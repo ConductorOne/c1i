@@ -4,7 +4,17 @@ import "github.com/spf13/cobra"
 
 var docsCmd = &cobra.Command{
 	Use:   "docs",
-	Short: "Search ConductorOne documentation and API reference",
+	Short: "Explore the ConductorOne API and documentation (no auth required)",
+	Long: `Explore the ConductorOne API reference and documentation — no credentials needed.
+
+AGENTS: Use these commands FIRST to discover API endpoints and understand their
+request/response schemas before making authenticated API calls.
+
+  docs search <query>            Search documentation by keyword
+  docs page <path>               Fetch a full documentation page
+  docs endpoints [--filter <p>]  List all API endpoints (filterable)
+  docs endpoint <path>           Show full schema for a specific endpoint
+  docs openapi                   Dump the raw OpenAPI spec`,
 }
 
 func init() {

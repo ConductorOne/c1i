@@ -24,7 +24,7 @@ const (
 
 var docsOpenapiCmd = &cobra.Command{
 	Use:   "openapi",
-	Short: "Dump the ConductorOne OpenAPI spec",
+	Short: "Dump the raw ConductorOne OpenAPI spec (no auth required)",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		data, err := fetchOpenAPISpec(cmd)
 		if err != nil {
@@ -37,7 +37,7 @@ var docsOpenapiCmd = &cobra.Command{
 
 var docsEndpointsCmd = &cobra.Command{
 	Use:   "endpoints [--filter <pattern>]",
-	Short: "List API endpoints from the OpenAPI spec",
+	Short: "List all API endpoints, filterable by keyword (no auth required)",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		data, err := fetchOpenAPISpec(cmd)
 		if err != nil {
@@ -105,7 +105,7 @@ var docsEndpointsCmd = &cobra.Command{
 
 var docsEndpointCmd = &cobra.Command{
 	Use:   "endpoint <path>",
-	Short: "Show details for a specific API endpoint",
+	Short: "Show full request/response schema for an API endpoint (no auth required)",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		data, err := fetchOpenAPISpec(cmd)

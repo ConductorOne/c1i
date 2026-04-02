@@ -19,7 +19,7 @@ const (
 
 var docsSearchCmd = &cobra.Command{
 	Use:   "search <query>",
-	Short: "Search ConductorOne documentation",
+	Short: "Search ConductorOne documentation by keyword (no auth required)",
 	Args:  cobra.MinimumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 
@@ -82,7 +82,7 @@ var docsSearchCmd = &cobra.Command{
 
 var docsPageCmd = &cobra.Command{
 	Use:   "page <path>",
-	Short: "Fetch a documentation page by path",
+	Short: "Fetch a full documentation page by path (no auth required)",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 
