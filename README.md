@@ -1,6 +1,8 @@
 # c1i
 
-A command-line interface for the [ConductorOne](https://www.conductorone.com) API.
+A command-line interface for the [ConductorOne](https://www.conductorone.com) API, designed for both human and AI agent use.
+
+c1i outputs structured data (NDJSON, JSON) that's easy for agents to parse, and includes built-in API discovery via `docs` commands — so an agent can explore the ConductorOne API, look up endpoint schemas, and search documentation without any additional credentials or tools.
 
 ## Install
 
@@ -24,7 +26,10 @@ Credentials are stored in the macOS keychain per tenant (service: `c1i/<tenant>`
 ## Authentication
 
 ```sh
-# Store and verify API credentials
+# Browser-based login (OAuth device flow)
+c1i auth login
+
+# Or store credentials directly
 c1i auth login --client-id <id> --client-secret <secret>
 
 # Check credential status
@@ -78,9 +83,9 @@ c1i api --path /api/v1/search/users --body '{"pageSize":10}'
 c1i api --path /api/v1/apps --paginate
 ```
 
-### Documentation
+### API Discovery & Documentation
 
-Browse the ConductorOne API reference and docs without leaving the terminal.
+Browse the ConductorOne API reference and docs without leaving the terminal. The `docs` commands require no ConductorOne credentials — agents can use them to explore the API before authenticating.
 
 ```sh
 # Search documentation
@@ -101,10 +106,20 @@ c1i docs openapi
 
 ## Output Conventions
 
-- **List commands** (`users list`, `apps list`, etc.) output NDJSON (one JSON object per line), suitable for piping to `jq`.
+- **List commands** (`users list`, `apps list`, etc.) output NDJSON (one JSON object per line), suitable for piping to `jq` or parsing line-by-line.
 - **Auth commands** output human-readable text.
 - **`api`** outputs pretty-printed JSON.
+- **`docs`** commands output NDJSON (search), plain text (page), or JSON (endpoints, endpoint).
 - List commands auto-paginate by default. Pass `--page-token` to fetch a single page manually.
+
+## Agent Integration
+
+c1i is designed to work well as a tool for AI coding agents:
+
+- **Structured output**: All data commands produce NDJSON or JSON, never mixed human-readable formats.
+- **Self-documenting API**: `docs endpoints`, `docs endpoint`, and `docs search` let an agent discover and understand the ConductorOne API without external documentation.
+- **Predictable pagination**: List commands auto-paginate; `--page-token` gives manual control when needed.
+- **Raw API escape hatch**: `api --path` with `--paginate` lets an agent hit any endpoint, even ones without a native command.
 
 ## License
 
