@@ -64,8 +64,23 @@ var apiCmd = &cobra.Command{
 					bodyObj["pageToken"] = pageToken
 				}
 				data, err = c.Post(cmd.Context(), path, bodyObj)
+			case "PUT":
+				var bodyObj map[string]any
+				if body != "" {
+					if err := json.Unmarshal([]byte(body), &bodyObj); err != nil {
+						return fmt.Errorf("invalid JSON body: %w", err)
+					}
+				} else {
+					bodyObj = map[string]any{}
+				}
+				if paginate && pageToken != "" {
+					bodyObj["pageToken"] = pageToken
+				}
+				data, err = c.Put(cmd.Context(), path, bodyObj)
+			case "DELETE":
+				data, err = c.Delete(cmd.Context(), path)
 			default:
-				return fmt.Errorf("unsupported method: %s (use GET or POST)", method)
+				return fmt.Errorf("unsupported method: %s (use GET, POST, PUT, or DELETE)", method)
 			}
 			if err != nil {
 				return fmt.Errorf("API error: %w", err)
@@ -98,7 +113,7 @@ var apiCmd = &cobra.Command{
 
 func init() {
 	apiCmd.Flags().String("path", "", "API path (e.g. /api/v1/search/app_users)")
-	apiCmd.Flags().String("method", "", "HTTP method: GET or POST (default: GET, or POST if --body is set)")
+	apiCmd.Flags().String("method", "", "HTTP method: GET, POST, PUT, or DELETE (default: GET, or POST if --body is set)")
 	apiCmd.Flags().String("body", "", "JSON request body (implies POST)")
 	apiCmd.Flags().Bool("paginate", false, "Automatically follow pagination to fetch all pages")
 	_ = apiCmd.MarkFlagRequired("path")
