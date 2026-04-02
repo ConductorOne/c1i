@@ -9,9 +9,9 @@ import (
 	"net/http"
 	"net/url"
 
-	conductoronesdkgo "github.com/conductorone/conductorone-sdk-go"
 	"github.com/ductone/c1i/internal/config"
 	"github.com/ductone/c1i/internal/keychain"
+	"github.com/ductone/c1i/internal/tokensource"
 	"golang.org/x/oauth2"
 )
 
@@ -28,7 +28,7 @@ func New(ctx context.Context, tenant string) (*Client, error) {
 	}
 
 	baseURL := config.BaseURL(tenant)
-	tokenSource, err := conductoronesdkgo.NewTokenSource(ctx, clientID, clientSecret, baseURL)
+	tokenSource, err := tokensource.NewTokenSource(ctx, clientID, clientSecret, baseURL)
 	if err != nil {
 		return nil, fmt.Errorf("creating token source: %w", err)
 	}

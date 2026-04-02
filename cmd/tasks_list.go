@@ -24,9 +24,25 @@ var tasksListCmd = &cobra.Command{
 
 		query, _ := cmd.Flags().GetString("query")
 		state, _ := cmd.Flags().GetString("state")
+		assignedToMe, _ := cmd.Flags().GetBool("assigned-to-me")
 		pageSize, _ := cmd.Flags().GetInt("page-size")
 		pageToken, _ := cmd.Flags().GetString("page-token")
 		manualPaging := cmd.Flags().Changed("page-token")
+
+		var myUserID string
+		if assignedToMe {
+			data, err := c.Get(cmd.Context(), "/api/v1/auth/introspect", nil)
+			if err != nil {
+				return fmt.Errorf("failed to get current user: %w", err)
+			}
+			var introspect struct {
+				UserID string `json:"userId"`
+			}
+			if err := json.Unmarshal(data, &introspect); err != nil {
+				return fmt.Errorf("failed to parse introspect response: %w", err)
+			}
+			myUserID = introspect.UserID
+		}
 
 		enc := json.NewEncoder(cmd.OutOrStdout())
 		for {
@@ -41,6 +57,9 @@ var tasksListCmd = &cobra.Command{
 			}
 			if state != "" {
 				body["taskStates"] = []string{mapTaskState(state)}
+			}
+			if myUserID != "" {
+				body["myWorkUserIds"] = []string{myUserID}
 			}
 
 			data, err := c.Post(cmd.Context(), "/api/v1/search/tasks", body)
@@ -125,6 +144,7 @@ var tasksListCmd = &cobra.Command{
 func init() {
 	tasksListCmd.Flags().String("query", "", "Search task display name or description")
 	tasksListCmd.Flags().String("state", "", "Filter by state: open, closed")
+	tasksListCmd.Flags().Bool("assigned-to-me", false, "Only show tasks assigned to me")
 	tasksListCmd.Flags().Int("page-size", 50, "Results per page")
 	tasksListCmd.Flags().String("page-token", "", "Pagination cursor")
 	tasksCmd.AddCommand(tasksListCmd)
