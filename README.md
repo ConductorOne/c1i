@@ -1,5 +1,7 @@
 # c1i
 
+> **Alpha** — this tool is under active development. Commands, flags, and output formats may change without notice.
+
 A command-line interface for the [ConductorOne](https://www.conductorone.com) API, designed for both human and AI agent use.
 
 c1i outputs structured data (NDJSON, JSON) that's easy for agents to parse, and includes built-in API discovery via `docs` commands — so an agent can explore the ConductorOne API, look up endpoint schemas, and search documentation without any additional credentials or tools.
@@ -12,16 +14,21 @@ go install github.com/ductone/c1i@latest
 
 ## Configuration
 
-c1i requires a **tenant** name. Set it via (in order of precedence):
+c1i requires a ConductorOne **URL**. You can pass a full URL, a raw domain, or a legacy short tenant name. Set it via (in order of precedence):
 
-1. `--tenant` flag
-2. `C1I_TENANT` environment variable
+1. `--url` flag
+2. `C1I_URL` environment variable
 3. `~/.c1i.yaml` config file:
    ```yaml
-   tenant: mycompany
+   url: https://mycompany.conductor.one
    ```
 
-Credentials are stored in the macOS keychain per tenant (service: `c1i/<tenant>`).
+All of these are equivalent:
+- `--url https://mycompany.conductor.one`
+- `--url mycompany.conductor.one`
+- `--url mycompany`
+
+Credentials are stored in the macOS Keychain, keyed per host.
 
 ## Authentication
 
