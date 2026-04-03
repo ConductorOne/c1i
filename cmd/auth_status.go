@@ -11,12 +11,12 @@ var authStatusCmd = &cobra.Command{
 	Use:   "status",
 	Short: "Check whether valid ConductorOne credentials are stored and working",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		tenant, err := GetTenant()
+		baseURL, err := GetBaseURL()
 		if err != nil {
 			return err
 		}
 
-		c, err := client.New(cmd.Context(), tenant)
+		c, err := client.New(cmd.Context(), baseURL)
 		if err != nil {
 			return fmt.Errorf("not authenticated: %w", err)
 		}
@@ -26,7 +26,7 @@ var authStatusCmd = &cobra.Command{
 			return fmt.Errorf("credentials found but API test failed: %w", err)
 		}
 
-		fmt.Fprintf(cmd.OutOrStdout(), "Authenticated to tenant %q.\n", tenant)
+		fmt.Fprintf(cmd.OutOrStdout(), "Authenticated to %s.\n", baseURL)
 		return nil
 	},
 }

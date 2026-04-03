@@ -18,7 +18,7 @@ var authLoginCmd = &cobra.Command{
 	Long: `Authenticate to ConductorOne. By default, opens your browser for OAuth device flow login.
 Alternatively, pass --client-id and --client-secret to store credentials directly.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		tenant, err := GetTenant()
+		baseURL, err := GetBaseURL()
 		if err != nil {
 			return err
 		}
@@ -27,14 +27,14 @@ Alternatively, pass --client-id and --client-secret to store credentials directl
 		clientSecret, _ := cmd.Flags().GetString("client-secret")
 
 		if clientID != "" && clientSecret != "" {
-			return loginWithCredentials(cmd, tenant, clientID, clientSecret)
+			return loginWithCredentials(cmd, baseURL, clientID, clientSecret)
 		}
 
 		if clientID != "" || clientSecret != "" {
 			return fmt.Errorf("both --client-id and --client-secret are required for credential login")
 		}
 
-		return loginWithBrowser(cmd, tenant)
+		return loginWithBrowser(cmd, baseURL)
 	},
 }
 
@@ -44,11 +44,11 @@ func init() {
 	authCmd.AddCommand(authLoginCmd)
 }
 
-func loginWithBrowser(cmd *cobra.Command, tenant string) error {
+func loginWithBrowser(cmd *cobra.Command, baseURL string) error {
 	ctx := cmd.Context()
 	out := cmd.OutOrStdout()
 
-	code, err := login.StartDeviceFlow(ctx, tenant)
+	code, err := login.StartDeviceFlow(ctx, baseURL)
 	if err != nil {
 		return err
 	}
@@ -61,25 +61,25 @@ func loginWithBrowser(cmd *cobra.Command, tenant string) error {
 
 	fmt.Fprintf(out, "Waiting for approval...\n")
 
-	creds, err := login.PollForToken(ctx, tenant, code)
+	creds, err := login.PollForToken(ctx, baseURL, code)
 	if err != nil {
 		return err
 	}
 
-	return storeAndVerify(cmd, tenant, creds.ClientID, creds.ClientSecret)
+	return storeAndVerify(cmd, baseURL, creds.ClientID, creds.ClientSecret)
 }
 
-func loginWithCredentials(cmd *cobra.Command, tenant, clientID, clientSecret string) error {
-	return storeAndVerify(cmd, tenant, clientID, clientSecret)
+func loginWithCredentials(cmd *cobra.Command, baseURL, clientID, clientSecret string) error {
+	return storeAndVerify(cmd, baseURL, clientID, clientSecret)
 }
 
-func storeAndVerify(cmd *cobra.Command, tenant, clientID, clientSecret string) error {
-	service := config.KeychainService(tenant)
+func storeAndVerify(cmd *cobra.Command, baseURL, clientID, clientSecret string) error {
+	service := config.KeychainService(baseURL)
 	if err := keychain.Store(service, clientID, clientSecret); err != nil {
 		return fmt.Errorf("failed to store credentials: %w", err)
 	}
 
-	c, err := client.New(cmd.Context(), tenant)
+	c, err := client.New(cmd.Context(), baseURL)
 	if err != nil {
 		_ = keychain.Delete(service)
 		return fmt.Errorf("credentials stored but verification failed: %w", err)
@@ -91,7 +91,7 @@ func storeAndVerify(cmd *cobra.Command, tenant, clientID, clientSecret string) e
 		return fmt.Errorf("credentials stored but API test failed: %w", err)
 	}
 
-	fmt.Fprintf(cmd.OutOrStdout(), "Credentials stored and verified for tenant %q.\n", tenant)
+	fmt.Fprintf(cmd.OutOrStdout(), "Credentials stored and verified for %s.\n", baseURL)
 	return nil
 }
 

@@ -10,8 +10,6 @@ import (
 	"net/url"
 	"strings"
 	"time"
-
-	"github.com/ductone/c1i/internal/config"
 )
 
 // C1iClientID is the OAuth client ID for the c1i CLI.
@@ -32,8 +30,7 @@ type Credentials struct {
 }
 
 // StartDeviceFlow initiates the OAuth device authorization flow.
-func StartDeviceFlow(ctx context.Context, tenant string) (*DeviceCode, error) {
-	baseURL := config.BaseURL(tenant)
+func StartDeviceFlow(ctx context.Context, baseURL string) (*DeviceCode, error) {
 	deviceURL := baseURL + "/auth/v1/device_authorization"
 
 	vals := url.Values{}
@@ -73,8 +70,7 @@ func StartDeviceFlow(ctx context.Context, tenant string) (*DeviceCode, error) {
 }
 
 // PollForToken polls the token endpoint until the user approves or the code expires.
-func PollForToken(ctx context.Context, tenant string, code *DeviceCode) (*Credentials, error) {
-	baseURL := config.BaseURL(tenant)
+func PollForToken(ctx context.Context, baseURL string, code *DeviceCode) (*Credentials, error) {
 	tokenURL := baseURL + "/auth/v1/token"
 
 	vals := url.Values{}

@@ -12,12 +12,12 @@ var requestsCreateGrantCmd = &cobra.Command{
 	Use:   "grant",
 	Short: "Create a grant access request",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		tenant, err := GetTenant()
+		baseURL, err := GetBaseURL()
 		if err != nil {
 			return err
 		}
 
-		c, err := client.New(cmd.Context(), tenant)
+		c, err := client.New(cmd.Context(), baseURL)
 		if err != nil {
 			return fmt.Errorf("authentication failed: %w", err)
 		}

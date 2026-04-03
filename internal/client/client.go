@@ -20,14 +20,25 @@ type Client struct {
 	baseURL    string
 }
 
-func New(ctx context.Context, tenant string) (*Client, error) {
-	service := config.KeychainService(tenant)
+func New(ctx context.Context, baseURL string) (*Client, error) {
+	service := config.KeychainService(baseURL)
 	clientID, clientSecret, err := keychain.Load(service)
 	if err != nil {
-		return nil, fmt.Errorf("loading credentials: %w", err)
+		// Try legacy keychain key for *.conductor.one domains.
+		legacyService := config.LegacyKeychainService(baseURL)
+		if legacyService != "" && legacyService != service {
+			clientID, clientSecret, err = keychain.Load(legacyService)
+			if err == nil {
+				// Migrate: store under new key and delete old.
+				_ = keychain.Store(service, clientID, clientSecret)
+				_ = keychain.Delete(legacyService)
+			}
+		}
+		if err != nil {
+			return nil, fmt.Errorf("loading credentials: %w", err)
+		}
 	}
 
-	baseURL := config.BaseURL(tenant)
 	tokenSource, err := tokensource.NewTokenSource(ctx, clientID, clientSecret, baseURL)
 	if err != nil {
 		return nil, fmt.Errorf("creating token source: %w", err)

@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/ductone/c1i/internal/config"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
@@ -30,9 +31,9 @@ right API calls before making authenticated requests.`,
 
 func init() {
 	cobra.OnInitialize(initConfig)
-	rootCmd.PersistentFlags().String("tenant", "", "ConductorOne tenant name (e.g. mycompany)")
-	_ = viper.BindPFlag("tenant", rootCmd.PersistentFlags().Lookup("tenant"))
-	_ = viper.BindEnv("tenant", "C1I_TENANT")
+	rootCmd.PersistentFlags().String("url", "", "ConductorOne URL (e.g. https://mycompany.conductor.one)")
+	_ = viper.BindPFlag("url", rootCmd.PersistentFlags().Lookup("url"))
+	_ = viper.BindEnv("url", "C1I_URL")
 }
 
 func initConfig() {
@@ -45,13 +46,13 @@ func initConfig() {
 	_ = viper.ReadInConfig()
 }
 
-// GetTenant returns the configured tenant or exits with an error.
-func GetTenant() (string, error) {
-	tenant := viper.GetString("tenant")
-	if tenant == "" {
-		return "", fmt.Errorf("tenant is required: set --tenant flag, C1I_TENANT env var, or tenant in ~%s.c1i.yaml", string(filepath.Separator))
+// GetBaseURL returns the configured base URL or exits with an error.
+func GetBaseURL() (string, error) {
+	raw := viper.GetString("url")
+	if raw == "" {
+		return "", fmt.Errorf("url is required: set --url flag, C1I_URL env var, or url in ~%s.c1i.yaml", string(filepath.Separator))
 	}
-	return tenant, nil
+	return config.ParseURL(raw), nil
 }
 
 func Execute() error {

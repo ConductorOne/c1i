@@ -12,12 +12,12 @@ var tasksDenyCmd = &cobra.Command{
 	Use:   "deny",
 	Short: "Deny an access request task",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		tenant, err := GetTenant()
+		baseURL, err := GetBaseURL()
 		if err != nil {
 			return err
 		}
 
-		c, err := client.New(cmd.Context(), tenant)
+		c, err := client.New(cmd.Context(), baseURL)
 		if err != nil {
 			return fmt.Errorf("authentication failed: %w", err)
 		}

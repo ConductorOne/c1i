@@ -13,12 +13,12 @@ var connectorsListCmd = &cobra.Command{
 	Use:   "list",
 	Short: "List connectors for an application (NDJSON output)",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		tenant, err := GetTenant()
+		baseURL, err := GetBaseURL()
 		if err != nil {
 			return err
 		}
 
-		c, err := client.New(cmd.Context(), tenant)
+		c, err := client.New(cmd.Context(), baseURL)
 		if err != nil {
 			return fmt.Errorf("authentication failed: %w", err)
 		}
