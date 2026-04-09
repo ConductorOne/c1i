@@ -40,6 +40,7 @@ var apiCmd = &cobra.Command{
 		}
 
 		out := cmd.OutOrStdout()
+		enc := json.NewEncoder(out)
 		pageToken := ""
 
 		for {
@@ -86,22 +87,36 @@ var apiCmd = &cobra.Command{
 				return fmt.Errorf("API error: %w", err)
 			}
 
-			var pretty bytes.Buffer
-			if err := json.Indent(&pretty, data, "", "  "); err != nil {
-				_, _ = out.Write(data)
-			} else {
-				pretty.WriteByte('\n')
-				_, _ = out.Write(pretty.Bytes())
-			}
-
 			if !paginate {
+				var pretty bytes.Buffer
+				if err := json.Indent(&pretty, data, "", "  "); err != nil {
+					_, _ = out.Write(data)
+				} else {
+					pretty.WriteByte('\n')
+					_, _ = out.Write(pretty.Bytes())
+				}
 				break
 			}
 
 			var page struct {
-				NextPageToken string `json:"nextPageToken"`
+				List          []json.RawMessage `json:"list"`
+				NextPageToken string            `json:"nextPageToken"`
 			}
-			if err := json.Unmarshal(data, &page); err != nil || page.NextPageToken == "" {
+			if err := json.Unmarshal(data, &page); err != nil {
+				return fmt.Errorf("failed to parse response: %w", err)
+			}
+
+			for _, item := range page.List {
+				var obj any
+				if err := json.Unmarshal(item, &obj); err != nil {
+					return fmt.Errorf("failed to parse list item: %w", err)
+				}
+				if err := enc.Encode(obj); err != nil {
+					return fmt.Errorf("failed to write output: %w", err)
+				}
+			}
+
+			if page.NextPageToken == "" {
 				break
 			}
 			pageToken = page.NextPageToken

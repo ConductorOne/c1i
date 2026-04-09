@@ -80,7 +80,7 @@ go run . api --path=/api/v1/apps --paginate
 go run . api --path=/api/v1/search/tasks --body='{"taskStates":["TASK_STATE_OPEN"]}' --paginate
 ```
 
-Defaults to GET; auto-switches to POST when `--body` is set. Pretty-prints JSON response.
+Defaults to GET; auto-switches to POST when `--body` is set. Without `--paginate`, pretty-prints the full JSON response. With `--paginate`, unwraps the `list` array and outputs NDJSON (one item per line), same format as list commands.
 
 ## Documentation
 
@@ -148,4 +148,4 @@ The UI calls them "campaigns" (`/admin/campaigns/{id}`), the API calls them "acc
 - Auto-paginates unless `--page-token` is provided
 - `--unmapped-only` filters client-side (accounts with no `identity_user_id`)
 - Auth commands output human-readable text
-- `api` command outputs pretty-printed JSON
+- `api` command outputs pretty-printed JSON; with `--paginate` outputs NDJSON (one list item per line)

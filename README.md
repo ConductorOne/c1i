@@ -86,9 +86,11 @@ c1i api --path /api/v1/apps
 # POST request
 c1i api --path /api/v1/search/users --body '{"pageSize":10}'
 
-# Auto-paginate through all results
+# Auto-paginate through all results (NDJSON output, one item per line)
 c1i api --path /api/v1/apps --paginate
 ```
+
+When `--paginate` is used, the `list` array from each page is unwrapped and each item is emitted as a single line of NDJSON — the same format used by list commands. Without `--paginate`, the full JSON response is pretty-printed.
 
 ### API Discovery & Documentation
 
@@ -115,7 +117,7 @@ c1i docs openapi
 
 - **List commands** (`users list`, `apps list`, etc.) output NDJSON (one JSON object per line), suitable for piping to `jq` or parsing line-by-line.
 - **Auth commands** output human-readable text.
-- **`api`** outputs pretty-printed JSON.
+- **`api`** outputs pretty-printed JSON. With `--paginate`, outputs NDJSON (one list item per line).
 - **`docs`** commands output NDJSON (search), plain text (page), or JSON (endpoints, endpoint).
 - List commands auto-paginate by default. Pass `--page-token` to fetch a single page manually.
 
@@ -126,7 +128,7 @@ c1i is designed to work well as a tool for AI coding agents:
 - **Structured output**: All data commands produce NDJSON or JSON, never mixed human-readable formats.
 - **Self-documenting API**: `docs endpoints`, `docs endpoint`, and `docs search` let an agent discover and understand the ConductorOne API without external documentation.
 - **Predictable pagination**: List commands auto-paginate; `--page-token` gives manual control when needed.
-- **Raw API escape hatch**: `api --path` with `--paginate` lets an agent hit any endpoint, even ones without a native command.
+- **Raw API escape hatch**: `api --path` with `--paginate` lets an agent hit any endpoint, even ones without a native command. Paginated output uses the same NDJSON format as list commands.
 
 ## License
 
