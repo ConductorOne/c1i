@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/ductone/c1i/cmd"
+	"github.com/ConductorOne/c1i/cmd"
 )
 
 func main() {

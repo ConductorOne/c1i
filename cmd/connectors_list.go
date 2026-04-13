@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"strconv"
 
-	"github.com/ductone/c1i/internal/client"
+	"github.com/ConductorOne/c1i/internal/client"
 	"github.com/spf13/cobra"
 )
 

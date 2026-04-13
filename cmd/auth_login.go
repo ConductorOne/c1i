@@ -5,17 +5,17 @@ import (
 	"os/exec"
 	"runtime"
 
-	"github.com/ductone/c1i/internal/client"
-	"github.com/ductone/c1i/internal/config"
-	"github.com/ductone/c1i/internal/keychain"
-	"github.com/ductone/c1i/internal/login"
+	"github.com/ConductorOne/c1i/internal/client"
+	"github.com/ConductorOne/c1i/internal/config"
+	"github.com/ConductorOne/c1i/internal/keychain"
+	"github.com/ConductorOne/c1i/internal/login"
 	"github.com/spf13/cobra"
 )
 
 var authLoginCmd = &cobra.Command{
 	Use:   "login",
-	Short: "Authenticate to ConductorOne via browser or API credentials",
-	Long: `Authenticate to ConductorOne. By default, opens your browser for OAuth device flow login.
+	Short: "Authenticate to C1 via browser or API credentials",
+	Long: `Authenticate to C1. By default, opens your browser for OAuth device flow login.
 Alternatively, pass --client-id and --client-secret to store credentials directly.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		baseURL, err := GetBaseURL()
@@ -39,8 +39,8 @@ Alternatively, pass --client-id and --client-secret to store credentials directl
 }
 
 func init() {
-	authLoginCmd.Flags().String("client-id", "", "ConductorOne API client ID (skip browser login)")
-	authLoginCmd.Flags().String("client-secret", "", "ConductorOne API client secret (skip browser login)")
+	authLoginCmd.Flags().String("client-id", "", "C1 API client ID (skip browser login)")
+	authLoginCmd.Flags().String("client-secret", "", "C1 API client secret (skip browser login)")
 	authCmd.AddCommand(authLoginCmd)
 }
 

@@ -9,9 +9,9 @@ import (
 	"net/http"
 	"net/url"
 
-	"github.com/ductone/c1i/internal/config"
-	"github.com/ductone/c1i/internal/keychain"
-	"github.com/ductone/c1i/internal/tokensource"
+	"github.com/ConductorOne/c1i/internal/config"
+	"github.com/ConductorOne/c1i/internal/keychain"
+	"github.com/ConductorOne/c1i/internal/tokensource"
 	"golang.org/x/oauth2"
 )
 

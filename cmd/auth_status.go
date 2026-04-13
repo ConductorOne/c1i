@@ -3,13 +3,13 @@ package cmd
 import (
 	"fmt"
 
-	"github.com/ductone/c1i/internal/client"
+	"github.com/ConductorOne/c1i/internal/client"
 	"github.com/spf13/cobra"
 )
 
 var authStatusCmd = &cobra.Command{
 	Use:   "status",
-	Short: "Check whether valid ConductorOne credentials are stored and working",
+	Short: "Check whether valid C1 credentials are stored and working",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		baseURL, err := GetBaseURL()
 		if err != nil {

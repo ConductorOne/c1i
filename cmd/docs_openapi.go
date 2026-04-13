@@ -24,7 +24,7 @@ const (
 
 var docsOpenapiCmd = &cobra.Command{
 	Use:   "openapi",
-	Short: "Dump the raw ConductorOne OpenAPI spec (no auth required)",
+	Short: "Dump the raw C1 OpenAPI spec (no auth required)",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		data, err := fetchOpenAPISpec(cmd)
 		if err != nil {

@@ -7,13 +7,13 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/ductone/c1i/internal/client"
+	"github.com/ConductorOne/c1i/internal/client"
 	"github.com/spf13/cobra"
 )
 
 var apiCmd = &cobra.Command{
 	Use:   "api",
-	Short: "Make a raw ConductorOne API request and pretty-print the JSON response",
+	Short: "Make a raw C1 API request and pretty-print the JSON response",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		baseURL, err := GetBaseURL()
 		if err != nil {

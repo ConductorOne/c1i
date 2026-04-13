@@ -4,8 +4,8 @@ import "github.com/spf13/cobra"
 
 var docsCmd = &cobra.Command{
 	Use:   "docs",
-	Short: "Explore the ConductorOne API and documentation (no auth required)",
-	Long: `Explore the ConductorOne API reference and documentation — no credentials needed.
+	Short: "Explore the C1 API and documentation (no auth required)",
+	Long: `Explore the C1 API reference and documentation — no credentials needed.
 
 AGENTS: Use these commands FIRST to discover API endpoints and understand their
 request/response schemas before making authenticated API calls.

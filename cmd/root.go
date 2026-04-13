@@ -5,17 +5,17 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/ductone/c1i/internal/config"
+	"github.com/ConductorOne/c1i/internal/config"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
 
 var rootCmd = &cobra.Command{
 	Use:   "c1i",
-	Short: "ConductorOne CLI",
-	Long: `c1i is a command-line interface for the ConductorOne API.
+	Short: "C1 (formerly ConductorOne) CLI",
+	Long: `c1i is a command-line interface for the C1 (formerly ConductorOne) API.
 
-If you are an AI agent or unfamiliar with the ConductorOne API, start with the docs
+If you are an AI agent or unfamiliar with the C1 API, start with the docs
 commands — they require NO authentication and let you explore every available endpoint:
 
   c1i docs search "access reviews"     Search documentation by keyword
@@ -31,7 +31,7 @@ right API calls before making authenticated requests.`,
 
 func init() {
 	cobra.OnInitialize(initConfig)
-	rootCmd.PersistentFlags().String("url", "", "ConductorOne URL (e.g. https://mycompany.conductor.one)")
+	rootCmd.PersistentFlags().String("url", "", "C1 URL (e.g. https://mycompany.conductor.one)")
 	_ = viper.BindPFlag("url", rootCmd.PersistentFlags().Lookup("url"))
 	_ = viper.BindEnv("url", "C1I_URL")
 }

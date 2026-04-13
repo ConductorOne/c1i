@@ -1,4 +1,4 @@
-module github.com/ductone/c1i
+module github.com/ConductorOne/c1i
 
 go 1.25.7
 
