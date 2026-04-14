@@ -14,7 +14,7 @@ import (
 
 // C1iClientID is the OAuth client ID for the c1i CLI.
 // This is the same public client ID used by the cone CLI.
-const C1iClientID = "2RGdOS94VDferT9e80mdgntl36K"
+const C1iClientID = "juQSPDsPrdMDpPpR6fGdeLLSs8g"
 
 type DeviceCode struct {
 	DeviceCode      string `json:"device_code"`

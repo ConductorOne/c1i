@@ -1,10 +1,12 @@
 # c1i
 
+**C1 Interface** — a CLI for C1, and it looks like `cli`. Get it?
+
 > **Alpha** — this tool is under active development. Commands, flags, and output formats may change without notice.
 
-A command-line interface for the [C1](https://www.conductorone.com) API, designed for both human and AI agent use.
+An agent-oriented command-line interface for the [C1](https://www.conductorone.com) API. Every command outputs structured data (NDJSON or JSON) that's easy for AI agents to parse, and built-in `docs` commands let an agent explore the C1 API, look up endpoint schemas, and search documentation — no credentials required.
 
-c1i outputs structured data (NDJSON, JSON) that's easy for agents to parse, and includes built-in API discovery via `docs` commands — so an agent can explore the C1 API, look up endpoint schemas, and search documentation without any additional credentials or tools.
+For a human-friendly CLI, see [cone](https://github.com/ConductorOne/cone).
 
 ## Install
 
@@ -28,7 +30,7 @@ All of these are equivalent:
 - `--url mycompany.conductor.one`
 - `--url mycompany`
 
-Credentials are stored in the macOS Keychain, keyed per host.
+Credentials are stored in the system keychain, keyed per host.
 
 ## Authentication
 
@@ -94,7 +96,7 @@ When `--paginate` is used, the `list` array from each page is unwrapped and each
 
 ### API Discovery & Documentation
 
-Browse the C1 API reference and docs without leaving the terminal. The `docs` commands require no C1 credentials — agents can use them to explore the API before authenticating.
+The `docs` commands require no C1 credentials — agents can use them to explore the API before authenticating.
 
 ```sh
 # Search documentation
@@ -115,17 +117,16 @@ c1i docs openapi
 
 ## Output Conventions
 
-- **List commands** (`users list`, `apps list`, etc.) output NDJSON (one JSON object per line), suitable for piping to `jq` or parsing line-by-line.
-- **Auth commands** output human-readable text.
+- **List commands** (`users list`, `apps list`, etc.) output NDJSON (one JSON object per line).
 - **`api`** outputs pretty-printed JSON. With `--paginate`, outputs NDJSON (one list item per line).
 - **`docs`** commands output NDJSON (search), plain text (page), or JSON (endpoints, endpoint).
 - List commands auto-paginate by default. Pass `--page-token` to fetch a single page manually.
 
-## Agent Integration
+## Design
 
-c1i is designed to work well as a tool for AI coding agents:
+c1i is built specifically as a tool for AI agents:
 
-- **Structured output**: All data commands produce NDJSON or JSON, never mixed human-readable formats.
+- **Structured output**: All data commands produce NDJSON or JSON — never mixed or human-formatted output.
 - **Self-documenting API**: `docs endpoints`, `docs endpoint`, and `docs search` let an agent discover and understand the C1 API without external documentation.
 - **Predictable pagination**: List commands auto-paginate; `--page-token` gives manual control when needed.
 - **Raw API escape hatch**: `api --path` with `--paginate` lets an agent hit any endpoint, even ones without a native command. Paginated output uses the same NDJSON format as list commands.
