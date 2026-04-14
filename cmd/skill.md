@@ -1,6 +1,6 @@
 ---
 name: c1i
-description: CLI for the C1 identity security platform — manage users, apps, entitlements, tasks, and access reviews.
+description: CLI for the C1 (formerly ConductorOne) identity security platform — manage users, apps, entitlements, tasks, access reviews, and more.
 version: {{VERSION}}
 required_bins:
   - c1i
