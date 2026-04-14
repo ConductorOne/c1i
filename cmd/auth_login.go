@@ -74,7 +74,7 @@ func isTerminal() bool {
 
 func promptForURL(cmd *cobra.Command) (string, error) {
 	out := cmd.OutOrStdout()
-	fmt.Fprintf(out, "Enter your C1 URL (e.g. mycompany.conductor.one or mycompany): ")
+	_, _ = fmt.Fprintf(out, "Enter your C1 URL (e.g. mycompany.conductor.one or mycompany): ")
 
 	scanner := bufio.NewScanner(os.Stdin)
 	if !scanner.Scan() {
@@ -91,7 +91,7 @@ func promptForURL(cmd *cobra.Command) (string, error) {
 
 func offerSaveURL(cmd *cobra.Command, baseURL string) {
 	out := cmd.OutOrStdout()
-	fmt.Fprintf(out, "Save %s as default URL in ~/.c1i.yaml? [Y/n] ", baseURL)
+	_, _ = fmt.Fprintf(out, "Save %s as default URL in ~/.c1i.yaml? [Y/n] ", baseURL)
 
 	scanner := bufio.NewScanner(os.Stdin)
 	if !scanner.Scan() {
@@ -104,11 +104,11 @@ func offerSaveURL(cmd *cobra.Command, baseURL string) {
 	}
 
 	if err := config.SaveToConfigFile("url", baseURL); err != nil {
-		fmt.Fprintf(out, "Warning: could not save config: %v\n", err)
+		_, _ = fmt.Fprintf(out, "Warning: could not save config: %v\n", err)
 		return
 	}
 
-	fmt.Fprintf(out, "URL saved to ~/.c1i.yaml\n")
+	_, _ = fmt.Fprintf(out, "URL saved to ~/.c1i.yaml\n")
 }
 
 func loginWithBrowser(cmd *cobra.Command, baseURL string) error {
@@ -120,13 +120,13 @@ func loginWithBrowser(cmd *cobra.Command, baseURL string) error {
 		return err
 	}
 
-	fmt.Fprintf(out, "Opening browser to authenticate...\n\n")
-	fmt.Fprintf(out, "If your browser does not open, visit:\n  %s\n\n", code.VerificationURI)
-	fmt.Fprintf(out, "Verify this code matches: %s\n\n", code.UserCode)
+	_, _ = fmt.Fprintf(out, "Opening browser to authenticate...\n\n")
+	_, _ = fmt.Fprintf(out, "If your browser does not open, visit:\n  %s\n\n", code.VerificationURI)
+	_, _ = fmt.Fprintf(out, "Verify this code matches: %s\n\n", code.UserCode)
 
 	_ = openBrowser(code.VerificationURI)
 
-	fmt.Fprintf(out, "Waiting for approval...\n")
+	_, _ = fmt.Fprintf(out, "Waiting for approval...\n")
 
 	creds, err := login.PollForToken(ctx, baseURL, code)
 	if err != nil {
@@ -158,7 +158,7 @@ func storeAndVerify(cmd *cobra.Command, baseURL, clientID, clientSecret string) 
 		return fmt.Errorf("credentials stored but API test failed: %w", err)
 	}
 
-	fmt.Fprintf(cmd.OutOrStdout(), "Credentials stored and verified for %s.\n", baseURL)
+	_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Credentials stored and verified for %s.\n", baseURL)
 	return nil
 }
 

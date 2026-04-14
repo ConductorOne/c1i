@@ -44,7 +44,7 @@ var tasksCommentCmd = &cobra.Command{
 			return fmt.Errorf("failed to parse response: %w", err)
 		}
 
-		fmt.Fprintf(cmd.OutOrStdout(), "Comment added: task_id=%s\n", resp.Task.ID)
+		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Comment added: task_id=%s\n", resp.Task.ID)
 		return nil
 	},
 }

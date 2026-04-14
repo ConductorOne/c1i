@@ -44,7 +44,7 @@ var docsSearchCmd = &cobra.Command{
 		if err != nil {
 			return fmt.Errorf("search request failed: %w", err)
 		}
-		defer resp.Body.Close()
+		defer func() { _ = resp.Body.Close() }()
 
 		body, err := io.ReadAll(resp.Body)
 		if err != nil {
@@ -101,7 +101,7 @@ var docsPageCmd = &cobra.Command{
 		if err != nil {
 			return fmt.Errorf("page request failed: %w", err)
 		}
-		defer resp.Body.Close()
+		defer func() { _ = resp.Body.Close() }()
 
 		body, err := io.ReadAll(resp.Body)
 		if err != nil {
@@ -120,7 +120,7 @@ var docsPageCmd = &cobra.Command{
 			return fmt.Errorf("failed to parse response: %w", err)
 		}
 
-		fmt.Fprintln(cmd.OutOrStdout(), page.Content)
+		_, _ = fmt.Fprintln(cmd.OutOrStdout(), page.Content)
 		return nil
 	},
 }

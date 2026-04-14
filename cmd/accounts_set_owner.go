@@ -49,7 +49,7 @@ var accountsSetOwnerCmd = &cobra.Command{
 			return fmt.Errorf("failed to parse response: %w", err)
 		}
 
-		fmt.Fprintf(cmd.OutOrStdout(), "Set owner: app_user_id=%s identity_user_id=%s\n", resp.AppUser.ID, resp.AppUser.IdentityUserID)
+		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Set owner: app_user_id=%s identity_user_id=%s\n", resp.AppUser.ID, resp.AppUser.IdentityUserID)
 		return nil
 	},
 }

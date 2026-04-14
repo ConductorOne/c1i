@@ -136,7 +136,7 @@ var docsEndpointCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		fmt.Fprintln(cmd.OutOrStdout(), string(out))
+		_, _ = fmt.Fprintln(cmd.OutOrStdout(), string(out))
 		return nil
 	},
 }
@@ -170,7 +170,7 @@ func fetchOpenAPISpec(cmd *cobra.Command) ([]byte, error) {
 		}
 		return nil, fmt.Errorf("fetching OpenAPI spec: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		if data, readErr := os.ReadFile(cachePath); readErr == nil {

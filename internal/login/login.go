@@ -45,7 +45,7 @@ func StartDeviceFlow(ctx context.Context, baseURL string) (*DeviceCode, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
@@ -105,7 +105,7 @@ func PollForToken(ctx context.Context, baseURL string, code *DeviceCode) (*Crede
 		}
 
 		body, err := io.ReadAll(resp.Body)
-		resp.Body.Close()
+		_ = resp.Body.Close()
 		if err != nil {
 			return nil, err
 		}
@@ -159,7 +159,7 @@ func createPersonalClient(ctx context.Context, baseURL, accessToken string) (*Cr
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {

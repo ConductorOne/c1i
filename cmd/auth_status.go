@@ -26,7 +26,7 @@ var authStatusCmd = &cobra.Command{
 			return fmt.Errorf("credentials found but API test failed: %w", err)
 		}
 
-		fmt.Fprintf(cmd.OutOrStdout(), "Authenticated to %s.\n", baseURL)
+		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Authenticated to %s.\n", baseURL)
 		return nil
 	},
 }

@@ -46,7 +46,7 @@ var tasksApproveCmd = &cobra.Command{
 			return fmt.Errorf("failed to parse response: %w", err)
 		}
 
-		fmt.Fprintf(cmd.OutOrStdout(), "Approved task: task_id=%s state=%s\n", resp.Task.ID, resp.Task.State)
+		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Approved task: task_id=%s state=%s\n", resp.Task.ID, resp.Task.State)
 		return nil
 	},
 }
