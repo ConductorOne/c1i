@@ -1,9 +1,12 @@
 package cmd
 
 import (
+	"bufio"
 	"fmt"
+	"os"
 	"os/exec"
 	"runtime"
+	"strings"
 
 	"github.com/ConductorOne/c1i/internal/client"
 	"github.com/ConductorOne/c1i/internal/config"
@@ -18,23 +21,40 @@ var authLoginCmd = &cobra.Command{
 	Long: `Authenticate to C1. By default, opens your browser for OAuth device flow login.
 Alternatively, pass --client-id and --client-secret to store credentials directly.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		baseURL, err := GetBaseURL()
-		if err != nil {
-			return err
+		baseURL, source := GetBaseURLWithSource(cmd)
+
+		if baseURL == "" {
+			if !isTerminal() {
+				return fmt.Errorf("url is required: set --url flag, C1I_URL env var, or url in ~/.c1i.yaml")
+			}
+			var err error
+			baseURL, err = promptForURL(cmd)
+			if err != nil {
+				return err
+			}
 		}
 
 		clientID, _ := cmd.Flags().GetString("client-id")
 		clientSecret, _ := cmd.Flags().GetString("client-secret")
 
+		var loginErr error
 		if clientID != "" && clientSecret != "" {
-			return loginWithCredentials(cmd, baseURL, clientID, clientSecret)
-		}
-
-		if clientID != "" || clientSecret != "" {
+			loginErr = loginWithCredentials(cmd, baseURL, clientID, clientSecret)
+		} else if clientID != "" || clientSecret != "" {
 			return fmt.Errorf("both --client-id and --client-secret are required for credential login")
+		} else {
+			loginErr = loginWithBrowser(cmd, baseURL)
 		}
 
-		return loginWithBrowser(cmd, baseURL)
+		if loginErr != nil {
+			return loginErr
+		}
+
+		if source != URLSourceConfig && isTerminal() {
+			offerSaveURL(cmd, baseURL)
+		}
+
+		return nil
 	},
 }
 
@@ -42,6 +62,53 @@ func init() {
 	authLoginCmd.Flags().String("client-id", "", "C1 API client ID (skip browser login)")
 	authLoginCmd.Flags().String("client-secret", "", "C1 API client secret (skip browser login)")
 	authCmd.AddCommand(authLoginCmd)
+}
+
+func isTerminal() bool {
+	fi, err := os.Stdin.Stat()
+	if err != nil {
+		return false
+	}
+	return fi.Mode()&os.ModeCharDevice != 0
+}
+
+func promptForURL(cmd *cobra.Command) (string, error) {
+	out := cmd.OutOrStdout()
+	fmt.Fprintf(out, "Enter your C1 URL (e.g. mycompany.conductor.one or mycompany): ")
+
+	scanner := bufio.NewScanner(os.Stdin)
+	if !scanner.Scan() {
+		return "", fmt.Errorf("url is required: set --url flag, C1I_URL env var, or url in ~/.c1i.yaml")
+	}
+
+	raw := strings.TrimSpace(scanner.Text())
+	if raw == "" {
+		return "", fmt.Errorf("url is required: set --url flag, C1I_URL env var, or url in ~/.c1i.yaml")
+	}
+
+	return config.ParseURL(raw), nil
+}
+
+func offerSaveURL(cmd *cobra.Command, baseURL string) {
+	out := cmd.OutOrStdout()
+	fmt.Fprintf(out, "Save %s as default URL in ~/.c1i.yaml? [Y/n] ", baseURL)
+
+	scanner := bufio.NewScanner(os.Stdin)
+	if !scanner.Scan() {
+		return
+	}
+
+	answer := strings.TrimSpace(strings.ToLower(scanner.Text()))
+	if answer != "" && answer != "y" && answer != "yes" {
+		return
+	}
+
+	if err := config.SaveToConfigFile("url", baseURL); err != nil {
+		fmt.Fprintf(out, "Warning: could not save config: %v\n", err)
+		return
+	}
+
+	fmt.Fprintf(out, "URL saved to ~/.c1i.yaml\n")
 }
 
 func loginWithBrowser(cmd *cobra.Command, baseURL string) error {

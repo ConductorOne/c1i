@@ -55,6 +55,30 @@ func GetBaseURL() (string, error) {
 	return config.ParseURL(raw), nil
 }
 
+// URLSource indicates where the URL was resolved from.
+type URLSource int
+
+const (
+	URLSourceNone   URLSource = iota
+	URLSourceFlag
+	URLSourceEnv
+	URLSourceConfig
+)
+
+// GetBaseURLWithSource returns the configured base URL and where it came from.
+func GetBaseURLWithSource(cmd *cobra.Command) (string, URLSource) {
+	if f := cmd.Flags().Lookup("url"); f != nil && f.Changed {
+		return config.ParseURL(f.Value.String()), URLSourceFlag
+	}
+	if v := os.Getenv("C1I_URL"); v != "" {
+		return config.ParseURL(v), URLSourceEnv
+	}
+	if v := viper.GetString("url"); v != "" {
+		return config.ParseURL(v), URLSourceConfig
+	}
+	return "", URLSourceNone
+}
+
 func Execute() error {
 	return rootCmd.Execute()
 }

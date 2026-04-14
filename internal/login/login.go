@@ -12,8 +12,7 @@ import (
 	"time"
 )
 
-// C1iClientID is the OAuth client ID for the c1i CLI.
-// This is the same public client ID used by the cone CLI.
+// C1iClientID is the public OAuth client ID for the c1i CLI.
 const C1iClientID = "juQSPDsPrdMDpPpR6fGdeLLSs8g"
 
 type DeviceCode struct {
