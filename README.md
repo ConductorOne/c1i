@@ -2,47 +2,27 @@
 
 **C1 Interface** — an agent-oriented CLI for C1, and it looks like `cli`. Get it?
 
-> **Alpha** — this tool is under active development. Commands, flags, and output formats may change without notice.
+> **Alpha** — under active development. Commands, flags, and output formats may change without notice.
 
-An agent-oriented command-line interface for the [C1](https://www.conductorone.com) API. Every command outputs structured data (NDJSON or JSON) that's easy for AI agents to parse, and built-in `docs` commands let an agent explore the C1 API, look up endpoint schemas, and search documentation — no credentials required.
-
+A command-line interface for the [C1](https://www.conductorone.com) API designed for AI agents.
+Structured output (NDJSON/JSON), built-in API docs, and auto-pagination.
 For a human-friendly CLI, see [cone](https://github.com/ConductorOne/cone).
 
-## Install
-
-```
-go install github.com/ConductorOne/c1i@latest
-```
-
-## Configuration
-
-c1i requires a C1 **URL**. You can pass a full URL, a raw domain, or a legacy short tenant name. Set it via (in order of precedence):
-
-1. `--url` flag
-2. `C1I_URL` environment variable
-3. `~/.c1i.yaml` config file:
-   ```yaml
-   url: https://mycompany.conductor.one
-   ```
-
-All of these are equivalent:
-- `--url https://mycompany.conductor.one`
-- `--url mycompany.conductor.one`
-- `--url mycompany`
-
-Credentials are stored in the system keychain, keyed per host.
-
-## Authentication
+## Quick Start
 
 ```sh
-# Browser-based login (OAuth device flow)
-c1i auth login
+# Install
+go install github.com/ConductorOne/c1i@latest
 
-# Or store credentials directly
-c1i auth login --client-id <id> --client-secret <secret>
+# Log in (opens browser)
+c1i auth login --url mycompany.conductor.one
 
-# Check credential status
-c1i auth status
+# List users
+c1i users list
+
+# Explore the API — no credentials needed
+c1i docs search "access reviews"
+c1i docs endpoints --filter task
 ```
 
 ## Commands
@@ -121,6 +101,37 @@ c1i docs openapi
 - **`api`** outputs pretty-printed JSON. With `--paginate`, outputs NDJSON (one list item per line).
 - **`docs`** commands output NDJSON (search), plain text (page), or JSON (endpoints, endpoint).
 - List commands auto-paginate by default. Pass `--page-token` to fetch a single page manually.
+
+## Configuration
+
+c1i requires a C1 **URL**. You can pass a full URL, a raw domain, or a legacy short tenant name. Set it via (in order of precedence):
+
+1. `--url` flag
+2. `C1I_URL` environment variable
+3. `~/.c1i.yaml` config file:
+   ```yaml
+   url: https://mycompany.conductor.one
+   ```
+
+All of these are equivalent:
+- `--url https://mycompany.conductor.one`
+- `--url mycompany.conductor.one`
+- `--url mycompany`
+
+Credentials are stored in the system keychain, keyed per host.
+
+## Authentication
+
+```sh
+# Browser-based login (OAuth device flow)
+c1i auth login
+
+# Or store credentials directly
+c1i auth login --client-id <id> --client-secret <secret>
+
+# Check credential status
+c1i auth status
+```
 
 ## Design
 
