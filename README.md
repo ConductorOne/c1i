@@ -1,6 +1,6 @@
 # c1i
 
-**C1 Interface** — a CLI for C1, and it looks like `cli`. Get it?
+**C1 Interface** — an agent-oriented CLI for C1, and it looks like `cli`. Get it?
 
 > **Alpha** — this tool is under active development. Commands, flags, and output formats may change without notice.
 
