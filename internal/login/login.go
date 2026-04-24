@@ -65,6 +65,11 @@ func StartDeviceFlow(ctx context.Context, baseURL string) (*DeviceCode, error) {
 		return nil, fmt.Errorf("server returned empty verification URI")
 	}
 
+	parsedURI, err := url.Parse(code.VerificationURI)
+	if err != nil || strings.ToLower(parsedURI.Scheme) != "https" {
+		return nil, fmt.Errorf("server returned verification URI with disallowed scheme (only https is permitted): %s", code.VerificationURI)
+	}
+
 	return &code, nil
 }
 
