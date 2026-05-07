@@ -26,7 +26,7 @@ var usersListCmd = &cobra.Command{
 		query, _ := cmd.Flags().GetString("query")
 		email, _ := cmd.Flags().GetString("email")
 		status, _ := cmd.Flags().GetString("status")
-		pageSize, _ := cmd.Flags().GetInt("page-size")
+		pageSize := clampPageSize(getIntFlag(cmd, "page-size"))
 		pageToken, _ := cmd.Flags().GetString("page-token")
 		manualPaging := cmd.Flags().Changed("page-token")
 

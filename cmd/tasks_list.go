@@ -26,7 +26,7 @@ var tasksListCmd = &cobra.Command{
 		query, _ := cmd.Flags().GetString("query")
 		state, _ := cmd.Flags().GetString("state")
 		assignedToMe, _ := cmd.Flags().GetBool("assigned-to-me")
-		pageSize, _ := cmd.Flags().GetInt("page-size")
+		pageSize := clampPageSize(getIntFlag(cmd, "page-size"))
 		pageToken, _ := cmd.Flags().GetString("page-token")
 		manualPaging := cmd.Flags().Changed("page-token")
 

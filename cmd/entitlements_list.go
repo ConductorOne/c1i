@@ -24,7 +24,7 @@ var entitlementsListCmd = &cobra.Command{
 
 		appID, _ := cmd.Flags().GetString("app-id")
 		query, _ := cmd.Flags().GetString("query")
-		pageSize, _ := cmd.Flags().GetInt("page-size")
+		pageSize := clampPageSize(getIntFlag(cmd, "page-size"))
 		pageToken, _ := cmd.Flags().GetString("page-token")
 		manualPaging := cmd.Flags().Changed("page-token")
 
