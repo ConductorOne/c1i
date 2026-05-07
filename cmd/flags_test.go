@@ -38,6 +38,29 @@ func TestMarkRequiredIdempotent(t *testing.T) {
 	}
 }
 
+func TestLimitReached(t *testing.T) {
+	cases := []struct {
+		emitted int
+		limit   int
+		want    bool
+	}{
+		{0, 0, false},   // unlimited, no rows yet
+		{100, 0, false}, // unlimited, plenty of rows
+		{4, 5, false},   // under cap
+		{5, 5, true},    // at cap
+		{6, 5, true},    // over cap (defensive)
+		{10, -1, false}, // negative limit treated as unlimited
+		{0, 1, false},   // limit set, no rows yet
+		{1, 1, true},    // single-item limit hit on first emit
+	}
+	for _, tc := range cases {
+		if got := limitReached(tc.emitted, tc.limit); got != tc.want {
+			t.Errorf("limitReached(emitted=%d, limit=%d) = %v, want %v",
+				tc.emitted, tc.limit, got, tc.want)
+		}
+	}
+}
+
 func TestRequireNonEmpty(t *testing.T) {
 	mkCmd := func() *cobra.Command {
 		cmd := &cobra.Command{Use: "test"}

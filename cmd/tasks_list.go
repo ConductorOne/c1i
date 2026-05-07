@@ -29,6 +29,7 @@ var tasksListCmd = &cobra.Command{
 		pageSize := clampPageSize(getIntFlag(cmd, "page-size"))
 		pageToken, _ := cmd.Flags().GetString("page-token")
 		manualPaging := cmd.Flags().Changed("page-token")
+		limit := getIntFlag(cmd, "limit")
 
 		var myUserID string
 		if assignedToMe {
@@ -46,6 +47,7 @@ var tasksListCmd = &cobra.Command{
 		}
 
 		enc := json.NewEncoder(cmd.OutOrStdout())
+		emitted := 0
 		for {
 			body := map[string]any{
 				"pageSize": pageSize,
@@ -136,6 +138,10 @@ var tasksListCmd = &cobra.Command{
 				}
 
 				_ = enc.Encode(row)
+				emitted++
+				if limitReached(emitted, limit) {
+					return nil
+				}
 			}
 
 			if resp.NextPageToken == "" || manualPaging {
@@ -154,6 +160,7 @@ func init() {
 	tasksListCmd.Flags().Bool("assigned-to-me", false, "Only show tasks assigned to me")
 	tasksListCmd.Flags().Int("page-size", 50, "Results per page (max 100)")
 	tasksListCmd.Flags().String("page-token", "", "Pagination cursor")
+	addLimitFlag(tasksListCmd)
 	tasksCmd.AddCommand(tasksListCmd)
 }
 

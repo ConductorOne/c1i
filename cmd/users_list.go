@@ -29,8 +29,10 @@ var usersListCmd = &cobra.Command{
 		pageSize := clampPageSize(getIntFlag(cmd, "page-size"))
 		pageToken, _ := cmd.Flags().GetString("page-token")
 		manualPaging := cmd.Flags().Changed("page-token")
+		limit := getIntFlag(cmd, "limit")
 
 		enc := json.NewEncoder(cmd.OutOrStdout())
+		emitted := 0
 		for {
 			body := map[string]any{
 				"pageSize": pageSize,
@@ -80,6 +82,10 @@ var usersListCmd = &cobra.Command{
 					"job_title":    u.JobTitle,
 					"status":       u.Status,
 				})
+				emitted++
+				if limitReached(emitted, limit) {
+					return nil
+				}
 			}
 
 			if resp.NextPageToken == "" || manualPaging {
@@ -98,6 +104,7 @@ func init() {
 	usersListCmd.Flags().String("status", "", "Filter by status: enabled, disabled, deleted")
 	usersListCmd.Flags().Int("page-size", 50, "Number of results per page (max 100)")
 	usersListCmd.Flags().String("page-token", "", "Pagination cursor for next page")
+	addLimitFlag(usersListCmd)
 	usersCmd.AddCommand(usersListCmd)
 }
 

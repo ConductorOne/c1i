@@ -21,6 +21,24 @@ func markRequired(cmd *cobra.Command, names ...string) {
 	}
 }
 
+// limitReached reports whether `emitted` rows have hit the requested
+// `limit`. A limit of 0 (or negative) means "no cap". Centralizing this
+// check pins the semantics across every list command and gives the
+// table tests one place to assert behavior.
+func limitReached(emitted, limit int) bool {
+	return limit > 0 && emitted >= limit
+}
+
+// addLimitFlag adds the standard --limit flag to a list-style command.
+// 0 means "no cap" (the default). When set, the command stops emitting
+// rows after `limit` items have been written AND breaks out of the
+// auto-pagination loop early so no extra API pages are fetched. Use
+// alongside --page-size: --page-size controls per-call batch size,
+// --limit caps the total output.
+func addLimitFlag(cmd *cobra.Command) {
+	cmd.Flags().Int("limit", 0, "Cap total number of results (0 = unlimited)")
+}
+
 // getIntFlag returns the int flag's value, ignoring the lookup error
 // (cobra only errors when the flag isn't registered, which is a
 // programming bug — there's nothing useful to do at runtime).

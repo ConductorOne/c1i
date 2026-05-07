@@ -35,8 +35,10 @@ var accountsListCmd = &cobra.Command{
 		pageSize := clampPageSize(getIntFlag(cmd, "page-size"))
 		pageToken, _ := cmd.Flags().GetString("page-token")
 		manualPaging := cmd.Flags().Changed("page-token")
+		limit := getIntFlag(cmd, "limit")
 
 		enc := json.NewEncoder(cmd.OutOrStdout())
+		emitted := 0
 		for {
 			body := map[string]any{
 				"appId":    appID,
@@ -96,6 +98,10 @@ var accountsListCmd = &cobra.Command{
 					"app_user_type":    a.AppUserType,
 					"status":           a.Status.Status,
 				})
+				emitted++
+				if limitReached(emitted, limit) {
+					return nil
+				}
 			}
 
 			if resp.NextPageToken == "" || manualPaging {
@@ -117,6 +123,7 @@ func init() {
 	accountsListCmd.Flags().Int("page-size", 50, "Results per page (max 100)")
 	accountsListCmd.Flags().String("page-token", "", "Pagination cursor")
 	markRequired(accountsListCmd, "app-id")
+	addLimitFlag(accountsListCmd)
 	accountsCmd.AddCommand(accountsListCmd)
 }
 

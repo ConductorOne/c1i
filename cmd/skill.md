@@ -92,7 +92,7 @@ c1i version    # or: c1i --version
 ### Users
 
 ```sh
-c1i users list [--query=NAME] [--email=EXACT] [--status=enabled|disabled|deleted] [--page-size=50] [--page-token=TOKEN]
+c1i users list [--query=NAME] [--email=EXACT] [--status=enabled|disabled|deleted] [--page-size=50] [--page-token=TOKEN] [--limit=N]
 ```
 
 NDJSON fields: `id, display_name, email, department, job_title, status`
@@ -100,7 +100,7 @@ NDJSON fields: `id, display_name, email, department, job_title, status`
 ### Apps
 
 ```sh
-c1i apps list [--page-size=50] [--page-token=TOKEN]
+c1i apps list [--page-size=50] [--page-token=TOKEN] [--limit=N]
 ```
 
 NDJSON fields: `id, display_name, description, user_count`
@@ -108,7 +108,7 @@ NDJSON fields: `id, display_name, description, user_count`
 ### Accounts
 
 ```sh
-c1i accounts list --app-id=ID [--status=enabled|disabled|deleted] [--type=user|service_account|system_account] [--unmapped-only] [--query=NAME] [--page-size=50] [--page-token=TOKEN]
+c1i accounts list --app-id=ID [--status=enabled|disabled|deleted] [--type=user|service_account|system_account] [--unmapped-only] [--query=NAME] [--page-size=50] [--page-token=TOKEN] [--limit=N]
 
 c1i accounts set-owner --app-id=ID --app-user-id=AUID --user-id=UID
 ```
@@ -118,7 +118,7 @@ NDJSON fields: `id, app_id, display_name, email, username, identity_user_id, app
 ### Entitlements
 
 ```sh
-c1i entitlements list [--app-id=ID] [--query=TEXT] [--page-size=50] [--page-token=TOKEN]
+c1i entitlements list [--app-id=ID] [--query=TEXT] [--page-size=50] [--page-token=TOKEN] [--limit=N]
 ```
 
 NDJSON fields: `id, app_id, display_name, description, slug, grant_count, purpose`
@@ -126,7 +126,7 @@ NDJSON fields: `id, app_id, display_name, description, slug, grant_count, purpos
 ### Tasks
 
 ```sh
-c1i tasks list [--state=open|closed] [--query=TEXT] [--assigned-to-me] [--page-size=50] [--page-token=TOKEN]
+c1i tasks list [--state=open|closed] [--query=TEXT] [--assigned-to-me] [--page-size=50] [--page-token=TOKEN] [--limit=N]
 ```
 
 NDJSON fields: `id, display_name, description, state, type, user_id, created_by_user_id, created_at, app_id, app_entitlement_id, outcome`
@@ -138,7 +138,7 @@ values like `GRANT_OUTCOME_APPROVED`, `GRANT_OUTCOME_DENIED`, etc.
 ### Connectors
 
 ```sh
-c1i connectors list --app-id=ID [--page-size=50] [--page-token=TOKEN]
+c1i connectors list --app-id=ID [--page-size=50] [--page-token=TOKEN] [--limit=N]
 ```
 
 NDJSON fields: `id, app_id, display_name, status`
@@ -242,6 +242,7 @@ The UI calls them "campaigns" (`/admin/campaigns/{id}`), the API calls them
 - **Auth commands**: Human-readable plain text.
 - **`api` command**: Pretty-printed JSON by default; NDJSON with `--paginate`.
 - All list commands auto-paginate. Passing `--page-token` disables auto-pagination.
+- `--page-size` controls the per-call batch size (max 100). Use `--limit N` to cap the *total* number of results emitted; auto-pagination stops fetching new pages once the cap is reached.
 - `--unmapped-only` (accounts) filters client-side: only accounts with no `identity_user_id`.
 
 ## Discovering a New Endpoint

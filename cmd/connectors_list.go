@@ -31,8 +31,10 @@ var connectorsListCmd = &cobra.Command{
 		pageSize := clampPageSize(getIntFlag(cmd, "page-size"))
 		pageToken, _ := cmd.Flags().GetString("page-token")
 		manualPaging := cmd.Flags().Changed("page-token")
+		limit := getIntFlag(cmd, "limit")
 
 		enc := json.NewEncoder(cmd.OutOrStdout())
+		emitted := 0
 		for {
 			params := map[string]string{
 				"page_size": strconv.Itoa(pageSize),
@@ -72,6 +74,10 @@ var connectorsListCmd = &cobra.Command{
 					"display_name": conn.DisplayName,
 					"status":       conn.Status.Status,
 				})
+				emitted++
+				if limitReached(emitted, limit) {
+					return nil
+				}
 			}
 
 			if resp.NextPageToken == "" || manualPaging {
@@ -89,5 +95,6 @@ func init() {
 	connectorsListCmd.Flags().Int("page-size", 50, "Results per page (max 100)")
 	connectorsListCmd.Flags().String("page-token", "", "Pagination cursor")
 	markRequired(connectorsListCmd, "app-id")
+	addLimitFlag(connectorsListCmd)
 	connectorsCmd.AddCommand(connectorsListCmd)
 }
