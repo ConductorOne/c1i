@@ -92,7 +92,7 @@ var entitlementsListCmd = &cobra.Command{
 func init() {
 	entitlementsListCmd.Flags().String("app-id", "", "Filter by application ID")
 	entitlementsListCmd.Flags().String("query", "", "Search entitlement display name")
-	entitlementsListCmd.Flags().Int("page-size", 50, "Results per page")
+	entitlementsListCmd.Flags().Int("page-size", 50, "Results per page (max 100)")
 	entitlementsListCmd.Flags().String("page-token", "", "Pagination cursor")
 	entitlementsCmd.AddCommand(entitlementsListCmd)
 }

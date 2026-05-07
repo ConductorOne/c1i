@@ -75,7 +75,7 @@ var appsListCmd = &cobra.Command{
 }
 
 func init() {
-	appsListCmd.Flags().Int("page-size", 50, "Results per page")
+	appsListCmd.Flags().Int("page-size", 50, "Results per page (max 100)")
 	appsListCmd.Flags().String("page-token", "", "Pagination cursor")
 	appsCmd.AddCommand(appsListCmd)
 }

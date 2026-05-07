@@ -96,7 +96,7 @@ func init() {
 	usersListCmd.Flags().String("query", "", "Fuzzy search on name or email")
 	usersListCmd.Flags().String("email", "", "Exact email match")
 	usersListCmd.Flags().String("status", "", "Filter by status: enabled, disabled, deleted")
-	usersListCmd.Flags().Int("page-size", 50, "Number of results per page")
+	usersListCmd.Flags().Int("page-size", 50, "Number of results per page (max 100)")
 	usersListCmd.Flags().String("page-token", "", "Pagination cursor for next page")
 	usersCmd.AddCommand(usersListCmd)
 }

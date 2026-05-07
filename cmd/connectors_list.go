@@ -86,7 +86,7 @@ var connectorsListCmd = &cobra.Command{
 
 func init() {
 	connectorsListCmd.Flags().String("app-id", "", "Application ID")
-	connectorsListCmd.Flags().Int("page-size", 50, "Results per page")
+	connectorsListCmd.Flags().Int("page-size", 50, "Results per page (max 100)")
 	connectorsListCmd.Flags().String("page-token", "", "Pagination cursor")
 	markRequired(connectorsListCmd, "app-id")
 	connectorsCmd.AddCommand(connectorsListCmd)

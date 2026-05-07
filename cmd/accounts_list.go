@@ -114,7 +114,7 @@ func init() {
 	accountsListCmd.Flags().String("type", "", "Filter: user, service_account, system_account")
 	accountsListCmd.Flags().Bool("unmapped-only", false, "Only show accounts with no linked identity user")
 	accountsListCmd.Flags().String("query", "", "Fuzzy search on display name")
-	accountsListCmd.Flags().Int("page-size", 50, "Results per page")
+	accountsListCmd.Flags().Int("page-size", 50, "Results per page (max 100)")
 	accountsListCmd.Flags().String("page-token", "", "Pagination cursor")
 	markRequired(accountsListCmd, "app-id")
 	accountsCmd.AddCommand(accountsListCmd)
