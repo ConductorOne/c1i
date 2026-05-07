@@ -23,7 +23,7 @@ go test ./...
 - `cmd/` — Cobra command definitions (one file per command)
 - `internal/client/` — Authenticated HTTP client
 - `internal/config/` — URL parsing and keychain service helpers
-- `internal/keychain/` — Credential storage (go-keyring)
+- `internal/keychain/` — Credential storage. Three backends, in precedence order: `C1I_CLIENT_ID`/`C1I_CLIENT_SECRET` env vars (read-only), OS keyring (go-keyring), and a 0600 file under `os.UserConfigDir()` (fallback for headless Linux/CI/containers).
 - `internal/login/` — OAuth device flow
 - `internal/tokensource/` — OAuth2 token source
 

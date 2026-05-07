@@ -56,7 +56,23 @@ c1i entitlements list [--app-id <id>] [--query <text>] [--page-size N] [--page-t
 ### Tasks
 
 ```sh
-c1i tasks list [--state open|closed] [--query <text>] [--page-size N] [--page-token TOKEN]
+c1i tasks list [--state open|closed] [--query <text>] [--assigned-to-me] [--page-size N] [--page-token TOKEN]
+c1i tasks approve --task-id <id> [--comment <text>]
+c1i tasks deny --task-id <id> [--comment <text>]
+c1i tasks comment --task-id <id> --comment <text>
+```
+
+### Connectors
+
+```sh
+c1i connectors list --app-id <id> [--page-size N] [--page-token TOKEN]
+```
+
+### Access Requests
+
+```sh
+c1i requests create grant --app-id <id> --entitlement-id <eid> --user-id <uid> [--justification <text>] [--duration <duration>]
+c1i requests create revoke --app-id <id> --entitlement-id <eid> --user-id <uid> [--justification <text>]
 ```
 
 ### Raw API
@@ -99,7 +115,7 @@ c1i docs openapi
 
 - **List commands** (`users list`, `apps list`, etc.) output NDJSON (one JSON object per line).
 - **`api`** outputs pretty-printed JSON. With `--paginate`, outputs NDJSON (one list item per line).
-- **`docs`** commands output NDJSON (search), plain text (page), or JSON (endpoints, endpoint).
+- **`docs`** commands output NDJSON (`search`, `endpoints`), pretty JSON (`endpoint`, `openapi` is YAML), or plain text (`page`).
 - List commands auto-paginate by default. Pass `--page-token` to fetch a single page manually.
 
 ## Configuration
@@ -118,7 +134,7 @@ All of these are equivalent:
 - `--url mycompany.conductor.one`
 - `--url mycompany`
 
-Credentials are stored in the system keychain, keyed per host.
+For credential storage, see [Credential sources](#credential-sources) below.
 
 ## Authentication
 
@@ -131,6 +147,9 @@ c1i auth login --client-id <id> --client-secret <secret>
 
 # Check credential status (also reports the storage backend)
 c1i auth status
+
+# Show the authenticated principal: user ID, display name, email, role/permission/feature counts
+c1i auth whoami           # add --verbose for full roles/permissions/features arrays
 
 # Remove stored credentials
 c1i auth logout
