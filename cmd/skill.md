@@ -46,18 +46,27 @@ c1i auth login
 # Direct credential login
 c1i auth login --client-id=ID --client-secret=SECRET
 
-# Verify stored credentials
+# Verify stored credentials (and see which source served them)
 c1i auth status
+
+# Identify the authenticated principal: user ID, roles, permissions, features
+c1i auth whoami
+
+# Remove stored credentials
+c1i auth logout
 ```
 
-Credentials are stored in the OS keychain under service `c1i/<tenant>`.
+Credentials are stored in the OS keyring when available, otherwise in a
+0600 file under your config directory. For non-interactive / CI use, set
+`C1I_CLIENT_ID` and `C1I_CLIENT_SECRET` (combined with `C1I_URL`) to skip
+storage entirely. Run `c1i auth status` to see which source is in use.
 
 ## Configuration
 
-Tenant is required for all API commands. Set via (precedence order):
-1. `--tenant` flag
-2. `C1I_TENANT` env var
-3. `~/.c1i.yaml` → `tenant: mycompany`
+The C1 URL is required for all API commands. Set via (precedence order):
+1. `--url` flag (e.g. `--url=https://mycompany.conductor.one` or `--url=mycompany`)
+2. `C1I_URL` env var
+3. `~/.c1i.yaml` → `url: https://mycompany.conductor.one`
 
 ## Commands
 
@@ -150,6 +159,7 @@ the `list` array and outputs NDJSON (one item per line).
 
 | Resource | Method | Path |
 |---|---|---|
+| Current principal (whoami) | GET | `/api/v1/auth/introspect` |
 | Get user | GET | `/api/v1/users/{id}` |
 | Search users | POST | `/api/v1/search/users` |
 | Get app | GET | `/api/v1/apps/{id}` |
