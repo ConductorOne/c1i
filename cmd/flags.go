@@ -29,6 +29,29 @@ func limitReached(emitted, limit int) bool {
 	return limit > 0 && emitted >= limit
 }
 
+// effectivePageSize tightens the per-call page size when --limit is
+// smaller than --page-size, so a `--limit 3` query doesn't fetch 50
+// items and discard 47 of them. When `limit` is unset (<=0), the
+// requested page-size is returned unchanged.
+//
+// Edge: if the remaining headroom (limit - emitted) is somehow zero or
+// negative (the outer loop should have stopped already), we still return
+// at least 1 — better to make a small wasteful call than to send
+// pageSize=0 and get an undefined response from the API.
+func effectivePageSize(requested, limit, emitted int) int {
+	if limit <= 0 {
+		return requested
+	}
+	remaining := limit - emitted
+	if remaining < 1 {
+		return 1
+	}
+	if remaining < requested {
+		return remaining
+	}
+	return requested
+}
+
 // addLimitFlag adds the standard --limit flag to a list-style command.
 // 0 means "no cap" (the default). When set, the command stops emitting
 // rows after `limit` items have been written AND breaks out of the

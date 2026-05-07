@@ -53,7 +53,7 @@ var apiCmd = &cobra.Command{
 		pageToken := ""
 		emitted := 0
 
-		for {
+		for !limitReached(emitted, limit) {
 			var data []byte
 			switch method {
 			case "GET":

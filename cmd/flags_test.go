@@ -61,6 +61,34 @@ func TestLimitReached(t *testing.T) {
 	}
 }
 
+func TestEffectivePageSize(t *testing.T) {
+	cases := []struct {
+		name      string
+		requested int
+		limit     int
+		emitted   int
+		want      int
+	}{
+		{"unlimited returns requested as-is", 50, 0, 0, 50},
+		{"limit unset (negative) returns requested", 50, -5, 10, 50},
+		{"limit larger than requested returns requested", 50, 200, 0, 50},
+		{"limit equal to requested on first page returns requested", 50, 50, 0, 50},
+		{"limit smaller than requested tightens", 50, 3, 0, 3},
+		{"limit smaller across pages tightens to remaining", 50, 75, 50, 25},
+		{"emitted at limit returns 1 (defensive — outer loop should stop first)", 50, 5, 5, 1},
+		{"emitted past limit returns 1 (defensive)", 50, 5, 7, 1},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := effectivePageSize(tc.requested, tc.limit, tc.emitted)
+			if got != tc.want {
+				t.Errorf("effectivePageSize(req=%d, lim=%d, em=%d) = %d, want %d",
+					tc.requested, tc.limit, tc.emitted, got, tc.want)
+			}
+		})
+	}
+}
+
 func TestRequireNonEmpty(t *testing.T) {
 	mkCmd := func() *cobra.Command {
 		cmd := &cobra.Command{Use: "test"}

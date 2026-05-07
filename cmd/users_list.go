@@ -26,14 +26,15 @@ var usersListCmd = &cobra.Command{
 		query, _ := cmd.Flags().GetString("query")
 		email, _ := cmd.Flags().GetString("email")
 		status, _ := cmd.Flags().GetString("status")
-		pageSize := clampPageSize(getIntFlag(cmd, "page-size"))
+		requestedPageSize := clampPageSize(getIntFlag(cmd, "page-size"))
 		pageToken, _ := cmd.Flags().GetString("page-token")
 		manualPaging := cmd.Flags().Changed("page-token")
 		limit := getIntFlag(cmd, "limit")
 
 		enc := json.NewEncoder(cmd.OutOrStdout())
 		emitted := 0
-		for {
+		for !limitReached(emitted, limit) {
+			pageSize := effectivePageSize(requestedPageSize, limit, emitted)
 			body := map[string]any{
 				"pageSize": pageSize,
 			}

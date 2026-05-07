@@ -26,7 +26,7 @@ var tasksListCmd = &cobra.Command{
 		query, _ := cmd.Flags().GetString("query")
 		state, _ := cmd.Flags().GetString("state")
 		assignedToMe, _ := cmd.Flags().GetBool("assigned-to-me")
-		pageSize := clampPageSize(getIntFlag(cmd, "page-size"))
+		requestedPageSize := clampPageSize(getIntFlag(cmd, "page-size"))
 		pageToken, _ := cmd.Flags().GetString("page-token")
 		manualPaging := cmd.Flags().Changed("page-token")
 		limit := getIntFlag(cmd, "limit")
@@ -48,7 +48,8 @@ var tasksListCmd = &cobra.Command{
 
 		enc := json.NewEncoder(cmd.OutOrStdout())
 		emitted := 0
-		for {
+		for !limitReached(emitted, limit) {
+			pageSize := effectivePageSize(requestedPageSize, limit, emitted)
 			body := map[string]any{
 				"pageSize": pageSize,
 			}
