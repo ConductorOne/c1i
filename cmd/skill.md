@@ -126,16 +126,24 @@ NDJSON fields: `id, app_id, display_name, description, slug, grant_count, purpos
 ### Tasks
 
 ```sh
-c1i tasks list [--state=open|closed] [--query=TEXT] [--page-size=50] [--page-token=TOKEN]
+c1i tasks list [--state=open|closed] [--query=TEXT] [--assigned-to-me] [--page-size=50] [--page-token=TOKEN]
 ```
 
 NDJSON fields: `id, display_name, description, state, type, user_id, created_by_user_id, created_at, app_id, app_entitlement_id, outcome`
 
+`outcome` is omitted on open tasks (the underlying enum default
+`*_OUTCOME_UNSPECIFIED` is suppressed). It is present on closed tasks with
+values like `GRANT_OUTCOME_APPROVED`, `GRANT_OUTCOME_DENIED`, etc.
+
 ### Connectors
 
 ```sh
-c1i connectors list [--page-size=50] [--page-token=TOKEN]
+c1i connectors list --app-id=ID [--page-size=50] [--page-token=TOKEN]
 ```
+
+NDJSON fields: `id, app_id, display_name, status`
+
+`--app-id` is required.
 
 ### Access Requests
 
@@ -172,9 +180,15 @@ Defaults to GET; auto-switches to POST when `--body` is set. Without
 `--paginate`, pretty-prints the full JSON response. With `--paginate`, unwraps
 the `list` array and outputs NDJSON (one item per line).
 
+If you GET an endpoint that requires POST (e.g. `/api/v1/search/*`), the
+server returns 404 or 405 and `c1i api` will print a one-line hint
+suggesting `--body` or `--method=POST`.
+
 ## Common API Endpoints
 
-> Use `c1i docs endpoints` for the latest list — this table is a quick reference.
+> Use `c1i docs endpoints` for the latest list. Note: a few endpoints
+> (notably `/api/v1/access_review*`) exist on the server but are not in
+> the public OpenAPI spec, so they only appear in this table.
 
 | Resource | Method | Path |
 |---|---|---|
@@ -231,7 +245,9 @@ The UI calls them "campaigns" (`/admin/campaigns/{id}`), the API calls them
 
 When you need to call an API endpoint you haven't used before:
 
-1. **Search for it**: `c1i docs endpoints --filter=<keyword>`
+1. **Search for it**: `c1i docs endpoints --filter=<keyword>` — matches
+   path, summary, operation ID, and description (so functional words like
+   "current user" or "self approval" work even when the path is opaque).
 2. **Inspect the schema**: `c1i docs endpoint <path>` to see request body fields and response shape.
 3. **Try it**: `c1i api --path=<path>` (GET) or `c1i api --path=<path> --body='...'` (POST).
 4. **Paginate if needed**: Add `--paginate` to unwrap `list` arrays into NDJSON.
