@@ -19,7 +19,12 @@ var authLoginCmd = &cobra.Command{
 	Use:   "login",
 	Short: "Authenticate to C1 via browser or API credentials",
 	Long: `Authenticate to C1. By default, opens your browser for OAuth device flow login.
-Alternatively, pass --client-id and --client-secret to store credentials directly.`,
+Alternatively, pass --client-id and --client-secret to store credentials directly.
+
+Credentials are stored in the OS keyring when available, otherwise as a 0600
+file under your config directory. For non-interactive / CI use, you can skip
+storage entirely and pass credentials each invocation via the C1I_CLIENT_ID
+and C1I_CLIENT_SECRET environment variables (combined with C1I_URL).`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		baseURL, source := GetBaseURLWithSource(cmd)
 
@@ -142,7 +147,8 @@ func loginWithCredentials(cmd *cobra.Command, baseURL, clientID, clientSecret st
 
 func storeAndVerify(cmd *cobra.Command, baseURL, clientID, clientSecret string) error {
 	service := config.KeychainService(baseURL)
-	if err := keychain.Store(service, clientID, clientSecret); err != nil {
+	backend, err := keychain.Store(service, clientID, clientSecret)
+	if err != nil {
 		return fmt.Errorf("failed to store credentials: %w", err)
 	}
 
@@ -158,7 +164,12 @@ func storeAndVerify(cmd *cobra.Command, baseURL, clientID, clientSecret string) 
 		return fmt.Errorf("credentials stored but API test failed: %w", err)
 	}
 
-	_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Credentials stored and verified for %s.\n", baseURL)
+	out := cmd.OutOrStdout()
+	_, _ = fmt.Fprintf(out, "Credentials stored and verified for %s.\n", baseURL)
+	if backend == keychain.BackendFile {
+		path, _ := keychain.FilePath(service)
+		_, _ = fmt.Fprintf(out, "Note: no OS keyring available — credentials saved as a 0600 file at %s\n", path)
+	}
 	return nil
 }
 

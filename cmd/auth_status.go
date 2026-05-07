@@ -4,6 +4,8 @@ import (
 	"fmt"
 
 	"github.com/ConductorOne/c1i/internal/client"
+	"github.com/ConductorOne/c1i/internal/config"
+	"github.com/ConductorOne/c1i/internal/keychain"
 	"github.com/spf13/cobra"
 )
 
@@ -16,6 +18,11 @@ var authStatusCmd = &cobra.Command{
 			return err
 		}
 
+		// Probe Load directly to learn which backend served the credentials.
+		// client.New does its own Load but doesn't expose the backend.
+		service := config.KeychainService(baseURL)
+		_, _, backend, loadErr := keychain.Load(service)
+
 		c, err := client.New(cmd.Context(), baseURL)
 		if err != nil {
 			return fmt.Errorf("not authenticated: %w", err)
@@ -26,7 +33,22 @@ var authStatusCmd = &cobra.Command{
 			return fmt.Errorf("credentials found but API test failed: %w", err)
 		}
 
-		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Authenticated to %s.\n", baseURL)
+		out := cmd.OutOrStdout()
+		_, _ = fmt.Fprintf(out, "Authenticated to %s.\n", baseURL)
+		if loadErr == nil {
+			switch backend {
+			case keychain.BackendEnv:
+				_, _ = fmt.Fprintln(out, "Source: environment variables (C1I_CLIENT_ID, C1I_CLIENT_SECRET)")
+			case keychain.BackendKeyring:
+				_, _ = fmt.Fprintln(out, "Source: OS keyring")
+			case keychain.BackendFile:
+				if path, perr := keychain.FilePath(service); perr == nil {
+					_, _ = fmt.Fprintf(out, "Source: file %s\n", path)
+				} else {
+					_, _ = fmt.Fprintln(out, "Source: file fallback")
+				}
+			}
+		}
 		return nil
 	},
 }

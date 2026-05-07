@@ -40,15 +40,15 @@ type Client struct {
 
 func New(ctx context.Context, baseURL string) (*Client, error) {
 	service := config.KeychainService(baseURL)
-	clientID, clientSecret, err := keychain.Load(service)
+	clientID, clientSecret, _, err := keychain.Load(service)
 	if err != nil {
 		// Try legacy keychain key for *.conductor.one domains.
 		legacyService := config.LegacyKeychainService(baseURL)
 		if legacyService != "" && legacyService != service {
-			clientID, clientSecret, err = keychain.Load(legacyService)
+			clientID, clientSecret, _, err = keychain.Load(legacyService)
 			if err == nil {
 				// Migrate: store under new key and delete old.
-				_ = keychain.Store(service, clientID, clientSecret)
+				_, _ = keychain.Store(service, clientID, clientSecret)
 				_ = keychain.Delete(legacyService)
 			}
 		}
