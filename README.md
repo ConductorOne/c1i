@@ -129,9 +129,32 @@ c1i auth login
 # Or store credentials directly
 c1i auth login --client-id <id> --client-secret <secret>
 
-# Check credential status
+# Check credential status (also reports the storage backend)
 c1i auth status
+
+# Remove stored credentials
+c1i auth logout
 ```
+
+### Credential sources
+
+`c1i` reads credentials from the first source that has them, in this order:
+
+1. **Environment variables** — set `C1I_CLIENT_ID` and `C1I_CLIENT_SECRET`
+   (alongside `C1I_URL`) for non-interactive / CI use. Both must be set; if
+   only one is set the value is ignored.
+2. **OS keyring** — Keychain on macOS, Credential Manager on Windows, Secret
+   Service (e.g. gnome-keyring, KeePassXC) on Linux. Used by default when
+   available.
+3. **File fallback** — a `0600` JSON file under your config directory
+   (`~/.config/c1i/credentials/` on Linux, `~/Library/Application Support/c1i/credentials/`
+   on macOS, `%AppData%\c1i\credentials\` on Windows). Used automatically when
+   no OS keyring is available — typical on headless Linux servers, containers,
+   CI runners, and WSL without a desktop environment.
+
+`c1i auth login` writes to the OS keyring when it can and falls back to the
+file backend transparently. `c1i auth status` tells you which source served
+the active credentials.
 
 ## Design
 
