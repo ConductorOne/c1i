@@ -46,18 +46,46 @@ c1i auth login
 # Direct credential login
 c1i auth login --client-id=ID --client-secret=SECRET
 
-# Verify stored credentials
+# Verify stored credentials (and see which source served them)
 c1i auth status
+
+# Identify the authenticated principal: user ID, roles, permissions, features
+c1i auth whoami
+
+# Remove stored credentials
+c1i auth logout
 ```
 
-Credentials are stored in the OS keychain under service `c1i/<tenant>`.
+Credentials are stored in the OS keyring when available, otherwise in a
+0600 file under your config directory. For non-interactive / CI use, set
+`C1I_CLIENT_ID` and `C1I_CLIENT_SECRET` (combined with `C1I_URL`) to skip
+storage entirely. Run `c1i auth status` to see which source is in use.
 
 ## Configuration
 
-Tenant is required for all API commands. Set via (precedence order):
-1. `--tenant` flag
-2. `C1I_TENANT` env var
-3. `~/.c1i.yaml` → `tenant: mycompany`
+The C1 URL is required for all API commands. Set via (precedence order):
+1. `--url` flag (e.g. `--url=https://mycompany.conductor.one` or `--url=mycompany`)
+2. `C1I_URL` env var
+3. `~/.c1i.yaml` → `url: https://mycompany.conductor.one`
+
+## Shell Completion
+
+```sh
+# bash
+c1i completion bash > /etc/bash_completion.d/c1i  # or source it from ~/.bashrc
+
+# zsh
+c1i completion zsh > "${fpath[1]}/_c1i"
+
+# fish
+c1i completion fish > ~/.config/fish/completions/c1i.fish
+```
+
+## Version
+
+```sh
+c1i version    # or: c1i --version
+```
 
 ## Commands
 
@@ -98,23 +126,34 @@ NDJSON fields: `id, app_id, display_name, description, slug, grant_count, purpos
 ### Tasks
 
 ```sh
-c1i tasks list [--state=open|closed] [--query=TEXT] [--page-size=50] [--page-token=TOKEN]
+c1i tasks list [--state=open|closed] [--query=TEXT] [--assigned-to-me] [--page-size=50] [--page-token=TOKEN]
 ```
 
 NDJSON fields: `id, display_name, description, state, type, user_id, created_by_user_id, created_at, app_id, app_entitlement_id, outcome`
 
+`outcome` is omitted on open tasks (the underlying enum default
+`*_OUTCOME_UNSPECIFIED` is suppressed). It is present on closed tasks with
+values like `GRANT_OUTCOME_APPROVED`, `GRANT_OUTCOME_DENIED`, etc.
+
 ### Connectors
 
 ```sh
-c1i connectors list [--page-size=50] [--page-token=TOKEN]
+c1i connectors list --app-id=ID [--page-size=50] [--page-token=TOKEN]
 ```
+
+NDJSON fields: `id, app_id, display_name, status`
+
+`--app-id` is required.
 
 ### Access Requests
 
 ```sh
-c1i requests create grant --app-id=ID --entitlement-id=EID --user-id=UID [--justification=TEXT] [--duration=DURATION]
-c1i requests create revoke --app-id=ID --entitlement-id=EID --user-id=UID [--justification=TEXT]
+c1i requests create grant --app-id=ID --entitlement-id=EID [--user-id=UID] [--description=TEXT] [--duration=DURATION] [--emergency]
+c1i requests create revoke --app-id=ID --entitlement-id=EID [--user-id=UID] [--description=TEXT]
 ```
+
+`--user-id` defaults to the authenticated user when omitted. `--description` is
+free-form justification text shown to approvers.
 
 ### Task Actions
 
@@ -144,12 +183,19 @@ Defaults to GET; auto-switches to POST when `--body` is set. Without
 `--paginate`, pretty-prints the full JSON response. With `--paginate`, unwraps
 the `list` array and outputs NDJSON (one item per line).
 
+If you GET an endpoint that requires POST (e.g. `/api/v1/search/*`), the
+server returns 404 or 405 and `c1i api` will print a one-line hint
+suggesting `--body` or `--method=POST`.
+
 ## Common API Endpoints
 
-> Use `c1i docs endpoints` for the latest list — this table is a quick reference.
+> Use `c1i docs endpoints` for the latest list. Note: a few endpoints
+> (notably `/api/v1/access_review*`) exist on the server but are not in
+> the public OpenAPI spec, so they only appear in this table.
 
 | Resource | Method | Path |
 |---|---|---|
+| Current principal (whoami) | GET | `/api/v1/auth/introspect` |
 | Get user | GET | `/api/v1/users/{id}` |
 | Search users | POST | `/api/v1/search/users` |
 | Get app | GET | `/api/v1/apps/{id}` |
@@ -202,7 +248,9 @@ The UI calls them "campaigns" (`/admin/campaigns/{id}`), the API calls them
 
 When you need to call an API endpoint you haven't used before:
 
-1. **Search for it**: `c1i docs endpoints --filter=<keyword>`
+1. **Search for it**: `c1i docs endpoints --filter=<keyword>` — matches
+   path, summary, operation ID, and description (so functional words like
+   "current user" or "self approval" work even when the path is opaque).
 2. **Inspect the schema**: `c1i docs endpoint <path>` to see request body fields and response shape.
 3. **Try it**: `c1i api --path=<path>` (GET) or `c1i api --path=<path> --body='...'` (POST).
 4. **Paginate if needed**: Add `--paginate` to unwrap `list` arrays into NDJSON.
