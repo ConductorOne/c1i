@@ -148,9 +148,12 @@ NDJSON fields: `id, app_id, display_name, status`
 ### Access Requests
 
 ```sh
-c1i requests create grant --app-id=ID --entitlement-id=EID --user-id=UID [--justification=TEXT] [--duration=DURATION]
-c1i requests create revoke --app-id=ID --entitlement-id=EID --user-id=UID [--justification=TEXT]
+c1i requests create grant --app-id=ID --entitlement-id=EID [--user-id=UID] [--description=TEXT] [--duration=DURATION] [--emergency]
+c1i requests create revoke --app-id=ID --entitlement-id=EID [--user-id=UID] [--description=TEXT]
 ```
+
+`--user-id` defaults to the authenticated user when omitted. `--description` is
+free-form justification text shown to approvers.
 
 ### Task Actions
 

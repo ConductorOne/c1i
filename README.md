@@ -71,9 +71,11 @@ c1i connectors list --app-id <id> [--page-size N] [--page-token TOKEN]
 ### Access Requests
 
 ```sh
-c1i requests create grant --app-id <id> --entitlement-id <eid> --user-id <uid> [--justification <text>] [--duration <duration>]
-c1i requests create revoke --app-id <id> --entitlement-id <eid> --user-id <uid> [--justification <text>]
+c1i requests create grant --app-id <id> --entitlement-id <eid> [--user-id <uid>] [--description <text>] [--duration <duration>] [--emergency]
+c1i requests create revoke --app-id <id> --entitlement-id <eid> [--user-id <uid>] [--description <text>]
 ```
+
+`--user-id` defaults to the authenticated user when omitted.
 
 ### Raw API
 
