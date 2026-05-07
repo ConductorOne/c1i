@@ -3,6 +3,7 @@ package cmd
 import (
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	"github.com/ConductorOne/c1i/internal/client"
 	"github.com/spf13/cobra"
@@ -102,9 +103,10 @@ func init() {
 
 // mapUserStatus translates the user-friendly --status value to the
 // enum the search/users API accepts. The API enum values are bare
-// (ENABLED / DISABLED / DELETED), not prefixed.
+// (ENABLED / DISABLED / DELETED), not prefixed. Input is case-insensitive
+// so `--status enabled` and `--status ENABLED` both work.
 func mapUserStatus(s string) string {
-	switch s {
+	switch strings.ToLower(s) {
 	case "enabled":
 		return "ENABLED"
 	case "disabled":

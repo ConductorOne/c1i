@@ -13,6 +13,10 @@ var connectorsListCmd = &cobra.Command{
 	Use:   "list",
 	Short: "List connectors for an application (NDJSON output)",
 	RunE: func(cmd *cobra.Command, args []string) error {
+		if err := requireNonEmpty(cmd, "app-id"); err != nil {
+			return err
+		}
+
 		baseURL, err := GetBaseURL()
 		if err != nil {
 			return err
@@ -84,6 +88,6 @@ func init() {
 	connectorsListCmd.Flags().String("app-id", "", "Application ID")
 	connectorsListCmd.Flags().Int("page-size", 50, "Results per page")
 	connectorsListCmd.Flags().String("page-token", "", "Pagination cursor")
-	_ = connectorsListCmd.MarkFlagRequired("app-id")
+	markRequired(connectorsListCmd, "app-id")
 	connectorsCmd.AddCommand(connectorsListCmd)
 }

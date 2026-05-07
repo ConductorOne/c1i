@@ -1,0 +1,83 @@
+package cmd
+
+import (
+	"strings"
+	"testing"
+
+	"github.com/spf13/cobra"
+)
+
+func TestMarkRequiredAnnotatesUsage(t *testing.T) {
+	cmd := &cobra.Command{Use: "test"}
+	cmd.Flags().String("foo", "", "Foo flag")
+	cmd.Flags().String("bar", "", "Bar flag")
+
+	markRequired(cmd, "foo", "bar")
+
+	for _, n := range []string{"foo", "bar"} {
+		f := cmd.Flags().Lookup(n)
+		if f == nil {
+			t.Fatalf("flag %s missing", n)
+		}
+		if !strings.Contains(f.Usage, "(required)") {
+			t.Errorf("flag --%s usage should contain (required), got %q", n, f.Usage)
+		}
+	}
+}
+
+func TestMarkRequiredIdempotent(t *testing.T) {
+	cmd := &cobra.Command{Use: "test"}
+	cmd.Flags().String("foo", "", "Foo flag")
+
+	markRequired(cmd, "foo")
+	markRequired(cmd, "foo")
+
+	got := cmd.Flags().Lookup("foo").Usage
+	if strings.Count(got, "(required)") != 1 {
+		t.Errorf("expected single (required) marker, got %q", got)
+	}
+}
+
+func TestRequireNonEmpty(t *testing.T) {
+	mkCmd := func() *cobra.Command {
+		cmd := &cobra.Command{Use: "test"}
+		cmd.Flags().String("a", "", "")
+		cmd.Flags().String("b", "", "")
+		cmd.Flags().String("c", "", "")
+		return cmd
+	}
+
+	t.Run("all set", func(t *testing.T) {
+		cmd := mkCmd()
+		_ = cmd.Flags().Set("a", "x")
+		_ = cmd.Flags().Set("b", "y")
+		if err := requireNonEmpty(cmd, "a", "b"); err != nil {
+			t.Fatalf("expected nil, got %v", err)
+		}
+	})
+
+	t.Run("single missing", func(t *testing.T) {
+		cmd := mkCmd()
+		_ = cmd.Flags().Set("a", "x")
+		err := requireNonEmpty(cmd, "a", "b")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "--b") {
+			t.Errorf("expected error to mention --b, got %v", err)
+		}
+	})
+
+	t.Run("multiple missing", func(t *testing.T) {
+		cmd := mkCmd()
+		err := requireNonEmpty(cmd, "a", "b", "c")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		for _, want := range []string{"--a", "--b", "--c"} {
+			if !strings.Contains(err.Error(), want) {
+				t.Errorf("expected error to mention %s, got %v", want, err)
+			}
+		}
+	})
+}

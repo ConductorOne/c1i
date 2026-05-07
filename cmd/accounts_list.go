@@ -3,6 +3,7 @@ package cmd
 import (
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	"github.com/ConductorOne/c1i/internal/client"
 	"github.com/spf13/cobra"
@@ -12,6 +13,10 @@ var accountsListCmd = &cobra.Command{
 	Use:   "list",
 	Short: "Search and list accounts (app users) for an application (NDJSON output)",
 	RunE: func(cmd *cobra.Command, args []string) error {
+		if err := requireNonEmpty(cmd, "app-id"); err != nil {
+			return err
+		}
+
 		baseURL, err := GetBaseURL()
 		if err != nil {
 			return err
@@ -111,12 +116,13 @@ func init() {
 	accountsListCmd.Flags().String("query", "", "Fuzzy search on display name")
 	accountsListCmd.Flags().Int("page-size", 50, "Results per page")
 	accountsListCmd.Flags().String("page-token", "", "Pagination cursor")
-	_ = accountsListCmd.MarkFlagRequired("app-id")
+	markRequired(accountsListCmd, "app-id")
 	accountsCmd.AddCommand(accountsListCmd)
 }
 
+// mapAppUserStatus is case-insensitive; both `--status enabled` and `ENABLED` work.
 func mapAppUserStatus(s string) string {
-	switch s {
+	switch strings.ToLower(s) {
 	case "enabled":
 		return "STATUS_ENABLED"
 	case "disabled":
@@ -128,8 +134,9 @@ func mapAppUserStatus(s string) string {
 	}
 }
 
+// mapAppUserType is case-insensitive.
 func mapAppUserType(s string) string {
-	switch s {
+	switch strings.ToLower(s) {
 	case "user":
 		return "APP_USER_TYPE_USER"
 	case "service_account":

@@ -52,7 +52,7 @@ var tasksCommentCmd = &cobra.Command{
 func init() {
 	tasksCommentCmd.Flags().String("task-id", "", "Task ID to comment on")
 	tasksCommentCmd.Flags().String("comment", "", "Comment text")
-	_ = tasksCommentCmd.MarkFlagRequired("task-id")
-	_ = tasksCommentCmd.MarkFlagRequired("comment")
+	markRequired(tasksCommentCmd, "task-id")
+	markRequired(tasksCommentCmd, "comment")
 	tasksCmd.AddCommand(tasksCommentCmd)
 }

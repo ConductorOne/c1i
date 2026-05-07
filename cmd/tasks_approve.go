@@ -54,6 +54,6 @@ var tasksApproveCmd = &cobra.Command{
 func init() {
 	tasksApproveCmd.Flags().String("task-id", "", "Task ID to approve")
 	tasksApproveCmd.Flags().String("comment", "", "Optional comment")
-	_ = tasksApproveCmd.MarkFlagRequired("task-id")
+	markRequired(tasksApproveCmd, "task-id")
 	tasksCmd.AddCommand(tasksApproveCmd)
 }

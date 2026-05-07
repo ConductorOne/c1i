@@ -134,7 +134,7 @@ func init() {
 	apiCmd.Flags().String("method", "", "HTTP method: GET, POST, PUT, or DELETE (default: GET, or POST if --body is set)")
 	apiCmd.Flags().String("body", "", "JSON request body (implies POST)")
 	apiCmd.Flags().Bool("paginate", false, "Automatically follow pagination to fetch all pages")
-	_ = apiCmd.MarkFlagRequired("path")
+	markRequired(apiCmd, "path")
 	rootCmd.AddCommand(apiCmd)
 }
 

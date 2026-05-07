@@ -54,6 +54,6 @@ var tasksDenyCmd = &cobra.Command{
 func init() {
 	tasksDenyCmd.Flags().String("task-id", "", "Task ID to deny")
 	tasksDenyCmd.Flags().String("comment", "", "Optional comment")
-	_ = tasksDenyCmd.MarkFlagRequired("task-id")
+	markRequired(tasksDenyCmd, "task-id")
 	tasksCmd.AddCommand(tasksDenyCmd)
 }

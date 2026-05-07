@@ -157,8 +157,10 @@ func init() {
 	tasksCmd.AddCommand(tasksListCmd)
 }
 
+// mapTaskState normalizes the user-friendly --state value to the API enum.
+// Input is case-insensitive so `--state open` and `--state OPEN` both work.
 func mapTaskState(s string) string {
-	switch s {
+	switch strings.ToLower(s) {
 	case "open":
 		return "TASK_STATE_OPEN"
 	case "closed":
