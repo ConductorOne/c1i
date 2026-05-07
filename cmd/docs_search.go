@@ -20,7 +20,14 @@ const (
 var docsSearchCmd = &cobra.Command{
 	Use:   "search <query>",
 	Short: "Search C1 documentation by keyword (no auth required)",
-	Args:  cobra.MinimumNArgs(1),
+	Long: `Search C1 documentation by keyword. Returns NDJSON, one match per
+line, with the doc page path, title, snippet, and URL.
+
+Examples:
+  c1i docs search "access reviews"
+  c1i docs search campaigns
+  c1i docs search "current user" | jq -r '.url'`,
+	Args: cobra.MinimumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 
 		query := args[0]
@@ -83,7 +90,18 @@ var docsSearchCmd = &cobra.Command{
 var docsPageCmd = &cobra.Command{
 	Use:   "page <path>",
 	Short: "Fetch a full documentation page by path (no auth required)",
-	Args:  cobra.ExactArgs(1),
+	Long: `Fetch a full C1 documentation page by its path. Output is the
+plain-text rendering of the page, suitable for grepping or piping.
+
+The path is the URL segment after https://conductorone.com/docs/, with
+no leading slash. Find paths via 'c1i docs search' (each result has a
+'path' field) or by browsing the docs site.
+
+Examples:
+  c1i docs page product/admin/campaigns
+  c1i docs page baton/okta
+  c1i docs search "access reviews" | jq -r '.path' | head -1 | xargs c1i docs page`,
+	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 
 		reqBody, _ := json.Marshal(map[string]string{

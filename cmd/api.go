@@ -15,6 +15,10 @@ var apiCmd = &cobra.Command{
 	Use:   "api",
 	Short: "Make a raw C1 API request and pretty-print the JSON response",
 	RunE: func(cmd *cobra.Command, args []string) error {
+		if err := requireNonEmpty(cmd, "path"); err != nil {
+			return err
+		}
+
 		baseURL, err := GetBaseURL()
 		if err != nil {
 			return err

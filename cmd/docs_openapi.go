@@ -117,7 +117,15 @@ var docsEndpointsCmd = &cobra.Command{
 var docsEndpointCmd = &cobra.Command{
 	Use:   "endpoint <path>",
 	Short: "Show full request/response schema for an API endpoint (no auth required)",
-	Args:  cobra.ExactArgs(1),
+	Long: `Show the full request and response schema for a specific C1 API
+endpoint. The path is one of the values returned by 'c1i docs endpoints'
+(no auth required for either command).
+
+Examples:
+  c1i docs endpoint /api/v1/users/{id}
+  c1i docs endpoint /api/v1/search/tasks
+  c1i docs endpoint /api/v1/auth/introspect`,
+	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		data, err := fetchOpenAPISpec(cmd)
 		if err != nil {
