@@ -100,14 +100,17 @@ func init() {
 	usersCmd.AddCommand(usersListCmd)
 }
 
+// mapUserStatus translates the user-friendly --status value to the
+// enum the search/users API accepts. The API enum values are bare
+// (ENABLED / DISABLED / DELETED), not prefixed.
 func mapUserStatus(s string) string {
 	switch s {
 	case "enabled":
-		return "STATUS_ENABLED"
+		return "ENABLED"
 	case "disabled":
-		return "STATUS_DISABLED"
+		return "DISABLED"
 	case "deleted":
-		return "STATUS_DELETED"
+		return "DELETED"
 	default:
 		return s
 	}
