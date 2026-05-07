@@ -84,6 +84,9 @@ var apiCmd = &cobra.Command{
 				return fmt.Errorf("unsupported method: %s (use GET, POST, PUT, or DELETE)", method)
 			}
 			if err != nil {
+				if method == "GET" && looksLikePOSTOnly(err.Error(), path) {
+					return fmt.Errorf("API error: %w\n\nHint: this looks like a POST-only endpoint (e.g. /search/* paths). Try '--body \"{}\"' (which switches to POST) or '--method=POST'", err)
+				}
 				return fmt.Errorf("API error: %w", err)
 			}
 
@@ -133,6 +136,17 @@ func init() {
 	apiCmd.Flags().Bool("paginate", false, "Automatically follow pagination to fetch all pages")
 	_ = apiCmd.MarkFlagRequired("path")
 	rootCmd.AddCommand(apiCmd)
+}
+
+// looksLikePOSTOnly returns true when a GET error and path together suggest
+// the endpoint requires POST. C1 returns 405 in some cases and 404 in others
+// (the gateway treats unknown method+path combos as 404), so we hint on both
+// when the path matches the search/* convention.
+func looksLikePOSTOnly(errMsg, path string) bool {
+	if !strings.Contains(errMsg, "returned 405") && !strings.Contains(errMsg, "returned 404") {
+		return false
+	}
+	return strings.Contains(path, "/search/") || strings.Contains(errMsg, "returned 405")
 }
 
 // setQueryParam adds or replaces a query parameter on a URL path.

@@ -156,6 +156,25 @@ c1i auth logout
 file backend transparently. `c1i auth status` tells you which source served
 the active credentials.
 
+## Shell Completion
+
+```sh
+# bash
+c1i completion bash > /etc/bash_completion.d/c1i
+
+# zsh
+c1i completion zsh > "${fpath[1]}/_c1i"
+
+# fish
+c1i completion fish > ~/.config/fish/completions/c1i.fish
+```
+
+## Version
+
+```sh
+c1i version       # or: c1i --version
+```
+
 ## Design
 
 c1i is built specifically as a tool for AI agents:

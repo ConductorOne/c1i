@@ -3,6 +3,7 @@ package cmd
 import (
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	"github.com/ConductorOne/c1i/internal/client"
 	"github.com/spf13/cobra"
@@ -117,15 +118,21 @@ var tasksListCmd = &cobra.Command{
 					row["type"] = "grant"
 					row["app_id"] = t.Type.Grant.AppID
 					row["app_entitlement_id"] = t.Type.Grant.AppEntitlementID
-					row["outcome"] = t.Type.Grant.Outcome
+					if o := finalOutcome(t.Type.Grant.Outcome); o != "" {
+						row["outcome"] = o
+					}
 				case t.Type.Revoke != nil:
 					row["type"] = "revoke"
 					row["app_id"] = t.Type.Revoke.AppID
 					row["app_entitlement_id"] = t.Type.Revoke.AppEntitlementID
-					row["outcome"] = t.Type.Revoke.Outcome
+					if o := finalOutcome(t.Type.Revoke.Outcome); o != "" {
+						row["outcome"] = o
+					}
 				case t.Type.Certify != nil:
 					row["type"] = "certify"
-					row["outcome"] = t.Type.Certify.Outcome
+					if o := finalOutcome(t.Type.Certify.Outcome); o != "" {
+						row["outcome"] = o
+					}
 				}
 
 				_ = enc.Encode(row)
@@ -159,4 +166,14 @@ func mapTaskState(s string) string {
 	default:
 		return s
 	}
+}
+
+// finalOutcome returns the outcome string only when it represents a real
+// terminal state. The proto default values (*_OUTCOME_UNSPECIFIED) appear on
+// every open task and are noise for agents reading the NDJSON stream.
+func finalOutcome(s string) string {
+	if s == "" || strings.HasSuffix(s, "_OUTCOME_UNSPECIFIED") {
+		return ""
+	}
+	return s
 }

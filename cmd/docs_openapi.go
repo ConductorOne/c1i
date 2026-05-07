@@ -78,7 +78,7 @@ var docsEndpointsCmd = &cobra.Command{
 					OperationID: op.OperationID,
 				}
 				if filter != "" {
-					haystack := strings.ToLower(e.Path + " " + e.Summary + " " + e.OperationID)
+					haystack := strings.ToLower(e.Path + " " + e.Summary + " " + e.OperationID + " " + op.Description)
 					if !strings.Contains(haystack, filter) {
 						continue
 					}

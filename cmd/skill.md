@@ -68,6 +68,25 @@ The C1 URL is required for all API commands. Set via (precedence order):
 2. `C1I_URL` env var
 3. `~/.c1i.yaml` → `url: https://mycompany.conductor.one`
 
+## Shell Completion
+
+```sh
+# bash
+c1i completion bash > /etc/bash_completion.d/c1i  # or source it from ~/.bashrc
+
+# zsh
+c1i completion zsh > "${fpath[1]}/_c1i"
+
+# fish
+c1i completion fish > ~/.config/fish/completions/c1i.fish
+```
+
+## Version
+
+```sh
+c1i version    # or: c1i --version
+```
+
 ## Commands
 
 ### Users
