@@ -8,12 +8,30 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"runtime/debug"
 
 	"github.com/ConductorOne/c1i/internal/config"
 	"github.com/ConductorOne/c1i/internal/keychain"
 	"github.com/ConductorOne/c1i/internal/tokensource"
 	"golang.org/x/oauth2"
 )
+
+var userAgent = func() string {
+	version := "dev"
+	if info, ok := debug.ReadBuildInfo(); ok && info.Main.Version != "" && info.Main.Version != "(devel)" {
+		version = info.Main.Version
+	}
+	return "c1.ai/c1i (version=" + version + ")"
+}()
+
+type userAgentTripper struct {
+	next http.RoundTripper
+}
+
+func (uat *userAgentTripper) RoundTrip(req *http.Request) (*http.Response, error) {
+	req.Header.Set("User-Agent", userAgent)
+	return uat.next.RoundTrip(req)
+}
 
 type Client struct {
 	httpClient *http.Client
@@ -44,8 +62,11 @@ func New(ctx context.Context, baseURL string) (*Client, error) {
 		return nil, fmt.Errorf("creating token source: %w", err)
 	}
 
+	oauthClient := oauth2.NewClient(ctx, tokenSource)
+	oauthClient.Transport = &userAgentTripper{next: oauthClient.Transport}
+
 	return &Client{
-		httpClient: oauth2.NewClient(ctx, tokenSource),
+		httpClient: oauthClient,
 		baseURL:    baseURL,
 	}, nil
 }
