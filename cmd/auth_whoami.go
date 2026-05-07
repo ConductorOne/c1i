@@ -10,10 +10,13 @@ import (
 
 var authWhoamiCmd = &cobra.Command{
 	Use:   "whoami",
-	Short: "Show the authenticated principal's user ID, roles, and permissions",
-	Long: `Calls /api/v1/auth/introspect and prints the authenticated principal's
-identity, roles, permissions, and tenant feature flags. Useful for agents
-that need to discover the current user before making other API calls.`,
+	Short: "Show the authenticated principal's user ID and tenant scope",
+	Long: `Calls /api/v1/auth/introspect and returns a compact summary of the
+authenticated principal: userId, principleId, and counts of roles,
+permissions, and feature flags.
+
+The full introspect payload can include hundreds of roles and over a
+thousand permissions — pass --verbose to dump it all.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		baseURL, err := GetBaseURL()
 		if err != nil {
@@ -27,11 +30,19 @@ that need to discover the current user before making other API calls.`,
 		if err != nil {
 			return err
 		}
-		var pretty any
-		if err := json.Unmarshal(body, &pretty); err != nil {
+
+		verbose, _ := cmd.Flags().GetBool("verbose")
+		var payload map[string]any
+		if err := json.Unmarshal(body, &payload); err != nil {
 			return fmt.Errorf("parsing introspect response: %w", err)
 		}
-		out, err := json.MarshalIndent(pretty, "", "  ")
+
+		var out []byte
+		if verbose {
+			out, err = json.MarshalIndent(payload, "", "  ")
+		} else {
+			out, err = json.MarshalIndent(summarize(payload), "", "  ")
+		}
 		if err != nil {
 			return err
 		}
@@ -40,6 +51,26 @@ that need to discover the current user before making other API calls.`,
 	},
 }
 
+func summarize(p map[string]any) map[string]any {
+	return map[string]any{
+		"userId":      p["userId"],
+		"principleId": p["principleId"],
+		"counts": map[string]int{
+			"roles":       sliceLen(p["roles"]),
+			"permissions": sliceLen(p["permissions"]),
+			"features":    sliceLen(p["features"]),
+		},
+	}
+}
+
+func sliceLen(v any) int {
+	if s, ok := v.([]any); ok {
+		return len(s)
+	}
+	return 0
+}
+
 func init() {
+	authWhoamiCmd.Flags().BoolP("verbose", "v", false, "Include full roles, permissions, and features arrays")
 	authCmd.AddCommand(authWhoamiCmd)
 }
