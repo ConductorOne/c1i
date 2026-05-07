@@ -23,12 +23,15 @@ var appsListCmd = &cobra.Command{
 			return fmt.Errorf("authentication failed: %w", err)
 		}
 
-		pageSize, _ := cmd.Flags().GetInt("page-size")
+		requestedPageSize := clampPageSize(getIntFlag(cmd, "page-size"))
 		pageToken, _ := cmd.Flags().GetString("page-token")
 		manualPaging := cmd.Flags().Changed("page-token")
+		limit := getIntFlag(cmd, "limit")
 
 		enc := json.NewEncoder(cmd.OutOrStdout())
-		for {
+		emitted := 0
+		for !limitReached(emitted, limit) {
+			pageSize := effectivePageSize(requestedPageSize, limit, emitted)
 			params := map[string]string{
 				"page_size": strconv.Itoa(pageSize),
 			}
@@ -62,6 +65,10 @@ var appsListCmd = &cobra.Command{
 					"description":  a.Description,
 					"user_count":   a.UserCount,
 				})
+				emitted++
+				if limitReached(emitted, limit) {
+					return nil
+				}
 			}
 
 			if resp.NextPageToken == "" || manualPaging {
@@ -75,7 +82,8 @@ var appsListCmd = &cobra.Command{
 }
 
 func init() {
-	appsListCmd.Flags().Int("page-size", 50, "Results per page")
+	appsListCmd.Flags().Int("page-size", 50, "Results per page (max 100)")
 	appsListCmd.Flags().String("page-token", "", "Pagination cursor")
+	addLimitFlag(appsListCmd)
 	appsCmd.AddCommand(appsListCmd)
 }

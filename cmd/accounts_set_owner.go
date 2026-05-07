@@ -58,8 +58,8 @@ func init() {
 	accountsSetOwnerCmd.Flags().String("app-id", "", "Application ID")
 	accountsSetOwnerCmd.Flags().String("app-user-id", "", "App user (account) ID")
 	accountsSetOwnerCmd.Flags().String("user-id", "", "C1 user ID to set as owner")
-	_ = accountsSetOwnerCmd.MarkFlagRequired("app-id")
-	_ = accountsSetOwnerCmd.MarkFlagRequired("app-user-id")
-	_ = accountsSetOwnerCmd.MarkFlagRequired("user-id")
+	markRequired(accountsSetOwnerCmd, "app-id")
+	markRequired(accountsSetOwnerCmd, "app-user-id")
+	markRequired(accountsSetOwnerCmd, "user-id")
 	accountsCmd.AddCommand(accountsSetOwnerCmd)
 }

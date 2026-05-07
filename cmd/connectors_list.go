@@ -13,6 +13,10 @@ var connectorsListCmd = &cobra.Command{
 	Use:   "list",
 	Short: "List connectors for an application (NDJSON output)",
 	RunE: func(cmd *cobra.Command, args []string) error {
+		if err := requireNonEmpty(cmd, "app-id"); err != nil {
+			return err
+		}
+
 		baseURL, err := GetBaseURL()
 		if err != nil {
 			return err
@@ -24,12 +28,15 @@ var connectorsListCmd = &cobra.Command{
 		}
 
 		appID, _ := cmd.Flags().GetString("app-id")
-		pageSize, _ := cmd.Flags().GetInt("page-size")
+		requestedPageSize := clampPageSize(getIntFlag(cmd, "page-size"))
 		pageToken, _ := cmd.Flags().GetString("page-token")
 		manualPaging := cmd.Flags().Changed("page-token")
+		limit := getIntFlag(cmd, "limit")
 
 		enc := json.NewEncoder(cmd.OutOrStdout())
-		for {
+		emitted := 0
+		for !limitReached(emitted, limit) {
+			pageSize := effectivePageSize(requestedPageSize, limit, emitted)
 			params := map[string]string{
 				"page_size": strconv.Itoa(pageSize),
 			}
@@ -68,6 +75,10 @@ var connectorsListCmd = &cobra.Command{
 					"display_name": conn.DisplayName,
 					"status":       conn.Status.Status,
 				})
+				emitted++
+				if limitReached(emitted, limit) {
+					return nil
+				}
 			}
 
 			if resp.NextPageToken == "" || manualPaging {
@@ -82,8 +93,9 @@ var connectorsListCmd = &cobra.Command{
 
 func init() {
 	connectorsListCmd.Flags().String("app-id", "", "Application ID")
-	connectorsListCmd.Flags().Int("page-size", 50, "Results per page")
+	connectorsListCmd.Flags().Int("page-size", 50, "Results per page (max 100)")
 	connectorsListCmd.Flags().String("page-token", "", "Pagination cursor")
-	_ = connectorsListCmd.MarkFlagRequired("app-id")
+	markRequired(connectorsListCmd, "app-id")
+	addLimitFlag(connectorsListCmd)
 	connectorsCmd.AddCommand(connectorsListCmd)
 }

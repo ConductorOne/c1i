@@ -3,6 +3,7 @@ package cmd
 import (
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	"github.com/ConductorOne/c1i/internal/client"
 	"github.com/spf13/cobra"
@@ -25,12 +26,15 @@ var usersListCmd = &cobra.Command{
 		query, _ := cmd.Flags().GetString("query")
 		email, _ := cmd.Flags().GetString("email")
 		status, _ := cmd.Flags().GetString("status")
-		pageSize, _ := cmd.Flags().GetInt("page-size")
+		requestedPageSize := clampPageSize(getIntFlag(cmd, "page-size"))
 		pageToken, _ := cmd.Flags().GetString("page-token")
 		manualPaging := cmd.Flags().Changed("page-token")
+		limit := getIntFlag(cmd, "limit")
 
 		enc := json.NewEncoder(cmd.OutOrStdout())
-		for {
+		emitted := 0
+		for !limitReached(emitted, limit) {
+			pageSize := effectivePageSize(requestedPageSize, limit, emitted)
 			body := map[string]any{
 				"pageSize": pageSize,
 			}
@@ -79,6 +83,10 @@ var usersListCmd = &cobra.Command{
 					"job_title":    u.JobTitle,
 					"status":       u.Status,
 				})
+				emitted++
+				if limitReached(emitted, limit) {
+					return nil
+				}
 			}
 
 			if resp.NextPageToken == "" || manualPaging {
@@ -95,16 +103,18 @@ func init() {
 	usersListCmd.Flags().String("query", "", "Fuzzy search on name or email")
 	usersListCmd.Flags().String("email", "", "Exact email match")
 	usersListCmd.Flags().String("status", "", "Filter by status: enabled, disabled, deleted")
-	usersListCmd.Flags().Int("page-size", 50, "Number of results per page")
+	usersListCmd.Flags().Int("page-size", 50, "Number of results per page (max 100)")
 	usersListCmd.Flags().String("page-token", "", "Pagination cursor for next page")
+	addLimitFlag(usersListCmd)
 	usersCmd.AddCommand(usersListCmd)
 }
 
 // mapUserStatus translates the user-friendly --status value to the
 // enum the search/users API accepts. The API enum values are bare
-// (ENABLED / DISABLED / DELETED), not prefixed.
+// (ENABLED / DISABLED / DELETED), not prefixed. Input is case-insensitive
+// so `--status enabled` and `--status ENABLED` both work.
 func mapUserStatus(s string) string {
-	switch s {
+	switch strings.ToLower(s) {
 	case "enabled":
 		return "ENABLED"
 	case "disabled":

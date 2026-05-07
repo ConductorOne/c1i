@@ -76,7 +76,7 @@ func init() {
 	requestsCreateGrantCmd.Flags().String("duration", "", "Grant duration (e.g. 24h, 7d)")
 	requestsCreateGrantCmd.Flags().String("description", "", "Justification or description")
 	requestsCreateGrantCmd.Flags().Bool("emergency", false, "Request emergency access")
-	_ = requestsCreateGrantCmd.MarkFlagRequired("app-id")
-	_ = requestsCreateGrantCmd.MarkFlagRequired("entitlement-id")
+	markRequired(requestsCreateGrantCmd, "app-id")
+	markRequired(requestsCreateGrantCmd, "entitlement-id")
 	requestsCreateCmd.AddCommand(requestsCreateGrantCmd)
 }

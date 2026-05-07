@@ -99,6 +99,17 @@ var docsEndpointsCmd = &cobra.Command{
 			_ = enc.Encode(e)
 		}
 
+		// When a filter returns nothing, point the user at `docs search`,
+		// which covers doc pages and concept-level matches. Some endpoints
+		// (e.g. access_review) are intentionally hidden from the public
+		// OpenAPI but documented elsewhere — without this hint, an agent
+		// will assume the endpoint doesn't exist.
+		if len(endpoints) == 0 && filter != "" {
+			_, _ = fmt.Fprintf(cmd.ErrOrStderr(),
+				"No endpoints matched %q. Some C1 endpoints aren't in the public OpenAPI spec — try 'c1i docs search %q' for doc-page matches.\n",
+				filter, filter)
+		}
+
 		return nil
 	},
 }
@@ -106,7 +117,15 @@ var docsEndpointsCmd = &cobra.Command{
 var docsEndpointCmd = &cobra.Command{
 	Use:   "endpoint <path>",
 	Short: "Show full request/response schema for an API endpoint (no auth required)",
-	Args:  cobra.ExactArgs(1),
+	Long: `Show the full request and response schema for a specific C1 API
+endpoint. The path is one of the values returned by 'c1i docs endpoints'
+(no auth required for either command).
+
+Examples:
+  c1i docs endpoint /api/v1/users/{id}
+  c1i docs endpoint /api/v1/search/tasks
+  c1i docs endpoint /api/v1/auth/introspect`,
+	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		data, err := fetchOpenAPISpec(cmd)
 		if err != nil {

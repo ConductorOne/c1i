@@ -3,6 +3,7 @@ package cmd
 import (
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	"github.com/ConductorOne/c1i/internal/client"
 	"github.com/spf13/cobra"
@@ -12,6 +13,10 @@ var accountsListCmd = &cobra.Command{
 	Use:   "list",
 	Short: "Search and list accounts (app users) for an application (NDJSON output)",
 	RunE: func(cmd *cobra.Command, args []string) error {
+		if err := requireNonEmpty(cmd, "app-id"); err != nil {
+			return err
+		}
+
 		baseURL, err := GetBaseURL()
 		if err != nil {
 			return err
@@ -27,12 +32,15 @@ var accountsListCmd = &cobra.Command{
 		appUserType, _ := cmd.Flags().GetString("type")
 		unmappedOnly, _ := cmd.Flags().GetBool("unmapped-only")
 		query, _ := cmd.Flags().GetString("query")
-		pageSize, _ := cmd.Flags().GetInt("page-size")
+		requestedPageSize := clampPageSize(getIntFlag(cmd, "page-size"))
 		pageToken, _ := cmd.Flags().GetString("page-token")
 		manualPaging := cmd.Flags().Changed("page-token")
+		limit := getIntFlag(cmd, "limit")
 
 		enc := json.NewEncoder(cmd.OutOrStdout())
-		for {
+		emitted := 0
+		for !limitReached(emitted, limit) {
+			pageSize := effectivePageSize(requestedPageSize, limit, emitted)
 			body := map[string]any{
 				"appId":    appID,
 				"pageSize": pageSize,
@@ -91,6 +99,10 @@ var accountsListCmd = &cobra.Command{
 					"app_user_type":    a.AppUserType,
 					"status":           a.Status.Status,
 				})
+				emitted++
+				if limitReached(emitted, limit) {
+					return nil
+				}
 			}
 
 			if resp.NextPageToken == "" || manualPaging {
@@ -109,14 +121,16 @@ func init() {
 	accountsListCmd.Flags().String("type", "", "Filter: user, service_account, system_account")
 	accountsListCmd.Flags().Bool("unmapped-only", false, "Only show accounts with no linked identity user")
 	accountsListCmd.Flags().String("query", "", "Fuzzy search on display name")
-	accountsListCmd.Flags().Int("page-size", 50, "Results per page")
+	accountsListCmd.Flags().Int("page-size", 50, "Results per page (max 100)")
 	accountsListCmd.Flags().String("page-token", "", "Pagination cursor")
-	_ = accountsListCmd.MarkFlagRequired("app-id")
+	markRequired(accountsListCmd, "app-id")
+	addLimitFlag(accountsListCmd)
 	accountsCmd.AddCommand(accountsListCmd)
 }
 
+// mapAppUserStatus is case-insensitive; both `--status enabled` and `ENABLED` work.
 func mapAppUserStatus(s string) string {
-	switch s {
+	switch strings.ToLower(s) {
 	case "enabled":
 		return "STATUS_ENABLED"
 	case "disabled":
@@ -128,8 +142,9 @@ func mapAppUserStatus(s string) string {
 	}
 }
 
+// mapAppUserType is case-insensitive.
 func mapAppUserType(s string) string {
-	switch s {
+	switch strings.ToLower(s) {
 	case "user":
 		return "APP_USER_TYPE_USER"
 	case "service_account":

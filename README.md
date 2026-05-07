@@ -30,19 +30,19 @@ c1i docs endpoints --filter task
 ### Users
 
 ```sh
-c1i users list [--query <text>] [--email <email>] [--status enabled|disabled|deleted] [--page-size N] [--page-token TOKEN]
+c1i users list [--query <text>] [--email <email>] [--status enabled|disabled|deleted] [--page-size N] [--page-token TOKEN] [--limit N]
 ```
 
 ### Apps
 
 ```sh
-c1i apps list [--page-size N] [--page-token TOKEN]
+c1i apps list [--page-size N] [--page-token TOKEN] [--limit N]
 ```
 
 ### Accounts
 
 ```sh
-c1i accounts list --app-id <id> [--status enabled|disabled|deleted] [--type user|service_account|system_account] [--unmapped-only] [--query <text>] [--page-size N] [--page-token TOKEN]
+c1i accounts list --app-id <id> [--status enabled|disabled|deleted] [--type user|service_account|system_account] [--unmapped-only] [--query <text>] [--page-size N] [--page-token TOKEN] [--limit N]
 
 c1i accounts set-owner --app-id <id> --app-user-id <id> --user-id <id>
 ```
@@ -50,13 +50,13 @@ c1i accounts set-owner --app-id <id> --app-user-id <id> --user-id <id>
 ### Entitlements
 
 ```sh
-c1i entitlements list [--app-id <id>] [--query <text>] [--page-size N] [--page-token TOKEN]
+c1i entitlements list [--app-id <id>] [--query <text>] [--page-size N] [--page-token TOKEN] [--limit N]
 ```
 
 ### Tasks
 
 ```sh
-c1i tasks list [--state open|closed] [--query <text>] [--assigned-to-me] [--page-size N] [--page-token TOKEN]
+c1i tasks list [--state open|closed] [--query <text>] [--assigned-to-me] [--page-size N] [--page-token TOKEN] [--limit N]
 c1i tasks approve --task-id <id> [--comment <text>]
 c1i tasks deny --task-id <id> [--comment <text>]
 c1i tasks comment --task-id <id> --comment <text>
@@ -65,7 +65,7 @@ c1i tasks comment --task-id <id> --comment <text>
 ### Connectors
 
 ```sh
-c1i connectors list --app-id <id> [--page-size N] [--page-token TOKEN]
+c1i connectors list --app-id <id> [--page-size N] [--page-token TOKEN] [--limit N]
 ```
 
 ### Access Requests
@@ -119,6 +119,7 @@ c1i docs openapi
 - **`api`** outputs pretty-printed JSON. With `--paginate`, outputs NDJSON (one list item per line).
 - **`docs`** commands output NDJSON (`search`, `endpoints`), pretty JSON (`endpoint`, `openapi` is YAML), or plain text (`page`).
 - List commands auto-paginate by default. Pass `--page-token` to fetch a single page manually.
+- `--page-size` controls the per-call batch size (max 100). Use `--limit N` to cap the *total* number of results emitted; auto-pagination stops fetching new pages once the cap is reached.
 
 ## Configuration
 
@@ -202,7 +203,7 @@ c1i is built specifically as a tool for AI agents:
 
 - **Structured output**: All data commands produce NDJSON or JSON — never mixed or human-formatted output.
 - **Self-documenting API**: `docs endpoints`, `docs endpoint`, and `docs search` let an agent discover and understand the C1 API without external documentation.
-- **Predictable pagination**: List commands auto-paginate; `--page-token` gives manual control when needed.
+- **Predictable pagination**: List commands auto-paginate; `--page-token` gives manual control, and `--limit N` caps the total number of emitted results.
 - **Raw API escape hatch**: `api --path` with `--paginate` lets an agent hit any endpoint, even ones without a native command. Paginated output uses the same NDJSON format as list commands.
 
 ## License

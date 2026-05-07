@@ -14,7 +14,8 @@ request/response schemas before making authenticated API calls.
   docs page <path>               Fetch a full documentation page
   docs endpoints [--filter <p>]  List all API endpoints (filterable)
   docs endpoint <path>           Show full schema for a specific endpoint
-  docs openapi                   Dump the raw OpenAPI spec`,
+  docs openapi                   Dump the raw OpenAPI spec
+  docs skill [-o FILE]           Export a SKILL.md that teaches an AI agent how to use c1i`,
 }
 
 func init() {

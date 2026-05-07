@@ -24,12 +24,15 @@ var entitlementsListCmd = &cobra.Command{
 
 		appID, _ := cmd.Flags().GetString("app-id")
 		query, _ := cmd.Flags().GetString("query")
-		pageSize, _ := cmd.Flags().GetInt("page-size")
+		requestedPageSize := clampPageSize(getIntFlag(cmd, "page-size"))
 		pageToken, _ := cmd.Flags().GetString("page-token")
 		manualPaging := cmd.Flags().Changed("page-token")
+		limit := getIntFlag(cmd, "limit")
 
 		enc := json.NewEncoder(cmd.OutOrStdout())
-		for {
+		emitted := 0
+		for !limitReached(emitted, limit) {
+			pageSize := effectivePageSize(requestedPageSize, limit, emitted)
 			body := map[string]any{
 				"pageSize": pageSize,
 			}
@@ -77,6 +80,10 @@ var entitlementsListCmd = &cobra.Command{
 					"grant_count":  e.GrantCount,
 					"purpose":      e.Purpose,
 				})
+				emitted++
+				if limitReached(emitted, limit) {
+					return nil
+				}
 			}
 
 			if resp.NextPageToken == "" || manualPaging {
@@ -92,7 +99,8 @@ var entitlementsListCmd = &cobra.Command{
 func init() {
 	entitlementsListCmd.Flags().String("app-id", "", "Filter by application ID")
 	entitlementsListCmd.Flags().String("query", "", "Search entitlement display name")
-	entitlementsListCmd.Flags().Int("page-size", 50, "Results per page")
+	entitlementsListCmd.Flags().Int("page-size", 50, "Results per page (max 100)")
 	entitlementsListCmd.Flags().String("page-token", "", "Pagination cursor")
+	addLimitFlag(entitlementsListCmd)
 	entitlementsCmd.AddCommand(entitlementsListCmd)
 }

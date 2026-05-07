@@ -26,9 +26,10 @@ var tasksListCmd = &cobra.Command{
 		query, _ := cmd.Flags().GetString("query")
 		state, _ := cmd.Flags().GetString("state")
 		assignedToMe, _ := cmd.Flags().GetBool("assigned-to-me")
-		pageSize, _ := cmd.Flags().GetInt("page-size")
+		requestedPageSize := clampPageSize(getIntFlag(cmd, "page-size"))
 		pageToken, _ := cmd.Flags().GetString("page-token")
 		manualPaging := cmd.Flags().Changed("page-token")
+		limit := getIntFlag(cmd, "limit")
 
 		var myUserID string
 		if assignedToMe {
@@ -46,7 +47,9 @@ var tasksListCmd = &cobra.Command{
 		}
 
 		enc := json.NewEncoder(cmd.OutOrStdout())
-		for {
+		emitted := 0
+		for !limitReached(emitted, limit) {
+			pageSize := effectivePageSize(requestedPageSize, limit, emitted)
 			body := map[string]any{
 				"pageSize": pageSize,
 			}
@@ -136,6 +139,10 @@ var tasksListCmd = &cobra.Command{
 				}
 
 				_ = enc.Encode(row)
+				emitted++
+				if limitReached(emitted, limit) {
+					return nil
+				}
 			}
 
 			if resp.NextPageToken == "" || manualPaging {
@@ -152,13 +159,16 @@ func init() {
 	tasksListCmd.Flags().String("query", "", "Search task display name or description")
 	tasksListCmd.Flags().String("state", "", "Filter by state: open, closed")
 	tasksListCmd.Flags().Bool("assigned-to-me", false, "Only show tasks assigned to me")
-	tasksListCmd.Flags().Int("page-size", 50, "Results per page")
+	tasksListCmd.Flags().Int("page-size", 50, "Results per page (max 100)")
 	tasksListCmd.Flags().String("page-token", "", "Pagination cursor")
+	addLimitFlag(tasksListCmd)
 	tasksCmd.AddCommand(tasksListCmd)
 }
 
+// mapTaskState normalizes the user-friendly --state value to the API enum.
+// Input is case-insensitive so `--state open` and `--state OPEN` both work.
 func mapTaskState(s string) string {
-	switch s {
+	switch strings.ToLower(s) {
 	case "open":
 		return "TASK_STATE_OPEN"
 	case "closed":

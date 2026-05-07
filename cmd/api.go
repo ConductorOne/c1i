@@ -15,6 +15,10 @@ var apiCmd = &cobra.Command{
 	Use:   "api",
 	Short: "Make a raw C1 API request and pretty-print the JSON response",
 	RunE: func(cmd *cobra.Command, args []string) error {
+		if err := requireNonEmpty(cmd, "path"); err != nil {
+			return err
+		}
+
 		baseURL, err := GetBaseURL()
 		if err != nil {
 			return err
@@ -29,6 +33,11 @@ var apiCmd = &cobra.Command{
 		method, _ := cmd.Flags().GetString("method")
 		body, _ := cmd.Flags().GetString("body")
 		paginate, _ := cmd.Flags().GetBool("paginate")
+		limit := getIntFlag(cmd, "limit")
+
+		if limit > 0 && !paginate {
+			return fmt.Errorf("--limit only applies with --paginate (without it, c1i api emits a single response and there's nothing to cap)")
+		}
 
 		method = strings.ToUpper(method)
 		if method == "" {
@@ -42,8 +51,9 @@ var apiCmd = &cobra.Command{
 		out := cmd.OutOrStdout()
 		enc := json.NewEncoder(out)
 		pageToken := ""
+		emitted := 0
 
-		for {
+		for !limitReached(emitted, limit) {
 			var data []byte
 			switch method {
 			case "GET":
@@ -117,6 +127,10 @@ var apiCmd = &cobra.Command{
 				if err := enc.Encode(obj); err != nil {
 					return fmt.Errorf("failed to write output: %w", err)
 				}
+				emitted++
+				if limitReached(emitted, limit) {
+					return nil
+				}
 			}
 
 			if page.NextPageToken == "" {
@@ -134,7 +148,8 @@ func init() {
 	apiCmd.Flags().String("method", "", "HTTP method: GET, POST, PUT, or DELETE (default: GET, or POST if --body is set)")
 	apiCmd.Flags().String("body", "", "JSON request body (implies POST)")
 	apiCmd.Flags().Bool("paginate", false, "Automatically follow pagination to fetch all pages")
-	_ = apiCmd.MarkFlagRequired("path")
+	markRequired(apiCmd, "path")
+	addLimitFlag(apiCmd)
 	rootCmd.AddCommand(apiCmd)
 }
 
