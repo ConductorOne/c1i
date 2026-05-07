@@ -99,6 +99,17 @@ var docsEndpointsCmd = &cobra.Command{
 			_ = enc.Encode(e)
 		}
 
+		// When a filter returns nothing, point the user at `docs search`,
+		// which covers doc pages and concept-level matches. Some endpoints
+		// (e.g. access_review) are intentionally hidden from the public
+		// OpenAPI but documented elsewhere — without this hint, an agent
+		// will assume the endpoint doesn't exist.
+		if len(endpoints) == 0 && filter != "" {
+			_, _ = fmt.Fprintf(cmd.ErrOrStderr(),
+				"No endpoints matched %q. Some C1 endpoints aren't in the public OpenAPI spec — try 'c1i docs search %q' for doc-page matches.\n",
+				filter, filter)
+		}
+
 		return nil
 	},
 }
