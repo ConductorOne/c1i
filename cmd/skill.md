@@ -145,6 +145,29 @@ NDJSON fields: `id, app_id, display_name, status`
 
 `--app-id` is required.
 
+### Automations
+
+```sh
+c1i automations list [--enabled-only] [--calls-function=FID] [--page-size=50] [--page-token=TOKEN] [--limit=N]
+c1i automations get <automation-id>
+c1i automations executions list [--state=done|error|pending|...] [--template-id=TID] [--page-size=50] [--page-token=TOKEN] [--limit=N]
+```
+
+`--calls-function` filters to automations that invoke the given function ID
+in any of their steps — useful before deleting a function, or to find an
+example automation that exercises one.
+
+`executions list --state` accepts the short forms (`done`, `error`,
+`pending`, `creating`, `waiting`, `terminate`) or the full
+`AUTOMATION_EXECUTION_STATE_*` enum. Filtering is applied client-side:
+the endpoint doesn't yet support server-side state filters, so a narrow
+filter still scans every page returned — combine with `--limit` to bound
+the work.
+
+List NDJSON fields: `id, display_name, description, enabled, last_executed_at, primary_trigger_type, is_draft, function_ids`
+
+Executions NDJSON fields: `id, automation_template_id, state, created_at, completed_at, duration, is_draft`
+
 ### Access Requests
 
 ```sh
