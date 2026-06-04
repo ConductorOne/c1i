@@ -68,6 +68,60 @@ c1i tasks comment --task-id <id> --comment <text>
 c1i connectors list --app-id <id> [--page-size N] [--page-token TOKEN] [--limit N]
 ```
 
+### Functions
+
+```sh
+c1i functions list [--published-only | --draft-only] [--page-size N] [--page-token TOKEN] [--limit N]
+c1i functions get <function-id>
+c1i functions source <function-id> [--commit <id>] [--out-dir <path>]
+c1i functions commits <function-id> [--page-size N] [--page-token TOKEN] [--limit N]
+c1i functions usage <function-id>
+```
+
+`functions source` auto-resolves the function's published commit (falling back to its head/latest draft) and base64-decodes the source files. Without `--out-dir`, each file is printed to stdout with a `// ===== <name> =====` delimiter; with `--out-dir`, files are written to disk. `functions usage` scans every automation and emits one row per step that calls the given function — useful before deleting a draft.
+
+### Automations
+
+```sh
+c1i automations list [--enabled-only] [--calls-function <fid>] [--page-size N] [--page-token TOKEN] [--limit N]
+c1i automations get <automation-id>
+c1i automations executions list [--state done|error|pending|...] [--template-id <tid>] [--page-size N] [--page-token TOKEN] [--limit N]
+```
+
+Each `automations list` row includes `function_ids` (every distinct function the automation invokes), so `--calls-function` can answer "which automations call function X?". `executions list --state` accepts the short forms (`done`, `error`, `pending`, ...) or the full `AUTOMATION_EXECUTION_STATE_*` enum; state and template filtering are applied client-side, so pair a narrow filter with `--limit` to bound the work.
+
+### MCP
+
+Drive the MCP admin surface (tools, toolsets, and bindings) for a registered MCP server. Tool and toolset commands take `--app-id` and `--connector-id`.
+
+```sh
+# Tools
+c1i mcp tools list    --app-id <id> --connector-id <id> [--page-size N] [--page-token TOKEN] [--limit N]
+c1i mcp tools get     --app-id <id> --connector-id <id> --id <tool-id>
+c1i mcp tools search  --app-id <id> --connector-id <id> [--query <text>] [--state ...] [--classification ...] [--page-size N] [--limit N]
+c1i mcp tools approve --app-id <id> --connector-id <id> --id <tool-id> [--state approved|disabled|pending]
+c1i mcp tools delete  --app-id <id> --connector-id <id> --id <tool-id>
+c1i mcp tools history --app-id <id> --connector-id <id> --id <tool-id> [--page-size N] [--limit N]
+
+# Toolsets (admin-curated tool groupings; one AppEntitlement per toolset)
+c1i mcp toolsets list                   --app-id <id> --connector-id <id> [--page-size N] [--limit N]
+c1i mcp toolsets get                    --app-id <id> --connector-id <id> --id <toolset-id>
+c1i mcp toolsets create                 --app-id <id> --connector-id <id> --display-name <name> [--description <text>]
+c1i mcp toolsets update                 --app-id <id> --connector-id <id> --id <toolset-id> [--display-name <name>] [--description <text>]
+c1i mcp toolsets delete                 --app-id <id> --connector-id <id> --id <toolset-id>
+c1i mcp toolsets get-by-entitlement     --app-id <id> --app-entitlement-id <aeid>
+c1i mcp toolsets requestable-connectors --user-id <uid>
+
+# Bindings (which tools belong to which toolset)
+c1i mcp bindings list     --app-id <id> --connector-id <id> --toolset-id <tid> [--page-size N] [--limit N]
+c1i mcp bindings create   --app-id <id> --connector-id <id> --toolset-id <tid> --tool-id <id> [--tool-id <id> ...]
+c1i mcp bindings delete   --app-id <id> --connector-id <id> --toolset-id <tid> --tool-id <id> [--tool-id <id> ...]
+c1i mcp bindings by-tools --app-id <id> --connector-id <id> --tool-id <id> [--tool-id <id> ...]
+c1i mcp bindings history  --app-id <id> --connector-id <id> (--toolset-id <tid> | --tool-id <id>) [--page-size N] [--limit N]
+```
+
+`mcp tools approve` is the standard post-registration step: newly discovered tools start in `PENDING_REVIEW`, and an admin approves each one for the gateway to proxy calls. Registering or deleting MCP servers themselves is not part of this surface. History endpoints return records newest-first.
+
 ### Access Requests
 
 ```sh
@@ -88,9 +142,12 @@ c1i api --path /api/v1/search/users --body '{"pageSize":10}'
 
 # Auto-paginate through all results (NDJSON output, one item per line)
 c1i api --path /api/v1/apps --paginate
+
+# Force the array field to drain when auto-detection picks the wrong one
+c1i api --path /api/v1/automation_executions --paginate --list-key automationExecutions
 ```
 
-When `--paginate` is used, the `list` array from each page is unwrapped and each item is emitted as a single line of NDJSON — the same format used by list commands. Without `--paginate`, the full JSON response is pretty-printed.
+When `--paginate` is used, each page's first array-valued field is unwrapped and each item is emitted as a single line of NDJSON — the same format used by list commands. This covers both the canonical `list` key and typed keys like `automationExecutions`; use `--list-key <field>` to force a specific field. If the server returns the same `nextPageToken` twice in a row, `c1i` aborts with an error rather than looping forever. Without `--paginate`, the full JSON response is pretty-printed.
 
 ### API Discovery & Documentation
 
