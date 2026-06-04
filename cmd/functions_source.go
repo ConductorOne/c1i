@@ -105,6 +105,12 @@ named exactly as the function has them — usually main.ts and main.test.ts).`,
 		}
 		sort.Strings(names)
 
+		if outDir != "" {
+			if err := os.MkdirAll(outDir, 0o755); err != nil {
+				return fmt.Errorf("failed to create out-dir: %w", err)
+			}
+		}
+
 		out := cmd.OutOrStdout()
 		for _, name := range names {
 			decoded, err := base64.StdEncoding.DecodeString(files[name])
@@ -112,8 +118,11 @@ named exactly as the function has them — usually main.ts and main.test.ts).`,
 				return fmt.Errorf("failed to base64-decode %s: %w", name, err)
 			}
 			if outDir != "" {
-				if err := os.MkdirAll(outDir, 0o755); err != nil {
-					return fmt.Errorf("failed to create out-dir: %w", err)
+				// The filename comes from the API response. Reject anything
+				// that isn't a plain filename so a hostile or buggy server
+				// can't write outside --out-dir (e.g. "../../etc/cron.d/x").
+				if unsafeSourceName(name) {
+					return fmt.Errorf("refusing to write file with unsafe name %q", name)
 				}
 				path := filepath.Join(outDir, name)
 				if err := os.WriteFile(path, decoded, 0o644); err != nil {
@@ -130,6 +139,15 @@ named exactly as the function has them — usually main.ts and main.test.ts).`,
 		}
 		return nil
 	},
+}
+
+// unsafeSourceName reports whether an API-supplied filename should be refused
+// when writing to --out-dir. We only ever expect plain filenames (main.ts,
+// main.test.ts), so anything containing a path separator, a parent-directory
+// reference, or an absolute/empty name is rejected rather than joined onto
+// the output directory.
+func unsafeSourceName(name string) bool {
+	return name == "" || name == "." || name == ".." || name != filepath.Base(name)
 }
 
 func init() {
