@@ -145,6 +145,57 @@ NDJSON fields: `id, app_id, display_name, status`
 
 `--app-id` is required.
 
+### MCP (tools, toolsets, bindings)
+
+```sh
+# --- Tools (discovered from a registered MCP server) ---
+c1i mcp tools list    --app-id=ID --connector-id=CID [--page-size=50] [--page-token=TOKEN] [--limit=N]
+c1i mcp tools get     --app-id=ID --connector-id=CID --id=TOOL_ID
+c1i mcp tools search  --app-id=ID --connector-id=CID [--query=TEXT] [--state=...]... [--classification=...]... [--page-size=50] [--page-token=TOKEN] [--limit=N]
+c1i mcp tools approve --app-id=ID --connector-id=CID --id=TOOL_ID [--state=approved|disabled|pending]
+c1i mcp tools delete  --app-id=ID --connector-id=CID --id=TOOL_ID
+c1i mcp tools history --app-id=ID --connector-id=CID --id=TOOL_ID [--page-size=50] [--page-token=TOKEN] [--limit=N]
+
+# --- Toolsets (access profiles — one AppEntitlement per toolset) ---
+c1i mcp toolsets list                   --app-id=ID --connector-id=CID [--page-size=50] [--page-token=TOKEN] [--limit=N]
+c1i mcp toolsets get                    --app-id=ID --connector-id=CID --id=TOOLSET_ID
+c1i mcp toolsets create                 --app-id=ID --connector-id=CID --display-name=NAME [--description=TEXT]
+c1i mcp toolsets update                 --app-id=ID --connector-id=CID --id=TOOLSET_ID [--display-name=NAME] [--description=TEXT]
+c1i mcp toolsets delete                 --app-id=ID --connector-id=CID --id=TOOLSET_ID
+c1i mcp toolsets get-by-entitlement     --app-id=ID --app-entitlement-id=AEID
+c1i mcp toolsets requestable-connectors --user-id=UID
+
+# --- Bindings (which tools are inside which toolsets) ---
+c1i mcp bindings list     --app-id=ID --connector-id=CID --toolset-id=TID [--page-size=50] [--page-token=TOKEN] [--limit=N]
+c1i mcp bindings create   --app-id=ID --connector-id=CID --toolset-id=TID --tool-id=ID [--tool-id=...]
+c1i mcp bindings delete   --app-id=ID --connector-id=CID --toolset-id=TID --tool-id=ID [--tool-id=...]
+c1i mcp bindings by-tools --app-id=ID --connector-id=CID --tool-id=ID [--tool-id=...]
+c1i mcp bindings history  --app-id=ID --connector-id=CID (--toolset-id=TID | --tool-id=ID) [--page-size=50] [--page-token=TOKEN] [--limit=N]
+```
+
+`mcp tools list`/`search` NDJSON fields: `id, app_id, connector_id, tool_name, app_entitlement_id, display_name, description, classification, state, visibility`
+
+`mcp tools history` emits one raw history entry per line, **newest-first** — each carries the full tool snapshot at that version plus the change-history metadata envelope (actor, change_kind, created_at, trace_id, syslog_event_id, annotations).
+
+`mcp toolsets list` NDJSON fields: `id, app_id, connector_id, display_name, description, app_entitlement_id, tool_count`
+
+`mcp toolsets requestable-connectors` NDJSON fields: `app_id, connector_id` (one per connector with at least one toolset the user can request — not paginated server-side).
+
+`mcp bindings list` NDJSON fields: `app_id, connector_id, access_profile_id, mcp_tool_id, created_at`
+
+`mcp bindings by-tools` NDJSON shape: `{"mcp_tool_id": "...", "toolsets": [...]}` per requested tool. Tools with no bindings still appear with `"toolsets": []` so callers can distinguish "no bindings" from "not requested".
+
+`mcp bindings history` requires exactly one of `--toolset-id` (history of all tools in a toolset) or `--tool-id` (history of all toolsets containing a tool). One raw entry per line, with a list-history metadata envelope plus the items added or removed in that transaction.
+
+Tool states: `MCP_TOOL_STATE_PENDING_REVIEW`, `MCP_TOOL_STATE_APPROVED`, `MCP_TOOL_STATE_DISABLED`, `MCP_TOOL_STATE_REMOVED`.
+Tool classifications: `TOOL_CLASSIFICATION_READ`, `_WRITE`, `_DESTRUCTIVE`, `_SENSITIVE`, `_DANGEROUS`.
+
+Approving tools is the standard post-registration step: a newly registered MCP
+server discovers its tools in `PENDING_REVIEW`, then an admin moves each to
+`APPROVED` for the gateway to proxy calls. Note: registering / deleting MCP
+servers themselves is not in the public REST surface — drive that via the
+`mcp-setup` skill or the support dashboard.
+
 ### Functions
 
 ```sh
@@ -262,6 +313,25 @@ hit this.
 | List automations | GET | `/api/v1/automations` |
 | Get automation | GET | `/api/v1/automations/{id}` |
 | List automation executions | GET | `/api/v1/automation_executions` |
+| List MCP tools | GET | `/api/v1/apps/{app_id}/connectors/{connector_id}/mcp_tools` |
+| Get MCP tool | GET | `/api/v1/apps/{app_id}/connectors/{connector_id}/mcp_tools/{id}` |
+| Search MCP tools | POST | `/api/v1/apps/{app_id}/connectors/{connector_id}/mcp_tools/search` |
+| Update MCP tool (approve) | POST | `/api/v1/apps/{app_id}/connectors/{connector_id}/mcp_tools/{id}` |
+| Delete MCP tool | DELETE | `/api/v1/apps/{app_id}/connectors/{connector_id}/mcp_tools/{id}` |
+| MCP tool change history | GET | `/api/v1/apps/{app_id}/connectors/{connector_id}/mcp_tools/{id}/history` |
+| List MCP toolsets | GET | `/api/v1/apps/{app_id}/connectors/{connector_id}/mcp_toolsets` |
+| Get MCP toolset | GET | `/api/v1/apps/{app_id}/connectors/{connector_id}/mcp_toolsets/{id}` |
+| Create MCP toolset | POST | `/api/v1/apps/{app_id}/connectors/{connector_id}/mcp_toolsets` |
+| Update MCP toolset | POST | `/api/v1/apps/{app_id}/connectors/{connector_id}/mcp_toolsets/{id}` |
+| Delete MCP toolset | DELETE | `/api/v1/apps/{app_id}/connectors/{connector_id}/mcp_toolsets/{id}` |
+| Resolve toolset by entitlement | GET | `/api/v1/apps/{app_id}/mcp_toolsets/by_app_entitlement_id/{app_entitlement_id}` |
+| User's requestable toolset connectors | GET | `/api/v1/users/{user_id}/mcp_toolsets/requestable_connectors` |
+| List MCP toolset bindings | GET | `/api/v1/apps/{app_id}/connectors/{connector_id}/mcp_toolsets/{toolset_id}/tool_bindings` |
+| Create MCP toolset bindings | POST | `/api/v1/apps/{app_id}/connectors/{connector_id}/mcp_toolsets/{toolset_id}/tool_bindings` |
+| Delete MCP toolset bindings | POST | `/api/v1/apps/{app_id}/connectors/{connector_id}/mcp_toolsets/{toolset_id}/tool_bindings/delete` |
+| MCP bindings by tools (reverse) | POST | `/api/v1/apps/{app_id}/connectors/{connector_id}/tool_bindings/by_tools` |
+| MCP toolset binding history | GET | `/api/v1/apps/{app_id}/connectors/{connector_id}/mcp_toolsets/{toolset_id}/tool_bindings/history` |
+| MCP tool binding history (reverse) | GET | `/api/v1/apps/{app_id}/connectors/{connector_id}/tool_bindings/by_tool/{tool_id}/history` |
 
 ## API Usage Patterns
 
@@ -274,6 +344,12 @@ hit this.
 - Search results nest objects: users under `"user"`, tasks under `"task"`,
   entitlements under `"appEntitlement"`, accounts under `"appUser"`.
 - GET list results are flat (apps list returns objects directly in `"list"`).
+- **MCP list endpoints break this convention**: the wrapper key matches the
+  resource — `{"tools": [...]}` for `mcp_tools`, `{"profiles": [...]}` for
+  `mcp_toolsets`, `{"bindings": [...]}` for `tool_bindings`. The
+  `nextPageToken` field is still present. History endpoints (`/history`)
+  and the reverse-binding endpoint (`/tool_bindings/by_tools`) keep the
+  generic `"list"` shape.
 
 ### Tasks
 
