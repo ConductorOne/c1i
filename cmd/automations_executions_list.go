@@ -37,11 +37,21 @@ the server returns. Combine with --limit to bound the work.`,
 		manualPaging := cmd.Flags().Changed("page-token")
 		limit := getIntFlag(cmd, "limit")
 
+		// --state/--template-id filter client-side, so a fetched row is not
+		// necessarily emitted. effectivePageSize tightens based on the emitted
+		// count, which would shrink the per-call page toward 1 while paging
+		// past non-matching rows (request amplification). Only tighten when no
+		// client-side filter is active.
+		clientFilter := stateFilter != "" || templateID != ""
+
 		enc := json.NewEncoder(cmd.OutOrStdout())
 		emitted := 0
 		prevToken := ""
 		for !limitReached(emitted, limit) {
-			pageSize := effectivePageSize(requestedPageSize, limit, emitted)
+			pageSize := requestedPageSize
+			if !clientFilter {
+				pageSize = effectivePageSize(requestedPageSize, limit, emitted)
+			}
 			params := map[string]string{
 				"page_size": strconv.Itoa(pageSize),
 			}
