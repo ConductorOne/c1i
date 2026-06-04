@@ -145,6 +145,49 @@ NDJSON fields: `id, app_id, display_name, status`
 
 `--app-id` is required.
 
+### Functions
+
+```sh
+c1i functions list [--published-only|--draft-only] [--page-size=50] [--page-token=TOKEN] [--limit=N]
+c1i functions get <function-id>
+c1i functions source <function-id> [--commit=CID] [--out-dir=PATH]
+c1i functions commits <function-id> [--page-size=50] [--page-token=TOKEN] [--limit=N]
+c1i functions usage <function-id>
+```
+
+`functions source` auto-resolves the function's published commit (falling
+back to head) and base64-decodes the source files. Without `--out-dir` each
+file is printed to stdout with `// ===== <name> =====` delimiter headers.
+
+`functions usage` scans all automations and emits one NDJSON row per step
+that calls the given function ID — useful before deleting a draft to see if
+anything still depends on it.
+
+List NDJSON fields: `id, display_name, description, function_type, published_commit_id, head, is_draft, use_spn`
+
+### Automations
+
+```sh
+c1i automations list [--enabled-only] [--calls-function=FID] [--page-size=50] [--page-token=TOKEN] [--limit=N]
+c1i automations get <automation-id>
+c1i automations executions list [--state=done|error|pending|...] [--template-id=TID] [--page-size=50] [--page-token=TOKEN] [--limit=N]
+```
+
+`--calls-function` filters to automations that invoke the given function ID
+in any of their steps — useful before deleting a function, or to find an
+example automation that exercises one.
+
+`executions list --state` accepts the short forms (`done`, `error`,
+`pending`, `creating`, `waiting`, `terminate`) or the full
+`AUTOMATION_EXECUTION_STATE_*` enum. Filtering is applied client-side:
+the endpoint doesn't yet support server-side state filters, so a narrow
+filter still scans every page returned — combine with `--limit` to bound
+the work.
+
+List NDJSON fields: `id, display_name, description, enabled, last_executed_at, primary_trigger_type, is_draft, function_ids`
+
+Executions NDJSON fields: `id, automation_template_id, state, created_at, completed_at, duration, is_draft`
+
 ### MCP (tools, toolsets, bindings)
 
 ```sh
@@ -195,49 +238,6 @@ server discovers its tools in `PENDING_REVIEW`, then an admin moves each to
 `APPROVED` for the gateway to proxy calls. Note: registering / deleting MCP
 servers themselves is not in the public REST surface — drive that via the
 `mcp-setup` skill or the support dashboard.
-
-### Functions
-
-```sh
-c1i functions list [--published-only|--draft-only] [--page-size=50] [--page-token=TOKEN] [--limit=N]
-c1i functions get <function-id>
-c1i functions source <function-id> [--commit=CID] [--out-dir=PATH]
-c1i functions commits <function-id> [--page-size=50] [--page-token=TOKEN] [--limit=N]
-c1i functions usage <function-id>
-```
-
-`functions source` auto-resolves the function's published commit (falling
-back to head) and base64-decodes the source files. Without `--out-dir` each
-file is printed to stdout with `// ===== <name> =====` delimiter headers.
-
-`functions usage` scans all automations and emits one NDJSON row per step
-that calls the given function ID — useful before deleting a draft to see if
-anything still depends on it.
-
-List NDJSON fields: `id, display_name, description, function_type, published_commit_id, head, is_draft, use_spn`
-
-### Automations
-
-```sh
-c1i automations list [--enabled-only] [--calls-function=FID] [--page-size=50] [--page-token=TOKEN] [--limit=N]
-c1i automations get <automation-id>
-c1i automations executions list [--state=done|error|pending|...] [--template-id=TID] [--page-size=50] [--page-token=TOKEN] [--limit=N]
-```
-
-`--calls-function` filters to automations that invoke the given function ID
-in any of their steps — useful before deleting a function, or to find an
-example automation that exercises one.
-
-`executions list --state` accepts the short forms (`done`, `error`,
-`pending`, `creating`, `waiting`, `terminate`) or the full
-`AUTOMATION_EXECUTION_STATE_*` enum. Filtering is applied client-side:
-the endpoint doesn't yet support server-side state filters, so a narrow
-filter still scans every page returned — combine with `--limit` to bound
-the work.
-
-List NDJSON fields: `id, display_name, description, enabled, last_executed_at, primary_trigger_type, is_draft, function_ids`
-
-Executions NDJSON fields: `id, automation_template_id, state, created_at, completed_at, duration, is_draft`
 
 ### Access Requests
 
