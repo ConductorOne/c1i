@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/url"
+	"sort"
 	"strings"
 
 	"github.com/ConductorOne/c1i/internal/client"
@@ -226,12 +227,21 @@ func extractListAndToken(data []byte, listKey string) ([]json.RawMessage, string
 		}
 	}
 
-	for k, v := range raw {
+	// Iterate keys in sorted order so the chosen array is deterministic when a
+	// response carries more than one array-valued field (Go map iteration is
+	// randomized). --list-key is the escape hatch when the first sorted match
+	// isn't the one you want.
+	keys := make([]string, 0, len(raw))
+	for k := range raw {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	for _, k := range keys {
 		if k == "nextPageToken" || k == "list" {
 			continue
 		}
 		var items []json.RawMessage
-		if err := json.Unmarshal(v, &items); err == nil {
+		if err := json.Unmarshal(raw[k], &items); err == nil {
 			return items, nextPageToken, nil
 		}
 	}

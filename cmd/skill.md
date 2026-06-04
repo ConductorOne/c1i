@@ -263,5 +263,5 @@ When you need to call an API endpoint you haven't used before:
    "current user" or "self approval" work even when the path is opaque).
 2. **Inspect the schema**: `c1i docs endpoint <path>` to see request body fields and response shape.
 3. **Try it**: `c1i api --path=<path>` (GET) or `c1i api --path=<path> --body='...'` (POST).
-4. **Paginate if needed**: Add `--paginate` to unwrap `list` arrays into NDJSON.
+4. **Paginate if needed**: Add `--paginate` to unwrap the response's first array-valued field (e.g. `list`, `automationExecutions`) into NDJSON. Use `--list-key=<field>` to force a specific field.
 5. **Read the docs**: `c1i docs search <topic>` and `c1i docs page <path>` for context beyond the API reference.

@@ -118,3 +118,24 @@ func TestExtractListAndTokenNullToken(t *testing.T) {
 		t.Errorf("expected empty token, got %q", token)
 	}
 }
+
+// TestExtractListAndTokenMultiArrayDeterministic pins that when a response
+// carries more than one array-valued field (and no "list"), the chosen array
+// is the first by sorted key name — not a randomized map-iteration pick. The
+// loop below runs the extraction many times; a non-deterministic walk would
+// eventually select "zebra".
+func TestExtractListAndTokenMultiArrayDeterministic(t *testing.T) {
+	data := []byte(`{"alpha":[{"id":"a"}],"zebra":[{"id":"z"}],"nextPageToken":"t"}`)
+	for i := 0; i < 50; i++ {
+		items, token, err := extractListAndToken(data, "")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if token != "t" {
+			t.Errorf("expected token %q, got %q", "t", token)
+		}
+		if len(items) != 1 || string(items[0]) != `{"id":"a"}` {
+			t.Fatalf("expected the sorted-first array (alpha), got %v", items)
+		}
+	}
+}
