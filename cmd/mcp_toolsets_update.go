@@ -46,7 +46,9 @@ Editing the AppEntitlement created behind the toolset is not supported here.`,
 		if cmd.Flags().Changed("display-name") {
 			v, _ := cmd.Flags().GetString("display-name")
 			profile["displayName"] = v
-			paths = append(paths, "display_name")
+			// FieldMask paths use the proto3-JSON (camelCase) field name, matching
+			// the body key and the convention in accounts set-owner ("identityUserId").
+			paths = append(paths, "displayName")
 		}
 		if cmd.Flags().Changed("description") {
 			v, _ := cmd.Flags().GetString("description")

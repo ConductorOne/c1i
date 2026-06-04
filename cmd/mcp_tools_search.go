@@ -72,15 +72,23 @@ var mcpToolsSearchCmd = &cobra.Command{
 				return fmt.Errorf("API error: %w", err)
 			}
 
+			// SearchTools may key its results under "tools" (like ListTools)
+			// or the generic "list"; accept either so a wrong guess doesn't
+			// make search silently return nothing.
 			var resp struct {
+				Tools         []toolView `json:"tools"`
 				List          []toolView `json:"list"`
 				NextPageToken string     `json:"nextPageToken"`
 			}
 			if err := json.Unmarshal(data, &resp); err != nil {
 				return fmt.Errorf("failed to parse response: %w", err)
 			}
+			items := resp.Tools
+			if len(items) == 0 {
+				items = resp.List
+			}
 
-			for _, t := range resp.List {
+			for _, t := range items {
 				_ = enc.Encode(toolRow(t))
 				emitted++
 				if limitReached(emitted, limit) {
