@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/url"
+	"sort"
 	"strings"
 
 	"github.com/ConductorOne/c1i/internal/client"
@@ -33,10 +34,14 @@ var apiCmd = &cobra.Command{
 		method, _ := cmd.Flags().GetString("method")
 		body, _ := cmd.Flags().GetString("body")
 		paginate, _ := cmd.Flags().GetBool("paginate")
+		listKey, _ := cmd.Flags().GetString("list-key")
 		limit := getIntFlag(cmd, "limit")
 
 		if limit > 0 && !paginate {
 			return fmt.Errorf("--limit only applies with --paginate (without it, c1i api emits a single response and there's nothing to cap)")
+		}
+		if listKey != "" && !paginate {
+			return fmt.Errorf("--list-key only applies with --paginate")
 		}
 
 		method = strings.ToUpper(method)
@@ -51,6 +56,7 @@ var apiCmd = &cobra.Command{
 		out := cmd.OutOrStdout()
 		enc := json.NewEncoder(out)
 		pageToken := ""
+		prevToken := ""
 		emitted := 0
 
 		for !limitReached(emitted, limit) {
@@ -111,15 +117,12 @@ var apiCmd = &cobra.Command{
 				break
 			}
 
-			var page struct {
-				List          []json.RawMessage `json:"list"`
-				NextPageToken string            `json:"nextPageToken"`
-			}
-			if err := json.Unmarshal(data, &page); err != nil {
+			items, nextToken, err := extractListAndToken(data, listKey)
+			if err != nil {
 				return fmt.Errorf("failed to parse response: %w", err)
 			}
 
-			for _, item := range page.List {
+			for _, item := range items {
 				var obj any
 				if err := json.Unmarshal(item, &obj); err != nil {
 					return fmt.Errorf("failed to parse list item: %w", err)
@@ -133,10 +136,16 @@ var apiCmd = &cobra.Command{
 				}
 			}
 
-			if page.NextPageToken == "" {
+			if nextToken == "" {
 				break
 			}
-			pageToken = page.NextPageToken
+			// Guard against servers that return the same token forever.
+			// Without this, c1i would loop indefinitely emitting no progress.
+			if nextToken == prevToken {
+				return fmt.Errorf("API returned the same nextPageToken twice in a row for %s; the endpoint may not support pagination via the cursor c1i is sending. Drop --paginate and call the endpoint directly, or report this with the path", path)
+			}
+			prevToken = nextToken
+			pageToken = nextToken
 		}
 
 		return nil
@@ -148,6 +157,7 @@ func init() {
 	apiCmd.Flags().String("method", "", "HTTP method: GET, POST, PUT, or DELETE (default: GET, or POST if --body is set)")
 	apiCmd.Flags().String("body", "", "JSON request body (implies POST)")
 	apiCmd.Flags().Bool("paginate", false, "Automatically follow pagination to fetch all pages")
+	apiCmd.Flags().String("list-key", "", "Force the response field name to drain as the list (default: auto-detect the first array-valued field, e.g. 'list', 'automationExecutions', 'automations')")
 	markRequired(apiCmd, "path")
 	addLimitFlag(apiCmd)
 	rootCmd.AddCommand(apiCmd)
@@ -174,4 +184,67 @@ func setQueryParam(rawPath, key, value string) string {
 	q.Set(key, value)
 	u.RawQuery = q.Encode()
 	return u.String()
+}
+
+// extractListAndToken finds the array-valued field in a paginated response and
+// the nextPageToken. Most C1 list endpoints wrap items under "list", but some
+// use typed keys ("automationExecutions", "automationVersions", etc.) — for
+// those, returning an empty list would make --paginate loop forever, so we
+// detect the array generically.
+//
+// If listKey is non-empty, that field is used verbatim. Otherwise the first
+// array-valued field at the top level (other than "nextPageToken") wins.
+func extractListAndToken(data []byte, listKey string) ([]json.RawMessage, string, error) {
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return nil, "", err
+	}
+
+	var nextPageToken string
+	if v, ok := raw["nextPageToken"]; ok {
+		// Ignore unmarshal error: a missing/null token is legitimately empty.
+		_ = json.Unmarshal(v, &nextPageToken)
+	}
+
+	if listKey != "" {
+		v, ok := raw[listKey]
+		if !ok {
+			return nil, nextPageToken, nil
+		}
+		var items []json.RawMessage
+		if err := json.Unmarshal(v, &items); err != nil {
+			return nil, nextPageToken, fmt.Errorf("field %q is not an array: %w", listKey, err)
+		}
+		return items, nextPageToken, nil
+	}
+
+	// Prefer "list" when present — it's the canonical name and skipping the
+	// map walk keeps behavior stable for endpoints that have always worked.
+	if v, ok := raw["list"]; ok {
+		var items []json.RawMessage
+		if err := json.Unmarshal(v, &items); err == nil {
+			return items, nextPageToken, nil
+		}
+	}
+
+	// Iterate keys in sorted order so the chosen array is deterministic when a
+	// response carries more than one array-valued field (Go map iteration is
+	// randomized). --list-key is the escape hatch when the first sorted match
+	// isn't the one you want.
+	keys := make([]string, 0, len(raw))
+	for k := range raw {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	for _, k := range keys {
+		if k == "nextPageToken" || k == "list" {
+			continue
+		}
+		var items []json.RawMessage
+		if err := json.Unmarshal(raw[k], &items); err == nil {
+			return items, nextPageToken, nil
+		}
+	}
+
+	return nil, nextPageToken, nil
 }
