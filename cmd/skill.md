@@ -201,11 +201,20 @@ c1i api --path=/api/v1/search/tasks --body='{"taskStates":["TASK_STATE_OPEN"]}' 
 
 Defaults to GET; auto-switches to POST when `--body` is set. Without
 `--paginate`, pretty-prints the full JSON response. With `--paginate`, unwraps
-the `list` array and outputs NDJSON (one item per line).
+the first array-valued field in the response and outputs NDJSON (one item per
+line) — works for endpoints that wrap items under `list` (most) as well as
+typed keys (`automationExecutions`, `automations`, etc.). Pass
+`--list-key=<field>` to force a specific field when the auto-detect picks the
+wrong one (rare).
 
 If you GET an endpoint that requires POST (e.g. `/api/v1/search/*`), the
 server returns 404 or 405 and `c1i api` will print a one-line hint
 suggesting `--body` or `--method=POST`.
+
+If the server returns the same `nextPageToken` twice in a row (some endpoints
+silently ignore the cursor), `c1i api --paginate` aborts with a clear error
+instead of looping forever. Drop `--paginate` and use a single call if you
+hit this.
 
 ## Common API Endpoints
 
@@ -274,5 +283,5 @@ When you need to call an API endpoint you haven't used before:
    "current user" or "self approval" work even when the path is opaque).
 2. **Inspect the schema**: `c1i docs endpoint <path>` to see request body fields and response shape.
 3. **Try it**: `c1i api --path=<path>` (GET) or `c1i api --path=<path> --body='...'` (POST).
-4. **Paginate if needed**: Add `--paginate` to unwrap `list` arrays into NDJSON.
+4. **Paginate if needed**: Add `--paginate` to unwrap the response's first array-valued field (e.g. `list`, `automationExecutions`) into NDJSON. Use `--list-key=<field>` to force a specific field.
 5. **Read the docs**: `c1i docs search <topic>` and `c1i docs page <path>` for context beyond the API reference.
