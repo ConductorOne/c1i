@@ -135,6 +135,7 @@ func isKeyringUnavailable(err error) bool {
 	return strings.Contains(msg, "org.freedesktop.secrets") ||
 		strings.Contains(msg, "Cannot autolaunch D-Bus") ||
 		strings.Contains(msg, "DBUS_SESSION_BUS_ADDRESS") ||
+		strings.Contains(msg, "dbus-launch") ||
 		strings.Contains(msg, "no usable backend")
 }
 
