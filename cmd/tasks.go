@@ -80,11 +80,17 @@ func resolvePolicyStepID(ctx context.Context, c *client.Client, taskID, explicit
 	}
 	data, err := c.Get(ctx, fmt.Sprintf("/api/v1/tasks/%s", taskID), nil)
 	if err != nil {
-		return "", fmt.Errorf("failed to fetch task to determine current policy step: %w", err)
+		if required {
+			return "", fmt.Errorf("failed to fetch task to determine current policy step: %w", err)
+		}
+		return "", nil // optional (deny): can't derive it, so omit the field
 	}
 	stepID, err := parseCurrentPolicyStepID(data)
 	if err != nil {
-		return "", err
+		if required {
+			return "", err
+		}
+		return "", nil // optional (deny): omit rather than block the action
 	}
 	if stepID == "" && required {
 		return "", fmt.Errorf("could not determine the current policy step for task %s; pass --policy-step-id explicitly", taskID)
