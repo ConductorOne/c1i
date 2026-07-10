@@ -167,6 +167,25 @@ c1i entitlements get ENTITLEMENT_ID --app-id=ID    # single entitlement, pretty 
 
 NDJSON fields: `id, app_id, display_name, description, slug, grant_count, purpose`
 
+### Grants (who has access)
+
+```sh
+c1i grants list --app-id=ID --entitlement-id=EID   # who holds an entitlement
+c1i grants list --user-id=UID                       # what a C1 identity has, across apps
+c1i grants list --app-user-id=AUID                  # what an app account holds
+c1i grants list --app-id=ID                         # every grant in an app
+[--page-size=50] [--page-token=TOKEN] [--limit=N]
+```
+
+Grants bind accounts/users to entitlements. **At least one filter is required**
+(`--app-id`, `--user-id`, `--app-user-id`, or `--entitlement-id`);
+`--entitlement-id` also requires `--app-id`. Backed by `POST /api/v1/search/grants`.
+
+NDJSON fields: `app_id, entitlement_id, entitlement_display_name, entitlement_slug, app_user_id, app_user_display_name, email, username, identity_user_id, app_user_type, created_at, deprovision_at, grant_source_count`
+
+`grant_source_count` is `0` for a direct grant, or the number of groups/roles
+the access is inherited through.
+
 ### Tasks
 
 ```sh

@@ -56,6 +56,21 @@ c1i entitlements list [--app-id <id>] [--query <text>] [--page-size N] [--page-t
 c1i entitlements get <entitlement-id> --app-id <id>
 ```
 
+### Grants ("who has access")
+
+```sh
+c1i grants list --app-id <id> --entitlement-id <id>   # who holds an entitlement
+c1i grants list --user-id <id>                         # what a C1 identity has, across apps
+c1i grants list --app-user-id <id>                     # what an app account holds
+c1i grants list --app-id <id>                          # every grant in an app
+```
+
+Grants are the bindings between accounts/users and entitlements. At least one
+filter is required. Each NDJSON row includes the entitlement, the account
+(`app_user_*`) and its `identity_user_id`, timestamps (`created_at`,
+`deprovision_at`), and `grant_source_count` — `0` for a direct grant, or the
+number of groups/roles the access is inherited through.
+
 ### Tasks
 
 ```sh

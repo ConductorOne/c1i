@@ -8,6 +8,12 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **`grants list`** — query access grants (who has access to what), backed by
+  `POST /api/v1/search/grants`. Filter by `--app-id`, `--user-id`,
+  `--app-user-id`, or `--entitlement-id` (with `--app-id`); at least one filter
+  is required. Each NDJSON row carries the entitlement, the account and its
+  identity user, grant timestamps, and `grant_source_count` (0 = direct grant,
+  otherwise the number of groups/roles the access is inherited through).
 - **`get <id>` for core resources**: `c1i users get`, `c1i apps get`, and
   `c1i entitlements get <id> --app-id` return a single object as pretty JSON,
   removing the need to `list | grep`.
