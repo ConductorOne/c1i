@@ -377,11 +377,13 @@ func parseRetryAfter(v string) (time.Duration, bool) {
 	if v == "" {
 		return 0, false
 	}
-	if secs, err := strconv.Atoi(v); err == nil {
+	// ParseInt (not Atoi) so a large value parses to 64-bit on 32-bit builds too,
+	// and is clamped rather than falling through to the date branch.
+	if secs, err := strconv.ParseInt(v, 10, 64); err == nil {
 		if secs < 0 {
 			return 0, false
 		}
-		if secs > maxRetryAfterSecs {
+		if secs > int64(maxRetryAfterSecs) {
 			return retryMaxDelay, true
 		}
 		return time.Duration(secs) * time.Second, true

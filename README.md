@@ -230,10 +230,11 @@ retried depends on the request, to avoid duplicating side effects:
 
 - **`429 Too Many Requests`** — retried for every command (the request is
   rejected before the server processes it, so a retry is always safe).
-- **`5xx` and network errors** — retried only for idempotent reads and updates
-  (GET/PUT/DELETE). Create-style mutations (POST/PATCH — e.g. `requests create`,
-  `tasks approve`) are **not** retried on these, since the server may have
-  already applied the change before the failure.
+- **Transient `5xx` (500, 502, 503, 504) and network errors** — retried only for
+  idempotent reads and updates (GET/PUT/DELETE). Create-style mutations
+  (POST/PATCH — e.g. `requests create`, `tasks approve`) are **not** retried on
+  these, since the server may have already applied the change before the failure.
+  Non-transient 5xx (501 Not Implemented, 505, 511) are never retried.
 
 Control the retry budget (attempts *after* the first try) via, in order of
 precedence:
