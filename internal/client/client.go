@@ -71,6 +71,19 @@ func New(ctx context.Context, baseURL string) (*Client, error) {
 	}, nil
 }
 
+// Path builds an API path from a printf-style format string, URL-escaping each
+// argument as a single path segment. Use it whenever a user-supplied ID is
+// interpolated into a request path so that values containing "?", "#", spaces,
+// or other reserved characters address the intended resource instead of being
+// truncated or mangled by url.Parse. Every format verb must be %s.
+func Path(format string, ids ...string) string {
+	escaped := make([]any, len(ids))
+	for i, id := range ids {
+		escaped[i] = url.PathEscape(id)
+	}
+	return fmt.Sprintf(format, escaped...)
+}
+
 func (c *Client) Get(ctx context.Context, path string, queryParams map[string]string) ([]byte, error) {
 	u, err := url.Parse(c.baseURL + path)
 	if err != nil {

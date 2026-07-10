@@ -45,7 +45,7 @@ var mcpToolsetsListCmd = &cobra.Command{
 				params["page_token"] = pageToken
 			}
 
-			path := fmt.Sprintf("/api/v1/apps/%s/connectors/%s/mcp_toolsets", appID, connectorID)
+			path := client.Path("/api/v1/apps/%s/connectors/%s/mcp_toolsets", appID, connectorID)
 			data, err := c.Get(cmd.Context(), path, params)
 			if err != nil {
 				return fmt.Errorf("API error: %w", err)

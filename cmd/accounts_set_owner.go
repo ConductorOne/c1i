@@ -26,7 +26,7 @@ var accountsSetOwnerCmd = &cobra.Command{
 		appUserID, _ := cmd.Flags().GetString("app-user-id")
 		userID, _ := cmd.Flags().GetString("user-id")
 
-		path := fmt.Sprintf("/api/v1/apps/%s/app_users/%s", appID, appUserID)
+		path := client.Path("/api/v1/apps/%s/app_users/%s", appID, appUserID)
 		body := map[string]any{
 			"appUser": map[string]any{
 				"identityUserId": userID,

@@ -29,7 +29,7 @@ var tasksCommentCmd = &cobra.Command{
 			"comment": comment,
 		}
 
-		path := fmt.Sprintf("/api/v1/tasks/%s/action/comment", taskID)
+		path := client.Path("/api/v1/tasks/%s/action/comment", taskID)
 		data, err := c.Post(cmd.Context(), path, body)
 		if err != nil {
 			return fmt.Errorf("API error: %w", err)

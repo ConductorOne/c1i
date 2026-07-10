@@ -45,7 +45,7 @@ in the request body; HTTP DELETE doesn't reliably support that.`,
 			"mcpToolIds":      toolIDs,
 		}
 
-		path := fmt.Sprintf("/api/v1/apps/%s/connectors/%s/mcp_toolsets/%s/tool_bindings/delete", appID, connectorID, toolsetID)
+		path := client.Path("/api/v1/apps/%s/connectors/%s/mcp_toolsets/%s/tool_bindings/delete", appID, connectorID, toolsetID)
 		if _, err := c.Post(cmd.Context(), path, body); err != nil {
 			return fmt.Errorf("API error: %w", err)
 		}

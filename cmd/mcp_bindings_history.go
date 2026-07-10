@@ -58,9 +58,9 @@ transaction.`,
 
 		var basePath string
 		if toolsetID != "" {
-			basePath = fmt.Sprintf("/api/v1/apps/%s/connectors/%s/mcp_toolsets/%s/tool_bindings/history", appID, connectorID, toolsetID)
+			basePath = client.Path("/api/v1/apps/%s/connectors/%s/mcp_toolsets/%s/tool_bindings/history", appID, connectorID, toolsetID)
 		} else {
-			basePath = fmt.Sprintf("/api/v1/apps/%s/connectors/%s/tool_bindings/by_tool/%s/history", appID, connectorID, toolID)
+			basePath = client.Path("/api/v1/apps/%s/connectors/%s/tool_bindings/by_tool/%s/history", appID, connectorID, toolID)
 		}
 
 		enc := json.NewEncoder(cmd.OutOrStdout())

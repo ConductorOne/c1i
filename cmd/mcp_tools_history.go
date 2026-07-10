@@ -50,7 +50,7 @@ created_at, trace_id, syslog_event_id, annotations).`,
 				params["page_token"] = pageToken
 			}
 
-			path := fmt.Sprintf("/api/v1/apps/%s/connectors/%s/mcp_tools/%s/history", appID, connectorID, id)
+			path := client.Path("/api/v1/apps/%s/connectors/%s/mcp_tools/%s/history", appID, connectorID, id)
 			data, err := c.Get(cmd.Context(), path, params)
 			if err != nil {
 				return fmt.Errorf("API error: %w", err)

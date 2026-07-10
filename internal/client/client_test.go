@@ -1,0 +1,51 @@
+package client
+
+import "testing"
+
+func TestPath(t *testing.T) {
+	tests := []struct {
+		name   string
+		format string
+		ids    []string
+		want   string
+	}{
+		{
+			name:   "single segment",
+			format: "/api/v1/functions/%s",
+			ids:    []string{"abc123"},
+			want:   "/api/v1/functions/abc123",
+		},
+		{
+			name:   "multiple segments",
+			format: "/api/v1/apps/%s/connectors/%s/mcp_tools/%s",
+			ids:    []string{"app1", "conn2", "tool3"},
+			want:   "/api/v1/apps/app1/connectors/conn2/mcp_tools/tool3",
+		},
+		{
+			name:   "escapes reserved characters",
+			format: "/api/v1/tasks/%s/action/deny",
+			ids:    []string{"a?b#c d"},
+			want:   "/api/v1/tasks/a%3Fb%23c%20d/action/deny",
+		},
+		{
+			name:   "escapes slashes so a value cannot traverse segments",
+			format: "/api/v1/functions/%s",
+			ids:    []string{"a/b"},
+			want:   "/api/v1/functions/a%2Fb",
+		},
+		{
+			name:   "no ids returns format unchanged",
+			format: "/api/v1/apps",
+			ids:    nil,
+			want:   "/api/v1/apps",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := Path(tt.format, tt.ids...); got != tt.want {
+				t.Errorf("Path(%q, %v) = %q, want %q", tt.format, tt.ids, got, tt.want)
+			}
+		})
+	}
+}

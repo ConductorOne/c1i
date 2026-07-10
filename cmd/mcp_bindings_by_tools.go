@@ -42,7 +42,7 @@ no bindings are still emitted with an empty toolsets array.`,
 			"mcpToolIds":  toolIDs,
 		}
 
-		path := fmt.Sprintf("/api/v1/apps/%s/connectors/%s/tool_bindings/by_tools", appID, connectorID)
+		path := client.Path("/api/v1/apps/%s/connectors/%s/tool_bindings/by_tools", appID, connectorID)
 		data, err := c.Post(cmd.Context(), path, body)
 		if err != nil {
 			return fmt.Errorf("API error: %w", err)

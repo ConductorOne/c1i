@@ -42,7 +42,7 @@ named exactly as the function has them — usually main.ts and main.test.ts).`,
 		outDir, _ := cmd.Flags().GetString("out-dir")
 
 		if commitID == "" {
-			fnData, err := c.Get(cmd.Context(), "/api/v1/functions/"+functionID, nil)
+			fnData, err := c.Get(cmd.Context(), client.Path("/api/v1/functions/%s", functionID), nil)
 			if err != nil {
 				return fmt.Errorf("API error fetching function metadata: %w", err)
 			}
@@ -75,7 +75,7 @@ named exactly as the function has them — usually main.ts and main.test.ts).`,
 			}
 		}
 
-		commitData, err := c.Get(cmd.Context(), fmt.Sprintf("/api/v1/functions/%s/commits/%s", functionID, commitID), nil)
+		commitData, err := c.Get(cmd.Context(), client.Path("/api/v1/functions/%s/commits/%s", functionID, commitID), nil)
 		if err != nil {
 			return fmt.Errorf("API error fetching commit %s: %w", commitID, err)
 		}

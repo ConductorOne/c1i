@@ -31,7 +31,7 @@ var mcpToolsGetCmd = &cobra.Command{
 		connectorID, _ := cmd.Flags().GetString("connector-id")
 		id, _ := cmd.Flags().GetString("id")
 
-		path := fmt.Sprintf("/api/v1/apps/%s/connectors/%s/mcp_tools/%s", appID, connectorID, id)
+		path := client.Path("/api/v1/apps/%s/connectors/%s/mcp_tools/%s", appID, connectorID, id)
 		data, err := c.Get(cmd.Context(), path, nil)
 		if err != nil {
 			return fmt.Errorf("API error: %w", err)
