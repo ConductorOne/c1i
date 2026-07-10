@@ -186,18 +186,88 @@ func TestDoWithRetry_ContextCancellationStopsRetry(t *testing.T) {
 	}
 }
 
-func TestIsRetryableStatus(t *testing.T) {
-	retryable := []int{429, 500, 502, 503, 504}
-	for _, c := range retryable {
-		if !isRetryableStatus(c) {
-			t.Errorf("isRetryableStatus(%d) = false, want true", c)
+func TestIsIdempotent(t *testing.T) {
+	for _, m := range []string{http.MethodGet, http.MethodHead, http.MethodPut, http.MethodDelete, http.MethodOptions, http.MethodTrace} {
+		if !isIdempotent(m) {
+			t.Errorf("isIdempotent(%s) = false, want true", m)
 		}
 	}
-	notRetryable := []int{200, 201, 400, 401, 403, 404, 409, 422, 501, 505}
-	for _, c := range notRetryable {
-		if isRetryableStatus(c) {
-			t.Errorf("isRetryableStatus(%d) = true, want false", c)
+	for _, m := range []string{http.MethodPost, http.MethodPatch, http.MethodConnect} {
+		if isIdempotent(m) {
+			t.Errorf("isIdempotent(%s) = true, want false", m)
 		}
+	}
+}
+
+func TestIsRetryableStatus(t *testing.T) {
+	// 429 is retryable for every method (rejected before processing).
+	for _, m := range []string{http.MethodGet, http.MethodPost, http.MethodPatch, http.MethodPut} {
+		if !isRetryableStatus(m, 429) {
+			t.Errorf("isRetryableStatus(%s, 429) = false, want true", m)
+		}
+	}
+	// 5xx is retryable only for idempotent methods.
+	for _, c := range []int{500, 502, 503, 504} {
+		if !isRetryableStatus(http.MethodGet, c) {
+			t.Errorf("isRetryableStatus(GET, %d) = false, want true", c)
+		}
+		if isRetryableStatus(http.MethodPost, c) {
+			t.Errorf("isRetryableStatus(POST, %d) = true, want false (non-idempotent)", c)
+		}
+	}
+	// Never retryable, regardless of method.
+	for _, c := range []int{200, 201, 400, 401, 403, 404, 409, 422, 501, 505} {
+		if isRetryableStatus(http.MethodGet, c) {
+			t.Errorf("isRetryableStatus(GET, %d) = true, want false", c)
+		}
+	}
+}
+
+func TestDoWithRetry_Post5xxNotRetried(t *testing.T) {
+	deterministicBackoff(t)
+	var calls int
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls++
+		w.WriteHeader(http.StatusServiceUnavailable)
+	}))
+	defer srv.Close()
+
+	_, err := newTestClient(srv, 5).Post(context.Background(), "/x", map[string]any{})
+	if err == nil {
+		t.Fatal("expected error")
+	}
+	if calls != 1 {
+		t.Fatalf("calls = %d, want 1 (POST must not retry on 5xx)", calls)
+	}
+}
+
+// errDoer always fails at the transport level, like a dropped connection.
+type errDoer struct{ calls int }
+
+func (d *errDoer) Do(*http.Request) (*http.Response, error) {
+	d.calls++
+	return nil, errors.New("connection reset")
+}
+
+func TestDoWithRetry_TransportErrorRetriedOnlyForIdempotent(t *testing.T) {
+	deterministicBackoff(t)
+
+	getDoer := &errDoer{}
+	getReq, _ := http.NewRequestWithContext(context.Background(), http.MethodGet, "http://x/y", nil)
+	if _, err := doWithRetry(getDoer, getReq, 3); err == nil {
+		t.Fatal("expected transport error to surface for GET")
+	}
+	if getDoer.calls != 4 { // 1 + 3 retries
+		t.Fatalf("GET calls = %d, want 4", getDoer.calls)
+	}
+
+	postDoer := &errDoer{}
+	postReq, _ := http.NewRequestWithContext(context.Background(), http.MethodPost, "http://x/y", strings.NewReader("{}"))
+	if _, err := doWithRetry(postDoer, postReq, 3); err == nil {
+		t.Fatal("expected transport error to surface for POST")
+	}
+	if postDoer.calls != 1 {
+		t.Fatalf("POST calls = %d, want 1 (transport error must not retry POST)", postDoer.calls)
 	}
 }
 
@@ -213,6 +283,13 @@ func TestParseRetryAfter(t *testing.T) {
 	}
 	if _, ok := parseRetryAfter("-3"); ok {
 		t.Errorf("negative seconds: want ok=false")
+	}
+	if d, ok := parseRetryAfter("0"); !ok || d != 0 {
+		t.Errorf("zero seconds: got (%v, %v), want (0, true)", d, ok)
+	}
+	// A huge value must be capped, not overflow into a negative duration.
+	if d, ok := parseRetryAfter("99999999999"); !ok || d != retryMaxDelay {
+		t.Errorf("overflow seconds: got (%v, %v), want (%v, true)", d, ok, retryMaxDelay)
 	}
 	// HTTP-date in the future yields a positive-ish duration.
 	future := time.Now().Add(90 * time.Second).UTC().Format(http.TimeFormat)
@@ -246,6 +323,16 @@ func TestNextBackoff(t *testing.T) {
 	resp := &http.Response{Header: http.Header{"Retry-After": []string{"3600"}}}
 	if got := nextBackoff(0, resp); got != retryMaxDelay {
 		t.Errorf("oversized Retry-After = %v, want cap %v", got, retryMaxDelay)
+	}
+	// Retry-After: 0 must floor to retryMinDelay, not collapse to a zero wait.
+	zeroResp := &http.Response{Header: http.Header{"Retry-After": []string{"0"}}}
+	if got := nextBackoff(0, zeroResp); got != retryMinDelay {
+		t.Errorf("Retry-After 0 = %v, want floor %v", got, retryMinDelay)
+	}
+	// A valid mid-range Retry-After is honored as-is.
+	midResp := &http.Response{Header: http.Header{"Retry-After": []string{"5"}}}
+	if got := nextBackoff(0, midResp); got != 5*time.Second {
+		t.Errorf("Retry-After 5 = %v, want 5s", got)
 	}
 }
 

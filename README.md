@@ -223,10 +223,19 @@ For credential storage, see [Credential sources](#credential-sources) below.
 
 ### Retries
 
-Transient API failures (HTTP 429 and 5xx) are retried automatically with
-exponential backoff and jitter, honoring a `Retry-After` header when the server
-sends one. This keeps long auto-paginated pulls from failing on a single rate-limit
-blip. Control the retry budget (attempts *after* the first try) via, in order of
+Transient API failures are retried automatically with exponential backoff and
+jitter, honoring a `Retry-After` header when the server sends one. This keeps
+long auto-paginated pulls from failing on a single rate-limit blip. What gets
+retried depends on the request, to avoid duplicating side effects:
+
+- **`429 Too Many Requests`** — retried for every command (the request is
+  rejected before the server processes it, so a retry is always safe).
+- **`5xx` and network errors** — retried only for idempotent reads and updates
+  (GET/PUT/DELETE). Create-style mutations (POST/PATCH — e.g. `requests create`,
+  `tasks approve`) are **not** retried on these, since the server may have
+  already applied the change before the failure.
+
+Control the retry budget (attempts *after* the first try) via, in order of
 precedence:
 
 1. `--max-retries N` flag (applies to any command)

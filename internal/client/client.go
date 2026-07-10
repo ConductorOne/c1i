@@ -25,9 +25,16 @@ const (
 	DefaultMaxRetries = 4
 	// retryBaseDelay is the first backoff interval; it doubles each attempt.
 	retryBaseDelay = 500 * time.Millisecond
+	// retryMinDelay floors every wait so a zero/past Retry-After can't collapse
+	// into a back-to-back retry burst.
+	retryMinDelay = 100 * time.Millisecond
 	// retryMaxDelay caps a single backoff interval so exponential growth
 	// (or a hostile Retry-After) can't stall the CLI indefinitely.
 	retryMaxDelay = 30 * time.Second
+	// maxRetryAfterSecs bounds a numeric Retry-After before the multiply below,
+	// so a huge value can't overflow time.Duration (it's clamped to the cap
+	// anyway).
+	maxRetryAfterSecs = int(retryMaxDelay / time.Second)
 )
 
 // sleepFn and jitterFn are indirected so tests can make backoff deterministic
@@ -241,11 +248,16 @@ type httpDoer interface {
 	Do(*http.Request) (*http.Response, error)
 }
 
-// doWithRetry sends req, retrying on transient failures (network errors, 429,
-// and 5xx) up to maxRetries additional times with exponential backoff + jitter.
-// It honors a Retry-After header when present. The request body is replayed
-// from req.GetBody on each attempt (http.NewRequestWithContext sets GetBody for
-// the bytes.Reader bodies this package uses), so POST/PUT retries are safe.
+// doWithRetry sends req, retrying transient failures up to maxRetries additional
+// times with exponential backoff + jitter, honoring a Retry-After header when
+// present. What is retried depends on the method (see isRetryableStatus /
+// isIdempotent): 429 is retried for any method, but 5xx and transport errors are
+// retried only for idempotent methods, so a POST/PATCH that may have committed
+// server-side before the failure is not silently re-applied.
+//
+// The request body is replayed from req.GetBody on each attempt
+// (http.NewRequestWithContext sets GetBody for the bytes.Reader bodies this
+// package uses), so a retried request re-sends the same payload.
 func doWithRetry(doer httpDoer, req *http.Request, maxRetries int) ([]byte, error) {
 	ctx := req.Context()
 	for attempt := 0; ; attempt++ {
@@ -259,9 +271,10 @@ func doWithRetry(doer httpDoer, req *http.Request, maxRetries int) ([]byte, erro
 
 		resp, err := doer.Do(req)
 		if err != nil {
-			// Transport-level failure (connection reset, timeout, ...).
-			// Retry if we have attempts left; otherwise surface it.
-			if attempt < maxRetries {
+			// Transport-level failure (connection reset, timeout, ...). We
+			// can't tell whether the server processed the request, so only
+			// retry idempotent methods.
+			if isIdempotent(req.Method) && attempt < maxRetries {
 				if serr := sleepFn(ctx, nextBackoff(attempt, nil)); serr != nil {
 					return nil, serr
 				}
@@ -274,7 +287,7 @@ func doWithRetry(doer httpDoer, req *http.Request, maxRetries int) ([]byte, erro
 		_ = resp.Body.Close()
 
 		if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-			if isRetryableStatus(resp.StatusCode) && attempt < maxRetries {
+			if isRetryableStatus(req.Method, resp.StatusCode) && attempt < maxRetries {
 				if serr := sleepFn(ctx, nextBackoff(attempt, resp)); serr != nil {
 					return nil, serr
 				}
@@ -290,32 +303,46 @@ func doWithRetry(doer httpDoer, req *http.Request, maxRetries int) ([]byte, erro
 	}
 }
 
-// isRetryableStatus reports whether an HTTP status warrants a retry: 429 (rate
-// limited) and the transient 5xx codes. 501 (Not Implemented) and 505 are
-// excluded because retrying them never succeeds.
-func isRetryableStatus(code int) bool {
-	switch code {
-	case http.StatusTooManyRequests, // 429
-		http.StatusInternalServerError, // 500
-		http.StatusBadGateway,          // 502
-		http.StatusServiceUnavailable,  // 503
-		http.StatusGatewayTimeout:      // 504
+// isIdempotent reports whether re-sending method after an ambiguous failure is
+// safe. Per RFC 9110 these methods are idempotent; POST and PATCH are not and
+// so are never retried on 5xx / transport errors.
+func isIdempotent(method string) bool {
+	switch method {
+	case http.MethodGet, http.MethodHead, http.MethodPut,
+		http.MethodDelete, http.MethodOptions, http.MethodTrace:
 		return true
 	default:
 		return false
 	}
 }
 
+// isRetryableStatus reports whether a response status warrants a retry for the
+// given method. 429 (rate limited) is always safe to retry: the request was
+// rejected before processing. The transient 5xx codes are retried only for
+// idempotent methods. 501/505 and 4xx (other than 429) are never retried.
+func isRetryableStatus(method string, code int) bool {
+	switch code {
+	case http.StatusTooManyRequests: // 429
+		return true
+	case http.StatusInternalServerError, // 500
+		http.StatusBadGateway,         // 502
+		http.StatusServiceUnavailable, // 503
+		http.StatusGatewayTimeout:     // 504
+		return isIdempotent(method)
+	default:
+		return false
+	}
+}
+
 // nextBackoff returns how long to wait before the next attempt. A valid
-// Retry-After header (from a 429/503) wins; otherwise it's exponential backoff
-// (retryBaseDelay * 2^attempt), capped at retryMaxDelay and spread with jitter.
+// Retry-After header (from a 429/503) wins and is honored as-is; otherwise it's
+// exponential backoff (retryBaseDelay * 2^attempt) spread with jitter. Either
+// way the result is bounded to [retryMinDelay, retryMaxDelay] so a zero/hostile
+// Retry-After can neither hammer the server nor stall the CLI.
 func nextBackoff(attempt int, resp *http.Response) time.Duration {
 	if resp != nil {
 		if d, ok := parseRetryAfter(resp.Header.Get("Retry-After")); ok {
-			if d > retryMaxDelay {
-				return retryMaxDelay
-			}
-			return d
+			return boundDelay(d)
 		}
 	}
 	// Shift instead of math.Pow to stay in integer nanoseconds; guard the
@@ -326,12 +353,26 @@ func nextBackoff(attempt int, resp *http.Response) time.Duration {
 			delay = d
 		}
 	}
-	return jitterFn(delay)
+	return boundDelay(jitterFn(delay))
+}
+
+// boundDelay clamps d into [retryMinDelay, retryMaxDelay]. The floor guarantees
+// a positive wait (so retries never busy-loop), and the cap keeps a single wait
+// bounded.
+func boundDelay(d time.Duration) time.Duration {
+	if d < retryMinDelay {
+		return retryMinDelay
+	}
+	if d > retryMaxDelay {
+		return retryMaxDelay
+	}
+	return d
 }
 
 // parseRetryAfter interprets a Retry-After header value, which is either an
 // integer number of seconds or an HTTP date. Returns (0, false) when absent or
-// unparseable, and never returns a negative duration.
+// unparseable. A numeric value is capped at maxRetryAfterSecs before the
+// multiply so it can't overflow time.Duration; callers bound the result anyway.
 func parseRetryAfter(v string) (time.Duration, bool) {
 	if v == "" {
 		return 0, false
@@ -340,13 +381,16 @@ func parseRetryAfter(v string) (time.Duration, bool) {
 		if secs < 0 {
 			return 0, false
 		}
+		if secs > maxRetryAfterSecs {
+			return retryMaxDelay, true
+		}
 		return time.Duration(secs) * time.Second, true
 	}
 	if t, err := http.ParseTime(v); err == nil {
 		if d := time.Until(t); d > 0 {
 			return d, true
 		}
-		return 0, true // date in the past → retry immediately
+		return 0, true // date in the past → retry after the floor delay
 	}
 	return 0, false
 }
