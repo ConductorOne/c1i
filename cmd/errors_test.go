@@ -89,6 +89,17 @@ func TestWriteErrorText(t *testing.T) {
 	}
 }
 
+func TestWriteErrorFormatCaseInsensitive(t *testing.T) {
+	for _, f := range []string{"json", "JSON", "Json"} {
+		var buf bytes.Buffer
+		writeError(&buf, errors.New("boom"), f)
+		var got map[string]any
+		if err := json.Unmarshal(buf.Bytes(), &got); err != nil {
+			t.Errorf("format %q did not produce JSON: %s", f, buf.String())
+		}
+	}
+}
+
 func TestWriteErrorJSON(t *testing.T) {
 	var buf bytes.Buffer
 	apiErr := &client.APIError{Method: "GET", Path: "/api/v1/x", StatusCode: 404, Body: `{"message":"not found"}`}

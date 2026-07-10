@@ -124,7 +124,7 @@ func isCobraUsageError(err error) bool {
 // ({error, and for API errors status/method/path/body}); otherwise the familiar
 // "Error: <msg>" text line.
 func writeError(w io.Writer, err error, format string) {
-	if format == "json" {
+	if strings.EqualFold(format, "json") {
 		obj := map[string]any{"error": err.Error()}
 		var apiErr *client.APIError
 		if errors.As(err, &apiErr) {
