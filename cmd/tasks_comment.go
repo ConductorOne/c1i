@@ -1,7 +1,6 @@
 package cmd
 
 import (
-	"encoding/json"
 	"fmt"
 
 	"github.com/ConductorOne/c1i/internal/client"
@@ -35,16 +34,12 @@ var tasksCommentCmd = &cobra.Command{
 			return fmt.Errorf("API error: %w", err)
 		}
 
-		var resp struct {
-			Task struct {
-				ID string `json:"id"`
-			} `json:"task"`
-		}
-		if err := json.Unmarshal(data, &resp); err != nil {
+		id, _, err := parseTaskActionResponse(data)
+		if err != nil {
 			return fmt.Errorf("failed to parse response: %w", err)
 		}
 
-		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Comment added: task_id=%s\n", resp.Task.ID)
+		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Comment added: task_id=%s\n", id)
 		return nil
 	},
 }
