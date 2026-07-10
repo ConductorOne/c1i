@@ -143,6 +143,9 @@ c1i api --path /api/v1/apps
 # POST request
 c1i api --path /api/v1/search/users --body '{"pageSize":10}'
 
+# Other methods — --method takes GET, POST, PUT, or DELETE
+c1i api --path /api/v1/apps/<app>/connectors/<conn>/mcp_tools/<id> --method DELETE
+
 # Auto-paginate through all results (NDJSON output, one item per line)
 c1i api --path /api/v1/apps --paginate
 
@@ -150,7 +153,8 @@ c1i api --path /api/v1/apps --paginate
 c1i api --path /api/v1/automation_executions --paginate --list-key automationExecutions
 ```
 
-When `--paginate` is used, each page's first array-valued field is unwrapped and each item is emitted as a single line of NDJSON — the same format used by list commands. This covers both the canonical `list` key and typed keys like `automationExecutions`; use `--list-key <field>` to force a specific field. If the server returns the same `nextPageToken` twice in a row, `c1i` aborts with an error rather than looping forever. Without `--paginate`, the full JSON response is pretty-printed.
+The method defaults to GET, or POST when `--body` is set; pass `--method` for
+PUT/DELETE. When `--paginate` is used, each page's first array-valued field is unwrapped and each item is emitted as a single line of NDJSON — the same format used by list commands. This covers both the canonical `list` key and typed keys like `automationExecutions`; use `--list-key <field>` to force a specific field. If the server returns the same `nextPageToken` twice in a row, `c1i` aborts with an error rather than looping forever. Without `--paginate`, the full JSON response is pretty-printed.
 
 ### API Discovery & Documentation
 
@@ -171,6 +175,9 @@ c1i docs endpoint /api/v1/search/tasks
 
 # Dump the raw OpenAPI spec
 c1i docs openapi
+
+# Print the agent skill/reference doc (write to a file with --output)
+c1i docs skill [--output SKILL.md]
 ```
 
 ## Output Conventions
@@ -257,9 +264,9 @@ retried depends on the request, to avoid duplicating side effects:
 - **`429 Too Many Requests`** — retried for every command (the request is
   rejected before the server processes it, so a retry is always safe).
 - **Transient `5xx` (500, 502, 503, 504) and network errors** — retried only for
-  idempotent reads and updates (GET/PUT/DELETE). Create-style mutations
-  (POST/PATCH — e.g. `requests create`, `tasks approve`) are **not** retried on
-  these, since the server may have already applied the change before the failure.
+  idempotent reads and updates (GET/PUT/DELETE). Non-idempotent `POST` mutations
+  (e.g. `requests create`, `tasks approve`) are **not** retried on these, since
+  the server may have already applied the change before the failure.
   Non-transient 5xx (501 Not Implemented, 505, 511) are never retried.
 
 Control the retry budget (attempts *after* the first try) via, in order of

@@ -28,7 +28,10 @@ Credentials are read from the first source that has them, in order:
 3. A `0600` JSON file under `os.UserConfigDir()` (headless Linux / CI / containers)
 
 `auth login` writes to the keyring when available and falls back to the file
-backend transparently. `auth status` reports which source is in use.
+backend transparently (headless Linux without `dbus-launch` included). `auth
+login`/`auth status` name the backend in use (e.g. "macOS Keychain", or the file
+path); `auth logout` clears the keyring + file tiers, reports whether anything
+was removed, and warns if the env-var credentials still override.
 
 ## Configuration
 
@@ -39,6 +42,20 @@ A C1 **URL** is required for all API commands. Set via (precedence order):
 
 All equivalent: `--url https://mycompany.conductor.one`, `--url mycompany.conductor.one`,
 `--url mycompany`.
+
+## Global flags
+
+Persistent flags available on every command (each with an env-var form):
+
+- `--fields=a,b,c` (`C1I_FIELDS`) — project emitted JSON to these keys only;
+  dot-paths for nested (`id,user.email`), nesting preserved, missing keys
+  omitted. Applies to list/`get`/`api` output; mutation confirmations are never
+  projected.
+- `--max-retries=N` (`C1I_MAX_RETRIES`, default 4; `0` disables) — auto-retry
+  transient failures (429 for any method; 500/502/503/504 + network errors for
+  idempotent GET/PUT/DELETE only) with backoff, honoring `Retry-After`.
+- `--error-format=text|json` (`C1I_ERROR_FORMAT`, default `text`) — `json` emits
+  a structured error object; see [Errors & exit codes](#errors--exit-codes).
 
 ## Users
 
@@ -78,10 +95,14 @@ NDJSON output: `{id, app_id, display_name, description, slug, grant_count, purpo
 
 ```sh
 go run . tasks list [--state=open|closed] [--query=TEXT] [--assigned-to-me] [--page-size=50] [--page-token=TOKEN] [--limit=N]
-go run . tasks approve --task-id=ID [--comment=TEXT]
-go run . tasks deny --task-id=ID [--comment=TEXT]
+go run . tasks approve --task-id=ID [--policy-step-id=SID] [--comment=TEXT]
+go run . tasks deny --task-id=ID [--policy-step-id=SID] [--comment=TEXT]
 go run . tasks comment --task-id=ID --comment=TEXT
 ```
+
+`--policy-step-id` targets a step of a multi-step policy; auto-derived from the
+task's current step when omitted (required for approve — errors if it can't be
+determined; optional for deny — omitted if it can't).
 
 NDJSON output: `{id, display_name, description, state, type, user_id, created_by_user_id, created_at, app_id, app_entitlement_id, outcome}`
 
@@ -186,6 +207,9 @@ go run . api --path=/api/v1/apps
 # POST request
 go run . api --path=/api/v1/search/users --body='{"pageSize":10}'
 
+# Other verbs — --method takes GET, POST, PUT, or DELETE
+go run . api --path=/api/v1/apps/APP/connectors/CONN/mcp_tools/TOOL --method=DELETE
+
 # Auto-paginate all pages
 go run . api --path=/api/v1/apps --paginate
 
@@ -193,12 +217,32 @@ go run . api --path=/api/v1/apps --paginate
 go run . api --path=/api/v1/automation_executions --paginate --list-key=automationExecutions
 ```
 
-Defaults to GET; auto-switches to POST when `--body` is set. Without `--paginate`,
-pretty-prints the full JSON response. With `--paginate`, drains each page's first
-array-valued field (covers both `list` and typed keys like `automationExecutions`)
-and outputs NDJSON, one item per line; use `--list-key=FIELD` to force a specific
-field, and `--limit=N` to cap total output. If the server returns the same
-`nextPageToken` twice in a row, the command aborts rather than looping forever.
+Defaults to GET; auto-switches to POST when `--body` is set; pass `--method` for
+PUT/DELETE. Without `--paginate`, pretty-prints the full JSON response. With
+`--paginate`, drains each page's first array-valued field (covers both `list` and
+typed keys like `automationExecutions`) and outputs NDJSON, one item per line;
+use `--list-key=FIELD` to force a specific field, and `--limit=N` to cap total
+output. If the server returns the same `nextPageToken` twice in a row, the
+command aborts rather than looping forever.
+
+## Errors & exit codes
+
+On failure, c1i writes an error to stderr and exits with a code callers can
+branch on without parsing text:
+
+| Code | Meaning |
+|---|---|
+| 0 | success |
+| 1 | generic / unclassified error |
+| 2 | usage error (bad flags/args, unknown command) |
+| 3 | not authenticated, or API `401`/`403` |
+| 4 | API `404` (not found) |
+| 5 | API `429` (rate limited) |
+| 6 | API `5xx` (server error) |
+
+`--error-format=json` emits `{"error","status","method","path","body"}` (body
+embedded as JSON when the API returned JSON). Typed internally via
+`client.APIError` / `client.AuthError`, classified in `cmd/errors.go`.
 
 ## Documentation
 
