@@ -134,6 +134,23 @@ func TestEmitterProjects(t *testing.T) {
 	}
 }
 
+func TestEmitterRawMessagePreservesNumbers(t *testing.T) {
+	big := `1234567890123456789`
+	// This is the shape the api --paginate loop feeds the emitter: a raw
+	// json.RawMessage list item. Numbers must survive both with and without
+	// projection (no float64 round-trip).
+	for _, paths := range [][][]string{nil, parseFieldPaths("id")} {
+		var buf bytes.Buffer
+		e := &emitter{enc: json.NewEncoder(&buf), paths: paths}
+		if err := e.Encode(json.RawMessage(`{"id":` + big + `,"x":1}`)); err != nil {
+			t.Fatalf("encode: %v", err)
+		}
+		if !bytes.Contains(buf.Bytes(), []byte(big)) {
+			t.Errorf("paths=%v: large integer corrupted: %s", paths, buf.Bytes())
+		}
+	}
+}
+
 func TestEmitterNoProjectionEmitsAll(t *testing.T) {
 	var buf bytes.Buffer
 	e := &emitter{enc: json.NewEncoder(&buf), paths: nil}

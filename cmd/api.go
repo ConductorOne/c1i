@@ -115,11 +115,11 @@ var apiCmd = &cobra.Command{
 			}
 
 			for _, item := range items {
-				var obj any
-				if err := json.Unmarshal(item, &obj); err != nil {
-					return fmt.Errorf("failed to parse list item: %w", err)
-				}
-				if err := enc.Encode(obj); err != nil {
+				// Encode the raw item, not a decoded any: decoding to any turns
+				// JSON numbers into float64 and corrupts large integer IDs. The
+				// emitter handles json.RawMessage directly (and projects it with
+				// UseNumber when --fields is set), preserving precision.
+				if err := enc.Encode(item); err != nil {
 					return fmt.Errorf("failed to write output: %w", err)
 				}
 				emitted++
