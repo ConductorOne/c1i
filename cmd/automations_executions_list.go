@@ -6,7 +6,6 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/ConductorOne/c1i/internal/client"
 	"github.com/spf13/cobra"
 )
 
@@ -25,7 +24,7 @@ the server returns. Combine with --limit to bound the work.`,
 			return err
 		}
 
-		c, err := client.New(cmd.Context(), baseURL)
+		c, err := newClient(cmd, baseURL)
 		if err != nil {
 			return fmt.Errorf("authentication failed: %w", err)
 		}

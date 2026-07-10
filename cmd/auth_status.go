@@ -3,7 +3,6 @@ package cmd
 import (
 	"fmt"
 
-	"github.com/ConductorOne/c1i/internal/client"
 	"github.com/ConductorOne/c1i/internal/config"
 	"github.com/ConductorOne/c1i/internal/keychain"
 	"github.com/spf13/cobra"
@@ -23,7 +22,7 @@ var authStatusCmd = &cobra.Command{
 		service := config.KeychainService(baseURL)
 		_, _, backend, loadErr := keychain.Load(service)
 
-		c, err := client.New(cmd.Context(), baseURL)
+		c, err := newClient(cmd, baseURL)
 		if err != nil {
 			return fmt.Errorf("not authenticated: %w", err)
 		}

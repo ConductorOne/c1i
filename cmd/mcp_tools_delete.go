@@ -26,7 +26,7 @@ sync when they disappear from the upstream MCP server. Use "mcp tools approve
 			return err
 		}
 
-		c, err := client.New(cmd.Context(), baseURL)
+		c, err := newClient(cmd, baseURL)
 		if err != nil {
 			return fmt.Errorf("authentication failed: %w", err)
 		}

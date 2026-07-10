@@ -221,6 +221,31 @@ All of these are equivalent:
 
 For credential storage, see [Credential sources](#credential-sources) below.
 
+### Retries
+
+Transient API failures are retried automatically with exponential backoff and
+jitter, honoring a `Retry-After` header when the server sends one. This keeps
+long auto-paginated pulls from failing on a single rate-limit blip. What gets
+retried depends on the request, to avoid duplicating side effects:
+
+- **`429 Too Many Requests`** — retried for every command (the request is
+  rejected before the server processes it, so a retry is always safe).
+- **Transient `5xx` (500, 502, 503, 504) and network errors** — retried only for
+  idempotent reads and updates (GET/PUT/DELETE). Create-style mutations
+  (POST/PATCH — e.g. `requests create`, `tasks approve`) are **not** retried on
+  these, since the server may have already applied the change before the failure.
+  Non-transient 5xx (501 Not Implemented, 505, 511) are never retried.
+
+Control the retry budget (attempts *after* the first try) via, in order of
+precedence:
+
+1. `--max-retries N` flag (applies to any command)
+2. `C1I_MAX_RETRIES` environment variable
+3. Default: `4`
+
+Set `--max-retries 0` to disable retries entirely. Non-retryable responses
+(4xx other than 429, and 501/505) fail immediately.
+
 ## Authentication
 
 ```sh

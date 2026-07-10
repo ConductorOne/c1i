@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/ConductorOne/c1i/internal/client"
 	"github.com/ConductorOne/c1i/internal/config"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -38,6 +39,10 @@ func init() {
 	rootCmd.PersistentFlags().String("fields", "", "Comma-separated fields to keep in JSON output (dot-paths for nested, e.g. id,user.email)")
 	_ = viper.BindPFlag("fields", rootCmd.PersistentFlags().Lookup("fields"))
 	_ = viper.BindEnv("fields", "C1I_FIELDS")
+
+	rootCmd.PersistentFlags().Int("max-retries", client.DefaultMaxRetries, "Retries for transient API failures (429/5xx); 0 disables")
+	_ = viper.BindPFlag("max_retries", rootCmd.PersistentFlags().Lookup("max-retries"))
+	_ = viper.BindEnv("max_retries", "C1I_MAX_RETRIES")
 }
 
 func initConfig() {

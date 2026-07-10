@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/ConductorOne/c1i/internal/client"
 	"github.com/spf13/cobra"
 )
 
@@ -17,7 +16,7 @@ var entitlementsListCmd = &cobra.Command{
 			return err
 		}
 
-		c, err := client.New(cmd.Context(), baseURL)
+		c, err := newClient(cmd, baseURL)
 		if err != nil {
 			return fmt.Errorf("authentication failed: %w", err)
 		}
