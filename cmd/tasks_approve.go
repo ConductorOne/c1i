@@ -23,8 +23,16 @@ var tasksApproveCmd = &cobra.Command{
 
 		taskID, _ := cmd.Flags().GetString("task-id")
 		comment, _ := cmd.Flags().GetString("comment")
+		policyStepID, _ := cmd.Flags().GetString("policy-step-id")
 
-		body := map[string]any{}
+		stepID, err := resolvePolicyStepID(cmd.Context(), c, taskID, policyStepID, true)
+		if err != nil {
+			return err
+		}
+
+		body := map[string]any{
+			"policyStepId": stepID,
+		}
 		if comment != "" {
 			body["comment"] = comment
 		}
@@ -47,6 +55,7 @@ var tasksApproveCmd = &cobra.Command{
 
 func init() {
 	tasksApproveCmd.Flags().String("task-id", "", "Task ID to approve")
+	tasksApproveCmd.Flags().String("policy-step-id", "", "Policy step to approve (defaults to the task's current step)")
 	tasksApproveCmd.Flags().String("comment", "", "Optional comment")
 	markRequired(tasksApproveCmd, "task-id")
 	tasksCmd.AddCommand(tasksApproveCmd)

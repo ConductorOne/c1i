@@ -57,10 +57,13 @@ c1i entitlements list [--app-id <id>] [--query <text>] [--page-size N] [--page-t
 
 ```sh
 c1i tasks list [--state open|closed] [--query <text>] [--assigned-to-me] [--page-size N] [--page-token TOKEN] [--limit N]
-c1i tasks approve --task-id <id> [--comment <text>]
-c1i tasks deny --task-id <id> [--comment <text>]
+c1i tasks approve --task-id <id> [--policy-step-id <id>] [--comment <text>]
+c1i tasks deny --task-id <id> [--policy-step-id <id>] [--comment <text>]
 c1i tasks comment --task-id <id> --comment <text>
 ```
+
+`approve`/`deny` target a specific policy step. If `--policy-step-id` is
+omitted, the task's currently executing step is fetched and used automatically.
 
 ### Connectors
 
