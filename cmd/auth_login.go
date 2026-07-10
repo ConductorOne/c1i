@@ -165,10 +165,12 @@ func storeAndVerify(cmd *cobra.Command, baseURL, clientID, clientSecret string) 
 	}
 
 	out := cmd.OutOrStdout()
-	_, _ = fmt.Fprintf(out, "Credentials stored and verified for %s.\n", baseURL)
 	if backend == keychain.BackendFile {
 		path, _ := keychain.FilePath(service)
-		_, _ = fmt.Fprintf(out, "Note: no OS keyring available — credentials saved as a 0600 file at %s\n", path)
+		_, _ = fmt.Fprintf(out, "Credentials verified and saved for %s.\n", baseURL)
+		_, _ = fmt.Fprintf(out, "No OS keyring available — stored as a 0600 file at %s\n", path)
+	} else {
+		_, _ = fmt.Fprintf(out, "Credentials verified and stored in the %s for %s.\n", keyringName(), baseURL)
 	}
 	return nil
 }
