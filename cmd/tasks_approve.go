@@ -10,6 +10,12 @@ import (
 var tasksApproveCmd = &cobra.Command{
 	Use:   "approve",
 	Short: "Approve an access request task",
+	Long: `Approve an access request task.
+
+The approval targets a specific step of the task's policy via --policy-step-id.
+If omitted, the task's currently executing step is fetched and used
+automatically; if it cannot be determined the command errors and asks you to
+pass --policy-step-id explicitly (approve requires a step).`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		baseURL, err := GetBaseURL()
 		if err != nil {

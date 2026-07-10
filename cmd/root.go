@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/ConductorOne/c1i/internal/client"
 	"github.com/ConductorOne/c1i/internal/config"
@@ -28,6 +29,23 @@ Use these to discover endpoints, understand request/response shapes, and find th
 right API calls before making authenticated requests.`,
 	SilenceUsage:  true,
 	SilenceErrors: true,
+	// Validate global flag values once, before any command runs.
+	PersistentPreRunE: func(_ *cobra.Command, _ []string) error {
+		return validateErrorFormat(viper.GetString("error_format"))
+	},
+}
+
+// validateErrorFormat accepts "", "text", or "json" (case-insensitive, matching
+// how writeError interprets the value) and rejects anything else as a usage
+// error so a typo like --error-format=jsonn fails loudly instead of silently
+// falling back to text.
+func validateErrorFormat(f string) error {
+	switch strings.ToLower(f) {
+	case "", "text", "json":
+		return nil
+	default:
+		return &usageError{fmt.Errorf("invalid --error-format %q: must be \"text\" or \"json\"", f)}
+	}
 }
 
 func init() {

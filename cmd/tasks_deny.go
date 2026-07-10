@@ -10,6 +10,11 @@ import (
 var tasksDenyCmd = &cobra.Command{
 	Use:   "deny",
 	Short: "Deny an access request task",
+	Long: `Deny an access request task.
+
+--policy-step-id targets a specific step of the task's policy. If omitted, the
+currently executing step is used when it can be derived, and simply left off
+otherwise — deny does not require a step, so it proceeds either way.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		baseURL, err := GetBaseURL()
 		if err != nil {
