@@ -79,6 +79,13 @@ var apiCmd = &cobra.Command{
 			return fmt.Errorf("unsupported method: %s (use GET, POST, PUT, PATCH, or DELETE)", method)
 		}
 
+		// GET and DELETE carry no request body. Rather than silently drop a body
+		// the caller supplied (which would send a different request than they
+		// expect), fail fast.
+		if body != "" && (method == "GET" || method == "DELETE") {
+			return fmt.Errorf("--method %s does not take a request body; drop --body/--body-file or use POST, PUT, or PATCH", method)
+		}
+
 		// Apply --query params to the path once; pagination adds page_token per
 		// iteration below for GET/DELETE.
 		for _, qp := range queryPairs {
