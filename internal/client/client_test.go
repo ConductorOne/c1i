@@ -49,3 +49,33 @@ func TestPath(t *testing.T) {
 		})
 	}
 }
+
+func TestPathLiteralPercent(t *testing.T) {
+	// %% is a literal percent, not a verb, so it needs no id.
+	if got := Path("/api/v1/x/%s/y%%z", "id"); got != "/api/v1/x/id/y%z" {
+		t.Errorf("Path with literal %%%% = %q", got)
+	}
+}
+
+func TestPathPanicsOnMismatch(t *testing.T) {
+	cases := []struct {
+		name   string
+		format string
+		ids    []string
+	}{
+		{"too few ids", "/api/v1/apps/%s/connectors/%s", []string{"a"}},
+		{"too many ids", "/api/v1/apps/%s", []string{"a", "b"}},
+		{"unsupported verb", "/api/v1/apps/%d", []string{"a"}},
+		{"dangling percent", "/api/v1/apps/%", []string{"a"}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			defer func() {
+				if recover() == nil {
+					t.Errorf("Path(%q, %v) did not panic", tc.format, tc.ids)
+				}
+			}()
+			_ = Path(tc.format, tc.ids...)
+		})
+	}
+}
