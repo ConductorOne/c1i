@@ -32,6 +32,9 @@ c1i docs page product/admin/campaigns
 
 # Dump the raw OpenAPI spec
 c1i docs openapi
+
+# Print this skill/reference doc (no auth); -o writes it to a file
+c1i docs skill
 ```
 
 Always prefer `docs endpoints` and `docs endpoint` over the common endpoints
@@ -56,10 +59,19 @@ c1i auth whoami
 c1i auth logout
 ```
 
-Credentials are stored in the OS keyring when available, otherwise in a
-0600 file under your config directory. For non-interactive / CI use, set
-`C1I_CLIENT_ID` and `C1I_CLIENT_SECRET` (combined with `C1I_URL`) to skip
-storage entirely. Run `c1i auth status` to see which source is in use.
+Credentials resolve in three tiers (first match wins):
+
+1. **Env vars** — `C1I_CLIENT_ID` + `C1I_CLIENT_SECRET` (read-only; best for
+   CI / non-interactive use, combined with `C1I_URL`).
+2. **OS keyring** — macOS Keychain, Windows Credential Manager, or Linux
+   Secret Service.
+3. **0600 file** under your config directory — automatic fallback on headless
+   Linux, containers, and CI where no keyring is available.
+
+`auth login` and `auth status` name the backend actually in use (e.g.
+"macOS Keychain", or the file path). `auth logout` clears the keyring and file
+tiers, reports whether anything was removed, and warns if `C1I_CLIENT_ID`/
+`C1I_CLIENT_SECRET` are still set (they override and can't be removed by logout).
 
 ## Configuration
 
@@ -67,6 +79,26 @@ The C1 URL is required for all API commands. Set via (precedence order):
 1. `--url` flag (e.g. `--url=https://mycompany.conductor.one` or `--url=mycompany`)
 2. `C1I_URL` env var
 3. `~/.c1i.yaml` → `url: https://mycompany.conductor.one`
+
+## Global Flags (agent controls)
+
+These persistent flags work on every command and are the main levers for agents.
+Each also has an env-var form.
+
+- **`--fields=a,b,c`** (`C1I_FIELDS`) — trim every emitted JSON object to just
+  these keys. Dot-paths select nested fields (`id,user.email`); nesting is
+  preserved and missing keys are silently omitted (so asking for a superset is
+  safe). A big token saver on large lists. Applies to list output, `api`, and
+  single-object `get` commands. Match the keys **as they appear in the output**
+  (list rows are snake_case like `display_name`; raw `api`/`get` output uses the
+  API's camelCase). Mutation and auth confirmations are never trimmed.
+- **`--max-retries=N`** (`C1I_MAX_RETRIES`, default `4`; `0` disables) — transient
+  failures are retried automatically with exponential backoff + jitter, honoring
+  `Retry-After`. `429` is retried for any method; `500/502/503/504` and network
+  errors are retried only for idempotent methods (GET/PUT/DELETE), never for
+  POST. **Don't build your own retry loop for these** — c1i already handles them.
+- **`--error-format=json`** (`C1I_ERROR_FORMAT`) — emit errors as a JSON object
+  instead of a plain `Error: ...` line (see Errors & Exit Codes below).
 
 ## Shell Completion
 
@@ -252,10 +284,16 @@ free-form justification text shown to approvers.
 ### Task Actions
 
 ```sh
-c1i tasks approve --task-id=ID [--comment=TEXT]
-c1i tasks deny --task-id=ID [--comment=TEXT]
+c1i tasks approve --task-id=ID [--policy-step-id=SID] [--comment=TEXT]
+c1i tasks deny --task-id=ID [--policy-step-id=SID] [--comment=TEXT]
 c1i tasks comment --task-id=ID --comment=TEXT
 ```
+
+`--policy-step-id` targets a specific step of a multi-step approval policy. When
+omitted it is auto-derived from the task's currently executing step: **required
+for approve** (the command errors if it can't be determined — pass it
+explicitly), **optional for deny** (omitted if it can't be derived, so deny
+still goes through).
 
 ### Raw API
 
@@ -271,9 +309,14 @@ c1i api --path=/api/v1/apps --paginate
 
 # POST with pagination
 c1i api --path=/api/v1/search/tasks --body='{"taskStates":["TASK_STATE_OPEN"]}' --paginate
+
+# Other methods: --method takes GET, POST, PUT, or DELETE
+c1i api --path=/api/v1/apps/APP/connectors/CONN/mcp_tools/TOOL --method=DELETE
 ```
 
-Defaults to GET; auto-switches to POST when `--body` is set. Without
+Defaults to GET; auto-switches to POST when `--body` is set. Use
+`--method=PUT|DELETE` for the remaining verbs. `--fields` projects the output
+just like on the typed commands. Without
 `--paginate`, pretty-prints the full JSON response. With `--paginate`, unwraps
 the first array-valued field in the response and outputs NDJSON (one item per
 line) — works for endpoints that wrap items under `list` (most) as well as
@@ -372,6 +415,26 @@ The UI calls them "campaigns" (`/admin/campaigns/{id}`), the API calls them
 - All list commands auto-paginate. Passing `--page-token` disables auto-pagination.
 - `--page-size` controls the per-call batch size (max 100). Use `--limit N` to cap the *total* number of results emitted; auto-pagination stops fetching new pages once the cap is reached.
 - `--unmapped-only` (accounts) filters client-side: only accounts with no `identity_user_id`.
+
+## Errors & Exit Codes
+
+On failure, c1i writes an error to stderr and exits with a code you can branch
+on **without parsing text**:
+
+| Code | Meaning |
+|---|---|
+| `0` | success |
+| `1` | generic / unclassified error |
+| `2` | usage error (bad flags/args, unknown command) |
+| `3` | not authenticated, or API returned `401`/`403` |
+| `4` | API returned `404` (not found) |
+| `5` | API returned `429` (rate limited — already retried; back off) |
+| `6` | API returned `5xx` (server error) |
+
+Add `--error-format=json` for a machine-readable error object:
+`{"error": "...", "status": 404, "method": "GET", "path": "...", "body": ...}`
+(the `body` is embedded as JSON when the API returned JSON, else a string).
+Prefer branching on the exit code over string-matching stderr.
 
 ## Discovering a New Endpoint
 
