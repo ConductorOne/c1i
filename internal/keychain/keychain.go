@@ -230,7 +230,7 @@ func loadFile(service string) (string, string, error) {
 func deleteFile(service string) (bool, error) {
 	p, err := filePath(service)
 	if err != nil {
-		return false, nil
+		return false, err
 	}
 	if err := os.Remove(p); err != nil {
 		if errors.Is(err, os.ErrNotExist) {
