@@ -46,6 +46,10 @@ func TestBuildGrantTaskBodyNoWrapper(t *testing.T) {
 			t.Errorf("unexpected field %q in wire body: %v", bad, wire)
 		}
 	}
+	// Pin the exact wire shape: only the fields in `want`, nothing else.
+	if len(wire) != len(want) {
+		t.Errorf("wire body has %d fields, want exactly %d: %v", len(wire), len(want), wire)
+	}
 }
 
 // TestBuildGrantTaskBodyOmitsEmpty confirms optional fields are omitted when
@@ -83,6 +87,10 @@ func TestBuildRevokeTaskBodyNoWrapper(t *testing.T) {
 	}
 	if _, ok := body["userId"]; ok {
 		t.Errorf("unexpected legacy field \"userId\" in body: %v", body)
+	}
+	// Pin the exact wire shape: only the fields in `want`, nothing else.
+	if len(body) != len(want) {
+		t.Errorf("body has %d fields, want exactly %d: %v", len(body), len(want), body)
 	}
 }
 
