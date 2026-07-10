@@ -58,7 +58,7 @@ no bindings are still emitted with an empty toolsets array.`,
 			return fmt.Errorf("failed to parse response: %w", err)
 		}
 
-		enc := json.NewEncoder(cmd.OutOrStdout())
+		enc := newEmitter(cmd.OutOrStdout())
 		for _, group := range resp.AccessProfilesForTools {
 			toolsets := make([]map[string]string, 0, len(group.AccessProfiles))
 			for _, p := range group.AccessProfiles {

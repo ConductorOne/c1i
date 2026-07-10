@@ -32,7 +32,7 @@ last_executed_at, args.`,
 			return fmt.Errorf("authentication failed: %w", err)
 		}
 
-		enc := json.NewEncoder(cmd.OutOrStdout())
+		enc := newEmitter(cmd.OutOrStdout())
 		pageToken := ""
 		matched := 0
 		for {

@@ -181,6 +181,28 @@ c1i docs openapi
 - List commands auto-paginate by default. Pass `--page-token` to fetch a single page manually.
 - `--page-size` controls the per-call batch size (max 100). Use `--limit N` to cap the *total* number of results emitted; auto-pagination stops fetching new pages once the cap is reached.
 
+### Field selection
+
+`--fields` trims every emitted JSON object to just the keys you name — a big
+token saver when an agent only needs a couple of fields from a large list.
+
+```sh
+# Only id and email from each user
+c1i users list --fields id,email
+
+# Dot-paths select nested fields; nesting is preserved in the output
+c1i api --path /api/v1/apps --paginate --fields id,displayName
+c1i functions get <id> --fields id,displayName,publishedCommitId
+```
+
+- Comma-separated; use dot-paths (`user.email`) for nested access.
+- Matches the keys **as they appear in the command's output** (e.g. list rows
+  use `id`, `display_name`; raw `api` output uses the API's own camelCase keys).
+- Missing fields are silently omitted, so requesting a superset is safe.
+- Also settable via `C1I_FIELDS`. Applies to read output — list commands, `api`,
+  and single-object `get` commands. Mutation confirmations (create/update/delete)
+  are never projected, so a session-wide `C1I_FIELDS` can't hide their status.
+
 ## Configuration
 
 c1i requires a C1 **URL**. You can pass a full URL, a raw domain, or a legacy short tenant name. Set it via (in order of precedence):

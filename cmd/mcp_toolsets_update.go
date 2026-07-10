@@ -1,8 +1,6 @@
 package cmd
 
 import (
-	"bytes"
-	"encoding/json"
 	"fmt"
 	"strings"
 
@@ -70,13 +68,7 @@ Editing the AppEntitlement created behind the toolset is not supported here.`,
 			return fmt.Errorf("API error: %w", err)
 		}
 
-		var pretty bytes.Buffer
-		if err := json.Indent(&pretty, data, "", "  "); err != nil {
-			return fmt.Errorf("failed to pretty-print response: %w", err)
-		}
-		_, _ = pretty.WriteTo(cmd.OutOrStdout())
-		_, _ = fmt.Fprintln(cmd.OutOrStdout())
-		return nil
+		return writeRawObject(cmd, data)
 	},
 }
 

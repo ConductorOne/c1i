@@ -58,17 +58,16 @@ thousand permissions — pass --verbose to dump it all.`,
 			}
 		}
 
-		var out []byte
+		var obj any = summarize(payload, displayName, email)
 		if verbose {
-			out, err = json.MarshalIndent(payload, "", "  ")
-		} else {
-			out, err = json.MarshalIndent(summarize(payload, displayName, email), "", "  ")
+			obj = payload
 		}
+		out, err := json.Marshal(obj)
 		if err != nil {
 			return err
 		}
-		_, _ = fmt.Fprintln(cmd.OutOrStdout(), string(out))
-		return nil
+		// Route through writeObject so --fields works (e.g. whoami --fields email).
+		return writeObject(cmd, out)
 	},
 }
 

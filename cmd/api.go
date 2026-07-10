@@ -1,7 +1,6 @@
 package cmd
 
 import (
-	"bytes"
 	"encoding/json"
 	"fmt"
 	"net/url"
@@ -54,7 +53,7 @@ var apiCmd = &cobra.Command{
 		}
 
 		out := cmd.OutOrStdout()
-		enc := json.NewEncoder(out)
+		enc := newEmitter(out)
 		pageToken := ""
 		prevToken := ""
 		emitted := 0
@@ -107,14 +106,7 @@ var apiCmd = &cobra.Command{
 			}
 
 			if !paginate {
-				var pretty bytes.Buffer
-				if err := json.Indent(&pretty, data, "", "  "); err != nil {
-					_, _ = out.Write(data)
-				} else {
-					pretty.WriteByte('\n')
-					_, _ = out.Write(pretty.Bytes())
-				}
-				break
+				return writeObject(cmd, data)
 			}
 
 			items, nextToken, err := extractListAndToken(data, listKey)
@@ -123,11 +115,11 @@ var apiCmd = &cobra.Command{
 			}
 
 			for _, item := range items {
-				var obj any
-				if err := json.Unmarshal(item, &obj); err != nil {
-					return fmt.Errorf("failed to parse list item: %w", err)
-				}
-				if err := enc.Encode(obj); err != nil {
+				// Encode the raw item, not a decoded any: decoding to any turns
+				// JSON numbers into float64 and corrupts large integer IDs. The
+				// emitter handles json.RawMessage directly (and projects it with
+				// UseNumber when --fields is set), preserving precision.
+				if err := enc.Encode(item); err != nil {
 					return fmt.Errorf("failed to write output: %w", err)
 				}
 				emitted++

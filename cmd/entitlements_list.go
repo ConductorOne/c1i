@@ -29,7 +29,7 @@ var entitlementsListCmd = &cobra.Command{
 		manualPaging := cmd.Flags().Changed("page-token")
 		limit := getIntFlag(cmd, "limit")
 
-		enc := json.NewEncoder(cmd.OutOrStdout())
+		enc := newEmitter(cmd.OutOrStdout())
 		emitted := 0
 		for !limitReached(emitted, limit) {
 			pageSize := effectivePageSize(requestedPageSize, limit, emitted)
