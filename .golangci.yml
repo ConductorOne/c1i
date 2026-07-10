@@ -1,0 +1,8 @@
+version: "2"
+
+# Enforce gofmt formatting. `golangci-lint run` reports unformatted
+# files as issues (fixable with `golangci-lint fmt`), so formatting
+# drift fails CI in the existing go-lint job.
+formatters:
+  enable:
+    - gofmt
