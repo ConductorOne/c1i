@@ -44,7 +44,7 @@ the server returns. Combine with --limit to bound the work.`,
 		// client-side filter is active.
 		clientFilter := stateFilter != "" || templateID != ""
 
-		enc := json.NewEncoder(cmd.OutOrStdout())
+		enc := newEmitter(cmd.OutOrStdout())
 		emitted := 0
 		prevToken := ""
 		for !limitReached(emitted, limit) {

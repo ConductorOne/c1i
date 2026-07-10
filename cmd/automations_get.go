@@ -1,8 +1,6 @@
 package cmd
 
 import (
-	"bytes"
-	"encoding/json"
 	"fmt"
 
 	"github.com/ConductorOne/c1i/internal/client"
@@ -29,14 +27,7 @@ var automationsGetCmd = &cobra.Command{
 			return fmt.Errorf("API error: %w", err)
 		}
 
-		var pretty bytes.Buffer
-		if err := json.Indent(&pretty, data, "", "  "); err != nil {
-			_, _ = cmd.OutOrStdout().Write(data)
-			return nil
-		}
-		pretty.WriteByte('\n')
-		_, _ = cmd.OutOrStdout().Write(pretty.Bytes())
-		return nil
+		return writeObject(cmd, data)
 	},
 }
 

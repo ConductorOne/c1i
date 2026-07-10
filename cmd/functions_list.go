@@ -41,7 +41,7 @@ var functionsListCmd = &cobra.Command{
 		// when no client-side filter is active.
 		clientFilter := publishedOnly || draftOnly
 
-		enc := json.NewEncoder(cmd.OutOrStdout())
+		enc := newEmitter(cmd.OutOrStdout())
 		emitted := 0
 		for !limitReached(emitted, limit) {
 			pageSize := requestedPageSize

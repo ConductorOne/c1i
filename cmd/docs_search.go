@@ -73,7 +73,7 @@ Examples:
 			return fmt.Errorf("failed to parse response: %w", err)
 		}
 
-		enc := json.NewEncoder(cmd.OutOrStdout())
+		enc := newEmitter(cmd.OutOrStdout())
 		for _, r := range results {
 			_ = enc.Encode(map[string]string{
 				"title":   r.Metadata.Title,

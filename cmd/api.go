@@ -1,7 +1,6 @@
 package cmd
 
 import (
-	"bytes"
 	"encoding/json"
 	"fmt"
 	"net/url"
@@ -54,7 +53,7 @@ var apiCmd = &cobra.Command{
 		}
 
 		out := cmd.OutOrStdout()
-		enc := json.NewEncoder(out)
+		enc := newEmitter(out)
 		pageToken := ""
 		prevToken := ""
 		emitted := 0
@@ -107,14 +106,7 @@ var apiCmd = &cobra.Command{
 			}
 
 			if !paginate {
-				var pretty bytes.Buffer
-				if err := json.Indent(&pretty, data, "", "  "); err != nil {
-					_, _ = out.Write(data)
-				} else {
-					pretty.WriteByte('\n')
-					_, _ = out.Write(pretty.Bytes())
-				}
-				break
+				return writeObject(cmd, data)
 			}
 
 			items, nextToken, err := extractListAndToken(data, listKey)

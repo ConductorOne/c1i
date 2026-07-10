@@ -46,7 +46,7 @@ var tasksListCmd = &cobra.Command{
 			myUserID = introspect.UserID
 		}
 
-		enc := json.NewEncoder(cmd.OutOrStdout())
+		enc := newEmitter(cmd.OutOrStdout())
 		emitted := 0
 		for !limitReached(emitted, limit) {
 			pageSize := effectivePageSize(requestedPageSize, limit, emitted)

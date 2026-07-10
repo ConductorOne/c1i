@@ -34,6 +34,10 @@ func init() {
 	rootCmd.PersistentFlags().String("url", "", "C1 URL (e.g. https://mycompany.conductor.one)")
 	_ = viper.BindPFlag("url", rootCmd.PersistentFlags().Lookup("url"))
 	_ = viper.BindEnv("url", "C1I_URL")
+
+	rootCmd.PersistentFlags().String("fields", "", "Comma-separated fields to keep in JSON output (dot-paths for nested, e.g. id,user.email)")
+	_ = viper.BindPFlag("fields", rootCmd.PersistentFlags().Lookup("fields"))
+	_ = viper.BindEnv("fields", "C1I_FIELDS")
 }
 
 func initConfig() {
