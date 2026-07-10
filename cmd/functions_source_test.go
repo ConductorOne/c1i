@@ -40,8 +40,8 @@ func TestFunctionsSourceCommitParse(t *testing.T) {
 // handle both so it doesn't silently fall through to "no commit found".
 func TestFunctionsSourceMetadataParse(t *testing.T) {
 	cases := map[string]struct {
-		payload      string
-		wantCommit   string
+		payload    string
+		wantCommit string
 	}{
 		"wrapped": {
 			payload:    `{"function":{"publishedCommitId":"abc","head":"def"}}`,

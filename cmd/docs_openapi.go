@@ -16,10 +16,10 @@ import (
 )
 
 const (
-	openapiURL      = "https://conductorone.com/docs/openapi.yaml"
-	cacheMaxAge     = 24 * time.Hour
-	cacheDirName    = ".c1i"
-	cacheFileName   = "openapi.yaml"
+	openapiURL    = "https://conductorone.com/docs/openapi.yaml"
+	cacheMaxAge   = 24 * time.Hour
+	cacheDirName  = ".c1i"
+	cacheFileName = "openapi.yaml"
 )
 
 var docsOpenapiCmd = &cobra.Command{
