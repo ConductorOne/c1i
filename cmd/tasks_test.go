@@ -30,18 +30,15 @@ func TestParseTaskActionResponse(t *testing.T) {
 	}
 }
 
-// TestParseTaskActionResponseTopLevelTaskIgnored guards against the old bug:
-// a top-level `task` field must NOT be picked up, because the real API never
-// returns the task there.
-func TestParseTaskActionResponseTopLevelTaskIgnored(t *testing.T) {
+// TestParseTaskActionResponseTopLevelTaskErrors guards against the old bug: a
+// top-level `task` field must NOT be accepted (the real API nests it under
+// taskView.task). Rather than silently returning empty id/state — which printed
+// "task_id= state=" — this must be a parse error.
+func TestParseTaskActionResponseTopLevelTaskErrors(t *testing.T) {
 	body := []byte(`{"task": {"id": "wrong", "state": "wrong"}}`)
 
-	id, state, err := parseTaskActionResponse(body)
-	if err != nil {
-		t.Fatalf("parseTaskActionResponse returned error: %v", err)
-	}
-	if id != "" || state != "" {
-		t.Errorf("expected empty id/state for top-level task, got id=%q state=%q", id, state)
+	if _, _, err := parseTaskActionResponse(body); err == nil {
+		t.Error("expected error when taskView.task.id is absent, got nil")
 	}
 }
 

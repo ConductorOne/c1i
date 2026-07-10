@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"encoding/json"
+	"fmt"
 
 	"github.com/spf13/cobra"
 )
@@ -26,6 +27,13 @@ func parseTaskActionResponse(data []byte) (id, state string, err error) {
 	}
 	if err := json.Unmarshal(data, &resp); err != nil {
 		return "", "", err
+	}
+	// A successful action response always carries the updated task under
+	// taskView.task. An empty id means the response wasn't the shape we expect
+	// (e.g. the old top-level `task` shape); erroring here prevents silently
+	// printing "task_id= state=" — the exact symptom this parsing fixed.
+	if resp.TaskView.Task.ID == "" {
+		return "", "", fmt.Errorf("unexpected task action response: no taskView.task.id in %s", data)
 	}
 	return resp.TaskView.Task.ID, resp.TaskView.Task.State, nil
 }
