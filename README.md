@@ -307,10 +307,10 @@ $ c1i requests create grant --app-id A1 --entitlement-id E1 --user-id U1 --dry-r
 ```
 
 It applies to every write command (`requests create`, `tasks approve/deny/comment`,
-`accounts set-owner`, the `mcp` mutations) and to non-GET `api` calls. Dry run
-still authenticates and may perform read-only lookups needed to build the request
-(for example, `tasks approve`/`deny` resolve the task's current policy step), but
-it never sends the mutation itself.
+`accounts set-owner`, the `mcp` mutations) and to non-GET `api` calls, and never
+sends the mutation itself. Most previews run fully offline — no credentials
+required. The exception is `tasks approve`/`deny`, which authenticate and read the
+task to resolve its current policy step, so the previewed body is exact.
 
 ### Debug tracing
 

@@ -14,8 +14,9 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - **`--dry-run` / `C1I_DRY_RUN`**: preview a mutating request (method, path,
   pretty-printed body) without sending it. Covers every write command
   (`requests create`, `tasks approve`/`deny`/`comment`, `accounts set-owner`, the
-  `mcp` mutations) and non-GET `api` calls. Read-only lookups needed to build the
-  request (e.g. resolving a task's current policy step) still run.
+  `mcp` mutations) and non-GET `api` calls. Previews run without credentials,
+  except `tasks approve`/`deny`, which authenticate to resolve the task's current
+  policy step.
 - **`--debug` / `C1I_DEBUG`**: trace each HTTP request to stderr (method, URL,
   status, elapsed time, including retries). Headers and bodies are never logged.
 - **`api` escape hatch rounded out**: `--method PATCH` is now supported;

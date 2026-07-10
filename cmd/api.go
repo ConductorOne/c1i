@@ -25,11 +25,6 @@ var apiCmd = &cobra.Command{
 			return err
 		}
 
-		c, err := newClient(cmd, baseURL)
-		if err != nil {
-			return fmt.Errorf("authentication failed: %w", err)
-		}
-
 		path, _ := cmd.Flags().GetString("path")
 		method, _ := cmd.Flags().GetString("method")
 		body, _ := cmd.Flags().GetString("body")
@@ -78,6 +73,11 @@ var apiCmd = &cobra.Command{
 				method = "GET"
 			}
 		}
+		switch method {
+		case "GET", "POST", "PUT", "PATCH", "DELETE":
+		default:
+			return fmt.Errorf("unsupported method: %s (use GET, POST, PUT, PATCH, or DELETE)", method)
+		}
 
 		// Apply --query params to the path once; pagination adds page_token per
 		// iteration below for GET/DELETE.
@@ -87,6 +87,29 @@ var apiCmd = &cobra.Command{
 				return fmt.Errorf("invalid --query %q: expected key=value", qp)
 			}
 			path = setQueryParam(path, k, v)
+		}
+
+		// Preview mutating requests without sending when --dry-run is set. GET is
+		// a read, so it still executes below. This mirrors the request the loop
+		// would build for the first page (before any page token is added), and
+		// runs before newClient so a preview needs no credentials.
+		if dryRunActive() && method != "GET" {
+			var previewBody any
+			if method != "DELETE" {
+				bodyObj := map[string]any{}
+				if body != "" {
+					if err := json.Unmarshal([]byte(body), &bodyObj); err != nil {
+						return fmt.Errorf("invalid JSON body: %w", err)
+					}
+				}
+				previewBody = bodyObj
+			}
+			return printDryRun(cmd, method, path, previewBody)
+		}
+
+		c, err := newClient(cmd, baseURL)
+		if err != nil {
+			return fmt.Errorf("authentication failed: %w", err)
 		}
 
 		out := cmd.OutOrStdout()
@@ -122,16 +145,6 @@ var apiCmd = &cobra.Command{
 				bodyBytes = b
 			default:
 				return fmt.Errorf("unsupported method: %s (use GET, POST, PUT, PATCH, or DELETE)", method)
-			}
-
-			// Preview mutating requests without sending when --dry-run is set.
-			// GET is a read, so it still executes.
-			if dryRunActive() && method != "GET" {
-				var previewBody any
-				if bodyBytes != nil {
-					previewBody = json.RawMessage(bodyBytes)
-				}
-				return printDryRun(cmd, method, reqPath, previewBody)
 			}
 
 			data, reqErr := c.Request(cmd.Context(), method, reqPath, bodyBytes, headers)

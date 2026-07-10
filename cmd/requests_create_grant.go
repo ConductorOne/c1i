@@ -42,11 +42,6 @@ var requestsCreateGrantCmd = &cobra.Command{
 			return err
 		}
 
-		c, err := newClient(cmd, baseURL)
-		if err != nil {
-			return fmt.Errorf("authentication failed: %w", err)
-		}
-
 		appID, _ := cmd.Flags().GetString("app-id")
 		entitlementID, _ := cmd.Flags().GetString("entitlement-id")
 		userID, _ := cmd.Flags().GetString("user-id")
@@ -58,6 +53,11 @@ var requestsCreateGrantCmd = &cobra.Command{
 
 		if dryRunActive() {
 			return printDryRun(cmd, "POST", "/api/v1/task/grant", body)
+		}
+
+		c, err := newClient(cmd, baseURL)
+		if err != nil {
+			return fmt.Errorf("authentication failed: %w", err)
 		}
 
 		data, err := c.Post(cmd.Context(), "/api/v1/task/grant", body)

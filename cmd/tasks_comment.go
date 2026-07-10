@@ -16,11 +16,6 @@ var tasksCommentCmd = &cobra.Command{
 			return err
 		}
 
-		c, err := newClient(cmd, baseURL)
-		if err != nil {
-			return fmt.Errorf("authentication failed: %w", err)
-		}
-
 		taskID, _ := cmd.Flags().GetString("task-id")
 		comment, _ := cmd.Flags().GetString("comment")
 
@@ -31,6 +26,11 @@ var tasksCommentCmd = &cobra.Command{
 		path := client.Path("/api/v1/tasks/%s/action/comment", taskID)
 		if dryRunActive() {
 			return printDryRun(cmd, "POST", path, body)
+		}
+
+		c, err := newClient(cmd, baseURL)
+		if err != nil {
+			return fmt.Errorf("authentication failed: %w", err)
 		}
 		data, err := c.Post(cmd.Context(), path, body)
 		if err != nil {

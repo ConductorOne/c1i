@@ -25,11 +25,6 @@ After creating, attach tools with "c1i mcp bindings create".`,
 			return err
 		}
 
-		c, err := newClient(cmd, baseURL)
-		if err != nil {
-			return fmt.Errorf("authentication failed: %w", err)
-		}
-
 		appID, _ := cmd.Flags().GetString("app-id")
 		connectorID, _ := cmd.Flags().GetString("connector-id")
 		displayName, _ := cmd.Flags().GetString("display-name")
@@ -47,6 +42,11 @@ After creating, attach tools with "c1i mcp bindings create".`,
 		path := client.Path("/api/v1/apps/%s/connectors/%s/mcp_toolsets", appID, connectorID)
 		if dryRunActive() {
 			return printDryRun(cmd, "POST", path, body)
+		}
+
+		c, err := newClient(cmd, baseURL)
+		if err != nil {
+			return fmt.Errorf("authentication failed: %w", err)
 		}
 		data, err := c.Post(cmd.Context(), path, body)
 		if err != nil {

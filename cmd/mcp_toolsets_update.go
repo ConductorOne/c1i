@@ -26,11 +26,6 @@ Editing the AppEntitlement created behind the toolset is not supported here.`,
 			return err
 		}
 
-		c, err := newClient(cmd, baseURL)
-		if err != nil {
-			return fmt.Errorf("authentication failed: %w", err)
-		}
-
 		appID, _ := cmd.Flags().GetString("app-id")
 		connectorID, _ := cmd.Flags().GetString("connector-id")
 		id, _ := cmd.Flags().GetString("id")
@@ -65,6 +60,11 @@ Editing the AppEntitlement created behind the toolset is not supported here.`,
 		path := client.Path("/api/v1/apps/%s/connectors/%s/mcp_toolsets/%s", appID, connectorID, id)
 		if dryRunActive() {
 			return printDryRun(cmd, "POST", path, body)
+		}
+
+		c, err := newClient(cmd, baseURL)
+		if err != nil {
+			return fmt.Errorf("authentication failed: %w", err)
 		}
 		data, err := c.Post(cmd.Context(), path, body)
 		if err != nil {
