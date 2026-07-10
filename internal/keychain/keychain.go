@@ -86,10 +86,7 @@ func Load(service string) (string, string, Backend, error) {
 // whether anything was actually removed, so callers can distinguish a real
 // logout from a no-op.
 func Delete(service string) (bool, error) {
-	removed := false
-	if keyring.Delete(service, acctClientID) == nil {
-		removed = true
-	}
+	removed := keyring.Delete(service, acctClientID) == nil
 	if keyring.Delete(service, acctClientSecret) == nil {
 		removed = true
 	}
