@@ -31,12 +31,14 @@ c1i docs endpoints --filter task
 
 ```sh
 c1i users list [--query <text>] [--email <email>] [--status enabled|disabled|deleted] [--page-size N] [--page-token TOKEN] [--limit N]
+c1i users get <user-id>
 ```
 
 ### Apps
 
 ```sh
 c1i apps list [--page-size N] [--page-token TOKEN] [--limit N]
+c1i apps get <app-id>
 ```
 
 ### Accounts
@@ -51,6 +53,7 @@ c1i accounts set-owner --app-id <id> --app-user-id <id> --user-id <id>
 
 ```sh
 c1i entitlements list [--app-id <id>] [--query <text>] [--page-size N] [--page-token TOKEN] [--limit N]
+c1i entitlements get <entitlement-id> --app-id <id>
 ```
 
 ### Tasks
@@ -143,8 +146,15 @@ c1i api --path /api/v1/apps
 # POST request
 c1i api --path /api/v1/search/users --body '{"pageSize":10}'
 
-# Other methods — --method takes GET, POST, PUT, or DELETE
+# Other methods — --method takes GET, POST, PUT, PATCH, or DELETE
 c1i api --path /api/v1/apps/<app>/connectors/<conn>/mcp_tools/<id> --method DELETE
+
+# Read the body from a file, or stdin with "-"
+c1i api --path /api/v1/search/users --body-file query.json
+echo '{"pageSize":10}' | c1i api --path /api/v1/search/users --body-file -
+
+# Add query params and headers (both repeatable)
+c1i api --path /api/v1/apps --query page_size=5 --header X-Request-Id=abc123
 
 # Auto-paginate through all results (NDJSON output, one item per line)
 c1i api --path /api/v1/apps --paginate
@@ -153,8 +163,10 @@ c1i api --path /api/v1/apps --paginate
 c1i api --path /api/v1/automation_executions --paginate --list-key automationExecutions
 ```
 
-The method defaults to GET, or POST when `--body` is set; pass `--method` for
-PUT/DELETE. When `--paginate` is used, each page's first array-valued field is unwrapped and each item is emitted as a single line of NDJSON — the same format used by list commands. This covers both the canonical `list` key and typed keys like `automationExecutions`; use `--list-key <field>` to force a specific field. If the server returns the same `nextPageToken` twice in a row, `c1i` aborts with an error rather than looping forever. Without `--paginate`, the full JSON response is pretty-printed.
+The method defaults to GET, or POST when a body is set; pass `--method` for
+PUT/PATCH/DELETE. The body comes from `--body` (inline JSON) or `--body-file` (a
+file, or `-` for stdin) — the two are mutually exclusive. `--query key=value` and
+`--header key=value` are both repeatable. When `--paginate` is used, each page's first array-valued field is unwrapped and each item is emitted as a single line of NDJSON — the same format used by list commands. This covers both the canonical `list` key and typed keys like `automationExecutions`; use `--list-key <field>` to force a specific field. If the server returns the same `nextPageToken` twice in a row, `c1i` aborts with an error rather than looping forever. Without `--paginate`, the full JSON response is pretty-printed.
 
 ### API Discovery & Documentation
 
@@ -278,6 +290,41 @@ precedence:
 
 Set `--max-retries 0` to disable retries entirely. Non-retryable responses
 (4xx other than 429, and 501/505) fail immediately.
+
+### Dry run
+
+`--dry-run` (or `C1I_DRY_RUN=1`) previews a mutating request — its method, path,
+and pretty-printed JSON body — and returns without sending it:
+
+```sh
+$ c1i requests create grant --app-id A1 --entitlement-id E1 --user-id U1 --dry-run
+[dry-run] POST /api/v1/task/grant
+{
+  "appEntitlementId": "E1",
+  "appId": "A1",
+  "identityUserId": "U1"
+}
+```
+
+It applies to every write command (`requests create`, `tasks approve/deny/comment`,
+`accounts set-owner`, the `mcp` mutations) and to non-GET `api` calls. Dry run
+still authenticates and may perform read-only lookups needed to build the request
+(for example, `tasks approve`/`deny` resolve the task's current policy step), but
+it never sends the mutation itself.
+
+### Debug tracing
+
+`--debug` (or `C1I_DEBUG=1`) traces each HTTP request to stderr — method, URL,
+response status, and elapsed time, including every retry attempt. Headers and
+bodies are never logged, so credentials don't leak. Output goes to stderr, so it
+won't corrupt piped JSON on stdout:
+
+```sh
+$ c1i apps list --debug 2>trace.log
+$ cat trace.log
+> GET https://mycompany.conductor.one/api/v1/apps
+< GET /api/v1/apps 200 OK (142ms)
+```
 
 ## Authentication
 

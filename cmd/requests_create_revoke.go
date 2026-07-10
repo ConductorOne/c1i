@@ -47,6 +47,10 @@ var requestsCreateRevokeCmd = &cobra.Command{
 
 		body := buildRevokeTaskBody(appID, entitlementID, userID, description)
 
+		if dryRunActive() {
+			return printDryRun(cmd, "POST", "/api/v1/task/revoke", body)
+		}
+
 		data, err := c.Post(cmd.Context(), "/api/v1/task/revoke", body)
 		if err != nil {
 			return fmt.Errorf("API error: %w", err)

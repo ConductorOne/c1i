@@ -30,6 +30,9 @@ var mcpToolsetsDeleteCmd = &cobra.Command{
 		id, _ := cmd.Flags().GetString("id")
 
 		path := client.Path("/api/v1/apps/%s/connectors/%s/mcp_toolsets/%s", appID, connectorID, id)
+		if dryRunActive() {
+			return printDryRun(cmd, "DELETE", path, nil)
+		}
 		if _, err := c.Delete(cmd.Context(), path); err != nil {
 			return fmt.Errorf("API error: %w", err)
 		}

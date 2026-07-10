@@ -45,6 +45,9 @@ After creating, attach tools with "c1i mcp bindings create".`,
 		}
 
 		path := client.Path("/api/v1/apps/%s/connectors/%s/mcp_toolsets", appID, connectorID)
+		if dryRunActive() {
+			return printDryRun(cmd, "POST", path, body)
+		}
 		data, err := c.Post(cmd.Context(), path, body)
 		if err != nil {
 			return fmt.Errorf("API error: %w", err)

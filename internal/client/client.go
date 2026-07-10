@@ -10,6 +10,7 @@ import (
 	"math/rand"
 	"net/http"
 	"net/url"
+	"os"
 	"runtime/debug"
 	"strconv"
 	"time"
@@ -85,6 +86,7 @@ type Client struct {
 	httpClient *http.Client
 	baseURL    string
 	maxRetries int
+	debug      bool
 }
 
 // Option configures a Client at construction time.
@@ -98,6 +100,34 @@ func WithMaxRetries(n int) Option {
 		n = 0
 	}
 	return func(c *Client) { c.maxRetries = n }
+}
+
+// WithDebug enables HTTP wire tracing to stderr: each request's method and URL,
+// then the response status and elapsed time (including every retry attempt).
+// Headers and bodies are never logged, so credentials don't leak.
+func WithDebug(enabled bool) Option {
+	return func(c *Client) { c.debug = enabled }
+}
+
+// debugTripper logs one line before and after each attempt. It wraps the
+// outermost transport so it measures the full round trip and sees retried
+// attempts individually.
+type debugTripper struct {
+	next http.RoundTripper
+	out  io.Writer
+}
+
+func (dt *debugTripper) RoundTrip(req *http.Request) (*http.Response, error) {
+	start := time.Now()
+	_, _ = fmt.Fprintf(dt.out, "> %s %s\n", req.Method, req.URL.String())
+	resp, err := dt.next.RoundTrip(req)
+	elapsed := time.Since(start).Round(time.Millisecond)
+	if err != nil {
+		_, _ = fmt.Fprintf(dt.out, "< %s %s error after %s: %v\n", req.Method, req.URL.Path, elapsed, err)
+		return resp, err
+	}
+	_, _ = fmt.Fprintf(dt.out, "< %s %s %s (%s)\n", req.Method, req.URL.Path, resp.Status, elapsed)
+	return resp, err
 }
 
 func New(ctx context.Context, baseURL string, opts ...Option) (*Client, error) {
@@ -134,6 +164,9 @@ func New(ctx context.Context, baseURL string, opts ...Option) (*Client, error) {
 	}
 	for _, opt := range opts {
 		opt(c)
+	}
+	if c.debug {
+		c.httpClient.Transport = &debugTripper{next: c.httpClient.Transport, out: os.Stderr}
 	}
 	return c, nil
 }
@@ -234,6 +267,43 @@ func (c *Client) Delete(ctx context.Context, path string) ([]byte, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodDelete, c.baseURL+path, nil)
 	if err != nil {
 		return nil, err
+	}
+	return c.do(req)
+}
+
+func (c *Client) Patch(ctx context.Context, path string, body any) ([]byte, error) {
+	data, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPatch, c.baseURL+path, bytes.NewReader(data))
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	return c.do(req)
+}
+
+// Request performs an arbitrary method against path with an optional raw JSON
+// body and extra headers. It's the generic path behind the `api` escape hatch;
+// typed commands use the Get/Post/Put/Delete/Patch helpers instead. A non-nil
+// body sets Content-Type: application/json (overridable via headers), and the
+// body is replayed on retries via the reader's GetBody.
+func (c *Client) Request(ctx context.Context, method, path string, body []byte, headers map[string]string) ([]byte, error) {
+	var rdr io.Reader
+	if body != nil {
+		rdr = bytes.NewReader(body)
+	}
+	req, err := http.NewRequestWithContext(ctx, method, c.baseURL+path, rdr)
+	if err != nil {
+		return nil, err
+	}
+	if body != nil {
+		req.Header.Set("Content-Type", "application/json")
+	}
+	for k, v := range headers {
+		req.Header.Set(k, v)
 	}
 	return c.do(req)
 }

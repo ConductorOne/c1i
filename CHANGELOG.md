@@ -4,6 +4,30 @@ All notable changes to c1i are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project aims
 to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- **`get <id>` for core resources**: `c1i users get`, `c1i apps get`, and
+  `c1i entitlements get <id> --app-id` return a single object as pretty JSON,
+  removing the need to `list | grep`.
+- **`--dry-run` / `C1I_DRY_RUN`**: preview a mutating request (method, path,
+  pretty-printed body) without sending it. Covers every write command
+  (`requests create`, `tasks approve`/`deny`/`comment`, `accounts set-owner`, the
+  `mcp` mutations) and non-GET `api` calls. Read-only lookups needed to build the
+  request (e.g. resolving a task's current policy step) still run.
+- **`--debug` / `C1I_DEBUG`**: trace each HTTP request to stderr (method, URL,
+  status, elapsed time, including retries). Headers and bodies are never logged.
+- **`api` escape hatch rounded out**: `--method PATCH` is now supported;
+  `--body-file` reads the JSON body from a file (or `-` for stdin, mutually
+  exclusive with `--body`); `--query key=value` and `--header key=value` are both
+  repeatable.
+
+### Fixed
+
+- README documented `api --method` as GET/POST/PUT/DELETE only; PATCH is now
+  supported and the docs list all five methods.
+
 ## [0.2.0] - 2026-07-10
 
 First changelog entry; releases through v0.1.5 predate this file (see the

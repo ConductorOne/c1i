@@ -11,5 +11,8 @@ import (
 // All commands go through this helper so cross-cutting client options are
 // wired in one place rather than at every call site.
 func newClient(cmd *cobra.Command, baseURL string) (*client.Client, error) {
-	return client.New(cmd.Context(), baseURL, client.WithMaxRetries(viper.GetInt("max_retries")))
+	return client.New(cmd.Context(), baseURL,
+		client.WithMaxRetries(viper.GetInt("max_retries")),
+		client.WithDebug(viper.GetBool("debug")),
+	)
 }

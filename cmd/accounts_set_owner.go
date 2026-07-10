@@ -34,6 +34,10 @@ var accountsSetOwnerCmd = &cobra.Command{
 			"updateMask": "identityUserId",
 		}
 
+		if dryRunActive() {
+			return printDryRun(cmd, "POST", path, body)
+		}
+
 		data, err := c.Post(cmd.Context(), path, body)
 		if err != nil {
 			return fmt.Errorf("API error: %w", err)

@@ -69,6 +69,14 @@ func init() {
 	rootCmd.PersistentFlags().String("error-format", "text", "Error output format: text or json")
 	_ = viper.BindPFlag("error_format", rootCmd.PersistentFlags().Lookup("error-format"))
 	_ = viper.BindEnv("error_format", "C1I_ERROR_FORMAT")
+
+	rootCmd.PersistentFlags().Bool("debug", false, "Trace HTTP requests (method, URL, status, timing) to stderr")
+	_ = viper.BindPFlag("debug", rootCmd.PersistentFlags().Lookup("debug"))
+	_ = viper.BindEnv("debug", "C1I_DEBUG")
+
+	rootCmd.PersistentFlags().Bool("dry-run", false, "Preview mutating requests (method, path, body) without sending them")
+	_ = viper.BindPFlag("dry_run", rootCmd.PersistentFlags().Lookup("dry-run"))
+	_ = viper.BindEnv("dry_run", "C1I_DRY_RUN")
 }
 
 func initConfig() {

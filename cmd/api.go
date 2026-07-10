@@ -3,7 +3,9 @@ package cmd
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/url"
+	"os"
 	"sort"
 	"strings"
 
@@ -31,8 +33,11 @@ var apiCmd = &cobra.Command{
 		path, _ := cmd.Flags().GetString("path")
 		method, _ := cmd.Flags().GetString("method")
 		body, _ := cmd.Flags().GetString("body")
+		bodyFile, _ := cmd.Flags().GetString("body-file")
 		paginate, _ := cmd.Flags().GetBool("paginate")
 		listKey, _ := cmd.Flags().GetString("list-key")
+		queryPairs, _ := cmd.Flags().GetStringArray("query")
+		headerPairs, _ := cmd.Flags().GetStringArray("header")
 		limit := getIntFlag(cmd, "limit")
 
 		if limit > 0 && !paginate {
@@ -40,6 +45,29 @@ var apiCmd = &cobra.Command{
 		}
 		if listKey != "" && !paginate {
 			return fmt.Errorf("--list-key only applies with --paginate")
+		}
+
+		// --body-file (or "-" for stdin) is an alternative to inline --body for
+		// payloads too large or awkward to pass on the command line.
+		if bodyFile != "" {
+			if body != "" {
+				return fmt.Errorf("--body and --body-file are mutually exclusive")
+			}
+			var raw []byte
+			if bodyFile == "-" {
+				raw, err = io.ReadAll(cmd.InOrStdin())
+			} else {
+				raw, err = os.ReadFile(bodyFile)
+			}
+			if err != nil {
+				return fmt.Errorf("reading --body-file: %w", err)
+			}
+			body = string(raw)
+		}
+
+		headers, err := parseKeyValueFlag(headerPairs, "header")
+		if err != nil {
+			return err
 		}
 
 		method = strings.ToUpper(method)
@@ -51,6 +79,16 @@ var apiCmd = &cobra.Command{
 			}
 		}
 
+		// Apply --query params to the path once; pagination adds page_token per
+		// iteration below for GET/DELETE.
+		for _, qp := range queryPairs {
+			k, v, ok := strings.Cut(qp, "=")
+			if !ok || k == "" {
+				return fmt.Errorf("invalid --query %q: expected key=value", qp)
+			}
+			path = setQueryParam(path, k, v)
+		}
+
 		out := cmd.OutOrStdout()
 		enc := newEmitter(out)
 		pageToken := ""
@@ -58,15 +96,14 @@ var apiCmd = &cobra.Command{
 		emitted := 0
 
 		for !limitReached(emitted, limit) {
-			var data []byte
+			reqPath := path
+			var bodyBytes []byte
 			switch method {
-			case "GET":
-				reqPath := path
+			case "GET", "DELETE":
 				if paginate && pageToken != "" {
 					reqPath = setQueryParam(reqPath, "page_token", pageToken)
 				}
-				data, err = c.Get(cmd.Context(), reqPath, nil)
-			case "POST":
+			case "POST", "PUT", "PATCH":
 				var bodyObj map[string]any
 				if body != "" {
 					if err := json.Unmarshal([]byte(body), &bodyObj); err != nil {
@@ -78,30 +115,31 @@ var apiCmd = &cobra.Command{
 				if paginate && pageToken != "" {
 					bodyObj["pageToken"] = pageToken
 				}
-				data, err = c.Post(cmd.Context(), path, bodyObj)
-			case "PUT":
-				var bodyObj map[string]any
-				if body != "" {
-					if err := json.Unmarshal([]byte(body), &bodyObj); err != nil {
-						return fmt.Errorf("invalid JSON body: %w", err)
-					}
-				} else {
-					bodyObj = map[string]any{}
+				b, mErr := json.Marshal(bodyObj)
+				if mErr != nil {
+					return fmt.Errorf("encoding request body: %w", mErr)
 				}
-				if paginate && pageToken != "" {
-					bodyObj["pageToken"] = pageToken
-				}
-				data, err = c.Put(cmd.Context(), path, bodyObj)
-			case "DELETE":
-				data, err = c.Delete(cmd.Context(), path)
+				bodyBytes = b
 			default:
-				return fmt.Errorf("unsupported method: %s (use GET, POST, PUT, or DELETE)", method)
+				return fmt.Errorf("unsupported method: %s (use GET, POST, PUT, PATCH, or DELETE)", method)
 			}
-			if err != nil {
-				if method == "GET" && looksLikePOSTOnly(err.Error(), path) {
-					return fmt.Errorf("API error: %w\n\nHint: this looks like a POST-only endpoint (e.g. /search/* paths). Try '--body \"{}\"' (which switches to POST) or '--method=POST'", err)
+
+			// Preview mutating requests without sending when --dry-run is set.
+			// GET is a read, so it still executes.
+			if dryRunActive() && method != "GET" {
+				var previewBody any
+				if bodyBytes != nil {
+					previewBody = json.RawMessage(bodyBytes)
 				}
-				return fmt.Errorf("API error: %w", err)
+				return printDryRun(cmd, method, reqPath, previewBody)
+			}
+
+			data, reqErr := c.Request(cmd.Context(), method, reqPath, bodyBytes, headers)
+			if reqErr != nil {
+				if method == "GET" && looksLikePOSTOnly(reqErr.Error(), reqPath) {
+					return fmt.Errorf("API error: %w\n\nHint: this looks like a POST-only endpoint (e.g. /search/* paths). Try '--body \"{}\"' (which switches to POST) or '--method=POST'", reqErr)
+				}
+				return fmt.Errorf("API error: %w", reqErr)
 			}
 
 			if !paginate {
@@ -143,10 +181,30 @@ var apiCmd = &cobra.Command{
 	},
 }
 
+// parseKeyValueFlag parses repeated "key=value" flag values into a map. flagName
+// is only used to make error messages point at the offending flag.
+func parseKeyValueFlag(pairs []string, flagName string) (map[string]string, error) {
+	if len(pairs) == 0 {
+		return nil, nil
+	}
+	m := make(map[string]string, len(pairs))
+	for _, p := range pairs {
+		k, v, ok := strings.Cut(p, "=")
+		if !ok || k == "" {
+			return nil, fmt.Errorf("invalid --%s %q: expected key=value", flagName, p)
+		}
+		m[k] = v
+	}
+	return m, nil
+}
+
 func init() {
 	apiCmd.Flags().String("path", "", "API path (e.g. /api/v1/search/app_users)")
-	apiCmd.Flags().String("method", "", "HTTP method: GET, POST, PUT, or DELETE (default: GET, or POST if --body is set)")
+	apiCmd.Flags().String("method", "", "HTTP method: GET, POST, PUT, PATCH, or DELETE (default: GET, or POST if a body is set)")
 	apiCmd.Flags().String("body", "", "JSON request body (implies POST)")
+	apiCmd.Flags().String("body-file", "", "Read the JSON request body from a file (\"-\" for stdin); mutually exclusive with --body")
+	apiCmd.Flags().StringArray("query", nil, "Query parameter as key=value (repeatable)")
+	apiCmd.Flags().StringArray("header", nil, "Extra request header as key=value (repeatable)")
 	apiCmd.Flags().Bool("paginate", false, "Automatically follow pagination to fetch all pages")
 	apiCmd.Flags().String("list-key", "", "Force the response field name to drain as the list (default: auto-detect the first array-valued field, e.g. 'list', 'automationExecutions', 'automations')")
 	markRequired(apiCmd, "path")

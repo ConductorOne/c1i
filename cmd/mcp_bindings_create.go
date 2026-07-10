@@ -41,6 +41,9 @@ var mcpBindingsCreateCmd = &cobra.Command{
 		}
 
 		path := client.Path("/api/v1/apps/%s/connectors/%s/mcp_toolsets/%s/tool_bindings", appID, connectorID, toolsetID)
+		if dryRunActive() {
+			return printDryRun(cmd, "POST", path, body)
+		}
 		data, err := c.Post(cmd.Context(), path, body)
 		if err != nil {
 			return fmt.Errorf("API error: %w", err)

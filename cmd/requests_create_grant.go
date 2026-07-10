@@ -56,6 +56,10 @@ var requestsCreateGrantCmd = &cobra.Command{
 
 		body := buildGrantTaskBody(appID, entitlementID, userID, duration, description, emergency)
 
+		if dryRunActive() {
+			return printDryRun(cmd, "POST", "/api/v1/task/grant", body)
+		}
+
 		data, err := c.Post(cmd.Context(), "/api/v1/task/grant", body)
 		if err != nil {
 			return fmt.Errorf("API error: %w", err)
