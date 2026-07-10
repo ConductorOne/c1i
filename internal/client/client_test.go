@@ -1,6 +1,253 @@
 package client
 
-import "testing"
+import (
+	"context"
+	"errors"
+	"io"
+	"net/http"
+	"net/http/httptest"
+	"strings"
+	"testing"
+	"time"
+)
+
+// deterministicBackoff makes sleeps instant and jitter a no-op for the duration
+// of a test, and returns a pointer to a slice recording each slept duration.
+func deterministicBackoff(t *testing.T) *[]time.Duration {
+	t.Helper()
+	origSleep, origJitter := sleepFn, jitterFn
+	var slept []time.Duration
+	sleepFn = func(ctx context.Context, d time.Duration) error {
+		slept = append(slept, d)
+		return ctx.Err()
+	}
+	jitterFn = func(d time.Duration) time.Duration { return d }
+	t.Cleanup(func() { sleepFn, jitterFn = origSleep, origJitter })
+	return &slept
+}
+
+func newTestClient(srv *httptest.Server, maxRetries int) *Client {
+	return &Client{httpClient: srv.Client(), baseURL: srv.URL, maxRetries: maxRetries}
+}
+
+func TestDoWithRetry_RetriesThenSucceeds(t *testing.T) {
+	deterministicBackoff(t)
+	var calls int
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls++
+		if calls < 3 {
+			w.WriteHeader(http.StatusServiceUnavailable)
+			return
+		}
+		_, _ = w.Write([]byte(`{"ok":true}`))
+	}))
+	defer srv.Close()
+
+	body, err := newTestClient(srv, 3).Get(context.Background(), "/x", nil)
+	if err != nil {
+		t.Fatalf("Get: %v", err)
+	}
+	if calls != 3 {
+		t.Fatalf("calls = %d, want 3 (2 retries then success)", calls)
+	}
+	if string(body) != `{"ok":true}` {
+		t.Fatalf("body = %q", body)
+	}
+}
+
+func TestDoWithRetry_ExhaustsRetriesAndReturnsError(t *testing.T) {
+	slept := deterministicBackoff(t)
+	var calls int
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls++
+		w.WriteHeader(http.StatusServiceUnavailable)
+	}))
+	defer srv.Close()
+
+	_, err := newTestClient(srv, 2).Get(context.Background(), "/x", nil)
+	if err == nil {
+		t.Fatal("expected error after exhausting retries")
+	}
+	if !strings.Contains(err.Error(), "returned 503") {
+		t.Fatalf("error = %v, want it to mention 503", err)
+	}
+	if calls != 3 { // initial + 2 retries
+		t.Fatalf("calls = %d, want 3", calls)
+	}
+	if len(*slept) != 2 {
+		t.Fatalf("slept %d times, want 2", len(*slept))
+	}
+}
+
+func TestDoWithRetry_NonRetryableStatusIsImmediate(t *testing.T) {
+	deterministicBackoff(t)
+	var calls int
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls++
+		http.Error(w, "nope", http.StatusNotFound)
+	}))
+	defer srv.Close()
+
+	_, err := newTestClient(srv, 5).Get(context.Background(), "/x", nil)
+	if err == nil {
+		t.Fatal("expected error for 404")
+	}
+	if calls != 1 {
+		t.Fatalf("calls = %d, want 1 (404 must not retry)", calls)
+	}
+}
+
+func TestDoWithRetry_ZeroRetriesDisables(t *testing.T) {
+	deterministicBackoff(t)
+	var calls int
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls++
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer srv.Close()
+
+	_, err := newTestClient(srv, 0).Get(context.Background(), "/x", nil)
+	if err == nil {
+		t.Fatal("expected error")
+	}
+	if calls != 1 {
+		t.Fatalf("calls = %d, want 1 with maxRetries=0", calls)
+	}
+}
+
+func TestDoWithRetry_POSTBodyReplayedOnRetry(t *testing.T) {
+	deterministicBackoff(t)
+	var calls int
+	var lastBody string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls++
+		b, _ := io.ReadAll(r.Body)
+		lastBody = string(b)
+		if calls < 2 {
+			w.WriteHeader(http.StatusTooManyRequests)
+			return
+		}
+		_, _ = w.Write([]byte(`{}`))
+	}))
+	defer srv.Close()
+
+	_, err := newTestClient(srv, 3).Post(context.Background(), "/x", map[string]any{"hello": "world"})
+	if err != nil {
+		t.Fatalf("Post: %v", err)
+	}
+	if calls != 2 {
+		t.Fatalf("calls = %d, want 2", calls)
+	}
+	if !strings.Contains(lastBody, `"hello":"world"`) {
+		t.Fatalf("retried request body = %q, want the original JSON replayed", lastBody)
+	}
+}
+
+func TestDoWithRetry_HonorsRetryAfter(t *testing.T) {
+	slept := deterministicBackoff(t)
+	var calls int
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls++
+		if calls == 1 {
+			w.Header().Set("Retry-After", "2")
+			w.WriteHeader(http.StatusTooManyRequests)
+			return
+		}
+		_, _ = w.Write([]byte(`{}`))
+	}))
+	defer srv.Close()
+
+	if _, err := newTestClient(srv, 3).Get(context.Background(), "/x", nil); err != nil {
+		t.Fatalf("Get: %v", err)
+	}
+	if len(*slept) != 1 || (*slept)[0] != 2*time.Second {
+		t.Fatalf("slept = %v, want a single 2s wait from Retry-After", *slept)
+	}
+}
+
+func TestDoWithRetry_ContextCancellationStopsRetry(t *testing.T) {
+	origSleep := sleepFn
+	sleepFn = func(ctx context.Context, d time.Duration) error { return context.Canceled }
+	t.Cleanup(func() { sleepFn = origSleep })
+
+	var calls int
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls++
+		w.WriteHeader(http.StatusServiceUnavailable)
+	}))
+	defer srv.Close()
+
+	_, err := newTestClient(srv, 5).Get(context.Background(), "/x", nil)
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("err = %v, want context.Canceled", err)
+	}
+	if calls != 1 {
+		t.Fatalf("calls = %d, want 1 (cancel during first backoff)", calls)
+	}
+}
+
+func TestIsRetryableStatus(t *testing.T) {
+	retryable := []int{429, 500, 502, 503, 504}
+	for _, c := range retryable {
+		if !isRetryableStatus(c) {
+			t.Errorf("isRetryableStatus(%d) = false, want true", c)
+		}
+	}
+	notRetryable := []int{200, 201, 400, 401, 403, 404, 409, 422, 501, 505}
+	for _, c := range notRetryable {
+		if isRetryableStatus(c) {
+			t.Errorf("isRetryableStatus(%d) = true, want false", c)
+		}
+	}
+}
+
+func TestParseRetryAfter(t *testing.T) {
+	if d, ok := parseRetryAfter("5"); !ok || d != 5*time.Second {
+		t.Errorf("seconds: got (%v, %v)", d, ok)
+	}
+	if _, ok := parseRetryAfter(""); ok {
+		t.Errorf("empty: want ok=false")
+	}
+	if _, ok := parseRetryAfter("not-a-number"); ok {
+		t.Errorf("garbage: want ok=false")
+	}
+	if _, ok := parseRetryAfter("-3"); ok {
+		t.Errorf("negative seconds: want ok=false")
+	}
+	// HTTP-date in the future yields a positive-ish duration.
+	future := time.Now().Add(90 * time.Second).UTC().Format(http.TimeFormat)
+	if d, ok := parseRetryAfter(future); !ok || d <= 0 {
+		t.Errorf("future date: got (%v, %v), want ok and positive", d, ok)
+	}
+	// HTTP-date in the past means retry now (ok, zero).
+	past := time.Now().Add(-90 * time.Second).UTC().Format(http.TimeFormat)
+	if d, ok := parseRetryAfter(past); !ok || d != 0 {
+		t.Errorf("past date: got (%v, %v), want (0, true)", d, ok)
+	}
+}
+
+func TestNextBackoff(t *testing.T) {
+	origJitter := jitterFn
+	jitterFn = func(d time.Duration) time.Duration { return d }
+	t.Cleanup(func() { jitterFn = origJitter })
+
+	// Exponential growth off retryBaseDelay when no Retry-After.
+	if got := nextBackoff(0, nil); got != retryBaseDelay {
+		t.Errorf("attempt 0 = %v, want %v", got, retryBaseDelay)
+	}
+	if got := nextBackoff(1, nil); got != retryBaseDelay*2 {
+		t.Errorf("attempt 1 = %v, want %v", got, retryBaseDelay*2)
+	}
+	// Never exceeds the cap, even for a large attempt count.
+	if got := nextBackoff(1000, nil); got != retryMaxDelay {
+		t.Errorf("large attempt = %v, want cap %v", got, retryMaxDelay)
+	}
+	// Retry-After beyond the cap is clamped.
+	resp := &http.Response{Header: http.Header{"Retry-After": []string{"3600"}}}
+	if got := nextBackoff(0, resp); got != retryMaxDelay {
+		t.Errorf("oversized Retry-After = %v, want cap %v", got, retryMaxDelay)
+	}
+}
 
 func TestPath(t *testing.T) {
 	tests := []struct {

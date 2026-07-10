@@ -26,7 +26,7 @@ created_at, trace_id, syslog_event_id, annotations).`,
 			return err
 		}
 
-		c, err := client.New(cmd.Context(), baseURL)
+		c, err := newClient(cmd, baseURL)
 		if err != nil {
 			return fmt.Errorf("authentication failed: %w", err)
 		}

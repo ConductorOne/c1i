@@ -221,6 +221,21 @@ All of these are equivalent:
 
 For credential storage, see [Credential sources](#credential-sources) below.
 
+### Retries
+
+Transient API failures (HTTP 429 and 5xx) are retried automatically with
+exponential backoff and jitter, honoring a `Retry-After` header when the server
+sends one. This keeps long auto-paginated pulls from failing on a single rate-limit
+blip. Control the retry budget (attempts *after* the first try) via, in order of
+precedence:
+
+1. `--max-retries N` flag (applies to any command)
+2. `C1I_MAX_RETRIES` environment variable
+3. Default: `4`
+
+Set `--max-retries 0` to disable retries entirely. Non-retryable responses
+(4xx other than 429, and 501/505) fail immediately.
+
 ## Authentication
 
 ```sh

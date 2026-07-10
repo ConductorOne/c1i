@@ -22,7 +22,7 @@ thousand permissions — pass --verbose to dump it all.`,
 		if err != nil {
 			return err
 		}
-		c, err := client.New(cmd.Context(), baseURL)
+		c, err := newClient(cmd, baseURL)
 		if err != nil {
 			return fmt.Errorf("not authenticated: %w", err)
 		}

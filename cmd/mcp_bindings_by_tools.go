@@ -24,7 +24,7 @@ no bindings are still emitted with an empty toolsets array.`,
 			return err
 		}
 
-		c, err := client.New(cmd.Context(), baseURL)
+		c, err := newClient(cmd, baseURL)
 		if err != nil {
 			return fmt.Errorf("authentication failed: %w", err)
 		}

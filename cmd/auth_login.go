@@ -8,7 +8,6 @@ import (
 	"runtime"
 	"strings"
 
-	"github.com/ConductorOne/c1i/internal/client"
 	"github.com/ConductorOne/c1i/internal/config"
 	"github.com/ConductorOne/c1i/internal/keychain"
 	"github.com/ConductorOne/c1i/internal/login"
@@ -152,7 +151,7 @@ func storeAndVerify(cmd *cobra.Command, baseURL, clientID, clientSecret string) 
 		return fmt.Errorf("failed to store credentials: %w", err)
 	}
 
-	c, err := client.New(cmd.Context(), baseURL)
+	c, err := newClient(cmd, baseURL)
 	if err != nil {
 		_, _ = keychain.Delete(service)
 		return fmt.Errorf("credentials stored but verification failed: %w", err)

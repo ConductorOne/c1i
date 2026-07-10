@@ -33,7 +33,7 @@ named exactly as the function has them — usually main.ts and main.test.ts).`,
 			return err
 		}
 
-		c, err := client.New(cmd.Context(), baseURL)
+		c, err := newClient(cmd, baseURL)
 		if err != nil {
 			return fmt.Errorf("authentication failed: %w", err)
 		}
