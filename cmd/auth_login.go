@@ -154,21 +154,23 @@ func storeAndVerify(cmd *cobra.Command, baseURL, clientID, clientSecret string) 
 
 	c, err := client.New(cmd.Context(), baseURL)
 	if err != nil {
-		_ = keychain.Delete(service)
+		_, _ = keychain.Delete(service)
 		return fmt.Errorf("credentials stored but verification failed: %w", err)
 	}
 
 	body := map[string]any{"pageSize": 1}
 	if _, err := c.Post(cmd.Context(), "/api/v1/search/users", body); err != nil {
-		_ = keychain.Delete(service)
+		_, _ = keychain.Delete(service)
 		return fmt.Errorf("credentials stored but API test failed: %w", err)
 	}
 
 	out := cmd.OutOrStdout()
-	_, _ = fmt.Fprintf(out, "Credentials stored and verified for %s.\n", baseURL)
 	if backend == keychain.BackendFile {
 		path, _ := keychain.FilePath(service)
-		_, _ = fmt.Fprintf(out, "Note: no OS keyring available — credentials saved as a 0600 file at %s\n", path)
+		_, _ = fmt.Fprintf(out, "Credentials verified and saved for %s.\n", baseURL)
+		_, _ = fmt.Fprintf(out, "No OS keyring available — stored as a 0600 file at %s\n", path)
+	} else {
+		_, _ = fmt.Fprintf(out, "Credentials verified and stored in the %s for %s.\n", keyringName(), baseURL)
 	}
 	return nil
 }

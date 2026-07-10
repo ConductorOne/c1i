@@ -20,10 +20,20 @@ C1I_CLIENT_SECRET) are not affected.`,
 			return err
 		}
 		service := config.KeychainService(baseURL)
-		if err := keychain.Delete(service); err != nil {
+		removed, err := keychain.Delete(service)
+		if err != nil {
 			return fmt.Errorf("logout: %w", err)
 		}
-		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Removed credentials for %s.\n", baseURL)
+
+		out := cmd.OutOrStdout()
+		if removed {
+			_, _ = fmt.Fprintf(out, "Removed credentials for %s.\n", baseURL)
+		} else {
+			_, _ = fmt.Fprintf(out, "No stored credentials to remove for %s.\n", baseURL)
+		}
+		if keychain.EnvCredentialsSet() {
+			_, _ = fmt.Fprintln(out, "Note: C1I_CLIENT_ID/C1I_CLIENT_SECRET are still set in your environment and take precedence; unset them to fully log out.")
+		}
 		return nil
 	},
 }

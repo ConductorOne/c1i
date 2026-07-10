@@ -40,7 +40,7 @@ var authStatusCmd = &cobra.Command{
 			case keychain.BackendEnv:
 				_, _ = fmt.Fprintln(out, "Source: environment variables (C1I_CLIENT_ID, C1I_CLIENT_SECRET)")
 			case keychain.BackendKeyring:
-				_, _ = fmt.Fprintln(out, "Source: OS keyring")
+				_, _ = fmt.Fprintf(out, "Source: %s\n", keyringName())
 			case keychain.BackendFile:
 				if path, perr := keychain.FilePath(service); perr == nil {
 					_, _ = fmt.Fprintf(out, "Source: file %s\n", path)
