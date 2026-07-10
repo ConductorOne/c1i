@@ -1,3 +1,6 @@
 c1i
 # Added by goreleaser init:
 dist/
+
+# macOS Finder metadata
+.DS_Store
