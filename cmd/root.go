@@ -32,6 +32,10 @@ right API calls before making authenticated requests.`,
 
 func init() {
 	cobra.OnInitialize(initConfig)
+	// Tag flag-parse failures so Run() can map them to the usage exit code.
+	rootCmd.SetFlagErrorFunc(func(_ *cobra.Command, err error) error {
+		return &usageError{err}
+	})
 	rootCmd.PersistentFlags().String("url", "", "C1 URL (e.g. https://mycompany.conductor.one)")
 	_ = viper.BindPFlag("url", rootCmd.PersistentFlags().Lookup("url"))
 	_ = viper.BindEnv("url", "C1I_URL")
@@ -43,6 +47,10 @@ func init() {
 	rootCmd.PersistentFlags().Int("max-retries", client.DefaultMaxRetries, "Retries for transient API failures (429/5xx); 0 disables")
 	_ = viper.BindPFlag("max_retries", rootCmd.PersistentFlags().Lookup("max-retries"))
 	_ = viper.BindEnv("max_retries", "C1I_MAX_RETRIES")
+
+	rootCmd.PersistentFlags().String("error-format", "text", "Error output format: text or json")
+	_ = viper.BindPFlag("error_format", rootCmd.PersistentFlags().Lookup("error-format"))
+	_ = viper.BindEnv("error_format", "C1I_ERROR_FORMAT")
 }
 
 func initConfig() {
@@ -86,8 +94,4 @@ func GetBaseURLWithSource(cmd *cobra.Command) (string, URLSource) {
 		return config.ParseURL(v), URLSourceConfig
 	}
 	return "", URLSourceNone
-}
-
-func Execute() error {
-	return rootCmd.Execute()
 }

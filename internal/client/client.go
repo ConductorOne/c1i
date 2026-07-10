@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"math/rand"
@@ -114,13 +115,13 @@ func New(ctx context.Context, baseURL string, opts ...Option) (*Client, error) {
 			}
 		}
 		if err != nil {
-			return nil, fmt.Errorf("loading credentials: %w", err)
+			return nil, &AuthError{fmt.Errorf("loading credentials: %w", err)}
 		}
 	}
 
 	tokenSource, err := tokensource.NewTokenSource(ctx, clientID, clientSecret, baseURL)
 	if err != nil {
-		return nil, fmt.Errorf("creating token source: %w", err)
+		return nil, &AuthError{fmt.Errorf("creating token source: %w", err)}
 	}
 
 	oauthClient := oauth2.NewClient(ctx, tokenSource)
@@ -271,6 +272,13 @@ func doWithRetry(doer httpDoer, req *http.Request, maxRetries int) ([]byte, erro
 
 		resp, err := doer.Do(req)
 		if err != nil {
+			// A rejected client_credentials grant (token minting is lazy, so it
+			// runs on the first request) surfaces here. Classify it as an auth
+			// failure and don't retry — the credentials won't fix themselves.
+			var tokErr *tokensource.TokenError
+			if errors.As(err, &tokErr) {
+				return nil, &AuthError{fmt.Errorf("token request failed: %w", err)}
+			}
 			// Transport-level failure (connection reset, timeout, ...). We
 			// can't tell whether the server processed the request, so only
 			// retry idempotent methods.
@@ -293,7 +301,12 @@ func doWithRetry(doer httpDoer, req *http.Request, maxRetries int) ([]byte, erro
 				}
 				continue
 			}
-			return nil, fmt.Errorf("API %s %s returned %d: %s", req.Method, req.URL.Path, resp.StatusCode, string(body))
+			return nil, &APIError{
+				Method:     req.Method,
+				Path:       req.URL.Path,
+				StatusCode: resp.StatusCode,
+				Body:       string(body),
+			}
 		}
 
 		if readErr != nil {
