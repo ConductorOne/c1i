@@ -23,8 +23,19 @@ var tasksDenyCmd = &cobra.Command{
 
 		taskID, _ := cmd.Flags().GetString("task-id")
 		comment, _ := cmd.Flags().GetString("comment")
+		policyStepID, _ := cmd.Flags().GetString("policy-step-id")
+
+		// policyStepId is optional for deny; include it when we can target a
+		// specific step (needed on multi-step policies) but don't require one.
+		stepID, err := resolvePolicyStepID(cmd.Context(), c, taskID, policyStepID, false)
+		if err != nil {
+			return err
+		}
 
 		body := map[string]any{}
+		if stepID != "" {
+			body["policyStepId"] = stepID
+		}
 		if comment != "" {
 			body["comment"] = comment
 		}
@@ -47,6 +58,7 @@ var tasksDenyCmd = &cobra.Command{
 
 func init() {
 	tasksDenyCmd.Flags().String("task-id", "", "Task ID to deny")
+	tasksDenyCmd.Flags().String("policy-step-id", "", "Policy step to deny (defaults to the task's current step)")
 	tasksDenyCmd.Flags().String("comment", "", "Optional comment")
 	markRequired(tasksDenyCmd, "task-id")
 	tasksCmd.AddCommand(tasksDenyCmd)
