@@ -154,13 +154,13 @@ func storeAndVerify(cmd *cobra.Command, baseURL, clientID, clientSecret string) 
 
 	c, err := client.New(cmd.Context(), baseURL)
 	if err != nil {
-		_ = keychain.Delete(service)
+		_, _ = keychain.Delete(service)
 		return fmt.Errorf("credentials stored but verification failed: %w", err)
 	}
 
 	body := map[string]any{"pageSize": 1}
 	if _, err := c.Post(cmd.Context(), "/api/v1/search/users", body); err != nil {
-		_ = keychain.Delete(service)
+		_, _ = keychain.Delete(service)
 		return fmt.Errorf("credentials stored but API test failed: %w", err)
 	}
 

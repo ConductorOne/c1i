@@ -179,12 +179,47 @@ func TestDeleteClearsBothBackends(t *testing.T) {
 		t.Fatalf("storeFile: %v", err)
 	}
 
-	if err := Delete(testService); err != nil {
+	removed, err := Delete(testService)
+	if err != nil {
 		t.Fatalf("Delete: %v", err)
+	}
+	if !removed {
+		t.Fatalf("Delete removed = false, want true when credentials existed")
 	}
 
 	if _, _, _, err := Load(testService); err == nil {
 		t.Fatalf("expected Load to fail after Delete")
+	}
+}
+
+func TestDeleteReportsNothingRemoved(t *testing.T) {
+	keyring.MockInit()
+	withTempConfigDir(t)
+	clearEnv(t)
+
+	removed, err := Delete(testService)
+	if err != nil {
+		t.Fatalf("Delete: %v", err)
+	}
+	if removed {
+		t.Fatalf("Delete removed = true, want false when no credentials existed")
+	}
+}
+
+func TestEnvCredentialsSet(t *testing.T) {
+	clearEnv(t)
+	if EnvCredentialsSet() {
+		t.Fatalf("EnvCredentialsSet = true with no env vars set")
+	}
+
+	t.Setenv(envClientID, "id")
+	if EnvCredentialsSet() {
+		t.Fatalf("EnvCredentialsSet = true with only client ID set")
+	}
+
+	t.Setenv(envClientSecret, "sec")
+	if !EnvCredentialsSet() {
+		t.Fatalf("EnvCredentialsSet = false with both env vars set")
 	}
 }
 

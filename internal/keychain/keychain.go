@@ -38,7 +38,7 @@ const (
 // 0600 file when no keyring is available. Env vars are never written.
 // Returns the backend used so callers can inform the user.
 func Store(service, clientID, clientSecret string) (Backend, error) {
-	_ = Delete(service)
+	_, _ = Delete(service)
 
 	if err := storeKeyring(service, clientID, clientSecret); err == nil {
 		return BackendKeyring, nil
@@ -82,11 +82,26 @@ func Load(service string) (string, string, Backend, error) {
 // Env vars are not touched. Best-effort: missing entries are not errors.
 // Keyring delete errors are swallowed (the entry may simply not exist or the
 // keyring may be unavailable); file errors are surfaced because they indicate
-// a local FS problem the caller should know about.
-func Delete(service string) error {
-	_ = keyring.Delete(service, acctClientID)
-	_ = keyring.Delete(service, acctClientSecret)
-	return deleteFile(service)
+// a local FS problem the caller should know about. The returned bool reports
+// whether anything was actually removed, so callers can distinguish a real
+// logout from a no-op.
+func Delete(service string) (bool, error) {
+	removed := false
+	if keyring.Delete(service, acctClientID) == nil {
+		removed = true
+	}
+	if keyring.Delete(service, acctClientSecret) == nil {
+		removed = true
+	}
+	fileRemoved, err := deleteFile(service)
+	return removed || fileRemoved, err
+}
+
+// EnvCredentialsSet reports whether both credential env vars are set. When they
+// are, Load uses them regardless of keyring/file contents, and Delete cannot
+// remove them — so callers (e.g. logout) can warn the user accordingly.
+func EnvCredentialsSet() bool {
+	return os.Getenv(envClientID) != "" && os.Getenv(envClientSecret) != ""
 }
 
 // FilePath returns the path the file backend uses for service, even if no
@@ -213,13 +228,18 @@ func loadFile(service string) (string, string, error) {
 	return c.ClientID, c.ClientSecret, nil
 }
 
-func deleteFile(service string) error {
+// deleteFile removes the file-backend credential for service. The returned
+// bool reports whether a file was actually removed (false if none existed).
+func deleteFile(service string) (bool, error) {
 	p, err := filePath(service)
 	if err != nil {
-		return nil
+		return false, nil
 	}
-	if err := os.Remove(p); err != nil && !errors.Is(err, os.ErrNotExist) {
-		return fmt.Errorf("deleting credentials: %w", err)
+	if err := os.Remove(p); err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return false, nil
+		}
+		return false, fmt.Errorf("deleting credentials: %w", err)
 	}
-	return nil
+	return true, nil
 }

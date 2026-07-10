@@ -49,7 +49,7 @@ func New(ctx context.Context, baseURL string) (*Client, error) {
 			if err == nil {
 				// Migrate: store under new key and delete old.
 				_, _ = keychain.Store(service, clientID, clientSecret)
-				_ = keychain.Delete(legacyService)
+				_, _ = keychain.Delete(legacyService)
 			}
 		}
 		if err != nil {
