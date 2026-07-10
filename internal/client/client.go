@@ -71,6 +71,50 @@ func New(ctx context.Context, baseURL string) (*Client, error) {
 	}, nil
 }
 
+// Path builds an API path from a printf-style format string, URL-escaping each
+// argument as a single path segment. Use it whenever a user-supplied ID is
+// interpolated into a request path so that values containing "?", "#", spaces,
+// or other reserved characters address the intended resource instead of being
+// truncated or mangled by url.Parse. Every format verb must be %s.
+//
+// format is always a compile-time constant in callers, so a verb/arg mismatch
+// is a programming bug — Path panics rather than let fmt.Sprintf emit a
+// corrupted path (%!s(MISSING) / %!(EXTRA ...)) that would be sent to the API.
+func Path(format string, ids ...string) string {
+	if n := countStringVerbs(format); n != len(ids) {
+		panic(fmt.Sprintf("client.Path: format %q has %d %%s verb(s) but got %d id(s)", format, n, len(ids)))
+	}
+	escaped := make([]any, len(ids))
+	for i, id := range ids {
+		escaped[i] = url.PathEscape(id)
+	}
+	return fmt.Sprintf(format, escaped...)
+}
+
+// countStringVerbs returns the number of %s verbs in format. It panics if the
+// format contains any other verb (e.g. %d) or a dangling %, since Path only
+// supports %s and a stray verb would corrupt the path.
+func countStringVerbs(format string) int {
+	n := 0
+	for i := 0; i < len(format); i++ {
+		if format[i] != '%' {
+			continue
+		}
+		if i+1 >= len(format) {
+			panic(fmt.Sprintf("client.Path: dangling %% in format %q", format))
+		}
+		switch format[i+1] {
+		case '%': // literal percent, not a verb
+		case 's':
+			n++
+		default:
+			panic(fmt.Sprintf("client.Path: unsupported verb %%%c in format %q (only %%s allowed)", format[i+1], format))
+		}
+		i++ // skip the character after %
+	}
+	return n
+}
+
 func (c *Client) Get(ctx context.Context, path string, queryParams map[string]string) ([]byte, error) {
 	u, err := url.Parse(c.baseURL + path)
 	if err != nil {

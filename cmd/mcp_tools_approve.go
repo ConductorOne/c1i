@@ -58,7 +58,7 @@ classification, visibility).`,
 			"updateMask": "state",
 		}
 
-		path := fmt.Sprintf("/api/v1/apps/%s/connectors/%s/mcp_tools/%s", appID, connectorID, id)
+		path := client.Path("/api/v1/apps/%s/connectors/%s/mcp_tools/%s", appID, connectorID, id)
 		data, err := c.Post(cmd.Context(), path, body)
 		if err != nil {
 			return fmt.Errorf("API error: %w", err)

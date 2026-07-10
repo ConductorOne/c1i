@@ -35,7 +35,7 @@ which toolset it represents.`,
 		appID, _ := cmd.Flags().GetString("app-id")
 		entID, _ := cmd.Flags().GetString("app-entitlement-id")
 
-		path := fmt.Sprintf("/api/v1/apps/%s/mcp_toolsets/by_app_entitlement_id/%s", appID, entID)
+		path := client.Path("/api/v1/apps/%s/mcp_toolsets/by_app_entitlement_id/%s", appID, entID)
 		data, err := c.Get(cmd.Context(), path, nil)
 		if err != nil {
 			return fmt.Errorf("API error: %w", err)

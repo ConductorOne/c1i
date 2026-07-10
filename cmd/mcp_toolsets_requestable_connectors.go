@@ -33,7 +33,7 @@ Unlike most other "list" commands this endpoint is not paginated server-side
 
 		userID, _ := cmd.Flags().GetString("user-id")
 
-		path := fmt.Sprintf("/api/v1/users/%s/mcp_toolsets/requestable_connectors", userID)
+		path := client.Path("/api/v1/users/%s/mcp_toolsets/requestable_connectors", userID)
 		data, err := c.Get(cmd.Context(), path, nil)
 		if err != nil {
 			return fmt.Errorf("API error: %w", err)

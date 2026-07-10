@@ -66,7 +66,7 @@ var mcpToolsSearchCmd = &cobra.Command{
 				body["classificationFilter"] = mapped
 			}
 
-			path := fmt.Sprintf("/api/v1/apps/%s/connectors/%s/mcp_tools/search", appID, connectorID)
+			path := client.Path("/api/v1/apps/%s/connectors/%s/mcp_tools/search", appID, connectorID)
 			data, err := c.Post(cmd.Context(), path, body)
 			if err != nil {
 				return fmt.Errorf("API error: %w", err)

@@ -42,7 +42,7 @@ thousand permissions — pass --verbose to dump it all.`,
 		// introspect summary — identity from introspect alone is the contract.
 		var displayName, email string
 		if uid, ok := payload["userId"].(string); ok && uid != "" {
-			if userBody, uerr := c.Get(cmd.Context(), "/api/v1/users/"+uid, nil); uerr == nil {
+			if userBody, uerr := c.Get(cmd.Context(), client.Path("/api/v1/users/%s", uid), nil); uerr == nil {
 				var u struct {
 					UserView struct {
 						User struct {

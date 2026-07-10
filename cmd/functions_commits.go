@@ -41,7 +41,7 @@ var functionsCommitsCmd = &cobra.Command{
 				params["page_token"] = pageToken
 			}
 
-			data, err := c.Get(cmd.Context(), fmt.Sprintf("/api/v1/functions/%s/commits", functionID), params)
+			data, err := c.Get(cmd.Context(), client.Path("/api/v1/functions/%s/commits", functionID), params)
 			if err != nil {
 				return fmt.Errorf("API error: %w", err)
 			}

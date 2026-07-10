@@ -46,7 +46,7 @@ After creating, attach tools with "c1i mcp bindings create".`,
 			body["description"] = description
 		}
 
-		path := fmt.Sprintf("/api/v1/apps/%s/connectors/%s/mcp_toolsets", appID, connectorID)
+		path := client.Path("/api/v1/apps/%s/connectors/%s/mcp_toolsets", appID, connectorID)
 		data, err := c.Post(cmd.Context(), path, body)
 		if err != nil {
 			return fmt.Errorf("API error: %w", err)

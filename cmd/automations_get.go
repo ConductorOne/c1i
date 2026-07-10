@@ -24,7 +24,7 @@ var automationsGetCmd = &cobra.Command{
 			return fmt.Errorf("authentication failed: %w", err)
 		}
 
-		data, err := c.Get(cmd.Context(), "/api/v1/automations/"+args[0], nil)
+		data, err := c.Get(cmd.Context(), client.Path("/api/v1/automations/%s", args[0]), nil)
 		if err != nil {
 			return fmt.Errorf("API error: %w", err)
 		}
