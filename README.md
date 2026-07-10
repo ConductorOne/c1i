@@ -203,6 +203,32 @@ c1i functions get <id> --fields id,displayName,publishedCommitId
   and single-object `get` commands. Mutation confirmations (create/update/delete)
   are never projected, so a session-wide `C1I_FIELDS` can't hide their status.
 
+### Errors & exit codes
+
+On failure, `c1i` writes an error to stderr and exits with a code an agent can
+branch on without parsing text:
+
+| Code | Meaning |
+|------|---------|
+| `0` | success |
+| `1` | generic / unclassified error |
+| `2` | usage error (bad flags or arguments) |
+| `3` | not authenticated, or API returned `401`/`403` |
+| `4` | API returned `404` (not found) |
+| `5` | API returned `429` (rate limited — back off and retry) |
+| `6` | API returned `5xx` (server error) |
+
+Pass `--error-format json` (or `C1I_ERROR_FORMAT=json`) to get a machine-readable
+error object instead of the default `Error: <msg>` line. For API errors it
+includes the status, method, path, and response body:
+
+```sh
+$ c1i api --path /api/v1/nope --error-format json
+{"error":"API error: API GET /api/v1/nope returned 404: ...","status":404,"method":"GET","path":"/api/v1/nope","body":{"message":"not found"}}
+```
+
+The `body` is embedded as JSON when the API returned JSON, otherwise as a string.
+
 ## Configuration
 
 c1i requires a C1 **URL**. You can pass a full URL, a raw domain, or a legacy short tenant name. Set it via (in order of precedence):

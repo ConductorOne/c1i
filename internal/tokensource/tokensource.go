@@ -26,6 +26,17 @@ var (
 	ErrInvalidClientSecret  = fmt.Errorf("invalid client secret")
 )
 
+// TokenError is returned when the token endpoint rejects the client credentials
+// (a non-200 on the client_credentials grant). Callers use errors.As to treat
+// it as an authentication failure rather than a generic request error.
+type TokenError struct {
+	StatusCode int
+}
+
+func (e *TokenError) Error() string {
+	return fmt.Sprintf("token request failed with status %d", e.StatusCode)
+}
+
 type c1Token struct {
 	AccessToken string `json:"access_token"`
 	TokenType   string `json:"token_type"`
@@ -146,7 +157,7 @@ func (c *c1TokenSource) Token() (*oauth2.Token, error) {
 	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("token request failed with status %d", resp.StatusCode)
+		return nil, &TokenError{StatusCode: resp.StatusCode}
 	}
 
 	c1t := &c1Token{}

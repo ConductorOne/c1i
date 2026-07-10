@@ -9,6 +9,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/ConductorOne/c1i/internal/tokensource"
 )
 
 // deterministicBackoff makes sleeps instant and jitter a no-op for the duration
@@ -411,5 +413,57 @@ func TestPathPanicsOnMismatch(t *testing.T) {
 			}()
 			_ = Path(tc.format, tc.ids...)
 		})
+	}
+}
+
+type errRoundTripper struct{ err error }
+
+func (r errRoundTripper) RoundTrip(*http.Request) (*http.Response, error) {
+	return nil, r.err
+}
+
+func TestDoWrapsTokenErrorAsAuth(t *testing.T) {
+	// A rejected client_credentials grant surfaces from httpClient.Do (wrapped
+	// in *url.Error). do() should classify it as an AuthError.
+	c := &Client{
+		httpClient: &http.Client{Transport: errRoundTripper{&tokensource.TokenError{StatusCode: 401}}},
+		baseURL:    "https://example.conductor.one",
+	}
+	_, err := c.Get(context.Background(), "/api/v1/x", nil)
+	var authErr *AuthError
+	if !errors.As(err, &authErr) {
+		t.Fatalf("expected AuthError for token rejection, got %T: %v", err, err)
+	}
+}
+
+func TestDoNetworkErrorIsNotAuth(t *testing.T) {
+	c := &Client{
+		httpClient: &http.Client{Transport: errRoundTripper{errors.New("dial tcp: connection refused")}},
+		baseURL:    "https://example.conductor.one",
+	}
+	_, err := c.Get(context.Background(), "/api/v1/x", nil)
+	if err == nil {
+		t.Fatal("expected an error")
+	}
+	var authErr *AuthError
+	if errors.As(err, &authErr) {
+		t.Error("a plain network error must not be classified as AuthError")
+	}
+}
+
+func TestDoReturnsAPIErrorWithStatus(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, `{"message":"nope"}`, http.StatusNotFound)
+	}))
+	defer srv.Close()
+
+	c := &Client{httpClient: srv.Client(), baseURL: srv.URL}
+	_, err := c.Get(context.Background(), "/api/v1/x", nil)
+	var apiErr *APIError
+	if !errors.As(err, &apiErr) {
+		t.Fatalf("expected APIError, got %T: %v", err, err)
+	}
+	if apiErr.StatusCode != 404 || apiErr.Method != http.MethodGet {
+		t.Errorf("APIError = %+v, want status 404 / GET", apiErr)
 	}
 }

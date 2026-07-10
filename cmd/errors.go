@@ -1,0 +1,155 @@
+package cmd
+
+import (
+	"encoding/json"
+	"errors"
+	"fmt"
+	"io"
+	"os"
+	"strings"
+
+	"github.com/ConductorOne/c1i/internal/client"
+	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
+)
+
+// Process exit codes. Agents branch on these instead of parsing stderr: e.g. 5
+// means "rate limited, back off and retry", 3 means "re-authenticate". Keep
+// these stable.
+const (
+	exitOK          = 0
+	exitError       = 1 // generic / unclassified failure
+	exitUsage       = 2 // bad flags or arguments
+	exitAuth        = 3 // not authenticated, or API returned 401/403
+	exitNotFound    = 4 // API returned 404
+	exitRateLimited = 5 // API returned 429
+	exitServer      = 6 // API returned 5xx
+)
+
+// usageError marks an error as a CLI-usage problem (bad flag/args) so it maps to
+// exitUsage. It is installed via cobra's FlagErrorFunc.
+type usageError struct{ err error }
+
+func (e *usageError) Error() string { return e.err.Error() }
+func (e *usageError) Unwrap() error { return e.err }
+
+// Run executes the root command, renders any error per --error-format, and
+// returns the process exit code. main() is just os.Exit(cmd.Run()).
+func Run() int {
+	attachSubcommandGuards(rootCmd)
+	err := rootCmd.Execute()
+	if err == nil {
+		return exitOK
+	}
+	writeError(os.Stderr, err, viper.GetString("error_format"))
+	return exitCode(err)
+}
+
+// attachSubcommandGuards makes command groups (a command with subcommands but no
+// Run of its own) fail on an unknown subcommand instead of silently printing
+// help and exiting 0. Without this, `c1i mcp bogus` reads as success. Running a
+// group with no args still prints help (exit 0).
+func attachSubcommandGuards(c *cobra.Command) {
+	for _, sub := range c.Commands() {
+		attachSubcommandGuards(sub)
+	}
+	if c.HasSubCommands() && c.Run == nil && c.RunE == nil {
+		c.RunE = func(cmd *cobra.Command, args []string) error {
+			if len(args) == 0 {
+				return cmd.Help()
+			}
+			return &usageError{fmt.Errorf("unknown subcommand %q for %q", args[0], cmd.CommandPath())}
+		}
+	}
+}
+
+// exitCode classifies err into a stable process exit code.
+func exitCode(err error) int {
+	if err == nil {
+		return exitOK
+	}
+	var apiErr *client.APIError
+	if errors.As(err, &apiErr) {
+		switch {
+		case apiErr.StatusCode == 401 || apiErr.StatusCode == 403:
+			return exitAuth
+		case apiErr.StatusCode == 404:
+			return exitNotFound
+		case apiErr.StatusCode == 429:
+			return exitRateLimited
+		case apiErr.StatusCode >= 500:
+			return exitServer
+		default:
+			return exitError
+		}
+	}
+	var authErr *client.AuthError
+	if errors.As(err, &authErr) {
+		return exitAuth
+	}
+	var usageErr *usageError
+	if errors.As(err, &usageErr) {
+		return exitUsage
+	}
+	if isCobraUsageError(err) {
+		return exitUsage
+	}
+	return exitError
+}
+
+// isCobraUsageError matches the usage failures cobra returns as plain errors
+// (not through FlagErrorFunc): unknown command, unknown/malformed flag, missing
+// required flag, and wrong argument count. These are only checked after the
+// typed API/auth/usage errors above, so an API error body containing one of
+// these substrings can't be misclassified.
+func isCobraUsageError(err error) bool {
+	msg := err.Error()
+	for _, p := range []string{
+		"unknown command",
+		"unknown flag",
+		"unknown shorthand flag",
+		"required flag(s)",
+		"flag needs an argument",
+		"invalid argument",
+		"arg(s)", // cobra's ExactArgs/MinimumNArgs/etc. messages
+	} {
+		if strings.Contains(msg, p) {
+			return true
+		}
+	}
+	return false
+}
+
+// writeError renders err to w. With format=="json" it emits a single JSON object
+// ({error, and for API errors status/method/path/body}); otherwise the familiar
+// "Error: <msg>" text line.
+func writeError(w io.Writer, err error, format string) {
+	if strings.EqualFold(format, "json") {
+		obj := map[string]any{"error": err.Error()}
+		var apiErr *client.APIError
+		if errors.As(err, &apiErr) {
+			obj["status"] = apiErr.StatusCode
+			obj["method"] = apiErr.Method
+			obj["path"] = apiErr.Path
+			if apiErr.Body != "" {
+				obj["body"] = rawJSONOrString(apiErr.Body)
+			}
+		}
+		if b, mErr := json.Marshal(obj); mErr == nil {
+			_, _ = fmt.Fprintln(w, string(b))
+			return
+		}
+	}
+	_, _ = fmt.Fprintf(w, "Error: %v\n", err)
+}
+
+// rawJSONOrString embeds s as structured JSON when it is a JSON object/array, so
+// an API error body isn't double-escaped into a string; otherwise returns the
+// plain string.
+func rawJSONOrString(s string) any {
+	t := strings.TrimSpace(s)
+	if (strings.HasPrefix(t, "{") || strings.HasPrefix(t, "[")) && json.Valid([]byte(t)) {
+		return json.RawMessage(t)
+	}
+	return s
+}
