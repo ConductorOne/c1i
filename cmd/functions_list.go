@@ -62,14 +62,14 @@ var functionsListCmd = &cobra.Command{
 
 			var resp struct {
 				List []struct {
-					ID                 string `json:"id"`
-					DisplayName        string `json:"displayName"`
-					Description        string `json:"description"`
-					FunctionType       string `json:"functionType"`
-					PublishedCommitID  string `json:"publishedCommitId"`
-					Head               string `json:"head"`
-					IsDraft            bool   `json:"isDraft"`
-					UseSpn             bool   `json:"useSpn"`
+					ID                string `json:"id"`
+					DisplayName       string `json:"displayName"`
+					Description       string `json:"description"`
+					FunctionType      string `json:"functionType"`
+					PublishedCommitID string `json:"publishedCommitId"`
+					Head              string `json:"head"`
+					IsDraft           bool   `json:"isDraft"`
+					UseSpn            bool   `json:"useSpn"`
 				} `json:"list"`
 				NextPageToken string `json:"nextPageToken"`
 			}

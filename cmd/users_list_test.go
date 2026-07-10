@@ -33,7 +33,7 @@ func TestMapTaskState(t *testing.T) {
 	cases := map[string]string{
 		"open":    "TASK_STATE_OPEN",
 		"closed":  "TASK_STATE_CLOSED",
-		"OPEN":    "TASK_STATE_OPEN",  // case-insensitive
+		"OPEN":    "TASK_STATE_OPEN", // case-insensitive
 		"Closed":  "TASK_STATE_CLOSED",
 		"":        "",
 		"unknown": "unknown",

@@ -59,7 +59,7 @@ func GetBaseURL() (string, error) {
 type URLSource int
 
 const (
-	URLSourceNone   URLSource = iota
+	URLSourceNone URLSource = iota
 	URLSourceFlag
 	URLSourceEnv
 	URLSourceConfig

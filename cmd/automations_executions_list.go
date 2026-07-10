@@ -66,13 +66,13 @@ the server returns. Combine with --limit to bound the work.`,
 
 			var resp struct {
 				AutomationExecutions []struct {
-					ID                  string `json:"id"`
+					ID                   string `json:"id"`
 					AutomationTemplateID string `json:"automationTemplateId"`
-					State               string `json:"state"`
-					CreatedAt           string `json:"createdAt"`
-					CompletedAt         string `json:"completedAt"`
-					Duration            string `json:"duration"`
-					IsDraft             bool   `json:"isDraft"`
+					State                string `json:"state"`
+					CreatedAt            string `json:"createdAt"`
+					CompletedAt          string `json:"completedAt"`
+					Duration             string `json:"duration"`
+					IsDraft              bool   `json:"isDraft"`
 				} `json:"automationExecutions"`
 				NextPageToken string `json:"nextPageToken"`
 			}
