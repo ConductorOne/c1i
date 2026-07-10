@@ -81,6 +81,12 @@ func projectBytes(data []byte, paths [][]string) (any, bool) {
 	if err := dec.Decode(&v); err != nil {
 		return nil, false
 	}
+	// Require exactly one JSON value. If data holds trailing/concatenated values
+	// (NDJSON, multiple responses), Decode would silently keep only the first;
+	// report not-ok so the caller falls back to emitting the raw bytes.
+	if dec.More() {
+		return nil, false
+	}
 	return projectDecoded(v, paths), true
 }
 

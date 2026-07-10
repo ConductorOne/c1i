@@ -108,6 +108,18 @@ func TestProjectBytesPreservesLargeNumbers(t *testing.T) {
 	}
 }
 
+func TestProjectBytesRejectsTrailingData(t *testing.T) {
+	// Concatenated/NDJSON input must not be silently truncated to its first
+	// value; projectBytes reports ok=false so the caller emits raw.
+	if _, ok := projectBytes([]byte(`{"id":"1"}{"id":"2"}`), parseFieldPaths("id")); ok {
+		t.Error("expected ok=false for multi-value input")
+	}
+	// A single value with trailing whitespace is still fine.
+	if _, ok := projectBytes([]byte("{\"id\":\"1\"}\n  "), parseFieldPaths("id")); !ok {
+		t.Error("expected ok=true for a single value with trailing whitespace")
+	}
+}
+
 func TestProjectBytesArrayElementwise(t *testing.T) {
 	// A top-level array is projected element by element.
 	projected, ok := projectBytes([]byte(`[{"id":"1","x":9},{"id":"2","x":8}]`), parseFieldPaths("id"))

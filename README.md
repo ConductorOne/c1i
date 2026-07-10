@@ -196,7 +196,9 @@ c1i functions get <id> --fields id,displayName,publishedCommitId
 - Matches the keys **as they appear in the command's output** (e.g. list rows
   use `id`, `display_name`; raw `api` output uses the API's own camelCase keys).
 - Missing fields are silently omitted, so requesting a superset is safe.
-- Also settable via `C1I_FIELDS`. Applies to list output, `api`, and single-object commands.
+- Also settable via `C1I_FIELDS`. Applies to read output — list commands, `api`,
+  and single-object `get` commands. Mutation confirmations (create/update/delete)
+  are never projected, so a session-wide `C1I_FIELDS` can't hide their status.
 
 ## Configuration
 
