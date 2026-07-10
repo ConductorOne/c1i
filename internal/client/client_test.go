@@ -467,3 +467,84 @@ func TestDoReturnsAPIErrorWithStatus(t *testing.T) {
 		t.Errorf("APIError = %+v, want status 404 / GET", apiErr)
 	}
 }
+
+func TestRequestSendsMethodHeaderBody(t *testing.T) {
+	var gotMethod, gotHeader, gotCT, gotBody string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotMethod = r.Method
+		gotHeader = r.Header.Get("X-Custom")
+		gotCT = r.Header.Get("Content-Type")
+		b, _ := io.ReadAll(r.Body)
+		gotBody = string(b)
+		_, _ = w.Write([]byte(`{"ok":true}`))
+	}))
+	defer srv.Close()
+
+	out, err := newTestClient(srv, 0).Request(context.Background(), http.MethodPatch, "/x",
+		[]byte(`{"a":1}`), map[string]string{"X-Custom": "yes"})
+	if err != nil {
+		t.Fatalf("Request: %v", err)
+	}
+	if gotMethod != http.MethodPatch {
+		t.Errorf("method = %q, want PATCH", gotMethod)
+	}
+	if gotHeader != "yes" {
+		t.Errorf("X-Custom = %q, want yes", gotHeader)
+	}
+	if gotCT != "application/json" {
+		t.Errorf("Content-Type = %q, want application/json", gotCT)
+	}
+	if gotBody != `{"a":1}` {
+		t.Errorf("body = %q, want {\"a\":1}", gotBody)
+	}
+	if string(out) != `{"ok":true}` {
+		t.Errorf("out = %q", out)
+	}
+}
+
+func TestRequestNoBodyOmitsContentType(t *testing.T) {
+	var gotCT string
+	var hadBody bool
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotCT = r.Header.Get("Content-Type")
+		b, _ := io.ReadAll(r.Body)
+		hadBody = len(b) > 0
+		_, _ = w.Write([]byte(`{}`))
+	}))
+	defer srv.Close()
+
+	if _, err := newTestClient(srv, 0).Request(context.Background(), http.MethodGet, "/x", nil, nil); err != nil {
+		t.Fatalf("Request: %v", err)
+	}
+	if gotCT != "" {
+		t.Errorf("Content-Type = %q, want empty for bodyless request", gotCT)
+	}
+	if hadBody {
+		t.Errorf("expected no request body")
+	}
+}
+
+func TestPatchSendsBodyAndContentType(t *testing.T) {
+	var gotMethod, gotCT, gotBody string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotMethod = r.Method
+		gotCT = r.Header.Get("Content-Type")
+		b, _ := io.ReadAll(r.Body)
+		gotBody = string(b)
+		_, _ = w.Write([]byte(`{"ok":true}`))
+	}))
+	defer srv.Close()
+
+	if _, err := newTestClient(srv, 0).Patch(context.Background(), "/x", map[string]any{"hello": "world"}); err != nil {
+		t.Fatalf("Patch: %v", err)
+	}
+	if gotMethod != http.MethodPatch {
+		t.Errorf("method = %q, want PATCH", gotMethod)
+	}
+	if gotCT != "application/json" {
+		t.Errorf("Content-Type = %q, want application/json", gotCT)
+	}
+	if gotBody != `{"hello":"world"}` {
+		t.Errorf("body = %q", gotBody)
+	}
+}

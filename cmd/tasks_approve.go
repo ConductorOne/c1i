@@ -44,6 +44,9 @@ pass --policy-step-id explicitly (approve requires a step).`,
 		}
 
 		path := client.Path("/api/v1/tasks/%s/action/approve", taskID)
+		if dryRunActive() {
+			return printDryRun(cmd, "POST", path, body)
+		}
 		data, err := c.Post(cmd.Context(), path, body)
 		if err != nil {
 			return fmt.Errorf("API error: %w", err)

@@ -17,11 +17,6 @@ var accountsSetOwnerCmd = &cobra.Command{
 			return err
 		}
 
-		c, err := newClient(cmd, baseURL)
-		if err != nil {
-			return fmt.Errorf("authentication failed: %w", err)
-		}
-
 		appID, _ := cmd.Flags().GetString("app-id")
 		appUserID, _ := cmd.Flags().GetString("app-user-id")
 		userID, _ := cmd.Flags().GetString("user-id")
@@ -32,6 +27,15 @@ var accountsSetOwnerCmd = &cobra.Command{
 				"identityUserId": userID,
 			},
 			"updateMask": "identityUserId",
+		}
+
+		if dryRunActive() {
+			return printDryRun(cmd, "POST", path, body)
+		}
+
+		c, err := newClient(cmd, baseURL)
+		if err != nil {
+			return fmt.Errorf("authentication failed: %w", err)
 		}
 
 		data, err := c.Post(cmd.Context(), path, body)

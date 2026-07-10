@@ -46,6 +46,9 @@ otherwise — deny does not require a step, so it proceeds either way.`,
 		}
 
 		path := client.Path("/api/v1/tasks/%s/action/deny", taskID)
+		if dryRunActive() {
+			return printDryRun(cmd, "POST", path, body)
+		}
 		data, err := c.Post(cmd.Context(), path, body)
 		if err != nil {
 			return fmt.Errorf("API error: %w", err)

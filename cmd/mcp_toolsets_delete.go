@@ -20,16 +20,19 @@ var mcpToolsetsDeleteCmd = &cobra.Command{
 			return err
 		}
 
-		c, err := newClient(cmd, baseURL)
-		if err != nil {
-			return fmt.Errorf("authentication failed: %w", err)
-		}
-
 		appID, _ := cmd.Flags().GetString("app-id")
 		connectorID, _ := cmd.Flags().GetString("connector-id")
 		id, _ := cmd.Flags().GetString("id")
 
 		path := client.Path("/api/v1/apps/%s/connectors/%s/mcp_toolsets/%s", appID, connectorID, id)
+		if dryRunActive() {
+			return printDryRun(cmd, "DELETE", path, nil)
+		}
+
+		c, err := newClient(cmd, baseURL)
+		if err != nil {
+			return fmt.Errorf("authentication failed: %w", err)
+		}
 		if _, err := c.Delete(cmd.Context(), path); err != nil {
 			return fmt.Errorf("API error: %w", err)
 		}

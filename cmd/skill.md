@@ -99,6 +99,15 @@ Each also has an env-var form.
   POST. **Don't build your own retry loop for these** — c1i already handles them.
 - **`--error-format=json`** (`C1I_ERROR_FORMAT`) — emit errors as a JSON object
   instead of a plain `Error: ...` line (see Errors & Exit Codes below).
+- **`--dry-run`** (`C1I_DRY_RUN`) — for any mutating command (`requests create`,
+  `tasks approve`/`deny`/`comment`, `accounts set-owner`, `mcp` mutations, and
+  non-GET `api` calls), print the method, path, and JSON body that *would* be sent
+  and exit `0` without sending it. Most previews need no credentials; the
+  exception is `tasks approve`/`deny`, which authenticate to resolve the task's
+  current policy step. Use it to confirm a payload before committing a change.
+- **`--debug`** (`C1I_DEBUG`) — trace every HTTP request to **stderr** (method,
+  URL, status, elapsed time, including retries). Never logs headers or bodies, so
+  it's safe to leave on; stdout stays clean JSON.
 
 ## Shell Completion
 
@@ -125,6 +134,7 @@ c1i version    # or: c1i --version
 
 ```sh
 c1i users list [--query=NAME] [--email=EXACT] [--status=enabled|disabled|deleted] [--page-size=50] [--page-token=TOKEN] [--limit=N]
+c1i users get USER_ID    # single user, pretty JSON
 ```
 
 NDJSON fields: `id, display_name, email, department, job_title, status`
@@ -133,6 +143,7 @@ NDJSON fields: `id, display_name, email, department, job_title, status`
 
 ```sh
 c1i apps list [--page-size=50] [--page-token=TOKEN] [--limit=N]
+c1i apps get APP_ID      # single app, pretty JSON
 ```
 
 NDJSON fields: `id, display_name, description, user_count`
@@ -151,6 +162,7 @@ NDJSON fields: `id, app_id, display_name, email, username, identity_user_id, app
 
 ```sh
 c1i entitlements list [--app-id=ID] [--query=TEXT] [--page-size=50] [--page-token=TOKEN] [--limit=N]
+c1i entitlements get ENTITLEMENT_ID --app-id=ID    # single entitlement, pretty JSON
 ```
 
 NDJSON fields: `id, app_id, display_name, description, slug, grant_count, purpose`
@@ -310,13 +322,20 @@ c1i api --path=/api/v1/apps --paginate
 # POST with pagination
 c1i api --path=/api/v1/search/tasks --body='{"taskStates":["TASK_STATE_OPEN"]}' --paginate
 
-# Other methods: --method takes GET, POST, PUT, or DELETE
+# Other methods: --method takes GET, POST, PUT, PATCH, or DELETE
 c1i api --path=/api/v1/apps/APP/connectors/CONN/mcp_tools/TOOL --method=DELETE
+
+# Body from a file or stdin ("-"); repeatable --query and --header
+c1i api --path=/api/v1/search/users --body-file=query.json
+echo '{"pageSize":10}' | c1i api --path=/api/v1/search/users --body-file=-
+c1i api --path=/api/v1/apps --query=page_size=5 --header=X-Request-Id=abc
 ```
 
-Defaults to GET; auto-switches to POST when `--body` is set. Use
-`--method=PUT|DELETE` for the remaining verbs. `--fields` projects the output
-just like on the typed commands. Without
+Defaults to GET; auto-switches to POST when a body is set. Use
+`--method=PUT|PATCH|DELETE` for the remaining verbs. The body comes from `--body`
+(inline) or `--body-file` (file, or `-` for stdin; mutually exclusive with
+`--body`). `--query=key=value` and `--header=key=value` are repeatable. `--fields`
+projects the output just like on the typed commands. Without
 `--paginate`, pretty-prints the full JSON response. With `--paginate`, unwraps
 the first array-valued field in the response and outputs NDJSON (one item per
 line) — works for endpoints that wrap items under `list` (most) as well as
