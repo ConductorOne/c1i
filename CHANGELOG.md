@@ -4,6 +4,18 @@ All notable changes to c1i are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project aims
 to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- **`export events`** — bulk-export the C1 system log (OCSF-formatted audit
+  events) as an NDJSON stream, one event per line, auto-paginating the full
+  result set via `POST /api/v1/systemlog/events`. Redirect to a file to archive
+  events or ship them to an external system. Filter with `--since` / `--until`
+  (RFC3339), order with `--sort asc|desc` (default `asc`, chronological), and
+  resume an incremental sync with `--since-event-uid`. `--fields` projection
+  applies per event.
+
 ## [0.2.1] - 2026-07-10
 
 ### Added

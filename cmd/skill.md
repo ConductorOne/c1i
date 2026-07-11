@@ -326,6 +326,19 @@ for approve** (the command errors if it can't be determined — pass it
 explicitly), **optional for deny** (omitted if it can't be derived, so deny
 still goes through).
 
+### Export
+
+```sh
+c1i export events [--since=RFC3339] [--until=RFC3339] [--since-event-uid=UID] [--sort=asc|desc] [--page-size=50] [--page-token=TOKEN] [--limit=N]
+```
+
+`export events` streams the C1 system log (OCSF audit events) as NDJSON, one
+event per line, auto-paginating the whole result — the bulk audit dump.
+Redirect to a file to archive or forward events. `--since`/`--until` are RFC3339
+timestamps; `--sort` defaults to `asc` (chronological), which pairs with
+`--since-event-uid=UID` to resume an incremental sync after the last event you
+stored. `--fields` trims each event (e.g. `--fields=activity_name,time`).
+
 ### Raw API
 
 ```sh
