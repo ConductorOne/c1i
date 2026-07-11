@@ -24,6 +24,9 @@ var tasksListCmd = &cobra.Command{
 
 		query, _ := cmd.Flags().GetString("query")
 		state, _ := cmd.Flags().GetString("state")
+		if err := validateTaskState(state); err != nil {
+			return &usageError{err}
+		}
 		assignedToMe, _ := cmd.Flags().GetBool("assigned-to-me")
 		requestedPageSize := clampPageSize(getIntFlag(cmd, "page-size"))
 		pageToken, _ := cmd.Flags().GetString("page-token")
@@ -35,6 +38,11 @@ var tasksListCmd = &cobra.Command{
 			myUserID, err = currentUserID(cmd.Context(), c)
 			if err != nil {
 				return err
+			}
+			// Guard against silently listing tenant-wide if the current user
+			// can't be resolved: --assigned-to-me must narrow to the caller.
+			if myUserID == "" {
+				return fmt.Errorf("could not determine the current user for --assigned-to-me")
 			}
 		}
 
@@ -96,10 +104,25 @@ func init() {
 	tasksCmd.AddCommand(tasksListCmd)
 }
 
+// validateTaskState rejects a --state value that isn't a recognized filter, so a
+// typo fails with a clear usage error instead of a raw gateway 400 on the
+// taskStates enum. An empty value means "no state filter" and is allowed. Shared
+// by `tasks list` and `requests list`.
+func validateTaskState(s string) error {
+	switch strings.ToLower(strings.TrimSpace(s)) {
+	case "", "open", "closed":
+		return nil
+	default:
+		return fmt.Errorf(`--state must be "open" or "closed"`)
+	}
+}
+
 // mapTaskState normalizes the user-friendly --state value to the API enum.
-// Input is case-insensitive so `--state open` and `--state OPEN` both work.
+// Input is case-insensitive (and surrounding whitespace is ignored) so
+// `--state open` and `--state OPEN` both work. Call validateTaskState first to
+// reject unrecognized values.
 func mapTaskState(s string) string {
-	switch strings.ToLower(s) {
+	switch strings.ToLower(strings.TrimSpace(s)) {
 	case "open":
 		return "TASK_STATE_OPEN"
 	case "closed":

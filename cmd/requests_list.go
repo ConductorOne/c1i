@@ -83,6 +83,9 @@ tenant.
 		if typ != "" && typ != "grant" && typ != "revoke" {
 			return &usageError{fmt.Errorf(`--type must be "grant" or "revoke"`)}
 		}
+		if err := validateTaskState(state); err != nil {
+			return &usageError{err}
+		}
 		if userID != "" && all {
 			return &usageError{fmt.Errorf("--user-id and --all are mutually exclusive")}
 		}
