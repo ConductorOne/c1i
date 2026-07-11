@@ -128,8 +128,11 @@ them to an external system.
 			}
 
 			for _, event := range resp.List {
-				// Emit each OCSF event verbatim (one NDJSON line). The emitter
-				// still honors --fields for callers who want to trim events.
+				// Emit each OCSF event as one NDJSON line. Like every list
+				// command this goes through the shared emitter, so --fields
+				// projection applies and values are re-encoded with Go's
+				// standard JSON encoding (which \u-escapes <, >, and & — valid
+				// JSON that any parser reads back identically).
 				_ = enc.Encode(event)
 				emitted++
 				if limitReached(emitted, limit) {
