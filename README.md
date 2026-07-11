@@ -148,9 +148,18 @@ c1i mcp bindings history  --app-id <id> --connector-id <id> (--toolset-id <tid> 
 ```sh
 c1i requests create grant --app-id <id> --entitlement-id <eid> [--user-id <uid>] [--description <text>] [--duration <duration>] [--emergency]
 c1i requests create revoke --app-id <id> --entitlement-id <eid> [--user-id <uid>] [--description <text>]
+c1i requests list [--user-id <id> | --all] [--app-id <id>] [--entitlement-id <id>] [--state open|closed] [--type grant|revoke] [--page-size N] [--page-token TOKEN] [--limit N]
+c1i requests get <request-id>
 ```
 
-`--user-id` defaults to the authenticated user when omitted.
+On `create`, `--user-id` defaults to the authenticated user when omitted.
+
+`requests list` is the requester lens on access requests (the grant/revoke tasks
+you file): by default it shows requests you opened or are the subject of —
+complementing `tasks list`, which is the approver's My Work lens. Use `--user-id`
+to scope to another user or `--all` for every request in the tenant. `requests
+get` fetches a single request (the `task_id` returned by `requests create`) as
+pretty JSON, including its current policy step and outcome.
 
 ### Raw API
 

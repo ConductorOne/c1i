@@ -4,6 +4,21 @@ All notable changes to c1i are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project aims
 to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- **`requests list`** — the requester lens on access requests (the grant and
+  revoke tasks you file), backed by `POST /api/v1/search/tasks` scoped to those
+  task types. By default it lists requests you opened or are the subject of, so
+  after a `requests create` you can poll status without dropping to `api`. Scope
+  with `--user-id` (another user) or `--all` (whole tenant), and narrow with
+  `--app-id`, `--entitlement-id`, `--state open|closed`, and `--type
+  grant|revoke`. Complements `tasks list`, which is the approver's My Work lens.
+- **`requests get <request-id>`** — fetch a single access request (the `task_id`
+  returned by `requests create`) via `GET /api/v1/tasks/{id}`, returned as pretty
+  JSON including its current policy step and outcome.
+
 ## [0.2.1] - 2026-07-10
 
 ### Added
