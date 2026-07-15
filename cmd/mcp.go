@@ -12,6 +12,8 @@ before they become callable through C1. Toolsets group tools into a single
 AppEntitlement so they can be requested and granted as a unit.
 
 Subcommands:
+  servers   - Register, configure, and inspect MCP servers (+ catalog and
+              per-user connections)
   tools     - List, search, get, approve, delete, and view history for tools
   toolsets  - CRUD toolsets, look up by entitlement, list user-requestable
               connectors

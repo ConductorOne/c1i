@@ -4,6 +4,22 @@ All notable changes to c1i are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project aims
 to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- **`mcp servers`** — manage the MCP-server lifecycle over REST (newly exposed by
+  the C1 API). Reads: `list`, `get`, `search` (with per-server tool counts),
+  `catalog list`/`get` (browse HOSTED templates), and `connections list` (the
+  caller's per-user connections). Lifecycle: `register` (HOSTED via `--catalog-id`
+  or EXTERNAL via `--url`), `update` (metadata via update_mask), `delete`, and
+  `resync-tools`. Config helpers: `update-credentials`, `test-connection`, and
+  `discover-oidc`. Auth uses convenience flags for the simple methods (`--auth
+  none|bearer-token|custom-header|basic-auth`) plus a `--hosted-config-file` /
+  `--external-config-file` JSON escape hatch for OAuth2 / AWS SigV4 / Google
+  service-account configs; secrets are sealed server-side and never returned on
+  read. Mutations honor `--dry-run`.
+
 ## [0.2.1] - 2026-07-10
 
 ### Added
