@@ -332,10 +332,20 @@ calls.
 ```sh
 c1i requests create grant --app-id=ID --entitlement-id=EID [--user-id=UID] [--description=TEXT] [--duration=DURATION] [--emergency]
 c1i requests create revoke --app-id=ID --entitlement-id=EID [--user-id=UID] [--description=TEXT]
+c1i requests list [--user-id=ID | --all] [--app-id=ID] [--entitlement-id=ID] [--state=open|closed] [--type=grant|revoke] [--page-size=50] [--page-token=TOKEN] [--limit=N]
+c1i requests get REQUEST_ID
 ```
 
-`--user-id` defaults to the authenticated user when omitted. `--description` is
-free-form justification text shown to approvers.
+On `create`, `--user-id` defaults to the authenticated user when omitted;
+`--description` is free-form justification text shown to approvers.
+
+`requests list` is the requester lens (the grant/revoke tasks you file):
+by default it returns requests you opened or are the subject of, so after a
+`requests create` you can poll status without dropping to `api`. It is scoped to
+the caller unless you pass `--user-id` (another user) or `--all` (whole tenant);
+use `tasks list` instead for the approver's My-Work view. `requests get` takes
+the `task_id` returned by `requests create` and returns the full task view
+(current policy step, outcome) as pretty JSON.
 
 ### Task Actions
 
@@ -350,6 +360,19 @@ omitted it is auto-derived from the task's currently executing step: **required
 for approve** (the command errors if it can't be determined — pass it
 explicitly), **optional for deny** (omitted if it can't be derived, so deny
 still goes through).
+
+### Export
+
+```sh
+c1i export events [--since=RFC3339] [--until=RFC3339] [--since-event-uid=UID] [--sort=asc|desc] [--page-size=50] [--page-token=TOKEN] [--limit=N]
+```
+
+`export events` streams the C1 system log (OCSF audit events) as NDJSON, one
+event per line, auto-paginating the whole result — the bulk audit dump.
+Redirect to a file to archive or forward events. `--since`/`--until` are RFC3339
+timestamps; `--sort` defaults to `asc` (chronological), which pairs with
+`--since-event-uid=UID` to resume an incremental sync after the last event you
+stored. `--fields` trims each event (e.g. `--fields=activity_name,time`).
 
 ### Raw API
 
@@ -412,8 +435,9 @@ hit this.
 | Get entitlement | GET | `/api/v1/apps/{app_id}/entitlements/{id}` |
 | Search entitlements | POST | `/api/v1/search/entitlements` |
 | Search app accounts | POST | `/api/v1/search/app_users` |
-| Get task | GET | `/api/v1/tasks/{id}` |
-| Search tasks | POST | `/api/v1/search/tasks` |
+| Get task / access request | GET | `/api/v1/tasks/{id}` |
+| Search tasks / access requests | POST | `/api/v1/search/tasks` |
+| Export system log events | POST | `/api/v1/systemlog/events` |
 | Get access review | GET | `/api/v1/access_review/{id}` |
 | List access reviews | GET | `/api/v1/access_reviews` |
 | List automations | GET | `/api/v1/automations` |
