@@ -24,6 +24,9 @@ var tasksListCmd = &cobra.Command{
 
 		query, _ := cmd.Flags().GetString("query")
 		state, _ := cmd.Flags().GetString("state")
+		if err := validateTaskState(state); err != nil {
+			return &usageError{err}
+		}
 		assignedToMe, _ := cmd.Flags().GetBool("assigned-to-me")
 		requestedPageSize := clampPageSize(getIntFlag(cmd, "page-size"))
 		pageToken, _ := cmd.Flags().GetString("page-token")
@@ -32,17 +35,15 @@ var tasksListCmd = &cobra.Command{
 
 		var myUserID string
 		if assignedToMe {
-			data, err := c.Get(cmd.Context(), "/api/v1/auth/introspect", nil)
+			myUserID, err = currentUserID(cmd.Context(), c)
 			if err != nil {
-				return fmt.Errorf("failed to get current user: %w", err)
+				return err
 			}
-			var introspect struct {
-				UserID string `json:"userId"`
+			// Guard against silently listing tenant-wide if the current user
+			// can't be resolved: --assigned-to-me must narrow to the caller.
+			if myUserID == "" {
+				return fmt.Errorf("could not determine the current user for --assigned-to-me")
 			}
-			if err := json.Unmarshal(data, &introspect); err != nil {
-				return fmt.Errorf("failed to parse introspect response: %w", err)
-			}
-			myUserID = introspect.UserID
 		}
 
 		enc := newEmitter(cmd.OutOrStdout())
@@ -70,74 +71,13 @@ var tasksListCmd = &cobra.Command{
 				return fmt.Errorf("API error: %w", err)
 			}
 
-			var resp struct {
-				List []struct {
-					Task struct {
-						ID              string `json:"id"`
-						DisplayName     string `json:"displayName"`
-						Description     string `json:"description"`
-						State           string `json:"state"`
-						UserID          string `json:"userId"`
-						CreatedByUserID string `json:"createdByUserId"`
-						CreatedAt       string `json:"createdAt"`
-						Type            struct {
-							Grant *struct {
-								AppID            string `json:"appId"`
-								AppEntitlementID string `json:"appEntitlementId"`
-								Outcome          string `json:"outcome"`
-							} `json:"grant"`
-							Revoke *struct {
-								AppID            string `json:"appId"`
-								AppEntitlementID string `json:"appEntitlementId"`
-								Outcome          string `json:"outcome"`
-							} `json:"revoke"`
-							Certify *struct {
-								Outcome string `json:"outcome"`
-							} `json:"certify"`
-						} `json:"type"`
-					} `json:"task"`
-				} `json:"list"`
-				NextPageToken string `json:"nextPageToken"`
-			}
+			var resp taskSearchList
 			if err := json.Unmarshal(data, &resp); err != nil {
 				return fmt.Errorf("failed to parse response: %w", err)
 			}
 
 			for _, item := range resp.List {
-				t := item.Task
-				row := map[string]string{
-					"id":                 t.ID,
-					"display_name":       t.DisplayName,
-					"description":        t.Description,
-					"state":              t.State,
-					"user_id":            t.UserID,
-					"created_by_user_id": t.CreatedByUserID,
-					"created_at":         t.CreatedAt,
-				}
-
-				switch {
-				case t.Type.Grant != nil:
-					row["type"] = "grant"
-					row["app_id"] = t.Type.Grant.AppID
-					row["app_entitlement_id"] = t.Type.Grant.AppEntitlementID
-					if o := finalOutcome(t.Type.Grant.Outcome); o != "" {
-						row["outcome"] = o
-					}
-				case t.Type.Revoke != nil:
-					row["type"] = "revoke"
-					row["app_id"] = t.Type.Revoke.AppID
-					row["app_entitlement_id"] = t.Type.Revoke.AppEntitlementID
-					if o := finalOutcome(t.Type.Revoke.Outcome); o != "" {
-						row["outcome"] = o
-					}
-				case t.Type.Certify != nil:
-					row["type"] = "certify"
-					if o := finalOutcome(t.Type.Certify.Outcome); o != "" {
-						row["outcome"] = o
-					}
-				}
-
-				_ = enc.Encode(row)
+				_ = enc.Encode(taskRow(item.Task))
 				emitted++
 				if limitReached(emitted, limit) {
 					return nil
@@ -164,10 +104,25 @@ func init() {
 	tasksCmd.AddCommand(tasksListCmd)
 }
 
+// validateTaskState rejects a --state value that isn't a recognized filter, so a
+// typo fails with a clear usage error instead of a raw gateway 400 on the
+// taskStates enum. An empty value means "no state filter" and is allowed. Shared
+// by `tasks list` and `requests list`.
+func validateTaskState(s string) error {
+	switch strings.ToLower(strings.TrimSpace(s)) {
+	case "", "open", "closed":
+		return nil
+	default:
+		return fmt.Errorf(`--state must be "open" or "closed"`)
+	}
+}
+
 // mapTaskState normalizes the user-friendly --state value to the API enum.
-// Input is case-insensitive so `--state open` and `--state OPEN` both work.
+// Input is case-insensitive (and surrounding whitespace is ignored) so
+// `--state open` and `--state OPEN` both work. Call validateTaskState first to
+// reject unrecognized values.
 func mapTaskState(s string) string {
-	switch strings.ToLower(s) {
+	switch strings.ToLower(strings.TrimSpace(s)) {
 	case "open":
 		return "TASK_STATE_OPEN"
 	case "closed":

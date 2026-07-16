@@ -307,10 +307,20 @@ servers themselves is not in the public REST surface — drive that via the
 ```sh
 c1i requests create grant --app-id=ID --entitlement-id=EID [--user-id=UID] [--description=TEXT] [--duration=DURATION] [--emergency]
 c1i requests create revoke --app-id=ID --entitlement-id=EID [--user-id=UID] [--description=TEXT]
+c1i requests list [--user-id=ID | --all] [--app-id=ID] [--entitlement-id=ID] [--state=open|closed] [--type=grant|revoke] [--page-size=50] [--page-token=TOKEN] [--limit=N]
+c1i requests get REQUEST_ID
 ```
 
-`--user-id` defaults to the authenticated user when omitted. `--description` is
-free-form justification text shown to approvers.
+On `create`, `--user-id` defaults to the authenticated user when omitted;
+`--description` is free-form justification text shown to approvers.
+
+`requests list` is the requester lens (the grant/revoke tasks you file):
+by default it returns requests you opened or are the subject of, so after a
+`requests create` you can poll status without dropping to `api`. It is scoped to
+the caller unless you pass `--user-id` (another user) or `--all` (whole tenant);
+use `tasks list` instead for the approver's My-Work view. `requests get` takes
+the `task_id` returned by `requests create` and returns the full task view
+(current policy step, outcome) as pretty JSON.
 
 ### Task Actions
 

@@ -8,6 +8,16 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **`requests list`** — the requester lens on access requests (the grant and
+  revoke tasks you file), backed by `POST /api/v1/search/tasks` scoped to those
+  task types. By default it lists requests you opened or are the subject of, so
+  after a `requests create` you can poll status without dropping to `api`. Scope
+  with `--user-id` (another user) or `--all` (whole tenant), and narrow with
+  `--app-id`, `--entitlement-id`, `--state open|closed`, and `--type
+  grant|revoke`. Complements `tasks list`, which is the approver's My Work lens.
+- **`requests get <request-id>`** — fetch a single access request (the `task_id`
+  returned by `requests create`) via `GET /api/v1/tasks/{id}`, returned as pretty
+  JSON including its current policy step and outcome.
 - **`export events`** — bulk-export the C1 system log (OCSF-formatted audit
   events) as an NDJSON stream, one event per line, auto-paginating the full
   result set via `POST /api/v1/systemlog/events`. Redirect to a file to archive
