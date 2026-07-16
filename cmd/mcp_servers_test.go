@@ -279,6 +279,39 @@ func TestBuildExternalConfigFileExclusive(t *testing.T) {
 	}
 }
 
+func TestDeriveCredentialUpdateMask(t *testing.T) {
+	got := deriveCredentialUpdateMask(map[string]any{
+		"bearerToken":  map[string]any{"token": "x"},
+		"tokenSharing": "MCP_SERVER_TOKEN_SHARING_SHARED",
+		"configFields": map[string]string{"a": "b"},
+	})
+	if got != "bearerToken,configFields,tokenSharing" {
+		t.Errorf("mask = %q, want bearerToken,configFields,tokenSharing (sorted proto paths)", got)
+	}
+	if got := deriveCredentialUpdateMask(map[string]any{}); got != "" {
+		t.Errorf("empty cfg mask = %q, want empty", got)
+	}
+}
+
+// TestUpdateCredentialsMaskFromFlags is the regression guard for the bug where
+// update-credentials masked the "externalConfig"/"hostedConfig" wrapper — which
+// the backend keys the mask on the auth oneof CASE name (e.g. "bearerToken"),
+// so masking the wrapper matched nothing and silently dropped every credential
+// change. The mask must be the auth path, not the wrapper.
+func TestUpdateCredentialsMaskFromFlags(t *testing.T) {
+	cmd := newServerFlagCmd()
+	_ = cmd.Flags().Set("type", "external")
+	_ = cmd.Flags().Set("auth", "bearer-token")
+	_ = cmd.Flags().Set("bearer-token", "secret")
+	cfg, err := buildExternalConfig(cmd)
+	if err != nil {
+		t.Fatalf("buildExternalConfig: %v", err)
+	}
+	if mask := deriveCredentialUpdateMask(cfg); mask != "bearerToken" {
+		t.Errorf("mask = %q, want %q (NOT externalConfig)", mask, "bearerToken")
+	}
+}
+
 // TestServerCountRowLastCalled pins that last_called_at appears only when the
 // view carries it, so search rows don't show a misleading always-empty column.
 func TestServerCountRowLastCalled(t *testing.T) {

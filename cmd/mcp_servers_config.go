@@ -5,10 +5,32 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"sort"
 	"strings"
 
 	"github.com/spf13/cobra"
 )
+
+// deriveCredentialUpdateMask returns the update_mask for an UpdateCredentials
+// request built from the convenience flags: the sorted set of top-level field
+// paths present in cfg.
+//
+// The backend applies a credential/config change only when the mask names that
+// field by its proto path — for the auth oneof that is the *case name* (e.g.
+// "bearerToken", "none", "customHeader", "basicAuth", "oauth2"), NOT the
+// wrapping "hostedConfig"/"externalConfig". The config builders already key the
+// object by those exact paths, so the mask is simply cfg's keys. (Sending the
+// wrapper name — the previous behavior — matched no path, so the backend
+// silently dropped every credential change.) Mirrors the admin UI, which masks
+// exactly the fields the user edited.
+func deriveCredentialUpdateMask(cfg map[string]any) string {
+	keys := make([]string, 0, len(cfg))
+	for k := range cfg {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	return strings.Join(keys, ",")
+}
 
 // addAuthFlags registers the convenience auth flags shared by register,
 // update-credentials, and test-connection. They cover the simple auth methods;
