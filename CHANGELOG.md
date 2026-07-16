@@ -18,6 +18,13 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - **`requests get <request-id>`** — fetch a single access request (the `task_id`
   returned by `requests create`) via `GET /api/v1/tasks/{id}`, returned as pretty
   JSON including its current policy step and outcome.
+- **`export events`** — bulk-export the C1 system log (OCSF-formatted audit
+  events) as an NDJSON stream, one event per line, auto-paginating the full
+  result set via `POST /api/v1/systemlog/events`. Redirect to a file to archive
+  events or ship them to an external system. Filter with `--since` / `--until`
+  (RFC3339), order with `--sort asc|desc` (default `asc`, chronological), and
+  resume an incremental sync with `--since-event-uid`. `--fields` projection
+  applies per event.
 
 ## [0.2.1] - 2026-07-10
 

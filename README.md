@@ -161,6 +161,26 @@ to scope to another user or `--all` for every request in the tenant. `requests
 get` fetches a single request (the `task_id` returned by `requests create`) as
 pretty JSON, including its current policy step and outcome.
 
+### Export
+
+```sh
+c1i export events [--since <rfc3339>] [--until <rfc3339>] [--since-event-uid <uid>] [--sort asc|desc] [--page-size N] [--page-token TOKEN] [--limit N]
+```
+
+`export events` dumps the C1 system log — OCSF-formatted audit events — as an
+NDJSON stream (one event per line), auto-paginating through the whole result.
+Redirect it to a file to archive events or ship them to an external system:
+
+```sh
+c1i export events > audit.ndjson                                  # everything, oldest first
+c1i export events --since 2026-07-01T00:00:00Z --until 2026-07-08T00:00:00Z
+c1i export events --since-event-uid <last-uid>                    # incremental sync
+```
+
+`--sort` defaults to `asc` (chronological), which pairs with `--since-event-uid`
+for incremental sync. `--fields` works on events too (e.g. `--fields
+activity_name,actor.user.email_addr,time`).
+
 ### Raw API
 
 ```sh
