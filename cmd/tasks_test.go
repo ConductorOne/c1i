@@ -2,6 +2,22 @@ package cmd
 
 import "testing"
 
+// TestValidateTaskState pins the shared --state validation used by `tasks list`
+// and `requests list`: empty means no filter, open/closed (any case, trimmed)
+// are accepted, everything else is a usage error rather than a raw enum 400.
+func TestValidateTaskState(t *testing.T) {
+	for _, ok := range []string{"", "open", "closed", "OPEN", " Closed "} {
+		if err := validateTaskState(ok); err != nil {
+			t.Errorf("validateTaskState(%q) = %v, want nil", ok, err)
+		}
+	}
+	for _, bad := range []string{"bogus", "pending", "open,closed"} {
+		if err := validateTaskState(bad); err == nil {
+			t.Errorf("validateTaskState(%q) = nil, want error", bad)
+		}
+	}
+}
+
 // TestParseTaskActionResponse pins the response shape for the task action
 // endpoints (approve/deny/comment). The updated task is nested under
 // taskView.task, NOT at the top level. A previous version unmarshalled a
