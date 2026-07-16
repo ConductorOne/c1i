@@ -251,9 +251,25 @@ List NDJSON fields: `id, display_name, description, enabled, last_executed_at, p
 
 Executions NDJSON fields: `id, automation_template_id, state, created_at, completed_at, duration, is_draft`
 
-### MCP (tools, toolsets, bindings)
+### MCP (servers, tools, toolsets, bindings)
 
 ```sh
+# --- Servers (register, configure, and inspect MCP servers) ---
+c1i mcp servers list               --app-id=ID [--page-size=50] [--page-token=TOKEN] [--limit=N]
+c1i mcp servers get                --app-id=ID --connector-id=CID
+c1i mcp servers search             --app-id=ID [--query=TEXT] [--tool-state=approved|pending|disabled|removed] [--include-last-called-at] [--limit=N]
+c1i mcp servers register           --app-id=ID --type=hosted   --display-name=NAME --catalog-id=CID [--auth=...] [--config-field=k=v]... [--tool-prefix=P] [--user-id=UID]...
+c1i mcp servers register           --app-id=ID --type=external --display-name=NAME --url=URL [--transport=streamable-http|sse] [--auth=...]
+c1i mcp servers update             --app-id=ID --connector-id=CID [--display-name=NAME] [--description=TEXT] [--data-sensitivity=...] [--tool-prefix=P] [--require-tool-approval]
+c1i mcp servers update-credentials --app-id=ID --connector-id=CID --type=hosted|external [--auth=...] [--update-mask=PATHS]
+c1i mcp servers delete             --app-id=ID --connector-id=CID
+c1i mcp servers resync-tools       --app-id=ID --connector-id=CID
+c1i mcp servers test-connection    (--url=URL [--transport=...] [--auth=...] | --app-id=ID --connector-id=CID [--update-mask=PATHS])
+c1i mcp servers discover-oidc      --issuer-url=URL
+c1i mcp servers catalog list       [--query=TEXT] [--page-size=50] [--limit=N]
+c1i mcp servers catalog get        --catalog-id=CID
+c1i mcp servers connections list   [--page-size=50] [--limit=N]
+
 # --- Tools (discovered from a registered MCP server) ---
 c1i mcp tools list    --app-id=ID --connector-id=CID [--page-size=50] [--page-token=TOKEN] [--limit=N]
 c1i mcp tools get     --app-id=ID --connector-id=CID --id=TOOL_ID
@@ -296,11 +312,20 @@ c1i mcp bindings history  --app-id=ID --connector-id=CID (--toolset-id=TID | --t
 Tool states: `MCP_TOOL_STATE_PENDING_REVIEW`, `MCP_TOOL_STATE_APPROVED`, `MCP_TOOL_STATE_DISABLED`, `MCP_TOOL_STATE_REMOVED`.
 Tool classifications: `TOOL_CLASSIFICATION_READ`, `_WRITE`, `_DESTRUCTIVE`, `_SENSITIVE`, `_DANGEROUS`.
 
+`mcp servers list`/`search` NDJSON fields: `connector_id, app_id, display_name, description, server_type, data_sensitivity, auth_method, mcp_server_catalog_id, tool_prefix, endpoint_url, token_sharing, created_at` (`search` adds `tool_count`, plus `last_called_at` when `--include-last-called-at` is set).
+
+`mcp servers catalog list` NDJSON fields: `id, display_name, description, service_name, channel, scope, maturity`.
+
+`mcp servers connections list` NDJSON fields: `connector_id, app_id, display_name, server_type, auth_method, connected, authorized_as_email, authorized_as_name, connected_at`.
+
+`mcp servers` auth (`register` / `update-credentials`): convenience flags cover the simple methods — `--auth=none`, `--auth=bearer-token --bearer-token=TOKEN`, `--auth=custom-header --header-name=NAME --header-value=VALUE`, `--auth=basic-auth --basic-auth-username=USER --basic-auth-password=PASS`, plus `--token-sharing=shared|per-user`. For OAuth2 / AWS SigV4 / Google service-account auth, pass the full config object with `--hosted-config-file=FILE` / `--external-config-file=FILE` (JSON, or `-` for stdin). Secrets are sealed server-side and never returned on read (only `*_configured` booleans). Register/update-credentials/update/delete/resync-tools honor `--dry-run`.
+
+Server types: `MCP_SERVER_TYPE_HOSTED` (runs in C1 from a catalog impl; pick via `mcp servers catalog list`), `MCP_SERVER_TYPE_EXTERNAL` (third-party URL). Registering under a new managed app (empty `app_id`) is not reachable over REST — `--app-id` is required.
+
 Approving tools is the standard post-registration step: a newly registered MCP
-server discovers its tools in `PENDING_REVIEW`, then an admin moves each to
-`APPROVED` for the gateway to proxy calls. Note: registering / deleting MCP
-servers themselves is not in the public REST surface — drive that via the
-`mcp-setup` skill or the support dashboard.
+server (or a `resync-tools` run) discovers its tools in `PENDING_REVIEW`, then an
+admin moves each to `APPROVED` with `mcp tools approve` for the gateway to proxy
+calls.
 
 ### Access Requests
 
@@ -410,13 +435,27 @@ hit this.
 | Get entitlement | GET | `/api/v1/apps/{app_id}/entitlements/{id}` |
 | Search entitlements | POST | `/api/v1/search/entitlements` |
 | Search app accounts | POST | `/api/v1/search/app_users` |
-| Get task | GET | `/api/v1/tasks/{id}` |
-| Search tasks | POST | `/api/v1/search/tasks` |
+| Get task / access request | GET | `/api/v1/tasks/{id}` |
+| Search tasks / access requests | POST | `/api/v1/search/tasks` |
+| Export system log events | POST | `/api/v1/systemlog/events` |
 | Get access review | GET | `/api/v1/access_review/{id}` |
 | List access reviews | GET | `/api/v1/access_reviews` |
 | List automations | GET | `/api/v1/automations` |
 | Get automation | GET | `/api/v1/automations/{id}` |
 | List automation executions | GET | `/api/v1/automation_executions` |
+| List MCP servers | GET | `/api/v1/apps/{app_id}/mcp_servers` |
+| Get MCP server | GET | `/api/v1/apps/{app_id}/mcp_servers/{connector_id}` |
+| Search MCP servers (tool counts) | POST | `/api/v1/apps/{app_id}/mcp_servers/search` |
+| Register MCP server | POST | `/api/v1/apps/{app_id}/mcp_servers` |
+| Update MCP server (metadata) | POST | `/api/v1/apps/{app_id}/mcp_servers/{connector_id}` |
+| Update MCP server credentials | POST | `/api/v1/apps/{app_id}/mcp_servers/{connector_id}/credentials` |
+| Delete MCP server | DELETE | `/api/v1/apps/{app_id}/mcp_servers/{connector_id}` |
+| Resync MCP server tools | POST | `/api/v1/apps/{app_id}/mcp_servers/{connector_id}/resync_tools` |
+| List MCP server catalog | GET | `/api/v1/mcp_server_catalog` |
+| Get MCP server catalog entry | GET | `/api/v1/mcp_server_catalog/{catalog_id}` |
+| List MCP server connections | GET | `/api/v1/mcp_server_connections` |
+| Discover OIDC endpoints | POST | `/api/v1/mcp_servers/discover_oidc` |
+| Test MCP server connection | POST | `/api/v1/mcp_servers/test_connection` |
 | List MCP tools | GET | `/api/v1/apps/{app_id}/connectors/{connector_id}/mcp_tools` |
 | Get MCP tool | GET | `/api/v1/apps/{app_id}/connectors/{connector_id}/mcp_tools/{id}` |
 | Search MCP tools | POST | `/api/v1/apps/{app_id}/connectors/{connector_id}/mcp_tools/search` |

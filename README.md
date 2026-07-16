@@ -113,9 +113,25 @@ Each `automations list` row includes `function_ids` (every distinct function the
 
 ### MCP
 
-Drive the MCP admin surface (tools, toolsets, and bindings) for a registered MCP server. Tool and toolset commands take `--app-id` and `--connector-id`.
+Drive the MCP admin surface (servers, tools, toolsets, and bindings). Most commands take `--app-id`; server/tool/toolset commands identify a specific server with `--connector-id`.
 
 ```sh
+# Servers (register, configure, and inspect MCP servers)
+c1i mcp servers list               --app-id <id> [--page-size N] [--limit N]
+c1i mcp servers get                --app-id <id> --connector-id <id>
+c1i mcp servers search             --app-id <id> [--query <text>] [--tool-state approved|pending|disabled|removed] [--include-last-called-at] [--limit N]
+c1i mcp servers register           --app-id <id> --type hosted   --display-name <name> --catalog-id <cid> [--auth ... ] [--config-field k=v ...]
+c1i mcp servers register           --app-id <id> --type external --display-name <name> --url <url> [--transport streamable-http|sse] [--auth ...]
+c1i mcp servers update             --app-id <id> --connector-id <id> [--display-name <name>] [--description <text>] [--data-sensitivity ...] [--tool-prefix <p>] [--require-tool-approval]
+c1i mcp servers update-credentials --app-id <id> --connector-id <id> --type hosted|external [--auth ...] [--update-mask <paths>]
+c1i mcp servers delete             --app-id <id> --connector-id <id>
+c1i mcp servers resync-tools       --app-id <id> --connector-id <id>
+c1i mcp servers test-connection    (--url <url> [--transport ...] [--auth ...] | --app-id <id> --connector-id <id>)
+c1i mcp servers discover-oidc      --issuer-url <url>
+c1i mcp servers catalog list       [--query <text>] [--page-size N] [--limit N]
+c1i mcp servers catalog get        --catalog-id <cid>
+c1i mcp servers connections list   [--page-size N] [--limit N]
+
 # Tools
 c1i mcp tools list    --app-id <id> --connector-id <id> [--page-size N] [--page-token TOKEN] [--limit N]
 c1i mcp tools get     --app-id <id> --connector-id <id> --id <tool-id>
@@ -141,7 +157,9 @@ c1i mcp bindings by-tools --app-id <id> --connector-id <id> --tool-id <id> [--to
 c1i mcp bindings history  --app-id <id> --connector-id <id> (--toolset-id <tid> | --tool-id <id>) [--page-size N] [--limit N]
 ```
 
-`mcp tools approve` is the standard post-registration step: newly discovered tools start in `PENDING_REVIEW`, and an admin approves each one for the gateway to proxy calls. Registering or deleting MCP servers themselves is not part of this surface. History endpoints return records newest-first.
+**Auth for `register` / `update-credentials`:** convenience flags cover the simple methods — `--auth none`, `--auth bearer-token --bearer-token TOKEN`, `--auth custom-header --header-name NAME --header-value VALUE`, `--auth basic-auth --basic-auth-username USER --basic-auth-password PASS`. For OAuth2 / AWS SigV4 / Google service-account auth, pass the full config object via `--hosted-config-file` / `--external-config-file` (JSON file, or `-` for stdin). Secrets are sealed server-side; reads only ever return `*_configured` booleans, never the values.
+
+`mcp tools approve` is the standard post-registration step: newly discovered tools (from `register` or `resync-tools`) start in `PENDING_REVIEW`, and an admin approves each one for the gateway to proxy calls. History endpoints return records newest-first.
 
 ### Access Requests
 
