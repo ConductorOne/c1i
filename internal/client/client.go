@@ -130,9 +130,13 @@ func (dt *debugTripper) RoundTrip(req *http.Request) (*http.Response, error) {
 	return resp, err
 }
 
-func New(ctx context.Context, baseURL string, opts ...Option) (*Client, error) {
+// loadCredentials resolves the stored client_id/client_secret for baseURL,
+// falling back to (and migrating from) the legacy *.conductor.one keychain key.
+// New and Token share it so token minting resolves credentials identically to
+// an authenticated request.
+func loadCredentials(baseURL string) (clientID, clientSecret string, err error) {
 	service := config.KeychainService(baseURL)
-	clientID, clientSecret, _, err := keychain.Load(service)
+	clientID, clientSecret, _, err = keychain.Load(service)
 	if err != nil {
 		// Try legacy keychain key for *.conductor.one domains.
 		legacyService := config.LegacyKeychainService(baseURL)
@@ -145,8 +149,35 @@ func New(ctx context.Context, baseURL string, opts ...Option) (*Client, error) {
 			}
 		}
 		if err != nil {
-			return nil, &AuthError{fmt.Errorf("loading credentials: %w", err)}
+			return "", "", &AuthError{fmt.Errorf("loading credentials: %w", err)}
 		}
+	}
+	return clientID, clientSecret, nil
+}
+
+// Token mints a fresh OAuth2 bearer token from the stored credentials for
+// baseURL. It powers `c1i auth token`, giving agents a short-lived bearer to
+// drive raw API calls without re-implementing the client_credentials exchange.
+func Token(ctx context.Context, baseURL string) (*oauth2.Token, error) {
+	clientID, clientSecret, err := loadCredentials(baseURL)
+	if err != nil {
+		return nil, err
+	}
+	tokenSource, err := tokensource.NewTokenSource(ctx, clientID, clientSecret, baseURL)
+	if err != nil {
+		return nil, &AuthError{fmt.Errorf("creating token source: %w", err)}
+	}
+	tok, err := tokenSource.Token()
+	if err != nil {
+		return nil, &AuthError{fmt.Errorf("minting token: %w", err)}
+	}
+	return tok, nil
+}
+
+func New(ctx context.Context, baseURL string, opts ...Option) (*Client, error) {
+	clientID, clientSecret, err := loadCredentials(baseURL)
+	if err != nil {
+		return nil, err
 	}
 
 	tokenSource, err := tokensource.NewTokenSource(ctx, clientID, clientSecret, baseURL)
