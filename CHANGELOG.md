@@ -4,6 +4,20 @@ All notable changes to c1i are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project aims
 to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- **`mcp servers register --print-config-template --auth <mode>`** — emit a
+  ready-to-edit `hostedConfig` / `externalConfig` JSON skeleton for the chosen
+  auth method (`oauth2`, `aws-sigv4`, `google-service-account`, plus the simple
+  methods), instead of hand-writing the file-based config. Valid JSON on stdout
+  (guidance on stderr), so `--print-config-template --auth oauth2 2>/dev/null >
+  config.json` yields a config that feeds straight back into `register
+  --hosted-config-file`. `register --help` now also names the auth field shapes,
+  documents the `tokenSharing` × auth-method compatibility rules, and links to
+  the api-reference page.
+
 ## [0.3.0] - 2026-07-16
 
 ### Added

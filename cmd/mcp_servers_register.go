@@ -22,17 +22,46 @@ Auth (convenience flags cover the simple methods):
   --auth bearer-token  --bearer-token TOKEN
   --auth custom-header --header-name NAME --header-value VALUE
   --auth basic-auth    --basic-auth-username USER --basic-auth-password PASS
+
 For OAuth2 / AWS SigV4 / Google service-account auth, pass the full config
 object via --hosted-config-file / --external-config-file (JSON, or "-" for
-stdin). Auth secrets are sealed server-side; reads only return *_configured.
+stdin). Don't hand-write it — generate a ready-to-edit skeleton:
+
+  c1i mcp servers register --print-config-template --auth oauth2 [--type hosted]
+
+The hostedConfig/externalConfig object nests auth under one oneof arm keyed by
+method (field names shown for reference):
+  oauth2:               {mode, clientId, clientSecret, authorizeUrl, tokenUrl,
+                         issuerUrl, scopes[], pkce}
+  awsSigv4:             {accessKeyId, secretAccessKey, sessionToken}
+  googleServiceAccount: {credentialsJson, scopes[]}
+  bearerToken:          {token}
+  customHeader:         {headerName, headerValue}
+  basicAuth:            {username, password}
+  none:                 {}
+oauth2.mode is one of MCP_SERVER_AUTH_OAUTH2_MODE_{SERVICE,PASSTHROUGH,
+CLIENT_CREDENTIALS,JWT_BEARER,GOOGLE_SERVICE_ACCOUNT,AUTHORIZATION_CODE}.
+
+tokenSharing x auth-method compatibility: tokenSharing=PER_USER is only valid
+with oauth2 (authorization-code/passthrough), bearerToken, customHeader, or
+basicAuth. Auth secrets are sealed server-side; reads only return *_configured.
+
+See full schema: c1i docs page api-reference/mcp-servers/register
 
 NOTE: registering under app_id="" (new managed app) or via an
 app_managed_state_binding_ref is not reachable over REST — this command
 requires --app-id. Approve discovered tools afterward with
 "c1i mcp tools approve".`,
 	RunE: func(cmd *cobra.Command, args []string) error {
+		if printTemplate, _ := cmd.Flags().GetBool("print-config-template"); printTemplate {
+			return printConfigTemplate(cmd)
+		}
+
 		if err := requireNonEmpty(cmd, "app-id", "type", "display-name"); err != nil {
-			return err
+			// Wrap as a usage error so a missing required flag still maps to
+			// exit code 2 (these flags are annotate-only, not cobra-required,
+			// so --print-config-template can short-circuit above them).
+			return &usageError{err}
 		}
 
 		baseURL, err := GetBaseURL()
@@ -137,8 +166,12 @@ func init() {
 	mcpServersRegisterCmd.Flags().String("url", "", "External MCP server URL (EXTERNAL)")
 	mcpServersRegisterCmd.Flags().String("transport", "", "Transport: streamable-http or sse (EXTERNAL)")
 	mcpServersRegisterCmd.Flags().String("external-config-file", "", "Full externalConfig JSON (file or \"-\" for stdin)")
+	// Config-template generator (no auth / no network)
+	mcpServersRegisterCmd.Flags().Bool("print-config-template", false, "Print a ready-to-edit config skeleton for the --auth method (use with --auth and --type) instead of registering")
 	// Shared auth
 	addAuthFlags(mcpServersRegisterCmd)
-	markRequired(mcpServersRegisterCmd, "app-id", "type", "display-name")
+	// annotate-only (not cobra-required) so --print-config-template works
+	// without --app-id/--type/--display-name; RunE enforces them otherwise.
+	annotateRequired(mcpServersRegisterCmd, "app-id", "type", "display-name")
 	mcpServersCmd.AddCommand(mcpServersRegisterCmd)
 }
