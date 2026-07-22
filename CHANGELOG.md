@@ -4,6 +4,15 @@ All notable changes to c1i are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project aims
 to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- **`apps create`** — create a new app (a container to register MCP servers
+  under) via `POST /api/v1/apps`. Only `--display-name` is required;
+  `--description` and repeatable `--owner` are optional. Honors `--dry-run`.
+  Previously the zero-state flow dropped to the raw `api` escape hatch.
+
 ## [0.3.0] - 2026-07-16
 
 ### Added
