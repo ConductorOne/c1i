@@ -35,9 +35,12 @@ func authArmTemplate(mode string) (map[string]any, error) {
 		}}, nil
 	case "oauth2":
 		return map[string]any{"oauth2": map[string]any{
-			// SERVICE = one shared credential; switch to
-			// MCP_SERVER_AUTH_OAUTH2_MODE_PASSTHROUGH (+ tokenSharing PER_USER)
-			// for per-user authorization-code flows.
+			// SERVICE = one shared service credential. For per-user auth (each
+			// user authorizes individually), use ..._MODE_PASSTHROUGH with
+			// tokenSharing PER_USER. SERVICE/PASSTHROUGH are the input modes a
+			// catalog entry advertises (supportedOauth2Modes); the backend may
+			// store a *resolved* grant such as ..._MODE_AUTHORIZATION_CODE, so
+			// a read-back mode can legitimately differ from what you sent.
 			"mode":         "MCP_SERVER_AUTH_OAUTH2_MODE_SERVICE",
 			"clientId":     "<oauth-client-id>",
 			"clientSecret": "<oauth-client-secret>",

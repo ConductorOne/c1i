@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"os"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -155,6 +157,84 @@ func TestPrintConfigTemplateNoHTMLEscape(t *testing.T) {
 	}
 	if !strings.Contains(out.String(), "<oauth-client-id>") {
 		t.Errorf("expected literal <oauth-client-id> placeholder: %s", out.String())
+	}
+}
+
+// TestTemplateRoundTripsThroughRegister proves the doc-comment guarantee: a
+// template emitted by printConfigTemplate feeds back through the real register
+// body builder (--hosted-config-file / --external-config-file) unchanged, with
+// the enum strings intact. Because the config-file path is copied verbatim
+// (no re-mapping), a future typo in an emitted enum value — e.g. transportType
+// or tokenSharing — would break register at runtime; this test catches that at
+// build time.
+func TestTemplateRoundTripsThroughRegister(t *testing.T) {
+	cases := []struct {
+		serverType, auth, cfgKey, fileFlag string
+		wantEnums                          map[string]string // top-level cfg key -> expected value
+		wantArm                            string            // oneof arm key expected present
+	}{
+		{
+			serverType: "hosted", auth: "oauth2",
+			cfgKey: "hostedConfig", fileFlag: "hosted-config-file",
+			wantEnums: map[string]string{"tokenSharing": "MCP_SERVER_TOKEN_SHARING_SHARED"},
+			wantArm:   "oauth2",
+		},
+		{
+			serverType: "external", auth: "bearer-token",
+			cfgKey: "externalConfig", fileFlag: "external-config-file",
+			wantEnums: map[string]string{"transportType": "MCP_SERVER_TRANSPORT_TYPE_STREAMABLE_HTTP"},
+			wantArm:   "bearerToken",
+		},
+	}
+	for _, c := range cases {
+		// 1. Generate the template.
+		gen := newTemplateCmd()
+		_ = gen.Flags().Set("type", c.serverType)
+		_ = gen.Flags().Set("auth", c.auth)
+		var tmpl bytes.Buffer
+		gen.SetOut(&tmpl)
+		gen.SetErr(&bytes.Buffer{})
+		if err := printConfigTemplate(gen); err != nil {
+			t.Fatalf("%s/%s: generate: %v", c.serverType, c.auth, err)
+		}
+
+		// 2. Feed it back through the real register body builder via config-file.
+		dir := t.TempDir()
+		path := dir + "/config.json"
+		if err := os.WriteFile(path, tmpl.Bytes(), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		reg := newServerFlagCmd()
+		_ = reg.Flags().Set("app-id", "app1")
+		_ = reg.Flags().Set("type", c.serverType)
+		_ = reg.Flags().Set("display-name", "X")
+		_ = reg.Flags().Set(c.fileFlag, path)
+		body, err := buildRegisterBody(reg)
+		if err != nil {
+			t.Fatalf("%s/%s: buildRegisterBody: %v", c.serverType, c.auth, err)
+		}
+
+		// 3. The config the register would send must equal the template verbatim.
+		got, ok := body[c.cfgKey].(map[string]any)
+		if !ok {
+			t.Fatalf("%s: body[%q] missing/not an object: %v", c.serverType, c.cfgKey, body[c.cfgKey])
+		}
+		var want map[string]any
+		if err := json.Unmarshal(tmpl.Bytes(), &want); err != nil {
+			t.Fatal(err)
+		}
+		if !reflect.DeepEqual(got, want) {
+			t.Errorf("%s: register config does not round-trip.\n got=%v\nwant=%v", c.serverType, got, want)
+		}
+		// 4. Pin the specific enum strings and the auth arm.
+		for k, v := range c.wantEnums {
+			if got[k] != v {
+				t.Errorf("%s: %s = %v, want %v", c.serverType, k, got[k], v)
+			}
+		}
+		if _, ok := got[c.wantArm].(map[string]any); !ok {
+			t.Errorf("%s: missing auth arm %q", c.serverType, c.wantArm)
+		}
 	}
 }
 
