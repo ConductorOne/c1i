@@ -158,6 +158,11 @@ func loadCredentials(baseURL string) (clientID, clientSecret string, err error) 
 // Token mints a fresh OAuth2 bearer token from the stored credentials for
 // baseURL. It powers `c1i auth token`, giving agents a short-lived bearer to
 // drive raw API calls without re-implementing the client_credentials exchange.
+//
+// ctx cancels the call (Ctrl-C / timeout): the oauth2.TokenSource interface has
+// no per-call context, and tokensource.Token() mints on its own background
+// request, so we run it off-goroutine and return as soon as ctx is done. The
+// in-flight mint (a sub-second request) is abandoned, not leaked indefinitely.
 func Token(ctx context.Context, baseURL string) (*oauth2.Token, error) {
 	clientID, clientSecret, err := loadCredentials(baseURL)
 	if err != nil {
@@ -167,11 +172,26 @@ func Token(ctx context.Context, baseURL string) (*oauth2.Token, error) {
 	if err != nil {
 		return nil, &AuthError{fmt.Errorf("creating token source: %w", err)}
 	}
-	tok, err := tokenSource.Token()
-	if err != nil {
-		return nil, &AuthError{fmt.Errorf("minting token: %w", err)}
+
+	type result struct {
+		tok *oauth2.Token
+		err error
 	}
-	return tok, nil
+	ch := make(chan result, 1)
+	go func() {
+		tok, err := tokenSource.Token()
+		ch <- result{tok, err}
+	}()
+
+	select {
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	case r := <-ch:
+		if r.err != nil {
+			return nil, &AuthError{fmt.Errorf("minting token: %w", r.err)}
+		}
+		return r.tok, nil
+	}
 }
 
 func New(ctx context.Context, baseURL string, opts ...Option) (*Client, error) {
