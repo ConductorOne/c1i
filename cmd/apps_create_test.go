@@ -16,7 +16,7 @@ func newAppCreateFlagCmd() *cobra.Command {
 }
 
 // TestBuildAppCreateBodyMinimal pins that only displayName is sent when nothing
-// else is supplied (no empty description/owners keys leaking into the request).
+// else is supplied (no empty description key leaking into the request).
 func TestBuildAppCreateBodyMinimal(t *testing.T) {
 	cmd := newAppCreateFlagCmd()
 	_ = cmd.Flags().Set("display-name", "Google Workspace")
