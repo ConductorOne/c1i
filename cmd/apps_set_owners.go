@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/ConductorOne/c1i/internal/client"
 	"github.com/spf13/cobra"
@@ -25,6 +26,13 @@ Honors --dry-run.`,
 		if len(userIDs) == 0 {
 			return &usageError{fmt.Errorf("at least one --user-id is required")}
 		}
+		for _, id := range userIDs {
+			if strings.TrimSpace(id) == "" {
+				// An empty id would send userIds:[""] and earn a confusing 4xx
+				// (the API requires a 27-char user id); reject it up front.
+				return &usageError{fmt.Errorf("--user-id values must be non-empty")}
+			}
+		}
 
 		baseURL, err := GetBaseURL()
 		if err != nil {
@@ -32,7 +40,7 @@ Honors --dry-run.`,
 		}
 
 		path := client.Path("/api/v1/apps/%s/owners", args[0])
-		body := map[string]any{"userIds": userIDs}
+		body := buildSetOwnersBody(userIDs)
 		if dryRunActive() {
 			return printDryRun(cmd, "PUT", path, body)
 		}
@@ -50,6 +58,13 @@ Honors --dry-run.`,
 			len(userIDs), args[0])
 		return nil
 	},
+}
+
+// buildSetOwnersBody assembles the PUT .../owners request body. Pure, so the
+// dry-run preview and a unit test pin the exact wire shape (userIds, not
+// user_ids, unwrapped) that the API expects.
+func buildSetOwnersBody(userIDs []string) map[string]any {
+	return map[string]any{"userIds": userIDs}
 }
 
 func init() {
