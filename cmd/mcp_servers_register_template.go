@@ -72,9 +72,12 @@ func printConfigTemplate(cmd *cobra.Command) error {
 	}
 	auth, _ := cmd.Flags().GetString("auth")
 
+	// Bad --auth / --type are user-input problems: wrap as usageError so they
+	// map to the documented usage exit code (2), not the generic exit code (1),
+	// letting automation reliably distinguish misuse from real failures.
 	arm, err := authArmTemplate(auth)
 	if err != nil {
-		return err
+		return &usageError{err}
 	}
 
 	cfg := map[string]any{}
@@ -86,7 +89,7 @@ func printConfigTemplate(cmd *cobra.Command) error {
 		cfg["url"] = "https://your-mcp-server.example/mcp"
 		cfg["transportType"] = "MCP_SERVER_TRANSPORT_TYPE_STREAMABLE_HTTP"
 	default:
-		return fmt.Errorf("invalid --type %q: use hosted or external", serverType)
+		return &usageError{fmt.Errorf("invalid --type %q: use hosted or external", serverType)}
 	}
 	for k, v := range arm {
 		cfg[k] = v

@@ -3,6 +3,7 @@ package cmd
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"strings"
 	"testing"
 
@@ -157,14 +158,27 @@ func TestPrintConfigTemplateNoHTMLEscape(t *testing.T) {
 	}
 }
 
-// TestPrintConfigTemplateUnknownAuth pins that an unknown mode errors rather
-// than emitting a silently wrong shape.
-func TestPrintConfigTemplateUnknownAuth(t *testing.T) {
-	cmd := newTemplateCmd()
-	_ = cmd.Flags().Set("auth", "bogus")
-	cmd.SetOut(&bytes.Buffer{})
-	cmd.SetErr(&bytes.Buffer{})
-	if err := printConfigTemplate(cmd); err == nil {
-		t.Error("expected error for unknown --auth")
+// TestPrintConfigTemplateBadInput pins that unknown --auth and invalid --type
+// error rather than emitting a silently wrong shape, and that both classify as
+// usage errors (exit 2) so automation can distinguish misuse from real failures.
+func TestPrintConfigTemplateBadInput(t *testing.T) {
+	cases := []struct{ flag, val string }{
+		{"auth", "bogus"},
+		{"type", "sideways"},
+	}
+	for _, c := range cases {
+		cmd := newTemplateCmd()
+		_ = cmd.Flags().Set(c.flag, c.val)
+		cmd.SetOut(&bytes.Buffer{})
+		cmd.SetErr(&bytes.Buffer{})
+		err := printConfigTemplate(cmd)
+		if err == nil {
+			t.Errorf("--%s %q: expected error", c.flag, c.val)
+			continue
+		}
+		var usageErr *usageError
+		if !errors.As(err, &usageErr) {
+			t.Errorf("--%s %q: error %v is not a usageError (would exit 1, not 2)", c.flag, c.val, err)
+		}
 	}
 }

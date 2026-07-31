@@ -29,8 +29,8 @@ stdin). Don't hand-write it — generate a ready-to-edit skeleton:
 
   c1i mcp servers register --print-config-template --auth oauth2 [--type hosted]
 
-The hostedConfig/externalConfig object nests auth under one oneof arm keyed by
-method (field names shown for reference):
+The hostedConfig/externalConfig object nests auth under a single arm keyed by
+method (exactly one of the following; field names shown for reference):
   oauth2:               {mode, clientId, clientSecret, authorizeUrl, tokenUrl,
                          issuerUrl, scopes[], pkce}
   awsSigv4:             {accessKeyId, secretAccessKey, sessionToken}
