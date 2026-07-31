@@ -159,10 +159,7 @@ func loadCredentials(baseURL string) (clientID, clientSecret string, err error) 
 // baseURL. It powers `c1i auth token`, giving agents a short-lived bearer to
 // drive raw API calls without re-implementing the client_credentials exchange.
 //
-// ctx cancels the call (Ctrl-C / timeout): the oauth2.TokenSource interface has
-// no per-call context, and tokensource.Token() mints on its own background
-// request, so we run it off-goroutine and return as soon as ctx is done. The
-// in-flight mint (a sub-second request) is abandoned, not leaked indefinitely.
+// ctx cancels the call (Ctrl-C / timeout) — see mintWithContext.
 func Token(ctx context.Context, baseURL string) (*oauth2.Token, error) {
 	clientID, clientSecret, err := loadCredentials(baseURL)
 	if err != nil {
@@ -172,14 +169,26 @@ func Token(ctx context.Context, baseURL string) (*oauth2.Token, error) {
 	if err != nil {
 		return nil, &AuthError{fmt.Errorf("creating token source: %w", err)}
 	}
+	return mintWithContext(ctx, tokenSource)
+}
 
+// mintWithContext calls ts.Token() but honors ctx cancellation. The
+// oauth2.TokenSource interface has no per-call context and tokensource.Token()
+// mints on its own background request, so the mint runs on a goroutine and we
+// return as soon as ctx is done. The channel is buffered so the goroutine can
+// always finish and be collected even after we've returned; the tokensource
+// HTTP client has its own timeout, so a hung token host can't keep that
+// goroutine (or its socket) alive indefinitely. A mint error is wrapped as
+// AuthError (exit 3); a ctx cancellation returns ctx.Err() unwrapped so callers
+// can distinguish it from an authentication failure.
+func mintWithContext(ctx context.Context, ts oauth2.TokenSource) (*oauth2.Token, error) {
 	type result struct {
 		tok *oauth2.Token
 		err error
 	}
 	ch := make(chan result, 1)
 	go func() {
-		tok, err := tokenSource.Token()
+		tok, err := ts.Token()
 		ch <- result{tok, err}
 	}()
 

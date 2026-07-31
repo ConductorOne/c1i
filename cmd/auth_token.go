@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 
 	"github.com/ConductorOne/c1i/internal/client"
@@ -32,7 +33,15 @@ disk; a new one is minted on each invocation.`,
 
 		tok, err := client.Token(cmd.Context(), baseURL)
 		if err != nil {
-			return fmt.Errorf("not authenticated: %w", err)
+			// Only frame genuine auth failures (bad/missing credentials, a
+			// rejected mint) as "not authenticated" → exit 3. A ctx
+			// cancellation (Ctrl-C / timeout) is not an auth problem, so let it
+			// pass through unwrapped (generic exit) rather than mislabel it.
+			var authErr *client.AuthError
+			if errors.As(err, &authErr) {
+				return fmt.Errorf("not authenticated: %w", err)
+			}
+			return err
 		}
 
 		out := cmd.OutOrStdout()
