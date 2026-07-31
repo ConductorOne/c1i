@@ -153,10 +153,19 @@ func resolveKey(m map[string]any, seg string) (string, any, bool) {
 		return seg, val, true
 	}
 	want := normalizeKey(seg)
-	for k, val := range m {
-		if normalizeKey(k) == want {
-			return k, val, true
+	// If several keys normalize to the same value (e.g. a source with both
+	// "displayName" and "display_name" and a spec of "display-name"), map
+	// iteration order is random — so pick the lexicographically smallest match
+	// for a stable, deterministic result instead of a flaky one.
+	best := ""
+	found := false
+	for k := range m {
+		if normalizeKey(k) == want && (!found || k < best) {
+			best, found = k, true
 		}
+	}
+	if found {
+		return best, m[best], true
 	}
 	return "", nil, false
 }

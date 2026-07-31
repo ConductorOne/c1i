@@ -103,6 +103,10 @@ func TestProjectValueCaseInsensitiveFallback(t *testing.T) {
 		{"nested cross-style", `{"app_user":{"userEmail":"a@b.c"}}`, "appUser.user_email", `{"app_user":{"userEmail":"a@b.c"}}`},
 		{"exact match wins over fallback", `{"displayName":"camel","display_name":"snake"}`, "displayName", `{"displayName":"camel"}`},
 		{"still missing stays missing", `{"id":"1"}`, "totally_absent", `{}`},
+		// Ambiguous fallback (both variants present, spec matches neither
+		// exactly): the lexicographically smallest key wins, deterministically —
+		// "displayName" < "display_name" ('N' 0x4E < '_' 0x5F).
+		{"ambiguous fallback is deterministic", `{"displayName":"camel","display_name":"snake"}`, "display-name", `{"displayName":"camel"}`},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
