@@ -13,6 +13,8 @@ var appsCreateCmd = &cobra.Command{
 
 Only --display-name is required. This creates a plain, unmanaged container
 app — the zero state for "make an app, then register MCP servers under it".
+(App owners are managed via the dedicated owners sub-resource, not at create
+time, so they aren't set here.)
 
 The created app is returned as pretty JSON under an "app" key (--fields is not
 applied to mutation output, so parse the id from the full object).
@@ -22,7 +24,9 @@ Example:
   c1i mcp servers register --app-id "$APP_ID" --type hosted ...`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		if err := requireNonEmpty(cmd, "display-name"); err != nil {
-			return err
+			// Wrap as usage error so `--display-name ""` maps to exit 2, matching
+			// a missing --display-name (cobra) rather than falling to generic 1.
+			return &usageError{err}
 		}
 
 		baseURL, err := GetBaseURL()
@@ -59,16 +63,12 @@ func buildAppCreateBody(cmd *cobra.Command) map[string]any {
 	if v, _ := cmd.Flags().GetString("description"); v != "" {
 		body["description"] = v
 	}
-	if owners, _ := cmd.Flags().GetStringSlice("owner"); len(owners) > 0 {
-		body["owners"] = owners
-	}
 	return body
 }
 
 func init() {
 	appsCreateCmd.Flags().String("display-name", "", "Display name for the new app")
 	appsCreateCmd.Flags().String("description", "", "Description for the new app")
-	appsCreateCmd.Flags().StringSlice("owner", nil, "Owner user ID (repeatable)")
 	markRequired(appsCreateCmd, "display-name")
 	appsCmd.AddCommand(appsCreateCmd)
 }

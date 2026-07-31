@@ -12,7 +12,6 @@ func newAppCreateFlagCmd() *cobra.Command {
 	f := cmd.Flags()
 	f.String("display-name", "", "")
 	f.String("description", "", "")
-	f.StringSlice("owner", nil, "")
 	return cmd
 }
 
@@ -29,20 +28,15 @@ func TestBuildAppCreateBodyMinimal(t *testing.T) {
 	}
 }
 
-// TestBuildAppCreateBodyFull pins optional fields flow through when set.
+// TestBuildAppCreateBodyFull pins optional description flows through when set.
 func TestBuildAppCreateBodyFull(t *testing.T) {
 	cmd := newAppCreateFlagCmd()
 	_ = cmd.Flags().Set("display-name", "Acme")
 	_ = cmd.Flags().Set("description", "the app")
-	_ = cmd.Flags().Set("owner", "u1")
-	_ = cmd.Flags().Set("owner", "u2")
 
 	got := buildAppCreateBody(cmd)
-	if got["displayName"] != "Acme" || got["description"] != "the app" {
-		t.Errorf("scalar fields = %v", got)
-	}
-	owners, ok := got["owners"].([]string)
-	if !ok || !reflect.DeepEqual(owners, []string{"u1", "u2"}) {
-		t.Errorf("owners = %v", got["owners"])
+	want := map[string]any{"displayName": "Acme", "description": "the app"}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("body = %v, want %v", got, want)
 	}
 }

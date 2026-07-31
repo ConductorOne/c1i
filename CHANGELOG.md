@@ -10,8 +10,8 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 - **`apps create`** — create a new app (a container to register MCP servers
   under) via `POST /api/v1/apps`. Only `--display-name` is required;
-  `--description` and repeatable `--owner` are optional. Honors `--dry-run`.
-  Previously the zero-state flow dropped to the raw `api` escape hatch.
+  `--description` is optional. Honors `--dry-run`. Previously the zero-state
+  flow dropped to the raw `api` escape hatch.
 
 ## [0.3.0] - 2026-07-16
 
