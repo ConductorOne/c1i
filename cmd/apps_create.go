@@ -14,8 +14,11 @@ var appsCreateCmd = &cobra.Command{
 Only --display-name is required. This creates a plain, unmanaged container
 app — the zero state for "make an app, then register MCP servers under it".
 
+The created app is returned as pretty JSON under an "app" key (--fields is not
+applied to mutation output, so parse the id from the full object).
+
 Example:
-  APP_ID=$(c1i apps create --display-name "Google Workspace" --fields id | jq -r .id)
+  APP_ID=$(c1i apps create --display-name "Google Workspace" | jq -r .app.id)
   c1i mcp servers register --app-id "$APP_ID" --type hosted ...`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		if err := requireNonEmpty(cmd, "display-name"); err != nil {
