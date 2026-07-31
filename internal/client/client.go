@@ -143,9 +143,14 @@ func loadCredentials(baseURL string) (clientID, clientSecret string, err error) 
 		if legacyService != "" && legacyService != service {
 			clientID, clientSecret, _, err = keychain.Load(legacyService)
 			if err == nil {
-				// Migrate: store under new key and delete old.
-				_, _ = keychain.Store(service, clientID, clientSecret)
-				_, _ = keychain.Delete(legacyService)
+				// Migrate: store under the new key, and only delete the legacy
+				// copy once the new one is safely written. Deleting first (or
+				// unconditionally) could drop the user's only credentials if
+				// Store fails — keychain.Store can error and internally clears
+				// the target before writing — forcing a re-login.
+				if _, serr := keychain.Store(service, clientID, clientSecret); serr == nil {
+					_, _ = keychain.Delete(legacyService)
+				}
 			}
 		}
 		if err != nil {
