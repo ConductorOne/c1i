@@ -89,6 +89,30 @@ func TestProjectValue(t *testing.T) {
 	}
 }
 
+// TestProjectValueCaseInsensitiveFallback covers the snake_case/camelCase
+// bridge: a --fields value in one style resolves keys emitted in the other
+// (the CLI emits list rows in snake_case but single-object reads in camelCase).
+// The output keeps the SOURCE key spelling, and an exact match always wins over
+// the fallback.
+func TestProjectValueCaseInsensitiveFallback(t *testing.T) {
+	cases := []struct {
+		name, in, spec, want string
+	}{
+		{"camel spec matches snake source", `{"display_name":"n","id":"1"}`, "displayName", `{"display_name":"n"}`},
+		{"snake spec matches camel source", `{"displayName":"n","id":"1"}`, "display_name", `{"displayName":"n"}`},
+		{"nested cross-style", `{"app_user":{"userEmail":"a@b.c"}}`, "appUser.user_email", `{"app_user":{"userEmail":"a@b.c"}}`},
+		{"exact match wins over fallback", `{"displayName":"camel","display_name":"snake"}`, "displayName", `{"displayName":"camel"}`},
+		{"still missing stays missing", `{"id":"1"}`, "totally_absent", `{}`},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := projectJSON(t, tc.in, tc.spec); got != tc.want {
+				t.Errorf("project(%s, %q) = %s, want %s", tc.in, tc.spec, got, tc.want)
+			}
+		})
+	}
+}
+
 func TestProjectValueNonObjectUnchanged(t *testing.T) {
 	// A bare scalar can't be projected; it should pass through untouched.
 	if got := projectJSON(t, `"hello"`, "id"); got != `"hello"` {
