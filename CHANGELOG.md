@@ -4,6 +4,16 @@ All notable changes to c1i are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project aims
 to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- **`apps set-owners <app-id> --user-id …`** — set an app's owner list via
+  `PUT /api/v1/apps/{id}/owners` (replaces the full set; `--user-id` repeatable).
+  Owner provisioning is asynchronous, so the command notes that new owners take
+  ~60-90s to appear in `apps get`; a success means the request was accepted.
+  Honors `--dry-run`.
+
 ## [0.3.0] - 2026-07-16
 
 ### Added
