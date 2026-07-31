@@ -42,9 +42,10 @@ method (exactly one of the following; field names shown for reference):
 oauth2.mode is one of MCP_SERVER_AUTH_OAUTH2_MODE_{SERVICE,PASSTHROUGH,
 CLIENT_CREDENTIALS,JWT_BEARER,GOOGLE_SERVICE_ACCOUNT,AUTHORIZATION_CODE}.
 
-tokenSharing x auth-method compatibility: tokenSharing=PER_USER is only valid
-with oauth2 (authorization-code/passthrough), bearerToken, customHeader, or
-basicAuth. Auth secrets are sealed server-side; reads only return *_configured.
+tokenSharing x auth-method compatibility: PER_USER (config value
+MCP_SERVER_TOKEN_SHARING_PER_USER) is only valid with oauth2 (authorization-
+code/passthrough), bearerToken, customHeader, or basicAuth. Auth secrets are
+sealed server-side; reads only return *_configured.
 
 See full schema: c1i docs page api-reference/mcp-servers/register
 
@@ -72,7 +73,10 @@ requires --app-id. Approve discovered tools afterward with
 		appID, _ := cmd.Flags().GetString("app-id")
 		body, err := buildRegisterBody(cmd)
 		if err != nil {
-			return err
+			// buildRegisterBody only fails on bad input (invalid --type,
+			// missing --catalog-id/--url, unreadable/invalid config file), so
+			// map these to the usage exit code (2) like the flag checks above.
+			return &usageError{err}
 		}
 
 		path := client.Path("/api/v1/apps/%s/mcp_servers", appID)
