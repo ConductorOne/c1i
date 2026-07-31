@@ -4,6 +4,15 @@ All notable changes to c1i are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project aims
 to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- **`apps delete <app-id>`** — soft-delete an app via `DELETE /api/v1/apps/{id}`
+  (sets `deletedAt`, retained for audit). Complements `apps create` so a
+  container app made by mistake can be cleaned up without the raw `api` escape
+  hatch. Honors `--dry-run`.
+
 ## [0.3.0] - 2026-07-16
 
 ### Added
