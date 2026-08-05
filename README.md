@@ -277,8 +277,10 @@ c1i functions get <id> --fields id,displayName,publishedCommitId
 ```
 
 - Comma-separated; use dot-paths (`user.email`) for nested access.
-- Matches the keys **as they appear in the command's output** (e.g. list rows
-  use `id`, `display_name`; raw `api` output uses the API's own camelCase keys).
+- Matches the emitted keys, trying an **exact match first**, then falling back
+  to a **case- and separator-insensitive** match. So `--fields displayName`
+  resolves whether the output uses `displayName` (single-object reads) or
+  `display_name` (list rows); the output keeps the source key's own spelling.
 - Missing fields are silently omitted, so requesting a superset is safe.
 - Also settable via `C1I_FIELDS`. Applies to read output — list commands, `api`,
   and single-object `get` commands. Mutation confirmations (create/update/delete)

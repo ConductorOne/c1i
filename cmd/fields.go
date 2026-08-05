@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"io"
 	"strings"
+	"unicode"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -92,14 +93,15 @@ func projectBytes(data []byte, paths [][]string) (any, bool) {
 
 // projectDecoded returns v keeping only paths. Objects are trimmed to the
 // requested keys (nesting preserved); arrays are projected element-wise; scalars
-// pass through unchanged.
+// pass through unchanged. The output uses the source's own key spelling, not the
+// requested one — --fields selects keys, it never renames them.
 func projectDecoded(v any, paths [][]string) any {
 	switch t := v.(type) {
 	case map[string]any:
 		out := map[string]any{}
 		for _, p := range paths {
-			if val, ok := lookupPath(t, p); ok {
-				setPath(out, p, val)
+			if keys, val, ok := lookupPath(t, p); ok {
+				setPath(out, keys, val)
 			}
 		}
 		return out
@@ -114,26 +116,72 @@ func projectDecoded(v any, paths [][]string) any {
 	}
 }
 
-// lookupPath walks m following path, returning the value at the leaf. It only
-// descends through nested objects; hitting a non-object before the leaf (or a
-// missing key) reports ok=false.
-func lookupPath(m map[string]any, path []string) (any, bool) {
+// lookupPath walks m following path, returning the value at the leaf and the
+// sequence of *source* keys actually matched (which may differ in casing/style
+// from path — see resolveKey). It only descends through nested objects; hitting
+// a non-object before the leaf (or a missing key) reports ok=false.
+func lookupPath(m map[string]any, path []string) ([]string, any, bool) {
 	cur := m
+	matched := make([]string, 0, len(path))
 	for i, seg := range path {
-		val, ok := cur[seg]
+		key, val, ok := resolveKey(cur, seg)
 		if !ok {
-			return nil, false
+			return nil, nil, false
 		}
+		matched = append(matched, key)
 		if i == len(path)-1 {
-			return val, true
+			return matched, val, true
 		}
 		next, ok := val.(map[string]any)
 		if !ok {
-			return nil, false
+			return nil, nil, false
 		}
 		cur = next
 	}
-	return nil, false
+	return nil, nil, false
+}
+
+// resolveKey finds seg among m's keys, returning the matching source key.
+// It tries an exact match first (unchanged behavior), then falls back to a
+// case- and separator-insensitive match so a --fields value can use camelCase
+// against snake_case output and vice versa — the CLI emits list rows in
+// snake_case but single-object reads in camelCase, and an agent shouldn't have
+// to know which. The fallback only runs when the exact lookup misses, so it can
+// never change an already-matching projection.
+func resolveKey(m map[string]any, seg string) (string, any, bool) {
+	if val, ok := m[seg]; ok {
+		return seg, val, true
+	}
+	want := normalizeKey(seg)
+	// If several keys normalize to the same value (e.g. a source with both
+	// "displayName" and "display_name" and a spec of "display-name"), map
+	// iteration order is random — so pick the lexicographically smallest match
+	// for a stable, deterministic result instead of a flaky one.
+	best := ""
+	found := false
+	for k := range m {
+		if normalizeKey(k) == want && (!found || k < best) {
+			best, found = k, true
+		}
+	}
+	if found {
+		return best, m[best], true
+	}
+	return "", nil, false
+}
+
+// normalizeKey lowercases s and strips '_'/'-' so "display_name", "displayName",
+// and "DisplayName" all compare equal.
+func normalizeKey(s string) string {
+	var b strings.Builder
+	b.Grow(len(s))
+	for _, r := range s {
+		if r == '_' || r == '-' {
+			continue
+		}
+		b.WriteRune(unicode.ToLower(r))
+	}
+	return b.String()
 }
 
 // setPath writes val into out at path, creating intermediate objects as needed.

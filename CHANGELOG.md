@@ -8,11 +8,50 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **`auth token`** — mint and print a short-lived OAuth2 bearer token from the
+  stored credentials, for driving raw API calls yourself (e.g. `curl -H
+  "Authorization: Bearer $(c1i auth token)"`). Prints just the token by default;
+  `--json` also emits the token type and absolute expiry. The token is
+  audience-scoped to the C1 API host and is never written to disk.
+- **`mcp servers register --print-config-template --auth <mode>`** — emit a
+  ready-to-edit `hostedConfig` / `externalConfig` JSON skeleton for the chosen
+  auth method (`oauth2`, `aws-sigv4`, `google-service-account`, plus the simple
+  methods), instead of hand-writing the file-based config. Valid JSON on stdout
+  (guidance on stderr), so `--print-config-template --auth oauth2 2>/dev/null >
+  config.json` yields a config that feeds straight back into `register
+  --hosted-config-file`. `register --help` now also names the auth field shapes,
+  documents the `tokenSharing` × auth-method compatibility rules, and links to
+  the api-reference page.
+- **`apps create`** — create a new app (a container to register MCP servers
+  under) via `POST /api/v1/apps`. Only `--display-name` is required;
+  `--description` is optional. Honors `--dry-run`. Previously the zero-state
+  flow dropped to the raw `api` escape hatch.
+- **`apps delete <app-id>`** — soft-delete an app via `DELETE /api/v1/apps/{id}`
+  (sets `deletedAt`, retained for audit). Complements `apps create` so a
+  container app made by mistake can be cleaned up without the raw `api` escape
+  hatch. Honors `--dry-run`.
 - **`apps set-owners <app-id> --user-id …`** — set an app's owner list via
   `PUT /api/v1/apps/{id}/owners` (replaces the full set; `--user-id` repeatable).
   Owner provisioning is asynchronous, so the command notes that new owners take
   ~60-90s to appear in `apps get`; a success means the request was accepted.
   Honors `--dry-run`.
+
+### Changed
+
+- An **empty required flag value** (e.g. `--app-id ""`) now exits `2` (usage),
+  matching a missing required flag, instead of `1` (generic). The check
+  (`requireNonEmpty`) applies this consistently across every command that uses
+  it, so automation branching on exit codes sees a stable usage signal.
+
+### Fixed
+
+- **`--fields` now bridges snake_case/camelCase.** List commands emit rows in
+  snake_case while single-object reads emit camelCase, so `--fields displayName`
+  on a list command silently returned `{}`. Field matching now falls back to a
+  case- and separator-insensitive comparison when an exact key match misses, so
+  a projection in either style resolves against either output. Exact matches are
+  unchanged (they always win), and the output keeps the source key spelling —
+  `--fields` selects keys, it never renames them.
 
 ## [0.3.0] - 2026-07-16
 
