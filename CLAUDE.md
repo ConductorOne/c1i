@@ -46,6 +46,26 @@ golangci-lint run --timeout=3m ./...   # includes gofmt formatting; CI gates on 
 
 ### Patterns to follow when adding/changing commands
 
+- **ID arguments (enforced convention):** a command that addresses **one
+  existing resource by its own id** takes that id as the **first positional
+  argument**; the ids that merely **scope/parent** it (and everything else) are
+  **flags**. Concretely:
+  - Single-object read/mutate/action (`get`, `update`, `delete`, `approve`,
+    `deny`, `comment`, `set-owner`, `resync-tools`, `source`, `usage`, …):
+    the resource's own id is positional (`Use: "get <thing-id>"`,
+    `cobra.ExactArgs(1)`, read via `args[0]`); parent ids stay flags
+    (`--app-id`, `--connector-id` when it is a *parent*). Don't validate the
+    positional id with `requireNonEmpty` — `cobra.ExactArgs` enforces presence;
+    match the flat commands (`users get <user-id>`).
+  - Collection ops (`list`, `search`), creates (`create`, `register`), and
+    relationship/multi-id ops (`mcp bindings *`): **all** ids are flags.
+  - Never use a bare generic `--id` flag for a resource's own id — it must be
+    the positional. Parent-scope ids keep descriptive flag names.
+  This mirrors `users/apps/entitlements/automations/functions/requests get
+  <x-id>`; the MCP and tasks commands follow the same shape
+  (`mcp servers get <connector-id> --app-id`, `mcp tools get <tool-id> --app-id
+  --connector-id`, `tasks approve <task-id>`). Keep README.md and `cmd/skill.md`
+  in lockstep when this changes.
 - **API client:** build it with `newClient(cmd, baseURL)` (cmd/client.go), not
   `client.New` directly — the helper threads the global flags (retries, etc.).
 - **Paths:** interpolate IDs into request paths with `client.Path("…/%s", id)`,
