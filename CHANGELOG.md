@@ -35,6 +35,14 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   Owner provisioning is asynchronous, so the command notes that new owners take
   ~60-90s to appear in `apps get`; a success means the request was accepted.
   Honors `--dry-run`.
+- **`apps set-owners --wait` / `--wait-timeout`** — optionally block after the
+  `PUT` and poll `GET /api/v1/apps/{id}/ownerids` (every 12s, default timeout
+  4m) until every requested `--user-id` shows up as provisioned, printing
+  progress as it goes. On timeout, exits non-zero with a message clarifying
+  that provisioning is still pending and not necessarily a failure — owner
+  provisioning has been observed to take from under two minutes up to several.
+  Without `--wait`, behavior is unchanged; `--wait` combined with `--dry-run`
+  still only previews the `PUT` and never polls.
 
 ### Changed
 
