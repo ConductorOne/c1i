@@ -113,7 +113,7 @@ Each `automations list` row includes `function_ids` (every distinct function the
 
 ### MCP
 
-Drive the MCP admin surface (servers, tools, toolsets, and bindings). Most commands take `--app-id`; server/tool/toolset commands identify a specific server with `--connector-id`.
+Drive the MCP admin surface (servers, tools, toolsets, and bindings). Most commands take `--app-id`; `mcp servers` commands take the server's `<connector-id>` positionally, while tool/toolset/binding commands scope to a server with `--connector-id`.
 
 ```sh
 # Servers (register, configure, and inspect MCP servers)
