@@ -21,6 +21,21 @@ func markRequired(cmd *cobra.Command, names ...string) {
 	}
 }
 
+// annotateRequired appends "(required)" to each named flag's usage WITHOUT
+// enabling cobra's pre-run required-flag validation. Use it when a command has
+// an escape-hatch flag (e.g. register's --print-config-template) that is valid
+// on its own without the otherwise-required flags: cobra validates required
+// flags before RunE runs, so the escape hatch could never short-circuit if the
+// flags were cobra-required. The command must enforce presence itself in RunE
+// (via requireNonEmpty).
+func annotateRequired(cmd *cobra.Command, names ...string) {
+	for _, n := range names {
+		if f := cmd.Flags().Lookup(n); f != nil && !strings.Contains(f.Usage, "(required)") {
+			f.Usage = strings.TrimRight(f.Usage, ". ") + " (required)"
+		}
+	}
+}
+
 // limitReached reports whether `emitted` rows have hit the requested
 // `limit`. A limit of 0 (or negative) means "no cap". Centralizing this
 // check pins the semantics across every list command and gives the
@@ -94,11 +109,9 @@ func clampPageSize(n int) int {
 // On commands like `accounts list`, that bypass causes the request to be
 // sent without any app filter, which pulls every account in the tenant.
 //
-// We apply this to *list* commands where an empty required value silently
-// over-fetches. Mutation commands (`tasks approve`, `requests create *`,
-// `accounts set-owner`) intentionally don't use it: their failure mode is
-// a fast 400 from the API rather than data leakage, and the gateway error
-// message is good enough to recover from.
+// The returned error is a *usageError, so an empty required value maps to the
+// usage exit code (2) — the same as a missing required flag — consistently
+// across every call site. Callers just `return err`; they must not re-wrap it.
 //
 // Call this at the top of RunE for any required string flag whose empty
 // value would over-fetch or otherwise misbehave.
@@ -114,8 +127,8 @@ func requireNonEmpty(cmd *cobra.Command, names ...string) error {
 	case 0:
 		return nil
 	case 1:
-		return fmt.Errorf("flag %s requires a non-empty value", missing[0])
+		return &usageError{fmt.Errorf("flag %s requires a non-empty value", missing[0])}
 	default:
-		return fmt.Errorf("flags %s require non-empty values", strings.Join(missing, ", "))
+		return &usageError{fmt.Errorf("flags %s require non-empty values", strings.Join(missing, ", "))}
 	}
 }

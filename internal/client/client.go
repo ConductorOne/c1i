@@ -130,23 +130,88 @@ func (dt *debugTripper) RoundTrip(req *http.Request) (*http.Response, error) {
 	return resp, err
 }
 
-func New(ctx context.Context, baseURL string, opts ...Option) (*Client, error) {
+// loadCredentials resolves the stored client_id/client_secret for baseURL,
+// falling back to (and migrating from) the legacy *.conductor.one keychain key.
+// New and Token share it so token minting resolves credentials identically to
+// an authenticated request.
+func loadCredentials(baseURL string) (clientID, clientSecret string, err error) {
 	service := config.KeychainService(baseURL)
-	clientID, clientSecret, _, err := keychain.Load(service)
+	clientID, clientSecret, _, err = keychain.Load(service)
 	if err != nil {
 		// Try legacy keychain key for *.conductor.one domains.
 		legacyService := config.LegacyKeychainService(baseURL)
 		if legacyService != "" && legacyService != service {
 			clientID, clientSecret, _, err = keychain.Load(legacyService)
 			if err == nil {
-				// Migrate: store under new key and delete old.
-				_, _ = keychain.Store(service, clientID, clientSecret)
-				_, _ = keychain.Delete(legacyService)
+				// Migrate: store under the new key, and only delete the legacy
+				// copy once the new one is safely written. Deleting first (or
+				// unconditionally) could drop the user's only credentials if
+				// Store fails — keychain.Store can error and internally clears
+				// the target before writing — forcing a re-login.
+				if _, serr := keychain.Store(service, clientID, clientSecret); serr == nil {
+					_, _ = keychain.Delete(legacyService)
+				}
 			}
 		}
 		if err != nil {
-			return nil, &AuthError{fmt.Errorf("loading credentials: %w", err)}
+			return "", "", &AuthError{fmt.Errorf("loading credentials: %w", err)}
 		}
+	}
+	return clientID, clientSecret, nil
+}
+
+// Token mints a fresh OAuth2 bearer token from the stored credentials for
+// baseURL. It powers `c1i auth token`, giving agents a short-lived bearer to
+// drive raw API calls without re-implementing the client_credentials exchange.
+//
+// ctx cancels the call (Ctrl-C / timeout) — see mintWithContext.
+func Token(ctx context.Context, baseURL string) (*oauth2.Token, error) {
+	clientID, clientSecret, err := loadCredentials(baseURL)
+	if err != nil {
+		return nil, err
+	}
+	tokenSource, err := tokensource.NewTokenSource(ctx, clientID, clientSecret, baseURL)
+	if err != nil {
+		return nil, &AuthError{fmt.Errorf("creating token source: %w", err)}
+	}
+	return mintWithContext(ctx, tokenSource)
+}
+
+// mintWithContext calls ts.Token() but honors ctx cancellation. The
+// oauth2.TokenSource interface has no per-call context and tokensource.Token()
+// mints on its own background request, so the mint runs on a goroutine and we
+// return as soon as ctx is done. The channel is buffered so the goroutine can
+// always finish and be collected even after we've returned; the tokensource
+// HTTP client has its own timeout, so a hung token host can't keep that
+// goroutine (or its socket) alive indefinitely. A mint error is wrapped as
+// AuthError (exit 3); a ctx cancellation returns ctx.Err() unwrapped so callers
+// can distinguish it from an authentication failure.
+func mintWithContext(ctx context.Context, ts oauth2.TokenSource) (*oauth2.Token, error) {
+	type result struct {
+		tok *oauth2.Token
+		err error
+	}
+	ch := make(chan result, 1)
+	go func() {
+		tok, err := ts.Token()
+		ch <- result{tok, err}
+	}()
+
+	select {
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	case r := <-ch:
+		if r.err != nil {
+			return nil, &AuthError{fmt.Errorf("minting token: %w", r.err)}
+		}
+		return r.tok, nil
+	}
+}
+
+func New(ctx context.Context, baseURL string, opts ...Option) (*Client, error) {
+	clientID, clientSecret, err := loadCredentials(baseURL)
+	if err != nil {
+		return nil, err
 	}
 
 	tokenSource, err := tokensource.NewTokenSource(ctx, clientID, clientSecret, baseURL)

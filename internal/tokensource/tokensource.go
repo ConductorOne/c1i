@@ -21,6 +21,11 @@ import (
 
 const assertionType = "urn:ietf:params:oauth:client-assertion-type:jwt-bearer"
 
+// tokenRequestTimeout bounds a single client-credentials mint. Generous for a
+// simple token POST, but finite so a hung/black-holed token host can't stall
+// the CLI forever (the request uses context.Background()).
+const tokenRequestTimeout = 30 * time.Second
+
 var (
 	v1SecretTokenIdentifier = []byte("v1")
 	ErrInvalidClientSecret  = fmt.Errorf("invalid client secret")
@@ -187,6 +192,9 @@ func NewTokenSource(ctx context.Context, clientID string, clientSecret string, t
 		clientID:     clientID,
 		clientSecret: secret,
 		tokenHost:    strings.TrimPrefix(tokenHost, "https://"),
-		httpClient:   &http.Client{},
+		// Bound the token-mint request: it runs on context.Background(), so
+		// without a timeout a hung token host would block the caller (and any
+		// goroutine that raced the mint against a caller ctx) indefinitely.
+		httpClient: &http.Client{Timeout: tokenRequestTimeout},
 	}), nil
 }
