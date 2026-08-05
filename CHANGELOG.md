@@ -8,6 +8,12 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **`docs guide [name]`** — print an embedded, task-oriented runbook (no auth
+  required, like the other `docs` subcommands). Run with no argument to list
+  the available names. Ships with `register-mcp-server`, `assign-toolset-
+  everyone`, and a placeholder `test-mcp-gateway` (c1i has no gateway-
+  invocation command yet). Content is embedded as Go string constants — no
+  network call, unlike `docs search` / `docs page`.
 - **`auth token`** — mint and print a short-lived OAuth2 bearer token from the
   stored credentials, for driving raw API calls yourself (e.g. `curl -H
   "Authorization: Bearer $(c1i auth token)"`). Prints just the token by default;
