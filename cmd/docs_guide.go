@@ -24,8 +24,9 @@ authentication — see "c1i auth login".
 MCP servers are modeled as a connector under an app. Reuse an existing app or
 create a new one:
 
-    c1i apps list --query "<name>"
-    # or
+    c1i apps list
+    # pick the target app's "id" from the list -> APP_ID
+    # or, to start fresh:
     APP_ID=$(c1i apps create --display-name "My MCP Apps" | jq -r .app.id)
 
 ## 2a. HOSTED: find a catalog entry
@@ -184,49 +185,60 @@ Grants are eventually consistent — a just-created grant can take up to a
 minute or two to appear in this list.
 `
 
-// guideTestMCPGateway is a placeholder/pointer runbook: c1i has no command
-// today that connects to the MCP gateway and invokes a tool through it (it's
-// an admin CLI for the C1 API, not an MCP client). This covers the pre-flight
-// checks c1i CAN do. Derived from cmd/mcp_servers_test_connection.go,
-// cmd/mcp_tools_get.go, cmd/mcp_toolsets_get_by_entitlement.go,
-// cmd/grants_list.go, and cmd/mcp_servers_search.go.
-const guideTestMCPGateway = `# Test the MCP gateway (placeholder)
+// guideTestMCPGateway walks through an end-to-end MCP gateway verification:
+// register a server, approve its tools, confirm they're actually served by
+// the gateway's own handshake, then invoke one. Derived from
+// cmd/mcp_servers_register.go, cmd/mcp_tools_approve.go, cmd/grants_list.go,
+// and the "mcp gateway list-tools" / "mcp gateway call" commands.
+const guideTestMCPGateway = `# Test the MCP gateway
 
-c1i is an admin CLI for the C1 API, not an MCP client — it has no command
-that connects to the MCP gateway and invokes a tool through it. This guide
-covers the pre-flight checks c1i CAN do; the actual tool call has to come
-from a real MCP client.
+End-to-end verification that a registered MCP server's tools are actually
+being served through the MCP gateway: register (or reuse) a server, approve
+its tools, confirm the gateway's own handshake lists them, then invoke one.
 
-## What c1i can verify before a live call
+## 1. Register a server and approve its tools
 
-1. The server is registered and reachable (EXTERNAL servers only):
+If you haven't already, see "c1i docs guide register-mcp-server" for the
+full walkthrough:
 
-    c1i mcp servers test-connection --app-id "$APP_ID" --connector-id "$CONNECTOR_ID"
+    c1i mcp servers register --app-id "$APP_ID" --type hosted \
+      --display-name "My Server" --catalog-id "$CATALOG_ID" --auth none
+    c1i mcp tools list --app-id "$APP_ID" --connector-id "$CONNECTOR_ID"
+    c1i mcp tools approve --app-id "$APP_ID" --connector-id "$CONNECTOR_ID" --id "$TOOL_ID"
 
-2. The tool you want to call is approved — only APPROVED tools are proxied:
+## 2. List the tools the gateway actually exposes
 
-    c1i mcp tools get --app-id "$APP_ID" --connector-id "$CONNECTOR_ID" --id "$TOOL_ID"
+"mcp gateway list-tools" runs the real MCP handshake against the gateway
+(not the admin API) and lists the tools it returns — the ground truth for
+"is this tool actually callable right now":
 
-3. The calling user actually holds a grant on the tool's toolset entitlement:
+    c1i mcp gateway list-tools
 
-    c1i mcp toolsets get-by-entitlement --app-id "$APP_ID" --app-entitlement-id "$ENTITLEMENT_ID"
-    c1i grants list --app-id "$APP_ID" --entitlement-id "$ENTITLEMENT_ID"
+Add --full to include each tool's input schema:
 
-4. Whether the server has ever been called, if you need a sanity check on
-   past activity:
+    c1i mcp gateway list-tools --full
 
-    c1i mcp servers search --app-id "$APP_ID" --include-last-called-at
+Only APPROVED tools the caller has been granted show up here. If a tool you
+just approved is missing, double check its state ("c1i mcp tools get") and
+the caller's grant on its toolset entitlement ("c1i grants list --app-id
+"$APP_ID" --entitlement-id "$ENTITLEMENT_ID"") before assuming the gateway
+itself is broken.
 
-## What's missing
+## 3. Call a tool through the gateway
 
-There is currently no "c1i mcp ... call" (or similar) command to invoke a
-tool end-to-end through the gateway. To actually exercise it, connect a real
-MCP client — an AI agent, or a generic tool such as the MCP Inspector — to
-your tenant's MCP endpoint using the granted user's credentials, and call the
-tool from there.
+    c1i mcp gateway call "<tool-name>" --args '{"key":"value"}'
 
-If a gateway-invocation command ships in c1i later, replace this guide with
-the real steps.
+"<tool-name>" is the tool_name from "mcp gateway list-tools" (or "mcp tools
+list"), not the internal tool ID. Omit --args for a tool that takes no
+input.
+
+## Gateway URL and auth
+
+The gateway URL is derived from --url / C1I_URL by inserting "-mcp" into the
+host — e.g. acme.conductor.one becomes acme-mcp.conductor.one/v1. Override it
+directly with --gateway-url if your tenant's gateway is hosted elsewhere.
+Both "list-tools" and "call" authenticate with the same stored c1i
+credentials as every other command — no separate MCP-specific auth step.
 `
 
 // docsGuides maps a guide name to its embedded content. Keep names stable —
