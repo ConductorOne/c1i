@@ -35,6 +35,15 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   Owner provisioning is asynchronous, so the command notes that new owners take
   ~60-90s to appear in `apps get`; a success means the request was accepted.
   Honors `--dry-run`.
+- **`mcp gateway list-tools` / `mcp gateway call`** — drive the C1 MCP gateway
+  over its streamable-HTTP MCP transport (the same handshake an MCP host does:
+  initialize → notifications/initialized → tools/list / tools/call), closing the
+  configure-then-verify loop so you can list and invoke a registered server's
+  tools without hand-rolling the protocol. The gateway URL is derived from
+  `--url` (inserting `-mcp` into the host) or set with `--gateway-url`; your
+  standard C1 token is accepted, so no extra auth setup is needed. `list-tools`
+  emits NDJSON (`--full` adds each tool's input schema); `call <tool> --args
+  '{…}'` prints the tool result.
 
 ### Changed
 

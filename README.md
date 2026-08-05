@@ -155,11 +155,17 @@ c1i mcp bindings create   --app-id <id> --connector-id <id> --toolset-id <tid> -
 c1i mcp bindings delete   --app-id <id> --connector-id <id> --toolset-id <tid> --tool-id <id> [--tool-id <id> ...]
 c1i mcp bindings by-tools --app-id <id> --connector-id <id> --tool-id <id> [--tool-id <id> ...]
 c1i mcp bindings history  --app-id <id> --connector-id <id> (--toolset-id <tid> | --tool-id <id>) [--page-size N] [--limit N]
+
+# Gateway (verify end to end: list and invoke tools over the live MCP gateway)
+c1i mcp gateway list-tools [--full] [--gateway-url <url>]
+c1i mcp gateway call <tool-name> [--args '{"k":"v"}'] [--gateway-url <url>]
 ```
 
 **Auth for `register` / `update-credentials`:** convenience flags cover the simple methods — `--auth none`, `--auth bearer-token --bearer-token TOKEN`, `--auth custom-header --header-name NAME --header-value VALUE`, `--auth basic-auth --basic-auth-username USER --basic-auth-password PASS`. For OAuth2 / AWS SigV4 / Google service-account auth, pass the full config object via `--hosted-config-file` / `--external-config-file` (JSON file, or `-` for stdin). Secrets are sealed server-side; reads only ever return `*_configured` booleans, never the values.
 
 `mcp tools approve` is the standard post-registration step: newly discovered tools (from `register` or `resync-tools`) start in `PENDING_REVIEW`, and an admin approves each one for the gateway to proxy calls. History endpoints return records newest-first.
+
+**`mcp gateway`** closes the configure-then-verify loop: after registering a server and approving its tools, `list-tools` runs the MCP handshake against the live gateway and shows what's actually callable, and `call` invokes a tool and prints its result. The gateway URL defaults to the `-mcp` host derived from `--url` (e.g. `acme.conductor.one` → `acme-mcp.conductor.one/v1`); override with `--gateway-url`. Your standard C1 token is accepted by the gateway, so no extra auth is needed.
 
 ### Access Requests
 
