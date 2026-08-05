@@ -42,8 +42,8 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `stable`, `required_scope_count`, and `optional_scope_count` (in addition to
   the existing fields, kept as-is). The catalog holds many near-duplicate
   entries for the same service — a thin REST wrapper (`slack`, base_url
-  `slack.com/api`) alongside the vendor's own hosted MCP endpoint
-  (`slack-mcp`, base_url `mcp.slack.com/mcp`) — and `display_name` /
+  `https://slack.com/api`) alongside the vendor's own hosted MCP endpoint
+  (`slack-mcp`, base_url `https://mcp.slack.com/mcp`) — and `display_name` /
   `service_name` alone didn't reliably tell them apart. `required_scope_count`
   / `optional_scope_count` summarize each entry's OAuth scope tiering, which
   turns out to live per auth mode (`authModes[].scopes` vs `.optionalScopes`)
