@@ -48,6 +48,10 @@ func Run() int {
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
+	go func() {
+		<-ctx.Done()
+		stop() // after the first signal, let a second Ctrl-C hit the default handler (hard-kill)
+	}()
 
 	err := rootCmd.ExecuteContext(ctx)
 	if err == nil {
