@@ -26,6 +26,10 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   under) via `POST /api/v1/apps`. Only `--display-name` is required;
   `--description` is optional. Honors `--dry-run`. Previously the zero-state
   flow dropped to the raw `api` escape hatch.
+- **`apps delete <app-id>`** — soft-delete an app via `DELETE /api/v1/apps/{id}`
+  (sets `deletedAt`, retained for audit). Complements `apps create` so a
+  container app made by mistake can be cleaned up without the raw `api` escape
+  hatch. Honors `--dry-run`.
 
 ### Changed
 
