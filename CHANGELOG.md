@@ -46,6 +46,12 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- **Ctrl-C now cancels cleanly.** The root command wires `cmd.Context()` to a
+  `signal.NotifyContext` on SIGINT/SIGTERM, so a long-running command (e.g.
+  `apps set-owners --wait` polling for async owner provisioning) sees its
+  context canceled and can exit with a clear message instead of the process
+  being hard-killed with no output. A first Ctrl-C cancels gracefully; a
+  second reverts to the OS default hard-kill.
 - An **empty required flag value** (e.g. `--app-id ""`) now exits `2` (usage),
   matching a missing required flag, instead of `1` (generic). The check
   (`requireNonEmpty`) applies this consistently across every command that uses
