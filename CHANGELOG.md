@@ -8,6 +8,11 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **`auth token`** — mint and print a short-lived OAuth2 bearer token from the
+  stored credentials, for driving raw API calls yourself (e.g. `curl -H
+  "Authorization: Bearer $(c1i auth token)"`). Prints just the token by default;
+  `--json` also emits the token type and absolute expiry. The token is
+  audience-scoped to the C1 API host and is never written to disk.
 - **`mcp servers register --print-config-template --auth <mode>`** — emit a
   ready-to-edit `hostedConfig` / `externalConfig` JSON skeleton for the chosen
   auth method (`oauth2`, `aws-sigv4`, `google-service-account`, plus the simple
