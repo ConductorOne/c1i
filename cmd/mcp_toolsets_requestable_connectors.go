@@ -9,18 +9,15 @@ import (
 )
 
 var mcpToolsetsRequestableConnectorsCmd = &cobra.Command{
-	Use:   "requestable-connectors",
+	Use:   "requestable-connectors <user-id>",
 	Short: "List connectors with toolsets the given user can request (NDJSON output)",
 	Long: `For a user, return the (app_id, connector_id) pairs that have at least one
 MCP toolset the user can currently request access to.
 
 Unlike most other "list" commands this endpoint is not paginated server-side
 — it returns the full set in one response.`,
+	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		if err := requireNonEmpty(cmd, "user-id"); err != nil {
-			return err
-		}
-
 		baseURL, err := GetBaseURL()
 		if err != nil {
 			return err
@@ -31,7 +28,7 @@ Unlike most other "list" commands this endpoint is not paginated server-side
 			return fmt.Errorf("authentication failed: %w", err)
 		}
 
-		userID, _ := cmd.Flags().GetString("user-id")
+		userID := args[0]
 
 		path := client.Path("/api/v1/users/%s/mcp_toolsets/requestable_connectors", userID)
 		data, err := c.Get(cmd.Context(), path, nil)
@@ -61,7 +58,5 @@ Unlike most other "list" commands this endpoint is not paginated server-side
 }
 
 func init() {
-	mcpToolsetsRequestableConnectorsCmd.Flags().String("user-id", "", "User ID")
-	markRequired(mcpToolsetsRequestableConnectorsCmd, "user-id")
 	mcpToolsetsCmd.AddCommand(mcpToolsetsRequestableConnectorsCmd)
 }
