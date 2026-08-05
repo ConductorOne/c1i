@@ -21,6 +21,21 @@ func markRequired(cmd *cobra.Command, names ...string) {
 	}
 }
 
+// annotateRequired appends "(required)" to each named flag's usage WITHOUT
+// enabling cobra's pre-run required-flag validation. Use it when a command has
+// an escape-hatch flag (e.g. register's --print-config-template) that is valid
+// on its own without the otherwise-required flags: cobra validates required
+// flags before RunE runs, so the escape hatch could never short-circuit if the
+// flags were cobra-required. The command must enforce presence itself in RunE
+// (via requireNonEmpty).
+func annotateRequired(cmd *cobra.Command, names ...string) {
+	for _, n := range names {
+		if f := cmd.Flags().Lookup(n); f != nil && !strings.Contains(f.Usage, "(required)") {
+			f.Usage = strings.TrimRight(f.Usage, ". ") + " (required)"
+		}
+	}
+}
+
 // limitReached reports whether `emitted` rows have hit the requested
 // `limit`. A limit of 0 (or negative) means "no cap". Centralizing this
 // check pins the semantics across every list command and gives the
