@@ -30,6 +30,11 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   (sets `deletedAt`, retained for audit). Complements `apps create` so a
   container app made by mistake can be cleaned up without the raw `api` escape
   hatch. Honors `--dry-run`.
+- **`apps set-owners <app-id> --user-id …`** — set an app's owner list via
+  `PUT /api/v1/apps/{id}/owners` (replaces the full set; `--user-id` repeatable).
+  Owner provisioning is asynchronous, so the command notes that new owners take
+  ~60-90s to appear in `apps get`; a success means the request was accepted.
+  Honors `--dry-run`.
 
 ### Changed
 
