@@ -129,7 +129,7 @@ c1i mcp servers resync-tools       <connector-id> --app-id <id>
 c1i mcp servers test-connection    (--url <url> [--transport ...] [--auth ...] | <connector-id> --app-id <id>)
 c1i mcp servers discover-oidc      --issuer-url <url>
 c1i mcp servers catalog list       [--query <text>] [--page-size N] [--limit N]
-c1i mcp servers catalog get        --catalog-id <cid>
+c1i mcp servers catalog get        <catalog-id>
 c1i mcp servers connections list   [--page-size N] [--limit N]
 
 # Tools

@@ -57,8 +57,16 @@ golangci-lint run --timeout=3m ./...   # includes gofmt formatting; CI gates on 
     (`--app-id`, `--connector-id` when it is a *parent*). Don't validate the
     positional id with `requireNonEmpty` — `cobra.ExactArgs` enforces presence;
     match the flat commands (`users get <user-id>`).
-  - Collection ops (`list`, `search`), creates (`create`, `register`), and
-    relationship/multi-id ops (`mcp bindings *`): **all** ids are flags.
+  - A sub-resource or sub-list nested under **exactly one** owner id in the path
+    (`/thing/{id}/…`) also takes that owner id positionally — e.g.
+    `functions commits|usage|source <function-id>`,
+    `mcp toolsets requestable-connectors <user-id>` (path
+    `/users/{id}/…/requestable_connectors`).
+  - **Flags** (never positional) for: searches / filtered or multi-scope
+    collections (`list`, `search`, `/search/*` endpoints, and lists scoped by
+    **more than one** id such as `mcp tools list --app-id --connector-id`);
+    creates (`create`, `register`); and relationship/multi-id ops
+    (`mcp bindings *`).
   - Never use a bare generic `--id` flag for a resource's own id — it must be
     the positional. Parent-scope ids keep descriptive flag names.
   This mirrors `users/apps/entitlements/automations/functions/requests get
