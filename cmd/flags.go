@@ -94,11 +94,9 @@ func clampPageSize(n int) int {
 // On commands like `accounts list`, that bypass causes the request to be
 // sent without any app filter, which pulls every account in the tenant.
 //
-// We apply this to *list* commands where an empty required value silently
-// over-fetches. Mutation commands (`tasks approve`, `requests create *`,
-// `accounts set-owner`) intentionally don't use it: their failure mode is
-// a fast 400 from the API rather than data leakage, and the gateway error
-// message is good enough to recover from.
+// The returned error is a *usageError, so an empty required value maps to the
+// usage exit code (2) — the same as a missing required flag — consistently
+// across every call site. Callers just `return err`; they must not re-wrap it.
 //
 // Call this at the top of RunE for any required string flag whose empty
 // value would over-fetch or otherwise misbehave.
@@ -114,8 +112,8 @@ func requireNonEmpty(cmd *cobra.Command, names ...string) error {
 	case 0:
 		return nil
 	case 1:
-		return fmt.Errorf("flag %s requires a non-empty value", missing[0])
+		return &usageError{fmt.Errorf("flag %s requires a non-empty value", missing[0])}
 	default:
-		return fmt.Errorf("flags %s require non-empty values", strings.Join(missing, ", "))
+		return &usageError{fmt.Errorf("flags %s require non-empty values", strings.Join(missing, ", "))}
 	}
 }

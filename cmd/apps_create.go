@@ -24,9 +24,7 @@ Example:
   c1i mcp servers register --app-id "$APP_ID" --type hosted ...`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		if err := requireNonEmpty(cmd, "display-name"); err != nil {
-			// Wrap as usage error so `--display-name ""` maps to exit 2, matching
-			// a missing --display-name (cobra) rather than falling to generic 1.
-			return &usageError{err}
+			return err
 		}
 
 		baseURL, err := GetBaseURL()
