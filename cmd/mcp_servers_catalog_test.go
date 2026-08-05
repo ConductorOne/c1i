@@ -151,6 +151,19 @@ func TestCatalogScopeCounts(t *testing.T) {
 			wantRequired: 3, // a, b, c
 			wantOptional: 2, // x, y
 		},
+		{
+			// No production entry does this today, but the API gives no
+			// guarantee it never will: a scope required by one auth mode
+			// and merely optional in another must still count as required
+			// only — the two tiers must stay disjoint.
+			name: "scope required in one mode, optional in another",
+			modes: []catalogAuthModeScopes{
+				{Scopes: []string{"a"}, OptionalScopes: nil},
+				{Scopes: []string{"b"}, OptionalScopes: []string{"a", "c"}},
+			},
+			wantRequired: 2, // a, b
+			wantOptional: 1, // c (not a, since a is required elsewhere)
+		},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {

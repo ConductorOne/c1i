@@ -76,6 +76,12 @@ type catalogEntryView struct {
 // modes on the same entry can carry different scope sets (e.g. Slack's OAuth2
 // mode has 27 optional scopes; its bearer-token mode has none), so this is a
 // union across modes, not a single mode's counts.
+//
+// No production entry currently has a scope that's required in one auth mode
+// and optional in another, but nothing in the API guarantees that stays
+// true. Required wins: a scope already in reqSet is excluded from optSet, so
+// the two counts are provably disjoint (never double-counting a scope)
+// regardless of what the API returns.
 func catalogScopeCounts(modes []catalogAuthModeScopes) (required, optional int) {
 	reqSet := make(map[string]struct{})
 	optSet := make(map[string]struct{})
@@ -83,7 +89,12 @@ func catalogScopeCounts(modes []catalogAuthModeScopes) (required, optional int) 
 		for _, s := range m.Scopes {
 			reqSet[s] = struct{}{}
 		}
+	}
+	for _, m := range modes {
 		for _, s := range m.OptionalScopes {
+			if _, isRequired := reqSet[s]; isRequired {
+				continue
+			}
 			optSet[s] = struct{}{}
 		}
 	}
