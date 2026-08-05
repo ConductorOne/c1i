@@ -9,7 +9,7 @@ import (
 )
 
 var mcpServersUpdateCmd = &cobra.Command{
-	Use:   "update",
+	Use:   "update <connector-id>",
 	Short: "Update an MCP server's editable metadata (pretty JSON)",
 	Long: `Update editable metadata on an MCP server. The update_mask is derived from
 which flags you set: pass --display-name to change only the name, and so on.
@@ -17,8 +17,9 @@ which flags you set: pass --display-name to change only the name, and so on.
 Updatable fields: display_name, description, data_sensitivity, tool_prefix,
 require_tool_approval. Auth config and URL are NOT updatable here — use
 "c1i mcp servers update-credentials" for those.`,
+	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		if err := requireNonEmpty(cmd, "app-id", "connector-id"); err != nil {
+		if err := requireNonEmpty(cmd, "app-id"); err != nil {
 			return err
 		}
 
@@ -28,7 +29,7 @@ require_tool_approval. Auth config and URL are NOT updatable here — use
 		}
 
 		appID, _ := cmd.Flags().GetString("app-id")
-		connectorID, _ := cmd.Flags().GetString("connector-id")
+		connectorID := args[0]
 
 		server := map[string]any{
 			"appId":       appID,
@@ -95,12 +96,11 @@ require_tool_approval. Auth config and URL are NOT updatable here — use
 
 func init() {
 	mcpServersUpdateCmd.Flags().String("app-id", "", "Application ID")
-	mcpServersUpdateCmd.Flags().String("connector-id", "", "MCP server (connector) ID")
 	mcpServersUpdateCmd.Flags().String("display-name", "", "New display name")
 	mcpServersUpdateCmd.Flags().String("description", "", "New description")
 	mcpServersUpdateCmd.Flags().String("data-sensitivity", "", "New data sensitivity: public, internal, confidential, restricted")
 	mcpServersUpdateCmd.Flags().String("tool-prefix", "", "New tool-name prefix")
 	mcpServersUpdateCmd.Flags().Bool("require-tool-approval", false, "Per-server override for tool auto-approval")
-	markRequired(mcpServersUpdateCmd, "app-id", "connector-id")
+	markRequired(mcpServersUpdateCmd, "app-id")
 	mcpServersCmd.AddCommand(mcpServersUpdateCmd)
 }
