@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"errors"
 	"strings"
 	"testing"
 
@@ -129,6 +130,18 @@ func TestRequireNonEmpty(t *testing.T) {
 			if !strings.Contains(err.Error(), want) {
 				t.Errorf("expected error to mention %s, got %v", want, err)
 			}
+		}
+	})
+
+	// An empty required value is a usage problem: the error must classify as a
+	// *usageError (exit 2) at every call site, not just the ones that used to
+	// wrap it inline.
+	t.Run("returns usageError (exit 2)", func(t *testing.T) {
+		cmd := mkCmd()
+		err := requireNonEmpty(cmd, "a")
+		var ue *usageError
+		if !errors.As(err, &ue) {
+			t.Errorf("error %v is not a *usageError", err)
 		}
 	})
 }

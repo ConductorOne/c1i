@@ -22,6 +22,17 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   --hosted-config-file`. `register --help` now also names the auth field shapes,
   documents the `tokenSharing` × auth-method compatibility rules, and links to
   the api-reference page.
+- **`apps create`** — create a new app (a container to register MCP servers
+  under) via `POST /api/v1/apps`. Only `--display-name` is required;
+  `--description` is optional. Honors `--dry-run`. Previously the zero-state
+  flow dropped to the raw `api` escape hatch.
+
+### Changed
+
+- An **empty required flag value** (e.g. `--app-id ""`) now exits `2` (usage),
+  matching a missing required flag, instead of `1` (generic). The check
+  (`requireNonEmpty`) applies this consistently across every command that uses
+  it, so automation branching on exit codes sees a stable usage signal.
 
 ## [0.3.0] - 2026-07-16
 
