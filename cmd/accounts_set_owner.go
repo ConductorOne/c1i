@@ -9,8 +9,9 @@ import (
 )
 
 var accountsSetOwnerCmd = &cobra.Command{
-	Use:   "set-owner",
+	Use:   "set-owner <app-user-id>",
 	Short: "Set the identity user (owner) for an app account",
+	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		baseURL, err := GetBaseURL()
 		if err != nil {
@@ -18,7 +19,7 @@ var accountsSetOwnerCmd = &cobra.Command{
 		}
 
 		appID, _ := cmd.Flags().GetString("app-id")
-		appUserID, _ := cmd.Flags().GetString("app-user-id")
+		appUserID := args[0]
 		userID, _ := cmd.Flags().GetString("user-id")
 
 		path := client.Path("/api/v1/apps/%s/app_users/%s", appID, appUserID)
@@ -60,10 +61,8 @@ var accountsSetOwnerCmd = &cobra.Command{
 
 func init() {
 	accountsSetOwnerCmd.Flags().String("app-id", "", "Application ID")
-	accountsSetOwnerCmd.Flags().String("app-user-id", "", "App user (account) ID")
 	accountsSetOwnerCmd.Flags().String("user-id", "", "C1 user ID to set as owner")
 	markRequired(accountsSetOwnerCmd, "app-id")
-	markRequired(accountsSetOwnerCmd, "app-user-id")
 	markRequired(accountsSetOwnerCmd, "user-id")
 	accountsCmd.AddCommand(accountsSetOwnerCmd)
 }
