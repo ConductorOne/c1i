@@ -4,6 +4,16 @@ All notable changes to c1i are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project aims
 to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- **`auth token`** — mint and print a short-lived OAuth2 bearer token from the
+  stored credentials, for driving raw API calls yourself (e.g. `curl -H
+  "Authorization: Bearer $(c1i auth token)"`). Prints just the token by default;
+  `--json` also emits the token type and absolute expiry. The token is
+  audience-scoped to the C1 API host and is never written to disk.
+
 ## [0.3.0] - 2026-07-16
 
 ### Added
