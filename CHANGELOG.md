@@ -38,6 +38,16 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   (`requireNonEmpty`) applies this consistently across every command that uses
   it, so automation branching on exit codes sees a stable usage signal.
 
+### Fixed
+
+- **`--fields` now bridges snake_case/camelCase.** List commands emit rows in
+  snake_case while single-object reads emit camelCase, so `--fields displayName`
+  on a list command silently returned `{}`. Field matching now falls back to a
+  case- and separator-insensitive comparison when an exact key match misses, so
+  a projection in either style resolves against either output. Exact matches are
+  unchanged (they always win), and the output keeps the source key spelling —
+  `--fields` selects keys, it never renames them.
+
 ## [0.3.0] - 2026-07-16
 
 ### Added
