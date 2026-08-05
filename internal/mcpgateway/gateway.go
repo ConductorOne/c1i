@@ -217,6 +217,12 @@ func extractSSEData(body []byte) []byte {
 			buf.WriteString(strings.TrimSpace(strings.TrimPrefix(line, "data:")))
 		}
 	}
+	if sc.Err() != nil {
+		// A scan error (e.g. a data line exceeding the buffer) would otherwise
+		// yield silently truncated JSON. Return the raw body so the caller's
+		// JSON decode fails visibly instead of on partial data.
+		return body
+	}
 	return buf.Bytes()
 }
 

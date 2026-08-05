@@ -21,8 +21,13 @@ Find tool names and their input schemas with "c1i mcp gateway list-tools --full"
 	RunE: func(cmd *cobra.Command, args []string) error {
 		var raw json.RawMessage
 		if argsJSON, _ := cmd.Flags().GetString("args"); strings.TrimSpace(argsJSON) != "" {
-			if !json.Valid([]byte(argsJSON)) {
-				return &usageError{fmt.Errorf("--args must be a valid JSON object")}
+			// MCP tool arguments must be a JSON object. json.Valid would also
+			// accept an array/string/number/null, which the gateway would then
+			// reject with a confusing server-side error — enforce object-ness
+			// client-side as a usage error.
+			var obj map[string]any
+			if err := json.Unmarshal([]byte(argsJSON), &obj); err != nil {
+				return &usageError{fmt.Errorf("--args must be a JSON object: %w", err)}
 			}
 			raw = json.RawMessage(argsJSON)
 		}
