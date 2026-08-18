@@ -266,3 +266,30 @@ func TestAcceptHeaderAdvertisesBothMediaTypes(t *testing.T) {
 		t.Errorf("Accept header = %q, want %q (both media types, or the C1 gateway returns 400)", gotAccept, want)
 	}
 }
+
+// TestExtractSSEResponseIgnoresC1CommentPreamble pins a shape captured from
+// C1's live gateway rather than inferred from the spec: the standalone GET
+// stream on the MCP endpoint opens with a `: ok` SSE comment line followed by
+// a blank line, then goes quiet. Comment lines (any line beginning with ':')
+// carry no field and must be ignored, and the blank line after one must not be
+// mistaken for the terminator of a real event. This client only issues POST
+// today, so C1's own preamble is not reached in practice — the case is pinned
+// because it is the one piece of real C1 SSE framing anyone has observed, and
+// a parser that treated it as a field line or as an empty event would break on
+// byte one if this client ever reads that stream.
+//
+// Scope, honestly: this is a documentation pin, not a strong guard. Breaking
+// the `data:` prefix gate is caught by TestExtractSSEResponse, not by this
+// test — id matching rescues this input even from a parser that mishandles
+// comment lines. It is here so the one observed piece of real C1 SSE framing
+// is recorded in the suite rather than only in a chat log.
+func TestExtractSSEResponseIgnoresC1CommentPreamble(t *testing.T) {
+	id := 2
+	body := ": ok\n\n" +
+		"data: {\"jsonrpc\":\"2.0\",\"id\":2,\"result\":{\"tools\":[]}}\n\n"
+	got := string(extractSSEResponse([]byte(body), &id))
+	want := `{"jsonrpc":"2.0","id":2,"result":{"tools":[]}}`
+	if got != want {
+		t.Errorf("comment preamble not ignored:\n got %q\nwant %q", got, want)
+	}
+}

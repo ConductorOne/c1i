@@ -293,11 +293,18 @@ func decodeMessage(body []byte) (*rpcResponse, error) {
 //
 // This handles the full input space the streamable-HTTP transport permits
 // (multi-event streams, multi-line data fields, non-matching ids in-flight) —
-// C1 itself has so far been observed answering every request with a plain
-// application/json body (no SSE framing at all, even for long-running calls),
-// so the multi-event path is spec-hardening against a mode this client
-// advertises support for but has not exercised against C1, not a fix for an
-// observed C1 response shape.
+// C1 has been observed answering every POST with a plain application/json
+// body — never text/event-stream — across three independent capture sessions
+// (including a 182s call, and including requests that did advertise
+// text/event-stream in Accept, so the server had SSE on the table and
+// declined it). C1 does emit real SSE framing on the standalone GET stream,
+// whose first bytes are a `: ok` comment line, but this client only ever
+// issues POST (see post), so that path is not reached here.
+//
+// So the multi-event path is spec-hardening against a mode this client
+// advertises support for but has not observed on POST — not a fix for an
+// observed C1 POST response shape. It is not merely theoretical either: the
+// server does write SSE on another channel of the same endpoint.
 func extractSSEResponse(body []byte, wantID *int) []byte {
 	var events [][]byte
 	var cur bytes.Buffer
