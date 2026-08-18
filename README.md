@@ -258,7 +258,13 @@ c1i docs openapi
 
 # Print the agent skill/reference doc (write to a file with --output)
 c1i docs skill [--output SKILL.md]
+
+# Print an embedded, task-oriented runbook (list names if omitted)
+c1i docs guide
+c1i docs guide register-mcp-server
 ```
+
+`docs guide` is embedded static content (no network call), unlike `docs search` / `docs page` which hit the C1 documentation site.
 
 ## Output Conventions
 
