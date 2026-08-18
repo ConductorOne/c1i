@@ -1,12 +1,20 @@
 package cmd
 
 import (
+	"context"
+	"encoding/json"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/ConductorOne/c1i/internal/client"
 	"github.com/spf13/cobra"
 )
+
+// ownerWaitPollInterval is how often --wait re-polls GET .../ownerids. Long
+// enough to avoid hammering the API during a ~60-90s (sometimes ~3-4min)
+// provisioning window, short enough that --wait-timeout still feels responsive.
+const ownerWaitPollInterval = 12 * time.Second
 
 var appsSetOwnersCmd = &cobra.Command{
 	Use:   "set-owners <app-id>",
@@ -15,11 +23,16 @@ var appsSetOwnersCmd = &cobra.Command{
 any existing owners. Provide one or more --user-id (C1 user IDs, 27 chars each).
 
 Owner changes are provisioned ASYNCHRONOUSLY: this call returns immediately,
-but the new owners take up to ~60-90s to show up in "apps get" (appOwners) and
-the owners sub-resource. A success here means the request was accepted, not
-that the owner list is already live.
+but the new owners take up to ~60-90s (occasionally several minutes) to show
+up in "apps get" (appOwners) and GET .../ownerids. A success here means the
+request was accepted, not that the owner list is already live.
 
-Honors --dry-run.`,
+Pass --wait to block and poll GET .../ownerids until every requested
+--user-id appears (or --wait-timeout elapses). Without --wait, behavior is
+unchanged: the command returns as soon as the PUT is accepted.
+
+Honors --dry-run (with --wait, dry-run still only previews the PUT; it never
+polls).`,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		userIDs, _ := cmd.Flags().GetStringSlice("user-id")
@@ -33,13 +46,19 @@ Honors --dry-run.`,
 				return &usageError{fmt.Errorf("--user-id values must be non-empty")}
 			}
 		}
+		wait, _ := cmd.Flags().GetBool("wait")
+		waitTimeout, _ := cmd.Flags().GetDuration("wait-timeout")
+		if wait && waitTimeout <= 0 {
+			return &usageError{fmt.Errorf("--wait-timeout must be positive")}
+		}
 
 		baseURL, err := GetBaseURL()
 		if err != nil {
 			return err
 		}
 
-		path := client.Path("/api/v1/apps/%s/owners", args[0])
+		appID := args[0]
+		path := client.Path("/api/v1/apps/%s/owners", appID)
 		body := buildSetOwnersBody(userIDs)
 		if dryRunActive() {
 			return printDryRun(cmd, "PUT", path, body)
@@ -55,9 +74,92 @@ Honors --dry-run.`,
 
 		_, _ = fmt.Fprintf(cmd.OutOrStdout(),
 			"Set %d owner(s) on app %s (provisioning is async; allow ~60-90s to appear).\n",
-			len(userIDs), args[0])
-		return nil
+			len(userIDs), appID)
+
+		if !wait {
+			return nil
+		}
+		return waitForOwners(cmd, c, appID, userIDs, waitTimeout)
 	},
+}
+
+// waitForOwners polls GET .../ownerids on appID every ownerWaitPollInterval
+// until every id in wantUserIDs is present, timeout elapses, or cmd's context
+// is canceled. It writes progress lines to cmd's stdout as it goes.
+func waitForOwners(cmd *cobra.Command, c *client.Client, appID string, wantUserIDs []string, timeout time.Duration) error {
+	out := cmd.OutOrStdout()
+	ownerIDsPath := client.Path("/api/v1/apps/%s/ownerids", appID)
+
+	ctx, cancel := context.WithTimeout(cmd.Context(), timeout)
+	defer cancel()
+
+	start := time.Now()
+	ticker := time.NewTicker(ownerWaitPollInterval)
+	defer ticker.Stop()
+
+	for {
+		got, err := fetchOwnerIDs(ctx, c, ownerIDsPath)
+		if err != nil {
+			if ctx.Err() != nil {
+				break // fall through to the timeout/cancellation report below
+			}
+			return fmt.Errorf("API error: %w", err)
+		}
+		if allOwnersPresent(wantUserIDs, got) {
+			_, _ = fmt.Fprintf(out, "Owners provisioned on app %s after %s.\n",
+				appID, time.Since(start).Round(time.Second))
+			return nil
+		}
+		_, _ = fmt.Fprintf(out, "Still waiting for owners to provision on app %s (%s elapsed)...\n",
+			appID, time.Since(start).Round(time.Second))
+
+		select {
+		case <-ctx.Done():
+		case <-ticker.C:
+			continue
+		}
+		break
+	}
+
+	if cmd.Context().Err() != nil {
+		return fmt.Errorf("canceled while waiting for owners to provision on app %s", appID)
+	}
+	return fmt.Errorf(
+		"timed out after %s waiting for owners to provision on app %s; "+
+			"this is not necessarily a failure — provisioning can take several minutes, "+
+			"check again later with: c1i api --method GET --path /api/v1/apps/%s/ownerids",
+		timeout, appID, appID)
+}
+
+// fetchOwnerIDs GETs .../ownerids and returns the current owner user IDs.
+func fetchOwnerIDs(ctx context.Context, c *client.Client, path string) ([]string, error) {
+	data, err := c.Get(ctx, path, nil)
+	if err != nil {
+		return nil, err
+	}
+	var parsed struct {
+		UserIDs []string `json:"userIds"`
+	}
+	if err := json.Unmarshal(data, &parsed); err != nil {
+		return nil, fmt.Errorf("parsing ownerids response: %w", err)
+	}
+	return parsed.UserIDs, nil
+}
+
+// allOwnersPresent reports whether every id in want is present in got. Pure
+// (no I/O) so the poll's success condition is unit-testable without a fake
+// server: --wait's loop calls this after each GET .../ownerids.
+func allOwnersPresent(want, got []string) bool {
+	gotSet := make(map[string]struct{}, len(got))
+	for _, id := range got {
+		gotSet[id] = struct{}{}
+	}
+	for _, id := range want {
+		if _, ok := gotSet[id]; !ok {
+			return false
+		}
+	}
+	return true
 }
 
 // buildSetOwnersBody assembles the PUT .../owners request body. Pure, so the
@@ -70,5 +172,7 @@ func buildSetOwnersBody(userIDs []string) map[string]any {
 func init() {
 	appsSetOwnersCmd.Flags().StringSlice("user-id", nil, "C1 user ID to set as owner (repeatable; replaces the full owner list)")
 	markRequired(appsSetOwnersCmd, "user-id")
+	appsSetOwnersCmd.Flags().Bool("wait", false, "block and poll GET .../ownerids until the requested owners appear, or --wait-timeout elapses")
+	appsSetOwnersCmd.Flags().Duration("wait-timeout", 4*time.Minute, "max time to wait with --wait (e.g. 30s, 5m)")
 	appsCmd.AddCommand(appsSetOwnersCmd)
 }

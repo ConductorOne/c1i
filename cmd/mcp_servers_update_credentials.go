@@ -34,7 +34,7 @@ func resolveMCPServerCatalogID(ctx context.Context, c *client.Client, appID, con
 }
 
 var mcpServersUpdateCredentialsCmd = &cobra.Command{
-	Use:   "update-credentials",
+	Use:   "update-credentials <connector-id>",
 	Short: "Replace an MCP server's auth config / config fields (pretty JSON)",
 	Long: `Replace the auth config and/or extra config fields on an existing MCP server.
 Reuses the same sealing + validation path as register, so auth secrets are
@@ -49,8 +49,9 @@ masks "bearerToken"; --url masks "url". Pass --update-mask with comma-separated
 proto field paths to override. Note the mask uses the auth oneof case name
 ("bearerToken", "customHeader", "basicAuth", "oauth2", "none"), not the
 "hostedConfig"/"externalConfig" wrapper.`,
+	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		if err := requireNonEmpty(cmd, "app-id", "connector-id", "type"); err != nil {
+		if err := requireNonEmpty(cmd, "app-id", "type"); err != nil {
 			return err
 		}
 
@@ -60,7 +61,7 @@ proto field paths to override. Note the mask uses the auth oneof case name
 		}
 
 		appID, _ := cmd.Flags().GetString("app-id")
-		connectorID, _ := cmd.Flags().GetString("connector-id")
+		connectorID := args[0]
 		typ, _ := cmd.Flags().GetString("type")
 
 		body := map[string]any{
@@ -145,7 +146,6 @@ proto field paths to override. Note the mask uses the auth oneof case name
 
 func init() {
 	mcpServersUpdateCredentialsCmd.Flags().String("app-id", "", "Application ID")
-	mcpServersUpdateCredentialsCmd.Flags().String("connector-id", "", "MCP server (connector) ID")
 	mcpServersUpdateCredentialsCmd.Flags().String("type", "", "Config shape (must match the server): hosted or external")
 	// HOSTED config
 	mcpServersUpdateCredentialsCmd.Flags().String("catalog-id", "", "Catalog entry ID (HOSTED)")
@@ -159,6 +159,6 @@ func init() {
 	// Shared auth
 	addAuthFlags(mcpServersUpdateCredentialsCmd)
 	mcpServersUpdateCredentialsCmd.Flags().String("update-mask", "", "Comma-separated proto field paths to update (default: derived from the fields you supply)")
-	markRequired(mcpServersUpdateCredentialsCmd, "app-id", "connector-id", "type")
+	markRequired(mcpServersUpdateCredentialsCmd, "app-id", "type")
 	mcpServersCmd.AddCommand(mcpServersUpdateCredentialsCmd)
 }

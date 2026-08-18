@@ -8,7 +8,7 @@ import (
 )
 
 var mcpToolsDeleteCmd = &cobra.Command{
-	Use:   "delete",
+	Use:   "delete <tool-id>",
 	Short: "Soft-delete an MCP tool",
 	Long: `Soft-delete an MCP tool. The tool stays in the database (for audit) but is
 hidden from listings and unbound from any toolsets.
@@ -16,8 +16,9 @@ hidden from listings and unbound from any toolsets.
 Note: tools normally transition to MCP_TOOL_STATE_REMOVED automatically during
 sync when they disappear from the upstream MCP server. Use "mcp tools approve
 --state=disabled" to block a tool without deleting it.`,
+	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		if err := requireNonEmpty(cmd, "app-id", "connector-id", "id"); err != nil {
+		if err := requireNonEmpty(cmd, "app-id", "connector-id"); err != nil {
 			return err
 		}
 
@@ -28,7 +29,7 @@ sync when they disappear from the upstream MCP server. Use "mcp tools approve
 
 		appID, _ := cmd.Flags().GetString("app-id")
 		connectorID, _ := cmd.Flags().GetString("connector-id")
-		id, _ := cmd.Flags().GetString("id")
+		id := args[0]
 
 		path := client.Path("/api/v1/apps/%s/connectors/%s/mcp_tools/%s", appID, connectorID, id)
 		if dryRunActive() {
@@ -51,7 +52,6 @@ sync when they disappear from the upstream MCP server. Use "mcp tools approve
 func init() {
 	mcpToolsDeleteCmd.Flags().String("app-id", "", "Application ID")
 	mcpToolsDeleteCmd.Flags().String("connector-id", "", "Connector ID")
-	mcpToolsDeleteCmd.Flags().String("id", "", "MCP tool ID")
-	markRequired(mcpToolsDeleteCmd, "app-id", "connector-id", "id")
+	markRequired(mcpToolsDeleteCmd, "app-id", "connector-id")
 	mcpToolsCmd.AddCommand(mcpToolsDeleteCmd)
 }

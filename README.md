@@ -46,7 +46,7 @@ c1i apps get <app-id>
 ```sh
 c1i accounts list --app-id <id> [--status enabled|disabled|deleted] [--type user|service_account|system_account] [--unmapped-only] [--query <text>] [--page-size N] [--page-token TOKEN] [--limit N]
 
-c1i accounts set-owner --app-id <id> --app-user-id <id> --user-id <id>
+c1i accounts set-owner <app-user-id> --app-id <id> --user-id <id>
 ```
 
 ### Entitlements
@@ -75,9 +75,9 @@ number of groups/roles the access is inherited through.
 
 ```sh
 c1i tasks list [--state open|closed] [--query <text>] [--assigned-to-me] [--page-size N] [--page-token TOKEN] [--limit N]
-c1i tasks approve --task-id <id> [--policy-step-id <id>] [--comment <text>]
-c1i tasks deny --task-id <id> [--policy-step-id <id>] [--comment <text>]
-c1i tasks comment --task-id <id> --comment <text>
+c1i tasks approve <task-id> [--policy-step-id <id>] [--comment <text>]
+c1i tasks deny <task-id> [--policy-step-id <id>] [--comment <text>]
+c1i tasks comment <task-id> --comment <text>
 ```
 
 `approve`/`deny` target a specific policy step. If `--policy-step-id` is
@@ -113,41 +113,41 @@ Each `automations list` row includes `function_ids` (every distinct function the
 
 ### MCP
 
-Drive the MCP admin surface (servers, tools, toolsets, and bindings). Most commands take `--app-id`; server/tool/toolset commands identify a specific server with `--connector-id`.
+Drive the MCP admin surface (servers, tools, toolsets, and bindings). Most commands take `--app-id`; `mcp servers` commands take the server's `<connector-id>` positionally, while tool/toolset/binding commands scope to a server with `--connector-id`.
 
 ```sh
 # Servers (register, configure, and inspect MCP servers)
 c1i mcp servers list               --app-id <id> [--page-size N] [--limit N]
-c1i mcp servers get                --app-id <id> --connector-id <id>
+c1i mcp servers get                <connector-id> --app-id <id>
 c1i mcp servers search             --app-id <id> [--query <text>] [--tool-state approved|pending|disabled|removed] [--include-last-called-at] [--limit N]
 c1i mcp servers register           --app-id <id> --type hosted   --display-name <name> --catalog-id <cid> [--auth ... ] [--config-field k=v ...]
 c1i mcp servers register           --app-id <id> --type external --display-name <name> --url <url> [--transport streamable-http|sse] [--auth ...]
-c1i mcp servers update             --app-id <id> --connector-id <id> [--display-name <name>] [--description <text>] [--data-sensitivity ...] [--tool-prefix <p>] [--require-tool-approval]
-c1i mcp servers update-credentials --app-id <id> --connector-id <id> --type hosted|external [--auth ...] [--update-mask <paths>]
-c1i mcp servers delete             --app-id <id> --connector-id <id>
-c1i mcp servers resync-tools       --app-id <id> --connector-id <id>
-c1i mcp servers test-connection    (--url <url> [--transport ...] [--auth ...] | --app-id <id> --connector-id <id>)
+c1i mcp servers update             <connector-id> --app-id <id> [--display-name <name>] [--description <text>] [--data-sensitivity ...] [--tool-prefix <p>] [--require-tool-approval]
+c1i mcp servers update-credentials <connector-id> --app-id <id> --type hosted|external [--auth ...] [--update-mask <paths>]
+c1i mcp servers delete             <connector-id> --app-id <id>
+c1i mcp servers resync-tools       <connector-id> --app-id <id>
+c1i mcp servers test-connection    (--url <url> [--transport ...] [--auth ...] | <connector-id> --app-id <id>)
 c1i mcp servers discover-oidc      --issuer-url <url>
 c1i mcp servers catalog list       [--query <text>] [--page-size N] [--limit N]
-c1i mcp servers catalog get        --catalog-id <cid>
+c1i mcp servers catalog get        <catalog-id>
 c1i mcp servers connections list   [--page-size N] [--limit N]
 
 # Tools
 c1i mcp tools list    --app-id <id> --connector-id <id> [--page-size N] [--page-token TOKEN] [--limit N]
-c1i mcp tools get     --app-id <id> --connector-id <id> --id <tool-id>
+c1i mcp tools get     <tool-id> --app-id <id> --connector-id <id>
 c1i mcp tools search  --app-id <id> --connector-id <id> [--query <text>] [--state ...] [--classification ...] [--page-size N] [--limit N]
-c1i mcp tools approve --app-id <id> --connector-id <id> --id <tool-id> [--state approved|disabled|pending]
-c1i mcp tools delete  --app-id <id> --connector-id <id> --id <tool-id>
-c1i mcp tools history --app-id <id> --connector-id <id> --id <tool-id> [--page-size N] [--limit N]
+c1i mcp tools approve <tool-id> --app-id <id> --connector-id <id> [--state approved|disabled|pending]
+c1i mcp tools delete  <tool-id> --app-id <id> --connector-id <id>
+c1i mcp tools history <tool-id> --app-id <id> --connector-id <id> [--page-size N] [--limit N]
 
 # Toolsets (admin-curated tool groupings; one AppEntitlement per toolset)
 c1i mcp toolsets list                   --app-id <id> --connector-id <id> [--page-size N] [--limit N]
-c1i mcp toolsets get                    --app-id <id> --connector-id <id> --id <toolset-id>
+c1i mcp toolsets get                    <toolset-id> --app-id <id> --connector-id <id>
 c1i mcp toolsets create                 --app-id <id> --connector-id <id> --display-name <name> [--description <text>]
-c1i mcp toolsets update                 --app-id <id> --connector-id <id> --id <toolset-id> [--display-name <name>] [--description <text>]
-c1i mcp toolsets delete                 --app-id <id> --connector-id <id> --id <toolset-id>
-c1i mcp toolsets get-by-entitlement     --app-id <id> --app-entitlement-id <aeid>
-c1i mcp toolsets requestable-connectors --user-id <uid>
+c1i mcp toolsets update                 <toolset-id> --app-id <id> --connector-id <id> [--display-name <name>] [--description <text>]
+c1i mcp toolsets delete                 <toolset-id> --app-id <id> --connector-id <id>
+c1i mcp toolsets get-by-entitlement     <app-entitlement-id> --app-id <id>
+c1i mcp toolsets requestable-connectors <user-id>
 
 # Bindings (which tools belong to which toolset)
 c1i mcp bindings list     --app-id <id> --connector-id <id> --toolset-id <tid> [--page-size N] [--limit N]

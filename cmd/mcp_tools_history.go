@@ -10,14 +10,15 @@ import (
 )
 
 var mcpToolsHistoryCmd = &cobra.Command{
-	Use:   "history",
+	Use:   "history <tool-id>",
 	Short: "Stream the change history for a single MCP tool (NDJSON output)",
 	Long: `One NDJSON record per historical version of the tool, newest-first as
 the server returns them. The record carries both the full tool snapshot at
 that point in time and the change-history envelope (actor, change_kind,
 created_at, trace_id, syslog_event_id, annotations).`,
+	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		if err := requireNonEmpty(cmd, "app-id", "connector-id", "id"); err != nil {
+		if err := requireNonEmpty(cmd, "app-id", "connector-id"); err != nil {
 			return err
 		}
 
@@ -33,7 +34,7 @@ created_at, trace_id, syslog_event_id, annotations).`,
 
 		appID, _ := cmd.Flags().GetString("app-id")
 		connectorID, _ := cmd.Flags().GetString("connector-id")
-		id, _ := cmd.Flags().GetString("id")
+		id := args[0]
 		requestedPageSize := clampHistoryPageSize(getIntFlag(cmd, "page-size"))
 		pageToken, _ := cmd.Flags().GetString("page-token")
 		manualPaging := cmd.Flags().Changed("page-token")
@@ -96,10 +97,9 @@ func clampHistoryPageSize(n int) int {
 func init() {
 	mcpToolsHistoryCmd.Flags().String("app-id", "", "Application ID")
 	mcpToolsHistoryCmd.Flags().String("connector-id", "", "Connector ID")
-	mcpToolsHistoryCmd.Flags().String("id", "", "MCP tool ID")
 	mcpToolsHistoryCmd.Flags().Int("page-size", 50, "Results per page (max 200)")
 	mcpToolsHistoryCmd.Flags().String("page-token", "", "Pagination cursor")
-	markRequired(mcpToolsHistoryCmd, "app-id", "connector-id", "id")
+	markRequired(mcpToolsHistoryCmd, "app-id", "connector-id")
 	addLimitFlag(mcpToolsHistoryCmd)
 	mcpToolsCmd.AddCommand(mcpToolsHistoryCmd)
 }

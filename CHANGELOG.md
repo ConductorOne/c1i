@@ -35,6 +35,14 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   Owner provisioning is asynchronous, so the command notes that new owners take
   ~60-90s to appear in `apps get`; a success means the request was accepted.
   Honors `--dry-run`.
+- **`apps set-owners --wait` / `--wait-timeout`** — optionally block after the
+  `PUT` and poll `GET /api/v1/apps/{id}/ownerids` (every 12s, default timeout
+  4m) until every requested `--user-id` shows up as provisioned, printing
+  progress as it goes. On timeout, exits non-zero with a message clarifying
+  that provisioning is still pending and not necessarily a failure — owner
+  provisioning has been observed to take from under two minutes up to several.
+  Without `--wait`, behavior is unchanged; `--wait` combined with `--dry-run`
+  still only previews the `PUT` and never polls.
 - **`mcp gateway list-tools` / `mcp gateway call`** — drive the C1 MCP gateway
   over its streamable-HTTP MCP transport (the same handshake an MCP host does:
   initialize → notifications/initialized → tools/list / tools/call), closing the
@@ -47,6 +55,30 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- **BREAKING — ID arguments are now positional.** A command that addresses one
+  existing resource by its own id now takes that id as the **first positional
+  argument** instead of a flag; parent/scope ids remain flags. This makes the
+  whole CLI consistent (flat commands like `users get <user-id>` already worked
+  this way). Migrate:
+  - `mcp servers get\|update\|update-credentials\|delete\|resync-tools --connector-id X --app-id A`
+    → `mcp servers <verb> X --app-id A` (and `test-connection` takes `[<connector-id>]` positionally).
+  - `mcp tools get\|approve\|delete\|history --id X --app-id A --connector-id C`
+    → `mcp tools <verb> X --app-id A --connector-id C`.
+  - `mcp toolsets get\|update\|delete --id X …` → `mcp toolsets <verb> X …`;
+    `mcp toolsets get-by-entitlement --app-entitlement-id X --app-id A` → `… X --app-id A`;
+    `mcp toolsets requestable-connectors --user-id X` → `… X`.
+  - `tasks approve\|deny\|comment --task-id X` → `tasks <verb> X`.
+  - `accounts set-owner --app-user-id X --app-id A --user-id U` → `accounts set-owner X --app-id A --user-id U`.
+  Collection (`list`/`search`), create, and relationship (`mcp bindings *`)
+  commands are unchanged (their ids stay flags). The old flags now error with
+  "unknown flag". The convention is documented in CLAUDE.md and enforced across
+  the README and the embedded agent skill.
+- **Ctrl-C now cancels cleanly.** The root command wires `cmd.Context()` to a
+  `signal.NotifyContext` on SIGINT/SIGTERM, so a long-running command (e.g.
+  `apps set-owners --wait` polling for async owner provisioning) sees its
+  context canceled and can exit with a clear message instead of the process
+  being hard-killed with no output. A first Ctrl-C cancels gracefully; a
+  second reverts to the OS default hard-kill.
 - An **empty required flag value** (e.g. `--app-id ""`) now exits `2` (usage),
   matching a missing required flag, instead of `1` (generic). The check
   (`requireNonEmpty`) applies this consistently across every command that uses

@@ -8,13 +8,14 @@ import (
 )
 
 var mcpServersResyncToolsCmd = &cobra.Command{
-	Use:   "resync-tools",
+	Use:   "resync-tools <connector-id>",
 	Short: "Re-run tool discovery for an MCP server",
 	Long: `Re-run tool discovery against the MCP server using the calling user's own
 credential. Newly discovered tools land in PENDING_REVIEW; approve them with
 "c1i mcp tools approve".`,
+	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		if err := requireNonEmpty(cmd, "app-id", "connector-id"); err != nil {
+		if err := requireNonEmpty(cmd, "app-id"); err != nil {
 			return err
 		}
 
@@ -24,7 +25,7 @@ credential. Newly discovered tools land in PENDING_REVIEW; approve them with
 		}
 
 		appID, _ := cmd.Flags().GetString("app-id")
-		connectorID, _ := cmd.Flags().GetString("connector-id")
+		connectorID := args[0]
 
 		body := map[string]any{
 			"appId":       appID,
@@ -50,7 +51,6 @@ credential. Newly discovered tools land in PENDING_REVIEW; approve them with
 
 func init() {
 	mcpServersResyncToolsCmd.Flags().String("app-id", "", "Application ID")
-	mcpServersResyncToolsCmd.Flags().String("connector-id", "", "MCP server (connector) ID")
-	markRequired(mcpServersResyncToolsCmd, "app-id", "connector-id")
+	markRequired(mcpServersResyncToolsCmd, "app-id")
 	mcpServersCmd.AddCommand(mcpServersResyncToolsCmd)
 }

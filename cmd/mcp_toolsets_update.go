@@ -9,15 +9,16 @@ import (
 )
 
 var mcpToolsetsUpdateCmd = &cobra.Command{
-	Use:   "update",
+	Use:   "update <toolset-id>",
 	Short: "Update an MCP toolset's display name and/or description (pretty JSON)",
 	Long: `Update editable fields on a toolset (display_name, description).
 
 The update_mask is derived from which flags you set: pass --display-name to
 update only the name, --description for only the description, both for both.
 Editing the AppEntitlement created behind the toolset is not supported here.`,
+	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		if err := requireNonEmpty(cmd, "app-id", "connector-id", "id"); err != nil {
+		if err := requireNonEmpty(cmd, "app-id", "connector-id"); err != nil {
 			return err
 		}
 
@@ -28,7 +29,7 @@ Editing the AppEntitlement created behind the toolset is not supported here.`,
 
 		appID, _ := cmd.Flags().GetString("app-id")
 		connectorID, _ := cmd.Flags().GetString("connector-id")
-		id, _ := cmd.Flags().GetString("id")
+		id := args[0]
 
 		profile := map[string]any{
 			"id":          id,
@@ -78,9 +79,8 @@ Editing the AppEntitlement created behind the toolset is not supported here.`,
 func init() {
 	mcpToolsetsUpdateCmd.Flags().String("app-id", "", "Application ID")
 	mcpToolsetsUpdateCmd.Flags().String("connector-id", "", "Connector ID")
-	mcpToolsetsUpdateCmd.Flags().String("id", "", "MCP toolset ID")
 	mcpToolsetsUpdateCmd.Flags().String("display-name", "", "New display name (omit to leave unchanged)")
 	mcpToolsetsUpdateCmd.Flags().String("description", "", "New description (omit to leave unchanged)")
-	markRequired(mcpToolsetsUpdateCmd, "app-id", "connector-id", "id")
+	markRequired(mcpToolsetsUpdateCmd, "app-id", "connector-id")
 	mcpToolsetsCmd.AddCommand(mcpToolsetsUpdateCmd)
 }

@@ -9,7 +9,7 @@ import (
 )
 
 var mcpToolsApproveCmd = &cobra.Command{
-	Use:   "approve",
+	Use:   "approve <tool-id>",
 	Short: "Approve an MCP tool (sets state=APPROVED)",
 	Long: `Approve an MCP tool by setting its state to MCP_TOOL_STATE_APPROVED.
 
@@ -21,6 +21,7 @@ Use --state to target a different lifecycle state (disabled, pending). The
 approve command is a thin wrapper around the underlying Update RPC; use
 "c1i api --path=..." directly if you need to update other fields (display name,
 classification, visibility).`,
+	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		baseURL, err := GetBaseURL()
 		if err != nil {
@@ -29,7 +30,7 @@ classification, visibility).`,
 
 		appID, _ := cmd.Flags().GetString("app-id")
 		connectorID, _ := cmd.Flags().GetString("connector-id")
-		id, _ := cmd.Flags().GetString("id")
+		id := args[0]
 		state, _ := cmd.Flags().GetString("state")
 		if state == "" {
 			state = "MCP_TOOL_STATE_APPROVED"
@@ -85,8 +86,7 @@ classification, visibility).`,
 func init() {
 	mcpToolsApproveCmd.Flags().String("app-id", "", "Application ID")
 	mcpToolsApproveCmd.Flags().String("connector-id", "", "Connector ID")
-	mcpToolsApproveCmd.Flags().String("id", "", "MCP tool ID")
 	mcpToolsApproveCmd.Flags().String("state", "", "Target state (default approved): pending, approved, disabled")
-	markRequired(mcpToolsApproveCmd, "app-id", "connector-id", "id")
+	markRequired(mcpToolsApproveCmd, "app-id", "connector-id")
 	mcpToolsCmd.AddCommand(mcpToolsApproveCmd)
 }
