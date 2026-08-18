@@ -145,6 +145,38 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `error`, then the last event, then the raw body on a scan error — so a
   reply to a different in-flight request can no longer be mistaken for the
   caller's own.
+- **`extractSSEResponse` no longer falls back to "the last event" when no
+  event answers the request.** Found by adversarial review of the fix
+  above (#49/#54): if a stream carried no event matching the request's id
+  and none carrying `result`/`error` — e.g. only a progress notification —
+  the old third-tier fallback returned that notification's bytes as if they
+  were the response. `decodeMessage` parses that fine (it has neither
+  `result` nor `error`), so `mcp gateway call`/`list-tools` read "the server
+  never answered" as a successful empty response. It now returns the raw
+  body instead, the same as the existing scan-error path, so the failure
+  surfaces as a visible decode error rather than a silent success. This is a
+  latent bug, not one observed in the wild: C1's gateway has never been seen
+  returning a multi-event SSE stream on a POST across three independent
+  live-capture sessions, so this fallback tier was unreachable against C1
+  today; it guarded a spec-permitted shape the client advertises support for
+  but has not observed.
+- **`mcp gateway call` no longer fails open when `isError` is present but not
+  a JSON boolean.** Also found by adversarial review of #49/#54, which added
+  the `isError` check in the first place: `toolResultIsError` decoded into a
+  `bool` field, so a server sending `isError` as the string `"true"`, a
+  number, an object, or an array made `json.Unmarshal` fail on the type
+  mismatch — and the old code treated that decode failure as `isError: false`
+  (success), narrowly reintroducing the exact "tool failure read as success"
+  bug exit code `7` exists to catch. Any `isError` value other than `false`,
+  `null`, or absent (all still success) or the literal `true` (still exit `7`)
+  now also exits `7`, with a diagnostic that calls out the non-boolean value
+  so it reads differently from a genuine `isError: true` failure. This is a
+  deliberate, accepted tradeoff: MCP defines `isError` as a boolean, so any
+  non-boolean value already means a non-conformant tool server, and a
+  spec-violating falsy value like `isError: 0` will now also be reported as
+  an error rather than special-cased back to success. This path requires a
+  non-conformant server to trigger; it has not been observed against C1's own
+  gateway.
 
 ## [0.3.0] - 2026-07-16
 

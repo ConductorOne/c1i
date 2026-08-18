@@ -287,9 +287,15 @@ func decodeMessage(body []byte) (*rpcResponse, error) {
 // It then picks the event that answers wantID, in order: (1) the event whose
 // JSON-RPC id matches wantID, if wantID is non-nil; (2) the event carrying a
 // `result` or `error` (a notification, which by definition carries no id, is
-// never a candidate here); (3) the last event in the stream, as a fallback for
-// a malformed/unrecognized stream. A scan error returns the raw body so a
-// decode failure surfaces visibly instead of silently picking the wrong bytes.
+// never a candidate here). If neither tier finds a match — e.g. the stream
+// contains only progress notifications and never actually answers the
+// request — the raw body is returned instead of guessing, the same as the
+// scanner-error path below, so the caller's JSON-RPC decode fails visibly
+// instead of a notification silently being mistaken for the response (which
+// would make decodeMessage return a zero-value {Result:nil, Error:nil}
+// message — i.e. the CLI treating "the server never answered" as a
+// successful empty response). A scan error also returns the raw body, for
+// the same reason.
 //
 // This handles the full input space the streamable-HTTP transport permits
 // (multi-event streams, multi-line data fields, non-matching ids in-flight) —
@@ -360,7 +366,6 @@ func extractSSEResponse(body []byte, wantID *int) []byte {
 		}
 	}
 
-	var last []byte
 	for _, e := range events {
 		if _, ok := idOf(e); ok {
 			var probe struct {
@@ -371,9 +376,13 @@ func extractSSEResponse(body []byte, wantID *int) []byte {
 				return e // the JSON-RPC response event
 			}
 		}
-		last = e
 	}
-	return last
+	// No event matched wantID and none carried result/error: this stream
+	// never answers the request (e.g. notifications only). Returning the raw
+	// body — rather than the last event, whatever it happens to be — makes
+	// the caller's JSON-RPC decode fail visibly instead of silently reading
+	// as success.
+	return body
 }
 
 func truncate(b []byte, n int) string {

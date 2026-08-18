@@ -117,6 +117,95 @@ func TestExtractSSEResponseSelectsByRequestID(t *testing.T) {
 	}
 }
 
+// TestExtractSSEResponseNoResponseInStream is the regression test for the
+// "last event" fallback tier that used to exist: if a stream never actually
+// answers the request (no event matches wantID, and no event carries
+// result/error — e.g. only a progress notification), extractSSEResponse must
+// return the raw body rather than silently returning the notification's
+// bytes as if they were the response. The old behavior made decodeMessage
+// happily parse the notification into a zero-value {Result:nil, Error:nil}
+// message, so call() returned (nil, nil) — the CLI treating "the server
+// never answered" as a successful empty response. Returning the raw body
+// instead makes json.Unmarshal fail visibly (it isn't valid JSON-RPC, or
+// even valid JSON at all), surfacing the failure instead of hiding it.
+func TestExtractSSEResponseNoResponseInStream(t *testing.T) {
+	sse := "data: {\"jsonrpc\":\"2.0\",\"method\":\"notifications/progress\",\"params\":{\"p\":50}}\n\n"
+	got := extractSSEResponse([]byte(sse), nil)
+	if string(got) != sse {
+		t.Errorf("extractSSEResponse = %q, want the raw body %q (a notification-only stream must not be mistaken for a response)", got, sse)
+	}
+	if msg, err := decodeMessage(got); err == nil {
+		t.Errorf("decodeMessage(%q) = %+v, <nil>, want a parse error (silent success bug: a notification decoded as an empty successful response)", got, msg)
+	}
+
+	// Same shape, but with a wantID set and no event anywhere carrying that
+	// id or a result/error: must still fall through to the raw body, not to
+	// whichever event happens to be last.
+	wantID := 5
+	got = extractSSEResponse([]byte(sse), &wantID)
+	if string(got) != sse {
+		t.Errorf("extractSSEResponse (wantID=5, no match) = %q, want raw body %q", got, sse)
+	}
+}
+
+// TestExtractSSEResponseMultipleNotificationsNoResponse covers a stream with
+// several events, none of which carry a result or error anywhere (not just a
+// single-event stream) — still must surface as a visible failure rather than
+// picking the last notification.
+func TestExtractSSEResponseMultipleNotificationsNoResponse(t *testing.T) {
+	sse := "data: {\"jsonrpc\":\"2.0\",\"method\":\"notifications/progress\",\"params\":{\"p\":10}}\n\n" +
+		"data: {\"jsonrpc\":\"2.0\",\"method\":\"notifications/progress\",\"params\":{\"p\":90}}\n\n"
+	got := extractSSEResponse([]byte(sse), nil)
+	if string(got) != sse {
+		t.Errorf("extractSSEResponse = %q, want raw body %q", got, sse)
+	}
+	if _, err := decodeMessage(got); err == nil {
+		t.Error("decodeMessage succeeded on a multi-notification stream with no response, want a visible parse error")
+	}
+}
+
+// TestExtractSSEResponseSelectsNullOrEmptyResult are regression guards: a
+// legitimate response carrying "result":null or "result":{} must still be
+// selected as the response (both are valid, present `result` fields per
+// JSON-RPC — a call that legitimately returns no data), not treated as
+// missing just because they look "empty".
+func TestExtractSSEResponseSelectsNullOrEmptyResult(t *testing.T) {
+	cases := []struct {
+		name string
+		sse  string
+		want string
+	}{
+		{
+			name: "null result",
+			sse:  "data: {\"jsonrpc\":\"2.0\",\"id\":1,\"result\":null}\n\n",
+			want: `{"jsonrpc":"2.0","id":1,"result":null}`,
+		},
+		{
+			name: "empty object result",
+			sse:  "data: {\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{}}\n\n",
+			want: `{"jsonrpc":"2.0","id":1,"result":{}}`,
+		},
+		{
+			name: "error instead of result",
+			sse:  "data: {\"jsonrpc\":\"2.0\",\"id\":1,\"error\":{\"code\":-32601,\"message\":\"nope\"}}\n\n",
+			want: `{"jsonrpc":"2.0","id":1,"error":{"code":-32601,"message":"nope"}}`,
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := string(extractSSEResponse([]byte(tc.sse), nil))
+			if got != tc.want {
+				t.Errorf("extractSSEResponse = %q, want %q (must still be selected as the response, not treated as missing)", got, tc.want)
+			}
+			// And it must decode as a legitimate message, with no error from
+			// decodeMessage itself (the JSON is well-formed either way).
+			if _, err := decodeMessage([]byte(got)); err != nil {
+				t.Errorf("decodeMessage(%q) failed: %v", got, err)
+			}
+		})
+	}
+}
+
 func TestDecodeMessage(t *testing.T) {
 	// Empty body (e.g. a 202 to a notification) is not an error.
 	if msg, err := decodeMessage([]byte("  ")); err != nil || msg.Error != nil {
