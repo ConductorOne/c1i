@@ -1,0 +1,290 @@
+// Package mcpgateway is a minimal client for the C1 MCP gateway, which speaks
+// the Model Context Protocol over streamable HTTP (JSON-RPC 2.0 POSTed to a
+// single endpoint). It exists so `c1i mcp gateway ...` can drive the same
+// handshake an MCP host would — initialize, list tools, call a tool — to close
+// the configure-then-verify loop without hand-rolling the protocol.
+package mcpgateway
+
+import (
+	"bufio"
+	"bytes"
+	"context"
+	"encoding/json"
+	"fmt"
+	"io"
+	"net/http"
+	"strings"
+)
+
+// protocolVersion is the MCP revision c1i negotiates. The gateway echoes its
+// own supported version in the initialize result.
+const protocolVersion = "2025-06-18"
+
+// Client is a single-session MCP gateway client. Not safe for concurrent use;
+// each command builds one, runs its handshake, and discards it.
+type Client struct {
+	endpoint   string
+	token      string
+	httpClient *http.Client
+	sessionID  string
+	nextID     int
+}
+
+// New returns a client targeting endpoint (the gateway's streamable-HTTP URL)
+// authenticated with the given bearer token.
+func New(endpoint, token string, httpClient *http.Client) *Client {
+	if httpClient == nil {
+		httpClient = http.DefaultClient
+	}
+	return &Client{endpoint: endpoint, token: token, httpClient: httpClient}
+}
+
+// Tool is one entry from tools/list.
+type Tool struct {
+	Name        string          `json:"name"`
+	Description string          `json:"description"`
+	InputSchema json.RawMessage `json:"inputSchema"`
+}
+
+// HTTPError is returned when the gateway responds with a non-2xx status. It
+// carries the status code so callers can classify it — e.g. map a 401/403 to an
+// authentication failure (exit 3) rather than a generic error.
+type HTTPError struct {
+	StatusCode int
+	Body       string
+}
+
+func (e *HTTPError) Error() string {
+	if e.Body != "" {
+		return fmt.Sprintf("gateway returned %d: %s", e.StatusCode, e.Body)
+	}
+	return fmt.Sprintf("gateway returned %d", e.StatusCode)
+}
+
+type rpcRequest struct {
+	JSONRPC string `json:"jsonrpc"`
+	ID      *int   `json:"id,omitempty"`
+	Method  string `json:"method"`
+	Params  any    `json:"params,omitempty"`
+}
+
+type rpcError struct {
+	Code    int             `json:"code"`
+	Message string          `json:"message"`
+	Data    json.RawMessage `json:"data,omitempty"`
+}
+
+func (e *rpcError) Error() string {
+	if len(e.Data) > 0 {
+		return fmt.Sprintf("MCP error %d: %s (%s)", e.Code, e.Message, string(e.Data))
+	}
+	return fmt.Sprintf("MCP error %d: %s", e.Code, e.Message)
+}
+
+type rpcResponse struct {
+	Result json.RawMessage `json:"result"`
+	Error  *rpcError       `json:"error"`
+}
+
+// Initialize performs the MCP handshake: the `initialize` request (capturing
+// the server-assigned Mcp-Session-Id) followed by the `notifications/initialized`
+// acknowledgement. It must run before ListTools/CallTool.
+func (c *Client) Initialize(ctx context.Context) error {
+	params := map[string]any{
+		"protocolVersion": protocolVersion,
+		"capabilities":    map[string]any{},
+		"clientInfo":      map[string]any{"name": "c1i", "version": "dev"},
+	}
+	if _, err := c.call(ctx, "initialize", params); err != nil {
+		return err
+	}
+	// A Mcp-Session-Id is optional: a stateless gateway may omit it, in which
+	// case subsequent requests simply carry no session header. Only send the
+	// header when the server gave us one (handled in post).
+	//
+	// notifications/initialized has no id and expects no result.
+	return c.notify(ctx, "notifications/initialized")
+}
+
+// ListTools returns the tools the gateway exposes to the caller, following
+// MCP cursor pagination (tools/list returns a nextCursor when more tools remain)
+// so the full set is returned even when it spans multiple pages.
+func (c *Client) ListTools(ctx context.Context) ([]Tool, error) {
+	var all []Tool
+	cursor := ""
+	for {
+		params := map[string]any{}
+		if cursor != "" {
+			params["cursor"] = cursor
+		}
+		raw, err := c.call(ctx, "tools/list", params)
+		if err != nil {
+			return nil, err
+		}
+		var out struct {
+			Tools      []Tool `json:"tools"`
+			NextCursor string `json:"nextCursor"`
+		}
+		if err := json.Unmarshal(raw, &out); err != nil {
+			return nil, fmt.Errorf("parsing tools/list result: %w", err)
+		}
+		all = append(all, out.Tools...)
+		if out.NextCursor == "" {
+			return all, nil
+		}
+		cursor = out.NextCursor
+	}
+}
+
+// CallTool invokes name with the given arguments (raw JSON object, or nil for
+// no arguments) and returns the raw MCP result (its `content` array, `isError`,
+// etc.) for the caller to render.
+func (c *Client) CallTool(ctx context.Context, name string, arguments json.RawMessage) (json.RawMessage, error) {
+	args := arguments
+	if len(args) == 0 {
+		args = json.RawMessage(`{}`)
+	}
+	params := map[string]any{"name": name, "arguments": args}
+	return c.call(ctx, "tools/call", params)
+}
+
+// call sends a JSON-RPC request expecting a response, and returns its result.
+func (c *Client) call(ctx context.Context, method string, params any) (json.RawMessage, error) {
+	c.nextID++
+	id := c.nextID
+	body, err := json.Marshal(rpcRequest{JSONRPC: "2.0", ID: &id, Method: method, Params: params})
+	if err != nil {
+		return nil, err
+	}
+	respBody, sessionID, err := c.post(ctx, body)
+	if err != nil {
+		return nil, err
+	}
+	if sessionID != "" {
+		c.sessionID = sessionID
+	}
+	msg, err := decodeMessage(respBody)
+	if err != nil {
+		return nil, fmt.Errorf("%s: %w", method, err)
+	}
+	if msg.Error != nil {
+		return nil, msg.Error
+	}
+	return msg.Result, nil
+}
+
+// notify sends a JSON-RPC notification (no id, no response expected).
+func (c *Client) notify(ctx context.Context, method string) error {
+	body, err := json.Marshal(rpcRequest{JSONRPC: "2.0", Method: method})
+	if err != nil {
+		return err
+	}
+	_, _, err = c.post(ctx, body)
+	return err
+}
+
+// post sends one JSON-RPC payload to the gateway and returns the raw response
+// body plus any Mcp-Session-Id header. It sets the session header on requests
+// once known, and accepts both a JSON and an SSE response (per the streamable-
+// HTTP transport, the server may answer either way).
+func (c *Client) post(ctx context.Context, payload []byte) (body []byte, sessionID string, err error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.endpoint, bytes.NewReader(payload))
+	if err != nil {
+		return nil, "", err
+	}
+	req.Header.Set("Authorization", "Bearer "+c.token)
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "application/json, text/event-stream")
+	req.Header.Set("MCP-Protocol-Version", protocolVersion)
+	if c.sessionID != "" {
+		req.Header.Set("Mcp-Session-Id", c.sessionID)
+	}
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, "", err
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	data, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, "", err
+	}
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return nil, "", &HTTPError{StatusCode: resp.StatusCode, Body: strings.TrimSpace(string(data))}
+	}
+
+	sid := resp.Header.Get("Mcp-Session-Id")
+	if strings.Contains(resp.Header.Get("Content-Type"), "text/event-stream") {
+		data = extractSSEResponse(data)
+	}
+	return data, sid, nil
+}
+
+// decodeMessage parses a single JSON-RPC response object. An empty body (e.g. a
+// 202 to a notification) decodes to an empty message with no error.
+func decodeMessage(body []byte) (*rpcResponse, error) {
+	trimmed := bytes.TrimSpace(body)
+	if len(trimmed) == 0 {
+		return &rpcResponse{}, nil
+	}
+	var msg rpcResponse
+	if err := json.Unmarshal(trimmed, &msg); err != nil {
+		return nil, fmt.Errorf("parsing gateway response: %w (body: %s)", err, truncate(trimmed, 200))
+	}
+	return &msg, nil
+}
+
+// extractSSEResponse pulls the JSON-RPC response out of an SSE stream. A
+// streamable-HTTP server may send several events in one response (e.g. progress
+// notifications followed by the result), so concatenating every `data:` line
+// would corrupt the JSON. Instead it parses the stream into events (blank-line
+// separated, each event's `data:` lines joined) and returns the payload of the
+// event that is the JSON-RPC response — the one carrying `result` or `error` —
+// skipping notifications. Falls back to the last event's payload, or the raw
+// body on a scan error, so a decode failure surfaces visibly.
+func extractSSEResponse(body []byte) []byte {
+	var events [][]byte
+	var cur bytes.Buffer
+	flush := func() {
+		if cur.Len() > 0 {
+			events = append(events, append([]byte(nil), cur.Bytes()...))
+			cur.Reset()
+		}
+	}
+	sc := bufio.NewScanner(bytes.NewReader(body))
+	sc.Buffer(make([]byte, 0, 64*1024), 8*1024*1024)
+	for sc.Scan() {
+		line := sc.Text()
+		if line == "" { // blank line terminates an SSE event
+			flush()
+			continue
+		}
+		if strings.HasPrefix(line, "data:") {
+			cur.WriteString(strings.TrimSpace(strings.TrimPrefix(line, "data:")))
+		}
+	}
+	flush()
+	if sc.Err() != nil {
+		return body
+	}
+	var last []byte
+	for _, e := range events {
+		var probe struct {
+			Result json.RawMessage `json:"result"`
+			Error  json.RawMessage `json:"error"`
+		}
+		if json.Unmarshal(e, &probe) == nil && (len(probe.Result) > 0 || len(probe.Error) > 0) {
+			return e // the JSON-RPC response event
+		}
+		last = e
+	}
+	return last
+}
+
+func truncate(b []byte, n int) string {
+	if len(b) <= n {
+		return string(b)
+	}
+	return string(b[:n]) + "…"
+}
