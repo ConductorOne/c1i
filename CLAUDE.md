@@ -86,7 +86,8 @@ golangci-lint run --timeout=3m ./...   # includes gofmt formatting; CI gates on 
 - **Errors:** the client returns typed `client.APIError` (carries status) and
   `client.AuthError`; `cmd/errors.go` maps them to exit codes — 0 ok, 1 generic,
   2 usage, 3 auth (401/403), 4 not-found (404), 5 rate-limited (429), 6 server
-  (5xx). Wrap client errors with `%w` so `errors.As` can classify them.
+  (5xx), 7 tool-execution error (`mcp gateway call` result has `isError: true`).
+  Wrap client errors with `%w` so `errors.As` can classify them.
 - Retries (429/5xx + transport, idempotent-aware) live in the client
   (`internal/client/client.go`); commands get them for free via `newClient`.
 

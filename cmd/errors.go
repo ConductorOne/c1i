@@ -27,6 +27,7 @@ const (
 	exitNotFound    = 4 // API returned 404
 	exitRateLimited = 5 // API returned 429
 	exitServer      = 6 // API returned 5xx
+	exitToolError   = 7 // an MCP tool call completed (transport/protocol succeeded) but the tool itself reported isError
 )
 
 // usageError marks an error as a CLI-usage problem (bad flag/args) so it maps to
@@ -35,6 +36,20 @@ type usageError struct{ err error }
 
 func (e *usageError) Error() string { return e.err.Error() }
 func (e *usageError) Unwrap() error { return e.err }
+
+// toolExecutionError marks an MCP tool call (`mcp gateway call`) whose result
+// carried isError:true — the JSON-RPC request succeeded (and, if it went over
+// HTTP, so did that), but the tool itself reported a failure. This is a
+// different class of failure from the transport/protocol codes (3/4/5/6): the
+// call completed; the *tool* failed. It maps to its own exitToolError so an
+// agent branching on exit code can tell the two apart. Not exported: nothing
+// outside cmd constructs one today, and keeping it here means exitCode's
+// switch is the single place that has to agree with cmd/mcp_gateway_call.go
+// on what it means.
+type toolExecutionError struct{ err error }
+
+func (e *toolExecutionError) Error() string { return e.err.Error() }
+func (e *toolExecutionError) Unwrap() error { return e.err }
 
 // Run executes the root command, renders any error per --error-format, and
 // returns the process exit code. main() is just os.Exit(cmd.Run()).
@@ -102,6 +117,10 @@ func exitCode(err error) int {
 	var authErr *client.AuthError
 	if errors.As(err, &authErr) {
 		return exitAuth
+	}
+	var toolErr *toolExecutionError
+	if errors.As(err, &toolErr) {
+		return exitToolError
 	}
 	var usageErr *usageError
 	if errors.As(err, &usageErr) {

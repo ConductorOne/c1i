@@ -65,6 +65,7 @@ func TestExitCode(t *testing.T) {
 		{"api 400", &client.APIError{StatusCode: 400}, exitError},
 		{"auth", &client.AuthError{Err: errors.New("no creds")}, exitAuth},
 		{"usage", &usageError{errors.New("bad flag")}, exitUsage},
+		{"tool execution", &toolExecutionError{errors.New("isError")}, exitToolError},
 		{"wrapped api 404", fmt.Errorf("API error: %w", &client.APIError{StatusCode: 404}), exitNotFound},
 		{"wrapped auth", fmt.Errorf("authentication failed: %w", &client.AuthError{Err: errors.New("x")}), exitAuth},
 		{"cobra unknown command", errors.New(`unknown command "bogus" for "c1i"`), exitUsage},

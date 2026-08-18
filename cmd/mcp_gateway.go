@@ -1,7 +1,6 @@
 package cmd
 
 import (
-	"errors"
 	"fmt"
 	"net/url"
 	"strings"
@@ -77,22 +76,16 @@ func newGatewayClient(cmd *cobra.Command) (*mcpgateway.Client, error) {
 		return nil, fmt.Errorf("authentication failed: %w", err)
 	}
 	gc := mcpgateway.New(endpoint, tok.AccessToken, nil)
+	// *mcpgateway.HTTPError unwraps to a *client.APIError, so wrapping with %w
+	// here is enough for cmd/errors.go's exitCode to classify a gateway 401/403
+	// as auth, 404 as not-found, 429 as rate-limited, and 5xx as server — the
+	// same taxonomy every other API failure gets. No separate classification
+	// helper is needed, and none is needed at the list-tools/call call sites
+	// either, since they wrap gateway errors with %w too.
 	if err := gc.Initialize(cmd.Context()); err != nil {
-		return nil, fmt.Errorf("gateway handshake failed: %w", classifyGatewayErr(err))
+		return nil, fmt.Errorf("gateway handshake failed: %w", err)
 	}
 	return gc, nil
-}
-
-// classifyGatewayErr maps a gateway 401/403 to a client.AuthError so it reaches
-// the exit-3 (auth) classification in cmd/errors.go — the gateway uses the same
-// bearer as the API, so an auth rejection there is an auth failure. Other errors
-// pass through unchanged.
-func classifyGatewayErr(err error) error {
-	var he *mcpgateway.HTTPError
-	if errors.As(err, &he) && (he.StatusCode == 401 || he.StatusCode == 403) {
-		return &client.AuthError{Err: err}
-	}
-	return err
 }
 
 func init() {
