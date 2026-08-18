@@ -89,3 +89,28 @@ golangci-lint run --timeout=3m ./...   # includes gofmt formatting; CI gates on 
   (5xx). Wrap client errors with `%w` so `errors.As` can classify them.
 - Retries (429/5xx + transport, idempotent-aware) live in the client
   (`internal/client/client.go`); commands get them for free via `newClient`.
+
+### Adding a new client/subsystem package
+
+A command built on the shared client (`newClient`) inherits the invariants above
+for free. A **new package that talks to a remote service directly** (e.g. a
+protocol client under `internal/`) does **not** — it must re-satisfy them
+explicitly, and this is where they are most easily dropped. Before finishing such
+a package, verify each of these against the new code:
+
+- **Paginate to completion.** Any list/collection call must follow the API's
+  cursor/next-page mechanism until it is exhausted and return the full set —
+  never the first page only. Silent truncation reads as success.
+- **Return typed, classifiable errors.** A non-2xx / auth failure must surface as
+  (or wrap, with `%w`) an error type that `cmd/errors.go` maps to the exit-code
+  taxonomy (3 auth, 4 not-found, 5 rate-limited, 6 server) — not a bare
+  `fmt.Errorf`, which collapses to exit 1.
+- **Escape ids in paths** (`client.Path`-style), use the shared output helpers in
+  `cmd`, and honor the global flags where applicable.
+
+When implementing a wire protocol or stream parser (JSON-RPC, SSE, MCP, …), code
+and test against the **full input space the spec permits**, not just the shape a
+reference server happens to return today: multi-event streams, optional
+fields/headers, paginated responses spanning multiple pages, and error payloads.
+Add a test that drives the wired end-to-end path (e.g. via `httptest`), not only
+the pure helper functions.
