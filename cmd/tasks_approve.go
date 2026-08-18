@@ -8,7 +8,7 @@ import (
 )
 
 var tasksApproveCmd = &cobra.Command{
-	Use:   "approve",
+	Use:   "approve <task-id>",
 	Short: "Approve an access request task",
 	Long: `Approve an access request task.
 
@@ -16,6 +16,7 @@ The approval targets a specific step of the task's policy via --policy-step-id.
 If omitted, the task's currently executing step is fetched and used
 automatically; if it cannot be determined the command errors and asks you to
 pass --policy-step-id explicitly (approve requires a step).`,
+	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		baseURL, err := GetBaseURL()
 		if err != nil {
@@ -27,7 +28,7 @@ pass --policy-step-id explicitly (approve requires a step).`,
 			return fmt.Errorf("authentication failed: %w", err)
 		}
 
-		taskID, _ := cmd.Flags().GetString("task-id")
+		taskID := args[0]
 		comment, _ := cmd.Flags().GetString("comment")
 		policyStepID, _ := cmd.Flags().GetString("policy-step-id")
 
@@ -63,9 +64,7 @@ pass --policy-step-id explicitly (approve requires a step).`,
 }
 
 func init() {
-	tasksApproveCmd.Flags().String("task-id", "", "Task ID to approve")
 	tasksApproveCmd.Flags().String("policy-step-id", "", "Policy step to approve (defaults to the task's current step)")
 	tasksApproveCmd.Flags().String("comment", "", "Optional comment")
-	markRequired(tasksApproveCmd, "task-id")
 	tasksCmd.AddCommand(tasksApproveCmd)
 }

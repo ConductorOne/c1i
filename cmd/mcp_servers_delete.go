@@ -8,13 +8,14 @@ import (
 )
 
 var mcpServersDeleteCmd = &cobra.Command{
-	Use:   "delete",
+	Use:   "delete <connector-id>",
 	Short: "Soft-delete an MCP server",
 	Long: `Soft-delete an MCP server. Stops the connector and removes it from the
 tenant's MCP catalog; the underlying Connector record is retained for audit,
 and any per-user OAuth credentials issued against it are revoked.`,
+	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		if err := requireNonEmpty(cmd, "app-id", "connector-id"); err != nil {
+		if err := requireNonEmpty(cmd, "app-id"); err != nil {
 			return err
 		}
 
@@ -24,7 +25,7 @@ and any per-user OAuth credentials issued against it are revoked.`,
 		}
 
 		appID, _ := cmd.Flags().GetString("app-id")
-		connectorID, _ := cmd.Flags().GetString("connector-id")
+		connectorID := args[0]
 
 		path := client.Path("/api/v1/apps/%s/mcp_servers/%s", appID, connectorID)
 		if dryRunActive() {
@@ -46,7 +47,6 @@ and any per-user OAuth credentials issued against it are revoked.`,
 
 func init() {
 	mcpServersDeleteCmd.Flags().String("app-id", "", "Application ID")
-	mcpServersDeleteCmd.Flags().String("connector-id", "", "MCP server (connector) ID")
-	markRequired(mcpServersDeleteCmd, "app-id", "connector-id")
+	markRequired(mcpServersDeleteCmd, "app-id")
 	mcpServersCmd.AddCommand(mcpServersDeleteCmd)
 }
