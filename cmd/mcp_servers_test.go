@@ -3,6 +3,7 @@ package cmd
 import (
 	"encoding/json"
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/spf13/cobra"
@@ -51,12 +52,22 @@ func TestServerRowAndCount(t *testing.T) {
 	}
 	for k, w := range want {
 		if row[k] != w {
-			t.Errorf("row[%q] = %q, want %q", k, row[k], w)
+			t.Errorf("row[%q] = %v, want %q", k, row[k], w)
 		}
 	}
 	countRow := serverCountRow(v, 7)
-	if countRow["tool_count"] != "7" {
-		t.Errorf("tool_count = %q, want 7", countRow["tool_count"])
+	// tool_count must be a real JSON number (int64(7)), not the string "7" —
+	// otherwise a `jq '.tool_count > 5'` pipeline does a string comparison
+	// instead of a numeric one.
+	if countRow["tool_count"] != int64(7) {
+		t.Errorf("tool_count = %v (%T), want int64(7)", countRow["tool_count"], countRow["tool_count"])
+	}
+	b, err := json.Marshal(countRow)
+	if err != nil {
+		t.Fatalf("marshal countRow: %v", err)
+	}
+	if !strings.Contains(string(b), `"tool_count":7`) {
+		t.Errorf("marshalled countRow = %s, want a bare numeric tool_count (\"tool_count\":7)", b)
 	}
 }
 

@@ -1,8 +1,6 @@
 package cmd
 
 import (
-	"strconv"
-
 	"github.com/spf13/cobra"
 )
 
@@ -101,9 +99,9 @@ func catalogScopeCounts(modes []catalogAuthModeScopes) (required, optional int) 
 	return len(reqSet), len(optSet)
 }
 
-func catalogEntryRow(e catalogEntryView) map[string]string {
+func catalogEntryRow(e catalogEntryView) map[string]any {
 	required, optional := catalogScopeCounts(e.AuthModes)
-	return map[string]string{
+	return map[string]any{
 		"id":                   e.ID,
 		"display_name":         e.DisplayName,
 		"description":          e.Description,
@@ -113,8 +111,8 @@ func catalogEntryRow(e catalogEntryView) map[string]string {
 		"channel":              e.Channel,
 		"scope":                e.Scope,
 		"maturity":             e.Maturity,
-		"stable":               strconv.FormatBool(e.Stable),
-		"required_scope_count": strconv.Itoa(required),
-		"optional_scope_count": strconv.Itoa(optional),
+		"stable":               e.Stable,
+		"required_scope_count": required,
+		"optional_scope_count": optional,
 	}
 }

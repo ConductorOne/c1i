@@ -87,15 +87,15 @@ type toolsetView struct {
 	ToolCount        int32  `json:"toolCount"`
 }
 
-func toolsetRow(t toolsetView) map[string]string {
-	return map[string]string{
+func toolsetRow(t toolsetView) map[string]any {
+	return map[string]any{
 		"id":                 t.ID,
 		"app_id":             t.AppID,
 		"connector_id":       t.ConnectorID,
 		"display_name":       t.DisplayName,
 		"description":        t.Description,
 		"app_entitlement_id": t.AppEntitlementID,
-		"tool_count":         strconv.FormatInt(int64(t.ToolCount), 10),
+		"tool_count":         int64(t.ToolCount),
 	}
 }
 

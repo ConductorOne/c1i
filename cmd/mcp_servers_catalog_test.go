@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"encoding/json"
+	"strings"
 	"testing"
 )
 
@@ -65,37 +66,52 @@ func TestCatalogEntryRowDisambiguation(t *testing.T) {
 	hostedRow := catalogEntryRow(hosted)
 
 	wantRest := map[string]string{
-		"id":                   "3Aaj3lKAbL5Dft3DAOVyN0ltRAp",
-		"display_name":         "Slack API",
-		"service_name":         "slack",
-		"base_url":             "https://slack.com/api",
-		"default_tool_prefix":  "slack_api",
-		"maturity":             "MCP_SERVER_CATALOG_MATURITY_CURATED",
-		"stable":               "true",
-		"required_scope_count": "14",
-		"optional_scope_count": "27",
+		"id":                  "3Aaj3lKAbL5Dft3DAOVyN0ltRAp",
+		"display_name":        "Slack API",
+		"service_name":        "slack",
+		"base_url":            "https://slack.com/api",
+		"default_tool_prefix": "slack_api",
+		"maturity":            "MCP_SERVER_CATALOG_MATURITY_CURATED",
 	}
 	for k, want := range wantRest {
 		if got := restRow[k]; got != want {
-			t.Errorf("restRow[%q] = %q, want %q", k, got, want)
+			t.Errorf("restRow[%q] = %v, want %q", k, got, want)
 		}
+	}
+	// stable/required_scope_count/optional_scope_count must be real JSON
+	// booleans/numbers (not stringified), so they're asserted separately from
+	// the string-valued fields above.
+	if restRow["stable"] != true {
+		t.Errorf("restRow[stable] = %v (%T), want bool true", restRow["stable"], restRow["stable"])
+	}
+	if restRow["required_scope_count"] != 14 {
+		t.Errorf("restRow[required_scope_count] = %v (%T), want int 14", restRow["required_scope_count"], restRow["required_scope_count"])
+	}
+	if restRow["optional_scope_count"] != 27 {
+		t.Errorf("restRow[optional_scope_count] = %v (%T), want int 27", restRow["optional_scope_count"], restRow["optional_scope_count"])
 	}
 
 	wantHosted := map[string]string{
-		"id":                   "3GBynv4ntUVsVWoWFZxGFt2xC5s",
-		"display_name":         "Slack",
-		"service_name":         "slack-mcp",
-		"base_url":             "https://mcp.slack.com/mcp",
-		"default_tool_prefix":  "slack",
-		"maturity":             "MCP_SERVER_CATALOG_MATURITY_GENERATED",
-		"stable":               "true",
-		"required_scope_count": "26",
-		"optional_scope_count": "0",
+		"id":                  "3GBynv4ntUVsVWoWFZxGFt2xC5s",
+		"display_name":        "Slack",
+		"service_name":        "slack-mcp",
+		"base_url":            "https://mcp.slack.com/mcp",
+		"default_tool_prefix": "slack",
+		"maturity":            "MCP_SERVER_CATALOG_MATURITY_GENERATED",
 	}
 	for k, want := range wantHosted {
 		if got := hostedRow[k]; got != want {
-			t.Errorf("hostedRow[%q] = %q, want %q", k, got, want)
+			t.Errorf("hostedRow[%q] = %v, want %q", k, got, want)
 		}
+	}
+	if hostedRow["stable"] != true {
+		t.Errorf("hostedRow[stable] = %v (%T), want bool true", hostedRow["stable"], hostedRow["stable"])
+	}
+	if hostedRow["required_scope_count"] != 26 {
+		t.Errorf("hostedRow[required_scope_count] = %v (%T), want int 26", hostedRow["required_scope_count"], hostedRow["required_scope_count"])
+	}
+	if hostedRow["optional_scope_count"] != 0 {
+		t.Errorf("hostedRow[optional_scope_count] = %v (%T), want int 0", hostedRow["optional_scope_count"], hostedRow["optional_scope_count"])
 	}
 
 	// The whole point: every disambiguating field must actually differ between
@@ -219,15 +235,33 @@ func TestCatalogEntryRowSuperset(t *testing.T) {
 	// And the new fields are present with sane defaults on an entry with no
 	// scope tiering at all.
 	newFields := map[string]string{
-		"base_url":             "https://api.example.com",
-		"default_tool_prefix":  "example",
-		"stable":               "false",
-		"required_scope_count": "0",
-		"optional_scope_count": "0",
+		"base_url":            "https://api.example.com",
+		"default_tool_prefix": "example",
 	}
 	for k, want := range newFields {
 		if got := row[k]; got != want {
-			t.Errorf("row[%q] = %q, want %q", k, got, want)
+			t.Errorf("row[%q] = %v, want %q", k, got, want)
 		}
+	}
+	// stable/required_scope_count/optional_scope_count are real JSON
+	// booleans/numbers, not stringified — checked separately from the
+	// string-valued fields above. This is also the regression guard for the
+	// bug where "stable": false serialized as the string "false", which is
+	// truthy to a `jq 'select(.stable)'` pipeline.
+	if row["stable"] != false {
+		t.Errorf("row[stable] = %v (%T), want bool false", row["stable"], row["stable"])
+	}
+	if row["required_scope_count"] != 0 {
+		t.Errorf("row[required_scope_count] = %v (%T), want int 0", row["required_scope_count"], row["required_scope_count"])
+	}
+	if row["optional_scope_count"] != 0 {
+		t.Errorf("row[optional_scope_count] = %v (%T), want int 0", row["optional_scope_count"], row["optional_scope_count"])
+	}
+	b, err := json.Marshal(row)
+	if err != nil {
+		t.Fatalf("marshal row: %v", err)
+	}
+	if !strings.Contains(string(b), `"stable":false`) {
+		t.Errorf("marshalled row = %s, want a bare JSON boolean (\"stable\":false), not a quoted string", b)
 	}
 }

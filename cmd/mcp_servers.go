@@ -133,8 +133,8 @@ type serverView struct {
 	LastCalledAt string `json:"lastCalledAt"`
 }
 
-func serverRow(s serverView) map[string]string {
-	return map[string]string{
+func serverRow(s serverView) map[string]any {
+	return map[string]any{
 		"connector_id":          s.ConnectorID,
 		"app_id":                s.AppID,
 		"display_name":          s.DisplayName,
@@ -154,9 +154,9 @@ func serverRow(s serverView) map[string]string {
 // by `search` (which wraps each view in {mcpServer, toolCount}). last_called_at
 // is included only when the view carries it (i.e. --include-last-called-at),
 // so the column doesn't appear as a misleading always-empty field otherwise.
-func serverCountRow(s serverView, toolCount int64) map[string]string {
+func serverCountRow(s serverView, toolCount int64) map[string]any {
 	row := serverRow(s)
-	row["tool_count"] = strconv.FormatInt(toolCount, 10)
+	row["tool_count"] = toolCount
 	if s.LastCalledAt != "" {
 		row["last_called_at"] = s.LastCalledAt
 	}

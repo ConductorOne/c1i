@@ -1,8 +1,6 @@
 package cmd
 
 import (
-	"strconv"
-
 	"github.com/spf13/cobra"
 )
 
@@ -30,14 +28,14 @@ type connectionView struct {
 	ConnectedAt       string `json:"connectedAt"`
 }
 
-func connectionRow(v connectionView) map[string]string {
-	return map[string]string{
+func connectionRow(v connectionView) map[string]any {
+	return map[string]any{
 		"connector_id":        v.ConnectorID,
 		"app_id":              v.AppID,
 		"display_name":        v.DisplayName,
 		"server_type":         v.ServerType,
 		"auth_method":         v.AuthMethod,
-		"connected":           strconv.FormatBool(v.Connected),
+		"connected":           v.Connected,
 		"authorized_as_email": v.AuthorizedAsEmail,
 		"authorized_as_name":  v.AuthorizedAsName,
 		"connected_at":        v.ConnectedAt,

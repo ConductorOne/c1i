@@ -97,6 +97,12 @@ func waitForOwners(cmd *cobra.Command, c *client.Client, appID string, wantUserI
 	ticker := time.NewTicker(ownerWaitPollInterval)
 	defer ticker.Stop()
 
+	// firstPoll suppresses the "still waiting" line on the very first check:
+	// that poll happens immediately after the PUT, before any real waiting has
+	// elapsed, so printing it there would misleadingly imply time has already
+	// passed. Starting with the second poll, real time (>= one tick) has
+	// actually elapsed, so the message is accurate.
+	firstPoll := true
 	for {
 		got, err := fetchOwnerIDs(ctx, c, ownerIDsPath)
 		if err != nil {
@@ -110,8 +116,11 @@ func waitForOwners(cmd *cobra.Command, c *client.Client, appID string, wantUserI
 				appID, time.Since(start).Round(time.Second))
 			return nil
 		}
-		_, _ = fmt.Fprintf(out, "Still waiting for owners to provision on app %s (%s elapsed)...\n",
-			appID, time.Since(start).Round(time.Second))
+		if !firstPoll {
+			_, _ = fmt.Fprintf(out, "Still waiting for owners to provision on app %s (%s elapsed)...\n",
+				appID, time.Since(start).Round(time.Second))
+		}
+		firstPoll = false
 
 		select {
 		case <-ctx.Done():
