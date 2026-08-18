@@ -8,10 +8,11 @@ import (
 )
 
 var mcpToolsGetCmd = &cobra.Command{
-	Use:   "get",
+	Use:   "get <tool-id>",
 	Short: "Get a single MCP tool (pretty JSON)",
+	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		if err := requireNonEmpty(cmd, "app-id", "connector-id", "id"); err != nil {
+		if err := requireNonEmpty(cmd, "app-id", "connector-id"); err != nil {
 			return err
 		}
 
@@ -27,7 +28,7 @@ var mcpToolsGetCmd = &cobra.Command{
 
 		appID, _ := cmd.Flags().GetString("app-id")
 		connectorID, _ := cmd.Flags().GetString("connector-id")
-		id, _ := cmd.Flags().GetString("id")
+		id := args[0]
 
 		path := client.Path("/api/v1/apps/%s/connectors/%s/mcp_tools/%s", appID, connectorID, id)
 		data, err := c.Get(cmd.Context(), path, nil)
@@ -42,7 +43,6 @@ var mcpToolsGetCmd = &cobra.Command{
 func init() {
 	mcpToolsGetCmd.Flags().String("app-id", "", "Application ID")
 	mcpToolsGetCmd.Flags().String("connector-id", "", "Connector ID")
-	mcpToolsGetCmd.Flags().String("id", "", "MCP tool ID")
-	markRequired(mcpToolsGetCmd, "app-id", "connector-id", "id")
+	markRequired(mcpToolsGetCmd, "app-id", "connector-id")
 	mcpToolsCmd.AddCommand(mcpToolsGetCmd)
 }
