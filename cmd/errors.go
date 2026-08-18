@@ -1,12 +1,15 @@
 package cmd
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"os"
+	"os/signal"
 	"strings"
+	"syscall"
 
 	"github.com/ConductorOne/c1i/internal/client"
 	"github.com/spf13/cobra"
@@ -35,9 +38,22 @@ func (e *usageError) Unwrap() error { return e.err }
 
 // Run executes the root command, renders any error per --error-format, and
 // returns the process exit code. main() is just os.Exit(cmd.Run()).
+//
+// cmd.Context() is wired to cancel on SIGINT/SIGTERM (first Ctrl-C cancels
+// gracefully; a second reverts to the OS default hard-kill), so long-running
+// commands — e.g. "apps set-owners --wait" polling for async provisioning —
+// can honor cancellation instead of only a --*-timeout flag.
 func Run() int {
 	attachSubcommandGuards(rootCmd)
-	err := rootCmd.Execute()
+
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+	go func() {
+		<-ctx.Done()
+		stop() // after the first signal, let a second Ctrl-C hit the default handler (hard-kill)
+	}()
+
+	err := rootCmd.ExecuteContext(ctx)
 	if err == nil {
 		return exitOK
 	}
