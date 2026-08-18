@@ -102,6 +102,19 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   matching a missing required flag, instead of `1` (generic). The check
   (`requireNonEmpty`) applies this consistently across every command that uses
   it, so automation branching on exit codes sees a stable usage signal.
+- **BREAKING — `mcp gateway call` now exits `7` when the tool itself fails.**
+  Previously, a tool result with `isError: true` (the tool ran, but reported
+  its own failure — e.g. a timed-out deployment) exited `0` like a success,
+  because nothing inspected `isError`; only a transport/protocol failure (a
+  non-2xx HTTP status, or a JSON-RPC `error` response) was ever non-zero. The
+  new exit code `7` is distinct from the existing 3/4/5/6 transport codes —
+  it means "the call completed but the tool reported an error," a different
+  failure class entirely. **The full result is still printed to stdout
+  exactly as before**, `isError` and all, so an in-band consumer (e.g. an
+  LLM host reading the error text out of the `content` array) is unaffected;
+  only the process exit code changes. `mcp gateway call` shipped earlier
+  today (this same day) in the PR this follows up on, so there is
+  effectively no installed base depending on the old exit-0 behavior.
 
 ### Fixed
 
