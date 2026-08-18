@@ -14,6 +14,8 @@ import (
 	"io"
 	"net/http"
 	"strings"
+
+	"github.com/ConductorOne/c1i/internal/client"
 )
 
 // protocolVersion is the MCP revision c1i negotiates. The gateway echoes its
@@ -48,10 +50,16 @@ type Tool struct {
 
 // HTTPError is returned when the gateway responds with a non-2xx status. It
 // carries the status code so callers can classify it — e.g. map a 401/403 to an
-// authentication failure (exit 3) rather than a generic error.
+// authentication failure (exit 3) rather than a generic error. It unwraps to a
+// *client.APIError so it threads through the same exit-code taxonomy every
+// other API failure in this CLI does (cmd/errors.go's exitCode), without
+// losing the gateway-specific message (including the response body) that
+// Error() renders.
 type HTTPError struct {
 	StatusCode int
 	Body       string
+	Method     string
+	Path       string
 }
 
 func (e *HTTPError) Error() string {
@@ -59,6 +67,18 @@ func (e *HTTPError) Error() string {
 		return fmt.Sprintf("gateway returned %d: %s", e.StatusCode, e.Body)
 	}
 	return fmt.Sprintf("gateway returned %d", e.StatusCode)
+}
+
+// Unwrap exposes a *client.APIError carrying the same status/method/path/body
+// so errors.As(err, &apiErr) reaches it through any wrapping (fmt.Errorf with
+// %w) the caller does on top of HTTPError.
+func (e *HTTPError) Unwrap() error {
+	return &client.APIError{
+		Method:     e.Method,
+		Path:       e.Path,
+		StatusCode: e.StatusCode,
+		Body:       e.Body,
+	}
 }
 
 type rpcRequest struct {
@@ -98,9 +118,16 @@ func (c *Client) Initialize(ctx context.Context) error {
 	if _, err := c.call(ctx, "initialize", params); err != nil {
 		return err
 	}
-	// A Mcp-Session-Id is optional: a stateless gateway may omit it, in which
-	// case subsequent requests simply carry no session header. Only send the
-	// header when the server gave us one (handled in post).
+	// A Mcp-Session-Id is optional per the MCP transport spec: a stateless
+	// gateway may omit it, in which case subsequent requests simply carry no
+	// session header. Only send the header when the server gave us one
+	// (handled in post). In practice the C1 gateway has always returned one
+	// on initialize, and a request sent before this handshake completes is
+	// rejected ("method ... is invalid during session initialization") — so
+	// this optional-header handling is spec compliance for a gateway mode
+	// c1i hasn't observed, not dead code; the observed C1 behavior still
+	// requires the initialize -> capture header -> notifications/initialized
+	// -> tools/* order this method enforces.
 	//
 	// notifications/initialized has no id and expects no result.
 	return c.notify(ctx, "notifications/initialized")
@@ -156,7 +183,7 @@ func (c *Client) call(ctx context.Context, method string, params any) (json.RawM
 	if err != nil {
 		return nil, err
 	}
-	respBody, sessionID, err := c.post(ctx, body)
+	respBody, sessionID, err := c.post(ctx, body, &id)
 	if err != nil {
 		return nil, err
 	}
@@ -179,21 +206,28 @@ func (c *Client) notify(ctx context.Context, method string) error {
 	if err != nil {
 		return err
 	}
-	_, _, err = c.post(ctx, body)
+	_, _, err = c.post(ctx, body, nil)
 	return err
 }
 
 // post sends one JSON-RPC payload to the gateway and returns the raw response
 // body plus any Mcp-Session-Id header. It sets the session header on requests
 // once known, and accepts both a JSON and an SSE response (per the streamable-
-// HTTP transport, the server may answer either way).
-func (c *Client) post(ctx context.Context, payload []byte) (body []byte, sessionID string, err error) {
+// HTTP transport, the server may answer either way). wantID is the id of the
+// JSON-RPC request being sent (nil for a notification, which has none) — when
+// the response arrives as an SSE stream with several events, it is used to
+// pick out the event that answers this specific request.
+func (c *Client) post(ctx context.Context, payload []byte, wantID *int) (body []byte, sessionID string, err error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.endpoint, bytes.NewReader(payload))
 	if err != nil {
 		return nil, "", err
 	}
 	req.Header.Set("Authorization", "Bearer "+c.token)
 	req.Header.Set("Content-Type", "application/json")
+	// Both media types are required, not just advertised as a preference: the
+	// C1 gateway rejects a request missing either with 400 "Accept must
+	// contain both 'application/json' and 'text/event-stream'". Do not trim
+	// this to just one type.
 	req.Header.Set("Accept", "application/json, text/event-stream")
 	req.Header.Set("MCP-Protocol-Version", protocolVersion)
 	if c.sessionID != "" {
@@ -211,12 +245,17 @@ func (c *Client) post(ctx context.Context, payload []byte) (body []byte, session
 		return nil, "", err
 	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return nil, "", &HTTPError{StatusCode: resp.StatusCode, Body: strings.TrimSpace(string(data))}
+		return nil, "", &HTTPError{
+			StatusCode: resp.StatusCode,
+			Body:       strings.TrimSpace(string(data)),
+			Method:     req.Method,
+			Path:       req.URL.Path,
+		}
 	}
 
 	sid := resp.Header.Get("Mcp-Session-Id")
 	if strings.Contains(resp.Header.Get("Content-Type"), "text/event-stream") {
-		data = extractSSEResponse(data)
+		data = extractSSEResponse(data, wantID)
 	}
 	return data, sid, nil
 }
@@ -238,19 +277,37 @@ func decodeMessage(body []byte) (*rpcResponse, error) {
 // extractSSEResponse pulls the JSON-RPC response out of an SSE stream. A
 // streamable-HTTP server may send several events in one response (e.g. progress
 // notifications followed by the result), so concatenating every `data:` line
-// would corrupt the JSON. Instead it parses the stream into events (blank-line
-// separated, each event's `data:` lines joined) and returns the payload of the
-// event that is the JSON-RPC response — the one carrying `result` or `error` —
-// skipping notifications. Falls back to the last event's payload, or the raw
-// body on a scan error, so a decode failure surfaces visibly.
-func extractSSEResponse(body []byte) []byte {
+// would corrupt the JSON. It first parses the stream into events (blank-line
+// separated); within an event, multiple `data:` lines are joined with "\n" per
+// the SSE spec (https://html.spec.whatwg.org/multipage/server-sent-events.html),
+// and exactly one optional leading space after the colon is stripped from each
+// line — nothing else, so meaningful surrounding whitespace in the payload
+// survives.
+//
+// It then picks the event that answers wantID, in order: (1) the event whose
+// JSON-RPC id matches wantID, if wantID is non-nil; (2) the event carrying a
+// `result` or `error` (a notification, which by definition carries no id, is
+// never a candidate here); (3) the last event in the stream, as a fallback for
+// a malformed/unrecognized stream. A scan error returns the raw body so a
+// decode failure surfaces visibly instead of silently picking the wrong bytes.
+//
+// This handles the full input space the streamable-HTTP transport permits
+// (multi-event streams, multi-line data fields, non-matching ids in-flight) —
+// C1 itself has so far been observed answering every request with a plain
+// application/json body (no SSE framing at all, even for long-running calls),
+// so the multi-event path is spec-hardening against a mode this client
+// advertises support for but has not exercised against C1, not a fix for an
+// observed C1 response shape.
+func extractSSEResponse(body []byte, wantID *int) []byte {
 	var events [][]byte
 	var cur bytes.Buffer
+	hasData := false // per-event: has at least one data: line been written to cur?
 	flush := func() {
-		if cur.Len() > 0 {
+		if hasData {
 			events = append(events, append([]byte(nil), cur.Bytes()...))
-			cur.Reset()
 		}
+		cur.Reset()
+		hasData = false
 	}
 	sc := bufio.NewScanner(bytes.NewReader(body))
 	sc.Buffer(make([]byte, 0, 64*1024), 8*1024*1024)
@@ -261,21 +318,51 @@ func extractSSEResponse(body []byte) []byte {
 			continue
 		}
 		if strings.HasPrefix(line, "data:") {
-			cur.WriteString(strings.TrimSpace(strings.TrimPrefix(line, "data:")))
+			data := strings.TrimPrefix(line, "data:")
+			data = strings.TrimPrefix(data, " ") // exactly one optional leading space, per spec
+			if hasData {
+				cur.WriteByte('\n') // multiple data: lines in one event join with \n, per spec
+			}
+			cur.WriteString(data)
+			hasData = true
 		}
 	}
 	flush()
 	if sc.Err() != nil {
 		return body
 	}
+
+	// idOf reports the event's JSON-RPC id, if the event decodes as an object
+	// with a non-null "id" field. A notification has no id and always reports
+	// ok=false, so it can never be selected as a response candidate below.
+	idOf := func(e []byte) (id int, ok bool) {
+		var probe struct {
+			ID *int `json:"id"`
+		}
+		if json.Unmarshal(e, &probe) != nil || probe.ID == nil {
+			return 0, false
+		}
+		return *probe.ID, true
+	}
+
+	if wantID != nil {
+		for _, e := range events {
+			if id, ok := idOf(e); ok && id == *wantID {
+				return e
+			}
+		}
+	}
+
 	var last []byte
 	for _, e := range events {
-		var probe struct {
-			Result json.RawMessage `json:"result"`
-			Error  json.RawMessage `json:"error"`
-		}
-		if json.Unmarshal(e, &probe) == nil && (len(probe.Result) > 0 || len(probe.Error) > 0) {
-			return e // the JSON-RPC response event
+		if _, ok := idOf(e); ok {
+			var probe struct {
+				Result json.RawMessage `json:"result"`
+				Error  json.RawMessage `json:"error"`
+			}
+			if json.Unmarshal(e, &probe) == nil && (len(probe.Result) > 0 || len(probe.Error) > 0) {
+				return e // the JSON-RPC response event
+			}
 		}
 		last = e
 	}

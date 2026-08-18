@@ -13,7 +13,7 @@ import (
 func TestExtractSSEResponse(t *testing.T) {
 	// A single result event.
 	sse := "event: message\ndata: {\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{\"ok\":true}}\n\n"
-	got := string(extractSSEResponse([]byte(sse)))
+	got := string(extractSSEResponse([]byte(sse), nil))
 	want := `{"jsonrpc":"2.0","id":1,"result":{"ok":true}}`
 	if got != want {
 		t.Errorf("extractSSEResponse = %q, want %q", got, want)
@@ -24,7 +24,7 @@ func TestExtractSSEResponse(t *testing.T) {
 	// concatenation of every data line.
 	multi := "event: message\ndata: {\"jsonrpc\":\"2.0\",\"method\":\"notifications/progress\",\"params\":{\"p\":50}}\n\n" +
 		"event: message\ndata: {\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{\"tools\":[]}}\n\n"
-	got = string(extractSSEResponse([]byte(multi)))
+	got = string(extractSSEResponse([]byte(multi), nil))
 	want = `{"jsonrpc":"2.0","id":1,"result":{"tools":[]}}`
 	if got != want {
 		t.Errorf("multi-event extractSSEResponse = %q, want %q", got, want)
@@ -32,9 +32,88 @@ func TestExtractSSEResponse(t *testing.T) {
 
 	// An error event is treated as the response too.
 	errSSE := "data: {\"jsonrpc\":\"2.0\",\"id\":1,\"error\":{\"code\":-32601,\"message\":\"nope\"}}\n\n"
-	got = string(extractSSEResponse([]byte(errSSE)))
+	got = string(extractSSEResponse([]byte(errSSE), nil))
 	if !strings.Contains(got, `"error"`) {
 		t.Errorf("error-event extractSSEResponse = %q, want the error payload", got)
+	}
+}
+
+// TestExtractSSEResponseMultiDataLineJoin verifies that multiple `data:`
+// lines within a single SSE event are joined with "\n" per the SSE spec
+// (https://html.spec.whatwg.org/multipage/server-sent-events.html#dispatchMessage),
+// not concatenated bare. The event here spans two `data:` lines split right
+// before a member separator inside "result", a spec-legal place for an SSE
+// producer to wrap a line: the reconstructed bytes must contain the "\n" the
+// spec calls for. This is a spec-hardening test (full input space the wire
+// format permits — see CLAUDE.md "Adding a new client/subsystem package"),
+// not a shape observed from the C1 gateway itself, which has been observed
+// answering with plain `application/json` (no SSE framing at all) even for
+// long-running calls; the spec still requires this client, which advertises
+// SSE support via Accept, to parse it correctly if a server ever sends it.
+func TestExtractSSEResponseMultiDataLineJoin(t *testing.T) {
+	sse := "data: {\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{\"a\":1\n" +
+		"data: ,\"b\":2}}\n" +
+		"\n"
+	got := string(extractSSEResponse([]byte(sse), nil))
+	want := `{"jsonrpc":"2.0","id":1,"result":{"a":1` + "\n" + `,"b":2}}`
+	if got != want {
+		t.Errorf("extractSSEResponse = %q, want %q (data: lines must join with \\n)", got, want)
+	}
+	// Bare concatenation (the pre-fix behavior) would instead produce
+	// `{"jsonrpc":"2.0","id":1,"result":{"a":1,"b":2}}` — missing the "\n" —
+	// which is a DIFFERENT byte sequence from want, so this test fails
+	// against the old code and passes against the fixed join logic.
+	var probe map[string]any
+	if err := json.Unmarshal([]byte(got), &probe); err != nil {
+		t.Fatalf("joined payload did not parse as JSON: %v (%q)", err, got)
+	}
+}
+
+// TestExtractSSEResponseLeadingSpaceStripping verifies that exactly one
+// optional leading space after "data:" is stripped, and nothing else —
+// meaningful surrounding whitespace inside the payload (a leading space
+// beyond the first, or trailing whitespace) must survive.
+func TestExtractSSEResponseLeadingSpaceStripping(t *testing.T) {
+	// Two leading spaces after "data:": only the first is the SSE field-value
+	// separator: the second is part of the value and must be preserved,
+	// landing inside the JSON string as a leading space in "text".
+	sse := "data:  {\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{\"text\":\"a\"}}   \n\n"
+	got := string(extractSSEResponse([]byte(sse), nil))
+	want := ` {"jsonrpc":"2.0","id":1,"result":{"text":"a"}}   `
+	if got != want {
+		t.Errorf("extractSSEResponse = %q, want %q (want leading/trailing whitespace preserved beyond the single stripped separator space)", got, want)
+	}
+}
+
+// TestExtractSSEResponseSelectsByRequestID verifies that when an SSE stream
+// carries a response for a different request's id alongside the response for
+// the caller's own id, the caller's id is what selects the event — not
+// whichever happens to carry a result/error, and not stream order.
+func TestExtractSSEResponseSelectsByRequestID(t *testing.T) {
+	sse := "data: {\"jsonrpc\":\"2.0\",\"id\":99,\"result\":{\"tools\":[\"wrong\"]}}\n\n" +
+		"data: {\"jsonrpc\":\"2.0\",\"id\":7,\"result\":{\"tools\":[\"right\"]}}\n\n"
+	wantID := 7
+	got := string(extractSSEResponse([]byte(sse), &wantID))
+	want := `{"jsonrpc":"2.0","id":7,"result":{"tools":["right"]}}`
+	if got != want {
+		t.Errorf("extractSSEResponse = %q, want %q (should select the event matching the request id)", got, want)
+	}
+
+	// The reverse order must select the same way — it's the id, not order.
+	sseReversed := "data: {\"jsonrpc\":\"2.0\",\"id\":7,\"result\":{\"tools\":[\"right\"]}}\n\n" +
+		"data: {\"jsonrpc\":\"2.0\",\"id\":99,\"result\":{\"tools\":[\"wrong\"]}}\n\n"
+	got = string(extractSSEResponse([]byte(sseReversed), &wantID))
+	if got != want {
+		t.Errorf("extractSSEResponse (reversed) = %q, want %q", got, want)
+	}
+
+	// A notification (no id) alongside the wanted response must never be
+	// mistaken for the response, even without id matching.
+	withNotification := "data: {\"jsonrpc\":\"2.0\",\"method\":\"notifications/progress\",\"params\":{}}\n\n" +
+		"data: {\"jsonrpc\":\"2.0\",\"id\":7,\"result\":{\"tools\":[\"right\"]}}\n\n"
+	got = string(extractSSEResponse([]byte(withNotification), &wantID))
+	if got != want {
+		t.Errorf("extractSSEResponse (with notification) = %q, want %q", got, want)
 	}
 }
 
@@ -159,5 +238,31 @@ func TestHTTPError(t *testing.T) {
 	}
 	if he.StatusCode != http.StatusForbidden {
 		t.Errorf("StatusCode = %d, want 403", he.StatusCode)
+	}
+}
+
+// TestAcceptHeaderAdvertisesBothMediaTypes pins the exact Accept header value
+// the client sends. The C1 gateway has been observed rejecting a request that
+// advertises only one of the two media types with 400 "Accept must contain
+// both 'application/json' and 'text/event-stream'" — trimming this header to
+// just one type is a cheap mistake for a future reader to make, and it only
+// fails at runtime against a real gateway, not in any unit test that doesn't
+// pin the header itself.
+func TestAcceptHeaderAdvertisesBothMediaTypes(t *testing.T) {
+	var gotAccept string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotAccept = r.Header.Get("Accept")
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = io.WriteString(w, `{"jsonrpc":"2.0","id":1,"result":{}}`)
+	}))
+	defer srv.Close()
+
+	c := New(srv.URL, "test-token", srv.Client())
+	if err := c.Initialize(context.Background()); err != nil {
+		t.Fatalf("Initialize: %v", err)
+	}
+	want := "application/json, text/event-stream"
+	if gotAccept != want {
+		t.Errorf("Accept header = %q, want %q (both media types, or the C1 gateway returns 400)", gotAccept, want)
 	}
 }

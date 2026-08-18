@@ -112,6 +112,26 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   a projection in either style resolves against either output. Exact matches are
   unchanged (they always win), and the output keeps the source key spelling —
   `--fields` selects keys, it never renames them.
+- **`mcp gateway` failures now classify to the standard exit-code taxonomy.**
+  A gateway HTTP failure previously exited `1` for everything except a 401/403
+  at the handshake step (which alone was mapped to `3`); a 404/429/5xx from
+  `list-tools` or `call` — including any failure after a successful handshake,
+  since the one-off classifier only ran on `Initialize` — was indistinguishable
+  from a generic error. `*mcpgateway.HTTPError` now unwraps to a
+  `*client.APIError`, so every gateway call threads through the same taxonomy
+  every other API failure gets (401/403 → 3, 404 → 4, 429 → 5, 5xx → 6),
+  without losing the response body from the error message. The one-off
+  handshake-only classifier is removed as redundant.
+- **`extractSSEResponse` now follows the SSE spec exactly.** Multiple `data:`
+  lines within one SSE event are joined with `\n` (previously concatenated
+  with no separator, which could corrupt a multi-line payload), and exactly
+  one optional leading space after `data:` is stripped — previously
+  `TrimSpace` also ate meaningful leading/trailing whitespace inside the
+  payload. The response event is now selected by matching the request's
+  JSON-RPC `id` first, falling back in order to an event carrying `result`/
+  `error`, then the last event, then the raw body on a scan error — so a
+  reply to a different in-flight request can no longer be mistaken for the
+  caller's own.
 
 ## [0.3.0] - 2026-07-16
 
