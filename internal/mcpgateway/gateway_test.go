@@ -3,11 +3,15 @@ package mcpgateway
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
+
+	"github.com/ConductorOne/c1i/internal/client"
 )
 
 func TestExtractSSEResponse(t *testing.T) {
@@ -89,32 +93,63 @@ func TestExtractSSEResponseLeadingSpaceStripping(t *testing.T) {
 // carries a response for a different request's id alongside the response for
 // the caller's own id, the caller's id is what selects the event — not
 // whichever happens to carry a result/error, and not stream order.
+//
+// Each arrangement below places at least one DECOY event — a non-matching id
+// carrying its own result/error — before the correct event in stream order.
+// That positioning matters: tier 2 (the "first event carrying result/error
+// wins" fallback) scans in stream order and returns on its first match, so a
+// decoy planted ahead of the correct event is exactly what would fool tier 2
+// if id-matching (tier 1) didn't exist or were deleted. Without such a decoy
+// ahead of the right answer, a subtest can pass "by accident" even with
+// id-matching removed, because tier 2 alone happens to land on the correct
+// event anyway — which is precisely what made the original "reversed" and
+// "with notification" arrangements non-load-bearing (see verification notes
+// in the task history: deleting tier 1 only failed the first arrangement).
 func TestExtractSSEResponseSelectsByRequestID(t *testing.T) {
-	sse := "data: {\"jsonrpc\":\"2.0\",\"id\":99,\"result\":{\"tools\":[\"wrong\"]}}\n\n" +
-		"data: {\"jsonrpc\":\"2.0\",\"id\":7,\"result\":{\"tools\":[\"right\"]}}\n\n"
 	wantID := 7
-	got := string(extractSSEResponse([]byte(sse), &wantID))
 	want := `{"jsonrpc":"2.0","id":7,"result":{"tools":["right"]}}`
-	if got != want {
-		t.Errorf("extractSSEResponse = %q, want %q (should select the event matching the request id)", got, want)
-	}
+
+	t.Run("decoy before correct", func(t *testing.T) {
+		sse := "data: {\"jsonrpc\":\"2.0\",\"id\":99,\"result\":{\"tools\":[\"wrong\"]}}\n\n" +
+			"data: {\"jsonrpc\":\"2.0\",\"id\":7,\"result\":{\"tools\":[\"right\"]}}\n\n"
+		got := string(extractSSEResponse([]byte(sse), &wantID))
+		if got != want {
+			t.Errorf("extractSSEResponse = %q, want %q (should select the event matching the request id)", got, want)
+		}
+	})
 
 	// The reverse order must select the same way — it's the id, not order.
-	sseReversed := "data: {\"jsonrpc\":\"2.0\",\"id\":7,\"result\":{\"tools\":[\"right\"]}}\n\n" +
-		"data: {\"jsonrpc\":\"2.0\",\"id\":99,\"result\":{\"tools\":[\"wrong\"]}}\n\n"
-	got = string(extractSSEResponse([]byte(sseReversed), &wantID))
-	if got != want {
-		t.Errorf("extractSSEResponse (reversed) = %q, want %q", got, want)
-	}
+	// A decoy (id 123) is now placed BEFORE the correct event, so tier 2
+	// alone — without id-matching — would return the decoy instead of
+	// stumbling onto the right answer just because it came first in the
+	// original two-event arrangement. The original two events are kept
+	// as-is, in their original order, with the decoy prepended.
+	t.Run("reversed, decoy prepended so tier 2 alone would pick it", func(t *testing.T) {
+		sseReversed := "data: {\"jsonrpc\":\"2.0\",\"id\":123,\"result\":{\"tools\":[\"decoy\"]}}\n\n" +
+			"data: {\"jsonrpc\":\"2.0\",\"id\":7,\"result\":{\"tools\":[\"right\"]}}\n\n" +
+			"data: {\"jsonrpc\":\"2.0\",\"id\":99,\"result\":{\"tools\":[\"wrong\"]}}\n\n"
+		got := string(extractSSEResponse([]byte(sseReversed), &wantID))
+		if got != want {
+			t.Errorf("extractSSEResponse (reversed) = %q, want %q", got, want)
+		}
+	})
 
 	// A notification (no id) alongside the wanted response must never be
-	// mistaken for the response, even without id matching.
-	withNotification := "data: {\"jsonrpc\":\"2.0\",\"method\":\"notifications/progress\",\"params\":{}}\n\n" +
-		"data: {\"jsonrpc\":\"2.0\",\"id\":7,\"result\":{\"tools\":[\"right\"]}}\n\n"
-	got = string(extractSSEResponse([]byte(withNotification), &wantID))
-	if got != want {
-		t.Errorf("extractSSEResponse (with notification) = %q, want %q", got, want)
-	}
+	// mistaken for the response, even without id matching. A decoy (id 55)
+	// is inserted between the notification and the correct event so tier 2
+	// alone — which skips the notification anyway, since it carries no
+	// result/error — would land on the decoy's result, not the notification
+	// being harmlessly skipped past. The original notification-then-correct
+	// arrangement is preserved; the decoy is inserted between them.
+	t.Run("with notification, decoy inserted so tier 2 alone would pick it", func(t *testing.T) {
+		withNotification := "data: {\"jsonrpc\":\"2.0\",\"method\":\"notifications/progress\",\"params\":{}}\n\n" +
+			"data: {\"jsonrpc\":\"2.0\",\"id\":55,\"result\":{\"tools\":[\"decoy\"]}}\n\n" +
+			"data: {\"jsonrpc\":\"2.0\",\"id\":7,\"result\":{\"tools\":[\"right\"]}}\n\n"
+		got := string(extractSSEResponse([]byte(withNotification), &wantID))
+		if got != want {
+			t.Errorf("extractSSEResponse (with notification) = %q, want %q", got, want)
+		}
+	})
 }
 
 // TestExtractSSEResponseNoResponseInStream is the regression test for the
@@ -390,6 +425,138 @@ func TestEndToEnd(t *testing.T) {
 	}
 }
 
+// initializingGatewayServer builds an httptest server that answers "initialize"
+// and "notifications/initialized" the normal way (issuing wantSession), and
+// delegates "tools/list" to listTools so pagination tests only need to write
+// the tools/list branch.
+func initializingGatewayServer(t *testing.T, wantSession string, listTools func(w http.ResponseWriter, cursor string)) *httptest.Server {
+	t.Helper()
+	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		var req struct {
+			Method string         `json:"method"`
+			Params map[string]any `json:"params"`
+		}
+		if err := json.Unmarshal(body, &req); err != nil {
+			t.Errorf("server got bad JSON: %v", err)
+		}
+		switch req.Method {
+		case "initialize":
+			w.Header().Set("Mcp-Session-Id", wantSession)
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = io.WriteString(w, `{"jsonrpc":"2.0","id":1,"result":{}}`)
+		case "notifications/initialized":
+			w.WriteHeader(http.StatusAccepted)
+		case "tools/list":
+			cursor, _ := req.Params["cursor"].(string)
+			w.Header().Set("Content-Type", "application/json")
+			listTools(w, cursor)
+		default:
+			t.Errorf("unexpected method %q", req.Method)
+		}
+	}))
+}
+
+// TestListToolsThreePages verifies the legitimate multi-page path still
+// returns the full union of tools when pagination spans three pages (not
+// just the two TestEndToEnd already covers), now that ListTools also tracks
+// seen cursors to guard against non-terminating pagination.
+func TestListToolsThreePages(t *testing.T) {
+	srv := initializingGatewayServer(t, "sess-3page", func(w http.ResponseWriter, cursor string) {
+		switch cursor {
+		case "":
+			_, _ = io.WriteString(w, `{"jsonrpc":"2.0","id":1,"result":{"tools":[{"name":"a"}],"nextCursor":"p2"}}`)
+		case "p2":
+			_, _ = io.WriteString(w, `{"jsonrpc":"2.0","id":1,"result":{"tools":[{"name":"b"}],"nextCursor":"p3"}}`)
+		case "p3":
+			_, _ = io.WriteString(w, `{"jsonrpc":"2.0","id":1,"result":{"tools":[{"name":"c"}]}}`)
+		default:
+			t.Errorf("unexpected cursor %q", cursor)
+		}
+	})
+	defer srv.Close()
+
+	ctx := context.Background()
+	c := New(srv.URL, "test-token", srv.Client())
+	if err := c.Initialize(ctx); err != nil {
+		t.Fatalf("Initialize: %v", err)
+	}
+	tools, err := c.ListTools(ctx)
+	if err != nil {
+		t.Fatalf("ListTools: %v", err)
+	}
+	if len(tools) != 3 || tools[0].Name != "a" || tools[1].Name != "b" || tools[2].Name != "c" {
+		t.Errorf("ListTools = %+v, want [a b c] across three pages", tools)
+	}
+}
+
+// TestListToolsRepeatedCursorTerminates is the regression test for a server
+// that hands back the same non-empty cursor forever (with an empty tools
+// array each time) — the exact pathological case that used to make ListTools
+// spin indefinitely. It must terminate quickly (within a couple of pages,
+// well under maxToolsListPages) via the seen-cursor guard, and surface a
+// visible error rather than silently returning a partial/empty list.
+func TestListToolsRepeatedCursorTerminates(t *testing.T) {
+	var calls int
+	srv := initializingGatewayServer(t, "sess-stuck", func(w http.ResponseWriter, cursor string) {
+		calls++
+		// Always the same cursor, always zero tools: pagination never
+		// advances and never terminates on its own.
+		_, _ = io.WriteString(w, `{"jsonrpc":"2.0","id":1,"result":{"tools":[],"nextCursor":"stuck"}}`)
+	})
+	defer srv.Close()
+
+	ctx := context.Background()
+	c := New(srv.URL, "test-token", srv.Client())
+	if err := c.Initialize(ctx); err != nil {
+		t.Fatalf("Initialize: %v", err)
+	}
+
+	_, err := c.ListTools(ctx)
+	if err == nil {
+		t.Fatal("ListTools returned a nil error against a repeated cursor, want a visible error instead of an infinite loop")
+	}
+	if calls > 3 {
+		t.Errorf("tools/list was called %d times, want termination within a couple of pages on a repeated cursor", calls)
+	}
+	t.Logf("ListTools terminated after %d tools/list call(s) with error: %v", calls, err)
+}
+
+// TestListToolsMaxPagesBackstop verifies the absolute page-count backstop:
+// a server that hands out a distinct, never-repeating cursor on every page
+// (so the seen-cursor guard alone never fires) must still be stopped, by
+// maxToolsListPages, rather than paginating forever. The var is lowered for
+// the duration of the test so it stays fast.
+func TestListToolsMaxPagesBackstop(t *testing.T) {
+	orig := maxToolsListPages
+	maxToolsListPages = 3
+	defer func() { maxToolsListPages = orig }()
+
+	var calls int
+	srv := initializingGatewayServer(t, "sess-runaway", func(w http.ResponseWriter, cursor string) {
+		calls++
+		// A fresh cursor every call -- never repeats -- so only the
+		// page-count backstop, not the seen-cursor guard, can stop this.
+		_, _ = fmt.Fprintf(w, `{"jsonrpc":"2.0","id":1,"result":{"tools":[],"nextCursor":"page-%d"}}`, calls)
+	})
+	defer srv.Close()
+
+	ctx := context.Background()
+	c := New(srv.URL, "test-token", srv.Client())
+	if err := c.Initialize(ctx); err != nil {
+		t.Fatalf("Initialize: %v", err)
+	}
+
+	_, err := c.ListTools(ctx)
+	if err == nil {
+		t.Fatalf("ListTools returned a nil error after %d calls against an ever-advancing cursor, want the max-page backstop to trigger", calls)
+	}
+	if calls > maxToolsListPages+1 {
+		t.Errorf("tools/list was called %d times, want termination at or shortly after maxToolsListPages=%d", calls, maxToolsListPages)
+	}
+	t.Logf("ListTools terminated after %d tools/list call(s) with error: %v", calls, err)
+}
+
 // TestHTTPError verifies a non-2xx gateway response surfaces as *HTTPError
 // carrying the status code, so callers can classify auth failures.
 func TestHTTPError(t *testing.T) {
@@ -410,6 +577,95 @@ func TestHTTPError(t *testing.T) {
 	}
 	if he.StatusCode != http.StatusForbidden {
 		t.Errorf("StatusCode = %d, want 403", he.StatusCode)
+	}
+}
+
+// TestHTTPErrorNamesFailingRPCMethod verifies that a non-2xx response to a
+// specific JSON-RPC call (tools/list here, distinct from the initialize call
+// that must succeed first) is attributable to that call: HTTPError.RPCMethod
+// names it, and the rendered Error() message both names it and still contains
+// the response body — MCP being a single-endpoint protocol means Method/Path
+// alone (always "POST" and the gateway path) can't tell initialize apart from
+// tools/list apart from tools/call, which is the gap this closes.
+func TestHTTPErrorNamesFailingRPCMethod(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		var req struct {
+			Method string `json:"method"`
+		}
+		_ = json.Unmarshal(body, &req)
+		switch req.Method {
+		case "initialize":
+			w.Header().Set("Mcp-Session-Id", "sess")
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = io.WriteString(w, `{"jsonrpc":"2.0","id":1,"result":{}}`)
+		case "notifications/initialized":
+			w.WriteHeader(http.StatusAccepted)
+		case "tools/list":
+			w.WriteHeader(http.StatusForbidden)
+			_, _ = io.WriteString(w, "forbidden: insufficient scope")
+		default:
+			t.Errorf("unexpected method %q", req.Method)
+		}
+	}))
+	defer srv.Close()
+
+	ctx := context.Background()
+	c := New(srv.URL, "test-token", srv.Client())
+	if err := c.Initialize(ctx); err != nil {
+		t.Fatalf("Initialize: %v", err)
+	}
+
+	_, err := c.ListTools(ctx)
+	if err == nil {
+		t.Fatal("expected an error from a 403 tools/list response")
+	}
+	he, ok := err.(*HTTPError)
+	if !ok {
+		t.Fatalf("error type = %T, want *HTTPError", err)
+	}
+	if he.RPCMethod != "tools/list" {
+		t.Errorf("RPCMethod = %q, want %q", he.RPCMethod, "tools/list")
+	}
+	msg := he.Error()
+	if !strings.Contains(msg, "tools/list") {
+		t.Errorf("Error() = %q, want it to name the failing RPC method %q", msg, "tools/list")
+	}
+	if !strings.Contains(msg, "forbidden: insufficient scope") {
+		t.Errorf("Error() = %q, want it to still contain the response body", msg)
+	}
+}
+
+// TestHTTPErrorClassificationAcrossStatuses verifies that adding RPCMethod to
+// HTTPError did not disturb the errors.As(err, &apiErr) chain that
+// cmd/errors.go's exitCode relies on to classify gateway failures: HTTPError
+// must still unwrap to a *client.APIError carrying the original status code
+// for every status that maps to a distinct exit code (401/403 -> auth,
+// 404 -> not found, 429 -> rate limited, 5xx -> server error). This asserts
+// the classified behavior via errors.As, not by inspecting the struct.
+func TestHTTPErrorClassificationAcrossStatuses(t *testing.T) {
+	for _, status := range []int{http.StatusUnauthorized, http.StatusForbidden, http.StatusNotFound, http.StatusTooManyRequests, http.StatusInternalServerError, http.StatusServiceUnavailable} {
+		t.Run(fmt.Sprintf("status_%d", status), func(t *testing.T) {
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.WriteHeader(status)
+				_, _ = io.WriteString(w, "boom")
+			}))
+			defer srv.Close()
+
+			c := New(srv.URL, "test-token", srv.Client())
+			err := c.Initialize(context.Background())
+			if err == nil {
+				t.Fatalf("expected an error for status %d", status)
+			}
+
+			var apiErr *client.APIError
+			if !errors.As(err, &apiErr) {
+				t.Fatalf("errors.As(err, &apiErr) = false for status %d; err = %v (%T)", status, err, err)
+			}
+			if apiErr.StatusCode != status {
+				t.Errorf("apiErr.StatusCode = %d, want %d", apiErr.StatusCode, status)
+			}
+		})
 	}
 }
 
