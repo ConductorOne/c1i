@@ -35,6 +35,14 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   Owner provisioning is asynchronous, so the command notes that new owners take
   ~60-90s to appear in `apps get`; a success means the request was accepted.
   Honors `--dry-run`.
+- **`apps set-owners --wait` / `--wait-timeout`** — optionally block after the
+  `PUT` and poll `GET /api/v1/apps/{id}/ownerids` (every 12s, default timeout
+  4m) until every requested `--user-id` shows up as provisioned, printing
+  progress as it goes. On timeout, exits non-zero with a message clarifying
+  that provisioning is still pending and not necessarily a failure — owner
+  provisioning has been observed to take from under two minutes up to several.
+  Without `--wait`, behavior is unchanged; `--wait` combined with `--dry-run`
+  still only previews the `PUT` and never polls.
 
 ### Changed
 
@@ -56,6 +64,12 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   commands are unchanged (their ids stay flags). The old flags now error with
   "unknown flag". The convention is documented in CLAUDE.md and enforced across
   the README and the embedded agent skill.
+- **Ctrl-C now cancels cleanly.** The root command wires `cmd.Context()` to a
+  `signal.NotifyContext` on SIGINT/SIGTERM, so a long-running command (e.g.
+  `apps set-owners --wait` polling for async owner provisioning) sees its
+  context canceled and can exit with a clear message instead of the process
+  being hard-killed with no output. A first Ctrl-C cancels gracefully; a
+  second reverts to the OS default hard-kill.
 - **`mcp servers catalog list`** rows now include `base_url`, `default_tool_prefix`,
   `stable`, `required_scope_count`, and `optional_scope_count` (in addition to
   the existing fields, kept as-is). The catalog holds many near-duplicate
