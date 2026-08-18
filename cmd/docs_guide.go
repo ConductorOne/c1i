@@ -185,16 +185,19 @@ Grants are eventually consistent — a just-created grant can take up to a
 minute or two to appear in this list.
 `
 
-// guideTestMCPGateway is a pre-flight checklist that verifies, with c1i, the
-// pieces that must be in place before a registered MCP server's tools are
-// served through the gateway to entitled callers. Derived from
-// cmd/mcp_servers_get.go, cmd/mcp_tools_approve.go,
-// cmd/mcp_toolsets_get_by_entitlement.go, and cmd/grants_list.go.
-const guideTestMCPGateway = `# Test the MCP gateway (pre-flight)
+// guideTestMCPGateway verifies, with c1i, the pieces that must be in place
+// before a registered MCP server's tools are served through the gateway to
+// entitled callers, then drives an actual call through the gateway itself.
+// Derived from cmd/mcp_servers_get.go, cmd/mcp_tools_approve.go,
+// cmd/mcp_toolsets_get_by_entitlement.go, cmd/grants_list.go,
+// cmd/mcp_gateway.go, cmd/mcp_gateway_list_tools.go, and
+// cmd/mcp_gateway_call.go.
+const guideTestMCPGateway = `# Test the MCP gateway (end-to-end)
 
 Before a registered MCP server's tools can be invoked through the C1 MCP
-gateway, several things must line up. This runbook uses c1i to verify each
-so you can localize a "the tool isn't callable" problem to the right layer.
+gateway, several things must line up. This runbook uses c1i to verify each,
+then drives an actual tool call through the gateway itself, so you can
+localize a "the tool isn't callable" problem to the right layer.
 (See "c1i docs guide register-mcp-server" to get a server registered first.)
 
 ## 1. The server exists and is configured
@@ -215,6 +218,10 @@ PENDING_REVIEW:
     c1i mcp tools get  "$TOOL_ID" --app-id "$APP_ID" --connector-id "$CONNECTOR_ID"
     c1i mcp tools approve "$TOOL_ID" --app-id "$APP_ID" --connector-id "$CONNECTOR_ID"
 
+Note the tool's "tool_name" from either response — the MCP protocol name the
+gateway lists it under. That's "$TOOL_NAME" in step 4, and it is a different
+value than the "$TOOL_ID" used above.
+
 ## 3. The caller holds (or can request) the toolset entitlement
 
 A tool is only exposed to a caller who holds the entitlement of a toolset
@@ -223,11 +230,28 @@ that binds it. Resolve the toolset for an entitlement, then check the grant:
     c1i mcp toolsets get-by-entitlement "$AEID" --app-id "$APP_ID"
     c1i grants list --app-id "$APP_ID" --entitlement-id "$ENTITLEMENT_ID"
 
+## 4. Call it through the gateway
+
+With the server registered, the tool approved, and the entitlement granted,
+the gateway should now list and serve the tool. List what it exposes to you
+(one NDJSON row per tool; --full also prints each tool's input JSON schema):
+
+    c1i mcp gateway list-tools --full
+
+Confirm "$TOOL_NAME" appears, then invoke it. Arguments are a JSON object via
+--args (a JSON string, array, or null is rejected as a usage error):
+
+    c1i mcp gateway call "$TOOL_NAME" --args '{"key":"value"}'
+
+The gateway endpoint is derived from --url / C1I_URL by default (inserting
+"-mcp" into the host); if the gateway lives elsewhere, override it with
+--gateway-url, e.g. "c1i mcp gateway list-tools --gateway-url https://acme-mcp.example.com/v1".
+
 ## What this proves
 
-When steps 1-3 check out, the server's approved tools are being served to
-entitled callers through the gateway. Invoking a tool directly through the
-gateway from the CLI (a dedicated gateway client) ships separately.
+When steps 1-4 check out, the server's approved tools are being served to
+entitled callers through the gateway, and "mcp gateway call" proves it end to
+end — not just that the pieces are theoretically wired up.
 `
 
 // docsGuides maps a guide name to its embedded content. Keep names stable —
