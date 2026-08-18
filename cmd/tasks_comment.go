@@ -8,15 +8,16 @@ import (
 )
 
 var tasksCommentCmd = &cobra.Command{
-	Use:   "comment",
+	Use:   "comment <task-id>",
 	Short: "Add a comment to a task",
+	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		baseURL, err := GetBaseURL()
 		if err != nil {
 			return err
 		}
 
-		taskID, _ := cmd.Flags().GetString("task-id")
+		taskID := args[0]
 		comment, _ := cmd.Flags().GetString("comment")
 
 		body := map[string]any{
@@ -48,9 +49,7 @@ var tasksCommentCmd = &cobra.Command{
 }
 
 func init() {
-	tasksCommentCmd.Flags().String("task-id", "", "Task ID to comment on")
 	tasksCommentCmd.Flags().String("comment", "", "Comment text")
-	markRequired(tasksCommentCmd, "task-id")
 	markRequired(tasksCommentCmd, "comment")
 	tasksCmd.AddCommand(tasksCommentCmd)
 }

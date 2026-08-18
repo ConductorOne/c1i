@@ -8,15 +8,16 @@ import (
 )
 
 var mcpToolsetsGetByEntitlementCmd = &cobra.Command{
-	Use:   "get-by-entitlement",
+	Use:   "get-by-entitlement <app-entitlement-id>",
 	Short: "Resolve a toolset by its AppEntitlement ID (pretty JSON)",
 	Long: `Look up the toolset that owns a given AppEntitlement.
 
 Each toolset creates one AppEntitlement at sync time; this is the reverse
 lookup — given an entitlement ID (e.g. from an access-request task), find
 which toolset it represents.`,
+	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		if err := requireNonEmpty(cmd, "app-id", "app-entitlement-id"); err != nil {
+		if err := requireNonEmpty(cmd, "app-id"); err != nil {
 			return err
 		}
 
@@ -31,7 +32,7 @@ which toolset it represents.`,
 		}
 
 		appID, _ := cmd.Flags().GetString("app-id")
-		entID, _ := cmd.Flags().GetString("app-entitlement-id")
+		entID := args[0]
 
 		path := client.Path("/api/v1/apps/%s/mcp_toolsets/by_app_entitlement_id/%s", appID, entID)
 		data, err := c.Get(cmd.Context(), path, nil)
@@ -45,7 +46,6 @@ which toolset it represents.`,
 
 func init() {
 	mcpToolsetsGetByEntitlementCmd.Flags().String("app-id", "", "Application ID")
-	mcpToolsetsGetByEntitlementCmd.Flags().String("app-entitlement-id", "", "AppEntitlement ID to look up")
-	markRequired(mcpToolsetsGetByEntitlementCmd, "app-id", "app-entitlement-id")
+	markRequired(mcpToolsetsGetByEntitlementCmd, "app-id")
 	mcpToolsetsCmd.AddCommand(mcpToolsetsGetByEntitlementCmd)
 }

@@ -7,7 +7,7 @@ import (
 )
 
 var mcpServersTestConnectionCmd = &cobra.Command{
-	Use:   "test-connection",
+	Use:   "test-connection [<connector-id>]",
 	Short: "Probe an EXTERNAL MCP server's reachability (pretty JSON)",
 	Long: `Probe whether an EXTERNAL MCP server is reachable with the supplied
 credentials. Returns reachable (did MCP initialize + tools/list both succeed),
@@ -16,9 +16,10 @@ tool_count, and a sanitized failure_reason.
 Two modes:
   create — supply the config to probe: --url [--transport] [auth flags], or
            --external-config-file for full-fidelity config.
-  edit   — probe an existing external server: --app-id + --connector-id, with
+  edit   — probe an existing external server: <connector-id> + --app-id, with
            any changed fields named by --update-mask (omit for a stored-config
            probe).`,
+	Args: cobra.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		baseURL, err := GetBaseURL()
 		if err != nil {
@@ -26,12 +27,18 @@ Two modes:
 		}
 
 		appID, _ := cmd.Flags().GetString("app-id")
-		connectorID, _ := cmd.Flags().GetString("connector-id")
+		var connectorID string
+		if len(args) > 0 {
+			connectorID = args[0]
+		}
 		editMode := appID != "" || connectorID != ""
 
 		body := map[string]any{}
 		if editMode {
-			if err := requireNonEmpty(cmd, "app-id", "connector-id"); err != nil {
+			if connectorID == "" {
+				return fmt.Errorf("edit mode requires <connector-id> as a positional argument (in addition to --app-id)")
+			}
+			if err := requireNonEmpty(cmd, "app-id"); err != nil {
 				return err
 			}
 			body["appId"] = appID
@@ -53,7 +60,7 @@ Two modes:
 			if len(ext) > 0 {
 				body["externalConfig"] = ext
 			} else if !editMode {
-				return fmt.Errorf("provide the config to probe: --url (with optional --transport/--auth) or --external-config-file, or pass --app-id and --connector-id to probe an existing server")
+				return fmt.Errorf("provide the config to probe: --url (with optional --transport/--auth) or --external-config-file, or pass <connector-id> and --app-id to probe an existing server")
 			}
 		}
 
@@ -72,7 +79,6 @@ Two modes:
 
 func init() {
 	mcpServersTestConnectionCmd.Flags().String("app-id", "", "Application ID of an existing external server (edit mode)")
-	mcpServersTestConnectionCmd.Flags().String("connector-id", "", "Connector ID of an existing external server (edit mode)")
 	mcpServersTestConnectionCmd.Flags().String("url", "", "External MCP server URL (create mode)")
 	mcpServersTestConnectionCmd.Flags().String("transport", "", "Transport: streamable-http or sse")
 	mcpServersTestConnectionCmd.Flags().String("external-config-file", "", "Full externalConfig JSON (file or \"-\" for stdin)")

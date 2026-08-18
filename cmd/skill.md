@@ -153,7 +153,7 @@ NDJSON fields: `id, display_name, description, user_count`
 ```sh
 c1i accounts list --app-id=ID [--status=enabled|disabled|deleted] [--type=user|service_account|system_account] [--unmapped-only] [--query=NAME] [--page-size=50] [--page-token=TOKEN] [--limit=N]
 
-c1i accounts set-owner --app-id=ID --app-user-id=AUID --user-id=UID
+c1i accounts set-owner <app-user-id> --app-id=ID --user-id=UID
 ```
 
 NDJSON fields: `id, app_id, display_name, email, username, identity_user_id, app_user_type, status`
@@ -256,36 +256,36 @@ Executions NDJSON fields: `id, automation_template_id, state, created_at, comple
 ```sh
 # --- Servers (register, configure, and inspect MCP servers) ---
 c1i mcp servers list               --app-id=ID [--page-size=50] [--page-token=TOKEN] [--limit=N]
-c1i mcp servers get                --app-id=ID --connector-id=CID
+c1i mcp servers get                <connector-id> --app-id=ID
 c1i mcp servers search             --app-id=ID [--query=TEXT] [--tool-state=approved|pending|disabled|removed] [--include-last-called-at] [--limit=N]
 c1i mcp servers register           --app-id=ID --type=hosted   --display-name=NAME --catalog-id=CID [--auth=...] [--config-field=k=v]... [--tool-prefix=P] [--user-id=UID]...
 c1i mcp servers register           --app-id=ID --type=external --display-name=NAME --url=URL [--transport=streamable-http|sse] [--auth=...]
-c1i mcp servers update             --app-id=ID --connector-id=CID [--display-name=NAME] [--description=TEXT] [--data-sensitivity=...] [--tool-prefix=P] [--require-tool-approval]
-c1i mcp servers update-credentials --app-id=ID --connector-id=CID --type=hosted|external [--auth=...] [--update-mask=PATHS]
-c1i mcp servers delete             --app-id=ID --connector-id=CID
-c1i mcp servers resync-tools       --app-id=ID --connector-id=CID
-c1i mcp servers test-connection    (--url=URL [--transport=...] [--auth=...] | --app-id=ID --connector-id=CID [--update-mask=PATHS])
+c1i mcp servers update             <connector-id> --app-id=ID [--display-name=NAME] [--description=TEXT] [--data-sensitivity=...] [--tool-prefix=P] [--require-tool-approval]
+c1i mcp servers update-credentials <connector-id> --app-id=ID --type=hosted|external [--auth=...] [--update-mask=PATHS]
+c1i mcp servers delete             <connector-id> --app-id=ID
+c1i mcp servers resync-tools       <connector-id> --app-id=ID
+c1i mcp servers test-connection    (--url=URL [--transport=...] [--auth=...] | <connector-id> --app-id=ID [--update-mask=PATHS])
 c1i mcp servers discover-oidc      --issuer-url=URL
 c1i mcp servers catalog list       [--query=TEXT] [--page-size=50] [--limit=N]
-c1i mcp servers catalog get        --catalog-id=CID
+c1i mcp servers catalog get        <catalog-id>
 c1i mcp servers connections list   [--page-size=50] [--limit=N]
 
 # --- Tools (discovered from a registered MCP server) ---
 c1i mcp tools list    --app-id=ID --connector-id=CID [--page-size=50] [--page-token=TOKEN] [--limit=N]
-c1i mcp tools get     --app-id=ID --connector-id=CID --id=TOOL_ID
+c1i mcp tools get     <tool-id> --app-id=ID --connector-id=CID
 c1i mcp tools search  --app-id=ID --connector-id=CID [--query=TEXT] [--state=...]... [--classification=...]... [--page-size=50] [--page-token=TOKEN] [--limit=N]
-c1i mcp tools approve --app-id=ID --connector-id=CID --id=TOOL_ID [--state=approved|disabled|pending]
-c1i mcp tools delete  --app-id=ID --connector-id=CID --id=TOOL_ID
-c1i mcp tools history --app-id=ID --connector-id=CID --id=TOOL_ID [--page-size=50] [--page-token=TOKEN] [--limit=N]
+c1i mcp tools approve <tool-id> --app-id=ID --connector-id=CID [--state=approved|disabled|pending]
+c1i mcp tools delete  <tool-id> --app-id=ID --connector-id=CID
+c1i mcp tools history <tool-id> --app-id=ID --connector-id=CID [--page-size=50] [--page-token=TOKEN] [--limit=N]
 
 # --- Toolsets (access profiles — one AppEntitlement per toolset) ---
 c1i mcp toolsets list                   --app-id=ID --connector-id=CID [--page-size=50] [--page-token=TOKEN] [--limit=N]
-c1i mcp toolsets get                    --app-id=ID --connector-id=CID --id=TOOLSET_ID
+c1i mcp toolsets get                    <toolset-id> --app-id=ID --connector-id=CID
 c1i mcp toolsets create                 --app-id=ID --connector-id=CID --display-name=NAME [--description=TEXT]
-c1i mcp toolsets update                 --app-id=ID --connector-id=CID --id=TOOLSET_ID [--display-name=NAME] [--description=TEXT]
-c1i mcp toolsets delete                 --app-id=ID --connector-id=CID --id=TOOLSET_ID
-c1i mcp toolsets get-by-entitlement     --app-id=ID --app-entitlement-id=AEID
-c1i mcp toolsets requestable-connectors --user-id=UID
+c1i mcp toolsets update                 <toolset-id> --app-id=ID --connector-id=CID [--display-name=NAME] [--description=TEXT]
+c1i mcp toolsets delete                 <toolset-id> --app-id=ID --connector-id=CID
+c1i mcp toolsets get-by-entitlement     <app-entitlement-id> --app-id=ID
+c1i mcp toolsets requestable-connectors <user-id>
 
 # --- Bindings (which tools are inside which toolsets) ---
 c1i mcp bindings list     --app-id=ID --connector-id=CID --toolset-id=TID [--page-size=50] [--page-token=TOKEN] [--limit=N]
@@ -350,9 +350,9 @@ the `task_id` returned by `requests create` and returns the full task view
 ### Task Actions
 
 ```sh
-c1i tasks approve --task-id=ID [--policy-step-id=SID] [--comment=TEXT]
-c1i tasks deny --task-id=ID [--policy-step-id=SID] [--comment=TEXT]
-c1i tasks comment --task-id=ID --comment=TEXT
+c1i tasks approve <task-id> [--policy-step-id=SID] [--comment=TEXT]
+c1i tasks deny <task-id> [--policy-step-id=SID] [--comment=TEXT]
+c1i tasks comment <task-id> --comment=TEXT
 ```
 
 `--policy-step-id` targets a specific step of a multi-step approval policy. When

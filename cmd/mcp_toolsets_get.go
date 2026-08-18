@@ -8,10 +8,11 @@ import (
 )
 
 var mcpToolsetsGetCmd = &cobra.Command{
-	Use:   "get",
+	Use:   "get <toolset-id>",
 	Short: "Get a single MCP toolset (pretty JSON)",
+	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		if err := requireNonEmpty(cmd, "app-id", "connector-id", "id"); err != nil {
+		if err := requireNonEmpty(cmd, "app-id", "connector-id"); err != nil {
 			return err
 		}
 
@@ -27,7 +28,7 @@ var mcpToolsetsGetCmd = &cobra.Command{
 
 		appID, _ := cmd.Flags().GetString("app-id")
 		connectorID, _ := cmd.Flags().GetString("connector-id")
-		id, _ := cmd.Flags().GetString("id")
+		id := args[0]
 
 		path := client.Path("/api/v1/apps/%s/connectors/%s/mcp_toolsets/%s", appID, connectorID, id)
 		data, err := c.Get(cmd.Context(), path, nil)
@@ -42,7 +43,6 @@ var mcpToolsetsGetCmd = &cobra.Command{
 func init() {
 	mcpToolsetsGetCmd.Flags().String("app-id", "", "Application ID")
 	mcpToolsetsGetCmd.Flags().String("connector-id", "", "Connector ID")
-	mcpToolsetsGetCmd.Flags().String("id", "", "MCP toolset ID")
-	markRequired(mcpToolsetsGetCmd, "app-id", "connector-id", "id")
+	markRequired(mcpToolsetsGetCmd, "app-id", "connector-id")
 	mcpToolsetsCmd.AddCommand(mcpToolsetsGetCmd)
 }
