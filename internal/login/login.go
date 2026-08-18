@@ -10,6 +10,8 @@ import (
 	"net/url"
 	"strings"
 	"time"
+
+	"github.com/ConductorOne/c1i/internal/client"
 )
 
 // C1iClientID is the public OAuth client ID for the c1i CLI.
@@ -53,7 +55,9 @@ func StartDeviceFlow(ctx context.Context, baseURL string) (*DeviceCode, error) {
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("device authorization failed: %s", string(body))
+		// Wrap as APIError so cmd/errors.go maps the status to the exit-code
+		// taxonomy (auth/rate-limited/server) instead of collapsing to exit 1.
+		return nil, fmt.Errorf("device authorization failed: %w", &client.APIError{Method: http.MethodPost, Path: deviceURL, StatusCode: resp.StatusCode, Body: string(body)})
 	}
 
 	var code DeviceCode
@@ -121,7 +125,7 @@ func PollForToken(ctx context.Context, baseURL string, code *DeviceCode) (*Crede
 				Description string `json:"error_description"`
 			}
 			if err := json.Unmarshal(body, &errResp); err != nil {
-				return nil, fmt.Errorf("token request failed: %s", string(body))
+				return nil, fmt.Errorf("token request failed: %w", &client.APIError{Method: http.MethodPost, Path: tokenURL, StatusCode: resp.StatusCode, Body: string(body)})
 			}
 
 			switch errResp.Error {
@@ -131,7 +135,10 @@ func PollForToken(ctx context.Context, baseURL string, code *DeviceCode) (*Crede
 				interval += 5
 				continue
 			default:
-				return nil, fmt.Errorf("authorization failed: %s", errResp.Description)
+				// A returned OAuth error (e.g. access_denied, expired_token) means
+				// the caller is not authenticated — classify as an auth failure
+				// (exit 3), not a generic error.
+				return nil, &client.AuthError{Err: fmt.Errorf("authorization failed: %s", errResp.Description)}
 			}
 		}
 
@@ -172,7 +179,7 @@ func createPersonalClient(ctx context.Context, baseURL, accessToken string) (*Cr
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("failed to create personal client: %s", string(body))
+		return nil, fmt.Errorf("failed to create personal client: %w", &client.APIError{Method: http.MethodPost, Path: pccURL, StatusCode: resp.StatusCode, Body: string(body)})
 	}
 
 	var clientResp struct {
