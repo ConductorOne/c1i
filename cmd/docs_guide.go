@@ -90,20 +90,20 @@ land in state MCP_TOOL_STATE_PENDING_REVIEW and are not yet callable.
 
 For each tool you want the gateway to proxy:
 
-    c1i mcp tools approve --app-id "$APP_ID" --connector-id "$CONNECTOR_ID" --id "$TOOL_ID"
+    c1i mcp tools approve "$TOOL_ID" --app-id "$APP_ID" --connector-id "$CONNECTOR_ID"
 
 A tool left in PENDING_REVIEW is never proxied. To explicitly block one
 instead of approving it, pass --state disabled to "mcp tools approve".
 
 ## 6. Verify
 
-    c1i mcp servers get --app-id "$APP_ID" --connector-id "$CONNECTOR_ID"
+    c1i mcp servers get "$CONNECTOR_ID" --app-id "$APP_ID"
     c1i mcp servers search --app-id "$APP_ID" --tool-state approved
 
 If the upstream MCP server later adds tools, re-run discovery without
 re-registering:
 
-    c1i mcp servers resync-tools --app-id "$APP_ID" --connector-id "$CONNECTOR_ID"
+    c1i mcp servers resync-tools "$CONNECTOR_ID" --app-id "$APP_ID"
 
 Next: "c1i docs guide assign-toolset-everyone" groups the approved tools into
 a toolset and grants it broadly.
@@ -150,7 +150,7 @@ per call):
 
 Each toolset creates exactly one AppEntitlement at sync time:
 
-    c1i mcp toolsets get --app-id "$APP_ID" --connector-id "$CONNECTOR_ID" --id "$TOOLSET_ID"
+    c1i mcp toolsets get "$TOOLSET_ID" --app-id "$APP_ID" --connector-id "$CONNECTOR_ID"
 
 Read appEntitlementId from the response:
 
@@ -175,7 +175,7 @@ auto-approves, each task resolves on its own. Otherwise, clear the resulting
 tasks:
 
     c1i tasks list --state open --query "<toolset display name>"
-    c1i tasks approve --task-id "$TASK_ID"
+    c1i tasks approve "$TASK_ID"
 
 ## 6. Verify
 
@@ -199,12 +199,12 @@ so you can localize a "the tool isn't callable" problem to the right layer.
 
 ## 1. The server exists and is configured
 
-    c1i mcp servers get --app-id "$APP_ID" --connector-id "$CONNECTOR_ID"
+    c1i mcp servers get "$CONNECTOR_ID" --app-id "$APP_ID"
 
 Shows the server and its auth/connection state. For an EXTERNAL server, also
 confirm the upstream endpoint answers:
 
-    c1i mcp servers test-connection --app-id "$APP_ID" --connector-id "$CONNECTOR_ID"
+    c1i mcp servers test-connection "$CONNECTOR_ID" --app-id "$APP_ID"
 
 ## 2. Its tools are discovered and APPROVED
 
@@ -212,15 +212,15 @@ The gateway only proxies APPROVED tools. Newly discovered tools start in
 PENDING_REVIEW:
 
     c1i mcp tools list --app-id "$APP_ID" --connector-id "$CONNECTOR_ID"
-    c1i mcp tools get  --app-id "$APP_ID" --connector-id "$CONNECTOR_ID" --id "$TOOL_ID"
-    c1i mcp tools approve --app-id "$APP_ID" --connector-id "$CONNECTOR_ID" --id "$TOOL_ID"
+    c1i mcp tools get  "$TOOL_ID" --app-id "$APP_ID" --connector-id "$CONNECTOR_ID"
+    c1i mcp tools approve "$TOOL_ID" --app-id "$APP_ID" --connector-id "$CONNECTOR_ID"
 
 ## 3. The caller holds (or can request) the toolset entitlement
 
 A tool is only exposed to a caller who holds the entitlement of a toolset
 that binds it. Resolve the toolset for an entitlement, then check the grant:
 
-    c1i mcp toolsets get-by-entitlement --app-id "$APP_ID" --app-entitlement-id "$AEID"
+    c1i mcp toolsets get-by-entitlement "$AEID" --app-id "$APP_ID"
     c1i grants list --app-id "$APP_ID" --entitlement-id "$ENTITLEMENT_ID"
 
 ## What this proves
