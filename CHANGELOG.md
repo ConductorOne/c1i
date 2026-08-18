@@ -62,6 +62,18 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- **BREAKING — NDJSON rows emit real JSON booleans and numbers, not strings.**
+  List commands stringified every non-string row value, so `stable` came out
+  as `"true"` and counts as `"7"`. That silently broke the documented reason
+  NDJSON exists here — piping to `jq` — because a non-empty string is always
+  truthy: `jq 'select(.stable)'` matched entries whose value was the string
+  `"false"`, and `jq 'select(.tool_count > 5)'` compared strings, not numbers.
+  Now `stable` and `connected` are `true`/`false`, and `tool_count`,
+  `required_scope_count`, `optional_scope_count`, and `grant_source_count` are
+  bare numbers. Key names and ordering are unchanged; only value *types*
+  changed. A consumer comparing these against the strings `"true"`/`"false"`
+  or `"7"` must switch to the native types. `--fields` projection is
+  unaffected (it already round-tripped rows as `map[string]any`).
 - **BREAKING — ID arguments are now positional.** A command that addresses one
   existing resource by its own id now takes that id as the **first positional
   argument** instead of a flag; parent/scope ids remain flags. This makes the
@@ -166,14 +178,19 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `result`/`error`) was gated on the event's `id` decoding as a non-null
   `*int`, so an event with a string `id`, or with `id: null`, was skipped by
   tier 2 and fell through to the new raw-body return — turning a legitimate
-  response into a confusing decode failure. Unlike the two items above, this
-  one is not purely latent: JSON-RPC 2.0 *requires* `id: null` specifically
+  response into a confusing decode failure. Like the two items above this is latent
+  against C1 today — `extractSSEResponse` only runs when the response is
+  `text/event-stream`, and C1 has never been observed returning that on POST.
+  It differs in how little it would take to fire: the others need a
+  multi-event stream, whereas this needs only a single SSE-framed error
+  response, because JSON-RPC 2.0 *requires* `id: null` specifically
   when the server couldn't determine the request's id — "If there was an
   error in detecting the id in the Request object (e.g. Parse error/Invalid
-  Request), it MUST be Null" (jsonrpc.org/specification) — so a
-  spec-compliant gateway responding to a malformed request with a
-  `-32700`/`-32600` error would have hit this and had its actual error
-  replaced by "parsing gateway response: invalid character...". The
+  Request), it MUST be Null" (jsonrpc.org/specification) — so any
+  spec-compliant gateway that framed responses as SSE would hit this the
+  first time it answered a malformed request with a `-32700`/`-32600` error,
+  and have its actual error replaced by "parsing gateway response: invalid
+  character...". The
   result/error scan no longer looks at `id` at all — presence of
   `result`/`error` is already sufficient to distinguish a response from a
   notification or a server-initiated request, both of which carry
@@ -195,6 +212,44 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   an error rather than special-cased back to success. This path requires a
   non-conformant server to trigger; it has not been observed against C1's own
   gateway.
+
+- **`apps set-owners --wait` no longer claims to be "still waiting" before it
+  has waited.** The poll loop queries once immediately, with no delay, so a
+  first-pass miss printed "Still waiting for owners to provision … (0s
+  elapsed)…" — which read as though time had already passed. The first check
+  is now silent; subsequent polls report progress as before. The success line,
+  the timeout error, the poll interval, and the default timeout are unchanged.
+- **`mcp gateway` HTTP errors now name the failing RPC.** MCP is a
+  single-endpoint protocol, so every gateway failure reported the same
+  `POST` and path and gave no way to tell an `initialize` failure from a
+  `tools/list` or `tools/call` one — including in `--error-format json`. The
+  error now carries and renders the JSON-RPC method, and still includes the
+  response body. Exit-code classification is unchanged and is now pinned by a
+  test across 401/403/404/429/500/503.
+- **`mcp gateway list-tools` can no longer paginate forever.** The
+  `tools/list` cursor loop had no termination guard, so a gateway that kept
+  returning the same cursor — or an ever-changing one — would spin
+  indefinitely. It now fails with a clear diagnostic when a cursor repeats, and
+  has an absolute page-count backstop. Both paths return an error rather than a
+  partial list: silently truncating the tool list is the exact failure this
+  client already had fixed once, and returning "what we got" would reintroduce
+  it in a new form.
+
+### Testing
+
+- **The `docs guide` runbooks, the positional-ID convention, and the gateway's
+  SSE id-matching are now pinned by tests.** These were the three places where
+  correct behavior rested on nothing but review attention: the embedded
+  runbooks are static strings with no compile-time link to the commands they
+  document; PR #50's flag→positional migration had no arg-parsing coverage at
+  all; and two of the three SSE id-selection cases passed even with id
+  matching deleted, because the only `result`-bearing event happened to be the
+  right one. Each is now covered by a test that provably fails when the
+  behavior regresses — the guide test resolves every `c1i …` invocation
+  against the live cobra tree, the arg test asserts the migrated commands take
+  one positional and no longer register the retired flag (and that collection
+  commands keep theirs), and the SSE cases now carry decoys so tier-2 fallback
+  alone picks the wrong event.
 
 ## [0.3.0] - 2026-07-16
 
