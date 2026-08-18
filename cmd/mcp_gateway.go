@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"errors"
 	"fmt"
 	"net/url"
 	"strings"
@@ -77,9 +78,21 @@ func newGatewayClient(cmd *cobra.Command) (*mcpgateway.Client, error) {
 	}
 	gc := mcpgateway.New(endpoint, tok.AccessToken, nil)
 	if err := gc.Initialize(cmd.Context()); err != nil {
-		return nil, fmt.Errorf("gateway handshake failed: %w", err)
+		return nil, fmt.Errorf("gateway handshake failed: %w", classifyGatewayErr(err))
 	}
 	return gc, nil
+}
+
+// classifyGatewayErr maps a gateway 401/403 to a client.AuthError so it reaches
+// the exit-3 (auth) classification in cmd/errors.go — the gateway uses the same
+// bearer as the API, so an auth rejection there is an auth failure. Other errors
+// pass through unchanged.
+func classifyGatewayErr(err error) error {
+	var he *mcpgateway.HTTPError
+	if errors.As(err, &he) && (he.StatusCode == 401 || he.StatusCode == 403) {
+		return &client.AuthError{Err: err}
+	}
+	return err
 }
 
 func init() {

@@ -46,6 +46,21 @@ type Tool struct {
 	InputSchema json.RawMessage `json:"inputSchema"`
 }
 
+// HTTPError is returned when the gateway responds with a non-2xx status. It
+// carries the status code so callers can classify it — e.g. map a 401/403 to an
+// authentication failure (exit 3) rather than a generic error.
+type HTTPError struct {
+	StatusCode int
+	Body       string
+}
+
+func (e *HTTPError) Error() string {
+	if e.Body != "" {
+		return fmt.Sprintf("gateway returned %d: %s", e.StatusCode, e.Body)
+	}
+	return fmt.Sprintf("gateway returned %d", e.StatusCode)
+}
+
 type rpcRequest struct {
 	JSONRPC string `json:"jsonrpc"`
 	ID      *int   `json:"id,omitempty"`
@@ -83,26 +98,42 @@ func (c *Client) Initialize(ctx context.Context) error {
 	if _, err := c.call(ctx, "initialize", params); err != nil {
 		return err
 	}
-	if c.sessionID == "" {
-		return fmt.Errorf("gateway did not return an Mcp-Session-Id on initialize")
-	}
+	// A Mcp-Session-Id is optional: a stateless gateway may omit it, in which
+	// case subsequent requests simply carry no session header. Only send the
+	// header when the server gave us one (handled in post).
+	//
 	// notifications/initialized has no id and expects no result.
 	return c.notify(ctx, "notifications/initialized")
 }
 
-// ListTools returns the tools the gateway exposes to the caller.
+// ListTools returns the tools the gateway exposes to the caller, following
+// MCP cursor pagination (tools/list returns a nextCursor when more tools remain)
+// so the full set is returned even when it spans multiple pages.
 func (c *Client) ListTools(ctx context.Context) ([]Tool, error) {
-	raw, err := c.call(ctx, "tools/list", map[string]any{})
-	if err != nil {
-		return nil, err
+	var all []Tool
+	cursor := ""
+	for {
+		params := map[string]any{}
+		if cursor != "" {
+			params["cursor"] = cursor
+		}
+		raw, err := c.call(ctx, "tools/list", params)
+		if err != nil {
+			return nil, err
+		}
+		var out struct {
+			Tools      []Tool `json:"tools"`
+			NextCursor string `json:"nextCursor"`
+		}
+		if err := json.Unmarshal(raw, &out); err != nil {
+			return nil, fmt.Errorf("parsing tools/list result: %w", err)
+		}
+		all = append(all, out.Tools...)
+		if out.NextCursor == "" {
+			return all, nil
+		}
+		cursor = out.NextCursor
 	}
-	var out struct {
-		Tools []Tool `json:"tools"`
-	}
-	if err := json.Unmarshal(raw, &out); err != nil {
-		return nil, fmt.Errorf("parsing tools/list result: %w", err)
-	}
-	return out.Tools, nil
 }
 
 // CallTool invokes name with the given arguments (raw JSON object, or nil for
@@ -180,12 +211,12 @@ func (c *Client) post(ctx context.Context, payload []byte) (body []byte, session
 		return nil, "", err
 	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return nil, "", fmt.Errorf("gateway returned %d: %s", resp.StatusCode, strings.TrimSpace(string(data)))
+		return nil, "", &HTTPError{StatusCode: resp.StatusCode, Body: strings.TrimSpace(string(data))}
 	}
 
 	sid := resp.Header.Get("Mcp-Session-Id")
 	if strings.Contains(resp.Header.Get("Content-Type"), "text/event-stream") {
-		data = extractSSEData(data)
+		data = extractSSEResponse(data)
 	}
 	return data, sid, nil
 }
@@ -204,26 +235,51 @@ func decodeMessage(body []byte) (*rpcResponse, error) {
 	return &msg, nil
 }
 
-// extractSSEData concatenates the `data:` payloads of an SSE stream into a
-// single body. The gateway sends the JSON-RPC message as one SSE event; joining
-// the data lines yields that JSON object.
-func extractSSEData(body []byte) []byte {
-	var buf bytes.Buffer
+// extractSSEResponse pulls the JSON-RPC response out of an SSE stream. A
+// streamable-HTTP server may send several events in one response (e.g. progress
+// notifications followed by the result), so concatenating every `data:` line
+// would corrupt the JSON. Instead it parses the stream into events (blank-line
+// separated, each event's `data:` lines joined) and returns the payload of the
+// event that is the JSON-RPC response — the one carrying `result` or `error` —
+// skipping notifications. Falls back to the last event's payload, or the raw
+// body on a scan error, so a decode failure surfaces visibly.
+func extractSSEResponse(body []byte) []byte {
+	var events [][]byte
+	var cur bytes.Buffer
+	flush := func() {
+		if cur.Len() > 0 {
+			events = append(events, append([]byte(nil), cur.Bytes()...))
+			cur.Reset()
+		}
+	}
 	sc := bufio.NewScanner(bytes.NewReader(body))
 	sc.Buffer(make([]byte, 0, 64*1024), 8*1024*1024)
 	for sc.Scan() {
 		line := sc.Text()
+		if line == "" { // blank line terminates an SSE event
+			flush()
+			continue
+		}
 		if strings.HasPrefix(line, "data:") {
-			buf.WriteString(strings.TrimSpace(strings.TrimPrefix(line, "data:")))
+			cur.WriteString(strings.TrimSpace(strings.TrimPrefix(line, "data:")))
 		}
 	}
+	flush()
 	if sc.Err() != nil {
-		// A scan error (e.g. a data line exceeding the buffer) would otherwise
-		// yield silently truncated JSON. Return the raw body so the caller's
-		// JSON decode fails visibly instead of on partial data.
 		return body
 	}
-	return buf.Bytes()
+	var last []byte
+	for _, e := range events {
+		var probe struct {
+			Result json.RawMessage `json:"result"`
+			Error  json.RawMessage `json:"error"`
+		}
+		if json.Unmarshal(e, &probe) == nil && (len(probe.Result) > 0 || len(probe.Error) > 0) {
+			return e // the JSON-RPC response event
+		}
+		last = e
+	}
+	return last
 }
 
 func truncate(b []byte, n int) string {

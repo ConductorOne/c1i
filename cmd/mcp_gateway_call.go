@@ -29,6 +29,10 @@ Find tool names and their input schemas with "c1i mcp gateway list-tools --full"
 			if err := json.Unmarshal([]byte(argsJSON), &obj); err != nil {
 				return &usageError{fmt.Errorf("--args must be a JSON object: %w", err)}
 			}
+			if obj == nil {
+				// json.Unmarshal of `null` into a map succeeds and leaves it nil.
+				return &usageError{fmt.Errorf("--args must be a JSON object, not null")}
+			}
 			raw = json.RawMessage(argsJSON)
 		}
 
