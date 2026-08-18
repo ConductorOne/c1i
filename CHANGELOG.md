@@ -160,6 +160,24 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   live-capture sessions, so this fallback tier was unreachable against C1
   today; it guarded a spec-permitted shape the client advertises support for
   but has not observed.
+- **`extractSSEResponse`'s result/error scan no longer discards a response
+  whose `id` isn't a plain non-null integer.** Found by adversarial review
+  of the fix directly above: that fix's tier-2 scan (the event carrying
+  `result`/`error`) was gated on the event's `id` decoding as a non-null
+  `*int`, so an event with a string `id`, or with `id: null`, was skipped by
+  tier 2 and fell through to the new raw-body return — turning a legitimate
+  response into a confusing decode failure. Unlike the two items above, this
+  one is not purely latent: JSON-RPC 2.0 *requires* `id: null` specifically
+  when the server couldn't determine the request's id — "If there was an
+  error in detecting the id in the Request object (e.g. Parse error/Invalid
+  Request), it MUST be Null" (jsonrpc.org/specification) — so a
+  spec-compliant gateway responding to a malformed request with a
+  `-32700`/`-32600` error would have hit this and had its actual error
+  replaced by "parsing gateway response: invalid character...". The
+  result/error scan no longer looks at `id` at all — presence of
+  `result`/`error` is already sufficient to distinguish a response from a
+  notification or a server-initiated request, both of which carry
+  `method`/`params` and never `result`/`error`.
 - **`mcp gateway call` no longer fails open when `isError` is present but not
   a JSON boolean.** Also found by adversarial review of #49/#54, which added
   the `isError` check in the first place: `toolResultIsError` decoded into a

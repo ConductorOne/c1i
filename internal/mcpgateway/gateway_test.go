@@ -165,10 +165,10 @@ func TestExtractSSEResponseMultipleNotificationsNoResponse(t *testing.T) {
 }
 
 // TestExtractSSEResponseSelectsNullOrEmptyResult are regression guards: a
-// legitimate response carrying "result":null or "result":{} must still be
-// selected as the response (both are valid, present `result` fields per
-// JSON-RPC — a call that legitimately returns no data), not treated as
-// missing just because they look "empty".
+// legitimate response carrying "result":null, "result":false, or
+// "result":{} must still be selected as the response (all are valid,
+// present `result` fields per JSON-RPC — a call that legitimately returns no
+// data), not treated as missing just because they look "empty" or falsy.
 func TestExtractSSEResponseSelectsNullOrEmptyResult(t *testing.T) {
 	cases := []struct {
 		name string
@@ -179,6 +179,11 @@ func TestExtractSSEResponseSelectsNullOrEmptyResult(t *testing.T) {
 			name: "null result",
 			sse:  "data: {\"jsonrpc\":\"2.0\",\"id\":1,\"result\":null}\n\n",
 			want: `{"jsonrpc":"2.0","id":1,"result":null}`,
+		},
+		{
+			name: "false result",
+			sse:  "data: {\"jsonrpc\":\"2.0\",\"id\":1,\"result\":false}\n\n",
+			want: `{"jsonrpc":"2.0","id":1,"result":false}`,
 		},
 		{
 			name: "empty object result",
@@ -204,6 +209,84 @@ func TestExtractSSEResponseSelectsNullOrEmptyResult(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestExtractSSEResponseFallsBackToResultEventOnIDMismatch is a regression
+// guard: when wantID doesn't match any event's id, tier 2 must still fall
+// back to the event carrying result/error (a plain numeric id mismatch —
+// this already worked before this package's most recent fixes; it must keep
+// working after them).
+func TestExtractSSEResponseFallsBackToResultEventOnIDMismatch(t *testing.T) {
+	wantID := 42
+	sse := "data: {\"jsonrpc\":\"2.0\",\"id\":7,\"result\":{\"tools\":[]}}\n\n"
+	want := `{"jsonrpc":"2.0","id":7,"result":{"tools":[]}}`
+	got := string(extractSSEResponse([]byte(sse), &wantID))
+	if got != want {
+		t.Errorf("extractSSEResponse = %q, want %q (a plain id mismatch must still fall back to the result-bearing event)", got, want)
+	}
+}
+
+// TestExtractSSEResponseSelectsResponseRegardlessOfIDShape guards against a
+// real over-correction found in review of the "return raw body instead of
+// the last event" fix above: tier 2 (the event-carrying-result/error scan)
+// used to be gated on the event's id decoding as a non-null *int (idOf). A
+// string id, or the JSON-RPC 2.0 spec-mandated `id: null`, failed that gate
+// and fell through all the way to the raw-body return — discarding a
+// legitimate, in the null case spec-*mandated*, response and replacing it
+// with a confusing "parsing gateway response" decode failure instead of the
+// server's actual answer.
+//
+// The null-id case is not theoretical: per
+// https://www.jsonrpc.org/specification (Response object), "If there was an
+// error in detecting the id in the Request object (e.g. Parse error/Invalid
+// Request), it MUST be Null." A spec-compliant gateway answering a
+// -32700/-32600 error is required to send exactly this shape.
+//
+// Presence of result/error alone is sufficient to identify a response: a
+// notification carries method/params and never result/error, and neither
+// does a server-initiated request, so no id-shape gate is needed to exclude
+// them.
+func TestExtractSSEResponseSelectsResponseRegardlessOfIDShape(t *testing.T) {
+	wantID := 1
+
+	t.Run("string id result", func(t *testing.T) {
+		sse := "data: {\"jsonrpc\":\"2.0\",\"id\":\"1\",\"result\":{\"ok\":true}}\n\n"
+		want := `{"jsonrpc":"2.0","id":"1","result":{"ok":true}}`
+		got := string(extractSSEResponse([]byte(sse), &wantID))
+		if got != want {
+			t.Errorf("extractSSEResponse = %q, want %q (a string id must not disqualify a result-bearing event)", got, want)
+		}
+		if _, err := decodeMessage([]byte(got)); err != nil {
+			t.Errorf("decodeMessage(%q) failed: %v", got, err)
+		}
+	})
+
+	t.Run("null id error (JSON-RPC 2.0 spec-mandated shape for parse/invalid-request errors)", func(t *testing.T) {
+		sse := "data: {\"jsonrpc\":\"2.0\",\"id\":null,\"error\":{\"code\":-32700,\"message\":\"parse error\"}}\n\n"
+		want := `{"jsonrpc":"2.0","id":null,"error":{"code":-32700,"message":"parse error"}}`
+		got := string(extractSSEResponse([]byte(sse), &wantID))
+		if got != want {
+			t.Errorf("extractSSEResponse = %q, want %q (id:null is spec-mandated for parse/invalid-request errors and must still be selected as the response)", got, want)
+		}
+		msg, err := decodeMessage([]byte(got))
+		if err != nil {
+			t.Fatalf("decodeMessage(%q) failed: %v", got, err)
+		}
+		if msg.Error == nil || msg.Error.Code != -32700 {
+			t.Errorf("decoded message = %+v, want Error.Code == -32700", msg)
+		}
+	})
+
+	// Same null-id shape, but with wantID nil: tier 1 is skipped entirely in
+	// that case, so tier 2 alone must still pick this up.
+	t.Run("null id error, no wantID", func(t *testing.T) {
+		sse := "data: {\"jsonrpc\":\"2.0\",\"id\":null,\"error\":{\"code\":-32600,\"message\":\"invalid request\"}}\n\n"
+		want := `{"jsonrpc":"2.0","id":null,"error":{"code":-32600,"message":"invalid request"}}`
+		got := string(extractSSEResponse([]byte(sse), nil))
+		if got != want {
+			t.Errorf("extractSSEResponse = %q, want %q", got, want)
+		}
+	})
 }
 
 func TestDecodeMessage(t *testing.T) {

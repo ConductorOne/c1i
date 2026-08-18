@@ -286,16 +286,26 @@ func decodeMessage(body []byte) (*rpcResponse, error) {
 //
 // It then picks the event that answers wantID, in order: (1) the event whose
 // JSON-RPC id matches wantID, if wantID is non-nil; (2) the event carrying a
-// `result` or `error` (a notification, which by definition carries no id, is
-// never a candidate here). If neither tier finds a match — e.g. the stream
-// contains only progress notifications and never actually answers the
-// request — the raw body is returned instead of guessing, the same as the
-// scanner-error path below, so the caller's JSON-RPC decode fails visibly
-// instead of a notification silently being mistaken for the response (which
-// would make decodeMessage return a zero-value {Result:nil, Error:nil}
-// message — i.e. the CLI treating "the server never answered" as a
-// successful empty response). A scan error also returns the raw body, for
-// the same reason.
+// `result` or `error`. Tier 2 deliberately does NOT require the event's id to
+// parse as a non-null integer: a notification never carries `result`/`error`
+// (it carries `method`/`params` instead), and neither does a server-initiated
+// request, so the presence of `result`/`error` alone is already sufficient to
+// identify a response — gating it on a parseable id as well would wrongly
+// reject a response whose id is a string, or a response whose id is the JSON
+// literal null. The latter is not a hypothetical: JSON-RPC 2.0 requires a
+// null id specifically when the server could not determine the request's id
+// — "If there was an error in detecting the id in the Request object (e.g.
+// Parse error/Invalid Request), it MUST be Null." (jsonrpc.org/specification,
+// Response object). So a spec-compliant -32700/-32600 error response is
+// exactly the shape tier 2 must still select, not discard. If neither tier
+// finds a match — e.g. the stream contains only progress notifications and
+// never actually answers the request — the raw body is returned instead of
+// guessing, the same as the scanner-error path below, so the caller's
+// JSON-RPC decode fails visibly instead of a notification silently being
+// mistaken for the response (which would make decodeMessage return a
+// zero-value {Result:nil, Error:nil} message — i.e. the CLI treating "the
+// server never answered" as a successful empty response). A scan error also
+// returns the raw body, for the same reason.
 //
 // This handles the full input space the streamable-HTTP transport permits
 // (multi-event streams, multi-line data fields, non-matching ids in-flight) —
@@ -367,14 +377,17 @@ func extractSSEResponse(body []byte, wantID *int) []byte {
 	}
 
 	for _, e := range events {
-		if _, ok := idOf(e); ok {
-			var probe struct {
-				Result json.RawMessage `json:"result"`
-				Error  json.RawMessage `json:"error"`
-			}
-			if json.Unmarshal(e, &probe) == nil && (len(probe.Result) > 0 || len(probe.Error) > 0) {
-				return e // the JSON-RPC response event
-			}
+		// No idOf gate here, deliberately: a string id or a spec-mandated
+		// `id: null` (see the doc comment above) must still be selectable as
+		// a response as long as it carries result/error. A notification and
+		// a server-initiated request never carry either field, so this check
+		// alone already excludes them without needing to inspect id at all.
+		var probe struct {
+			Result json.RawMessage `json:"result"`
+			Error  json.RawMessage `json:"error"`
+		}
+		if json.Unmarshal(e, &probe) == nil && (len(probe.Result) > 0 || len(probe.Error) > 0) {
+			return e // the JSON-RPC response event
 		}
 	}
 	// No event matched wantID and none carried result/error: this stream
