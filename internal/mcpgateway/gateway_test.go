@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -836,3 +837,56 @@ func TestExtractSSEResponseEmptyDataLineIsNotAResponse(t *testing.T) {
 		t.Error("decodeMessage succeeded on an empty-data stream; a missing response must surface as an error")
 	}
 }
+
+// TestCallToolSurfacesZeroCodeRPCError pins a shape observed live against C1:
+// an UPSTREAM CONNECTOR failure — the external MCP server being unreachable, or
+// a vendor API returning 401 mid-call — arrives as HTTP 200 carrying a JSON-RPC
+// `error` whose `code` is **0**, not as an HTTP error and not as
+// `result.isError`.
+//
+// Zero is Go's zero value, so the idiomatic-looking `err.Code != 0` guard, or
+// any switch on code that treats 0 as "unset, probably fine", would silently
+// drop a real failure — a vendor 401 would read as success. This client
+// deliberately keys only on `error` being present, never on its code. The test
+// exists so that stays true: adding a code check here is the plausible
+// refactor that would reintroduce the bug.
+func TestCallToolSurfacesZeroCodeRPCError(t *testing.T) {
+	const upstream = `connector tool "pagerduty_oauth_list_teams": call failed: tool "list_teams" returned error: api error 401:`
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		var req struct {
+			ID     *int   `json:"id"`
+			Method string `json:"method"`
+		}
+		_ = json.Unmarshal(body, &req)
+		w.Header().Set("Content-Type", "application/json")
+		switch req.Method {
+		case "initialize":
+			w.Header().Set("Mcp-Session-Id", "s1")
+			_, _ = io.WriteString(w, `{"jsonrpc":"2.0","id":1,"result":{"protocolVersion":"2025-06-18"}}`)
+		case "notifications/initialized":
+			w.WriteHeader(http.StatusAccepted)
+		default:
+			// HTTP 200 with a JSON-RPC error carrying code 0.
+			_, _ = io.WriteString(w, `{"jsonrpc":"2.0","id":2,"error":{"code":0,"message":`+
+				strconvQuote(upstream)+`}}`)
+		}
+	}))
+	defer srv.Close()
+
+	c := New(srv.URL, "tok", srv.Client())
+	if err := c.Initialize(context.Background()); err != nil {
+		t.Fatalf("Initialize: %v", err)
+	}
+	_, err := c.CallTool(context.Background(), "pagerduty_oauth_list_teams", nil)
+	if err == nil {
+		t.Fatal("a JSON-RPC error with code 0 was treated as success; an upstream connector failure must surface as an error")
+	}
+	if !strings.Contains(err.Error(), "api error 401") {
+		t.Errorf("error %q does not carry the upstream message", err)
+	}
+}
+
+// strconvQuote renders s as a JSON string literal for embedding in a fixture.
+func strconvQuote(s string) string { return strconv.Quote(s) }
