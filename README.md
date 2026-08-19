@@ -217,6 +217,11 @@ c1i api --path /api/v1/search/users --body '{"pageSize":10}'
 # Other methods — --method takes GET, POST, PUT, PATCH, or DELETE
 c1i api --path /api/v1/apps/<app>/connectors/<conn>/mcp_tools/<id> --method DELETE
 
+# DELETE normally refuses a body; some endpoints (e.g. remove-membership)
+# require one, so opt in explicitly
+c1i api --path /api/v1/apps/<app>/entitlements/<ent>/remove-membership \
+  --method DELETE --body '{"appUserId":"<app-user>"}' --allow-delete-body
+
 # Read the body from a file, or stdin with "-"
 c1i api --path /api/v1/search/users --body-file query.json
 echo '{"pageSize":10}' | c1i api --path /api/v1/search/users --body-file -
@@ -233,7 +238,10 @@ c1i api --path /api/v1/automation_executions --paginate --list-key automationExe
 
 The method defaults to GET, or POST when a body is set; pass `--method` for
 PUT/PATCH/DELETE. The body comes from `--body` (inline JSON) or `--body-file` (a
-file, or `-` for stdin) — the two are mutually exclusive. `--query key=value` and
+file, or `-` for stdin) — the two are mutually exclusive. GET and DELETE refuse
+a body by default (a body on either is more likely a mistake than intent); pass
+`--allow-delete-body` to lift that for DELETE specifically, for the handful of
+C1 endpoints that require one. `--query key=value` and
 `--header key=value` are both repeatable. When `--paginate` is used, each page's first array-valued field is unwrapped and each item is emitted as a single line of NDJSON — the same format used by list commands. This covers both the canonical `list` key and typed keys like `automationExecutions`; use `--list-key <field>` to force a specific field. If the server returns the same `nextPageToken` twice in a row, `c1i` aborts with an error rather than looping forever. Without `--paginate`, the full JSON response is pretty-printed.
 
 ### API Discovery & Documentation

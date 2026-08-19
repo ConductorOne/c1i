@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -11,6 +12,24 @@ import (
 
 	"github.com/spf13/cobra"
 )
+
+// apiRequester is the minimal surface `api` needs from an authenticated
+// client: send one request, get the response bytes. Defining it locally
+// (instead of depending on *client.Client's full method set) lets tests
+// substitute a fake that talks straight to an httptest.Server, so the
+// DELETE-body opt-in can be proven on the wire without driving newClient's
+// real OAuth token mint.
+type apiRequester interface {
+	Request(ctx context.Context, method, path string, body []byte, headers map[string]string) ([]byte, error)
+}
+
+// newAPIClient builds the client `api` sends requests through. It's a var,
+// not a plain function, purely so api_test.go can swap in a fake for the
+// duration of a test (restoring the original after) — production always
+// takes this branch, unchanged.
+var newAPIClient = func(cmd *cobra.Command, baseURL string) (apiRequester, error) {
+	return newClient(cmd, baseURL)
+}
 
 var apiCmd = &cobra.Command{
 	Use:   "api",
@@ -33,6 +52,7 @@ var apiCmd = &cobra.Command{
 		listKey, _ := cmd.Flags().GetString("list-key")
 		queryPairs, _ := cmd.Flags().GetStringArray("query")
 		headerPairs, _ := cmd.Flags().GetStringArray("header")
+		allowDeleteBody, _ := cmd.Flags().GetBool("allow-delete-body")
 		limit := getIntFlag(cmd, "limit")
 
 		if limit > 0 && !paginate {
@@ -79,11 +99,17 @@ var apiCmd = &cobra.Command{
 			return fmt.Errorf("unsupported method: %s (use GET, POST, PUT, PATCH, or DELETE)", method)
 		}
 
-		// GET and DELETE carry no request body. Rather than silently drop a body
-		// the caller supplied (which would send a different request than they
-		// expect), fail fast.
-		if body != "" && (method == "GET" || method == "DELETE") {
-			return fmt.Errorf("--method %s does not take a request body; drop --body/--body-file or use POST, PUT, or PATCH", method)
+		// GET carries no request body, full stop. DELETE normally doesn't
+		// either, but a handful of C1 endpoints (e.g. remove-membership) are
+		// body-taking DELETEs, so --allow-delete-body is an explicit opt-in
+		// escape hatch. Without it, a body on DELETE is far more likely to be
+		// a mistake than intent, so we fail fast rather than silently drop it
+		// (which would send a different request than the caller expects).
+		if body != "" && method == "GET" {
+			return fmt.Errorf("--method GET does not take a request body; drop --body/--body-file or use POST, PUT, or PATCH")
+		}
+		if body != "" && method == "DELETE" && !allowDeleteBody {
+			return fmt.Errorf("--method DELETE does not take a request body; drop --body/--body-file, use POST, PUT, or PATCH, or pass --allow-delete-body if the endpoint requires a body on DELETE")
 		}
 
 		// Apply --query params to the path once; pagination adds page_token per
@@ -102,7 +128,10 @@ var apiCmd = &cobra.Command{
 		// runs before newClient so a preview needs no credentials.
 		if dryRunActive() && method != "GET" {
 			var previewBody any
-			if method != "DELETE" {
+			// A DELETE only reaches here with body != "" when --allow-delete-body
+			// was set (the guard above rejects the combination otherwise), so
+			// this still previews "no body" for a plain DELETE.
+			if method != "DELETE" || body != "" {
 				bodyObj := map[string]any{}
 				if body != "" {
 					if err := json.Unmarshal([]byte(body), &bodyObj); err != nil {
@@ -114,7 +143,7 @@ var apiCmd = &cobra.Command{
 			return printDryRun(cmd, method, path, previewBody)
 		}
 
-		c, err := newClient(cmd, baseURL)
+		c, err := newAPIClient(cmd, baseURL)
 		if err != nil {
 			return fmt.Errorf("authentication failed: %w", err)
 		}
@@ -129,9 +158,28 @@ var apiCmd = &cobra.Command{
 			reqPath := path
 			var bodyBytes []byte
 			switch method {
-			case "GET", "DELETE":
+			case "GET":
 				if paginate && pageToken != "" {
 					reqPath = setQueryParam(reqPath, "page_token", pageToken)
+				}
+			case "DELETE":
+				if paginate && pageToken != "" {
+					reqPath = setQueryParam(reqPath, "page_token", pageToken)
+				}
+				// Reaching here with body != "" means --allow-delete-body was
+				// set; the guard above already rejected the combination
+				// otherwise. Send the caller's exact bytes (validated as JSON,
+				// but not re-marshaled) rather than routing through the
+				// map[string]any round-trip POST/PUT/PATCH use below, which
+				// exists to splice in pageToken for pagination — not needed
+				// here since DELETE pagination (like GET's) rides the query
+				// string, not the body.
+				if body != "" {
+					var discard any
+					if err := json.Unmarshal([]byte(body), &discard); err != nil {
+						return fmt.Errorf("invalid JSON body: %w", err)
+					}
+					bodyBytes = []byte(body)
 				}
 			case "POST", "PUT", "PATCH":
 				var bodyObj map[string]any
@@ -223,6 +271,7 @@ func init() {
 	apiCmd.Flags().String("method", "", "HTTP method: GET, POST, PUT, PATCH, or DELETE (default: GET, or POST if a body is set)")
 	apiCmd.Flags().String("body", "", "JSON request body (implies POST)")
 	apiCmd.Flags().String("body-file", "", "Read the JSON request body from a file (\"-\" for stdin); mutually exclusive with --body")
+	apiCmd.Flags().Bool("allow-delete-body", false, "Allow --body/--body-file with --method DELETE (some C1 endpoints, e.g. remove-membership, require a body on DELETE; without this flag such a request is refused)")
 	apiCmd.Flags().StringArray("query", nil, "Query parameter as key=value (repeatable)")
 	apiCmd.Flags().StringArray("header", nil, "Extra request header as key=value (repeatable)")
 	apiCmd.Flags().Bool("paginate", false, "Automatically follow pagination to fetch all pages")

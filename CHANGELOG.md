@@ -8,6 +8,15 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **`api --allow-delete-body`** — explicit opt-in that lets `--method DELETE`
+  carry a `--body`/`--body-file`. Some C1 endpoints are body-taking DELETEs
+  (e.g. `.../remove-membership`, which needs `{"appUserId": "..."}` to say
+  which membership to remove), and without an opt-in they were completely
+  uncallable through `c1i api` — the documented escape hatch for exactly this
+  case. The default is unchanged: `--method DELETE --body` without the flag
+  still refuses with the same error (now also naming the opt-in), so the
+  guard still catches an accidental body on an ordinary DELETE. `--dry-run`
+  previews the method, path, and body when the opt-in is set.
 - **`docs guide [name]`** — print an embedded, task-oriented runbook (no auth
   required, like the other `docs` subcommands). Run with no argument to list
   the available names. Ships with `register-mcp-server`, `assign-toolset-
