@@ -254,13 +254,79 @@ entitled callers through the gateway, and "mcp gateway call" proves it end to
 end — not just that the pieces are theoretically wired up.
 `
 
+// guideDelegateEntitlementProvisioning walks through the two-step needed to
+// get real delegated provisioning out of an entitlement proxy binding: the
+// binding itself (c1.api.app.v1.AppEntitlementsProxy) is a visibility and
+// tracking link only and triggers no provisioning by itself, so a second
+// call sets provisionerPolicy.delegated on the destination entitlement.
+// Field names and the "binding must already exist" precondition were
+// verified against the live public OpenAPI spec schemas
+// c1.api.app.v1.AppEntitlementsProxy and c1.api.policy.v1.DelegatedProvision
+// ("MUST be configured as a proxy binding leading into this entitlement").
+// This is a distinct object from the tool<->toolset bindings under "mcp
+// bindings" (cmd/mcp_bindings*.go) — c1i has no dedicated command for
+// entitlement proxy bindings, so every step here goes through "c1i api".
+// Derived from cmd/api.go and cmd/entitlements_get.go.
+const guideDelegateEntitlementProvisioning = `# Delegate provisioning through a proxy binding
+
+An entitlement proxy binding (entitlement -> entitlement) is a different
+object from the tool<->toolset bindings the mcp bindings command family
+covers. A proxy binding is a visibility and tracking link only — creating
+one does not, by itself, trigger any provisioning. Real delegated
+provisioning is a separate second step, below.
+
+There is no dedicated command for entitlement proxy bindings, so both steps
+below go through "c1i api".
+
+## 1. Create the proxy binding
+
+The binding is directional: a source entitlement (what a requester sees or
+holds) bound to a destination entitlement (what should actually be
+provisioned). Both ends are identified entirely by the path; the body is
+empty:
+
+    c1i api --path=/api/v1/apps/<SRC_APP_ID>/<SRC_ENTITLEMENT_ID>/bindings/<DST_APP_ID>/<DST_ENTITLEMENT_ID> --body='{}'
+
+Confirm it was created:
+
+    c1i api --path=/api/v1/apps/<SRC_APP_ID>/<SRC_ENTITLEMENT_ID>/bindings/<DST_APP_ID>/<DST_ENTITLEMENT_ID> --method=GET
+
+## 2. Turn on delegated provisioning on the destination entitlement
+
+This is the step that actually changes behavior. On the destination
+entitlement — the one the binding above leads into — set
+provisionerPolicy.delegated, pointing back at the source entitlement:
+
+    c1i entitlements get <DST_ENTITLEMENT_ID> --app-id <DST_APP_ID>
+
+    c1i api --path=/api/v1/apps/<DST_APP_ID>/entitlements/<DST_ENTITLEMENT_ID> --body='{"entitlement":{"provisionerPolicy":{"delegated":{"appId":"<SRC_APP_ID>","entitlementId":"<SRC_ENTITLEMENT_ID>"}}},"updateMask":"provisionerPolicy"}'
+
+C1's schema documents provisionerPolicy.delegated's precondition directly:
+the destination entitlement "MUST be configured as a proxy binding leading
+into this entitlement" — do step 1 first even though the write API does not
+reject the step 2 update if you skip it; whether delegation actually
+provisions anything without a real binding behind it is unverified, so
+don't rely on that path.
+
+## What this proves
+
+Step 1 alone never grants or provisions anything — it only makes one
+entitlement visible and trackable through another. Step 2's
+provisionerPolicy.delegated update is the documented provisioning trigger,
+and per C1's own schema it's meant to depend on step 1 already being in
+place, even though this runbook only confirmed that step 1 succeeds, step 2
+succeeds, and the resulting field shape — not that skipping step 1 changes
+runtime provisioning behavior.
+`
+
 // docsGuides maps a guide name to its embedded content. Keep names stable —
 // they're part of the CLI's public surface (an agent may hardcode
 // "c1i docs guide register-mcp-server" in its own tooling).
 var docsGuides = map[string]string{
-	"register-mcp-server":     guideRegisterMCPServer,
-	"assign-toolset-everyone": guideAssignToolsetEveryone,
-	"test-mcp-gateway":        guideTestMCPGateway,
+	"register-mcp-server":               guideRegisterMCPServer,
+	"assign-toolset-everyone":           guideAssignToolsetEveryone,
+	"test-mcp-gateway":                  guideTestMCPGateway,
+	"delegate-entitlement-provisioning": guideDelegateEntitlementProvisioning,
 }
 
 // guideNames returns the available guide names, sorted for stable output.

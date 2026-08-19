@@ -11,8 +11,11 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - **`docs guide [name]`** — print an embedded, task-oriented runbook (no auth
   required, like the other `docs` subcommands). Run with no argument to list
   the available names. Ships with `register-mcp-server`, `assign-toolset-
-  everyone`, and `test-mcp-gateway` (a pre-flight checklist for verifying a
-  server's tools are approved, entitled, and served through the gateway).
+  everyone`, `test-mcp-gateway` (a pre-flight checklist for verifying a
+  server's tools are approved, entitled, and served through the gateway), and
+  `delegate-entitlement-provisioning` (an entitlement "proxy binding" alone
+  grants nothing — this walks through the required second step,
+  `provisionerPolicy.delegated`, verified live against a leet tenant).
   Content is embedded as Go string constants — no network call, unlike
   `docs search` / `docs page`.
 - **`auth token`** — mint and print a short-lived OAuth2 bearer token from the
@@ -130,6 +133,38 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- **`docs endpoints --filter` now names the known hidden endpoint families
+  instead of only pointing at `docs search`.** A filter that matches nothing
+  used to say only "try `docs search`," which reads as "this endpoint
+  doesn't exist" for the endpoints that are real, work live, and are simply
+  absent from the public OpenAPI spec on purpose. The miss message now names
+  the two families verified against the live public spec and a leet tenant
+  — the MCP admin surface (`mcp_servers`/`mcp_tools`/`mcp_toolsets`, covered
+  by `mcp servers`/`mcp tools`/`mcp toolsets`) and access reviews
+  (`access_review`/`access_reviews`, reachable via `api --path`) — with the
+  concrete next step for each, before falling back to `docs search` for
+  anything else. Two other candidate "hidden" families from the same
+  customer report turned out not to fit this message: `bundle_automation` is
+  already in the public spec (`docs endpoints --filter bundle_automation`
+  finds it), and `managed_state_bindings` isn't a standalone endpoint at all
+  — `AppManagedStateBindingRef` is a request-body field on the existing
+  `connectors` (`CreateDelegated`) endpoint.
+- **`mcp bindings --help` now disambiguates itself from entitlement proxy
+  bindings.** `mcp bindings` operates on MCP tool↔toolset bindings only. A
+  customer's agent, grepping c1i for "bindings," had no signal that the
+  entitlement→entitlement "proxy binding" object (used for delegated
+  provisioning) is a different thing entirely that c1i has no dedicated
+  command for. The command's `--help` now states both explicitly and points
+  at the new `docs guide delegate-entitlement-provisioning` runbook.
+- **`entitlements --help` now documents that some system-builtin
+  entitlements share a canonical ID across apps.** Verified live against a
+  leet tenant: the base "Access" entitlement carries the identical id
+  (`287oY0rG4UirjDNFEYguMBvxyim`) on GitHub, Salesforce, Bitbucket Cloud,
+  Snowflake, and Google Workspace apps alike (the same pattern already
+  documented for MCP's "All approved tools"/"Read tools" system toolsets). A
+  customer's agent lost real time ruling out data corruption before
+  realizing this was intentional. `--help` now states it and calls out that
+  an entitlement id is only unique per app — always key on (app-id, id).
 - **`login` failures now use the exit-code taxonomy.** The OAuth device-flow
   helpers returned bare errors for non-2xx responses from the device, token, and
   personal-client endpoints, so every login failure collapsed to exit `1`
