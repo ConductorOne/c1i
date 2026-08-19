@@ -56,17 +56,17 @@ var apiCmd = &cobra.Command{
 		limit := getIntFlag(cmd, "limit")
 
 		if limit > 0 && !paginate {
-			return fmt.Errorf("--limit only applies with --paginate (without it, c1i api emits a single response and there's nothing to cap)")
+			return &usageError{fmt.Errorf("--limit only applies with --paginate (without it, c1i api emits a single response and there's nothing to cap)")}
 		}
 		if listKey != "" && !paginate {
-			return fmt.Errorf("--list-key only applies with --paginate")
+			return &usageError{fmt.Errorf("--list-key only applies with --paginate")}
 		}
 
 		// --body-file (or "-" for stdin) is an alternative to inline --body for
 		// payloads too large or awkward to pass on the command line.
 		if bodyFile != "" {
 			if body != "" {
-				return fmt.Errorf("--body and --body-file are mutually exclusive")
+				return &usageError{fmt.Errorf("--body and --body-file are mutually exclusive")}
 			}
 			var raw []byte
 			if bodyFile == "-" {
@@ -96,7 +96,7 @@ var apiCmd = &cobra.Command{
 		switch method {
 		case "GET", "POST", "PUT", "PATCH", "DELETE":
 		default:
-			return fmt.Errorf("unsupported method: %s (use GET, POST, PUT, PATCH, or DELETE)", method)
+			return &usageError{fmt.Errorf("unsupported method: %s (use GET, POST, PUT, PATCH, or DELETE)", method)}
 		}
 
 		// GET carries no request body, full stop. DELETE normally doesn't
@@ -106,10 +106,10 @@ var apiCmd = &cobra.Command{
 		// a mistake than intent, so we fail fast rather than silently drop it
 		// (which would send a different request than the caller expects).
 		if body != "" && method == "GET" {
-			return fmt.Errorf("--method GET does not take a request body; drop --body/--body-file or use POST, PUT, or PATCH")
+			return &usageError{fmt.Errorf("--method GET does not take a request body; drop --body/--body-file or use POST, PUT, or PATCH")}
 		}
 		if body != "" && method == "DELETE" && !allowDeleteBody {
-			return fmt.Errorf("--method DELETE does not take a request body; drop --body/--body-file, use POST, PUT, or PATCH, or pass --allow-delete-body if the endpoint requires a body on DELETE")
+			return &usageError{fmt.Errorf("--method DELETE does not take a request body; drop --body/--body-file, use POST, PUT, or PATCH, or pass --allow-delete-body if the endpoint requires a body on DELETE")}
 		}
 
 		// Apply --query params to the path once; pagination adds page_token per
@@ -117,7 +117,7 @@ var apiCmd = &cobra.Command{
 		for _, qp := range queryPairs {
 			k, v, ok := strings.Cut(qp, "=")
 			if !ok || k == "" {
-				return fmt.Errorf("invalid --query %q: expected key=value", qp)
+				return &usageError{fmt.Errorf("invalid --query %q: expected key=value", qp)}
 			}
 			path = setQueryParam(path, k, v)
 		}
@@ -259,7 +259,7 @@ func parseKeyValueFlag(pairs []string, flagName string) (map[string]string, erro
 	for _, p := range pairs {
 		k, v, ok := strings.Cut(p, "=")
 		if !ok || k == "" {
-			return nil, fmt.Errorf("invalid --%s %q: expected key=value", flagName, p)
+			return nil, &usageError{fmt.Errorf("invalid --%s %q: expected key=value", flagName, p)}
 		}
 		m[k] = v
 	}
