@@ -121,12 +121,57 @@ func flagNameFromToken(tok string) string {
 	return name
 }
 
+// validateInvocationsAgainstCobraTree is the shared drift-guard check: every
+// invocation must resolve to a real, executable cobra command (walking
+// rootCmd's actual tree — not a guess about naming), and every "--flag" it
+// passes must actually be registered on that command, its own or inherited
+// from a parent (persistent/global flags like --app-id on a scope command,
+// or --url on rootCmd). Used against both the embedded "docs guide" runbooks
+// and cmd/agents.md, so a drift in either is caught the same way.
+func validateInvocationsAgainstCobraTree(t *testing.T, invocations []string) {
+	t.Helper()
+
+	for _, inv := range invocations {
+		tokens := tokenizeInvocation(inv)
+		if len(tokens) == 0 || tokens[0] != "c1i" {
+			t.Errorf("invocation %q did not tokenize with a leading \"c1i\"", inv)
+			continue
+		}
+
+		leaf, remaining, err := rootCmd.Find(tokens[1:])
+		if err != nil {
+			t.Errorf("invocation %q: rootCmd.Find failed: %v", inv, err)
+			continue
+		}
+		if leaf.Run == nil && leaf.RunE == nil {
+			// Find() stops at the deepest node it recognizes. A
+			// group command (e.g. "mcp", or "mcp gateway" if that
+			// existed) has no Run/RunE, so landing here means the
+			// invocation's subcommand path doesn't fully resolve to
+			// a real, executable command.
+			t.Errorf("invocation %q resolved only to %q (a command group, not an executable leaf) — the subcommand path is wrong or no longer exists", inv, leaf.CommandPath())
+			continue
+		}
+
+		// Force local+inherited (parent persistent/global) flags to
+		// merge into leaf.Flags(), then check every --flag token
+		// against that merged set.
+		leaf.InheritedFlags()
+		for _, tok := range remaining {
+			flagName := flagNameFromToken(tok)
+			if flagName == "" {
+				continue // positional arg, shell variable, or placeholder — not a flag
+			}
+			if leaf.Flags().Lookup(flagName) == nil {
+				t.Errorf("invocation %q: --%s is not a registered flag on %q (own or inherited)", inv, flagName, leaf.CommandPath())
+			}
+		}
+	}
+}
+
 // TestGuideCommandsResolveAgainstCobraTree is the drift guard: every "c1i ..."
-// invocation embedded in a guide must resolve to a real, executable cobra
-// command (walking rootCmd's actual tree — not a guess about naming), and
-// every "--flag" it passes must actually be registered on that command, its
-// own or inherited from a parent (persistent/global flags like --app-id on a
-// scope command, or --url on rootCmd).
+// invocation embedded in a guide must resolve against the real cobra tree
+// (see validateInvocationsAgainstCobraTree).
 //
 // Regression check performed while writing this test (see the PR description
 // / commit message for the exact steps): temporarily reverting one guide line
@@ -142,43 +187,21 @@ func TestGuideCommandsResolveAgainstCobraTree(t *testing.T) {
 			if len(invocations) == 0 {
 				t.Fatalf("no \"c1i ...\" invocations found in guide %q; extraction regressed?", name)
 			}
-
-			for _, inv := range invocations {
-				tokens := tokenizeInvocation(inv)
-				if len(tokens) == 0 || tokens[0] != "c1i" {
-					t.Errorf("invocation %q did not tokenize with a leading \"c1i\"", inv)
-					continue
-				}
-
-				leaf, remaining, err := rootCmd.Find(tokens[1:])
-				if err != nil {
-					t.Errorf("invocation %q: rootCmd.Find failed: %v", inv, err)
-					continue
-				}
-				if leaf.Run == nil && leaf.RunE == nil {
-					// Find() stops at the deepest node it recognizes. A
-					// group command (e.g. "mcp", or "mcp gateway" if that
-					// existed) has no Run/RunE, so landing here means the
-					// invocation's subcommand path doesn't fully resolve to
-					// a real, executable command.
-					t.Errorf("invocation %q resolved only to %q (a command group, not an executable leaf) — the subcommand path is wrong or no longer exists", inv, leaf.CommandPath())
-					continue
-				}
-
-				// Force local+inherited (parent persistent/global) flags to
-				// merge into leaf.Flags(), then check every --flag token
-				// against that merged set.
-				leaf.InheritedFlags()
-				for _, tok := range remaining {
-					flagName := flagNameFromToken(tok)
-					if flagName == "" {
-						continue // positional arg, shell variable, or placeholder — not a flag
-					}
-					if leaf.Flags().Lookup(flagName) == nil {
-						t.Errorf("invocation %q: --%s is not a registered flag on %q (own or inherited)", inv, flagName, leaf.CommandPath())
-					}
-				}
-			}
+			validateInvocationsAgainstCobraTree(t, invocations)
 		})
 	}
+}
+
+// TestAgentsMDCommandsResolveAgainstCobraTree extends the same drift guard to
+// cmd/agents.md — the embedded agent-facing bootstrap doc has no
+// compile-time link to the cobra commands it names either, so without this
+// it could drift exactly the way the guides could before
+// TestGuideCommandsResolveAgainstCobraTree existed (and the way cmd/skill.md
+// did, unvalidated, for its entire lifetime).
+func TestAgentsMDCommandsResolveAgainstCobraTree(t *testing.T) {
+	invocations := extractGuideInvocations(t, agentsTemplate)
+	if len(invocations) == 0 {
+		t.Fatalf("no \"c1i ...\" invocations found in cmd/agents.md; extraction regressed?")
+	}
+	validateInvocationsAgainstCobraTree(t, invocations)
 }

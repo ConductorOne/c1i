@@ -17,8 +17,9 @@ covers what you need yet.
   docs endpoints [--filter <p>]  List all API endpoints (filterable)
   docs endpoint <path>           Show full schema for a specific endpoint
   docs openapi                   Dump the raw OpenAPI spec
-  docs skill [-o FILE]           Export a SKILL.md that teaches an AI agent how to use c1i
-  docs guide [name]              Print an embedded task-oriented runbook (list names if omitted)`,
+  docs guide [name]              Print an embedded task-oriented runbook (list names if omitted)
+
+"docs skill" is kept as an alias of "docs agents" for backward compatibility.`,
 }
 
 func init() {

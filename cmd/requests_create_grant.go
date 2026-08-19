@@ -61,8 +61,8 @@ var requestsCreateGrantCmd = &cobra.Command{
 		// --user-id is omitted, self-resolution below runs before printDryRun
 		// builds the body — otherwise --dry-run would preview a body missing
 		// identityUserId while the real call sends one. This means --dry-run
-		// now needs credentials when --user-id is omitted; see cmd/skill.md's
-		// dry-run exception list.
+		// now needs credentials when --user-id is omitted; see README.md's
+		// "Dry run" section for the exception list.
 		c, err := newGrantClient(cmd, baseURL)
 		if err != nil {
 			return fmt.Errorf("authentication failed: %w", err)

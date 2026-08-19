@@ -87,7 +87,7 @@ never fails proves nothing.
   This mirrors `users/apps/entitlements/automations/functions/requests get
   <x-id>`; the MCP and tasks commands follow the same shape
   (`mcp servers get <connector-id> --app-id`, `mcp tools get <tool-id> --app-id
-  --connector-id`, `tasks approve <task-id>`). Keep README.md and `cmd/skill.md`
+  --connector-id`, `tasks approve <task-id>`). Keep README.md and `cmd/agents.md`
   in lockstep when this changes.
 - **`Args` is optional, but if set it must match `Use` (enforced convention):**
   a runnable command need not declare `Args` — `attachSubcommandGuards`
