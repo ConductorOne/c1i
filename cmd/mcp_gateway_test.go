@@ -18,7 +18,7 @@ import (
 
 func TestDeriveGatewayURL(t *testing.T) {
 	cases := []struct{ in, want string }{
-		{"https://leet.conductor.one", "https://leet-mcp.conductor.one/v1"},
+		{"https://acme.conductor.one", "https://acme-mcp.conductor.one/v1"},
 		{"https://acme.conductor.one/", "https://acme-mcp.conductor.one/v1"},
 		{"http://localhost:8080", "http://localhost-mcp:8080/v1"},
 	}
