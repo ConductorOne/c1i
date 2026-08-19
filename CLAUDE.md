@@ -37,6 +37,12 @@ golangci-lint run --timeout=3m ./...   # includes gofmt formatting; CI gates on 
 - Output: NDJSON for list/search commands, pretty JSON for single-object commands, plain text for auth.
 - All list commands auto-paginate. `--page-token` disables auto-pagination.
 - `docs` subcommands require no authentication.
+- **Keep comments concise.** Whenever you write or change a comment, say the
+  non-obvious thing and stop — a why, a constraint, or a gotcha the code can't
+  express. Don't restate the code, recap how a bug was found, or narrate review
+  history. Long comments drift and nobody updates them, so brevity is a
+  maintenance property, not a style preference. Applies to comments you touch;
+  don't go reformatting untouched ones.
 
 ### Global flags (persistent, on `rootCmd`)
 
