@@ -3,6 +3,7 @@ package cmd
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"reflect"
 	"testing"
 
@@ -235,6 +236,180 @@ func TestWriteObjectProjects(t *testing.T) {
 	}
 	if got := buf.String(); !bytes.Contains(buf.Bytes(), []byte(`"id": "1"`)) || bytes.Contains(buf.Bytes(), []byte(`"name"`)) {
 		t.Errorf("writeObject with --fields = %q, want only id", got)
+	}
+}
+
+// TestProjectValueDepthInsensitive covers the wrapper-key bug: single-object
+// reads pass the API response through as-is, wrapped under the endpoint's own
+// key (userView.user, function, app, ...), so an unqualified --fields id used
+// to match nothing and silently project to {}. A path that doesn't resolve
+// from the root now falls back to searching nested objects.
+func TestProjectValueDepthInsensitive(t *testing.T) {
+	cases := []struct {
+		name, in, spec, want string
+	}{
+		{
+			"unqualified name finds doubly-nested wrapper",
+			`{"userView":{"user":{"id":"1","displayName":"n"},"other":"x"}}`,
+			"id,displayName",
+			`{"userView":{"user":{"displayName":"n","id":"1"}}}`,
+		},
+		{
+			"unqualified name finds singly-nested wrapper",
+			`{"function":{"id":"1","publishedCommitId":"c1"}}`,
+			"id",
+			`{"function":{"id":"1"}}`,
+		},
+		{
+			"shorter dot-path than the real nesting still resolves",
+			`{"userView":{"user":{"id":"1"}}}`,
+			"user.id",
+			`{"userView":{"user":{"id":"1"}}}`,
+		},
+		{
+			"exact root match still wins over a deeper one",
+			`{"id":"top","wrap":{"id":"nested"}}`,
+			"id",
+			`{"id":"top"}`,
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := projectJSON(t, tc.in, tc.spec); got != tc.want {
+				t.Errorf("project(%s, %q) = %s, want %s", tc.in, tc.spec, got, tc.want)
+			}
+		})
+	}
+}
+
+// TestProjectValueDepthInsensitiveAmbiguityIsDeterministic covers the case
+// where the same leaf name exists under two different sibling wrappers at the
+// same depth: the segment-wise-smallest full path wins, deterministically,
+// mirroring how resolveKey breaks a casing tie.
+func TestProjectValueDepthInsensitiveAmbiguityIsDeterministic(t *testing.T) {
+	in := `{"b":{"id":"from-b"},"a":{"id":"from-a"}}`
+	want := `{"a":{"id":"from-a"}}`
+	for i := 0; i < 20; i++ { // map iteration order is random; run repeatedly
+		if got := projectJSON(t, in, "id"); got != want {
+			t.Fatalf("project(%s, %q) = %s, want %s (run %d)", in, "id", got, want, i)
+		}
+	}
+}
+
+// TestProjectValueDepthInsensitiveAmbiguityDotInKeyIsDeterministic is a
+// regression test for a real nondeterminism bug found in review: the
+// original tie-break joined each candidate's full path with "." before
+// comparing strings. A JSON key can itself legally contain a literal dot, so
+// {"a":{"b.c":{"id":"from-A"}}} and {"a.b":{"c":{"id":"from-B"}}} both join
+// to the identical string "a.b.c.id" despite being different locations.
+// sort.Slice is not a stable sort, so when the comparator reports neither
+// candidate as less than the other, the result silently falls back to
+// randomized Go map iteration order — the same deterministic input could
+// return "from-A" on one run and "from-B" on the next. Reviewer reproduced
+// this at roughly 44/50 vs 6/50 across repeated runs, including under -race.
+//
+// The fix compares path *segments* directly (lessPath) instead of joined
+// strings, so this pair can never compare equal: their first segments ("a"
+// vs "a.b") differ, and "a" < "a.b" lexically (a proper prefix sorts first).
+// Looped 100 times — well past the reviewer's 50 — because a comparator that
+// still ties would only fail intermittently under map-iteration randomization;
+// a single assertion is not adequate coverage for this class of bug.
+func TestProjectValueDepthInsensitiveAmbiguityDotInKeyIsDeterministic(t *testing.T) {
+	in := `{"a":{"b.c":{"id":"from-A"}},"a.b":{"c":{"id":"from-B"}}}`
+	want := `{"a":{"b.c":{"id":"from-A"}}}`
+	for i := 0; i < 100; i++ {
+		if got := projectJSON(t, in, "id"); got != want {
+			t.Fatalf("project(%s, %q) = %s, want %s (run %d of 100)", in, "id", got, want, i)
+		}
+	}
+}
+
+// TestProjectValueDepthInsensitivePrefersShallowerBelowRoot closes a gap found
+// in review: the existing shallow-vs-deep coverage only exercised root
+// (depth 0, handled by lookupPath) versus depth 1 (lookupPathAnyDepth) — a
+// precedence enforced by the *caller* trying lookupPath first, not by
+// anything inside lookupPathAnyDepth itself. This case has two matches that
+// are BOTH below the root, at different depths, so it exercises
+// lookupPathAnyDepth's own shallow-first stopping behavior: it must return at
+// the first level with a match (depth 1, "a.id") without ever considering the
+// deeper one (depth 2, "z.deep.id").
+func TestProjectValueDepthInsensitivePrefersShallowerBelowRoot(t *testing.T) {
+	in := `{"a":{"id":"shallow"},"z":{"deep":{"id":"deepest"}}}`
+	want := `{"a":{"id":"shallow"}}`
+	if got := projectJSON(t, in, "id"); got != want {
+		t.Errorf("project(%s, %q) = %s, want %s (shallower match must win)", in, "id", got, want)
+	}
+}
+
+// TestProjectValueDepthInsensitiveDoesNotDescendIntoArrays documents the
+// scoping decision: only nested objects are searched, not array elements.
+func TestProjectValueDepthInsensitiveDoesNotDescendIntoArrays(t *testing.T) {
+	in := `{"items":[{"id":"1"}]}`
+	if got, want := projectJSON(t, in, "id"), `{}`; got != want {
+		t.Errorf("project(%s, %q) = %s, want %s (arrays should not be searched)", in, "id", got, want)
+	}
+}
+
+// TestWriteObjectFailsLoudlyOnNoMatch is the backstop half of the fix: a
+// --fields spec that matches nothing anywhere in the response (a genuine typo,
+// or a field that truly doesn't exist) must not silently print "{}" with exit
+// 0 — it must return a *usageError (exit 2) instead.
+func TestWriteObjectFailsLoudlyOnNoMatch(t *testing.T) {
+	viper.Set("fields", "totally_bogus_field")
+	t.Cleanup(func() { viper.Set("fields", "") })
+
+	cmd := &cobra.Command{}
+	var buf bytes.Buffer
+	cmd.SetOut(&buf)
+
+	err := writeObject(cmd, []byte(`{"userView":{"user":{"id":"1","displayName":"n"}}}`))
+	if err == nil {
+		t.Fatalf("writeObject with a fully-unmatched --fields returned nil error; output: %s", buf.String())
+	}
+	var usageErr *usageError
+	if !errors.As(err, &usageErr) {
+		t.Fatalf("writeObject error = %v (%T), want a *usageError (exit code 2)", err, err)
+	}
+	if buf.Len() != 0 {
+		t.Errorf("writeObject wrote output %q despite returning an error; must not print anything on a no-match", buf.String())
+	}
+}
+
+// TestWriteObjectPartialMatchStillSucceeds pins a deliberate, documented gap:
+// the no-match backstop only fires when *every* requested field misses. A spec
+// with one real field and one typo (--fields id,totally_bogus_field) still
+// exits 0 with just the real field — the typo is dropped silently, with no
+// signal at all that it didn't match anything.
+//
+// This is intentional, not an oversight: --fields/C1I_FIELDS is a persistent,
+// env-backed global (see cmd/root.go's viper.BindEnv("fields", "C1I_FIELDS")),
+// so one spec is routinely applied across many differently-shaped responses in
+// a session. Erroring on any unmatched field would make a session-wide
+// C1I_FIELDS blow up on every command whose response happens to lack one of
+// the names — the same problem writeRawObject's own doc comment calls out for
+// mutation confirmations. Zero-match is the only defensible line: nothing
+// matched means the spec is useless *here*; a partial match means the caller
+// got whatever was actually available.
+//
+// Do not "fix" this into an error without confronting that consequence first.
+func TestWriteObjectPartialMatchStillSucceeds(t *testing.T) {
+	viper.Set("fields", "id,totally_bogus_field")
+	t.Cleanup(func() { viper.Set("fields", "") })
+
+	cmd := &cobra.Command{}
+	var buf bytes.Buffer
+	cmd.SetOut(&buf)
+
+	if err := writeObject(cmd, []byte(`{"function":{"id":"1","name":"n"}}`)); err != nil {
+		t.Fatalf("writeObject: %v (want nil error / exit 0 on a partial match)", err)
+	}
+	var got any
+	if jsonErr := json.Unmarshal(buf.Bytes(), &got); jsonErr != nil {
+		t.Fatalf("output not valid JSON: %v (%s)", jsonErr, buf.Bytes())
+	}
+	want := map[string]any{"function": map[string]any{"id": "1"}}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("writeObject partial match = %s, want exactly %v (matching field only; typo and \"name\" dropped silently)", buf.Bytes(), want)
 	}
 }
 

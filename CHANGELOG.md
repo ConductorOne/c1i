@@ -189,6 +189,33 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   a projection in either style resolves against either output. Exact matches are
   unchanged (they always win), and the output keeps the source key spelling —
   `--fields` selects keys, it never renames them.
+- **`--fields` on a single-object `get` no longer silently returns `{}` with
+  exit `0`.** Every `get` command (`users`, `apps`, `functions`, `automations`,
+  `requests`, ...) passes the API response through as-is, wrapped under the
+  endpoint's own top-level key (`function`, `app`, `userView.user`, ...). An
+  unqualified `--fields id` — the obvious first thing to try, and exactly what
+  the unfiltered output shows — matched nothing at the root and printed `{}`
+  while still exiting `0`, reporting success for a request that returned no
+  data. Two changes close this: (1) a name that doesn't resolve from the root
+  is now also searched for inside the wrapper, depth-insensitively, so
+  `--fields id,displayName` on `functions get` finds `function.id`/
+  `function.displayName` without the caller needing to know the wrapper key
+  (the full path still works and is tried first; if the same name exists at
+  more than one depth, the shallowest match wins, with same-depth ties broken
+  by the alphabetically first full path, deterministically — the same
+  tie-break rule already used for the snake_case/camelCase fallback above);
+  (2) regardless of (1), a `--fields` spec matching **nothing at all** in the
+  response — a genuine typo, or a field that truly doesn't exist — is now a
+  usage error (exit `2`) instead of a silent `{}`. This is a zero-match check
+  only, by design: a typo among several fields (`--fields id,dispalyName`)
+  still exits `0`, silently dropping just the misspelled one, because
+  `--fields`/`C1I_FIELDS` is a persistent, session-wide setting and one spec is
+  routinely reused across differently-shaped responses — erroring on any
+  unmatched name would make a session-wide `C1I_FIELDS` fail on every command
+  whose response legitimately lacks one of the names. List/NDJSON output is
+  unaffected: list rows are already flat maps the CLI builds itself, not a
+  wrapped API passthrough, so the defect never applied there and no-match
+  rows there still emit `{}` per row.
 - **`mcp gateway` failures now classify to the standard exit-code taxonomy.**
   A gateway HTTP failure previously exited `1` for everything except a 401/403
   at the handshake step (which alone was mapped to `3`); a 404/429/5xx from

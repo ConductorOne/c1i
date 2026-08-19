@@ -295,7 +295,7 @@ c1i users list --fields id,email
 
 # Dot-paths select nested fields; nesting is preserved in the output
 c1i api --path /api/v1/apps --paginate --fields id,displayName
-c1i functions get <id> --fields function.id,function.displayName,function.publishedCommitId
+c1i functions get <id> --fields id,displayName,publishedCommitId
 ```
 
 - Comma-separated; use dot-paths (`user.email`) for nested access.
@@ -305,8 +305,24 @@ c1i functions get <id> --fields function.id,function.displayName,function.publis
   `display_name` (list rows); the output keeps the source key's own spelling.
 - Single-object `get` commands pass through the API response as-is, which
   wraps the resource under the endpoint's own top-level key (`function`,
-  `app`, `automation`, `userView.user`, ...) — check the unfiltered output
-  once to find that key before writing a `--fields` path against it.
+  `app`, `automation`, `userView.user`, ...). You don't need to know that key:
+  a name that doesn't match at the top level is also searched for inside the
+  wrapper, so `--fields id,displayName` on `functions get` finds
+  `function.id`/`function.displayName` automatically. The full path
+  (`--fields function.id`) still works too and is tried first. If the same
+  name exists at more than one depth, the shallowest match wins; a tie at the
+  same depth resolves to the alphabetically first full path, deterministically.
+- A `--fields` spec that matches **nothing at all** in the response (a typo, or
+  a field that truly doesn't exist) is a usage error (exit `2`), not a silent
+  `{}`. This is a zero-match check only: `--fields id,dispalyName` (typo) still
+  exits `0` and silently returns just `{"id": ...}` — the misspelled field is
+  dropped with no error and no other signal that it didn't match anything. This
+  is deliberate, not a gap in the check: `--fields`/`C1I_FIELDS` is a
+  persistent, session-wide setting, so one spec is routinely applied across
+  many differently-shaped responses; erroring on any unmatched name would make
+  a session-wide `C1I_FIELDS` fail on every command whose response happens to
+  lack one of the names. Double-check the spelling of every name you pass —
+  the tool only catches getting *all* of them wrong.
 - Missing fields are silently omitted, so requesting a superset is safe.
 - Also settable via `C1I_FIELDS`. Applies to read output — list commands, `api`,
   and single-object `get` commands. Mutation confirmations (create/update/delete)
