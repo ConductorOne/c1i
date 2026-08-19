@@ -721,3 +721,118 @@ func TestExtractSSEResponseIgnoresC1CommentPreamble(t *testing.T) {
 		t.Errorf("comment preamble not ignored:\n got %q\nwant %q", got, want)
 	}
 }
+
+// TestClientWorksWithoutSessionID pins that a gateway which never issues an
+// Mcp-Session-Id still works end to end. The header is OPTIONAL in the MCP
+// spec — a stateless server may omit it — and this client is deliberately
+// tolerant of that: post only sets the header when one was captured.
+//
+// Live probing has since established that C1's gateway always DOES return a
+// session id, and that it is functionally required there (calling tools/list
+// before the handshake completes is rejected). So this path is spec compliance
+// rather than an observed C1 mode — which is exactly why it needs a test: it
+// is the one handshake behavior no real traffic will ever exercise for us, and
+// a future "simplify" that made the header mandatory would break stateless
+// servers with nothing to catch it.
+//
+// Recovered from an abandoned branch (commit 22f0c40) whose work was otherwise
+// superseded; nothing on main pinned this.
+func TestClientWorksWithoutSessionID(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if got := r.Header.Get("Mcp-Session-Id"); got != "" {
+			t.Errorf("client sent Mcp-Session-Id %q despite the server never issuing one", got)
+		}
+		body, _ := io.ReadAll(r.Body)
+		var req struct {
+			ID     *int   `json:"id"`
+			Method string `json:"method"`
+		}
+		if err := json.Unmarshal(body, &req); err != nil {
+			t.Errorf("server got bad JSON: %v", err)
+		}
+		switch req.Method {
+		case "initialize":
+			// Deliberately no Mcp-Session-Id response header.
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = io.WriteString(w, `{"jsonrpc":"2.0","id":1,"result":{"protocolVersion":"2025-06-18"}}`)
+		case "notifications/initialized":
+			if req.ID != nil {
+				t.Errorf("notifications/initialized carried an id (%d); a notification must have none", *req.ID)
+			}
+			w.WriteHeader(http.StatusAccepted)
+		case "tools/list":
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = io.WriteString(w, `{"jsonrpc":"2.0","id":2,"result":{"tools":[{"name":"tool_stateless","description":"d"}]}}`)
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer srv.Close()
+
+	c := New(srv.URL, "tok", srv.Client())
+	if err := c.Initialize(context.Background()); err != nil {
+		t.Fatalf("Initialize against a session-less gateway: %v", err)
+	}
+	tools, err := c.ListTools(context.Background())
+	if err != nil {
+		t.Fatalf("ListTools against a session-less gateway: %v", err)
+	}
+	if len(tools) != 1 || tools[0].Name != "tool_stateless" {
+		t.Errorf("ListTools = %+v, want exactly one tool named tool_stateless", tools)
+	}
+}
+
+// TestExtractSSEResponseHostileFraming covers spec-legal SSE framing shapes
+// that a compliant server may emit and that the other tests here don't reach:
+// CRLF line endings, a data: field with no space after the colon, an event
+// carrying only non-data fields, and a final event with no terminating blank
+// line.
+//
+// These were originally written as throwaway probes during an adversarial
+// review, run once, and discarded. They are durable regression coverage, so
+// they are landed here rather than re-derived the next time someone touches
+// the parser.
+func TestExtractSSEResponseHostileFraming(t *testing.T) {
+	const response = `{"jsonrpc":"2.0","id":1,"result":{"ok":true}}`
+
+	for _, tc := range []struct {
+		name string
+		sse  string
+	}{
+		// SSE permits CRLF; bufio.Scanner's ScanLines strips the trailing \r,
+		// so no stray carriage return may reach the JSON decoder.
+		{"CRLF line endings", "data: " + response + "\r\n\r\n"},
+		// The space after "data:" is optional, not required.
+		{"no space after colon", "data:" + response + "\n\n"},
+		// An event with event:/id: but no data: carries no payload and must be
+		// dropped entirely rather than yielding an empty candidate.
+		{"preceding event with no data field", "event: ping\nid: 5\n\ndata: " + response + "\n\n"},
+		// A comment line (leading ':') is ignored by the SSE parser.
+		{"preceding comment line", ": keepalive\n\ndata: " + response + "\n\n"},
+		// A stream may end without a terminating blank line; the final event
+		// must still be flushed.
+		{"no trailing blank line", "data: " + response},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := string(extractSSEResponse([]byte(tc.sse), nil)); got != response {
+				t.Errorf("extractSSEResponse = %q, want %q", got, response)
+			}
+		})
+	}
+}
+
+// TestExtractSSEResponseEmptyDataLineIsNotAResponse pins that a stream whose
+// only event is an empty data: field is treated as "no response arrived" — it
+// falls back to the raw body so the caller's decode fails visibly, rather than
+// yielding an empty payload that would decode as a successful empty result.
+// That silent-success shape is the bug this fallback tier exists to prevent.
+func TestExtractSSEResponseEmptyDataLineIsNotAResponse(t *testing.T) {
+	sse := "data:\n\n"
+	got := extractSSEResponse([]byte(sse), nil)
+	if string(got) != sse {
+		t.Errorf("extractSSEResponse = %q, want the raw body %q so the decode fails visibly", got, sse)
+	}
+	if _, err := decodeMessage(got); err == nil {
+		t.Error("decodeMessage succeeded on an empty-data stream; a missing response must surface as an error")
+	}
+}

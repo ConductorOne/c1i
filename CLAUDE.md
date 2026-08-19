@@ -83,6 +83,12 @@ golangci-lint run --timeout=3m ./...   # includes gofmt formatting; CI gates on 
   single-object reads through `writeObject`; **mutation confirmations**
   (create/update/delete) through `writeRawObject` (never projected, so a
   session-wide `C1I_FIELDS` can't blank a success message).
+- **Row values keep their real JSON types.** A row is `map[string]any`: put
+  `bool` and numeric values in as-is, never `strconv.FormatBool`/`Itoa`. NDJSON
+  exists here so agents can pipe to `jq`, and stringifying breaks that
+  silently — every non-empty string is truthy, so `jq 'select(.stable)'`
+  matches `"false"`, and `jq 'select(.tool_count > 5)'` compares strings.
+  This recurred across six row builders before it was caught.
 - **Errors:** the client returns typed `client.APIError` (carries status) and
   `client.AuthError`; `cmd/errors.go` maps them to exit codes — 0 ok, 1 generic,
   2 usage, 3 auth (401/403), 4 not-found (404), 5 rate-limited (429), 6 server
