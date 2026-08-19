@@ -330,9 +330,23 @@ func TestWriteObjectFailsLoudlyOnNoMatch(t *testing.T) {
 	}
 }
 
-// TestWriteObjectPartialMatchStillSucceeds ensures the no-match backstop only
-// fires when every requested field misses; a spec with one real field and one
-// typo still succeeds with just the real field.
+// TestWriteObjectPartialMatchStillSucceeds pins a deliberate, documented gap:
+// the no-match backstop only fires when *every* requested field misses. A spec
+// with one real field and one typo (--fields id,totally_bogus_field) still
+// exits 0 with just the real field — the typo is dropped silently, with no
+// signal at all that it didn't match anything.
+//
+// This is intentional, not an oversight: --fields/C1I_FIELDS is a persistent,
+// env-backed global (see cmd/root.go's viper.BindEnv("fields", "C1I_FIELDS")),
+// so one spec is routinely applied across many differently-shaped responses in
+// a session. Erroring on any unmatched field would make a session-wide
+// C1I_FIELDS blow up on every command whose response happens to lack one of
+// the names — the same problem writeRawObject's own doc comment calls out for
+// mutation confirmations. Zero-match is the only defensible line: nothing
+// matched means the spec is useless *here*; a partial match means the caller
+// got whatever was actually available.
+//
+// Do not "fix" this into an error without confronting that consequence first.
 func TestWriteObjectPartialMatchStillSucceeds(t *testing.T) {
 	viper.Set("fields", "id,totally_bogus_field")
 	t.Cleanup(func() { viper.Set("fields", "") })
@@ -342,10 +356,15 @@ func TestWriteObjectPartialMatchStillSucceeds(t *testing.T) {
 	cmd.SetOut(&buf)
 
 	if err := writeObject(cmd, []byte(`{"function":{"id":"1","name":"n"}}`)); err != nil {
-		t.Fatalf("writeObject: %v", err)
+		t.Fatalf("writeObject: %v (want nil error / exit 0 on a partial match)", err)
 	}
-	if !bytes.Contains(buf.Bytes(), []byte(`"id": "1"`)) {
-		t.Errorf("writeObject partial match = %s, want id present", buf.Bytes())
+	var got any
+	if jsonErr := json.Unmarshal(buf.Bytes(), &got); jsonErr != nil {
+		t.Fatalf("output not valid JSON: %v (%s)", jsonErr, buf.Bytes())
+	}
+	want := map[string]any{"function": map[string]any{"id": "1"}}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("writeObject partial match = %s, want exactly %v (matching field only; typo and \"name\" dropped silently)", buf.Bytes(), want)
 	}
 }
 

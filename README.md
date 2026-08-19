@@ -314,8 +314,15 @@ c1i functions get <id> --fields id,displayName,publishedCommitId
   same depth resolves to the alphabetically first full path, deterministically.
 - A `--fields` spec that matches **nothing at all** in the response (a typo, or
   a field that truly doesn't exist) is a usage error (exit `2`), not a silent
-  `{}`. A spec where only *some* names match still succeeds, with just the
-  matched ones in the output.
+  `{}`. This is a zero-match check only: `--fields id,dispalyName` (typo) still
+  exits `0` and silently returns just `{"id": ...}` — the misspelled field is
+  dropped with no error and no other signal that it didn't match anything. This
+  is deliberate, not a gap in the check: `--fields`/`C1I_FIELDS` is a
+  persistent, session-wide setting, so one spec is routinely applied across
+  many differently-shaped responses; erroring on any unmatched name would make
+  a session-wide `C1I_FIELDS` fail on every command whose response happens to
+  lack one of the names. Double-check the spelling of every name you pass —
+  the tool only catches getting *all* of them wrong.
 - Missing fields are silently omitted, so requesting a superset is safe.
 - Also settable via `C1I_FIELDS`. Applies to read output — list commands, `api`,
   and single-object `get` commands. Mutation confirmations (create/update/delete)

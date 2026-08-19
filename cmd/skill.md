@@ -106,8 +106,13 @@ Each also has an env-var form.
   response's wrapper key (`function`, `app`, `userView.user`, ...) without
   spelling it out, so `--fields id` works the same on every `get` command. On a
   single-object `get`, a `--fields` spec matching nothing at all is a usage
-  error (exit `2`), not a silent `{}`. Mutation and auth confirmations are
-  never trimmed.
+  error (exit `2`), not a silent `{}` — but that's a zero-match check only: a
+  typo among several fields (`--fields id,dispalyName`) still exits `0` and
+  silently drops just the misspelled one, since one `C1I_FIELDS` is routinely
+  reused across differently-shaped responses in a session and erroring on any
+  unmatched name would make it fail on responses that legitimately lack one of
+  them. Double-check spelling; only getting *every* name wrong is caught.
+  Mutation and auth confirmations are never trimmed.
 - **`--max-retries=N`** (`C1I_MAX_RETRIES`, default `4`; `0` disables) — transient
   failures are retried automatically with exponential backoff + jitter, honoring
   `Retry-After`. `429` is retried for any method; `500/502/503/504` and network

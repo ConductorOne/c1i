@@ -206,7 +206,13 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   tie-break rule already used for the snake_case/camelCase fallback above);
   (2) regardless of (1), a `--fields` spec matching **nothing at all** in the
   response — a genuine typo, or a field that truly doesn't exist — is now a
-  usage error (exit `2`) instead of a silent `{}`. List/NDJSON output is
+  usage error (exit `2`) instead of a silent `{}`. This is a zero-match check
+  only, by design: a typo among several fields (`--fields id,dispalyName`)
+  still exits `0`, silently dropping just the misspelled one, because
+  `--fields`/`C1I_FIELDS` is a persistent, session-wide setting and one spec is
+  routinely reused across differently-shaped responses — erroring on any
+  unmatched name would make a session-wide `C1I_FIELDS` fail on every command
+  whose response legitimately lacks one of the names. List/NDJSON output is
   unaffected: list rows are already flat maps the CLI builds itself, not a
   wrapped API passthrough, so the defect never applied there and no-match
   rows there still emit `{}` per row.
