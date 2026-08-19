@@ -284,8 +284,8 @@ func TestProjectValueDepthInsensitive(t *testing.T) {
 
 // TestProjectValueDepthInsensitiveAmbiguityIsDeterministic covers the case
 // where the same leaf name exists under two different sibling wrappers at the
-// same depth: the lexicographically smallest full dotted path wins,
-// deterministically, mirroring how resolveKey breaks a casing tie.
+// same depth: the segment-wise-smallest full path wins, deterministically,
+// mirroring how resolveKey breaks a casing tie.
 func TestProjectValueDepthInsensitiveAmbiguityIsDeterministic(t *testing.T) {
 	in := `{"b":{"id":"from-b"},"a":{"id":"from-a"}}`
 	want := `{"a":{"id":"from-a"}}`
@@ -293,6 +293,51 @@ func TestProjectValueDepthInsensitiveAmbiguityIsDeterministic(t *testing.T) {
 		if got := projectJSON(t, in, "id"); got != want {
 			t.Fatalf("project(%s, %q) = %s, want %s (run %d)", in, "id", got, want, i)
 		}
+	}
+}
+
+// TestProjectValueDepthInsensitiveAmbiguityDotInKeyIsDeterministic is a
+// regression test for a real nondeterminism bug found in review: the
+// original tie-break joined each candidate's full path with "." before
+// comparing strings. A JSON key can itself legally contain a literal dot, so
+// {"a":{"b.c":{"id":"from-A"}}} and {"a.b":{"c":{"id":"from-B"}}} both join
+// to the identical string "a.b.c.id" despite being different locations.
+// sort.Slice is not a stable sort, so when the comparator reports neither
+// candidate as less than the other, the result silently falls back to
+// randomized Go map iteration order — the same deterministic input could
+// return "from-A" on one run and "from-B" on the next. Reviewer reproduced
+// this at roughly 44/50 vs 6/50 across repeated runs, including under -race.
+//
+// The fix compares path *segments* directly (lessPath) instead of joined
+// strings, so this pair can never compare equal: their first segments ("a"
+// vs "a.b") differ, and "a" < "a.b" lexically (a proper prefix sorts first).
+// Looped 100 times — well past the reviewer's 50 — because a comparator that
+// still ties would only fail intermittently under map-iteration randomization;
+// a single assertion is not adequate coverage for this class of bug.
+func TestProjectValueDepthInsensitiveAmbiguityDotInKeyIsDeterministic(t *testing.T) {
+	in := `{"a":{"b.c":{"id":"from-A"}},"a.b":{"c":{"id":"from-B"}}}`
+	want := `{"a":{"b.c":{"id":"from-A"}}}`
+	for i := 0; i < 100; i++ {
+		if got := projectJSON(t, in, "id"); got != want {
+			t.Fatalf("project(%s, %q) = %s, want %s (run %d of 100)", in, "id", got, want, i)
+		}
+	}
+}
+
+// TestProjectValueDepthInsensitivePrefersShallowerBelowRoot closes a gap found
+// in review: the existing shallow-vs-deep coverage only exercised root
+// (depth 0, handled by lookupPath) versus depth 1 (lookupPathAnyDepth) — a
+// precedence enforced by the *caller* trying lookupPath first, not by
+// anything inside lookupPathAnyDepth itself. This case has two matches that
+// are BOTH below the root, at different depths, so it exercises
+// lookupPathAnyDepth's own shallow-first stopping behavior: it must return at
+// the first level with a match (depth 1, "a.id") without ever considering the
+// deeper one (depth 2, "z.deep.id").
+func TestProjectValueDepthInsensitivePrefersShallowerBelowRoot(t *testing.T) {
+	in := `{"a":{"id":"shallow"},"z":{"deep":{"id":"deepest"}}}`
+	want := `{"a":{"id":"shallow"}}`
+	if got := projectJSON(t, in, "id"); got != want {
+		t.Errorf("project(%s, %q) = %s, want %s (shallower match must win)", in, "id", got, want)
 	}
 }
 

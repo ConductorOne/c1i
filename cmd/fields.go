@@ -166,14 +166,28 @@ func lookupPath(m map[string]any, path []string) ([]string, any, bool) {
 // one match exists, without descending further, so `--fields id` prefers an
 // outer "id" over one buried deeper. Two matches at the *same* depth are a
 // genuine ambiguity (e.g. sibling objects that both have an "id"); it is
-// resolved the same way resolveKey resolves a casing tie — deterministically,
-// by taking the lexicographically smallest dotted path from the root — rather
-// than by map-iteration order (random) or by erroring (which would make the
-// depth-insensitive fallback unpredictable to rely on). This never overrides
-// an exact/root match: lookupPath is always tried first by the caller.
-// Arrays are not searched into; only nested objects are — the observed
-// wrapper shapes are all objects, and picking an array index to descend into
-// would be its own ambiguity.
+// resolved the same way resolveKey resolves a casing tie — deterministically —
+// rather than by map-iteration order (random) or by erroring (which would make
+// the depth-insensitive fallback unpredictable to rely on). This never
+// overrides an exact/root match: lookupPath is always tried first by the
+// caller. Arrays are not searched into; only nested objects are — the
+// observed wrapper shapes are all objects, and picking an array index to
+// descend into would be its own ambiguity.
+//
+// The tie-break compares the candidates' full []string path segments
+// element-wise (lessPath), NOT a "."-joined string. Joining first is a trap:
+// a JSON key can itself legally contain a literal dot (e.g. a sibling
+// structure {"a":{"b.c":{"id":..}}} vs {"a.b":{"c":{"id":..}}}), and both
+// paths join to the identical string "a.b.c.id" despite being genuinely
+// different locations. A string comparator then reports neither candidate as
+// less than the other, so sort.Slice (which is not a stable sort) falls back
+// to whatever order the candidates happened to arrive in — which comes from
+// randomized Go map iteration. That turns a deterministic input into
+// nondeterministic output: the same `--fields id` against the same response
+// could return a different value from run to run. Comparing the segment
+// slices directly can't collide this way, because two different locations in
+// a JSON tree always differ in at least one *segment*, even when their
+// dotted-string joins coincide.
 func lookupPathAnyDepth(m map[string]any, path []string) ([]string, any, bool) {
 	type node struct {
 		prefix []string
@@ -212,13 +226,35 @@ func lookupPathAnyDepth(m map[string]any, path []string) ([]string, any, bool) {
 		}
 		if len(matches) > 0 {
 			sort.Slice(matches, func(i, j int) bool {
-				return strings.Join(matches[i].full, ".") < strings.Join(matches[j].full, ".")
+				return lessPath(matches[i].full, matches[j].full)
 			})
 			return matches[0].full, matches[0].val, true
 		}
 		level = next
 	}
 	return nil, nil, false
+}
+
+// lessPath reports whether path a sorts before path b, comparing segment
+// count first (fewer segments first) and then each segment in order, plain
+// string comparison. See lookupPathAnyDepth's comment for why this must NOT
+// be done by joining segments with "." first and comparing the resulting
+// strings: two structurally different paths can join to the identical
+// string when a segment itself contains a literal dot, which would make
+// sort.Slice's ordering depend on randomized map-iteration order instead of
+// the paths' actual content. Comparing segments directly can't have that
+// collision — two different locations in a decoded JSON tree always differ
+// in at least one segment.
+func lessPath(a, b []string) bool {
+	if len(a) != len(b) {
+		return len(a) < len(b)
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return a[i] < b[i]
+		}
+	}
+	return false
 }
 
 // resolveKey finds seg among m's keys, returning the matching source key.
