@@ -280,10 +280,13 @@ below go through "c1i api".
 
 ## 1. Create the proxy binding
 
-The binding is directional: a source entitlement (what a requester sees or
-holds) bound to a destination entitlement (what should actually be
-provisioned). Both ends are identified entirely by the path; the body is
-empty:
+The binding is directional, and which entitlement goes in which path
+position matters — get it backwards and the binding points the wrong way.
+Use step 2 below to tell them apart: the destination is the entitlement you
+will set provisionerPolicy.delegated ON in step 2; the source is the
+entitlement named INSIDE that delegated object — the one whose own connector
+actually performs the provisioning. Both ends are identified entirely by the
+path; the body is empty:
 
     c1i api --path=/api/v1/apps/<SRC_APP_ID>/<SRC_ENTITLEMENT_ID>/bindings/<DST_APP_ID>/<DST_ENTITLEMENT_ID> --body='{}'
 

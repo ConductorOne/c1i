@@ -15,7 +15,7 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   server's tools are approved, entitled, and served through the gateway), and
   `delegate-entitlement-provisioning` (an entitlement "proxy binding" alone
   grants nothing — this walks through the required second step,
-  `provisionerPolicy.delegated`, verified live against a leet tenant).
+  `provisionerPolicy.delegated`, verified live against a test tenant).
   Content is embedded as Go string constants — no network call, unlike
   `docs search` / `docs page`.
 - **`auth token`** — mint and print a short-lived OAuth2 bearer token from the
@@ -138,8 +138,8 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   used to say only "try `docs search`," which reads as "this endpoint
   doesn't exist" for the endpoints that are real, work live, and are simply
   absent from the public OpenAPI spec on purpose. The miss message now names
-  the two families verified against the live public spec and a leet tenant
-  — the MCP admin surface (`mcp_servers`/`mcp_tools`/`mcp_toolsets`, covered
+  the two families verified against the live public spec and a live C1
+  tenant — the MCP admin surface (`mcp_servers`/`mcp_tools`/`mcp_toolsets`, covered
   by `mcp servers`/`mcp tools`/`mcp toolsets`) and access reviews
   (`access_review`/`access_reviews`, reachable via `api --path`) — with the
   concrete next step for each, before falling back to `docs search` for
@@ -158,10 +158,10 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   at the new `docs guide delegate-entitlement-provisioning` runbook.
 - **`entitlements --help` now documents that some system-builtin
   entitlements share a canonical ID across apps.** Verified live against a
-  leet tenant: the base "Access" entitlement carries the identical id
+  test tenant: the base "Access" entitlement carries the identical id
   (`287oY0rG4UirjDNFEYguMBvxyim`) on GitHub, Salesforce, Bitbucket Cloud,
-  Snowflake, and Google Workspace apps alike (the same pattern already
-  documented for MCP's "All approved tools"/"Read tools" system toolsets). A
+  Snowflake, and Google Workspace apps alike (the same pattern observed for
+  MCP's "All approved tools"/"Read tools" system toolsets). A
   customer's agent lost real time ruling out data corruption before
   realizing this was intentional. `--help` now states it and calls out that
   an entitlement id is only unique per app — always key on (app-id, id).
