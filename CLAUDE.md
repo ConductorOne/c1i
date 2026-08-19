@@ -118,11 +118,12 @@ never fails proves nothing.
   EXTERNAL-only `mcp servers` subcommands that documented no scope, a `--user-id`
   that promised "defaults to self" and 500s without it, and a `delete` that
   silently cascaded to every bound toolset's entitlement.
-- **`api` is the escape hatch and sits outside the invariants above.** It takes a
-  raw path and body, so `newClient`/`client.Path`/the output helpers don't apply.
-  Reach for it only when no first-class command exists; if you find yourself
-  documenting a raw `api` call for a common workflow, that's a missing command,
-  not a documentation task.
+- **`api` is the escape hatch for endpoints with no first-class command.** It
+  still goes through `newClient` and the output helpers, so retries and
+  exit-code classification work as they do everywhere else; what it skips is
+  `client.Path` escaping, since `--path` is raw caller input. If you find
+  yourself documenting a raw `api` call for a common workflow, that's a missing
+  command, not a documentation task.
 
 ### Adding a new client/subsystem package
 
