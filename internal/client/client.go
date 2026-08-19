@@ -236,6 +236,24 @@ func New(ctx context.Context, baseURL string, opts ...Option) (*Client, error) {
 	return c, nil
 }
 
+// NewForTesting returns a *Client that sends every request through hc to
+// baseURL, bypassing loadCredentials and the OAuth mint New performs. It
+// exists so a test in another package (e.g. cmd's) can drive a command built
+// on the shared client against a real httptest.Server without needing valid
+// stored credentials or a live token endpoint — mirroring what this
+// package's own client_test.go does internally via newTestClient, just
+// exported for cross-package use. Accepts the same Options New does (e.g.
+// WithMaxRetries(0), to keep a test that deliberately triggers 5xx/network
+// retries from paying New's real exponential backoff). No production code
+// path calls this; c1i always authenticates through New.
+func NewForTesting(baseURL string, hc *http.Client, opts ...Option) *Client {
+	c := &Client{httpClient: hc, baseURL: baseURL, maxRetries: DefaultMaxRetries}
+	for _, opt := range opts {
+		opt(c)
+	}
+	return c
+}
+
 // Path builds an API path from a printf-style format string, URL-escaping each
 // argument as a single path segment. Use it whenever a user-supplied ID is
 // interpolated into a request path so that values containing "?", "#", spaces,

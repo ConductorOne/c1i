@@ -83,9 +83,48 @@ func newGatewayClient(cmd *cobra.Command) (*mcpgateway.Client, error) {
 	// helper is needed, and none is needed at the list-tools/call call sites
 	// either, since they wrap gateway errors with %w too.
 	if err := gc.Initialize(cmd.Context()); err != nil {
-		return nil, fmt.Errorf("gateway handshake failed: %w", err)
+		return nil, fmt.Errorf("gateway handshake failed: %w", classifyGatewayError(err))
 	}
 	return gc, nil
+}
+
+// classifyGatewayError reclassifies a JSON-RPC-level error from the gateway
+// (an *mcpgateway.rpcError, unexported — accessed via RPCErrorCode) so it
+// reaches the right process exit code through cmd/errors.go's exitCode:
+//
+//   - -32602 (invalid params) / -32601 (method not found): the caller named a
+//     tool or method that doesn't exist. Wrapped in *usageError -> exit 2.
+//   - code 0 (an upstream connector failure — an unreachable external MCP
+//     server, a vendor API error surfaced through the connector, ...).
+//     Wrapped in *remoteFailureError -> exit 6. This arrives on an HTTP 200
+//     response (the gateway itself didn't fail), so it is NOT wrapped in a
+//     *client.APIError with an invented status — that was tried and reverted
+//     because it rendered as a false "status" field in --error-format json.
+//   - any other code, or no JSON-RPC code at all (e.g. a transport-level
+//     *mcpgateway.HTTPError, which already classifies via its own Unwrap to
+//     *client.APIError with a real status): left unchanged, exits 1
+//     (generic) as before.
+//
+// *usageError and *remoteFailureError both live in package cmd
+// (internal/mcpgateway must not import cmd), so this reclassification has to
+// happen here rather than in the gateway client — this function is the seam.
+// Call it on the error CallTool/ListTools return, before wrapping with the
+// "%s failed: %w" context each call site already adds; both wrapper types'
+// Error() delegates verbatim to the wrapped error, so the rendered message is
+// unchanged.
+func classifyGatewayError(err error) error {
+	if err == nil {
+		return nil
+	}
+	if code, ok := mcpgateway.RPCErrorCode(err); ok {
+		switch code {
+		case -32602, -32601:
+			return &usageError{err}
+		case 0:
+			return &remoteFailureError{err}
+		}
+	}
+	return err
 }
 
 func init() {

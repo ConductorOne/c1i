@@ -226,6 +226,49 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   every other API failure gets (401/403 → 3, 404 → 4, 429 → 5, 5xx → 6),
   without losing the response body from the error message. The one-off
   handshake-only classifier is removed as redundant.
+- **A JSON-RPC-level `mcp gateway` failure now classifies too, not just an
+  HTTP-level one.** The fix above covers a non-2xx HTTP response; a gateway
+  answering 200 with a JSON-RPC `error` (initialize/tools/list/tools/call all
+  go through the same JSON-RPC envelope) still exited `1` regardless of code —
+  verified live: naming a nonexistent tool (`-32602`) or an unimplemented
+  method (`-32601`) both exited `1`, and so did every upstream connector
+  failure (an unreachable external MCP server, a vendor API error), which
+  arrives as JSON-RPC code `0`. `-32602`/`-32601` now exit `2` (usage — the
+  caller named a tool or method that doesn't exist) and code `0` now exits `6`
+  (server — a system the gateway depends on failed); any other JSON-RPC code
+  still exits `1`, unchanged. Error messages are unchanged, only the exit
+  code. `internal/mcpgateway` cannot construct a `*usageError` (it lives in
+  package `cmd`), so it exposes the code (`mcpgateway.RPCErrorCode`) and
+  `cmd/mcp_gateway.go`'s new `classifyGatewayError` wraps it: `-32602`/
+  `-32601` in `*usageError`, code `0` in a new `*remoteFailureError`
+  (`cmd/errors.go`) that also maps to `6`. Code `0` is deliberately not
+  reached by unwrapping to a `*client.APIError` with an invented status: the
+  gateway answers HTTP 200 for this failure class, so a `*client.APIError`
+  would fabricate a status that never happened, and — since `writeError`
+  renders `apiErr.StatusCode` under `--error-format json` — that fabricated
+  status would then appear as a false "fact about the wire" in
+  machine-readable output. `*remoteFailureError` carries no status at all, so
+  `--error-format json` on this failure class emits only `{"error": "..."}` .
+- **`requests create grant`/`requests create revoke --user-id`'s "defaults to
+  self if omitted" is now true for both.** Omitting it used to send no
+  `identityUserId` at all, which the API rejects with a
+  `500 {"code":2,"message":"user_id is required"}` — a documented default
+  the flag never actually had, on both commands (they share the same wire
+  contract and the same help text). Both now resolve the caller's own user id
+  via the same introspect-based `currentUserID` lookup `requests list`'s
+  default requester scope and `tasks list --assigned-to-me` already use,
+  costing one extra `GET /api/v1/auth/introspect` call only when `--user-id`
+  is omitted. `--dry-run` also resolves self before building its preview
+  (authenticating before the dry-run check, like `tasks approve`/`deny`
+  already do to resolve the task's policy step) so the previewed body
+  includes `identityUserId` and matches what the real call actually sends —
+  an earlier version of this fix left `--dry-run` previewing a body without
+  it while the real call sent one; `cmd/skill.md`/`README.md`'s dry-run
+  sections now list both commands alongside `tasks approve`/`deny` as
+  needing credentials when `--user-id` is omitted. An explicit `--user-id`
+  still needs no extra call, dry-run or not. Verified live end to end: a
+  grant created with `--user-id` omitted, then revoked with `--user-id`
+  omitted, both populated `identityUserId` with the caller's own id.
 - **`extractSSEResponse` now follows the SSE spec exactly.** Multiple `data:`
   lines within one SSE event are joined with `\n` (previously concatenated
   with no separator, which could corrupt a multi-line payload), and exactly

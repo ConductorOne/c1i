@@ -104,8 +104,9 @@ never fails proves nothing.
   This recurred across six row builders before it was caught.
 - **Errors:** the client returns typed `client.APIError` (carries status) and
   `client.AuthError`; `cmd/errors.go` maps them to exit codes — 0 ok, 1 generic,
-  2 usage, 3 auth (401/403), 4 not-found (404), 5 rate-limited (429), 6 server
-  (5xx), 7 tool-execution error (`mcp gateway call` result has `isError: true`).
+  2 usage, 3 auth (401/403), 4 not-found (404), 5 rate-limited (429), 6 remote
+  system failed (API 5xx, or an upstream MCP connector failure), 7
+  tool-execution error (`mcp gateway call` result has `isError: true`).
   Wrap client errors with `%w` so `errors.As` can classify them, and wrap a bad
   flag/arg combination in `&usageError{}` so it exits 2 — a bare `fmt.Errorf`
   silently becomes exit 1.

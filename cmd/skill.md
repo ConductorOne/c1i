@@ -124,8 +124,11 @@ Each also has an env-var form.
   `tasks approve`/`deny`/`comment`, `accounts set-owner`, `mcp` mutations, and
   non-GET `api` calls), print the method, path, and JSON body that *would* be sent
   and exit `0` without sending it. Most previews need no credentials; the
-  exception is `tasks approve`/`deny`, which authenticate to resolve the task's
-  current policy step. Use it to confirm a payload before committing a change.
+  exceptions are `tasks approve`/`deny` (authenticate to resolve the task's
+  current policy step) and `requests create grant`/`revoke` when `--user-id` is
+  omitted (authenticate to resolve it to the caller, so the preview matches
+  what's actually sent). Use it to confirm a payload before committing a
+  change.
 - **`--debug`** (`C1I_DEBUG`) — trace every HTTP request to **stderr** (method,
   URL, status, elapsed time, including retries). Never logs headers or bodies, so
   it's safe to leave on; stdout stays clean JSON.
@@ -376,9 +379,12 @@ must be a JSON object (a string/array/null is rejected as a usage error).
 
 Exit code 7 (see Errors & Exit Codes) is only set when the result carries
 `isError: true` — the call itself succeeded but the tool reported failure.
-Any other gateway failure (unknown tool name, an upstream connector error)
-is a JSON-RPC-level error and currently exits 1 (generic), not one of the
-classified codes — don't assume 3/4/5/6 apply to those.
+A JSON-RPC-level error (the call itself failed) is classified by its code:
+`-32602`/`-32601` (invalid params / method not found — you named a tool or
+method that doesn't exist) exit 2; code `0` (an upstream connector
+failure — e.g. an unreachable external MCP server, or a vendor API error
+surfaced through the connector) exits 6. Any other JSON-RPC error code
+still exits 1 (generic) — don't assume 3/4/5 apply to those.
 
 ### Access Requests
 
@@ -582,7 +588,7 @@ on **without parsing text**:
 | `3` | not authenticated, or API returned `401`/`403` |
 | `4` | API returned `404` (not found) |
 | `5` | API returned `429` (rate limited — already retried; back off) |
-| `6` | API returned `5xx` (server error) |
+| `6` | a remote system failed: API returned `5xx`, or an upstream MCP connector failed |
 | `7` | `mcp gateway call` result carried `isError: true` (tool itself failed; the call succeeded) |
 
 Add `--error-format=json` for a machine-readable error object:

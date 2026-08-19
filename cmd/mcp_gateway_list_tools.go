@@ -20,7 +20,7 @@ each tool's input JSON schema.`,
 		}
 		tools, err := gc.ListTools(cmd.Context())
 		if err != nil {
-			return fmt.Errorf("tools/list failed: %w", err)
+			return fmt.Errorf("tools/list failed: %w", classifyGatewayError(err))
 		}
 
 		full, _ := cmd.Flags().GetBool("full")

@@ -341,7 +341,7 @@ branch on without parsing text:
 | `3` | not authenticated, or API returned `401`/`403` |
 | `4` | API returned `404` (not found) |
 | `5` | API returned `429` (rate limited — back off and retry) |
-| `6` | API returned `5xx` (server error) |
+| `6` | a remote system failed: API returned `5xx`, or an upstream MCP connector failed |
 | `7` | `mcp gateway call` completed, but the tool itself reported an error (`isError: true` in its result) |
 
 Pass `--error-format json` (or `C1I_ERROR_FORMAT=json`) to get a machine-readable
@@ -416,8 +416,10 @@ $ c1i requests create grant --app-id A1 --entitlement-id E1 --user-id U1 --dry-r
 It applies to every write command (`requests create`, `tasks approve/deny/comment`,
 `accounts set-owner`, the `mcp` mutations) and to non-GET `api` calls, and never
 sends the mutation itself. Most previews run fully offline — no credentials
-required. The exception is `tasks approve`/`deny`, which authenticate and read the
-task to resolve its current policy step, so the previewed body is exact.
+required. The exceptions are `tasks approve`/`deny` (authenticate and read the
+task to resolve its current policy step) and `requests create grant`/`revoke`
+when `--user-id` is omitted (authenticate to resolve it to the caller) — both so
+the previewed body is exact.
 
 ### Debug tracing
 

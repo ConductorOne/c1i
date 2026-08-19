@@ -10,6 +10,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -106,6 +107,35 @@ func (e *rpcError) Error() string {
 		return fmt.Sprintf("MCP error %d: %s (%s)", e.Code, e.Message, string(e.Data))
 	}
 	return fmt.Sprintf("MCP error %d: %s", e.Code, e.Message)
+}
+
+// RPCErrorCode returns the JSON-RPC error code carried by err, if err is (or
+// wraps) a JSON-RPC-level error the gateway returned. ok is false for a
+// transport-level failure (e.g. *HTTPError — a non-2xx HTTP status) or any
+// other error, letting a caller distinguish "the gateway answered with a
+// JSON-RPC error" from "the request never got a JSON-RPC-shaped response at
+// all."
+//
+// This exists so cmd — which owns the process exit-code taxonomy and the
+// types (like *usageError) some of those codes must map to — can react to
+// specific JSON-RPC codes without internal/mcpgateway importing package cmd.
+//
+// Deliberately NOT an Unwrap() on rpcError to a *client.APIError: code 0 (the
+// shape observed for an upstream connector failure — an unreachable external
+// MCP server, a vendor API error, ...) arrives on an HTTP 200 response, so
+// there is no real status to attach. An earlier version of this fix unwrapped
+// to *client.APIError{StatusCode: 502} to reach exit 6 through the existing
+// ">= 500" rule, but that fabricated status then rendered as a false "status"
+// field in --error-format json — a claim about the wire that never happened.
+// cmd/mcp_gateway.go's classifyGatewayError uses this accessor to wrap code 0
+// in a *remoteFailureError (cmd/errors.go) instead: exit 6, no invented
+// status anywhere.
+func RPCErrorCode(err error) (code int, ok bool) {
+	var rpcErr *rpcError
+	if errors.As(err, &rpcErr) {
+		return rpcErr.Code, true
+	}
+	return 0, false
 }
 
 type rpcResponse struct {

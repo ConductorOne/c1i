@@ -1,8 +1,20 @@
 package cmd
 
 import (
+	"bytes"
+	"context"
 	"encoding/json"
+	"fmt"
+	"io"
+	"net/http"
+	"net/http/httptest"
+	"strings"
 	"testing"
+	"time"
+
+	"github.com/ConductorOne/c1i/internal/client"
+	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 )
 
 // TestBuildGrantTaskBodyNoWrapper pins the fix for the 400 "unknown field
@@ -65,6 +77,422 @@ func TestBuildGrantTaskBodyOmitsEmpty(t *testing.T) {
 	}
 }
 
+// resetGrantCmdFlags restores requestsCreateGrantCmd's own flags to their
+// zero values, so tests sharing the package-level singleton can't leak flag
+// state into each other or into other test files (mirrors api_test.go's
+// resetAPICmdFlags).
+func resetGrantCmdFlags(t *testing.T) {
+	t.Helper()
+	reset := func() {
+		_ = requestsCreateGrantCmd.Flags().Set("app-id", "")
+		_ = requestsCreateGrantCmd.Flags().Set("entitlement-id", "")
+		_ = requestsCreateGrantCmd.Flags().Set("user-id", "")
+		_ = requestsCreateGrantCmd.Flags().Set("duration", "")
+		_ = requestsCreateGrantCmd.Flags().Set("description", "")
+		_ = requestsCreateGrantCmd.Flags().Set("emergency", "false")
+	}
+	reset()
+	t.Cleanup(reset)
+}
+
+// stubNewGrantClient swaps newGrantClient to return a *client.Client wired
+// (via client.NewForTesting) to a real httptest.Server, bypassing newClient's
+// OAuth mint, restoring the original when the test ends.
+func stubNewGrantClient(t *testing.T, srv *httptest.Server) {
+	t.Helper()
+	orig := newGrantClient
+	newGrantClient = func(_ *cobra.Command, _ string) (*client.Client, error) {
+		return client.NewForTesting(srv.URL, srv.Client()), nil
+	}
+	t.Cleanup(func() { newGrantClient = orig })
+}
+
+// TestRequestsCreateGrantDefaultsUserIDToSelf pins the fix for --user-id's
+// help text ("defaults to self if omitted") not actually having a default:
+// omitting it used to send no identityUserId at all, which the API rejects
+// with a 500 "user_id is required". It now resolves the caller's own id via
+// the same introspect-based currentUserID lookup requests_list.go's default
+// requester scope and tasks_list.go's --assigned-to-me already use.
+//
+// It drives requestsCreateGrantCmd.RunE directly (not through rootCmd/cobra's
+// full parse-and-execute path — GetBaseURL/dryRunActive read viper directly,
+// so this doesn't need it) against a real httptest.Server standing in for
+// both /api/v1/auth/introspect and /api/v1/task/grant, and asserts the server
+// actually received the resolved id in the POST body — not just that the
+// command returned no error.
+func TestRequestsCreateGrantDefaultsUserIDToSelf(t *testing.T) {
+	const selfUserID = "zz-c1i-test-self-user-id"
+
+	var gotIntrospect bool
+	var gotGrantBody map[string]any
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/api/v1/auth/introspect":
+			gotIntrospect = true
+			_, _ = fmt.Fprintf(w, `{"userId":%q}`, selfUserID)
+		case r.Method == http.MethodPost && r.URL.Path == "/api/v1/task/grant":
+			body, _ := io.ReadAll(r.Body)
+			if err := json.Unmarshal(body, &gotGrantBody); err != nil {
+				t.Errorf("server: unmarshaling request body: %v", err)
+			}
+			_, _ = fmt.Fprint(w, `{"taskView":{"task":{"id":"task-1","state":"PENDING"}}}`)
+		default:
+			t.Errorf("unexpected request: %s %s", r.Method, r.URL.Path)
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer srv.Close()
+
+	resetGrantCmdFlags(t)
+	stubNewGrantClient(t, srv)
+	t.Setenv("C1I_URL", srv.URL)
+
+	origDryRun := viper.GetBool("dry_run")
+	viper.Set("dry_run", false)
+	t.Cleanup(func() { viper.Set("dry_run", origDryRun) })
+
+	_ = requestsCreateGrantCmd.Flags().Set("app-id", "app1")
+	_ = requestsCreateGrantCmd.Flags().Set("entitlement-id", "ent1")
+	// --user-id intentionally left unset.
+
+	var out bytes.Buffer
+	requestsCreateGrantCmd.SetOut(&out)
+	requestsCreateGrantCmd.SetContext(context.Background())
+
+	if err := requestsCreateGrantCmd.RunE(requestsCreateGrantCmd, nil); err != nil {
+		t.Fatalf("RunE: %v", err)
+	}
+
+	if !gotIntrospect {
+		t.Error("expected the command to resolve self via /api/v1/auth/introspect")
+	}
+	if got := gotGrantBody["identityUserId"]; got != selfUserID {
+		t.Errorf("server received identityUserId = %v, want %q", got, selfUserID)
+	}
+}
+
+// TestRequestsCreateGrantExplicitUserIDSkipsSelfResolution is a regression
+// guard alongside the default-to-self test: an explicit --user-id must be
+// sent as-is, without ever calling introspect.
+func TestRequestsCreateGrantExplicitUserIDSkipsSelfResolution(t *testing.T) {
+	const explicitUserID = "zz-c1i-test-explicit-user-id"
+
+	var gotIntrospect bool
+	var gotGrantBody map[string]any
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/api/v1/auth/introspect":
+			gotIntrospect = true
+			_, _ = fmt.Fprint(w, `{"userId":"should-not-be-used"}`)
+		case r.Method == http.MethodPost && r.URL.Path == "/api/v1/task/grant":
+			body, _ := io.ReadAll(r.Body)
+			if err := json.Unmarshal(body, &gotGrantBody); err != nil {
+				t.Errorf("server: unmarshaling request body: %v", err)
+			}
+			_, _ = fmt.Fprint(w, `{"taskView":{"task":{"id":"task-1","state":"PENDING"}}}`)
+		default:
+			t.Errorf("unexpected request: %s %s", r.Method, r.URL.Path)
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer srv.Close()
+
+	resetGrantCmdFlags(t)
+	stubNewGrantClient(t, srv)
+	t.Setenv("C1I_URL", srv.URL)
+
+	origDryRun := viper.GetBool("dry_run")
+	viper.Set("dry_run", false)
+	t.Cleanup(func() { viper.Set("dry_run", origDryRun) })
+
+	_ = requestsCreateGrantCmd.Flags().Set("app-id", "app1")
+	_ = requestsCreateGrantCmd.Flags().Set("entitlement-id", "ent1")
+	_ = requestsCreateGrantCmd.Flags().Set("user-id", explicitUserID)
+
+	var out bytes.Buffer
+	requestsCreateGrantCmd.SetOut(&out)
+	requestsCreateGrantCmd.SetContext(context.Background())
+
+	if err := requestsCreateGrantCmd.RunE(requestsCreateGrantCmd, nil); err != nil {
+		t.Fatalf("RunE: %v", err)
+	}
+
+	if gotIntrospect {
+		t.Error("expected introspect NOT to be called when --user-id is explicit")
+	}
+	if got := gotGrantBody["identityUserId"]; got != explicitUserID {
+		t.Errorf("server received identityUserId = %v, want %q", got, explicitUserID)
+	}
+}
+
+// TestRequestsCreateGrantDryRunPreviewsResolvedSelf pins the fix for a
+// dry-run/real-call mismatch: --dry-run used to preview a body built before
+// self-resolution ran, so an omitted --user-id previewed with no
+// identityUserId at all while the real call (after the fix above) sends one
+// -- the preview wasn't the payload. Self-resolution now runs before the
+// dry-run check (mirroring tasks_approve.go/tasks_deny.go resolving the
+// policy step before theirs), so this asserts the previewed JSON body
+// actually contains identityUserId set to the resolved self id, and that the
+// real mutating POST is never sent under --dry-run.
+func TestRequestsCreateGrantDryRunPreviewsResolvedSelf(t *testing.T) {
+	const selfUserID = "zz-c1i-test-self-user-id"
+
+	var gotIntrospect bool
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/api/v1/auth/introspect":
+			gotIntrospect = true
+			_, _ = fmt.Fprintf(w, `{"userId":%q}`, selfUserID)
+		case r.Method == http.MethodPost && r.URL.Path == "/api/v1/task/grant":
+			t.Error("--dry-run must never send the real POST /api/v1/task/grant")
+			w.WriteHeader(http.StatusInternalServerError)
+		default:
+			t.Errorf("unexpected request: %s %s", r.Method, r.URL.Path)
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer srv.Close()
+
+	resetGrantCmdFlags(t)
+	stubNewGrantClient(t, srv)
+	t.Setenv("C1I_URL", srv.URL)
+
+	origDryRun := viper.GetBool("dry_run")
+	viper.Set("dry_run", true)
+	t.Cleanup(func() { viper.Set("dry_run", origDryRun) })
+
+	_ = requestsCreateGrantCmd.Flags().Set("app-id", "app1")
+	_ = requestsCreateGrantCmd.Flags().Set("entitlement-id", "ent1")
+	// --user-id intentionally left unset.
+
+	var out bytes.Buffer
+	requestsCreateGrantCmd.SetOut(&out)
+	requestsCreateGrantCmd.SetContext(context.Background())
+
+	if err := requestsCreateGrantCmd.RunE(requestsCreateGrantCmd, nil); err != nil {
+		t.Fatalf("RunE: %v", err)
+	}
+
+	if !gotIntrospect {
+		t.Error("expected --dry-run to still resolve self via /api/v1/auth/introspect")
+	}
+	if !strings.Contains(out.String(), `"identityUserId": "`+selfUserID+`"`) {
+		t.Errorf("dry-run preview = %q, want it to contain identityUserId %q", out.String(), selfUserID)
+	}
+}
+
+// TestRequestsCreateGrantDryRunExplicitUserIDSkipsSelfResolution mirrors the
+// non-dry-run regression guard: under --dry-run too, an explicit --user-id
+// must be previewed as-is without ever calling introspect -- the explicit
+// path must not pay for the default path's extra call.
+func TestRequestsCreateGrantDryRunExplicitUserIDSkipsSelfResolution(t *testing.T) {
+	const explicitUserID = "zz-c1i-test-explicit-user-id"
+
+	var gotIntrospect bool
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/api/v1/auth/introspect":
+			gotIntrospect = true
+			_, _ = fmt.Fprint(w, `{"userId":"should-not-be-used"}`)
+		case r.Method == http.MethodPost && r.URL.Path == "/api/v1/task/grant":
+			t.Error("--dry-run must never send the real POST /api/v1/task/grant")
+			w.WriteHeader(http.StatusInternalServerError)
+		default:
+			t.Errorf("unexpected request: %s %s", r.Method, r.URL.Path)
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer srv.Close()
+
+	resetGrantCmdFlags(t)
+	stubNewGrantClient(t, srv)
+	t.Setenv("C1I_URL", srv.URL)
+
+	origDryRun := viper.GetBool("dry_run")
+	viper.Set("dry_run", true)
+	t.Cleanup(func() { viper.Set("dry_run", origDryRun) })
+
+	_ = requestsCreateGrantCmd.Flags().Set("app-id", "app1")
+	_ = requestsCreateGrantCmd.Flags().Set("entitlement-id", "ent1")
+	_ = requestsCreateGrantCmd.Flags().Set("user-id", explicitUserID)
+
+	var out bytes.Buffer
+	requestsCreateGrantCmd.SetOut(&out)
+	requestsCreateGrantCmd.SetContext(context.Background())
+
+	if err := requestsCreateGrantCmd.RunE(requestsCreateGrantCmd, nil); err != nil {
+		t.Fatalf("RunE: %v", err)
+	}
+
+	if gotIntrospect {
+		t.Error("expected introspect NOT to be called under --dry-run when --user-id is explicit")
+	}
+	if !strings.Contains(out.String(), `"identityUserId": "`+explicitUserID+`"`) {
+		t.Errorf("dry-run preview = %q, want it to contain identityUserId %q", out.String(), explicitUserID)
+	}
+}
+
+// TestRequestsCreateGrantDryRunUnauthenticatedFailsLegibly checks the cost of
+// moving authentication ahead of the dry-run check: --dry-run now needs
+// credentials (to resolve self) when --user-id is omitted, so an
+// unauthenticated --dry-run must fail the same legible way tasks_approve.go's
+// identical authenticate-before-dry-run already does -- a wrapped
+// *client.AuthError (exit 3), not a panic or a bare unclassified error.
+func TestRequestsCreateGrantDryRunUnauthenticatedFailsLegibly(t *testing.T) {
+	resetGrantCmdFlags(t)
+
+	origNewGrantClient := newGrantClient
+	newGrantClient = func(_ *cobra.Command, _ string) (*client.Client, error) {
+		return nil, &client.AuthError{Err: fmt.Errorf("no credentials found")}
+	}
+	t.Cleanup(func() { newGrantClient = origNewGrantClient })
+
+	t.Setenv("C1I_URL", "https://example.invalid")
+
+	origDryRun := viper.GetBool("dry_run")
+	viper.Set("dry_run", true)
+	t.Cleanup(func() { viper.Set("dry_run", origDryRun) })
+
+	_ = requestsCreateGrantCmd.Flags().Set("app-id", "app1")
+	_ = requestsCreateGrantCmd.Flags().Set("entitlement-id", "ent1")
+
+	var out bytes.Buffer
+	requestsCreateGrantCmd.SetOut(&out)
+	requestsCreateGrantCmd.SetContext(context.Background())
+
+	err := requestsCreateGrantCmd.RunE(requestsCreateGrantCmd, nil)
+	if err == nil {
+		t.Fatal("expected an error for an unauthenticated --dry-run")
+	}
+	if !strings.Contains(err.Error(), "authentication failed") {
+		t.Errorf("error = %q, want it to legibly name authentication as the problem", err.Error())
+	}
+	if got := exitCode(err); got != exitAuth {
+		t.Errorf("exitCode = %d, want exitAuth (%d)", got, exitAuth)
+	}
+}
+
+// TestRequestsCreateGrantDryRunIntrospectServerFailureClassifies answers the
+// coordinator's question about the new failure surface --dry-run gained:
+// self-resolution now runs during a dry-run preview too, so introspect can
+// now fail *during a dry-run*, not just during a real call. A 500 from
+// introspect must classify the same way any other 5xx from this CLI does --
+// a *client.APIError surfacing through currentUserID's %w wrap, exit 6 -- not
+// a bare/confusing error, and must never let the (never-reached) real
+// mutating POST fire.
+func TestRequestsCreateGrantDryRunIntrospectServerFailureClassifies(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/api/v1/auth/introspect":
+			w.WriteHeader(http.StatusInternalServerError)
+			_, _ = fmt.Fprint(w, `{"code":13,"message":"internal error"}`)
+		case r.Method == http.MethodPost && r.URL.Path == "/api/v1/task/grant":
+			t.Error("--dry-run must never send the real POST /api/v1/task/grant")
+			w.WriteHeader(http.StatusInternalServerError)
+		default:
+			t.Errorf("unexpected request: %s %s", r.Method, r.URL.Path)
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer srv.Close()
+
+	resetGrantCmdFlags(t)
+	origNewGrantClient := newGrantClient
+	// WithMaxRetries(0): a 500 is otherwise retried (idempotent GET), which
+	// would make this legitimately slow (multi-second real backoff) for no
+	// benefit -- the classification this test pins doesn't depend on retry
+	// count.
+	newGrantClient = func(_ *cobra.Command, _ string) (*client.Client, error) {
+		return client.NewForTesting(srv.URL, srv.Client(), client.WithMaxRetries(0)), nil
+	}
+	t.Cleanup(func() { newGrantClient = origNewGrantClient })
+	t.Setenv("C1I_URL", srv.URL)
+
+	origDryRun := viper.GetBool("dry_run")
+	viper.Set("dry_run", true)
+	t.Cleanup(func() { viper.Set("dry_run", origDryRun) })
+
+	_ = requestsCreateGrantCmd.Flags().Set("app-id", "app1")
+	_ = requestsCreateGrantCmd.Flags().Set("entitlement-id", "ent1")
+	// --user-id intentionally left unset, so self-resolution runs.
+
+	var out bytes.Buffer
+	requestsCreateGrantCmd.SetOut(&out)
+	requestsCreateGrantCmd.SetContext(context.Background())
+
+	err := requestsCreateGrantCmd.RunE(requestsCreateGrantCmd, nil)
+	if err == nil {
+		t.Fatal("expected an error when introspect returns 500")
+	}
+	if !strings.Contains(err.Error(), "failed to get current user") {
+		t.Errorf("error = %q, want it to name self-resolution as the failing step", err.Error())
+	}
+	if got := exitCode(err); got != exitServer {
+		t.Errorf("exitCode = %d, want exitServer (%d); err=%v", got, exitServer, err)
+	}
+}
+
+// TestRequestsCreateGrantDryRunIntrospectNetworkFailureExitsGenerically
+// covers the other half of the coordinator's question: introspect not
+// returning at all (connection refused), as opposed to answering with a
+// status. This has no HTTP status to classify by, so it must fall through to
+// the generic exit 1 -- not panic, not hang. A short context timeout keeps
+// this bounded without needing to fully exhaust the client's real retry
+// backoff (500ms+ per attempt).
+func TestRequestsCreateGrantDryRunIntrospectNetworkFailureExitsGenerically(t *testing.T) {
+	// A server that is opened then immediately closed hands back a real,
+	// already-assigned "http://127.0.0.1:PORT" that nothing is listening on
+	// -- connection refused, not a DNS failure, which is the more realistic
+	// shape of "the gateway/API host is briefly unreachable".
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
+	deadURL := srv.URL
+	srv.Close()
+
+	resetGrantCmdFlags(t)
+	origNewGrantClient := newGrantClient
+	newGrantClient = func(_ *cobra.Command, _ string) (*client.Client, error) {
+		return client.NewForTesting(deadURL, http.DefaultClient), nil
+	}
+	t.Cleanup(func() { newGrantClient = origNewGrantClient })
+	t.Setenv("C1I_URL", deadURL)
+
+	origDryRun := viper.GetBool("dry_run")
+	viper.Set("dry_run", true)
+	t.Cleanup(func() { viper.Set("dry_run", origDryRun) })
+
+	_ = requestsCreateGrantCmd.Flags().Set("app-id", "app1")
+	_ = requestsCreateGrantCmd.Flags().Set("entitlement-id", "ent1")
+
+	var out bytes.Buffer
+	requestsCreateGrantCmd.SetOut(&out)
+	// 50ms is comfortably under the client's minimum jittered backoff
+	// (250-500ms for the first retry), so ctx cancellation -- not the
+	// connection-refused error itself -- is what ends this quickly, proving
+	// the command doesn't hang through several real backoff sleeps.
+	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	defer cancel()
+	requestsCreateGrantCmd.SetContext(ctx)
+
+	done := make(chan error, 1)
+	go func() { done <- requestsCreateGrantCmd.RunE(requestsCreateGrantCmd, nil) }()
+
+	select {
+	case err := <-done:
+		if err == nil {
+			t.Fatal("expected an error when introspect is unreachable")
+		}
+		if got := exitCode(err); got != exitError {
+			t.Errorf("exitCode = %d, want exitError (%d) for a failure with no HTTP status at all; err=%v", got, exitError, err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("RunE did not return within 5s -- an unreachable introspect host under --dry-run must not hang")
+	}
+}
+
 // TestBuildRevokeTaskBodyNoWrapper pins the same flat-body contract for
 // POST /api/v1/task/revoke (CreateRevokeTaskRequest).
 func TestBuildRevokeTaskBodyNoWrapper(t *testing.T) {
@@ -103,5 +531,373 @@ func TestBuildRevokeTaskBodyOmitsEmpty(t *testing.T) {
 	}
 	if body["appId"] != "app1" || body["appEntitlementId"] != "ent1" {
 		t.Errorf("unexpected body: %v", body)
+	}
+}
+
+// resetRevokeCmdFlags mirrors resetGrantCmdFlags for requestsCreateRevokeCmd's
+// own flags.
+func resetRevokeCmdFlags(t *testing.T) {
+	t.Helper()
+	reset := func() {
+		_ = requestsCreateRevokeCmd.Flags().Set("app-id", "")
+		_ = requestsCreateRevokeCmd.Flags().Set("entitlement-id", "")
+		_ = requestsCreateRevokeCmd.Flags().Set("user-id", "")
+		_ = requestsCreateRevokeCmd.Flags().Set("description", "")
+	}
+	reset()
+	t.Cleanup(reset)
+}
+
+// stubNewRevokeClient mirrors stubNewGrantClient for newRevokeClient.
+func stubNewRevokeClient(t *testing.T, srv *httptest.Server) {
+	t.Helper()
+	orig := newRevokeClient
+	newRevokeClient = func(_ *cobra.Command, _ string) (*client.Client, error) {
+		return client.NewForTesting(srv.URL, srv.Client()), nil
+	}
+	t.Cleanup(func() { newRevokeClient = orig })
+}
+
+// TestRequestsCreateRevokeDefaultsUserIDToSelf mirrors
+// TestRequestsCreateGrantDefaultsUserIDToSelf for the identical twin defect in
+// `requests create revoke`: --user-id's help also promises "defaults to self
+// if omitted" and also sent no identityUserId at all, hitting the same API
+// 500 "user_id is required". Same fix, same currentUserID lookup, same proof
+// shape: assert against a real httptest.Server that the server received the
+// resolved id, not just that the command returned no error.
+func TestRequestsCreateRevokeDefaultsUserIDToSelf(t *testing.T) {
+	const selfUserID = "zz-c1i-test-self-user-id"
+
+	var gotIntrospect bool
+	var gotRevokeBody map[string]any
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/api/v1/auth/introspect":
+			gotIntrospect = true
+			_, _ = fmt.Fprintf(w, `{"userId":%q}`, selfUserID)
+		case r.Method == http.MethodPost && r.URL.Path == "/api/v1/task/revoke":
+			body, _ := io.ReadAll(r.Body)
+			if err := json.Unmarshal(body, &gotRevokeBody); err != nil {
+				t.Errorf("server: unmarshaling request body: %v", err)
+			}
+			_, _ = fmt.Fprint(w, `{"taskView":{"task":{"id":"task-1","state":"PENDING"}}}`)
+		default:
+			t.Errorf("unexpected request: %s %s", r.Method, r.URL.Path)
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer srv.Close()
+
+	resetRevokeCmdFlags(t)
+	stubNewRevokeClient(t, srv)
+	t.Setenv("C1I_URL", srv.URL)
+
+	origDryRun := viper.GetBool("dry_run")
+	viper.Set("dry_run", false)
+	t.Cleanup(func() { viper.Set("dry_run", origDryRun) })
+
+	_ = requestsCreateRevokeCmd.Flags().Set("app-id", "app1")
+	_ = requestsCreateRevokeCmd.Flags().Set("entitlement-id", "ent1")
+	// --user-id intentionally left unset.
+
+	var out bytes.Buffer
+	requestsCreateRevokeCmd.SetOut(&out)
+	requestsCreateRevokeCmd.SetContext(context.Background())
+
+	if err := requestsCreateRevokeCmd.RunE(requestsCreateRevokeCmd, nil); err != nil {
+		t.Fatalf("RunE: %v", err)
+	}
+
+	if !gotIntrospect {
+		t.Error("expected the command to resolve self via /api/v1/auth/introspect")
+	}
+	if got := gotRevokeBody["identityUserId"]; got != selfUserID {
+		t.Errorf("server received identityUserId = %v, want %q", got, selfUserID)
+	}
+}
+
+// TestRequestsCreateRevokeExplicitUserIDSkipsSelfResolution mirrors the grant
+// regression guard: an explicit --user-id must be sent as-is, without ever
+// calling introspect.
+func TestRequestsCreateRevokeExplicitUserIDSkipsSelfResolution(t *testing.T) {
+	const explicitUserID = "zz-c1i-test-explicit-user-id"
+
+	var gotIntrospect bool
+	var gotRevokeBody map[string]any
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/api/v1/auth/introspect":
+			gotIntrospect = true
+			_, _ = fmt.Fprint(w, `{"userId":"should-not-be-used"}`)
+		case r.Method == http.MethodPost && r.URL.Path == "/api/v1/task/revoke":
+			body, _ := io.ReadAll(r.Body)
+			if err := json.Unmarshal(body, &gotRevokeBody); err != nil {
+				t.Errorf("server: unmarshaling request body: %v", err)
+			}
+			_, _ = fmt.Fprint(w, `{"taskView":{"task":{"id":"task-1","state":"PENDING"}}}`)
+		default:
+			t.Errorf("unexpected request: %s %s", r.Method, r.URL.Path)
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer srv.Close()
+
+	resetRevokeCmdFlags(t)
+	stubNewRevokeClient(t, srv)
+	t.Setenv("C1I_URL", srv.URL)
+
+	origDryRun := viper.GetBool("dry_run")
+	viper.Set("dry_run", false)
+	t.Cleanup(func() { viper.Set("dry_run", origDryRun) })
+
+	_ = requestsCreateRevokeCmd.Flags().Set("app-id", "app1")
+	_ = requestsCreateRevokeCmd.Flags().Set("entitlement-id", "ent1")
+	_ = requestsCreateRevokeCmd.Flags().Set("user-id", explicitUserID)
+
+	var out bytes.Buffer
+	requestsCreateRevokeCmd.SetOut(&out)
+	requestsCreateRevokeCmd.SetContext(context.Background())
+
+	if err := requestsCreateRevokeCmd.RunE(requestsCreateRevokeCmd, nil); err != nil {
+		t.Fatalf("RunE: %v", err)
+	}
+
+	if gotIntrospect {
+		t.Error("expected introspect NOT to be called when --user-id is explicit")
+	}
+	if got := gotRevokeBody["identityUserId"]; got != explicitUserID {
+		t.Errorf("server received identityUserId = %v, want %q", got, explicitUserID)
+	}
+}
+
+// TestRequestsCreateRevokeDryRunPreviewsResolvedSelf mirrors
+// TestRequestsCreateGrantDryRunPreviewsResolvedSelf for the revoke twin.
+func TestRequestsCreateRevokeDryRunPreviewsResolvedSelf(t *testing.T) {
+	const selfUserID = "zz-c1i-test-self-user-id"
+
+	var gotIntrospect bool
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/api/v1/auth/introspect":
+			gotIntrospect = true
+			_, _ = fmt.Fprintf(w, `{"userId":%q}`, selfUserID)
+		case r.Method == http.MethodPost && r.URL.Path == "/api/v1/task/revoke":
+			t.Error("--dry-run must never send the real POST /api/v1/task/revoke")
+			w.WriteHeader(http.StatusInternalServerError)
+		default:
+			t.Errorf("unexpected request: %s %s", r.Method, r.URL.Path)
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer srv.Close()
+
+	resetRevokeCmdFlags(t)
+	stubNewRevokeClient(t, srv)
+	t.Setenv("C1I_URL", srv.URL)
+
+	origDryRun := viper.GetBool("dry_run")
+	viper.Set("dry_run", true)
+	t.Cleanup(func() { viper.Set("dry_run", origDryRun) })
+
+	_ = requestsCreateRevokeCmd.Flags().Set("app-id", "app1")
+	_ = requestsCreateRevokeCmd.Flags().Set("entitlement-id", "ent1")
+	// --user-id intentionally left unset.
+
+	var out bytes.Buffer
+	requestsCreateRevokeCmd.SetOut(&out)
+	requestsCreateRevokeCmd.SetContext(context.Background())
+
+	if err := requestsCreateRevokeCmd.RunE(requestsCreateRevokeCmd, nil); err != nil {
+		t.Fatalf("RunE: %v", err)
+	}
+
+	if !gotIntrospect {
+		t.Error("expected --dry-run to still resolve self via /api/v1/auth/introspect")
+	}
+	if !strings.Contains(out.String(), `"identityUserId": "`+selfUserID+`"`) {
+		t.Errorf("dry-run preview = %q, want it to contain identityUserId %q", out.String(), selfUserID)
+	}
+}
+
+// TestRequestsCreateRevokeDryRunExplicitUserIDSkipsSelfResolution mirrors
+// TestRequestsCreateGrantDryRunExplicitUserIDSkipsSelfResolution for revoke.
+func TestRequestsCreateRevokeDryRunExplicitUserIDSkipsSelfResolution(t *testing.T) {
+	const explicitUserID = "zz-c1i-test-explicit-user-id"
+
+	var gotIntrospect bool
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/api/v1/auth/introspect":
+			gotIntrospect = true
+			_, _ = fmt.Fprint(w, `{"userId":"should-not-be-used"}`)
+		case r.Method == http.MethodPost && r.URL.Path == "/api/v1/task/revoke":
+			t.Error("--dry-run must never send the real POST /api/v1/task/revoke")
+			w.WriteHeader(http.StatusInternalServerError)
+		default:
+			t.Errorf("unexpected request: %s %s", r.Method, r.URL.Path)
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer srv.Close()
+
+	resetRevokeCmdFlags(t)
+	stubNewRevokeClient(t, srv)
+	t.Setenv("C1I_URL", srv.URL)
+
+	origDryRun := viper.GetBool("dry_run")
+	viper.Set("dry_run", true)
+	t.Cleanup(func() { viper.Set("dry_run", origDryRun) })
+
+	_ = requestsCreateRevokeCmd.Flags().Set("app-id", "app1")
+	_ = requestsCreateRevokeCmd.Flags().Set("entitlement-id", "ent1")
+	_ = requestsCreateRevokeCmd.Flags().Set("user-id", explicitUserID)
+
+	var out bytes.Buffer
+	requestsCreateRevokeCmd.SetOut(&out)
+	requestsCreateRevokeCmd.SetContext(context.Background())
+
+	if err := requestsCreateRevokeCmd.RunE(requestsCreateRevokeCmd, nil); err != nil {
+		t.Fatalf("RunE: %v", err)
+	}
+
+	if gotIntrospect {
+		t.Error("expected introspect NOT to be called under --dry-run when --user-id is explicit")
+	}
+	if !strings.Contains(out.String(), `"identityUserId": "`+explicitUserID+`"`) {
+		t.Errorf("dry-run preview = %q, want it to contain identityUserId %q", out.String(), explicitUserID)
+	}
+}
+
+// TestRequestsCreateRevokeDryRunUnauthenticatedFailsLegibly mirrors
+// TestRequestsCreateGrantDryRunUnauthenticatedFailsLegibly for revoke.
+func TestRequestsCreateRevokeDryRunUnauthenticatedFailsLegibly(t *testing.T) {
+	resetRevokeCmdFlags(t)
+
+	origNewRevokeClient := newRevokeClient
+	newRevokeClient = func(_ *cobra.Command, _ string) (*client.Client, error) {
+		return nil, &client.AuthError{Err: fmt.Errorf("no credentials found")}
+	}
+	t.Cleanup(func() { newRevokeClient = origNewRevokeClient })
+
+	t.Setenv("C1I_URL", "https://example.invalid")
+
+	origDryRun := viper.GetBool("dry_run")
+	viper.Set("dry_run", true)
+	t.Cleanup(func() { viper.Set("dry_run", origDryRun) })
+
+	_ = requestsCreateRevokeCmd.Flags().Set("app-id", "app1")
+	_ = requestsCreateRevokeCmd.Flags().Set("entitlement-id", "ent1")
+
+	var out bytes.Buffer
+	requestsCreateRevokeCmd.SetOut(&out)
+	requestsCreateRevokeCmd.SetContext(context.Background())
+
+	err := requestsCreateRevokeCmd.RunE(requestsCreateRevokeCmd, nil)
+	if err == nil {
+		t.Fatal("expected an error for an unauthenticated --dry-run")
+	}
+	if !strings.Contains(err.Error(), "authentication failed") {
+		t.Errorf("error = %q, want it to legibly name authentication as the problem", err.Error())
+	}
+	if got := exitCode(err); got != exitAuth {
+		t.Errorf("exitCode = %d, want exitAuth (%d)", got, exitAuth)
+	}
+}
+
+// TestRequestsCreateRevokeDryRunIntrospectServerFailureClassifies mirrors
+// TestRequestsCreateGrantDryRunIntrospectServerFailureClassifies for revoke.
+func TestRequestsCreateRevokeDryRunIntrospectServerFailureClassifies(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/api/v1/auth/introspect":
+			w.WriteHeader(http.StatusInternalServerError)
+			_, _ = fmt.Fprint(w, `{"code":13,"message":"internal error"}`)
+		case r.Method == http.MethodPost && r.URL.Path == "/api/v1/task/revoke":
+			t.Error("--dry-run must never send the real POST /api/v1/task/revoke")
+			w.WriteHeader(http.StatusInternalServerError)
+		default:
+			t.Errorf("unexpected request: %s %s", r.Method, r.URL.Path)
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer srv.Close()
+
+	resetRevokeCmdFlags(t)
+	origNewRevokeClient := newRevokeClient
+	newRevokeClient = func(_ *cobra.Command, _ string) (*client.Client, error) {
+		return client.NewForTesting(srv.URL, srv.Client(), client.WithMaxRetries(0)), nil
+	}
+	t.Cleanup(func() { newRevokeClient = origNewRevokeClient })
+	t.Setenv("C1I_URL", srv.URL)
+
+	origDryRun := viper.GetBool("dry_run")
+	viper.Set("dry_run", true)
+	t.Cleanup(func() { viper.Set("dry_run", origDryRun) })
+
+	_ = requestsCreateRevokeCmd.Flags().Set("app-id", "app1")
+	_ = requestsCreateRevokeCmd.Flags().Set("entitlement-id", "ent1")
+
+	var out bytes.Buffer
+	requestsCreateRevokeCmd.SetOut(&out)
+	requestsCreateRevokeCmd.SetContext(context.Background())
+
+	err := requestsCreateRevokeCmd.RunE(requestsCreateRevokeCmd, nil)
+	if err == nil {
+		t.Fatal("expected an error when introspect returns 500")
+	}
+	if !strings.Contains(err.Error(), "failed to get current user") {
+		t.Errorf("error = %q, want it to name self-resolution as the failing step", err.Error())
+	}
+	if got := exitCode(err); got != exitServer {
+		t.Errorf("exitCode = %d, want exitServer (%d); err=%v", got, exitServer, err)
+	}
+}
+
+// TestRequestsCreateRevokeDryRunIntrospectNetworkFailureExitsGenerically
+// mirrors TestRequestsCreateGrantDryRunIntrospectNetworkFailureExitsGenerically
+// for revoke.
+func TestRequestsCreateRevokeDryRunIntrospectNetworkFailureExitsGenerically(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
+	deadURL := srv.URL
+	srv.Close()
+
+	resetRevokeCmdFlags(t)
+	origNewRevokeClient := newRevokeClient
+	newRevokeClient = func(_ *cobra.Command, _ string) (*client.Client, error) {
+		return client.NewForTesting(deadURL, http.DefaultClient), nil
+	}
+	t.Cleanup(func() { newRevokeClient = origNewRevokeClient })
+	t.Setenv("C1I_URL", deadURL)
+
+	origDryRun := viper.GetBool("dry_run")
+	viper.Set("dry_run", true)
+	t.Cleanup(func() { viper.Set("dry_run", origDryRun) })
+
+	_ = requestsCreateRevokeCmd.Flags().Set("app-id", "app1")
+	_ = requestsCreateRevokeCmd.Flags().Set("entitlement-id", "ent1")
+
+	var out bytes.Buffer
+	requestsCreateRevokeCmd.SetOut(&out)
+	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	defer cancel()
+	requestsCreateRevokeCmd.SetContext(ctx)
+
+	done := make(chan error, 1)
+	go func() { done <- requestsCreateRevokeCmd.RunE(requestsCreateRevokeCmd, nil) }()
+
+	select {
+	case err := <-done:
+		if err == nil {
+			t.Fatal("expected an error when introspect is unreachable")
+		}
+		if got := exitCode(err); got != exitError {
+			t.Errorf("exitCode = %d, want exitError (%d) for a failure with no HTTP status at all; err=%v", got, exitError, err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("RunE did not return within 5s -- an unreachable introspect host under --dry-run must not hang")
 	}
 }

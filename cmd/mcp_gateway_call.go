@@ -42,7 +42,7 @@ Find tool names and their input schemas with "c1i mcp gateway list-tools --full"
 		}
 		result, err := gc.CallTool(cmd.Context(), args[0], raw)
 		if err != nil {
-			return fmt.Errorf("tools/call failed: %w", err)
+			return fmt.Errorf("tools/call failed: %w", classifyGatewayError(err))
 		}
 		return renderCallResult(cmd, args[0], result)
 	},
