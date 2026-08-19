@@ -39,12 +39,17 @@ func TestGrantRow(t *testing.T) {
 		"app_user_type":            "APP_USER_TYPE_USER",
 		"created_at":               "2026-01-02T03:04:05Z",
 		"deprovision_at":           "2026-06-01T00:00:00Z",
-		"grant_source_count":       "2",
 	}
 	for k, v := range want {
 		if row[k] != v {
-			t.Errorf("row[%q] = %q, want %q", k, row[k], v)
+			t.Errorf("row[%q] = %v, want %q", k, row[k], v)
 		}
+	}
+	// grant_source_count must be a real JSON number, not the string "2" —
+	// otherwise a `jq '.grant_source_count > 0'` pipeline does a string
+	// comparison instead of a numeric one.
+	if row["grant_source_count"] != 2 {
+		t.Errorf("grant_source_count = %v (%T), want int 2", row["grant_source_count"], row["grant_source_count"])
 	}
 }
 
@@ -61,7 +66,7 @@ func TestGrantRowAppIDFallback(t *testing.T) {
 	if row["app_id"] != "appB" {
 		t.Errorf("app_id = %q, want appB (fallback to account appId)", row["app_id"])
 	}
-	if row["grant_source_count"] != "0" {
-		t.Errorf("grant_source_count = %q, want 0 for a direct grant", row["grant_source_count"])
+	if row["grant_source_count"] != 0 {
+		t.Errorf("grant_source_count = %v (%T), want int 0 for a direct grant", row["grant_source_count"], row["grant_source_count"])
 	}
 }

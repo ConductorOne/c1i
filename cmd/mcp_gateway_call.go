@@ -63,29 +63,69 @@ func renderCallResult(cmd *cobra.Command, toolName string, result json.RawMessag
 	if err := writeRawObject(cmd, result); err != nil {
 		return err
 	}
-	if toolResultIsError(result) {
+	switch classifyIsError(result) {
+	case isErrorTrue:
 		return &toolExecutionError{fmt.Errorf("tool %q reported an error (isError: true); see the result printed above for details", toolName)}
+	case isErrorMalformed:
+		return &toolExecutionError{fmt.Errorf("tool %q returned a non-boolean isError value; MCP defines isError as a boolean, so this is a non-conformant server response — treating it as an error; see the result printed above for details", toolName)}
 	}
 	return nil
 }
 
-// toolResultIsError reports whether an MCP tools/call result carries
-// isError:true, per the MCP spec's CallToolResult ("isError?: boolean" —
-// https://modelcontextprotocol.io/specification/2025-06-18/server/tools):
-// absent or false means the tool call succeeded; only an explicit true means
-// the tool itself failed (the JSON-RPC call and any transport underneath it
-// still succeeded — that's a separate error class, see toolExecutionError). A
-// result that isn't a JSON object, or has no isError key, is treated as not
-// an error rather than failing closed, matching decodeMessage's tolerance for
-// unexpected shapes elsewhere in this package.
-func toolResultIsError(result json.RawMessage) bool {
+// isErrorVerdict is the result of inspecting an MCP tools/call result's
+// isError field.
+type isErrorVerdict int
+
+const (
+	isErrorOK        isErrorVerdict = iota // absent, null, or false: the tool call succeeded
+	isErrorTrue                            // isError: true: the tool itself reported a failure
+	isErrorMalformed                       // isError present but not a JSON boolean literal (non-conformant server)
+)
+
+// classifyIsError inspects an MCP tools/call result's isError field, per the
+// MCP spec's CallToolResult ("isError?: boolean" —
+// https://modelcontextprotocol.io/specification/2025-06-18/server/tools) —
+// and reports which of three outcomes applies:
+//
+//   - absent, null, or the literal false -> isErrorOK (success)
+//   - the literal true -> isErrorTrue (the tool itself failed; the JSON-RPC
+//     call and any transport underneath it still succeeded — that's a
+//     separate error class, see toolExecutionError)
+//   - present but not a JSON boolean literal at all (a string, number,
+//     object, or array) -> isErrorMalformed
+//
+// The isErrorMalformed case is a deliberate tradeoff, not an oversight: MCP
+// defines isError as a boolean, so any server sending a non-boolean value is
+// already non-conformant, and json.Unmarshal into a bool field fails on that
+// type mismatch. Rather than let that decode failure fail open (as it used
+// to — silently returning false, which reintroduced the exact "tool failure
+// read as success" bug exit code 7 exists to catch), any non-boolean value is
+// now treated as an error. This means a spec-violating falsy value like
+// isError: 0 is reported as an error too; that tradeoff was accepted
+// deliberately in favor of never failing open on a malformed server.
+//
+// A result that isn't a JSON object at all (or has no isError key at all —
+// which json.Unmarshal treats as a top-level decode success that simply
+// leaves probe.IsError untouched) is treated as isErrorOK rather than
+// failing closed, matching decodeMessage's tolerance for unexpected shapes
+// elsewhere in this package.
+func classifyIsError(result json.RawMessage) isErrorVerdict {
 	var probe struct {
-		IsError bool `json:"isError"`
+		IsError json.RawMessage `json:"isError"`
 	}
 	if err := json.Unmarshal(result, &probe); err != nil {
-		return false
+		// Not a JSON object at all (array, string, number, null, or invalid/
+		// empty JSON): treated as success, not failing closed.
+		return isErrorOK
 	}
-	return probe.IsError
+	switch strings.TrimSpace(string(probe.IsError)) {
+	case "", "null", "false":
+		return isErrorOK
+	case "true":
+		return isErrorTrue
+	default:
+		return isErrorMalformed
+	}
 }
 
 func init() {

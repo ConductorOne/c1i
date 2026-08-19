@@ -55,18 +55,25 @@ type Tool struct {
 // other API failure in this CLI does (cmd/errors.go's exitCode), without
 // losing the gateway-specific message (including the response body) that
 // Error() renders.
+//
+// Method and Path are always "POST" and the fixed gateway endpoint path — MCP
+// is a single-endpoint protocol, so those two fields alone can't tell a caller
+// which JSON-RPC call failed (initialize vs tools/list vs tools/call). RPCMethod
+// carries that JSON-RPC method name as additional context; it is not part of
+// client.APIError (see Unwrap) and does not change Method/Path's meaning.
 type HTTPError struct {
 	StatusCode int
 	Body       string
 	Method     string
 	Path       string
+	RPCMethod  string
 }
 
 func (e *HTTPError) Error() string {
 	if e.Body != "" {
-		return fmt.Sprintf("gateway returned %d: %s", e.StatusCode, e.Body)
+		return fmt.Sprintf("gateway %s request returned %d: %s", e.RPCMethod, e.StatusCode, e.Body)
 	}
-	return fmt.Sprintf("gateway returned %d", e.StatusCode)
+	return fmt.Sprintf("gateway %s request returned %d", e.RPCMethod, e.StatusCode)
 }
 
 // Unwrap exposes a *client.APIError carrying the same status/method/path/body
@@ -133,13 +140,37 @@ func (c *Client) Initialize(ctx context.Context) error {
 	return c.notify(ctx, "notifications/initialized")
 }
 
+// maxToolsListPages caps ListTools pagination as a backstop against a server
+// that keeps handing out distinct, always-advancing cursors indefinitely. The
+// per-cursor repeat guard in ListTools (below) already catches the more
+// common failure — the same cursor (or an already-seen one) coming back
+// forever — after just one extra page, but it can't catch a cursor that is
+// always new. 1000 is generous for any real tool catalog (C1's gateway
+// exposes a handful to a few hundred tools) while still bounding a runaway
+// server to a finite, human-diagnosable number of requests rather than an
+// unbounded hang. A var (not const) so tests can lower it to keep the
+// pathological-pagination test fast.
+var maxToolsListPages = 1000
+
 // ListTools returns the tools the gateway exposes to the caller, following
 // MCP cursor pagination (tools/list returns a nextCursor when more tools remain)
 // so the full set is returned even when it spans multiple pages.
+//
+// It guards against a misbehaving server that never terminates pagination:
+// a cursor that repeats (the same one twice, or one seen on an earlier page)
+// and an absolute page-count backstop (maxToolsListPages) both stop the loop
+// and return an error rather than either hanging forever or silently
+// returning a truncated list — the latter would reintroduce, in a different
+// shape, the exact silent-partial-success failure mode this client's SSE
+// handling was already hardened against (see extractSSEResponse).
 func (c *Client) ListTools(ctx context.Context) ([]Tool, error) {
 	var all []Tool
 	cursor := ""
-	for {
+	seen := map[string]bool{"": true} // "" is the initial (no-cursor) state
+	for page := 0; ; page++ {
+		if page >= maxToolsListPages {
+			return nil, fmt.Errorf("tools/list did not terminate after %d pages (cursor %q); the gateway appears to be paginating without end", maxToolsListPages, cursor)
+		}
 		params := map[string]any{}
 		if cursor != "" {
 			params["cursor"] = cursor
@@ -159,6 +190,10 @@ func (c *Client) ListTools(ctx context.Context) ([]Tool, error) {
 		if out.NextCursor == "" {
 			return all, nil
 		}
+		if seen[out.NextCursor] {
+			return nil, fmt.Errorf("tools/list returned a repeated cursor %q; the gateway is not making pagination progress", out.NextCursor)
+		}
+		seen[out.NextCursor] = true
 		cursor = out.NextCursor
 	}
 }
@@ -183,7 +218,7 @@ func (c *Client) call(ctx context.Context, method string, params any) (json.RawM
 	if err != nil {
 		return nil, err
 	}
-	respBody, sessionID, err := c.post(ctx, body, &id)
+	respBody, sessionID, err := c.post(ctx, method, body, &id)
 	if err != nil {
 		return nil, err
 	}
@@ -206,18 +241,22 @@ func (c *Client) notify(ctx context.Context, method string) error {
 	if err != nil {
 		return err
 	}
-	_, _, err = c.post(ctx, body, nil)
+	_, _, err = c.post(ctx, method, body, nil)
 	return err
 }
 
 // post sends one JSON-RPC payload to the gateway and returns the raw response
 // body plus any Mcp-Session-Id header. It sets the session header on requests
 // once known, and accepts both a JSON and an SSE response (per the streamable-
-// HTTP transport, the server may answer either way). wantID is the id of the
-// JSON-RPC request being sent (nil for a notification, which has none) — when
-// the response arrives as an SSE stream with several events, it is used to
-// pick out the event that answers this specific request.
-func (c *Client) post(ctx context.Context, payload []byte, wantID *int) (body []byte, sessionID string, err error) {
+// HTTP transport, the server may answer either way). rpcMethod is the JSON-RPC
+// method name being sent (e.g. "tools/list") — carried into HTTPError so a
+// non-2xx response can be attributed to the RPC that triggered it, since
+// Method/Path alone are always "POST" and the fixed gateway path. wantID is
+// the id of the JSON-RPC request being sent (nil for a notification, which
+// has none) — when the response arrives as an SSE stream with several
+// events, it is used to pick out the event that answers this specific
+// request.
+func (c *Client) post(ctx context.Context, rpcMethod string, payload []byte, wantID *int) (body []byte, sessionID string, err error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.endpoint, bytes.NewReader(payload))
 	if err != nil {
 		return nil, "", err
@@ -250,6 +289,7 @@ func (c *Client) post(ctx context.Context, payload []byte, wantID *int) (body []
 			Body:       strings.TrimSpace(string(data)),
 			Method:     req.Method,
 			Path:       req.URL.Path,
+			RPCMethod:  rpcMethod,
 		}
 	}
 
@@ -286,10 +326,26 @@ func decodeMessage(body []byte) (*rpcResponse, error) {
 //
 // It then picks the event that answers wantID, in order: (1) the event whose
 // JSON-RPC id matches wantID, if wantID is non-nil; (2) the event carrying a
-// `result` or `error` (a notification, which by definition carries no id, is
-// never a candidate here); (3) the last event in the stream, as a fallback for
-// a malformed/unrecognized stream. A scan error returns the raw body so a
-// decode failure surfaces visibly instead of silently picking the wrong bytes.
+// `result` or `error`. Tier 2 deliberately does NOT require the event's id to
+// parse as a non-null integer: a notification never carries `result`/`error`
+// (it carries `method`/`params` instead), and neither does a server-initiated
+// request, so the presence of `result`/`error` alone is already sufficient to
+// identify a response — gating it on a parseable id as well would wrongly
+// reject a response whose id is a string, or a response whose id is the JSON
+// literal null. The latter is not a hypothetical: JSON-RPC 2.0 requires a
+// null id specifically when the server could not determine the request's id
+// — "If there was an error in detecting the id in the Request object (e.g.
+// Parse error/Invalid Request), it MUST be Null." (jsonrpc.org/specification,
+// Response object). So a spec-compliant -32700/-32600 error response is
+// exactly the shape tier 2 must still select, not discard. If neither tier
+// finds a match — e.g. the stream contains only progress notifications and
+// never actually answers the request — the raw body is returned instead of
+// guessing, the same as the scanner-error path below, so the caller's
+// JSON-RPC decode fails visibly instead of a notification silently being
+// mistaken for the response (which would make decodeMessage return a
+// zero-value {Result:nil, Error:nil} message — i.e. the CLI treating "the
+// server never answered" as a successful empty response). A scan error also
+// returns the raw body, for the same reason.
 //
 // This handles the full input space the streamable-HTTP transport permits
 // (multi-event streams, multi-line data fields, non-matching ids in-flight) —
@@ -360,20 +416,26 @@ func extractSSEResponse(body []byte, wantID *int) []byte {
 		}
 	}
 
-	var last []byte
 	for _, e := range events {
-		if _, ok := idOf(e); ok {
-			var probe struct {
-				Result json.RawMessage `json:"result"`
-				Error  json.RawMessage `json:"error"`
-			}
-			if json.Unmarshal(e, &probe) == nil && (len(probe.Result) > 0 || len(probe.Error) > 0) {
-				return e // the JSON-RPC response event
-			}
+		// No idOf gate here, deliberately: a string id or a spec-mandated
+		// `id: null` (see the doc comment above) must still be selectable as
+		// a response as long as it carries result/error. A notification and
+		// a server-initiated request never carry either field, so this check
+		// alone already excludes them without needing to inspect id at all.
+		var probe struct {
+			Result json.RawMessage `json:"result"`
+			Error  json.RawMessage `json:"error"`
 		}
-		last = e
+		if json.Unmarshal(e, &probe) == nil && (len(probe.Result) > 0 || len(probe.Error) > 0) {
+			return e // the JSON-RPC response event
+		}
 	}
-	return last
+	// No event matched wantID and none carried result/error: this stream
+	// never answers the request (e.g. notifications only). Returning the raw
+	// body — rather than the last event, whatever it happens to be — makes
+	// the caller's JSON-RPC decode fail visibly instead of silently reading
+	// as success.
+	return body
 }
 
 func truncate(b []byte, n int) string {

@@ -221,6 +221,83 @@ func TestGatewayCallIsErrorExitCode(t *testing.T) {
 		}
 	})
 
+	t.Run("isError null -> exit 0, output unchanged", func(t *testing.T) {
+		resultBody := `{"jsonrpc":"2.0","id":2,"result":{"isError":null,"content":[{"type":"text","text":"ok"}]}}`
+		stdout, err := runCall(t, resultBody)
+		if err != nil {
+			t.Fatalf("expected no error when isError is null (treated as absent), got %v", err)
+		}
+		if got := exitCode(err); got != exitOK {
+			t.Errorf("exitCode = %d, want exitOK", got)
+		}
+		if !strings.Contains(stdout, "ok") {
+			t.Errorf("stdout = %q, want the full result printed unchanged", stdout)
+		}
+	})
+
+	t.Run("non-object result -> exit 0, output unchanged", func(t *testing.T) {
+		// A result that isn't a JSON object at all (no isError key could even
+		// exist) must not fail closed.
+		resultBody := `{"jsonrpc":"2.0","id":2,"result":[]}`
+		stdout, err := runCall(t, resultBody)
+		if err != nil {
+			t.Fatalf("expected no error for a non-object result, got %v", err)
+		}
+		if got := exitCode(err); got != exitOK {
+			t.Errorf("exitCode = %d, want exitOK", got)
+		}
+		if strings.TrimSpace(stdout) != "[]" {
+			t.Errorf("stdout = %q, want the raw result %q printed unchanged", stdout, "[]")
+		}
+	})
+
+	// Regression coverage for the "toolResultIsError fails open on a
+	// non-boolean isError" bug: a server sending isError as a JSON value
+	// other than a literal boolean (string, number, object, array) used to
+	// make json.Unmarshal fail with a type-mismatch error, which the old
+	// implementation swallowed and reported as false (success) — silently
+	// treating a genuine tool failure as exit 0. Each of these must now map
+	// to exit 7, with the full result still printed to stdout first.
+	nonBooleanIsError := []struct {
+		name       string
+		resultBody string
+	}{
+		{"isError string \"true\"", `{"jsonrpc":"2.0","id":2,"result":{"isError":"true","content":[{"type":"text","text":"boom"}]}}`},
+		{"isError number 1", `{"jsonrpc":"2.0","id":2,"result":{"isError":1,"content":[{"type":"text","text":"boom"}]}}`},
+		{"isError object", `{"jsonrpc":"2.0","id":2,"result":{"isError":{},"content":[{"type":"text","text":"boom"}]}}`},
+		{"isError array", `{"jsonrpc":"2.0","id":2,"result":{"isError":[],"content":[{"type":"text","text":"boom"}]}}`},
+	}
+	for _, tc := range nonBooleanIsError {
+		t.Run(tc.name+" -> exit 7 (non-conformant server treated as error, not fail-open)", func(t *testing.T) {
+			stdout, err := runCall(t, tc.resultBody)
+			if err == nil {
+				t.Fatalf("expected an error for non-boolean isError (%s)", tc.name)
+			}
+			if got := exitCode(err); got != exitToolError {
+				t.Errorf("exitCode = %d, want exitToolError(%d); err=%v", got, exitToolError, err)
+			}
+			var toolErr *toolExecutionError
+			if !errors.As(err, &toolErr) {
+				t.Errorf("error type = %T, want *toolExecutionError", err)
+			}
+			// The diagnostic must distinguish this from isError:true so a
+			// user can tell a real tool failure from a malformed server
+			// response, even though the exit code (7) is the same.
+			if strings.Contains(err.Error(), "isError: true") {
+				t.Errorf("error message = %q, want it to NOT read like a literal isError:true failure (must distinguish malformed from true)", err.Error())
+			}
+			if !strings.Contains(err.Error(), "non-boolean") {
+				t.Errorf("error message = %q, want it to call out the non-boolean isError value", err.Error())
+			}
+			// The full result must still be printed first, unaffected by the
+			// exit-code classification — the print-then-classify ordering
+			// contract holds for this case too, not just isError:true.
+			if !strings.Contains(stdout, "boom") {
+				t.Errorf("stdout = %q, want the full result (content text) printed before the error is returned", stdout)
+			}
+		})
+	}
+
 	t.Run("JSON-RPC error response does not map to exit 7", func(t *testing.T) {
 		resultBody := `{"jsonrpc":"2.0","id":2,"error":{"code":-32602,"message":"unknown tool"}}`
 		_, err := runCall(t, resultBody)

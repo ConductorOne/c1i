@@ -3,7 +3,6 @@ package cmd
 import (
 	"encoding/json"
 	"fmt"
-	"strconv"
 
 	"github.com/spf13/cobra"
 )
@@ -41,7 +40,7 @@ type grantListItem struct {
 }
 
 // grantRow flattens a grant into the NDJSON output row.
-func grantRow(item grantListItem) map[string]string {
+func grantRow(item grantListItem) map[string]any {
 	b := item.AppEntitlementUserBinding
 	e := item.Entitlement.AppEntitlement
 	au := b.AppUser.AppUser
@@ -51,7 +50,7 @@ func grantRow(item grantListItem) map[string]string {
 	if appID == "" {
 		appID = au.AppID
 	}
-	return map[string]string{
+	return map[string]any{
 		"app_id":                   appID,
 		"entitlement_id":           e.ID,
 		"entitlement_display_name": e.DisplayName,
@@ -65,7 +64,7 @@ func grantRow(item grantListItem) map[string]string {
 		"created_at":               b.CreatedAt,
 		"deprovision_at":           b.DeprovisionAt,
 		// 0 = direct grant; >0 = inherited through that many groups/roles.
-		"grant_source_count": strconv.Itoa(len(b.GrantSources)),
+		"grant_source_count": len(b.GrantSources),
 	}
 }
 
