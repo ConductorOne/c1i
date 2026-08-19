@@ -28,12 +28,13 @@ var (
 	// the first character that isn't part of a flag name, so trailing
 	// punctuation ("'s", ",", ".") is never mistaken for part of it.
 	flagShapedTokenRe = regexp.MustCompile(`--[A-Za-z][A-Za-z0-9-]*`)
-	// shorthandTokenRe matches a "-x" shorthand token in free prose: a
-	// single dash, one letter, then a non-word character or end of line.
-	// The look-behind-by-hand ("^|\s") keeps it from firing inside a
-	// hyphenated word like "well-known" or on the second dash of a
-	// "--long-flag".
-	shorthandTokenRe = regexp.MustCompile(`(?:^|\s)-([A-Za-z])(?:[^A-Za-z0-9-]|$)`)
+	// shorthandTokenRe matches a whole "-x" prose token: one dash, one
+	// letter, then anything that can't continue a flag name. Applied per
+	// whitespace-separated field, so adjacent tokens ("-q -z") are all
+	// reported; a single regex over the line would consume the space
+	// delimiting them and miss every one after the first. Never matches
+	// "--long-flag" or a hyphenated word like "well-known".
+	shorthandTokenRe = regexp.MustCompile(`^-([A-Za-z])(?:[^A-Za-z0-9-].*)?$`)
 )
 
 // extractGuideInvocations returns every "c1i ..." invocation in guide, in
@@ -141,7 +142,12 @@ func checkUnclaimedMentions(t *testing.T, name, guide string) {
 
 		afterMention := guide[start+len("c1i") : start+lineEnd]
 		longFlags := flagShapedTokenRe.FindAllString(afterMention, -1)
-		shortFlags := shorthandTokenRe.FindAllStringSubmatch(afterMention, -1)
+		var shortFlags []string
+		for _, f := range strings.Fields(afterMention) {
+			if sm := shorthandTokenRe.FindStringSubmatch(f); sm != nil {
+				shortFlags = append(shortFlags, sm[1])
+			}
+		}
 		if len(longFlags) == 0 && len(shortFlags) == 0 {
 			continue // no flag-shaped token following on this line
 		}
@@ -158,8 +164,7 @@ func checkUnclaimedMentions(t *testing.T, name, guide string) {
 				t.Errorf("guide %q: %q names %s, which is not a registered flag on %q (own or inherited)", name, trimmedLine, tok, leaf.CommandPath())
 			}
 		}
-		for _, sm := range shortFlags {
-			letter := sm[1]
+		for _, letter := range shortFlags {
 			if leaf.Flags().ShorthandLookup(letter) == nil {
 				t.Errorf("guide %q: %q names -%s, which is not a registered shorthand flag on %q (own or inherited)", name, trimmedLine, letter, leaf.CommandPath())
 			}
