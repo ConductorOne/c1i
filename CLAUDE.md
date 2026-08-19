@@ -46,7 +46,9 @@ never fails proves nothing.
   non-obvious thing and stop — a why, a constraint, or a gotcha the code can't
   express. Don't restate the code, recap how a bug was found, or narrate review
   history. Long comments drift and nobody updates them, so brevity is a
-  maintenance property, not a style preference. Applies to comments you touch;
+  maintenance property, not a style preference. This repo is also public, so a
+  comment is published text — brevity limits both noise and the chance of
+  leaking an internal tenant/hostname/ticket id. Applies to comments you touch;
   don't go reformatting untouched ones.
 
 ### Global flags (persistent, on `rootCmd`)
@@ -87,6 +89,15 @@ never fails proves nothing.
   (`mcp servers get <connector-id> --app-id`, `mcp tools get <tool-id> --app-id
   --connector-id`, `tasks approve <task-id>`). Keep README.md and `cmd/skill.md`
   in lockstep when this changes.
+- **`Args` is optional, but if set it must match `Use` (enforced convention):**
+  a runnable command need not declare `Args` — `attachSubcommandGuards`
+  (`cmd/errors.go`) stamps `cobra.NoArgs` on any that leave it nil, so a stray
+  positional is rejected with exit 2. Don't hand-add `Args: cobra.NoArgs` to a
+  zero-positional command; the guard already covers it, and removing the guard
+  would silently reopen the gap. If a command *does* take a positional,
+  `Use` must document it (`<id>` / `[<id>]`) and `Args` must match that shape —
+  `TestArgsUseConsistencyAcrossTree` (`cmd/args_positional_test.go`) checks
+  every command in the tree both ways, so a mismatch fails CI.
 - **API client:** build it with `newClient(cmd, baseURL)` (cmd/client.go), not
   `client.New` directly — the helper threads the global flags (retries, etc.).
 - **Paths:** interpolate IDs into request paths with `client.Path("…/%s", id)`,
