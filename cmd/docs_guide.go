@@ -101,7 +101,7 @@ instead of approving it, pass --state disabled to "mcp tools approve".
     c1i mcp servers search --app-id "$APP_ID" --tool-state approved
 
 If the upstream MCP server later adds tools, re-run discovery without
-re-registering:
+re-registering — EXTERNAL servers only; HOSTED returns a 400:
 
     c1i mcp servers resync-tools "$CONNECTOR_ID" --app-id "$APP_ID"
 
@@ -164,6 +164,13 @@ delay.
     c1i users list --status enabled
 
 ## 5. Request the entitlement for every user
+
+The app must already be configured for self-service access requests (C1 web
+console: App > Access requests > standard audience) — c1i has no command for
+this. An unconfigured entitlement rejects every request below outright with
+403 "target user is not allowed to request that resource", before any task
+is filed; matching the entitlement's grantPolicyId to the app's default via
+"c1i api" does not fix it.
 
 For each user ID from step 4:
 
@@ -243,6 +250,10 @@ Confirm "$TOOL_NAME" appears, then invoke it. Arguments are a JSON object via
 
     c1i mcp gateway call "$TOOL_NAME" --args '{"key":"value"}'
 
+A tool result with isError: true exits 7; other gateway-call failures (an
+unknown tool name, an upstream connector error) exit 1 — only isError is
+distinguished.
+
 The gateway endpoint is derived from --url / C1I_URL by default (inserting
 "-mcp" into the host); if the gateway lives elsewhere, override it with
 --gateway-url, e.g. "c1i mcp gateway list-tools --gateway-url https://acme-mcp.example.com/v1".
@@ -315,11 +326,7 @@ don't rely on that path.
 
 Step 1 alone never grants or provisions anything — it only makes one
 entitlement visible and trackable through another. Step 2's
-provisionerPolicy.delegated update is the documented provisioning trigger,
-and per C1's own schema it's meant to depend on step 1 already being in
-place, even though this runbook only confirmed that step 1 succeeds, step 2
-succeeds, and the resulting field shape — not that skipping step 1 changes
-runtime provisioning behavior.
+provisionerPolicy.delegated update is the actual provisioning trigger.
 `
 
 // docsGuides maps a guide name to its embedded content. Keep names stable —
