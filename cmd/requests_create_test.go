@@ -10,6 +10,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/ConductorOne/c1i/internal/client"
 	"github.com/spf13/cobra"
@@ -375,6 +376,123 @@ func TestRequestsCreateGrantDryRunUnauthenticatedFailsLegibly(t *testing.T) {
 	}
 }
 
+// TestRequestsCreateGrantDryRunIntrospectServerFailureClassifies answers the
+// coordinator's question about the new failure surface --dry-run gained:
+// self-resolution now runs during a dry-run preview too, so introspect can
+// now fail *during a dry-run*, not just during a real call. A 500 from
+// introspect must classify the same way any other 5xx from this CLI does --
+// a *client.APIError surfacing through currentUserID's %w wrap, exit 6 -- not
+// a bare/confusing error, and must never let the (never-reached) real
+// mutating POST fire.
+func TestRequestsCreateGrantDryRunIntrospectServerFailureClassifies(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/api/v1/auth/introspect":
+			w.WriteHeader(http.StatusInternalServerError)
+			_, _ = fmt.Fprint(w, `{"code":13,"message":"internal error"}`)
+		case r.Method == http.MethodPost && r.URL.Path == "/api/v1/task/grant":
+			t.Error("--dry-run must never send the real POST /api/v1/task/grant")
+			w.WriteHeader(http.StatusInternalServerError)
+		default:
+			t.Errorf("unexpected request: %s %s", r.Method, r.URL.Path)
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer srv.Close()
+
+	resetGrantCmdFlags(t)
+	origNewGrantClient := newGrantClient
+	// WithMaxRetries(0): a 500 is otherwise retried (idempotent GET), which
+	// would make this legitimately slow (multi-second real backoff) for no
+	// benefit -- the classification this test pins doesn't depend on retry
+	// count.
+	newGrantClient = func(_ *cobra.Command, _ string) (*client.Client, error) {
+		return client.NewForTesting(srv.URL, srv.Client(), client.WithMaxRetries(0)), nil
+	}
+	t.Cleanup(func() { newGrantClient = origNewGrantClient })
+	t.Setenv("C1I_URL", srv.URL)
+
+	origDryRun := viper.GetBool("dry_run")
+	viper.Set("dry_run", true)
+	t.Cleanup(func() { viper.Set("dry_run", origDryRun) })
+
+	_ = requestsCreateGrantCmd.Flags().Set("app-id", "app1")
+	_ = requestsCreateGrantCmd.Flags().Set("entitlement-id", "ent1")
+	// --user-id intentionally left unset, so self-resolution runs.
+
+	var out bytes.Buffer
+	requestsCreateGrantCmd.SetOut(&out)
+	requestsCreateGrantCmd.SetContext(context.Background())
+
+	err := requestsCreateGrantCmd.RunE(requestsCreateGrantCmd, nil)
+	if err == nil {
+		t.Fatal("expected an error when introspect returns 500")
+	}
+	if !strings.Contains(err.Error(), "failed to get current user") {
+		t.Errorf("error = %q, want it to name self-resolution as the failing step", err.Error())
+	}
+	if got := exitCode(err); got != exitServer {
+		t.Errorf("exitCode = %d, want exitServer (%d); err=%v", got, exitServer, err)
+	}
+}
+
+// TestRequestsCreateGrantDryRunIntrospectNetworkFailureExitsGenerically
+// covers the other half of the coordinator's question: introspect not
+// returning at all (connection refused), as opposed to answering with a
+// status. This has no HTTP status to classify by, so it must fall through to
+// the generic exit 1 -- not panic, not hang. A short context timeout keeps
+// this bounded without needing to fully exhaust the client's real retry
+// backoff (500ms+ per attempt).
+func TestRequestsCreateGrantDryRunIntrospectNetworkFailureExitsGenerically(t *testing.T) {
+	// A server that is opened then immediately closed hands back a real,
+	// already-assigned "http://127.0.0.1:PORT" that nothing is listening on
+	// -- connection refused, not a DNS failure, which is the more realistic
+	// shape of "the gateway/API host is briefly unreachable".
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
+	deadURL := srv.URL
+	srv.Close()
+
+	resetGrantCmdFlags(t)
+	origNewGrantClient := newGrantClient
+	newGrantClient = func(_ *cobra.Command, _ string) (*client.Client, error) {
+		return client.NewForTesting(deadURL, http.DefaultClient), nil
+	}
+	t.Cleanup(func() { newGrantClient = origNewGrantClient })
+	t.Setenv("C1I_URL", deadURL)
+
+	origDryRun := viper.GetBool("dry_run")
+	viper.Set("dry_run", true)
+	t.Cleanup(func() { viper.Set("dry_run", origDryRun) })
+
+	_ = requestsCreateGrantCmd.Flags().Set("app-id", "app1")
+	_ = requestsCreateGrantCmd.Flags().Set("entitlement-id", "ent1")
+
+	var out bytes.Buffer
+	requestsCreateGrantCmd.SetOut(&out)
+	// 50ms is comfortably under the client's minimum jittered backoff
+	// (250-500ms for the first retry), so ctx cancellation -- not the
+	// connection-refused error itself -- is what ends this quickly, proving
+	// the command doesn't hang through several real backoff sleeps.
+	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	defer cancel()
+	requestsCreateGrantCmd.SetContext(ctx)
+
+	done := make(chan error, 1)
+	go func() { done <- requestsCreateGrantCmd.RunE(requestsCreateGrantCmd, nil) }()
+
+	select {
+	case err := <-done:
+		if err == nil {
+			t.Fatal("expected an error when introspect is unreachable")
+		}
+		if got := exitCode(err); got != exitError {
+			t.Errorf("exitCode = %d, want exitError (%d) for a failure with no HTTP status at all; err=%v", got, exitError, err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("RunE did not return within 5s -- an unreachable introspect host under --dry-run must not hang")
+	}
+}
+
 // TestBuildRevokeTaskBodyNoWrapper pins the same flat-body contract for
 // POST /api/v1/task/revoke (CreateRevokeTaskRequest).
 func TestBuildRevokeTaskBodyNoWrapper(t *testing.T) {
@@ -687,5 +805,99 @@ func TestRequestsCreateRevokeDryRunUnauthenticatedFailsLegibly(t *testing.T) {
 	}
 	if got := exitCode(err); got != exitAuth {
 		t.Errorf("exitCode = %d, want exitAuth (%d)", got, exitAuth)
+	}
+}
+
+// TestRequestsCreateRevokeDryRunIntrospectServerFailureClassifies mirrors
+// TestRequestsCreateGrantDryRunIntrospectServerFailureClassifies for revoke.
+func TestRequestsCreateRevokeDryRunIntrospectServerFailureClassifies(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/api/v1/auth/introspect":
+			w.WriteHeader(http.StatusInternalServerError)
+			_, _ = fmt.Fprint(w, `{"code":13,"message":"internal error"}`)
+		case r.Method == http.MethodPost && r.URL.Path == "/api/v1/task/revoke":
+			t.Error("--dry-run must never send the real POST /api/v1/task/revoke")
+			w.WriteHeader(http.StatusInternalServerError)
+		default:
+			t.Errorf("unexpected request: %s %s", r.Method, r.URL.Path)
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer srv.Close()
+
+	resetRevokeCmdFlags(t)
+	origNewRevokeClient := newRevokeClient
+	newRevokeClient = func(_ *cobra.Command, _ string) (*client.Client, error) {
+		return client.NewForTesting(srv.URL, srv.Client(), client.WithMaxRetries(0)), nil
+	}
+	t.Cleanup(func() { newRevokeClient = origNewRevokeClient })
+	t.Setenv("C1I_URL", srv.URL)
+
+	origDryRun := viper.GetBool("dry_run")
+	viper.Set("dry_run", true)
+	t.Cleanup(func() { viper.Set("dry_run", origDryRun) })
+
+	_ = requestsCreateRevokeCmd.Flags().Set("app-id", "app1")
+	_ = requestsCreateRevokeCmd.Flags().Set("entitlement-id", "ent1")
+
+	var out bytes.Buffer
+	requestsCreateRevokeCmd.SetOut(&out)
+	requestsCreateRevokeCmd.SetContext(context.Background())
+
+	err := requestsCreateRevokeCmd.RunE(requestsCreateRevokeCmd, nil)
+	if err == nil {
+		t.Fatal("expected an error when introspect returns 500")
+	}
+	if !strings.Contains(err.Error(), "failed to get current user") {
+		t.Errorf("error = %q, want it to name self-resolution as the failing step", err.Error())
+	}
+	if got := exitCode(err); got != exitServer {
+		t.Errorf("exitCode = %d, want exitServer (%d); err=%v", got, exitServer, err)
+	}
+}
+
+// TestRequestsCreateRevokeDryRunIntrospectNetworkFailureExitsGenerically
+// mirrors TestRequestsCreateGrantDryRunIntrospectNetworkFailureExitsGenerically
+// for revoke.
+func TestRequestsCreateRevokeDryRunIntrospectNetworkFailureExitsGenerically(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
+	deadURL := srv.URL
+	srv.Close()
+
+	resetRevokeCmdFlags(t)
+	origNewRevokeClient := newRevokeClient
+	newRevokeClient = func(_ *cobra.Command, _ string) (*client.Client, error) {
+		return client.NewForTesting(deadURL, http.DefaultClient), nil
+	}
+	t.Cleanup(func() { newRevokeClient = origNewRevokeClient })
+	t.Setenv("C1I_URL", deadURL)
+
+	origDryRun := viper.GetBool("dry_run")
+	viper.Set("dry_run", true)
+	t.Cleanup(func() { viper.Set("dry_run", origDryRun) })
+
+	_ = requestsCreateRevokeCmd.Flags().Set("app-id", "app1")
+	_ = requestsCreateRevokeCmd.Flags().Set("entitlement-id", "ent1")
+
+	var out bytes.Buffer
+	requestsCreateRevokeCmd.SetOut(&out)
+	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	defer cancel()
+	requestsCreateRevokeCmd.SetContext(ctx)
+
+	done := make(chan error, 1)
+	go func() { done <- requestsCreateRevokeCmd.RunE(requestsCreateRevokeCmd, nil) }()
+
+	select {
+	case err := <-done:
+		if err == nil {
+			t.Fatal("expected an error when introspect is unreachable")
+		}
+		if got := exitCode(err); got != exitError {
+			t.Errorf("exitCode = %d, want exitError (%d) for a failure with no HTTP status at all; err=%v", got, exitError, err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("RunE did not return within 5s -- an unreachable introspect host under --dry-run must not hang")
 	}
 }
