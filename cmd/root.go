@@ -17,16 +17,16 @@ var rootCmd = &cobra.Command{
 	Short: "C1 (formerly ConductorOne) CLI",
 	Long: `c1i is a command-line interface for the C1 (formerly ConductorOne) API.
 
-If you are an AI agent or unfamiliar with the C1 API, start with the docs
-commands — they require NO authentication and let you explore every available endpoint:
+If you are an AI agent, run "c1i docs agents" first — it covers conventions
+this help text can't (output contracts, exit codes, when to prefer a
+first-class command over raw API calls). It requires NO authentication.
+
+For raw API exploration, also with no authentication required:
 
   c1i docs search "access reviews"     Search documentation by keyword
   c1i docs endpoints --filter task      List API endpoints matching a pattern
   c1i docs endpoint /api/v1/tasks/{id}  Show full request/response schema
-  c1i docs page product/admin/campaigns Fetch a documentation page
-
-Use these to discover endpoints, understand request/response shapes, and find the
-right API calls before making authenticated requests.`,
+  c1i docs page product/admin/campaigns Fetch a documentation page`,
 	SilenceUsage:  true,
 	SilenceErrors: true,
 	// Validate global flag values once, before any command runs.

@@ -8,6 +8,12 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **`docs agents [-o FILE]`** — print a short, agent-facing bootstrap doc (no
+  auth required, like the other `docs` subcommands): output contracts, exit
+  codes, pagination, and when to prefer a first-class command over `c1i api`.
+  Unlike `docs skill`, it does not enumerate commands — use the cobra command
+  tree or `docs skill` for that. Root and `docs` help now point agents at it
+  first, instead of framing the goal as finding "the right API calls."
 - **`api --allow-delete-body`** — explicit opt-in that lets `--method DELETE`
   carry a `--body`/`--body-file`. Some C1 endpoints are body-taking DELETEs
   (e.g. `.../remove-membership`, which needs `{"appUserId": "..."}` to say

@@ -7,9 +7,11 @@ var docsCmd = &cobra.Command{
 	Short: "Explore the C1 API and documentation (no auth required)",
 	Long: `Explore the C1 API reference and documentation — no credentials needed.
 
-AGENTS: Use these commands FIRST to discover API endpoints and understand their
-request/response schemas before making authenticated API calls.
+AGENTS: start with "docs agents" for the conventions --help can't tell you.
+Use the rest to explore endpoints and schemas when no first-class command
+covers what you need yet.
 
+  docs agents [-o FILE]          Short bootstrap doc: output contracts, exit codes, when to use "api"
   docs search <query>            Search documentation by keyword
   docs page <path>               Fetch a full documentation page
   docs endpoints [--filter <p>]  List all API endpoints (filterable)

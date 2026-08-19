@@ -251,6 +251,10 @@ C1 endpoints that require one. `--query key=value` and
 The `docs` commands require no C1 credentials — agents can use them to explore the API before authenticating.
 
 ```sh
+# Print the agent bootstrap doc: output contracts, exit codes, when to
+# prefer first-class commands over raw API calls (write to a file with --output)
+c1i docs agents [--output AGENTS.md]
+
 # Search documentation
 c1i docs search "access reviews"
 
