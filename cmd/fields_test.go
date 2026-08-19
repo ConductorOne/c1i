@@ -3,6 +3,7 @@ package cmd
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"reflect"
 	"testing"
 
@@ -235,6 +236,116 @@ func TestWriteObjectProjects(t *testing.T) {
 	}
 	if got := buf.String(); !bytes.Contains(buf.Bytes(), []byte(`"id": "1"`)) || bytes.Contains(buf.Bytes(), []byte(`"name"`)) {
 		t.Errorf("writeObject with --fields = %q, want only id", got)
+	}
+}
+
+// TestProjectValueDepthInsensitive covers the wrapper-key bug: single-object
+// reads pass the API response through as-is, wrapped under the endpoint's own
+// key (userView.user, function, app, ...), so an unqualified --fields id used
+// to match nothing and silently project to {}. A path that doesn't resolve
+// from the root now falls back to searching nested objects.
+func TestProjectValueDepthInsensitive(t *testing.T) {
+	cases := []struct {
+		name, in, spec, want string
+	}{
+		{
+			"unqualified name finds doubly-nested wrapper",
+			`{"userView":{"user":{"id":"1","displayName":"n"},"other":"x"}}`,
+			"id,displayName",
+			`{"userView":{"user":{"displayName":"n","id":"1"}}}`,
+		},
+		{
+			"unqualified name finds singly-nested wrapper",
+			`{"function":{"id":"1","publishedCommitId":"c1"}}`,
+			"id",
+			`{"function":{"id":"1"}}`,
+		},
+		{
+			"shorter dot-path than the real nesting still resolves",
+			`{"userView":{"user":{"id":"1"}}}`,
+			"user.id",
+			`{"userView":{"user":{"id":"1"}}}`,
+		},
+		{
+			"exact root match still wins over a deeper one",
+			`{"id":"top","wrap":{"id":"nested"}}`,
+			"id",
+			`{"id":"top"}`,
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := projectJSON(t, tc.in, tc.spec); got != tc.want {
+				t.Errorf("project(%s, %q) = %s, want %s", tc.in, tc.spec, got, tc.want)
+			}
+		})
+	}
+}
+
+// TestProjectValueDepthInsensitiveAmbiguityIsDeterministic covers the case
+// where the same leaf name exists under two different sibling wrappers at the
+// same depth: the lexicographically smallest full dotted path wins,
+// deterministically, mirroring how resolveKey breaks a casing tie.
+func TestProjectValueDepthInsensitiveAmbiguityIsDeterministic(t *testing.T) {
+	in := `{"b":{"id":"from-b"},"a":{"id":"from-a"}}`
+	want := `{"a":{"id":"from-a"}}`
+	for i := 0; i < 20; i++ { // map iteration order is random; run repeatedly
+		if got := projectJSON(t, in, "id"); got != want {
+			t.Fatalf("project(%s, %q) = %s, want %s (run %d)", in, "id", got, want, i)
+		}
+	}
+}
+
+// TestProjectValueDepthInsensitiveDoesNotDescendIntoArrays documents the
+// scoping decision: only nested objects are searched, not array elements.
+func TestProjectValueDepthInsensitiveDoesNotDescendIntoArrays(t *testing.T) {
+	in := `{"items":[{"id":"1"}]}`
+	if got, want := projectJSON(t, in, "id"), `{}`; got != want {
+		t.Errorf("project(%s, %q) = %s, want %s (arrays should not be searched)", in, "id", got, want)
+	}
+}
+
+// TestWriteObjectFailsLoudlyOnNoMatch is the backstop half of the fix: a
+// --fields spec that matches nothing anywhere in the response (a genuine typo,
+// or a field that truly doesn't exist) must not silently print "{}" with exit
+// 0 — it must return a *usageError (exit 2) instead.
+func TestWriteObjectFailsLoudlyOnNoMatch(t *testing.T) {
+	viper.Set("fields", "totally_bogus_field")
+	t.Cleanup(func() { viper.Set("fields", "") })
+
+	cmd := &cobra.Command{}
+	var buf bytes.Buffer
+	cmd.SetOut(&buf)
+
+	err := writeObject(cmd, []byte(`{"userView":{"user":{"id":"1","displayName":"n"}}}`))
+	if err == nil {
+		t.Fatalf("writeObject with a fully-unmatched --fields returned nil error; output: %s", buf.String())
+	}
+	var usageErr *usageError
+	if !errors.As(err, &usageErr) {
+		t.Fatalf("writeObject error = %v (%T), want a *usageError (exit code 2)", err, err)
+	}
+	if buf.Len() != 0 {
+		t.Errorf("writeObject wrote output %q despite returning an error; must not print anything on a no-match", buf.String())
+	}
+}
+
+// TestWriteObjectPartialMatchStillSucceeds ensures the no-match backstop only
+// fires when every requested field misses; a spec with one real field and one
+// typo still succeeds with just the real field.
+func TestWriteObjectPartialMatchStillSucceeds(t *testing.T) {
+	viper.Set("fields", "id,totally_bogus_field")
+	t.Cleanup(func() { viper.Set("fields", "") })
+
+	cmd := &cobra.Command{}
+	var buf bytes.Buffer
+	cmd.SetOut(&buf)
+
+	if err := writeObject(cmd, []byte(`{"function":{"id":"1","name":"n"}}`)); err != nil {
+		t.Fatalf("writeObject: %v", err)
+	}
+	if !bytes.Contains(buf.Bytes(), []byte(`"id": "1"`)) {
+		t.Errorf("writeObject partial match = %s, want id present", buf.Bytes())
 	}
 }
 

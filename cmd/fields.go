@@ -3,7 +3,9 @@ package cmd
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"io"
+	"sort"
 	"strings"
 	"unicode"
 
@@ -102,6 +104,17 @@ func projectDecoded(v any, paths [][]string) any {
 		for _, p := range paths {
 			if keys, val, ok := lookupPath(t, p); ok {
 				setPath(out, keys, val)
+				continue
+			}
+			// Single-object reads pass the API response through as-is, which
+			// wraps the resource under the endpoint's own top-level key
+			// (userView.user, function, app, ...). A path that doesn't resolve
+			// from the root falls back to a depth-insensitive search: try the
+			// same path starting from every nested object, so `--fields id`
+			// finds `userView.user.id` without the caller needing to know the
+			// wrapper key. See lookupPathAnyDepth for the ambiguity rule.
+			if keys, val, ok := lookupPathAnyDepth(t, p); ok {
+				setPath(out, keys, val)
 			}
 		}
 		return out
@@ -137,6 +150,73 @@ func lookupPath(m map[string]any, path []string) ([]string, any, bool) {
 			return nil, nil, false
 		}
 		cur = next
+	}
+	return nil, nil, false
+}
+
+// lookupPathAnyDepth searches m's descendant objects (not m itself — callers
+// only reach here after a root-anchored lookupPath(m, path) already failed)
+// for the first place path resolves, one nesting level at a time. This is the
+// depth-insensitive half of field matching: a single-object read wraps its
+// payload under the endpoint's own key (userView.user, function, app, ...),
+// so an unqualified `--fields id` (or a dot-path shorter than the real
+// nesting) would otherwise match nothing and silently project to {}.
+//
+// Shallower matches win: the search stops at the first level where at least
+// one match exists, without descending further, so `--fields id` prefers an
+// outer "id" over one buried deeper. Two matches at the *same* depth are a
+// genuine ambiguity (e.g. sibling objects that both have an "id"); it is
+// resolved the same way resolveKey resolves a casing tie — deterministically,
+// by taking the lexicographically smallest dotted path from the root — rather
+// than by map-iteration order (random) or by erroring (which would make the
+// depth-insensitive fallback unpredictable to rely on). This never overrides
+// an exact/root match: lookupPath is always tried first by the caller.
+// Arrays are not searched into; only nested objects are — the observed
+// wrapper shapes are all objects, and picking an array index to descend into
+// would be its own ambiguity.
+func lookupPathAnyDepth(m map[string]any, path []string) ([]string, any, bool) {
+	type node struct {
+		prefix []string
+		obj    map[string]any
+	}
+	type found struct {
+		full []string
+		val  any
+	}
+	prefixed := func(prefix []string, seg string) []string {
+		next := make([]string, len(prefix)+1)
+		copy(next, prefix)
+		next[len(prefix)] = seg
+		return next
+	}
+
+	var level []node
+	for k, v := range m {
+		if sub, ok := v.(map[string]any); ok {
+			level = append(level, node{[]string{k}, sub})
+		}
+	}
+	for len(level) > 0 {
+		var matches []found
+		var next []node
+		for _, n := range level {
+			if matched, val, ok := lookupPath(n.obj, path); ok {
+				full := append(append([]string{}, n.prefix...), matched...)
+				matches = append(matches, found{full, val})
+			}
+			for k, v := range n.obj {
+				if sub, ok := v.(map[string]any); ok {
+					next = append(next, node{prefixed(n.prefix, k), sub})
+				}
+			}
+		}
+		if len(matches) > 0 {
+			sort.Slice(matches, func(i, j int) bool {
+				return strings.Join(matches[i].full, ".") < strings.Join(matches[j].full, ".")
+			})
+			return matches[0].full, matches[0].val, true
+		}
+		level = next
 	}
 	return nil, nil, false
 }
@@ -228,9 +308,21 @@ func (e *emitter) Encode(v any) error {
 // writeObject pretty-prints a single JSON response to stdout, applying --fields
 // projection when set. Use it for read/get output. It falls back to raw
 // pretty-printing when projection is off or the bytes aren't valid JSON.
+//
+// A projection that matches none of the requested paths is a usage error, not
+// a successful empty result: depth-insensitive matching (see
+// lookupPathAnyDepth) closes the common case where a name just needed to be
+// found under the response's wrapper key, but a genuine typo (or a field that
+// truly doesn't exist anywhere in the response) must not be allowed to print
+// "{}" and exit 0 — that reads as "the resource has no such data" when what
+// actually happened is "the requested fields don't exist". Failing loudly here
+// is the backstop for whatever depth-insensitive matching doesn't catch.
 func writeObject(cmd *cobra.Command, data []byte) error {
 	if paths := fieldPaths(); len(paths) > 0 {
 		if projected, ok := projectBytes(data, paths); ok {
+			if projectionMatchedNothing(projected) {
+				return &usageError{fmt.Errorf("--fields %q matched no keys in the response", viper.GetString("fields"))}
+			}
 			if b, err := json.MarshalIndent(projected, "", "  "); err == nil {
 				_, _ = cmd.OutOrStdout().Write(append(b, '\n'))
 				return nil
@@ -238,6 +330,29 @@ func writeObject(cmd *cobra.Command, data []byte) error {
 		}
 	}
 	return writeRawObject(cmd, data)
+}
+
+// projectionMatchedNothing reports whether a projected value has nothing in
+// it: an empty object, or a non-empty array whose every element is itself
+// empty. An empty array is not a miss — the projection may be exactly right,
+// there's just no data — so it is left alone.
+func projectionMatchedNothing(v any) bool {
+	switch t := v.(type) {
+	case map[string]any:
+		return len(t) == 0
+	case []any:
+		if len(t) == 0 {
+			return false
+		}
+		for _, el := range t {
+			if !projectionMatchedNothing(el) {
+				return false
+			}
+		}
+		return true
+	default:
+		return false
+	}
 }
 
 // writeRawObject pretty-prints a single JSON response to stdout WITHOUT applying

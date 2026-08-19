@@ -102,7 +102,12 @@ Each also has an env-var form.
   safe). A big token saver on large lists. Applies to list output, `api`, and
   single-object `get` commands. Match the keys **as they appear in the output**
   (list rows are snake_case like `display_name`; raw `api`/`get` output uses the
-  API's camelCase). Mutation and auth confirmations are never trimmed.
+  API's camelCase) — an unqualified name also matches inside a `get`
+  response's wrapper key (`function`, `app`, `userView.user`, ...) without
+  spelling it out, so `--fields id` works the same on every `get` command. On a
+  single-object `get`, a `--fields` spec matching nothing at all is a usage
+  error (exit `2`), not a silent `{}`. Mutation and auth confirmations are
+  never trimmed.
 - **`--max-retries=N`** (`C1I_MAX_RETRIES`, default `4`; `0` disables) — transient
   failures are retried automatically with exponential backoff + jitter, honoring
   `Retry-After`. `429` is retried for any method; `500/502/503/504` and network
