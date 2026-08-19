@@ -57,7 +57,7 @@ func StartDeviceFlow(ctx context.Context, baseURL string) (*DeviceCode, error) {
 	if resp.StatusCode != http.StatusOK {
 		// Wrap as APIError so cmd/errors.go maps the status to the exit-code
 		// taxonomy (auth/rate-limited/server) instead of collapsing to exit 1.
-		return nil, fmt.Errorf("device authorization failed: %w", &client.APIError{Method: http.MethodPost, Path: deviceURL, StatusCode: resp.StatusCode, Body: string(body)})
+		return nil, fmt.Errorf("device authorization failed: %w", &client.APIError{Method: http.MethodPost, Path: req.URL.Path, StatusCode: resp.StatusCode, Body: string(body)})
 	}
 
 	var code DeviceCode
@@ -120,12 +120,36 @@ func PollForToken(ctx context.Context, baseURL string, code *DeviceCode) (*Crede
 		}
 
 		if resp.StatusCode != http.StatusOK {
+			apiErr := func() error {
+				return fmt.Errorf("token request failed: %w", &client.APIError{
+					Method: http.MethodPost, Path: req.URL.Path, StatusCode: resp.StatusCode, Body: string(body),
+				})
+			}
+
 			var errResp struct {
 				Error       string `json:"error"`
 				Description string `json:"error_description"`
 			}
-			if err := json.Unmarshal(body, &errResp); err != nil {
-				return nil, fmt.Errorf("token request failed: %w", &client.APIError{Method: http.MethodPost, Path: tokenURL, StatusCode: resp.StatusCode, Body: string(body)})
+			// Only a body carrying a non-empty "error" is an OAuth error
+			// response (RFC 6749 §5.2). A failure whose JSON merely happens to
+			// unmarshal cleanly into this struct — e.g. a 5xx returning
+			// {"message":"..."} — leaves Error empty and must NOT be read as
+			// one, or a server failure would classify as an auth failure
+			// (exit 3) instead of exit 6.
+			if err := json.Unmarshal(body, &errResp); err != nil || errResp.Error == "" {
+				return nil, apiErr()
+			}
+
+			// A 5xx is a server failure whatever its body says, so it stays on
+			// the transport taxonomy (exit 6). This is checked BEFORE the
+			// pending/slow_down cases deliberately: those two mean "keep
+			// polling", and RFC 8628 has the server return them with HTTP 400,
+			// so a 5xx carrying one is a malfunctioning server rather than a
+			// grant still in progress. Letting it reach the switch would keep
+			// polling through a real outage and then report the far less useful
+			// "device code expired" at exit 1.
+			if resp.StatusCode >= http.StatusInternalServerError {
+				return nil, apiErr()
 			}
 
 			switch errResp.Error {
@@ -134,12 +158,17 @@ func PollForToken(ctx context.Context, baseURL string, code *DeviceCode) (*Crede
 			case "slow_down":
 				interval += 5
 				continue
-			default:
-				// A returned OAuth error (e.g. access_denied, expired_token) means
-				// the caller is not authenticated — classify as an auth failure
-				// (exit 3), not a generic error.
-				return nil, &client.AuthError{Err: fmt.Errorf("authorization failed: %s", errResp.Description)}
 			}
+
+			// A genuine OAuth error (e.g. access_denied, expired_token) means
+			// the caller is not authenticated — classify as an auth failure
+			// (exit 3), not a generic error. Fall back to the error code when
+			// the server omits a human-readable description.
+			detail := errResp.Description
+			if detail == "" {
+				detail = errResp.Error
+			}
+			return nil, &client.AuthError{Err: fmt.Errorf("authorization failed: %s", detail)}
 		}
 
 		var tokenResp struct {
@@ -179,7 +208,7 @@ func createPersonalClient(ctx context.Context, baseURL, accessToken string) (*Cr
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("failed to create personal client: %w", &client.APIError{Method: http.MethodPost, Path: pccURL, StatusCode: resp.StatusCode, Body: string(body)})
+		return nil, fmt.Errorf("failed to create personal client: %w", &client.APIError{Method: http.MethodPost, Path: req.URL.Path, StatusCode: resp.StatusCode, Body: string(body)})
 	}
 
 	var clientResp struct {
