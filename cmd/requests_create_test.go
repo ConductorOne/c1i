@@ -1,8 +1,18 @@
 package cmd
 
 import (
+	"bytes"
+	"context"
 	"encoding/json"
+	"fmt"
+	"io"
+	"net/http"
+	"net/http/httptest"
 	"testing"
+
+	"github.com/ConductorOne/c1i/internal/client"
+	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 )
 
 // TestBuildGrantTaskBodyNoWrapper pins the fix for the 400 "unknown field
@@ -62,6 +72,156 @@ func TestBuildGrantTaskBodyOmitsEmpty(t *testing.T) {
 	}
 	if body["appId"] != "app1" || body["appEntitlementId"] != "ent1" {
 		t.Errorf("unexpected body: %v", body)
+	}
+}
+
+// resetGrantCmdFlags restores requestsCreateGrantCmd's own flags to their
+// zero values, so tests sharing the package-level singleton can't leak flag
+// state into each other or into other test files (mirrors api_test.go's
+// resetAPICmdFlags).
+func resetGrantCmdFlags(t *testing.T) {
+	t.Helper()
+	reset := func() {
+		_ = requestsCreateGrantCmd.Flags().Set("app-id", "")
+		_ = requestsCreateGrantCmd.Flags().Set("entitlement-id", "")
+		_ = requestsCreateGrantCmd.Flags().Set("user-id", "")
+		_ = requestsCreateGrantCmd.Flags().Set("duration", "")
+		_ = requestsCreateGrantCmd.Flags().Set("description", "")
+		_ = requestsCreateGrantCmd.Flags().Set("emergency", "false")
+	}
+	reset()
+	t.Cleanup(reset)
+}
+
+// stubNewGrantClient swaps newGrantClient to return a *client.Client wired
+// (via client.NewForTesting) to a real httptest.Server, bypassing newClient's
+// OAuth mint, restoring the original when the test ends.
+func stubNewGrantClient(t *testing.T, srv *httptest.Server) {
+	t.Helper()
+	orig := newGrantClient
+	newGrantClient = func(_ *cobra.Command, _ string) (*client.Client, error) {
+		return client.NewForTesting(srv.URL, srv.Client()), nil
+	}
+	t.Cleanup(func() { newGrantClient = orig })
+}
+
+// TestRequestsCreateGrantDefaultsUserIDToSelf pins the fix for --user-id's
+// help text ("defaults to self if omitted") not actually having a default:
+// omitting it used to send no identityUserId at all, which the API rejects
+// with a 500 "user_id is required". It now resolves the caller's own id via
+// the same introspect-based currentUserID lookup requests_list.go's default
+// requester scope and tasks_list.go's --assigned-to-me already use.
+//
+// It drives requestsCreateGrantCmd.RunE directly (not through rootCmd/cobra's
+// full parse-and-execute path — GetBaseURL/dryRunActive read viper directly,
+// so this doesn't need it) against a real httptest.Server standing in for
+// both /api/v1/auth/introspect and /api/v1/task/grant, and asserts the server
+// actually received the resolved id in the POST body — not just that the
+// command returned no error.
+func TestRequestsCreateGrantDefaultsUserIDToSelf(t *testing.T) {
+	const selfUserID = "zz-c1i-test-self-user-id"
+
+	var gotIntrospect bool
+	var gotGrantBody map[string]any
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/api/v1/auth/introspect":
+			gotIntrospect = true
+			_, _ = fmt.Fprintf(w, `{"userId":%q}`, selfUserID)
+		case r.Method == http.MethodPost && r.URL.Path == "/api/v1/task/grant":
+			body, _ := io.ReadAll(r.Body)
+			if err := json.Unmarshal(body, &gotGrantBody); err != nil {
+				t.Errorf("server: unmarshaling request body: %v", err)
+			}
+			_, _ = fmt.Fprint(w, `{"taskView":{"task":{"id":"task-1","state":"PENDING"}}}`)
+		default:
+			t.Errorf("unexpected request: %s %s", r.Method, r.URL.Path)
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer srv.Close()
+
+	resetGrantCmdFlags(t)
+	stubNewGrantClient(t, srv)
+	t.Setenv("C1I_URL", srv.URL)
+
+	origDryRun := viper.GetBool("dry_run")
+	viper.Set("dry_run", false)
+	t.Cleanup(func() { viper.Set("dry_run", origDryRun) })
+
+	_ = requestsCreateGrantCmd.Flags().Set("app-id", "app1")
+	_ = requestsCreateGrantCmd.Flags().Set("entitlement-id", "ent1")
+	// --user-id intentionally left unset.
+
+	var out bytes.Buffer
+	requestsCreateGrantCmd.SetOut(&out)
+	requestsCreateGrantCmd.SetContext(context.Background())
+
+	if err := requestsCreateGrantCmd.RunE(requestsCreateGrantCmd, nil); err != nil {
+		t.Fatalf("RunE: %v", err)
+	}
+
+	if !gotIntrospect {
+		t.Error("expected the command to resolve self via /api/v1/auth/introspect")
+	}
+	if got := gotGrantBody["identityUserId"]; got != selfUserID {
+		t.Errorf("server received identityUserId = %v, want %q", got, selfUserID)
+	}
+}
+
+// TestRequestsCreateGrantExplicitUserIDSkipsSelfResolution is a regression
+// guard alongside the default-to-self test: an explicit --user-id must be
+// sent as-is, without ever calling introspect.
+func TestRequestsCreateGrantExplicitUserIDSkipsSelfResolution(t *testing.T) {
+	const explicitUserID = "zz-c1i-test-explicit-user-id"
+
+	var gotIntrospect bool
+	var gotGrantBody map[string]any
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/api/v1/auth/introspect":
+			gotIntrospect = true
+			_, _ = fmt.Fprint(w, `{"userId":"should-not-be-used"}`)
+		case r.Method == http.MethodPost && r.URL.Path == "/api/v1/task/grant":
+			body, _ := io.ReadAll(r.Body)
+			if err := json.Unmarshal(body, &gotGrantBody); err != nil {
+				t.Errorf("server: unmarshaling request body: %v", err)
+			}
+			_, _ = fmt.Fprint(w, `{"taskView":{"task":{"id":"task-1","state":"PENDING"}}}`)
+		default:
+			t.Errorf("unexpected request: %s %s", r.Method, r.URL.Path)
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer srv.Close()
+
+	resetGrantCmdFlags(t)
+	stubNewGrantClient(t, srv)
+	t.Setenv("C1I_URL", srv.URL)
+
+	origDryRun := viper.GetBool("dry_run")
+	viper.Set("dry_run", false)
+	t.Cleanup(func() { viper.Set("dry_run", origDryRun) })
+
+	_ = requestsCreateGrantCmd.Flags().Set("app-id", "app1")
+	_ = requestsCreateGrantCmd.Flags().Set("entitlement-id", "ent1")
+	_ = requestsCreateGrantCmd.Flags().Set("user-id", explicitUserID)
+
+	var out bytes.Buffer
+	requestsCreateGrantCmd.SetOut(&out)
+	requestsCreateGrantCmd.SetContext(context.Background())
+
+	if err := requestsCreateGrantCmd.RunE(requestsCreateGrantCmd, nil); err != nil {
+		t.Fatalf("RunE: %v", err)
+	}
+
+	if gotIntrospect {
+		t.Error("expected introspect NOT to be called when --user-id is explicit")
+	}
+	if got := gotGrantBody["identityUserId"]; got != explicitUserID {
+		t.Errorf("server received identityUserId = %v, want %q", got, explicitUserID)
 	}
 }
 

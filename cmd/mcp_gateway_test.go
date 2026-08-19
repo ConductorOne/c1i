@@ -122,6 +122,73 @@ func TestGatewayErrorExitCodes(t *testing.T) {
 	})
 }
 
+// TestGatewayJSONRPCErrorExitCodes pins the process exit code for a JSON-RPC-
+// level error returned by tools/call, across every code cmd now
+// distinguishes for the gateway: -32602 (invalid params) / -32601 (method
+// not found) -- the caller named a tool or method that doesn't exist -- map
+// to exitUsage (2); code 0 -- the shape observed for an upstream connector
+// failure (see internal/mcpgateway's rpcError.Unwrap) -- maps to exitServer
+// (6); and any other code (e.g. -32603, internal error) is left unmapped and
+// still exits 1 (generic), exactly as before this change.
+//
+// It drives a real httptest.Server round trip through *mcpgateway.Client and
+// wraps the resulting error exactly as mcp_gateway_call.go's RunE does
+// ("tools/call failed: %w", classifyGatewayError(err)), so it proves the
+// actual wiring -- classifyGatewayError, rpcError.Unwrap, and exitCode
+// together -- rather than re-implementing it. It also pins that the rendered
+// error message is unchanged by classification: only the exit code changes.
+func TestGatewayJSONRPCErrorExitCodes(t *testing.T) {
+	cases := []struct {
+		name string
+		code int
+		want int
+	}{
+		{"invalid params", -32602, exitUsage},
+		{"method not found", -32601, exitUsage},
+		{"upstream connector failure", 0, exitServer},
+		{"internal error (unmapped code)", -32603, exitError},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			reqN := 0
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				reqN++
+				w.Header().Set("Content-Type", "application/json")
+				switch reqN {
+				case 1: // initialize
+					_, _ = fmt.Fprint(w, `{"jsonrpc":"2.0","id":1,"result":{}}`)
+				case 2: // notifications/initialized
+					w.WriteHeader(http.StatusAccepted)
+				default: // tools/call
+					_, _ = fmt.Fprintf(w, `{"jsonrpc":"2.0","id":2,"error":{"code":%d,"message":"boom"}}`, tc.code)
+				}
+			}))
+			defer srv.Close()
+
+			gc := mcpgateway.New(srv.URL, "test-token", srv.Client())
+			if err := gc.Initialize(context.Background()); err != nil {
+				t.Fatalf("code %d: unexpected Initialize failure: %v", tc.code, err)
+			}
+			_, callErr := gc.CallTool(context.Background(), "my_tool", nil)
+			if callErr == nil {
+				t.Fatalf("code %d: expected CallTool to fail", tc.code)
+			}
+
+			wrapped := fmt.Errorf("tools/call failed: %w", classifyGatewayError(callErr))
+			if got := exitCode(wrapped); got != tc.want {
+				t.Errorf("code %d: exitCode = %d, want %d (err: %v)", tc.code, got, tc.want, wrapped)
+			}
+
+			// Classification must not change what gets printed -- an agent
+			// may be matching on the message.
+			wantMsg := fmt.Sprintf("tools/call failed: MCP error %d: boom", tc.code)
+			if wrapped.Error() != wantMsg {
+				t.Errorf("code %d: message = %q, want %q", tc.code, wrapped.Error(), wantMsg)
+			}
+		})
+	}
+}
+
 // TestGatewayCallIsErrorExitCode covers the four required scenarios for a
 // tool's own reported failure: a tools/call result with isError:true (exit 7,
 // full result still printed), a result with isError:false or with isError

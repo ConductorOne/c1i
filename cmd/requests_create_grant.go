@@ -7,6 +7,13 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// newGrantClient builds the client `requests create grant` sends its
+// self-resolution (currentUserID) and POST /api/v1/task/grant requests
+// through. It's a var, not a direct newClient call, so a test can substitute
+// a client pointed at an httptest.Server (via client.NewForTesting) without a
+// real OAuth mint — the same DI pattern `c1i api` uses via newAPIClient.
+var newGrantClient = newClient
+
 // buildGrantTaskBody builds the CreateGrantTaskRequest wire body for
 // POST /api/v1/task/grant (c1.api.task.v1.TaskService.CreateGrantTask).
 // The endpoint expects the request fields at the TOP LEVEL — wrapping them
@@ -49,16 +56,40 @@ var requestsCreateGrantCmd = &cobra.Command{
 		description, _ := cmd.Flags().GetString("description")
 		emergency, _ := cmd.Flags().GetBool("emergency")
 
-		body := buildGrantTaskBody(appID, entitlementID, userID, duration, description, emergency)
-
 		if dryRunActive() {
+			// Resolving "self" costs an authenticated introspect call (see
+			// currentUserID), and dry-run is documented/used elsewhere in this
+			// CLI as not requiring authentication (every other mutating
+			// command checks dryRunActive before newClient). So an omitted
+			// --user-id previews with identityUserId absent, same as before
+			// this fix — the preview just can't show what "self" resolves to
+			// without authenticating.
+			body := buildGrantTaskBody(appID, entitlementID, userID, duration, description, emergency)
 			return printDryRun(cmd, "POST", "/api/v1/task/grant", body)
 		}
 
-		c, err := newClient(cmd, baseURL)
+		c, err := newGrantClient(cmd, baseURL)
 		if err != nil {
 			return fmt.Errorf("authentication failed: %w", err)
 		}
+
+		// --user-id's help promises "defaults to self if omitted" — resolve it
+		// here via the same introspect-based lookup requests_list.go's default
+		// requester scope and tasks_list.go's --assigned-to-me already use
+		// (see currentUserID in cmd/tasks.go), rather than sending no
+		// identityUserId at all: the API has no default of its own and
+		// rejects that with a 500 "user_id is required".
+		if userID == "" {
+			userID, err = currentUserID(cmd.Context(), c)
+			if err != nil {
+				return err
+			}
+			if userID == "" {
+				return fmt.Errorf("could not determine the current user; pass --user-id")
+			}
+		}
+
+		body := buildGrantTaskBody(appID, entitlementID, userID, duration, description, emergency)
 
 		data, err := c.Post(cmd.Context(), "/api/v1/task/grant", body)
 		if err != nil {

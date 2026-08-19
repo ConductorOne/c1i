@@ -250,9 +250,10 @@ Confirm "$TOOL_NAME" appears, then invoke it. Arguments are a JSON object via
 
     c1i mcp gateway call "$TOOL_NAME" --args '{"key":"value"}'
 
-A tool result with isError: true exits 7; other gateway-call failures (an
-unknown tool name, an upstream connector error) exit 1 — only isError is
-distinguished.
+A tool result with isError: true exits 7. A JSON-RPC-level failure (the call
+itself failed, not the tool) is classified by its code: an unknown tool name
+(-32602) or method (-32601) exits 2; an upstream connector error (code 0 —
+e.g. an unreachable external MCP server) exits 6; any other code exits 1.
 
 The gateway endpoint is derived from --url / C1I_URL by default (inserting
 "-mcp" into the host); if the gateway lives elsewhere, override it with

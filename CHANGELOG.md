@@ -199,6 +199,32 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   every other API failure gets (401/403 → 3, 404 → 4, 429 → 5, 5xx → 6),
   without losing the response body from the error message. The one-off
   handshake-only classifier is removed as redundant.
+- **A JSON-RPC-level `mcp gateway` failure now classifies too, not just an
+  HTTP-level one.** The fix above covers a non-2xx HTTP response; a gateway
+  answering 200 with a JSON-RPC `error` (initialize/tools/list/tools/call all
+  go through the same JSON-RPC envelope) still exited `1` regardless of code —
+  verified live: naming a nonexistent tool (`-32602`) or an unimplemented
+  method (`-32601`) both exited `1`, and so did every upstream connector
+  failure (an unreachable external MCP server, a vendor API error), which
+  arrives as JSON-RPC code `0`. `-32602`/`-32601` now exit `2` (usage — the
+  caller named a tool or method that doesn't exist) and code `0` now exits `6`
+  (server — a system the gateway depends on failed); any other JSON-RPC code
+  still exits `1`, unchanged. Error messages are unchanged, only the exit
+  code. `internal/mcpgateway` cannot construct a `*usageError` (it lives in
+  package `cmd`), so it exposes the code (`mcpgateway.RPCErrorCode`) and gives
+  its error an `Unwrap()` to `*client.APIError{StatusCode: 502}` for code `0`
+  (auto-classifying via the existing `>= 500` rule); `cmd/mcp_gateway.go`'s
+  `classifyGatewayError` does the `-32602`/`-32601` → `*usageError` wrapping.
+- **`requests create grant --user-id`'s "defaults to self if omitted" is now
+  true.** Omitting it used to send no `identityUserId` at all, which the API
+  rejects with a `500 {"code":2,"message":"user_id is required"}` — a
+  documented default the flag never actually had. It now resolves the
+  caller's own user id via the same introspect-based `currentUserID` lookup
+  `requests list`'s default requester scope and `tasks list
+  --assigned-to-me` already use, costing one extra `GET
+  /api/v1/auth/introspect` call only when `--user-id` is omitted.
+  `--dry-run` still previews without `identityUserId` when omitted, since
+  resolving self requires authenticating and dry-run doesn't.
 - **`extractSSEResponse` now follows the SSE spec exactly.** Multiple `data:`
   lines within one SSE event are joined with `\n` (previously concatenated
   with no separator, which could corrupt a multi-line payload), and exactly

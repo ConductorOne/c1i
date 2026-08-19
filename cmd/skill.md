@@ -366,9 +366,12 @@ must be a JSON object (a string/array/null is rejected as a usage error).
 
 Exit code 7 (see Errors & Exit Codes) is only set when the result carries
 `isError: true` — the call itself succeeded but the tool reported failure.
-Any other gateway failure (unknown tool name, an upstream connector error)
-is a JSON-RPC-level error and currently exits 1 (generic), not one of the
-classified codes — don't assume 3/4/5/6 apply to those.
+A JSON-RPC-level error (the call itself failed) is classified by its code:
+`-32602`/`-32601` (invalid params / method not found — you named a tool or
+method that doesn't exist) exit 2; code `0` (an upstream connector
+failure — e.g. an unreachable external MCP server, or a vendor API error
+surfaced through the connector) exits 6. Any other JSON-RPC error code
+still exits 1 (generic) — don't assume 3/4/5 apply to those.
 
 ### Access Requests
 
