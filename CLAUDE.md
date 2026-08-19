@@ -48,7 +48,7 @@ never fails proves nothing.
   history. Long comments drift and nobody updates them, so brevity is a
   maintenance property, not a style preference. This repo is also public, so a
   comment is published text — brevity limits both noise and the chance of
-  leaking an internal tenant/hostname/ticket id. Applies to comments you touch;
+  leaking an internal tenant/hostname/ticket ID. Applies to comments you touch;
   don't go reformatting untouched ones.
 
 ### Global flags (persistent, on `rootCmd`)
@@ -96,8 +96,14 @@ never fails proves nothing.
   zero-positional command; the guard already covers it, and removing the guard
   would silently reopen the gap. If a command *does* take a positional,
   `Use` must document it (`<id>` / `[<id>]`) and `Args` must match that shape —
-  `TestArgsUseConsistencyAcrossTree` (`cmd/args_positional_test.go`) checks
-  every command in the tree both ways, so a mismatch fails CI.
+  `TestArgsUseConsistencyAcrossTree` (`cmd/args_positional_test.go`) walks the
+  whole tree and fails CI on a mismatch. Exactly what it enforces: a required
+  positional must be rejected one short of the documented count and accepted at
+  it (no upper bound — `docs search <query>` deliberately uses
+  `MinimumNArgs(1)`); an optional positional must declare non-nil `Args` that
+  accepts 0 and the documented count; a command documenting none must not
+  require one. Rejecting a *stray* positional is the guard's job, not the
+  test's.
 - **API client:** build it with `newClient(cmd, baseURL)` (cmd/client.go), not
   `client.New` directly — the helper threads the global flags (retries, etc.).
 - **Paths:** interpolate IDs into request paths with `client.Path("…/%s", id)`,
