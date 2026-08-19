@@ -144,6 +144,15 @@ func TestArgsUseConsistencyAcrossTree(t *testing.T) {
 							path, c.Use, spec.required)
 					}
 				case spec.optional > 0:
+					// A nil Args would vacuously pass both checks below via
+					// cobra's ArbitraryArgs fallback, yet attachSubcommandGuards
+					// stamps nil Args to cobra.NoArgs at real-binary startup -
+					// rejecting the documented optional argument. Require an
+					// explicit Args (e.g. cobra.MaximumNArgs(1)).
+					if c.Args == nil {
+						t.Errorf("%s: Use %q documents an optional positional, but Args is nil - declare it explicitly (e.g. cobra.MaximumNArgs(%d)), since attachSubcommandGuards stamps a nil Args to cobra.NoArgs and would reject this argument",
+							path, c.Use, spec.optional)
+					}
 					if !argsAccepts(c, 0) {
 						t.Errorf("%s: Use %q documents an optional positional, but Args rejected 0 args",
 							path, c.Use)
