@@ -21,9 +21,10 @@ and `c1i docs guide <name>`. For the full command reference in one file, use
 
 Reach for a first-class command (`users get`, `mcp servers register`, `grants
 list`, ...) before `c1i api`. First-class commands auto-paginate to
-completion, return typed errors that map to the exit codes below, and guard
-spell out destructive cascades in their `--help`. `c1i api` gets none of that: it sends exactly what you tell
-it to, once, and surfaces whatever the server returns.
+completion, return typed errors that map to the exit codes below, and spell
+out destructive cascades in their `--help`. `c1i api` gets none of that: it
+sends exactly what you tell it to, once, and surfaces whatever the server
+returns.
 
 `c1i api` is still the correct tool when no first-class command exists yet for
 an endpoint. Find those gaps with `c1i docs endpoints` (list) and `c1i docs
@@ -39,9 +40,12 @@ endpoint <path>` (full request/response schema) before falling back to:
   `--fields` / `C1I_FIELDS` can't blank a success message.
 - Values keep their real JSON types: c1i never stringifies a boolean or a
   number, so `jq 'select(.enabled)'` and numeric comparisons behave.
-- Field names are camelCase (`appId`, `toolCount`), and the API itself
-  sometimes returns a numeric-looking value AS a string — `toolCount` from
-  `mcp servers test-connection` is one. Check the shape before comparing.
+- Casing differs by output mode: list rows are snake_case (`app_id`,
+  `display_name`); single-object reads pass the API's own camelCase through
+  (`userView`, `displayName`). `--fields` accepts either casing at any depth,
+  so you don't have to know which — but `jq` does, so check a row first.
+- One wire quirk to know: `mcp servers test-connection` returns `toolCount`
+  as a JSON string, not a number.
 - `--fields id,user.email` (comma-separated dot-paths) projects output to
   just those keys. `C1I_FIELDS` sets the same thing session-wide — if output
   looks unexpectedly sparse, check whether it's set.
