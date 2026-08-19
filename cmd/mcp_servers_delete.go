@@ -12,7 +12,13 @@ var mcpServersDeleteCmd = &cobra.Command{
 	Short: "Soft-delete an MCP server",
 	Long: `Soft-delete an MCP server. Stops the connector and removes it from the
 tenant's MCP catalog; the underlying Connector record is retained for audit,
-and any per-user OAuth credentials issued against it are revoked.`,
+and any per-user OAuth credentials issued against it are revoked.
+
+This cascades: every toolset bound to the connector, and each toolset's app
+entitlement, is soft-deleted with it. Anyone whose access came through one of
+those entitlements is affected, so check what depends on the server first, e.g.
+"c1i mcp toolsets list --app-id X --connector-id Y" and "c1i grants list
+--app-id X --entitlement-id Z".`,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		if err := requireNonEmpty(cmd, "app-id"); err != nil {

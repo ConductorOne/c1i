@@ -23,6 +23,10 @@ go test ./...
 golangci-lint run --timeout=3m ./...   # includes gofmt formatting; CI gates on this
 ```
 
+Never weaken, loosen, or delete a test to make a change pass. For a new test,
+confirm it fails before your fix and passes after — a test that compiles but
+never fails proves nothing.
+
 ## Project Layout
 
 - `cmd/` — Cobra command definitions (one file per command)
@@ -30,6 +34,7 @@ golangci-lint run --timeout=3m ./...   # includes gofmt formatting; CI gates on 
 - `internal/config/` — URL parsing and keychain service helpers
 - `internal/keychain/` — Credential storage. Three backends, in precedence order: `C1I_CLIENT_ID`/`C1I_CLIENT_SECRET` env vars (read-only), OS keyring (go-keyring), and a 0600 file under `os.UserConfigDir()` (fallback for headless Linux/CI/containers).
 - `internal/login/` — OAuth device flow
+- `internal/mcpgateway/` — JSON-RPC/streamable-HTTP client for the MCP gateway (backs `mcp gateway call`/`list-tools`)
 - `internal/tokensource/` — OAuth2 token source
 
 ## Conventions
@@ -37,12 +42,20 @@ golangci-lint run --timeout=3m ./...   # includes gofmt formatting; CI gates on 
 - Output: NDJSON for list/search commands, pretty JSON for single-object commands, plain text for auth.
 - All list commands auto-paginate. `--page-token` disables auto-pagination.
 - `docs` subcommands require no authentication.
+- **Keep comments concise.** Whenever you write or change a comment, say the
+  non-obvious thing and stop — a why, a constraint, or a gotcha the code can't
+  express. Don't restate the code, recap how a bug was found, or narrate review
+  history. Long comments drift and nobody updates them, so brevity is a
+  maintenance property, not a style preference. Applies to comments you touch;
+  don't go reformatting untouched ones.
 
 ### Global flags (persistent, on `rootCmd`)
 
 - `--url` / `C1I_URL`, `--fields` / `C1I_FIELDS` (JSON field projection),
   `--max-retries` / `C1I_MAX_RETRIES` (default `client.DefaultMaxRetries`),
-  `--error-format` / `C1I_ERROR_FORMAT` (`text`|`json`). See README for behavior.
+  `--error-format` / `C1I_ERROR_FORMAT` (`text`|`json`), `--dry-run` /
+  `C1I_DRY_RUN` (preview a mutating request without sending it), `--debug` /
+  `C1I_DEBUG` (trace HTTP requests to stderr). See README for behavior.
 
 ### Patterns to follow when adding/changing commands
 
@@ -93,9 +106,24 @@ golangci-lint run --timeout=3m ./...   # includes gofmt formatting; CI gates on 
   `client.AuthError`; `cmd/errors.go` maps them to exit codes — 0 ok, 1 generic,
   2 usage, 3 auth (401/403), 4 not-found (404), 5 rate-limited (429), 6 server
   (5xx), 7 tool-execution error (`mcp gateway call` result has `isError: true`).
-  Wrap client errors with `%w` so `errors.As` can classify them.
+  Wrap client errors with `%w` so `errors.As` can classify them, and wrap a bad
+  flag/arg combination in `&usageError{}` so it exits 2 — a bare `fmt.Errorf`
+  silently becomes exit 1.
 - Retries (429/5xx + transport, idempotent-aware) live in the client
   (`internal/client/client.go`); commands get them for free via `newClient`.
+- **Help text is a claim about the server.** Don't state a default, scope, or
+  restriction in a `Long`/flag description you haven't seen the API honor. Quote
+  the server's own error string when documenting a restriction so it's greppable
+  from both directions. Four shipped examples of getting this wrong: two
+  EXTERNAL-only `mcp servers` subcommands that documented no scope, a `--user-id`
+  that promised "defaults to self" and 500s without it, and a `delete` that
+  silently cascaded to every bound toolset's entitlement.
+- **`api` is the escape hatch for endpoints with no first-class command.** It
+  still goes through `newClient` and the output helpers, so retries and
+  exit-code classification work as they do everywhere else; what it skips is
+  `client.Path` escaping, since `--path` is raw caller input. If you find
+  yourself documenting a raw `api` call for a common workflow, that's a missing
+  command, not a documentation task.
 
 ### Adding a new client/subsystem package
 

@@ -1,6 +1,6 @@
 # c1i
 
-**C1 Interface** — an agent-oriented CLI for C1, and it looks like `cli`. Get it?
+**C1 Interface** — and it looks like `cli`. Get it?
 
 > **Beta** — stabilizing toward 1.0. The core commands, flags, and output formats are stable; smaller changes may still land before 1.0.
 
@@ -81,7 +81,9 @@ c1i tasks comment <task-id> --comment <text>
 ```
 
 `approve`/`deny` target a specific policy step. If `--policy-step-id` is
-omitted, the task's currently executing step is fetched and used automatically.
+omitted, the task's currently executing step is fetched and used automatically
+for both — but `approve` requires a resolvable step and errors if it can't
+find one, while `deny` proceeds without a step if none can be derived.
 
 ### Connectors
 
@@ -125,7 +127,7 @@ c1i mcp servers register           --app-id <id> --type external --display-name 
 c1i mcp servers update             <connector-id> --app-id <id> [--display-name <name>] [--description <text>] [--data-sensitivity ...] [--tool-prefix <p>] [--require-tool-approval]
 c1i mcp servers update-credentials <connector-id> --app-id <id> --type hosted|external [--auth ...] [--update-mask <paths>]
 c1i mcp servers delete             <connector-id> --app-id <id>
-c1i mcp servers resync-tools       <connector-id> --app-id <id>
+c1i mcp servers resync-tools       <connector-id> --app-id <id>   # EXTERNAL only
 c1i mcp servers test-connection    (--url <url> [--transport ...] [--auth ...] | <connector-id> --app-id <id>)
 c1i mcp servers discover-oidc      --issuer-url <url>
 c1i mcp servers catalog list       [--query <text>] [--page-size N] [--limit N]
@@ -161,7 +163,7 @@ c1i mcp gateway list-tools [--full] [--gateway-url <url>]
 c1i mcp gateway call <tool-name> [--args '{"k":"v"}'] [--gateway-url <url>]
 ```
 
-**Auth for `register` / `update-credentials`:** convenience flags cover the simple methods — `--auth none`, `--auth bearer-token --bearer-token TOKEN`, `--auth custom-header --header-name NAME --header-value VALUE`, `--auth basic-auth --basic-auth-username USER --basic-auth-password PASS`. For OAuth2 / AWS SigV4 / Google service-account auth, pass the full config object via `--hosted-config-file` / `--external-config-file` (JSON file, or `-` for stdin). Secrets are sealed server-side; reads only ever return `*_configured` booleans, never the values.
+**Auth for `register` / `update-credentials`:** convenience flags cover the simple methods — `--auth none`, `--auth bearer-token --bearer-token TOKEN`, `--auth custom-header --header-name NAME --header-value VALUE`, `--auth basic-auth --basic-auth-username USER --basic-auth-password PASS`. For OAuth2 / AWS SigV4 / Google service-account auth, pass the full config object via `--hosted-config-file` / `--external-config-file` (JSON file, or `-` for stdin) — generate a ready-to-edit skeleton with `--print-config-template --auth <method> [--type hosted]` instead of hand-writing it. Secrets are sealed server-side; reads only ever return `*_configured` booleans, never the values.
 
 `mcp tools approve` is the standard post-registration step: newly discovered tools (from `register` or `resync-tools`) start in `PENDING_REVIEW`, and an admin approves each one for the gateway to proxy calls. History endpoints return records newest-first.
 
@@ -293,7 +295,7 @@ c1i users list --fields id,email
 
 # Dot-paths select nested fields; nesting is preserved in the output
 c1i api --path /api/v1/apps --paginate --fields id,displayName
-c1i functions get <id> --fields id,displayName,publishedCommitId
+c1i functions get <id> --fields function.id,function.displayName,function.publishedCommitId
 ```
 
 - Comma-separated; use dot-paths (`user.email`) for nested access.
@@ -301,6 +303,10 @@ c1i functions get <id> --fields id,displayName,publishedCommitId
   to a **case- and separator-insensitive** match. So `--fields displayName`
   resolves whether the output uses `displayName` (single-object reads) or
   `display_name` (list rows); the output keeps the source key's own spelling.
+- Single-object `get` commands pass through the API response as-is, which
+  wraps the resource under the endpoint's own top-level key (`function`,
+  `app`, `automation`, `userView.user`, ...) — check the unfiltered output
+  once to find that key before writing a `--fields` path against it.
 - Missing fields are silently omitted, so requesting a superset is safe.
 - Also settable via `C1I_FIELDS`. Applies to read output — list commands, `api`,
   and single-object `get` commands. Mutation confirmations (create/update/delete)
@@ -327,8 +333,8 @@ error object instead of the default `Error: <msg>` line. For API errors it
 includes the status, method, path, and response body:
 
 ```sh
-$ c1i api --path /api/v1/nope --error-format json
-{"error":"API error: API GET /api/v1/nope returned 404: ...","status":404,"method":"GET","path":"/api/v1/nope","body":{"message":"not found"}}
+$ c1i api --path /api/v1/apps/<nonexistent-id> --error-format json
+{"body":{"code":5,"message":"not found (request-id: ...)"},"error":"API error: API GET /api/v1/apps/<nonexistent-id> returned 404: ...","method":"GET","path":"/api/v1/apps/<nonexistent-id>","status":404}
 ```
 
 The `body` is embedded as JSON when the API returned JSON, otherwise as a string.
@@ -468,15 +474,6 @@ c1i completion fish > ~/.config/fish/completions/c1i.fish
 ```sh
 c1i version       # or: c1i --version
 ```
-
-## Design
-
-c1i is built specifically as a tool for AI agents:
-
-- **Structured output**: All data commands produce NDJSON or JSON — never mixed or human-formatted output.
-- **Self-documenting API**: `docs endpoints`, `docs endpoint`, and `docs search` let an agent discover and understand the C1 API without external documentation.
-- **Predictable pagination**: List commands auto-paginate; `--page-token` gives manual control, and `--limit N` caps the total number of emitted results.
-- **Raw API escape hatch**: `api --path` with `--paginate` lets an agent hit any endpoint, even ones without a native command. Paginated output uses the same NDJSON format as list commands.
 
 ## License
 

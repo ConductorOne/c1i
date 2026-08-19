@@ -17,6 +17,9 @@ connector_id). HOSTED servers run inside C1 from a catalog impl; EXTERNAL
 servers point at a third-party MCP URL. Auth secrets are sent in the request
 body and sealed server-side — reads only ever return "*_configured" booleans.
 
+"resync-tools" and "test-connection" are EXTERNAL-only; both return a 400 on a
+HOSTED server.
+
 Subcommands:
   list / get / search   - Inspect servers registered under an app
   register              - Register a new HOSTED or EXTERNAL server

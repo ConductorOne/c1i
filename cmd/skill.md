@@ -35,10 +35,18 @@ c1i docs openapi
 
 # Print this skill/reference doc (no auth); -o writes it to a file
 c1i docs skill
+
+# Print a task-oriented runbook for a common end-to-end workflow (no args: list names)
+c1i docs guide register-mcp-server
 ```
 
 Always prefer `docs endpoints` and `docs endpoint` over the common endpoints
 table below — the docs commands reflect the latest API surface.
+
+`docs guide` is static, embedded content (no network call) covering multi-step
+workflows the per-command help doesn't connect end to end — e.g.
+`register-mcp-server`, `test-mcp-gateway`, `assign-toolset-everyone`,
+`delegate-entitlement-provisioning`. Run it with no argument to list names.
 
 ## Auth
 
@@ -57,6 +65,9 @@ c1i auth whoami
 
 # Remove stored credentials
 c1i auth logout
+
+# Print a short-lived bearer token (for driving raw HTTP/curl yourself)
+c1i auth token [--json]
 ```
 
 Credentials resolve in three tiers (first match wins):
@@ -109,19 +120,6 @@ Each also has an env-var form.
   URL, status, elapsed time, including retries). Never logs headers or bodies, so
   it's safe to leave on; stdout stays clean JSON.
 
-## Shell Completion
-
-```sh
-# bash
-c1i completion bash > /etc/bash_completion.d/c1i  # or source it from ~/.bashrc
-
-# zsh
-c1i completion zsh > "${fpath[1]}/_c1i"
-
-# fish
-c1i completion fish > ~/.config/fish/completions/c1i.fish
-```
-
 ## Version
 
 ```sh
@@ -144,9 +142,18 @@ NDJSON fields: `id, display_name, email, department, job_title, status`
 ```sh
 c1i apps list [--page-size=50] [--page-token=TOKEN] [--limit=N]
 c1i apps get APP_ID      # single app, pretty JSON
+c1i apps create --display-name=NAME [--description=TEXT]
+c1i apps set-owners <app-id> --user-id=UID [--user-id=...] [--wait] [--wait-timeout=DUR]
+c1i apps delete <app-id>
 ```
 
 NDJSON fields: `id, display_name, description, user_count`
+
+`apps create` makes a plain container app to register MCP servers under;
+owners aren't set at create time — use `apps set-owners` (replaces the full
+owner list). Owner provisioning is asynchronous (~60-90s, occasionally
+longer); pass `--wait` to block and poll until the requested owners appear.
+`apps delete` soft-deletes (the record is retained for audit).
 
 ### Accounts
 
@@ -166,6 +173,10 @@ c1i entitlements get ENTITLEMENT_ID --app-id=ID    # single entitlement, pretty 
 ```
 
 NDJSON fields: `id, app_id, display_name, description, slug, grant_count, purpose`
+
+Some system-builtin entitlements (e.g. the base "Access" entitlement) reuse
+the identical `id` across every app that has one — an entitlement `id` is
+only unique per `(app_id, id)`, never `id` alone.
 
 ### Grants (who has access)
 
@@ -227,6 +238,8 @@ that calls the given function ID — useful before deleting a draft to see if
 anything still depends on it.
 
 List NDJSON fields: `id, display_name, description, function_type, published_commit_id, head, is_draft, use_spn`
+Commits NDJSON fields: `id, function_id, author, message, created_at`
+Usage NDJSON fields: `automation_id, automation_name, step_name, enabled, last_executed_at, args`
 
 ### Automations
 
@@ -258,13 +271,14 @@ Executions NDJSON fields: `id, automation_template_id, state, created_at, comple
 c1i mcp servers list               --app-id=ID [--page-size=50] [--page-token=TOKEN] [--limit=N]
 c1i mcp servers get                <connector-id> --app-id=ID
 c1i mcp servers search             --app-id=ID [--query=TEXT] [--tool-state=approved|pending|disabled|removed] [--include-last-called-at] [--limit=N]
-c1i mcp servers register           --app-id=ID --type=hosted   --display-name=NAME --catalog-id=CID [--auth=...] [--config-field=k=v]... [--tool-prefix=P] [--user-id=UID]...
+c1i mcp servers register           --app-id=ID --type=hosted   --display-name=NAME --catalog-id=CID [--source-app-id=ID] [--auth=...] [--config-field=k=v]... [--tool-prefix=P] [--user-id=UID]...
 c1i mcp servers register           --app-id=ID --type=external --display-name=NAME --url=URL [--transport=streamable-http|sse] [--auth=...]
+c1i mcp servers register           --print-config-template [--auth=oauth2|aws-sigv4|google-service-account] [--type=hosted|external]
 c1i mcp servers update             <connector-id> --app-id=ID [--display-name=NAME] [--description=TEXT] [--data-sensitivity=...] [--tool-prefix=P] [--require-tool-approval]
 c1i mcp servers update-credentials <connector-id> --app-id=ID --type=hosted|external [--auth=...] [--update-mask=PATHS]
 c1i mcp servers delete             <connector-id> --app-id=ID
-c1i mcp servers resync-tools       <connector-id> --app-id=ID
-c1i mcp servers test-connection    (--url=URL [--transport=...] [--auth=...] | <connector-id> --app-id=ID [--update-mask=PATHS])
+c1i mcp servers resync-tools       <connector-id> --app-id=ID   # EXTERNAL only; 400 on HOSTED
+c1i mcp servers test-connection    (--url=URL [--transport=...] [--auth=...] | <connector-id> --app-id=ID [--update-mask=PATHS])   # EXTERNAL only; 400 on HOSTED
 c1i mcp servers discover-oidc      --issuer-url=URL
 c1i mcp servers catalog list       [--query=TEXT] [--page-size=50] [--limit=N]
 c1i mcp servers catalog get        <catalog-id>
@@ -289,9 +303,9 @@ c1i mcp toolsets requestable-connectors <user-id>
 
 # --- Bindings (which tools are inside which toolsets) ---
 c1i mcp bindings list     --app-id=ID --connector-id=CID --toolset-id=TID [--page-size=50] [--page-token=TOKEN] [--limit=N]
-c1i mcp bindings create   --app-id=ID --connector-id=CID --toolset-id=TID --tool-id=ID [--tool-id=...]
-c1i mcp bindings delete   --app-id=ID --connector-id=CID --toolset-id=TID --tool-id=ID [--tool-id=...]
-c1i mcp bindings by-tools --app-id=ID --connector-id=CID --tool-id=ID [--tool-id=...]
+c1i mcp bindings create   --app-id=ID --connector-id=CID --toolset-id=TID --tool-id=ID [--tool-id=...]   # --tool-id repeatable, max 100
+c1i mcp bindings delete   --app-id=ID --connector-id=CID --toolset-id=TID --tool-id=ID [--tool-id=...]   # --tool-id repeatable, max 100
+c1i mcp bindings by-tools --app-id=ID --connector-id=CID --tool-id=ID [--tool-id=...]                    # --tool-id repeatable, max 32
 c1i mcp bindings history  --app-id=ID --connector-id=CID (--toolset-id=TID | --tool-id=ID) [--page-size=50] [--page-token=TOKEN] [--limit=N]
 ```
 
@@ -309,16 +323,21 @@ c1i mcp bindings history  --app-id=ID --connector-id=CID (--toolset-id=TID | --t
 
 `mcp bindings history` requires exactly one of `--toolset-id` (history of all tools in a toolset) or `--tool-id` (history of all toolsets containing a tool). One raw entry per line, with a list-history metadata envelope plus the items added or removed in that transaction.
 
+`mcp bindings` covers tool↔toolset bindings only. A separate object, the
+*entitlement proxy binding* (entitlement→entitlement, a visibility/tracking
+link used for delegated provisioning), has no dedicated command — use
+`c1i api` directly; see `c1i docs guide delegate-entitlement-provisioning`.
+
 Tool states: `MCP_TOOL_STATE_PENDING_REVIEW`, `MCP_TOOL_STATE_APPROVED`, `MCP_TOOL_STATE_DISABLED`, `MCP_TOOL_STATE_REMOVED`.
 Tool classifications: `TOOL_CLASSIFICATION_READ`, `_WRITE`, `_DESTRUCTIVE`, `_SENSITIVE`, `_DANGEROUS`.
 
 `mcp servers list`/`search` NDJSON fields: `connector_id, app_id, display_name, description, server_type, data_sensitivity, auth_method, mcp_server_catalog_id, tool_prefix, endpoint_url, token_sharing, created_at` (`search` adds `tool_count`, plus `last_called_at` when `--include-last-called-at` is set).
 
-`mcp servers catalog list` NDJSON fields: `id, display_name, description, service_name, channel, scope, maturity`.
+`mcp servers catalog list` NDJSON fields: `id, display_name, description, service_name, base_url, default_tool_prefix, stable, channel, scope, maturity, required_scope_count, optional_scope_count`. Scope counts summarize `catalog get`'s per-auth-mode `authModes[].scopes`/`optionalScopes` (scope tiering is per auth mode, not one catalog-wide list); the schema's top-level `defaultScopes` is empty on every entry seen in production.
 
 `mcp servers connections list` NDJSON fields: `connector_id, app_id, display_name, server_type, auth_method, connected, authorized_as_email, authorized_as_name, connected_at`.
 
-`mcp servers` auth (`register` / `update-credentials`): convenience flags cover the simple methods — `--auth=none`, `--auth=bearer-token --bearer-token=TOKEN`, `--auth=custom-header --header-name=NAME --header-value=VALUE`, `--auth=basic-auth --basic-auth-username=USER --basic-auth-password=PASS`, plus `--token-sharing=shared|per-user`. For OAuth2 / AWS SigV4 / Google service-account auth, pass the full config object with `--hosted-config-file=FILE` / `--external-config-file=FILE` (JSON, or `-` for stdin). Secrets are sealed server-side and never returned on read (only `*_configured` booleans). Register/update-credentials/update/delete/resync-tools honor `--dry-run`.
+`mcp servers` auth (`register` / `update-credentials`): convenience flags cover the simple methods — `--auth=none`, `--auth=bearer-token --bearer-token=TOKEN`, `--auth=custom-header --header-name=NAME --header-value=VALUE`, `--auth=basic-auth --basic-auth-username=USER --basic-auth-password=PASS`, plus `--token-sharing=shared|per-user`. For OAuth2 / AWS SigV4 / Google service-account auth, don't hand-write the config JSON — generate a skeleton first with `--print-config-template --auth=oauth2|aws-sigv4|google-service-account [--type=hosted|external]` (prints to stdout, no auth/network needed), fill in the `<placeholders>`, then pass it back via `--hosted-config-file=FILE` / `--external-config-file=FILE` (JSON, or `-` for stdin). Secrets are sealed server-side and never returned on read (only `*_configured` booleans). Register/update-credentials/update/delete/resync-tools honor `--dry-run`.
 
 Server types: `MCP_SERVER_TYPE_HOSTED` (runs in C1 from a catalog impl; pick via `mcp servers catalog list`), `MCP_SERVER_TYPE_EXTERNAL` (third-party URL). Registering under a new managed app (empty `app_id`) is not reachable over REST — `--app-id` is required.
 
@@ -326,6 +345,30 @@ Approving tools is the standard post-registration step: a newly registered MCP
 server (or a `resync-tools` run) discovers its tools in `PENDING_REVIEW`, then an
 admin moves each to `APPROVED` with `mcp tools approve` for the gateway to proxy
 calls.
+
+#### Gateway (call tools end-to-end)
+
+```sh
+c1i mcp gateway list-tools [--full] [--gateway-url=URL]
+c1i mcp gateway call <tool-name> [--args='{"key":"value"}'] [--gateway-url=URL]
+```
+
+Drives the actual MCP gateway (the same `initialize` → `tools/list` /
+`tools/call` handshake an MCP host performs) to verify what's really callable
+after registering a server and approving tools — the closing step of the
+configure-then-verify loop, and the way to confirm a tool is reachable without
+wiring up a separate MCP client. `--gateway-url` overrides the default, which
+is derived from `--url`/`C1I_URL` by inserting `-mcp` into the host
+(`https://acme.conductor.one` → `https://acme-mcp.conductor.one/v1`). `--args`
+must be a JSON object (a string/array/null is rejected as a usage error).
+`list-tools` emits NDJSON (`name, description`, plus `input_schema` with
+`--full`); `call` prints the raw MCP result as pretty JSON.
+
+Exit code 7 (see Errors & Exit Codes) is only set when the result carries
+`isError: true` — the call itself succeeded but the tool reported failure.
+Any other gateway failure (unknown tool name, an upstream connector error)
+is a JSON-RPC-level error and currently exits 1 (generic), not one of the
+classified codes — don't assume 3/4/5/6 apply to those.
 
 ### Access Requests
 
@@ -513,7 +556,7 @@ The UI calls them "campaigns" (`/admin/campaigns/{id}`), the API calls them
 - **Auth commands**: Human-readable plain text.
 - **`api` command**: Pretty-printed JSON by default; NDJSON with `--paginate`.
 - All list commands auto-paginate. Passing `--page-token` disables auto-pagination.
-- `--page-size` controls the per-call batch size (max 100). Use `--limit N` to cap the *total* number of results emitted; auto-pagination stops fetching new pages once the cap is reached.
+- `--page-size` controls the per-call batch size (max 100, except `mcp tools history` and `mcp bindings history`, which allow up to 200). Use `--limit N` to cap the *total* number of results emitted; auto-pagination stops fetching new pages once the cap is reached.
 - `--unmapped-only` (accounts) filters client-side: only accounts with no `identity_user_id`.
 
 ## Errors & Exit Codes
@@ -530,11 +573,16 @@ on **without parsing text**:
 | `4` | API returned `404` (not found) |
 | `5` | API returned `429` (rate limited — already retried; back off) |
 | `6` | API returned `5xx` (server error) |
+| `7` | `mcp gateway call` result carried `isError: true` (tool itself failed; the call succeeded) |
 
 Add `--error-format=json` for a machine-readable error object:
 `{"error": "...", "status": 404, "method": "GET", "path": "...", "body": ...}`
 (the `body` is embedded as JSON when the API returned JSON, else a string).
 Prefer branching on the exit code over string-matching stderr.
+
+Some `c1i api` usage mistakes (e.g. `--limit` without `--paginate`, an
+unsupported `--method`) currently exit `1` rather than `2`; don't rely on `2`
+to detect every misuse of `c1i api` specifically.
 
 ## Discovering a New Endpoint
 
