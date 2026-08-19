@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 	"github.com/spf13/viper"
 )
 
@@ -170,6 +171,21 @@ func resetAPICmdFlags(t *testing.T) {
 		_ = apiCmd.Flags().Set("body", "")
 		_ = apiCmd.Flags().Set("body-file", "")
 		_ = apiCmd.Flags().Set("allow-delete-body", "false")
+		_ = apiCmd.Flags().Set("paginate", "false")
+		_ = apiCmd.Flags().Set("list-key", "")
+		_ = apiCmd.Flags().Set("limit", "0")
+		// StringArray flags append on Set once pflag's internal "changed" bit
+		// is true (which it is, forever, once any test has passed --query or
+		// --header), so plain Set("query", "") wouldn't clear prior values —
+		// it would append an empty string. Replace on the SliceValue
+		// interface actually empties the backing slice.
+		for _, name := range []string{"query", "header"} {
+			if f := apiCmd.Flags().Lookup(name); f != nil {
+				if sv, ok := f.Value.(pflag.SliceValue); ok {
+					_ = sv.Replace([]string{})
+				}
+			}
+		}
 	}
 	reset()
 	t.Cleanup(reset)
@@ -217,9 +233,12 @@ func stubNewAPIClient(t *testing.T, srv *httptest.Server) {
 
 // TestAPIDeleteBodyRefusedByDefault is a regression guard: without
 // --allow-delete-body, `api --method DELETE --body` must keep failing with
-// the same refusal and the same (unclassified, exit 1) exit code it always
-// has — this is the safety rail the opt-in is not allowed to weaken. It
-// fails if the guard is ever dropped or the opt-in is made the default.
+// the same refusal, still naming the opt-in — that invariant is the safety
+// rail, and this test fails if the guard is ever dropped or the opt-in is
+// made the default. The exit code is classified as exitUsage (2): this is a
+// malformed invocation (bad flag combination), not an unclassified failure,
+// so exitError (1) was never the "correct" code — it was a pre-existing gap.
+// See TestAPIGetBodyRefused for the GET-with-body twin.
 func TestAPIDeleteBodyRefusedByDefault(t *testing.T) {
 	resetAPICmdFlags(t)
 	t.Setenv("C1I_URL", "https://example.invalid")
@@ -244,8 +263,38 @@ func TestAPIDeleteBodyRefusedByDefault(t *testing.T) {
 	if !strings.Contains(err.Error(), "--allow-delete-body") {
 		t.Errorf("error = %q, want it to name the opt-in", err.Error())
 	}
-	if got, want := exitCode(err), exitError; got != want {
-		t.Errorf("exitCode = %d, want %d (unclassified, same as before the opt-in existed)", got, want)
+	if got, want := exitCode(err), exitUsage; got != want {
+		t.Errorf("exitCode = %d, want %d (usage error: bad flag combination)", got, want)
+	}
+}
+
+// TestAPIGetBodyRefused is the GET twin of TestAPIDeleteBodyRefusedByDefault:
+// GET never takes a body (there's no opt-in for it, unlike DELETE), and the
+// refusal must classify as exitUsage (2), not the generic exitError (1) it
+// returned before this guard was wrapped in usageError.
+func TestAPIGetBodyRefused(t *testing.T) {
+	resetAPICmdFlags(t)
+	t.Setenv("C1I_URL", "https://example.invalid")
+
+	var out bytes.Buffer
+	apiCmd.SetOut(&out)
+	apiCmd.SetErr(&out)
+	rootCmd.SetArgs([]string{
+		"api",
+		"--path", "/api/v1/apps",
+		"--method", "GET",
+		"--body", `{"a":1}`,
+	})
+
+	err := rootCmd.ExecuteContext(context.Background())
+	if err == nil {
+		t.Fatal("expected an error, got nil")
+	}
+	if !strings.Contains(err.Error(), "--method GET does not take a request body") {
+		t.Errorf("error = %q, want it to still name the refusal", err.Error())
+	}
+	if got, want := exitCode(err), exitUsage; got != want {
+		t.Errorf("exitCode = %d, want %d (usage error: bad flag combination)", got, want)
 	}
 }
 

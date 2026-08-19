@@ -286,6 +286,30 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   partial list: silently truncating the tool list is the exact failure this
   client already had fixed once, and returning "what we got" would reintroduce
   it in a new form.
+- **`c1i api` invalid-invocation guards now exit `2` (usage), not `1`.**
+  **Breaking change for anything branching on exit codes:** `--limit`/
+  `--list-key` without `--paginate`, `--body`/`--body-file` given together, an
+  unsupported `--method`, a body on `--method GET`, a body on `--method
+  DELETE` without `--allow-delete-body`, and a malformed `key=value` in
+  `--query`/`--header` all used to return a bare, unclassified error (exit
+  `1`). They're now wrapped in the same `usageError` that every other bad
+  flag/argument combination already uses, so `c1i api` joins the rest of the
+  CLI in exiting `2` for a malformed invocation. This includes the
+  `--method DELETE --body` refusal added in the previous entry above, which
+  shipped exiting `1` and now exits `2` — a caller that special-cased `1` for
+  that specific refusal needs to check `2` instead. No error message text
+  changed, only the exit code.
+- **A stray positional argument is no longer silently ignored on ~38
+  commands.** Any runnable command that left `Args` unset fell back to
+  cobra's `ArbitraryArgs`, so e.g. `c1i mcp servers list somejunk` ran
+  normally, ignored `somejunk`, and exited `0` — reading as success for a
+  probably-typo'd invocation. Every runnable command whose `Args` was nil now
+  defaults to `cobra.NoArgs` at startup, so a stray argument is rejected with
+  a usage error (exit `2`) instead. This never touches a command that already
+  declares its own `Args` (e.g. a `get <id>`-style command with
+  `cobra.ExactArgs(1)`), and command groups (`mcp`, `mcp servers`, ...) keep
+  their existing "print help on no args / error on an unknown subcommand"
+  behavior unchanged.
 
 ### Testing
 
