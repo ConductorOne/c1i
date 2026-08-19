@@ -118,6 +118,14 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- **`login` failures now use the exit-code taxonomy.** The OAuth device-flow
+  helpers returned bare errors for non-2xx responses from the device, token, and
+  personal-client endpoints, so every login failure collapsed to exit `1`
+  regardless of cause. They now surface a typed `client.APIError` (mapping the
+  status to `3` auth / `5` rate-limited / `6` server) or, for an OAuth
+  `access_denied`/`expired_token` response, a `client.AuthError` (exit `3`) — so
+  automation wrapping `c1i login` sees the same stable signals as the rest of the
+  CLI.
 - **`--fields` now bridges snake_case/camelCase.** List commands emit rows in
   snake_case while single-object reads emit camelCase, so `--fields displayName`
   on a list command silently returned `{}`. Field matching now falls back to a
