@@ -22,8 +22,7 @@ and `c1i docs guide <name>`. For the full command reference in one file, use
 Reach for a first-class command (`users get`, `mcp servers register`, `grants
 list`, ...) before `c1i api`. First-class commands auto-paginate to
 completion, return typed errors that map to the exit codes below, and guard
-destructive operations (e.g. `--dry-run` support, confirmation-worthy Long
-text on deletes). `c1i api` gets none of that: it sends exactly what you tell
+spell out destructive cascades in their `--help`. `c1i api` gets none of that: it sends exactly what you tell
 it to, once, and surfaces whatever the server returns.
 
 `c1i api` is still the correct tool when no first-class command exists yet for
@@ -38,9 +37,11 @@ endpoint <path>` (full request/response schema) before falling back to:
 - Single-object reads emit pretty-printed JSON.
 - Mutation confirmations (create/update/delete) are never field-projected —
   `--fields` / `C1I_FIELDS` can't blank a success message.
-- Values keep their real JSON types: booleans and numbers are not
-  stringified. `jq 'select(.stable)'` and `jq 'select(.tool_count > 5)'`
-  behave the way you'd expect.
+- Values keep their real JSON types: c1i never stringifies a boolean or a
+  number, so `jq 'select(.enabled)'` and numeric comparisons behave.
+- Field names are camelCase (`appId`, `toolCount`), and the API itself
+  sometimes returns a numeric-looking value AS a string — `toolCount` from
+  `mcp servers test-connection` is one. Check the shape before comparing.
 - `--fields id,user.email` (comma-separated dot-paths) projects output to
   just those keys. `C1I_FIELDS` sets the same thing session-wide — if output
   looks unexpectedly sparse, check whether it's set.
@@ -79,16 +80,16 @@ Two operations are irreversible in ways that aren't obvious from their
   files a real access-request task assigned to a human. It is not a dry
   read.
 - `mcp servers delete` cascades: every toolset bound to that server, and
-  each toolset's app entitlement, is deleted with it. Anyone whose access
-  came through one of those entitlements is affected.
+  each toolset's app entitlement, is soft-deleted with it. Anyone whose
+  access came through one of those entitlements is affected.
 
 ## Auth
 
-Three credential sources, in precedence order: `C1I_CLIENT_ID` /
-`C1I_CLIENT_SECRET` env vars, the OS keyring, or a 0600 file fallback (used
-automatically on headless Linux/CI/containers where no keyring exists) —
-set up either via `c1i auth login`. `--url` / `C1I_URL` selects which C1
-tenant you're talking to. See `c1i auth --help`.
+Credentials resolve in this order: `C1I_CLIENT_ID` + `C1I_CLIENT_SECRET`
+env vars (read-only — c1i never writes them), the OS keyring, then a 0600
+file used automatically where no keyring exists (headless Linux, CI,
+containers). Log in with `c1i auth login`; confirm with `c1i auth whoami`.
+`--url` / `C1I_URL` selects the tenant. See `c1i auth --help`.
 
 ## Persist what you learn
 
