@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"fmt"
 	"regexp"
 	"strings"
 	"testing"
@@ -23,6 +24,16 @@ var (
 	// extraction can drop it — it's not part of the invocation's argv.
 	redirectRe = regexp.MustCompile(`\s>{1,2}\s`)
 	bareC1iRe  = regexp.MustCompile(`\bc1i\b`)
+	// flagShapedTokenRe matches a "--flag" token in free prose. It stops at
+	// the first character that isn't part of a flag name, so trailing
+	// punctuation ("'s", ",", ".") is never mistaken for part of it.
+	flagShapedTokenRe = regexp.MustCompile(`--[A-Za-z][A-Za-z0-9-]*`)
+	// shorthandTokenRe matches a "-x" shorthand token in free prose: a
+	// single dash, one letter, then a non-word character or end of line.
+	// The look-behind-by-hand ("^|\s") keeps it from firing inside a
+	// hyphenated word like "well-known" or on the second dash of a
+	// "--long-flag".
+	shorthandTokenRe = regexp.MustCompile(`(?:^|\s)-([A-Za-z])(?:[^A-Za-z0-9-]|$)`)
 )
 
 // extractGuideInvocations returns every "c1i ..." invocation in guide, in
@@ -74,16 +85,27 @@ func extractGuideInvocations(t *testing.T, guide string) []string {
 	return invocations
 }
 
-// findUnclaimedFlaggedMentions flags a "c1i" mention that falls outside all
-// three recognized shapes (e.g. unquoted mid-sentence prose, or a line
-// prefixed with shell logic) but still carries a "--flag"-shaped token later
-// on the same line — the pattern a drifted flag can hide behind today. It
-// deliberately does not flag every bare "c1i" mention: guide prose routinely
-// says things like "c1i has no command for this" with no invocation meant,
-// and flagging those produces false positives on the existing guides.
-// Requiring a nearby "--" narrows this to the actual risk at the cost of
-// missing a positional-only drift in free prose (no flag involved).
-func findUnclaimedFlaggedMentions(guide string) []string {
+// checkUnclaimedMentions flags a "c1i" mention that falls outside all three
+// recognized invocation shapes (e.g. unquoted mid-sentence prose, or a line
+// prefixed with shell logic) but names a "--flag"/"-f"-shaped token later on
+// the same line — the pattern a drifted flag can hide behind in ordinary
+// prose like "the register command's --tool-prefix flag...". Rather than
+// flagging on shape alone (which false-positives on any correct sentence
+// that names a real command and a real flag), it resolves the longest
+// matching command path from the words following "c1i" — reusing
+// rootCmd.Find, the same resolver the shape-based invocations use — and
+// checks each flag-shaped token on the line against THAT command's
+// registered flags (own + inherited, shorthands included). It reports a
+// failure only when a flag is genuinely not registered.
+//
+// It deliberately does not flag every bare "c1i" mention: guide prose
+// routinely says things like "c1i has no command for this" with no
+// invocation or flag meant. Requiring a nearby flag-shaped token narrows
+// this to the actual risk at the cost of missing a positional-only drift in
+// free prose (no flag involved) — a documented, accepted gap.
+func checkUnclaimedMentions(t *testing.T, name, guide string) {
+	t.Helper()
+
 	type span struct{ start, end int }
 	var claimed []span
 	for _, re := range []*regexp.Regexp{quotedInvocationRe, substInvocationRe} {
@@ -100,7 +122,6 @@ func findUnclaimedFlaggedMentions(guide string) []string {
 		return false
 	}
 
-	var flagged []string
 	for _, m := range bareC1iRe.FindAllStringIndex(guide, -1) {
 		start := m[0]
 		if isClaimed(start) {
@@ -113,15 +134,37 @@ func findUnclaimedFlaggedMentions(guide string) []string {
 			lineEnd = len(rest)
 		}
 		line := guide[lineStart : start+lineEnd]
-		if strings.HasPrefix(strings.TrimSpace(line), "c1i ") {
+		trimmedLine := strings.TrimSpace(line)
+		if strings.HasPrefix(trimmedLine, "c1i ") {
 			continue // command-block line; already extracted & checked
 		}
-		if !strings.Contains(guide[start:start+lineEnd], "--") {
+
+		afterMention := guide[start+len("c1i") : start+lineEnd]
+		longFlags := flagShapedTokenRe.FindAllString(afterMention, -1)
+		shortFlags := shorthandTokenRe.FindAllStringSubmatch(afterMention, -1)
+		if len(longFlags) == 0 && len(shortFlags) == 0 {
 			continue // no flag-shaped token following on this line
 		}
-		flagged = append(flagged, strings.TrimSpace(line))
+
+		leaf, _, err := rootCmd.Find(strings.Fields(afterMention))
+		if err != nil {
+			t.Errorf("guide %q: %q: rootCmd.Find failed while resolving the command path named here: %v", name, trimmedLine, err)
+			continue
+		}
+		leaf.InheritedFlags() // merge inherited flags before lookups
+
+		for _, tok := range longFlags {
+			if leaf.Flags().Lookup(strings.TrimPrefix(tok, "--")) == nil {
+				t.Errorf("guide %q: %q names %s, which is not a registered flag on %q (own or inherited)", name, trimmedLine, tok, leaf.CommandPath())
+			}
+		}
+		for _, sm := range shortFlags {
+			letter := sm[1]
+			if leaf.Flags().ShorthandLookup(letter) == nil {
+				t.Errorf("guide %q: %q names -%s, which is not a registered shorthand flag on %q (own or inherited)", name, trimmedLine, letter, leaf.CommandPath())
+			}
+		}
 	}
-	return flagged
 }
 
 // tokenizeInvocation splits on unquoted whitespace, stripping both double
@@ -131,7 +174,20 @@ func findUnclaimedFlaggedMentions(guide string) []string {
 // --args '{"key": "--not-a-flag"}'. Placeholders and shell variables
 // ("$TOOL_ID", "<name>") become plain tokens; callers only look for tokens
 // starting with "-".
-func tokenizeInvocation(invocation string) []string {
+//
+// An unquoted "#" at a token boundary starts a trailing comment that runs to
+// end of line and is dropped — e.g. `c1i mcp servers list --app-id "$X"  #
+// note`. Comment detection and quote tracking happen in one left-to-right
+// scan, so a "#" inside a quoted value (--args '{"a":"#x"}') is data, not a
+// comment, and a "'" inside a comment doesn't open a quote span.
+//
+// If a quote span is still open at end of line, the invocation cannot be
+// tokenized unambiguously (e.g. a bare apostrophe used as punctuation, not
+// quoting) and tokenizeInvocation returns an error instead of silently
+// degrading into a partially-parsed token stream — a caller that ignored
+// this and used the tokens anyway could glue an unrelated flag into the
+// unterminated value and never see it as a separate token.
+func tokenizeInvocation(invocation string) ([]string, error) {
 	var tokens []string
 	var cur strings.Builder
 	var quote rune // 0 when not inside a quoted span, else the quote rune
@@ -149,6 +205,8 @@ func tokenizeInvocation(invocation string) []string {
 			} else {
 				cur.WriteRune(r)
 			}
+		case r == '#' && cur.Len() == 0:
+			return tokens, nil // trailing comment at a token boundary
 		case r == '"' || r == '\'':
 			quote = r
 		case r == ' ':
@@ -157,8 +215,11 @@ func tokenizeInvocation(invocation string) []string {
 			cur.WriteRune(r)
 		}
 	}
+	if quote != 0 {
+		return nil, fmt.Errorf("unterminated %c-quoted value in %q", quote, invocation)
+	}
 	flush()
-	return tokens
+	return tokens, nil
 }
 
 // flagNameFromToken returns the long-flag name for a "--foo"/"--foo=bar"
@@ -256,11 +317,7 @@ func TestGuideCommandsResolveAgainstCobraTree(t *testing.T) {
 	for name, guide := range docsGuides {
 		name, guide := name, guide
 		t.Run(name, func(t *testing.T) {
-			if bad := findUnclaimedFlaggedMentions(guide); len(bad) > 0 {
-				for _, line := range bad {
-					t.Errorf("guide %q: %q mentions c1i with a --flag-shaped token outside all recognized invocation shapes — rewrite it into one, or extend extractGuideInvocations", name, line)
-				}
-			}
+			checkUnclaimedMentions(t, name, guide)
 
 			invocations := extractGuideInvocations(t, guide)
 			if len(invocations) == 0 {
@@ -268,7 +325,11 @@ func TestGuideCommandsResolveAgainstCobraTree(t *testing.T) {
 			}
 
 			for _, inv := range invocations {
-				tokens := tokenizeInvocation(inv)
+				tokens, terr := tokenizeInvocation(inv)
+				if terr != nil {
+					t.Errorf("invocation %q: %v", inv, terr)
+					continue
+				}
 				if len(tokens) == 0 || tokens[0] != "c1i" {
 					t.Errorf("invocation %q did not tokenize with a leading \"c1i\"", inv)
 					continue
