@@ -47,8 +47,8 @@ credentials:
     c1i mcp servers test-connection --url https://your-mcp-server.example/mcp \
       --transport streamable-http --auth bearer-token --bearer-token "$TOKEN"
 
-The response reports "reachable" (bool), "tool_count", and a sanitized
-"failure_reason" when it isn't.
+The response reports "reachable" (bool), "toolCount" (string), and a
+sanitized "failureReason" when it isn't.
 
 ## 3. (Optional) Generate a config template for non-trivial auth
 
