@@ -109,12 +109,13 @@ func parseUsePositionals(use string) positionalSpec {
 // validator is consistent with what its Use string documents:
 //
 //   - Use documents N required positionals (e.g. "<connector-id>") => Args
-//     must reject N-1 args and accept N. (We don't assert an upper bound here:
-//     a couple of pre-existing single-positional commands - e.g.
-//     "docs search <query>" - deliberately use cobra.MinimumNArgs(1) to allow
-//     trailing words, which is a legitimate variant of "requires 1".)
+//     must reject N-1 args and accept N. (No upper bound: "docs search
+//     <query>" deliberately uses cobra.MinimumNArgs(1) to allow trailing
+//     words, a legitimate variant of "requires 1".)
 //   - Use documents an optional positional (e.g. "[<connector-id>]") => Args
-//     must accept both 0 and 1 args.
+//     must be non-nil and accept both 0 and 1 args. A nil Args would pass
+//     vacuously via cobra's ArbitraryArgs fallback, yet be stamped to NoArgs
+//     at runtime.
 //   - Use documents no positional at all => Args must not itself REQUIRE one.
 //     We deliberately do NOT assert the reverse (that Args rejects a stray
 //     extra positional) as a tree-wide rule: cobra falls back to
@@ -144,6 +145,15 @@ func TestArgsUseConsistencyAcrossTree(t *testing.T) {
 							path, c.Use, spec.required)
 					}
 				case spec.optional > 0:
+					// A nil Args would vacuously pass both checks below via
+					// cobra's ArbitraryArgs fallback, yet attachSubcommandGuards
+					// stamps nil Args to cobra.NoArgs at real-binary startup -
+					// rejecting the documented optional argument. Require an
+					// explicit Args (e.g. cobra.MaximumNArgs(1)).
+					if c.Args == nil {
+						t.Errorf("%s: Use %q documents an optional positional, but Args is nil - declare it explicitly (e.g. cobra.MaximumNArgs(%d)), since attachSubcommandGuards stamps a nil Args to cobra.NoArgs and would reject this argument",
+							path, c.Use, spec.optional)
+					}
 					if !argsAccepts(c, 0) {
 						t.Errorf("%s: Use %q documents an optional positional, but Args rejected 0 args",
 							path, c.Use)

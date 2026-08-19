@@ -37,8 +37,8 @@ func deriveGatewayURL(baseURL string) (string, error) {
 	if err != nil || u.Host == "" {
 		return "", fmt.Errorf("cannot derive gateway URL from %q", baseURL)
 	}
-	// Insert -mcp into the hostname (not the port): leet.conductor.one ->
-	// leet-mcp.conductor.one.
+	// Insert -mcp into the hostname (not the port): acme.conductor.one ->
+	// acme-mcp.conductor.one.
 	hostname := u.Hostname()
 	if i := strings.Index(hostname, "."); i > 0 {
 		hostname = hostname[:i] + "-mcp" + hostname[i:]

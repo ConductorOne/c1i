@@ -7,9 +7,9 @@ import (
 )
 
 // ParseURL normalizes any of the following inputs to "https://{host}" (no trailing slash):
-//   - Full URL: "https://c1internal.conductor.one/" → "https://c1internal.conductor.one"
-//   - Raw domain: "c1internal.conductor.one" → "https://c1internal.conductor.one"
-//   - Legacy short name: "c1internal" → "https://c1internal.conductor.one"
+//   - Full URL: "https://acme.conductor.one/" → "https://acme.conductor.one"
+//   - Raw domain: "acme.conductor.one" → "https://acme.conductor.one"
+//   - Legacy short name: "acme" → "https://acme.conductor.one"
 func ParseURL(input string) string {
 	input = strings.TrimSpace(input)
 	if strings.Contains(input, "://") {

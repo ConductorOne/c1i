@@ -128,6 +128,11 @@ func attachSubcommandGuards(c *cobra.Command) {
 			return &usageError{fmt.Errorf("unknown subcommand %q for %q", args[0], cmd.CommandPath())}
 		}
 	}
+	// Defaulting nil Args to NoArgs is only safe because a command that
+	// legitimately takes a positional is required to set Args itself —
+	// TestArgsUseConsistencyAcrossTree (cmd/args_positional_test.go) fails CI
+	// if a Use string documenting "<id>" isn't backed by a matching Args. Do
+	// not remove this stamp; it's what makes leaving Args unset elsewhere safe.
 	if wasRunnable && c.Args == nil {
 		c.Args = cobra.NoArgs
 	}
