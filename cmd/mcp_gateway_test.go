@@ -3,6 +3,7 @@ package cmd
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -10,6 +11,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/ConductorOne/c1i/internal/client"
 	"github.com/ConductorOne/c1i/internal/mcpgateway"
 	"github.com/spf13/cobra"
 )
@@ -184,6 +186,29 @@ func TestGatewayJSONRPCErrorExitCodes(t *testing.T) {
 			wantMsg := fmt.Sprintf("tools/call failed: MCP error %d: boom", tc.code)
 			if wrapped.Error() != wantMsg {
 				t.Errorf("code %d: message = %q, want %q", tc.code, wrapped.Error(), wantMsg)
+			}
+
+			// The gateway answered every one of these cases with HTTP 200 --
+			// only the JSON-RPC body carries the error -- so none of them
+			// must ever produce a *client.APIError in the chain: that would
+			// assert a status the wire never sent. This caught a real bug: an
+			// earlier version of the code-0 fix reached exit 6 by unwrapping
+			// to *client.APIError{StatusCode: 502}, which then rendered as a
+			// false "status":502 in --error-format json for a request that
+			// got a real 200.
+			var apiErr *client.APIError
+			if errors.As(wrapped, &apiErr) {
+				t.Errorf("code %d: error chain contains a *client.APIError (status %d) for a JSON-RPC-level failure that never touched HTTP status -- this fabricates a status", tc.code, apiErr.StatusCode)
+			}
+
+			var buf bytes.Buffer
+			writeError(&buf, wrapped, "json")
+			var jsonOut map[string]any
+			if err := json.Unmarshal(buf.Bytes(), &jsonOut); err != nil {
+				t.Fatalf("code %d: --error-format json output not valid JSON: %v (%s)", tc.code, err, buf.String())
+			}
+			if _, ok := jsonOut["status"]; ok {
+				t.Errorf("code %d: --error-format json output %s carries a \"status\" field for a failure with no real HTTP status", tc.code, buf.String())
 			}
 		})
 	}

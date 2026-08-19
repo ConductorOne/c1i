@@ -265,3 +265,141 @@ func TestBuildRevokeTaskBodyOmitsEmpty(t *testing.T) {
 		t.Errorf("unexpected body: %v", body)
 	}
 }
+
+// resetRevokeCmdFlags mirrors resetGrantCmdFlags for requestsCreateRevokeCmd's
+// own flags.
+func resetRevokeCmdFlags(t *testing.T) {
+	t.Helper()
+	reset := func() {
+		_ = requestsCreateRevokeCmd.Flags().Set("app-id", "")
+		_ = requestsCreateRevokeCmd.Flags().Set("entitlement-id", "")
+		_ = requestsCreateRevokeCmd.Flags().Set("user-id", "")
+		_ = requestsCreateRevokeCmd.Flags().Set("description", "")
+	}
+	reset()
+	t.Cleanup(reset)
+}
+
+// stubNewRevokeClient mirrors stubNewGrantClient for newRevokeClient.
+func stubNewRevokeClient(t *testing.T, srv *httptest.Server) {
+	t.Helper()
+	orig := newRevokeClient
+	newRevokeClient = func(_ *cobra.Command, _ string) (*client.Client, error) {
+		return client.NewForTesting(srv.URL, srv.Client()), nil
+	}
+	t.Cleanup(func() { newRevokeClient = orig })
+}
+
+// TestRequestsCreateRevokeDefaultsUserIDToSelf mirrors
+// TestRequestsCreateGrantDefaultsUserIDToSelf for the identical twin defect in
+// `requests create revoke`: --user-id's help also promises "defaults to self
+// if omitted" and also sent no identityUserId at all, hitting the same API
+// 500 "user_id is required". Same fix, same currentUserID lookup, same proof
+// shape: assert against a real httptest.Server that the server received the
+// resolved id, not just that the command returned no error.
+func TestRequestsCreateRevokeDefaultsUserIDToSelf(t *testing.T) {
+	const selfUserID = "zz-c1i-test-self-user-id"
+
+	var gotIntrospect bool
+	var gotRevokeBody map[string]any
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/api/v1/auth/introspect":
+			gotIntrospect = true
+			_, _ = fmt.Fprintf(w, `{"userId":%q}`, selfUserID)
+		case r.Method == http.MethodPost && r.URL.Path == "/api/v1/task/revoke":
+			body, _ := io.ReadAll(r.Body)
+			if err := json.Unmarshal(body, &gotRevokeBody); err != nil {
+				t.Errorf("server: unmarshaling request body: %v", err)
+			}
+			_, _ = fmt.Fprint(w, `{"taskView":{"task":{"id":"task-1","state":"PENDING"}}}`)
+		default:
+			t.Errorf("unexpected request: %s %s", r.Method, r.URL.Path)
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer srv.Close()
+
+	resetRevokeCmdFlags(t)
+	stubNewRevokeClient(t, srv)
+	t.Setenv("C1I_URL", srv.URL)
+
+	origDryRun := viper.GetBool("dry_run")
+	viper.Set("dry_run", false)
+	t.Cleanup(func() { viper.Set("dry_run", origDryRun) })
+
+	_ = requestsCreateRevokeCmd.Flags().Set("app-id", "app1")
+	_ = requestsCreateRevokeCmd.Flags().Set("entitlement-id", "ent1")
+	// --user-id intentionally left unset.
+
+	var out bytes.Buffer
+	requestsCreateRevokeCmd.SetOut(&out)
+	requestsCreateRevokeCmd.SetContext(context.Background())
+
+	if err := requestsCreateRevokeCmd.RunE(requestsCreateRevokeCmd, nil); err != nil {
+		t.Fatalf("RunE: %v", err)
+	}
+
+	if !gotIntrospect {
+		t.Error("expected the command to resolve self via /api/v1/auth/introspect")
+	}
+	if got := gotRevokeBody["identityUserId"]; got != selfUserID {
+		t.Errorf("server received identityUserId = %v, want %q", got, selfUserID)
+	}
+}
+
+// TestRequestsCreateRevokeExplicitUserIDSkipsSelfResolution mirrors the grant
+// regression guard: an explicit --user-id must be sent as-is, without ever
+// calling introspect.
+func TestRequestsCreateRevokeExplicitUserIDSkipsSelfResolution(t *testing.T) {
+	const explicitUserID = "zz-c1i-test-explicit-user-id"
+
+	var gotIntrospect bool
+	var gotRevokeBody map[string]any
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/api/v1/auth/introspect":
+			gotIntrospect = true
+			_, _ = fmt.Fprint(w, `{"userId":"should-not-be-used"}`)
+		case r.Method == http.MethodPost && r.URL.Path == "/api/v1/task/revoke":
+			body, _ := io.ReadAll(r.Body)
+			if err := json.Unmarshal(body, &gotRevokeBody); err != nil {
+				t.Errorf("server: unmarshaling request body: %v", err)
+			}
+			_, _ = fmt.Fprint(w, `{"taskView":{"task":{"id":"task-1","state":"PENDING"}}}`)
+		default:
+			t.Errorf("unexpected request: %s %s", r.Method, r.URL.Path)
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer srv.Close()
+
+	resetRevokeCmdFlags(t)
+	stubNewRevokeClient(t, srv)
+	t.Setenv("C1I_URL", srv.URL)
+
+	origDryRun := viper.GetBool("dry_run")
+	viper.Set("dry_run", false)
+	t.Cleanup(func() { viper.Set("dry_run", origDryRun) })
+
+	_ = requestsCreateRevokeCmd.Flags().Set("app-id", "app1")
+	_ = requestsCreateRevokeCmd.Flags().Set("entitlement-id", "ent1")
+	_ = requestsCreateRevokeCmd.Flags().Set("user-id", explicitUserID)
+
+	var out bytes.Buffer
+	requestsCreateRevokeCmd.SetOut(&out)
+	requestsCreateRevokeCmd.SetContext(context.Background())
+
+	if err := requestsCreateRevokeCmd.RunE(requestsCreateRevokeCmd, nil); err != nil {
+		t.Fatalf("RunE: %v", err)
+	}
+
+	if gotIntrospect {
+		t.Error("expected introspect NOT to be called when --user-id is explicit")
+	}
+	if got := gotRevokeBody["identityUserId"]; got != explicitUserID {
+		t.Errorf("server received identityUserId = %v, want %q", got, explicitUserID)
+	}
+}

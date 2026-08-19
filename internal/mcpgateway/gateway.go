@@ -109,39 +109,6 @@ func (e *rpcError) Error() string {
 	return fmt.Sprintf("MCP error %d: %s", e.Code, e.Message)
 }
 
-// Unwrap lets a JSON-RPC error with code 0 classify as a server-class failure
-// (cmd/errors.go's exitCode maps a *client.APIError with StatusCode >= 500 to
-// exit 6) through the same *client.APIError path every other API failure in
-// this CLI uses, mirroring HTTPError.Unwrap above — without cmd/errors.go
-// needing a JSON-RPC-specific case.
-//
-// Code 0 is the shape observed for an upstream failure the C1 gateway itself
-// hit while servicing the call — an unreachable external MCP server, a
-// vendor API error surfaced through the connector, etc. (verified live: the
-// gateway answers with HTTP 200 and a JSON-RPC error whose code is the bare
-// int 0, not a JSON-RPC-reserved code). There is no real HTTP status behind
-// it, since the gateway itself answered 200 — this synthesizes 502 Bad
-// Gateway as the closest fit for "a system this service depends on failed."
-//
-// Every other code deliberately does NOT unwrap here (returns nil): only
-// code 0 has been observed to mean an upstream/server-class failure.
-// -32602/-32601 are usage-shaped (the caller named a tool or method that
-// doesn't exist) and are reclassified by cmd (see RPCErrorCode and
-// cmd/mcp_gateway.go's classifyGatewayError) into a *usageError, a type that
-// lives in package cmd and so cannot be constructed here. Any other code is
-// left to classify as the generic exit 1 until a real case teaches us
-// otherwise — see CLAUDE.md's "don't invent mappings for codes you haven't
-// observed."
-func (e *rpcError) Unwrap() error {
-	if e.Code != 0 {
-		return nil
-	}
-	return &client.APIError{
-		StatusCode: http.StatusBadGateway,
-		Body:       e.Message,
-	}
-}
-
 // RPCErrorCode returns the JSON-RPC error code carried by err, if err is (or
 // wraps) a JSON-RPC-level error the gateway returned. ok is false for a
 // transport-level failure (e.g. *HTTPError — a non-2xx HTTP status) or any
@@ -152,6 +119,17 @@ func (e *rpcError) Unwrap() error {
 // This exists so cmd — which owns the process exit-code taxonomy and the
 // types (like *usageError) some of those codes must map to — can react to
 // specific JSON-RPC codes without internal/mcpgateway importing package cmd.
+//
+// Deliberately NOT an Unwrap() on rpcError to a *client.APIError: code 0 (the
+// shape observed for an upstream connector failure — an unreachable external
+// MCP server, a vendor API error, ...) arrives on an HTTP 200 response, so
+// there is no real status to attach. An earlier version of this fix unwrapped
+// to *client.APIError{StatusCode: 502} to reach exit 6 through the existing
+// ">= 500" rule, but that fabricated status then rendered as a false "status"
+// field in --error-format json — a claim about the wire that never happened.
+// cmd/mcp_gateway.go's classifyGatewayError uses this accessor to wrap code 0
+// in a *remoteFailureError (cmd/errors.go) instead: exit 6, no invented
+// status anywhere.
 func RPCErrorCode(err error) (code int, ok bool) {
 	var rpcErr *rpcError
 	if errors.As(err, &rpcErr) {

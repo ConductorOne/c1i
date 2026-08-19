@@ -575,7 +575,7 @@ on **without parsing text**:
 | `3` | not authenticated, or API returned `401`/`403` |
 | `4` | API returned `404` (not found) |
 | `5` | API returned `429` (rate limited — already retried; back off) |
-| `6` | API returned `5xx` (server error) |
+| `6` | a remote system failed: API returned `5xx`, or an upstream MCP connector failed |
 | `7` | `mcp gateway call` result carried `isError: true` (tool itself failed; the call succeeded) |
 
 Add `--error-format=json` for a machine-readable error object:
