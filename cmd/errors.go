@@ -95,14 +95,31 @@ func Run() int {
 	return exitCode(err)
 }
 
-// attachSubcommandGuards makes command groups (a command with subcommands but no
-// Run of its own) fail on an unknown subcommand instead of silently printing
-// help and exiting 0. Without this, `c1i mcp bogus` reads as success. Running a
-// group with no args still prints help (exit 0).
+// attachSubcommandGuards walks the whole command tree once (at Run()) and
+// closes two gaps that otherwise read as silent success:
+//
+//   - A command group (has subcommands, no Run/RunE of its own) fails on an
+//     unknown subcommand instead of printing help and exiting 0. Without
+//     this, `c1i mcp bogus` reads as success. Running a group with no args
+//     still prints help (exit 0).
+//   - A runnable command that leaves Args unset falls back to cobra's
+//     ArbitraryArgs, so `c1i mcp servers list somejunk` silently ignores the
+//     stray positional and exits 0. Any runnable leaf whose Args is nil gets
+//     cobra.NoArgs here so a stray positional becomes a usage error (exit 2)
+//     instead. This only ever sets Args when it is nil — a command that
+//     already declares its own Args (e.g. a migrated `get <id>` command using
+//     cobra.ExactArgs(1)) is never touched.
 func attachSubcommandGuards(c *cobra.Command) {
 	for _, sub := range c.Commands() {
 		attachSubcommandGuards(sub)
 	}
+	// Capture runnability before the group guard below potentially installs a
+	// synthetic RunE — otherwise a pure group command would look "runnable"
+	// by the time we get to the NoArgs check, and cobra.NoArgs would replace
+	// the synthetic RunE's own usageError-wrapped "unknown subcommand"
+	// message with cobra's plain "unknown command" one before RunE ever runs
+	// (ValidateArgs happens first). Groups keep their existing behavior.
+	wasRunnable := c.Runnable()
 	if c.HasSubCommands() && c.Run == nil && c.RunE == nil {
 		c.RunE = func(cmd *cobra.Command, args []string) error {
 			if len(args) == 0 {
@@ -110,6 +127,9 @@ func attachSubcommandGuards(c *cobra.Command) {
 			}
 			return &usageError{fmt.Errorf("unknown subcommand %q for %q", args[0], cmd.CommandPath())}
 		}
+	}
+	if wasRunnable && c.Args == nil {
+		c.Args = cobra.NoArgs
 	}
 }
 

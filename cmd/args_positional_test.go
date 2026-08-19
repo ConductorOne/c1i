@@ -1,6 +1,8 @@
 package cmd
 
 import (
+	"bytes"
+	"context"
 	"regexp"
 	"strings"
 	"testing"
@@ -291,5 +293,70 @@ func TestCollectionCommandsKeepFlagIDsAndNoPositional(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// TestStrayPositionalRejectedOnCollectionCommand exercises defect 2
+// end-to-end: a runnable command that leaves Args unset falls back to
+// cobra.ArbitraryArgs, so `c1i mcp servers list somejunk` used to silently
+// ignore the stray argument and exit 0. attachSubcommandGuards closes that
+// gap tree-wide by defaulting a nil Args to cobra.NoArgs; production picks
+// this up via Run() (see cmd/errors.go), and tests call it explicitly here
+// since they drive rootCmd.ExecuteContext directly, bypassing Run().
+//
+// This drives the real rootCmd tree (not a synthetic command) and asserts
+// the actual process exit code via exitCode(), not just "an error occurred" —
+// a stray positional must be a usage error (2), not a generic one (1).
+func TestStrayPositionalRejectedOnCollectionCommand(t *testing.T) {
+	attachSubcommandGuards(rootCmd)
+
+	cases := [][]string{
+		// --app-id is supplied so this doesn't fail for the unrelated reason
+		// of a missing required flag (requireNonEmpty) — that would return
+		// exitUsage too, but for the wrong reason, masking whether the stray
+		// positional itself was actually rejected before RunE ever ran.
+		{"mcp", "servers", "list", "somejunk", "--app-id", "app_fake"},
+		{"users", "list", "somejunk"},
+	}
+	for _, args := range cases {
+		args := args
+		t.Run(strings.Join(args, " "), func(t *testing.T) {
+			t.Setenv("C1I_URL", "https://example.invalid")
+			var out bytes.Buffer
+			rootCmd.SetOut(&out)
+			rootCmd.SetErr(&out)
+			rootCmd.SetArgs(args)
+
+			err := rootCmd.ExecuteContext(context.Background())
+			if err == nil {
+				t.Fatalf("expected the stray positional %q to be rejected, got nil error (silently accepted)", args[len(args)-1])
+			}
+			if got, want := exitCode(err), exitUsage; got != want {
+				t.Errorf("exitCode(%v) = %d, want %d (exitUsage)", err, got, want)
+			}
+		})
+	}
+}
+
+// TestLegitimatePositionalStillAccepted proves the tree-wide guard above
+// never clobbers a command that legitimately takes a positional:
+// `users get <id>` already declares cobra.ExactArgs(1) (Args is non-nil), so
+// attachSubcommandGuards must leave it untouched — it accepts exactly one
+// argument, rejects zero, and rejects two.
+func TestLegitimatePositionalStillAccepted(t *testing.T) {
+	attachSubcommandGuards(rootCmd)
+
+	cmd := findCommand(t, rootCmd, "users", "get")
+	if cmd.Args == nil {
+		t.Fatal("users get: Args is nil - it should already declare cobra.ExactArgs(1) before the tree-wide guard ever runs")
+	}
+	if argsAccepts(cmd, 0) {
+		t.Error("users get: expected 0 positionals to be rejected (id is required)")
+	}
+	if !argsAccepts(cmd, 1) {
+		t.Error("users get: expected exactly 1 positional to be accepted")
+	}
+	if argsAccepts(cmd, 2) {
+		t.Error("users get: expected 2 positionals to be rejected")
 	}
 }

@@ -583,10 +583,6 @@ Add `--error-format=json` for a machine-readable error object:
 (the `body` is embedded as JSON when the API returned JSON, else a string).
 Prefer branching on the exit code over string-matching stderr.
 
-Some `c1i api` usage mistakes (e.g. `--limit` without `--paginate`, an
-unsupported `--method`) currently exit `1` rather than `2`; don't rely on `2`
-to detect every misuse of `c1i api` specifically.
-
 ## Discovering a New Endpoint
 
 When you need to call an API endpoint you haven't used before:
