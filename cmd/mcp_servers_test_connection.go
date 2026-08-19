@@ -11,7 +11,7 @@ var mcpServersTestConnectionCmd = &cobra.Command{
 	Short: "Probe an EXTERNAL MCP server's reachability (pretty JSON)",
 	Long: `Probe whether an EXTERNAL MCP server is reachable with the supplied
 credentials. Returns reachable (did MCP initialize + tools/list both succeed),
-tool_count, and a sanitized failure_reason.
+toolCount (string), and a sanitized failureReason.
 
 Two modes:
   create — supply the config to probe: --url [--transport] [auth flags], or
