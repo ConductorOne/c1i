@@ -23,6 +23,10 @@ go test ./...
 golangci-lint run --timeout=3m ./...   # includes gofmt formatting; CI gates on this
 ```
 
+Never weaken, loosen, or delete a test to make a change pass. For a new test,
+confirm it fails before your fix and passes after — a test that compiles but
+never fails proves nothing.
+
 ## Project Layout
 
 - `cmd/` — Cobra command definitions (one file per command)
@@ -102,9 +106,23 @@ golangci-lint run --timeout=3m ./...   # includes gofmt formatting; CI gates on 
   `client.AuthError`; `cmd/errors.go` maps them to exit codes — 0 ok, 1 generic,
   2 usage, 3 auth (401/403), 4 not-found (404), 5 rate-limited (429), 6 server
   (5xx), 7 tool-execution error (`mcp gateway call` result has `isError: true`).
-  Wrap client errors with `%w` so `errors.As` can classify them.
+  Wrap client errors with `%w` so `errors.As` can classify them, and wrap a bad
+  flag/arg combination in `&usageError{}` so it exits 2 — a bare `fmt.Errorf`
+  silently becomes exit 1.
 - Retries (429/5xx + transport, idempotent-aware) live in the client
   (`internal/client/client.go`); commands get them for free via `newClient`.
+- **Help text is a claim about the server.** Don't state a default, scope, or
+  restriction in a `Long`/flag description you haven't seen the API honor. Quote
+  the server's own error string when documenting a restriction so it's greppable
+  from both directions. Four shipped examples of getting this wrong: two
+  EXTERNAL-only `mcp servers` subcommands that documented no scope, a `--user-id`
+  that promised "defaults to self" and 500s without it, and a `delete` that
+  silently cascaded to every bound toolset's entitlement.
+- **`api` is the escape hatch and sits outside the invariants above.** It takes a
+  raw path and body, so `newClient`/`client.Path`/the output helpers don't apply.
+  Reach for it only when no first-class command exists; if you find yourself
+  documenting a raw `api` call for a common workflow, that's a missing command,
+  not a documentation task.
 
 ### Adding a new client/subsystem package
 

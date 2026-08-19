@@ -127,7 +127,7 @@ c1i mcp servers register           --app-id <id> --type external --display-name 
 c1i mcp servers update             <connector-id> --app-id <id> [--display-name <name>] [--description <text>] [--data-sensitivity ...] [--tool-prefix <p>] [--require-tool-approval]
 c1i mcp servers update-credentials <connector-id> --app-id <id> --type hosted|external [--auth ...] [--update-mask <paths>]
 c1i mcp servers delete             <connector-id> --app-id <id>
-c1i mcp servers resync-tools       <connector-id> --app-id <id>
+c1i mcp servers resync-tools       <connector-id> --app-id <id>   # EXTERNAL only
 c1i mcp servers test-connection    (--url <url> [--transport ...] [--auth ...] | <connector-id> --app-id <id>)
 c1i mcp servers discover-oidc      --issuer-url <url>
 c1i mcp servers catalog list       [--query <text>] [--page-size N] [--limit N]

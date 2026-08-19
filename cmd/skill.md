@@ -277,8 +277,8 @@ c1i mcp servers register           --print-config-template [--auth=oauth2|aws-si
 c1i mcp servers update             <connector-id> --app-id=ID [--display-name=NAME] [--description=TEXT] [--data-sensitivity=...] [--tool-prefix=P] [--require-tool-approval]
 c1i mcp servers update-credentials <connector-id> --app-id=ID --type=hosted|external [--auth=...] [--update-mask=PATHS]
 c1i mcp servers delete             <connector-id> --app-id=ID
-c1i mcp servers resync-tools       <connector-id> --app-id=ID
-c1i mcp servers test-connection    (--url=URL [--transport=...] [--auth=...] | <connector-id> --app-id=ID [--update-mask=PATHS])
+c1i mcp servers resync-tools       <connector-id> --app-id=ID   # EXTERNAL only; 400 on HOSTED
+c1i mcp servers test-connection    (--url=URL [--transport=...] [--auth=...] | <connector-id> --app-id=ID [--update-mask=PATHS])   # EXTERNAL only; 400 on HOSTED
 c1i mcp servers discover-oidc      --issuer-url=URL
 c1i mcp servers catalog list       [--query=TEXT] [--page-size=50] [--limit=N]
 c1i mcp servers catalog get        <catalog-id>

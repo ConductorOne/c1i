@@ -18,7 +18,10 @@ Two modes:
            --external-config-file for full-fidelity config.
   edit   — probe an existing external server: <connector-id> + --app-id, with
            any changed fields named by --update-mask (omit for a stored-config
-           probe).`,
+           probe).
+
+EXTERNAL servers only; HOSTED servers return an error ("test connection is only
+supported for external MCP servers").`,
 	Args: cobra.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		baseURL, err := GetBaseURL()
