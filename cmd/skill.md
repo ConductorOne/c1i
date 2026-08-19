@@ -114,8 +114,11 @@ Each also has an env-var form.
   `tasks approve`/`deny`/`comment`, `accounts set-owner`, `mcp` mutations, and
   non-GET `api` calls), print the method, path, and JSON body that *would* be sent
   and exit `0` without sending it. Most previews need no credentials; the
-  exception is `tasks approve`/`deny`, which authenticate to resolve the task's
-  current policy step. Use it to confirm a payload before committing a change.
+  exceptions are `tasks approve`/`deny` (authenticate to resolve the task's
+  current policy step) and `requests create grant`/`revoke` when `--user-id` is
+  omitted (authenticate to resolve it to the caller, so the preview matches
+  what's actually sent). Use it to confirm a payload before committing a
+  change.
 - **`--debug`** (`C1I_DEBUG`) — trace every HTTP request to **stderr** (method,
   URL, status, elapsed time, including retries). Never logs headers or bodies, so
   it's safe to leave on; stdout stays clean JSON.

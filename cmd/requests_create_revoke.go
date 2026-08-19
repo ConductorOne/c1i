@@ -48,18 +48,13 @@ var requestsCreateRevokeCmd = &cobra.Command{
 		userID, _ := cmd.Flags().GetString("user-id")
 		description, _ := cmd.Flags().GetString("description")
 
-		if dryRunActive() {
-			// Resolving "self" costs an authenticated introspect call (see
-			// currentUserID), and dry-run is documented/used elsewhere in this
-			// CLI as not requiring authentication (every other mutating
-			// command checks dryRunActive before newClient). So an omitted
-			// --user-id previews with identityUserId absent, same as before
-			// this fix — the preview just can't show what "self" resolves to
-			// without authenticating.
-			body := buildRevokeTaskBody(appID, entitlementID, userID, description)
-			return printDryRun(cmd, "POST", "/api/v1/task/revoke", body)
-		}
-
+		// Authenticate before the dry-run check (like tasks_approve.go /
+		// tasks_deny.go resolving the policy step before theirs) so that when
+		// --user-id is omitted, self-resolution below runs before printDryRun
+		// builds the body — otherwise --dry-run would preview a body missing
+		// identityUserId while the real call sends one. This means --dry-run
+		// now needs credentials when --user-id is omitted; see cmd/skill.md's
+		// dry-run exception list.
 		c, err := newRevokeClient(cmd, baseURL)
 		if err != nil {
 			return fmt.Errorf("authentication failed: %w", err)
@@ -71,7 +66,9 @@ var requestsCreateRevokeCmd = &cobra.Command{
 		// (see currentUserID in cmd/tasks.go), rather than sending no
 		// identityUserId at all: the API has no default of its own and
 		// rejects that with a 500 "user_id is required" (the same defect
-		// requests_create_grant.go had).
+		// requests_create_grant.go had). Skipped entirely when --user-id is
+		// explicit, so that path never pays for the introspect call, dry-run
+		// or not.
 		if userID == "" {
 			userID, err = currentUserID(cmd.Context(), c)
 			if err != nil {
@@ -83,6 +80,10 @@ var requestsCreateRevokeCmd = &cobra.Command{
 		}
 
 		body := buildRevokeTaskBody(appID, entitlementID, userID, description)
+
+		if dryRunActive() {
+			return printDryRun(cmd, "POST", "/api/v1/task/revoke", body)
+		}
 
 		data, err := c.Post(cmd.Context(), "/api/v1/task/revoke", body)
 		if err != nil {

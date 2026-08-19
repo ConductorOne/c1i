@@ -231,11 +231,17 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   via the same introspect-based `currentUserID` lookup `requests list`'s
   default requester scope and `tasks list --assigned-to-me` already use,
   costing one extra `GET /api/v1/auth/introspect` call only when `--user-id`
-  is omitted. `--dry-run` still previews without `identityUserId` when
-  omitted, since resolving self requires authenticating and dry-run doesn't.
-  Verified live end to end: a grant created with `--user-id` omitted, then
-  revoked with `--user-id` omitted, both populated `identityUserId` with the
-  caller's own id.
+  is omitted. `--dry-run` also resolves self before building its preview
+  (authenticating before the dry-run check, like `tasks approve`/`deny`
+  already do to resolve the task's policy step) so the previewed body
+  includes `identityUserId` and matches what the real call actually sends —
+  an earlier version of this fix left `--dry-run` previewing a body without
+  it while the real call sent one; `cmd/skill.md`/`README.md`'s dry-run
+  sections now list both commands alongside `tasks approve`/`deny` as
+  needing credentials when `--user-id` is omitted. An explicit `--user-id`
+  still needs no extra call, dry-run or not. Verified live end to end: a
+  grant created with `--user-id` omitted, then revoked with `--user-id`
+  omitted, both populated `identityUserId` with the caller's own id.
 - **`extractSSEResponse` now follows the SSE spec exactly.** Multiple `data:`
   lines within one SSE event are joined with `\n` (previously concatenated
   with no separator, which could corrupt a multi-line payload), and exactly
