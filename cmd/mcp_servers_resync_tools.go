@@ -12,7 +12,10 @@ var mcpServersResyncToolsCmd = &cobra.Command{
 	Short: "Re-run tool discovery for an MCP server",
 	Long: `Re-run tool discovery against the MCP server using the calling user's own
 credential. Newly discovered tools land in PENDING_REVIEW; approve them with
-"c1i mcp tools approve".`,
+"c1i mcp tools approve".
+
+EXTERNAL servers only; HOSTED servers return an error ("resync is only supported
+for external MCP servers").`,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		if err := requireNonEmpty(cmd, "app-id"); err != nil {
