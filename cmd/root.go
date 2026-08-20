@@ -118,7 +118,7 @@ func init() {
 	rootCmd.SetFlagErrorFunc(func(_ *cobra.Command, err error) error {
 		return &usageError{err}
 	})
-	rootCmd.PersistentFlags().String("url", "", "C1 URL (e.g. https://mycompany.conductor.one or https://mycompany.c1eu.ai)")
+	rootCmd.PersistentFlags().String("url", "", "C1 URL; https required (e.g. https://mycompany.conductor.one or https://mycompany.c1eu.ai)")
 	_ = viper.BindPFlag("url", rootCmd.PersistentFlags().Lookup("url"))
 	_ = viper.BindEnv("url", "C1I_URL")
 
@@ -153,12 +153,11 @@ func initConfig() {
 	_ = viper.ReadInConfig()
 }
 
-// GetBaseURL returns the configured base URL or exits with an error. Anything
-// ParseURL silently rewrote (a non-https scheme, embedded credentials) is
-// printed to stderr as a warning rather than surfaced as an error, so a typo
-// doesn't turn into a hard failure -- but it's no longer silent. Delegates to
-// GetBaseURLWithSource so a ParseURL error (e.g. a retired bare short name)
-// is reported with the same source-naming used everywhere else.
+// GetBaseURL returns the configured base URL or exits with an error. Embedded
+// credentials are dropped with a warning to stderr rather than an error; a
+// non-https scheme is an error. Delegates to GetBaseURLWithSource so a ParseURL
+// error (e.g. a retired bare short name) is reported with the same
+// source-naming used everywhere else.
 func GetBaseURL() (string, error) {
 	baseURL, source, err := GetBaseURLWithSource()
 	if err != nil {
@@ -204,7 +203,7 @@ func urlSourceLabel(source URLSource) string {
 }
 
 // GetBaseURLWithSource returns the configured base URL and where it came
-// from, warning to stderr about anything ParseURL silently rewrote. Looks up
+// from, warning to stderr about anything ParseURL dropped. Looks up
 // the "url" flag on rootCmd.PersistentFlags() directly (not a passed-in
 // *cobra.Command's merged Flags()) so it gives the right answer regardless
 // of which subcommand is actually executing -- GetBaseURL calls this from

@@ -19,7 +19,10 @@ Get this right first. A wrong tenant returns plausible-looking data with
 exit 0 — nothing downstream tells you it was the wrong one.
 
 `--url` (or `C1I_URL`) selects the tenant. With neither set, c1i falls back
-silently to whatever `url:` names in `~/.c1i.yaml`.
+silently to whatever `url:` names in `~/.c1i.yaml`. It must be a full host —
+`mycompany.conductor.one` or `mycompany.c1eu.ai` (EU) — and `https` is required:
+a bare `mycompany` and a non-https scheme are both usage errors (exit `2`)
+before any request is sent.
 Pass `--url` explicitly on every invocation instead of relying on an
 exported `C1I_URL` — if it gets lost between shell calls (a fresh shell per
 call is common), you fall through to the config file's tenant with no

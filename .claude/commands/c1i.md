@@ -32,7 +32,8 @@ Credentials resolve in order: `C1I_CLIENT_ID`/`C1I_CLIENT_SECRET` env vars
 A C1 URL is required for all API commands, resolved in order: `--url` flag →
 `C1I_URL` env var → `~/.c1i.yaml` (`url: https://mycompany.conductor.one`).
 `--url` takes a full host — `mycompany.conductor.one` or `mycompany.c1eu.ai`,
-with or without the scheme. A bare `mycompany` is rejected as ambiguous.
+with or without the scheme; `https` is required, and any other scheme is
+rejected rather than rewritten. A bare `mycompany` is rejected as ambiguous.
 
 ## Global flags (persistent, on every command)
 
