@@ -4,3 +4,6 @@ dist/
 
 # macOS Finder metadata
 .DS_Store
+
+# Scratch space: temp output, test data, debug dumps. Never the repo root.
+dev/

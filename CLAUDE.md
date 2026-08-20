@@ -30,6 +30,14 @@ Never weaken, loosen, or delete a test to make a change pass. For a new test,
 confirm it fails before your fix and passes after — a test that compiles but
 never fails proves nothing.
 
+## Scratch files
+
+Temp output, test data, and debug dumps go in `dev/` (gitignored, create it as
+needed). Nothing scratch belongs at the repo root: `git add -A` in a dirty root
+once committed 18 scratch files to this public repo, so
+`TestNoUnexpectedFilesAtRepoRoot` fails the build on any tracked root file
+outside its allowlist. Stage explicit paths rather than `-A`.
+
 ## Project Layout
 
 - `cmd/` — Cobra command definitions (one file per command)
