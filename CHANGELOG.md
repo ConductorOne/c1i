@@ -280,13 +280,13 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   Exit `2` is a deliberate simplification: a bad id is the only cause of a `3xx`
   seen so far, but a redirect on an otherwise well-formed request would not be
   the caller's mistake and would still report `2`.
-- **BREAKING — an unreachable MCP gateway now exits `8`, not `1`.** A DNS failure or a
+- **An unreachable MCP gateway now exits `8`, not `1`.** A DNS failure or a
   refused connection during the gateway handshake returned a bare error that
   collapsed to generic. Exit `8` already means "a system beyond C1 failed",
   which is exactly this; the earlier work classified JSON-RPC response codes and
   never reached the transport path, which fails before any JSON-RPC body exists.
   A rejected credential still exits `3` and a real C1 `5xx` still exits `6`.
-- **BREAKING — `api` no longer exits `0` printing a non-JSON body.** A `--path` that escapes
+- **`api` no longer exits `0` printing a non-JSON body.** A `--path` that escapes
   the API prefix can reach the web app, which answers `200` with an HTML
   document; `c1i api` printed it verbatim and reported success, so a downstream
   parser broke with no signal. A `200` whose body is not JSON is now an error
