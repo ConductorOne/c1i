@@ -327,13 +327,13 @@ func TestClient_IDPathRedirectChainRefused_StillRefused(t *testing.T) {
 	}
 }
 
-// TestResolveSamePath unit-tests the path-comparison decision directly for
-// cases that are impractical to stand up as a real network hop (notably,
+// TestResolveAllowedRedirect unit-tests the path-and-host decision directly
+// for cases that are impractical to stand up as a real network hop (notably,
 // resolving a Location against a base whose own URL was itself already
 // parsed), as a supplement to the httptest-driven tests above, not a
 // replacement for them.
-func TestResolveSamePath(t *testing.T) {
-	base, err := url.Parse("http://example.test/x/%2F")
+func TestResolveAllowedRedirect(t *testing.T) {
+	base, err := url.Parse("http://api.tenant.example/x/%2F")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -343,16 +343,210 @@ func TestResolveSamePath(t *testing.T) {
 		wantOK   bool
 	}{
 		{"empty location never resolves", "", false},
-		{"identical absolute URL", "http://example.test/x/%2F", true},
-		{"trailing slash added counts as changed", "http://example.test/x/%2F/", false},
+		{"identical absolute URL", "http://api.tenant.example/x/%2F", true},
+		{"trailing slash added counts as changed", "http://api.tenant.example/x/%2F/", false},
 		{"unparseable location", "http://ex ample.test", false},
+		{"same path, subdomain-related host: allowed", "http://tenant.example/x/%2F", true},
+		{"same path, unrelated host: refused", "http://evil.example/x/%2F", false},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			_, ok := resolveSamePath(base, tc.location)
+			_, ok := resolveAllowedRedirect(base, tc.location)
 			if ok != tc.wantOK {
-				t.Errorf("resolveSamePath(%q) ok = %v, want %v", tc.location, ok, tc.wantOK)
+				t.Errorf("resolveAllowedRedirect(%q) ok = %v, want %v", tc.location, ok, tc.wantOK)
 			}
 		})
+	}
+}
+
+// TestHostInScope guards the label-boundary safety of the suffix check
+// directly: a naive substring/suffix match without the "." would let
+// "eviltenant.example" pass as a subdomain of "tenant.example".
+func TestHostInScope(t *testing.T) {
+	cases := []struct {
+		name string
+		base string
+		tgt  string
+		want bool
+	}{
+		{"identical host", "tenant.example", "tenant.example", true},
+		{"identical host, case-insensitive", "Tenant.Example", "tenant.example", true},
+		{"subdomain of base", "tenant.example", "api.tenant.example", true},
+		{"base is subdomain of target", "api.tenant.example", "tenant.example", true},
+		{"unrelated host, shared suffix label boundary violated", "tenant.example", "eviltenant.example", false},
+		{"unrelated host, shared suffix label boundary violated, reversed", "eviltenant.example", "tenant.example", false},
+		{"completely unrelated host", "tenant.example", "evil.example", false},
+		// This is structurally the tenant-subdomain <-> canonical-apex case
+		// the rule is meant to allow (e.g. leet.conductor.one <-> conductor.one),
+		// not a hole: "example" here is the apex, not an unrelated host that
+		// merely shares a suffix label with it.
+		{"apex is the bare parent of a subdomain: allowed", "tenant.example", "example", true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			base := &url.URL{Host: tc.base}
+			tgt := &url.URL{Host: tc.tgt}
+			if got := hostInScope(base, tgt); got != tc.want {
+				t.Errorf("hostInScope(%q, %q) = %v, want %v", tc.base, tc.tgt, got, tc.want)
+			}
+		})
+	}
+}
+
+// authInjectingTripper stands in for the oauth2 transport in production:
+// it attaches a bearer token to every request it forwards, with no
+// awareness of host. It exists so these tests can observe, on the wire,
+// exactly what the coordinator's finding was about — whether that token
+// reaches a redirect target — rather than inferring it from the error type
+// alone.
+type authInjectingTripper struct {
+	next  http.RoundTripper
+	token string
+}
+
+func (a *authInjectingTripper) RoundTrip(req *http.Request) (*http.Response, error) {
+	req.Header.Set("Authorization", "Bearer "+a.token)
+	return a.next.RoundTrip(req)
+}
+
+// hostRewritingTransport lets a test address fake hostnames (e.g.
+// "tenant.example", "evil.example") that don't resolve, by mapping each to
+// the real httptest.Server address to dial while preserving the fake name
+// as the wire Host header (so a handler can key off r.Host, and so
+// redirectTripper — which runs above this transport and reads req.URL as
+// given — makes its allow/refuse decision against the fake hostnames, not
+// the real loopback addresses). It never mutates the caller's *http.Request
+// in place, only a clone, since redirectTripper still holds and reuses the
+// original.
+type hostRewritingTransport struct {
+	next  *http.Transport
+	hosts map[string]string // fake hostname -> real "127.0.0.1:port"
+}
+
+func (h *hostRewritingTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	fakeHost := req.URL.Hostname()
+	real, ok := h.hosts[fakeHost]
+	if !ok {
+		return nil, fmt.Errorf("test hostRewritingTransport: no real address mapped for host %q", fakeHost)
+	}
+	clone := req.Clone(req.Context())
+	clone.Host = req.URL.Host // preserve the fake name as the wire Host header
+	u := *req.URL
+	u.Host = real
+	clone.URL = &u
+	return h.next.RoundTrip(clone)
+}
+
+// TestClient_RedirectSubdomainHost_SamePath_Followed proves a same-path
+// redirect to a different but same-scope host (api.<domain> <-> <domain>,
+// in both directions) is followed and still carries auth — that's the
+// intended, safe case hostInScope exists to keep working.
+func TestClient_RedirectSubdomainHost_SamePath_Followed(t *testing.T) {
+	const token = "SECRET-TOKEN"
+
+	run := func(t *testing.T, fromHost, toHost string) {
+		var toHostCalled bool
+		var gotAuth string
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			switch r.Host {
+			case fromHost:
+				w.Header().Set("Location", "http://"+toHost+"/x")
+				w.WriteHeader(http.StatusMovedPermanently)
+			case toHost:
+				toHostCalled = true
+				gotAuth = r.Header.Get("Authorization")
+				_, _ = w.Write([]byte(`{"ok":true}`))
+			default:
+				t.Fatalf("unexpected Host %q", r.Host)
+			}
+		}))
+		defer srv.Close()
+
+		realAddr := srv.Listener.Addr().String()
+		hc := &http.Client{Transport: &redirectTripper{next: &authInjectingTripper{
+			token: token,
+			next: &hostRewritingTransport{
+				next:  http.DefaultTransport.(*http.Transport),
+				hosts: map[string]string{fromHost: realAddr, toHost: realAddr},
+			},
+		}}}
+		c := &Client{httpClient: hc, baseURL: "http://" + fromHost, maxRetries: 0}
+
+		body, err := c.Get(context.Background(), "/x", nil)
+		if err != nil {
+			t.Fatalf("unexpected error following %s -> %s: %v", fromHost, toHost, err)
+		}
+		if string(body) != `{"ok":true}` {
+			t.Errorf("body = %s, want the target's body", body)
+		}
+		if !toHostCalled {
+			t.Fatalf("%s was never contacted; the same-scope redirect must be followed", toHost)
+		}
+		if gotAuth != "Bearer "+token {
+			t.Errorf("%s saw Authorization = %q, want %q (a followed in-scope hop is meant to carry auth)", toHost, gotAuth, "Bearer "+token)
+		}
+	}
+
+	t.Run("api.tenant.example -> tenant.example", func(t *testing.T) {
+		run(t, "api.tenant.example", "tenant.example")
+	})
+	t.Run("tenant.example -> api.tenant.example", func(t *testing.T) {
+		run(t, "tenant.example", "api.tenant.example")
+	})
+}
+
+// TestClient_RedirectUnrelatedHost_Refused is the coordinator's finding,
+// closed: a same-path redirect to a host outside the request host's trust
+// scope must be refused, and — the point of the fix — the unrelated host
+// must never be contacted at all, so it never has the chance to see the
+// bearer token attached by the transport beneath redirectTripper.
+func TestClient_RedirectUnrelatedHost_Refused(t *testing.T) {
+	const token = "SECRET-TOKEN"
+	const goodHost = "tenant.example"
+	const evilHost = "evil.example"
+
+	var evilCalls int
+	var evilSawAuth string
+	evilSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		evilCalls++
+		evilSawAuth = r.Header.Get("Authorization")
+		_, _ = w.Write([]byte(`{"stolen":true}`))
+	}))
+	defer evilSrv.Close()
+
+	goodSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Host != goodHost {
+			t.Fatalf("unexpected Host %q", r.Host)
+		}
+		w.Header().Set("Location", "http://"+evilHost+"/x")
+		w.WriteHeader(http.StatusMovedPermanently)
+	}))
+	defer goodSrv.Close()
+
+	hc := &http.Client{Transport: &redirectTripper{next: &authInjectingTripper{
+		token: token,
+		next: &hostRewritingTransport{
+			next: http.DefaultTransport.(*http.Transport),
+			hosts: map[string]string{
+				goodHost: goodSrv.Listener.Addr().String(),
+				evilHost: evilSrv.Listener.Addr().String(),
+			},
+		},
+	}}}
+	c := &Client{httpClient: hc, baseURL: "http://" + goodHost, maxRetries: 0}
+
+	body, err := c.Get(context.Background(), "/x", nil)
+	var redirErr *RedirectError
+	if !errors.As(err, &redirErr) {
+		t.Fatalf("error = %T (%v), want *RedirectError", err, err)
+	}
+	if body != nil {
+		t.Errorf("body = %q, want nil (no body on refusal)", body)
+	}
+	if evilCalls != 0 {
+		t.Fatalf("%s was contacted %d time(s); an out-of-scope redirect must never be followed", evilHost, evilCalls)
+	}
+	if evilSawAuth != "" {
+		t.Errorf("%s observed Authorization = %q; it must never see any request, let alone the token", evilHost, evilSawAuth)
 	}
 }

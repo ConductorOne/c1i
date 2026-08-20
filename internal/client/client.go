@@ -13,6 +13,7 @@ import (
 	"os"
 	"runtime/debug"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/ConductorOne/c1i/internal/config"
@@ -102,22 +103,18 @@ var redirectStatuses = map[int]bool{
 // a hang.
 const maxRedirectHops = 5
 
-// redirectTripper decides, per 3xx response, whether the redirect changes
-// the resource being addressed or is pure scheme/host canonicalization. This
-// API performs zero redirects for any request this CLI issues today
-// (verified with --debug against a normal call); the defect this guards is
-// an id of "/" or "." escaping to a path the server 301s to a *different*
-// path — first a trailing slash, then the bare collection — turning a
-// single-object read into a collection read. A redirect whose target path
-// is byte-identical to the request's can't do that, so it's followed;
-// anything else is refused. It intercepts at the RoundTripper layer, one
-// level below http.Client's own redirect-following logic, rather than via
-// http.Client.CheckRedirect: CheckRedirect's signature only exposes the
-// *next* request, not the response that triggered it, so it can't report
-// the status code or Location a refusal needs to show. Returning an error
-// from RoundTrip on refusal means Client.Do never receives a 3xx response to
-// act on, so its own redirect logic never runs and no retry/backoff or
-// second request happens for a refused hop.
+// redirectTripper follows a 3xx only when the target's escaped path matches
+// the request's exactly AND the target host is in the same trust scope as
+// the request host (see hostInScope); anything else — a changed path, or a
+// same-path redirect to an unrelated host — is refused as *RedirectError.
+// The host check exists because this tripper sits outside the oauth2
+// transport: following to an arbitrary host would hand that host the
+// caller's bearer token, which is exactly what net/http's own redirect
+// handling strips Authorization to prevent. It intercepts at the
+// RoundTripper layer rather than via http.Client.CheckRedirect because
+// CheckRedirect's signature only exposes the *next* request, not the
+// response that triggered it, so it can't report the status/Location a
+// refusal needs to show.
 type redirectTripper struct {
 	next http.RoundTripper
 }
@@ -131,7 +128,7 @@ func (rt *redirectTripper) RoundTrip(req *http.Request) (*http.Response, error) 
 		loc := resp.Header.Get("Location")
 		_ = resp.Body.Close()
 
-		target, ok := resolveSamePath(req.URL, loc)
+		target, ok := resolveAllowedRedirect(req.URL, loc)
 		if !ok {
 			return nil, &RedirectError{
 				Method:     req.Method,
@@ -155,26 +152,17 @@ func (rt *redirectTripper) RoundTrip(req *http.Request) (*http.Response, error) 
 	}
 }
 
-// resolveSamePath resolves location — a bare path, a path-relative
+// resolveAllowedRedirect resolves location — a bare path, a path-relative
 // reference, or an absolute URL — against base per RFC 3986 (the same
 // resolution net/http's own redirect-following uses), and reports the
-// resolved target only when its path is identical to base's: a redirect
-// that is pure scheme/host canonicalization, not a change of resource.
-//
-// Comparison is on EscapedPath, not the decoded Path, matching
-// pathHasEmptySegment and do()'s own guard, so a percent-encoded separator
-// (%2F) can't be silently decoded into one during the comparison. An empty
-// Location, or one url.Parse rejects, is never treated as unchanged.
-//
-// A trailing-slash difference counts as a path change and is deliberately
-// not normalized away: it's the exact shape the live bypass produces (an
-// escaped "/" id redirects to a trailing-slash path before the final hop to
-// the bare collection), so the bug lives on the side of two paths that
-// "look like" the same resource but aren't — normalizing them together
-// would reopen it. A query-string difference alone does not count:
-// EscapedPath excludes the query, and the defect this guards against is a
-// change of resource path, not query.
-func resolveSamePath(base *url.URL, location string) (*url.URL, bool) {
+// resolved target only when both hold: its escaped path is identical to
+// base's (EscapedPath, not the decoded Path, so a percent-encoded separator
+// like %2F isn't silently decoded into one — matching pathHasEmptySegment
+// and do()'s guard; a trailing-slash difference therefore counts as
+// changed, since that's the exact shape the id-normalizes-to-collection
+// bypass produces), and its host is in the same trust scope as base's (see
+// hostInScope). An empty Location, or one url.Parse rejects, never resolves.
+func resolveAllowedRedirect(base *url.URL, location string) (*url.URL, bool) {
 	if location == "" {
 		return nil, false
 	}
@@ -185,7 +173,31 @@ func resolveSamePath(base *url.URL, location string) (*url.URL, bool) {
 	if target.EscapedPath() != base.EscapedPath() {
 		return nil, false
 	}
+	if !hostInScope(base, target) {
+		return nil, false
+	}
 	return target, true
+}
+
+// hostInScope reports whether target's host is close enough to base's to
+// trust with base's credentials: identical (ignoring scheme/port), or one
+// is exactly "<label>." prepended to the other (apex<->www, tenant<->
+// canonical-host within the same domain). This is a suffix check on whole
+// labels, not a substring match, so "eviltenant.example" is never mistaken
+// for a subdomain of "tenant.example" — the "." is part of the comparison
+// string precisely to enforce the label boundary. No public-suffix list is
+// used or needed: an unrelated host (different domain entirely) never
+// satisfies this and is refused.
+func hostInScope(base, target *url.URL) bool {
+	a := strings.ToLower(base.Hostname())
+	b := strings.ToLower(target.Hostname())
+	if a == "" || b == "" {
+		return false
+	}
+	if a == b {
+		return true
+	}
+	return strings.HasSuffix(a, "."+b) || strings.HasSuffix(b, "."+a)
 }
 
 // redirectedRequest builds the request for an allowed (same-path) redirect
