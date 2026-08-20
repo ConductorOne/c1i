@@ -6,16 +6,12 @@ import (
 	"strings"
 )
 
-// ParseURL normalizes any of the following inputs to "https://{host}" (no
-// trailing slash). A host that arrives WITH a dot (a full URL, a
-// protocol-relative URL, or a raw domain) is lower-cased -- DNS/HTTP hosts
-// are case-insensitive but the keychain key built from one
-// (KeychainService) is not, so a mixed-case --url must normalize the same
-// as its lower-case form or credential lookup spuriously fails. This is
-// deliberately about URL SHAPE only, never about which tenant domain family
-// a host belongs to (there is more than one valid one, e.g.
-// *.conductor.one and *.c1eu.ai, and more may follow) -- nothing here
-// allowlists or validates against a specific suffix.
+// ParseURL normalizes input to "https://{host}" (no trailing slash), lower-casing
+// the host: DNS is case-insensitive but the keychain key built from the host
+// (KeychainService) is not, so a mixed-case --url must normalize to the same key
+// or credential lookup spuriously fails. Validates URL SHAPE only — never which
+// tenant domain family a host belongs to, since more than one is valid
+// (*.conductor.one, *.c1eu.ai) and nothing here should allowlist a suffix.
 //   - Full URL: "https://acme.conductor.one/" → "https://acme.conductor.one"
 //   - Protocol-relative: "//acme.conductor.one" → "https://acme.conductor.one"
 //   - Raw domain: "ACME.conductor.one" → "https://acme.conductor.one"

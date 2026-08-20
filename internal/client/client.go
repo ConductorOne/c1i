@@ -179,20 +179,12 @@ func resolveAllowedRedirect(base *url.URL, location string) (*url.URL, bool) {
 	return target, true
 }
 
-// hostInScope reports whether target's host is close enough to base's to
-// trust with base's credentials: identical (ignoring scheme/port — this
-// branch alone covers a bare single-label host like "localhost", which is a
-// legitimate local-development target and not a cross-host hop at all), or
-// one is exactly "<label>." prepended to the other (apex<->www, tenant<->
-// canonical-host within the same domain), provided the target has at least
-// two labels — a single-label target is never a real canonicalization of a
-// public tenant host, and every domain family this CLI talks to has a
-// two-label apex. This is a suffix check on whole labels, not a substring
-// match, so "eviltenant.example" is never mistaken for a subdomain of
-// "tenant.example" — the "." is part of the comparison string precisely to
-// enforce the label boundary. No public-suffix list is used or needed: an
-// unrelated host (different domain entirely) never satisfies this and is
-// refused.
+// hostInScope reports whether target's host may be trusted with base's
+// credentials: identical (ignoring scheme/port), or one is "<label>." prepended
+// to the other with at least two labels in the target. The "." is inside the
+// comparison to enforce a label boundary, so "eviltenant.example" is not a
+// subdomain of "tenant.example"; the two-label floor rejects a bare apex that
+// could not be a real canonicalization.
 func hostInScope(base, target *url.URL) bool {
 	a := strings.ToLower(base.Hostname())
 	b := strings.ToLower(target.Hostname())
