@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 
 	"github.com/zalando/go-keyring"
@@ -163,6 +164,63 @@ func TestFileFallbackBubblesRealKeyringErrors(t *testing.T) {
 
 	if _, err := Store(testService, testID, testSecret); err == nil {
 		t.Fatalf("expected non-availability error to surface, got nil")
+	}
+}
+
+// TestLoadNeverLoggedInMessageUnchanged pins the exact wording Load returns
+// when there is genuinely no stored credential anywhere (keyring reachable
+// and empty, file store empty). This is the "run 'c1i auth login'" case, and
+// it must read exactly as it did before the keyring-unavailable diagnosis was
+// added — a user who never logged in must see no change.
+func TestLoadNeverLoggedInMessageUnchanged(t *testing.T) {
+	keyring.MockInit()
+	withTempConfigDir(t)
+	clearEnv(t)
+
+	_, _, _, err := Load(testService)
+	if err == nil {
+		t.Fatalf("expected error when nothing was ever stored")
+	}
+	want := "no credentials found for " + testService + ": run 'c1i auth login'"
+	if err.Error() != want {
+		t.Fatalf("Load error = %q, want %q", err.Error(), want)
+	}
+	if !errors.Is(err, ErrNoCredentials) {
+		t.Errorf("expected error to wrap ErrNoCredentials, got: %v", err)
+	}
+}
+
+// TestLoadKeyringUnavailableAndFileEmptyDiagnosesReachability is the
+// load-bearing regression test for ledger C63: when the keyring is
+// unreachable (not merely empty) AND the file store has no entry either, Load
+// must say so — a credential may be sitting in the keyring, unreachable,
+// while "run 'c1i auth login'" (the generic never-logged-in message) would
+// send the user to create a second, file-backed credential instead of
+// explaining why the first one can't be read. Before the fix, this case was
+// indistinguishable from "never logged in" because Load discarded the
+// isKeyringUnavailable classification once it decided to fall through to the
+// file store.
+func TestLoadKeyringUnavailableAndFileEmptyDiagnosesReachability(t *testing.T) {
+	keyring.MockInitWithError(keyring.ErrUnsupportedPlatform)
+	withTempConfigDir(t)
+	clearEnv(t)
+
+	_, _, _, err := Load(testService)
+	if err == nil {
+		t.Fatalf("expected error when keyring is unavailable and file store is empty")
+	}
+
+	if strings.Contains(err.Error(), "run 'c1i auth login'") {
+		t.Errorf("Load error must not tell the user to log in again while the keyring is unreachable "+
+			"(that stores a second, orphaned credential): got %q", err.Error())
+	}
+	for _, want := range []string{"file store", "keyring is currently unavailable", "unsupported platform"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("Load error = %q, want it to mention %q", err.Error(), want)
+		}
+	}
+	if !errors.Is(err, keyring.ErrUnsupportedPlatform) {
+		t.Errorf("expected error to wrap the underlying keyring error, got: %v", err)
 	}
 }
 

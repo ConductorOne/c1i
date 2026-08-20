@@ -160,6 +160,20 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- **A credential stuck in an unreachable OS keyring was misreported as "no
+  credentials found: run `c1i auth login`."** `keychain.Load` falls back to
+  its 0600 file store both when the keyring has never seen a credential and
+  when the keyring is merely unreachable (headless Linux/containers without
+  a D-Bus session bus) — but it discarded that distinction once it decided to
+  fall through, so a real credential sitting inert in the keyring looked
+  identical to never having logged in. Following the old advice made things
+  worse: it wrote a second, file-backed credential while the original
+  keyring entry stayed unreachable. Load now says plainly that the file
+  store is empty *and* the keyring is currently unavailable, names the
+  underlying keyring error, and notes that `auth login` will store a new
+  credential in the file store rather than recover the keyring one. The
+  genuinely-never-logged-in message is unchanged, and this still surfaces as
+  `client.AuthError` (exit 3), same as before.
 - **The `docs guide` drift guard (`TestGuideCommandsResolveAgainstCobraTree`)
   now validates positional-argument counts, short flags, and single-quoted
   values, and flags "c1i ..." text it can't check.** An audit of the guard
