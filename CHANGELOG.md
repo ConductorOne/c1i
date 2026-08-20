@@ -8,6 +8,22 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **`policies list|get|search|create|update|delete|validate-cel`** — first-class
+  commands for C1 policies (approval/provisioning/certification workflows).
+  `create`/`update` refuse client-side (exit 2) to send a request with
+  empty/missing steps for a policy's baseline entry — `POST /api/v1/policies`
+  with no `policySteps` silently succeeds and returns a deny-everything
+  policy (a single `{"reject":{}}` step), with no validation error; pass
+  `--allow-deny-all` if that's genuinely intended. They also refuse an
+  unspecified `--policy-type`, an empty `rules[].condition`, a `provision`
+  step, `fallback`/`fallbackUserIds` on an approver arm that doesn't support
+  them, and `fallback:true` with nothing to fall back to — several of these
+  are bare server errors that otherwise surface as an opaque `HTTP 500`
+  rather than a `400`. `update` builds the API's required
+  `{"policy": {...}, "updateMask": "..."}` wrapper for you (a flat body
+  400s). `validate-cel` checks a CEL condition (root variable `subject`, not
+  `user`) without creating or updating anything. See README's "Policies"
+  section for the full flag surface and guard list.
 - **`docs agents [-o FILE]`** — print a short, agent-facing bootstrap doc (no
   auth required, like the other `docs` subcommands): tenant/auth, output
   contracts, exit codes, pagination, and when to prefer a first-class command
