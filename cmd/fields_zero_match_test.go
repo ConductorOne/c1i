@@ -19,7 +19,7 @@ import (
 // already did (see TestWriteObjectFailsLoudlyOnNoMatch /
 // TestWriteObjectPartialMatchStillSucceeds in cmd/fields_test.go, which pin
 // that existing single-object rule). Confirmed live, pre-fix, against
-// https://leet.conductor.one: `users list --fields totally.bogus.path`
+// a live tenant: `users list --fields totally.bogus.path`
 // printed two "{}" rows and exited 0 on unfixed main.
 //
 // The fix is: emit rows normally as they stream (never buffer — --paginate

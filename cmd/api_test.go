@@ -435,7 +435,7 @@ func twoPageFixtureServer(page1Item, page2Item string) *httptest.Server {
 // --paginate exists precisely to walk unbounded results without holding them
 // all in memory) and then fail with exit 2, not silently exit 0 having
 // printed two "{}" rows (the pre-fix behavior, confirmed live against
-// https://leet.conductor.one before this fix).
+// a live tenant before this fix).
 func TestAPIPaginateFieldsZeroMatchAcrossAllPagesErrors(t *testing.T) {
 	srv := twoPageFixtureServer(`{"name":"page1-item"}`, `{"name":"page2-item"}`)
 	defer srv.Close()
