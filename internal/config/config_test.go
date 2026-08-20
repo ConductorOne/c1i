@@ -58,13 +58,15 @@ func TestParseURLCaseInsensitiveHost(t *testing.T) {
 	}
 }
 
-// TestParseURLBareShortNameCaseUntouched pins that the bare-short-name
-// expansion ("acme" -> "acme.conductor.one") is deliberately left exactly as
-// it was: unlike every other branch, its host is NOT lower-cased. Which
-// domain family a bare short name should expand to is a genuinely open
-// question now that more than one is valid (*.conductor.one, *.c1eu.ai);
-// this fix does not decide it, so this branch's behavior -- case included
-// -- must not shift in passing.
+// TestParseURLBareShortNameCaseUntouched is a snapshot, not a requirement:
+// it pins the bare-short-name branch's PRE-EXISTING case-sensitivity defect
+// (unlike every other branch, its host is NOT lower-cased, so
+// `ParseURL("ACME")` still produces a keychain key case-mismatch) exactly as
+// found, because this fix was told not to touch that branch. The branch is
+// already slated for retirement (a bare short name becoming a usage error,
+// once there's more than one tenant domain family a short name could mean)
+// -- this test goes with it when that lands; don't "fix" the inconsistency
+// here in isolation.
 func TestParseURLBareShortNameCaseUntouched(t *testing.T) {
 	got, warnings := ParseURL("ACME")
 	if want := "https://ACME.conductor.one"; got != want {
