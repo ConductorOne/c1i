@@ -106,8 +106,7 @@ func init() {
 	policiesSearchCmd.Flags().Bool("include-deleted", false, "Include soft-deleted policies")
 	policiesSearchCmd.Flags().StringSlice("exclude-policy-id", nil, "Policy ID to exclude from results (repeatable)")
 	// Floor is 5, not the 10 the policy proto's comment claims: the shipped
-	// clamp is postgres.PageSize (MinPageSize 5, MaxPageSize 100), and 9 passes
-	// through unclamped. Verified live.
+	// clamp is 5..100, and 9 passes through unclamped. Verified live.
 	policiesSearchCmd.Flags().Int("page-size", 25, "Results per page (5-100; a value of 5 or less becomes 5; 0 means the server default of 25)")
 	policiesSearchCmd.Flags().String("page-token", "", "Pagination cursor")
 	addLimitFlag(policiesSearchCmd)

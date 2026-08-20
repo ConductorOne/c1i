@@ -118,7 +118,7 @@ Each `automations list` row includes `function_ids` (every distinct function the
 ```sh
 c1i policies list [--page-size N] [--page-token TOKEN] [--limit N]
 c1i policies get <policy-id>
-c1i policies search [--query <text>] [--display-name <name>] [--policy-type grant|revoke|certify ...] [--include-deleted] [--exclude-policy-id <id> ...] [--page-size N] [--limit N]
+c1i policies search [--query <text>] [--display-name <name>] [--policy-type grant|revoke|certify ...] [--include-deleted] [--exclude-policy-id <id> ...] [--page-size N] [--page-token TOKEN] [--limit N]
 c1i policies create --display-name <name> --policy-type grant|revoke|certify [--description <text>] [--steps-file <file|-> ] [--rules-file <file|-> ] [--allow-deny-all]
 c1i policies create --body-file <file|->
 c1i policies update <policy-id> [--display-name <name>] [--description <text>] [--policy-type ...] [--steps-file <file|-> ] [--rules-file <file|-> ] [--allow-deny-all]
@@ -164,11 +164,16 @@ requires an explicit `--update-mask`.
 Its root variable is `subject` (not `user`); this validates the
 `rules[].condition` environment specifically, which is NOT the same
 environment `ExpressionApproval.expressions` run in (see the command's
-`--help`).
+`--help`). An invalid condition prints its compile markers and exits 2, so
+`c1i policies validate-cel '<cond>' && ...` only continues on a condition
+that compiles.
 
 A soft-deleted policy still returns from a direct `get` (with `deletedAt`
 populated) but disappears from `list` and the default `search`; only
-`search --include-deleted` finds it there.
+`search --include-deleted` finds it there. List and search rows carry
+`deleted_at` so deleted rows are distinguishable without a second call — it
+is `null` on a live policy, so `jq 'select(.deleted_at)'` selects only the
+deleted ones.
 
 ### MCP
 

@@ -233,9 +233,6 @@ func TestPoliciesUpdateAllowDenyAllBypassesGuardAndSendsRequest(t *testing.T) {
 	}
 }
 
-// TestPoliciesUpdateBodyFileRequiresUpdateMask pins that --body-file without
-// --update-mask is refused (there would be nothing to tell the server what
-// changed).
 // TestPoliciesUpdateWithoutAllowDenyAllIsRefused is the other half of the
 // bypass pair above. A bypass test on its own proves little: it asserts the
 // request reaches the server, which also happens if the guard is simply
@@ -276,6 +273,8 @@ func TestPoliciesUpdateWithoutAllowDenyAllIsRefused(t *testing.T) {
 	}
 }
 
+// TestPoliciesUpdateBodyFileRequiresUpdateMask pins that --body-file without
+// --update-mask is refused: nothing would tell the server what changed.
 func TestPoliciesUpdateBodyFileRequiresUpdateMask(t *testing.T) {
 	resetPoliciesUpdateCmdFlags(t)
 	bodyPath := writeTempJSON(t, "body.json", `{"displayName":"x"}`)
