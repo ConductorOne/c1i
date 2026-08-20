@@ -5,20 +5,22 @@ import (
 	"strings"
 )
 
-// This file holds the client-side guards for `policies create`/`update`
-// : checks that run BEFORE any request is sent, each
-// failing as a *usageError (exit 2). They exist because several C1 policy
-// API defects either silently produce a dangerous result (an empty
-// policySteps becomes a deny-everything policy, no error) or return an
-// unhelpful status. Most of the rejections this file pins are plain
-// fmt.Errorf values from pkg/models/policy/policy_validate.go's
+// This file holds the client-side guards for `policies create`/`update`:
+// checks that run BEFORE any request is sent, each failing as a *usageError
+// (exit 2). They exist because several C1 policy API defects either
+// silently produce a dangerous result (an empty policySteps becomes a
+// deny-everything policy, no error) or return an unhelpful status. Most of
+// the rejections this file pins are plain fmt.Errorf values from
+// pkg/models/policy/policy_validate.go's
 // validateApproval/ValidateNonProvisionPolicyStepSlice — NOT gRPC-status
 // errors — and the platform's generic error-to-HTTP-status mapping falls
 // back to codes.Unknown for a bare error, which maps to HTTP 500. So every
 // guard below is not just "the server 400s, catch it earlier" but "the
 // server 500s with no explanation, catch it client-side or the caller gets
-// an opaque failure." Verified against the platform source
-// (pkg/models/policy/policy.go, policy_validate.go,
+// an opaque failure": a step with none of its oneof arms set, and the dozen
+// business rules on the agent approver arm specifically, fail the exact
+// same way. Verified against the platform source (pkg/models/policy/policy.go,
+// policy_validate.go,
 // pkg/controller/conditional_policy/controller/conditional_policy.go) and
 // the live public OpenAPI spec, not guessed.
 
@@ -27,6 +29,20 @@ import (
 var approvalArms = []string{
 	"users", "manager", "appOwners", "group", "self",
 	"entitlementOwners", "expression", "webhook", "resourceOwners", "agent",
+}
+
+// stepArms lists every arm of the Step oneof (c1.api.policy.v1.Step.typ),
+// per policies_create.go's --steps-file documentation. A step with none of
+// these keys set reaches the server as a nil step.
+var stepArms = []string{"approval", "provision", "accept", "reject", "wait", "form"}
+
+func hasStepArm(step map[string]any) bool {
+	for _, arm := range stepArms {
+		if _, ok := step[arm]; ok {
+			return true
+		}
+	}
+	return false
 }
 
 // approverArmsWithoutFallback lists the Approval arms whose message type
@@ -248,33 +264,56 @@ func validateRuleConditions(rules []any) error {
 // validateApproval, plus the provision-step rejection in
 // ValidateNonProvisionPolicyStepSlice:
 //
-//  1. A `provision` step is never allowed in a policy body (it's a
+//  1. A step with none of the six Step oneof arms set (approval, provision,
+//     accept, reject, wait, form) — the server's own error is "policy step
+//     is nil". An arm present with an empty body (e.g. {"reject":{}}) is a
+//     legitimate step and is NOT rejected here.
+//  2. A `provision` step is never allowed in a policy body (it's a
 //     read-only, server-computed step type) — "provision steps are not
 //     allowed in policies", a bare error.
-//  2. `approval.assigned` must not be sent as true — it's a read-only,
+//  3. `approval.assigned` must not be sent as true — it's a read-only,
 //     server-computed field ("assigned is a read-only field and must be
 //     false by default").
-//  3. fallback / fallbackUserIds set on an arm that doesn't support them
+//  4. fallback / fallbackUserIds set on an arm that doesn't support them
 //     (users, appOwners, webhook, agent) — rejected server-side as an
 //     unknown JSON field (400, not 500, but still worth catching early).
-//  4. fallback:true with nothing to fall back to, on any of the six arms
+//  5. fallback:true with nothing to fall back to, on any of the six arms
 //     that support it (manager, group, self, expression, entitlementOwners,
 //     resourceOwners) — each is validated identically: fallbackGroupIds
 //     must be non-empty when isGroupFallbackEnabled is true, otherwise
 //     fallbackUserIds must be non-empty. A bare error either way.
-//  5. `manager.assignedUserIds` must be empty — server-computed
+//  6. `manager.assignedUserIds` must be empty — server-computed
 //     ("manager steps assigned user IDs is set by the task workflow, not
 //     defined on the input").
-//  6. `agent.agentUserId` must be empty — deprecated/system-driven
+//  7. `agent.agentUserId` must be empty — deprecated/system-driven
 //     ("agent approval steps are system-driven and cannot reference an
 //     agent user").
 //
-// A handful of additional agent-approval business rules exist server-side
-// (agentMode/agentFailureAction required, mode<->policyType constraints,
-// reassign/policy-id list requirements when specific modes are chosen) that
-// this guard does not yet cover — see the policies_validate.go package
-// comment / README for the callout.
-func validateApprovalFallback(policySteps map[string]any) error {
+// The Approval_Agent case in validateApproval has six more bare-error
+// rules, guarded here too. policyType is the caller's already-resolved
+// policy type; "" means unknown (an update that never resolves one — e.g.
+// --body-file with no policyType and no --steps-file fetch, see
+// policies_update.go's resolveFallbackPolicyType) and skips the two rules
+// that need it:
+//
+//  8. `agentMode` is required ("agent mode is required").
+//  9. Agent steps are only allowed when policyType is GRANT or CERTIFY
+//     ("agent approval steps are only allowed in grant and certify
+//     policies") — skipped when policyType is unknown.
+//  10. When policyType is CERTIFY, agentMode must be COMMENT_ONLY ("agent
+//     mode can only be \"Comment only\" in certify policies").
+//  11. When agentMode is CHANGE_POLICY_ONLY, policyIds must be non-empty
+//     ("policy ids are required when agent mode is \"Change policy\"").
+//     The sibling rule — no policyIds entry may equal the policy's own
+//     id — is NOT checked: this guard never has the policy's own id
+//     available (create has none yet; update withholds it until after
+//     validation, see buildUpdatePolicyPatch).
+//  12. `agentFailureAction` is required ("agent failure action is
+//     required").
+//  13. When agentFailureAction is REASSIGN_TO_USERS, reassignToUserIds
+//     must be non-empty ("reassign to user ids is required when agent
+//     failure action is \"Reassign to users\"").
+func validateApprovalFallback(policySteps map[string]any, policyType string) error {
 	for ptype, v := range policySteps {
 		entry, ok := v.(map[string]any)
 		if !ok {
@@ -285,6 +324,9 @@ func validateApprovalFallback(policySteps map[string]any) error {
 			step, ok := s.(map[string]any)
 			if !ok {
 				continue
+			}
+			if !hasStepArm(step) {
+				return &usageError{fmt.Errorf("policySteps[%q].steps[%d]: step has none of the recognized arms (approval, provision, accept, reject, wait, form) — the server rejects this with a bare \"policy step is nil\" error (HTTP 500, not 400)", ptype, i)}
 			}
 			if _, hasProvision := step["provision"]; hasProvision {
 				return &usageError{fmt.Errorf("policySteps[%q].steps[%d]: a \"provision\" step is never allowed in a policy body — it's read-only and server-computed", ptype, i)}
@@ -332,6 +374,34 @@ func validateApprovalFallback(policySteps map[string]any) error {
 					if uid, _ := armObj["agentUserId"].(string); uid != "" {
 						return &usageError{fmt.Errorf("policySteps[%q].steps[%d].approval.agent.agentUserId must be empty — agent approval steps are system-driven and cannot reference an agent user (deprecated field)", ptype, i)}
 					}
+					if policyType != "" && policyType != "POLICY_TYPE_UNSPECIFIED" &&
+						policyType != "POLICY_TYPE_GRANT" && policyType != "POLICY_TYPE_CERTIFY" {
+						return &usageError{fmt.Errorf("policySteps[%q].steps[%d].approval.agent: agent approval steps are only allowed in grant and certify policies (this policy is %s) — server error: \"agent approval steps are only allowed in grant and certify policies\" (HTTP 500, not 400)", ptype, i, policyType)}
+					}
+					agentMode, _ := armObj["agentMode"].(string)
+					if agentMode == "" || agentMode == "APPROVAL_AGENT_MODE_UNSPECIFIED" {
+						return &usageError{fmt.Errorf("policySteps[%q].steps[%d].approval.agent.agentMode is required — server error: \"agent mode is required\" (HTTP 500, not 400)", ptype, i)}
+					}
+					if policyType == "POLICY_TYPE_CERTIFY" && agentMode != "APPROVAL_AGENT_MODE_COMMENT_ONLY" {
+						return &usageError{fmt.Errorf(`policySteps[%q].steps[%d].approval.agent.agentMode must be APPROVAL_AGENT_MODE_COMMENT_ONLY in a certify policy — server error: agent mode can only be "Comment only" in certify policies (HTTP 500, not 400)`, ptype, i)}
+					}
+					if agentMode == "APPROVAL_AGENT_MODE_CHANGE_POLICY_ONLY" {
+						if ids, _ := armObj["policyIds"].([]any); len(ids) == 0 {
+							return &usageError{fmt.Errorf(`policySteps[%q].steps[%d].approval.agent.policyIds is required when agentMode is APPROVAL_AGENT_MODE_CHANGE_POLICY_ONLY — server error: policy ids are required when agent mode is "Change policy" (HTTP 500, not 400)`, ptype, i)}
+						}
+						// The sibling rule — no policyIds entry may equal the
+						// policy's own id — isn't checked: this function is never
+						// given the policy's own id (see the doc comment above).
+					}
+					agentFailureAction, _ := armObj["agentFailureAction"].(string)
+					if agentFailureAction == "" || agentFailureAction == "APPROVAL_AGENT_FAILURE_ACTION_UNSPECIFIED" {
+						return &usageError{fmt.Errorf("policySteps[%q].steps[%d].approval.agent.agentFailureAction is required — server error: \"agent failure action is required\" (HTTP 500, not 400)", ptype, i)}
+					}
+					if agentFailureAction == "APPROVAL_AGENT_FAILURE_ACTION_REASSIGN_TO_USERS" {
+						if ids, _ := armObj["reassignToUserIds"].([]any); len(ids) == 0 {
+							return &usageError{fmt.Errorf(`policySteps[%q].steps[%d].approval.agent.reassignToUserIds is required when agentFailureAction is APPROVAL_AGENT_FAILURE_ACTION_REASSIGN_TO_USERS — server error: reassign to user ids is required when agent failure action is "Reassign to users" (HTTP 500, not 400)`, ptype, i)}
+						}
+					}
 				}
 			}
 		}
@@ -352,7 +422,7 @@ func validateCreateBody(body map[string]any, allowDenyAll bool) error {
 	if err := validatePolicyStepsNonEmpty(policyType, policySteps, allowDenyAll); err != nil {
 		return err
 	}
-	if err := validateApprovalFallback(policySteps); err != nil {
+	if err := validateApprovalFallback(policySteps, policyType); err != nil {
 		return err
 	}
 	if rules, ok := body["rules"].([]any); ok {
@@ -390,7 +460,7 @@ func validateUpdatePatch(policy map[string]any, fallbackPolicyType string, allow
 		if err := validatePolicyStepsNonEmpty(policyType, ps, allowDenyAll); err != nil {
 			return err
 		}
-		if err := validateApprovalFallback(ps); err != nil {
+		if err := validateApprovalFallback(ps, policyType); err != nil {
 			return err
 		}
 	}

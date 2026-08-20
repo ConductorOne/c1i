@@ -219,28 +219,28 @@ func approvalStep(arm string, armBody map[string]any) map[string]any {
 
 func TestValidateApprovalFallback_FiresOnUsersArmWithFallback(t *testing.T) {
 	steps := approvalStep("users", map[string]any{"userIds": []any{"u1"}, "fallback": true})
-	if err := validateApprovalFallback(steps); err == nil {
+	if err := validateApprovalFallback(steps, "POLICY_TYPE_GRANT"); err == nil {
 		t.Fatal("expected an error: \"users\" does not support fallback")
 	}
 }
 
 func TestValidateApprovalFallback_FiresOnAppOwnersArmWithFallbackUserIds(t *testing.T) {
 	steps := approvalStep("appOwners", map[string]any{"fallbackUserIds": []any{"u1"}})
-	if err := validateApprovalFallback(steps); err == nil {
+	if err := validateApprovalFallback(steps, "POLICY_TYPE_GRANT"); err == nil {
 		t.Fatal("expected an error: \"appOwners\" does not support fallbackUserIds")
 	}
 }
 
 func TestValidateApprovalFallback_FiresOnWebhookArmWithFallback(t *testing.T) {
 	steps := approvalStep("webhook", map[string]any{"webhookId": "wh1", "fallback": true})
-	if err := validateApprovalFallback(steps); err == nil {
+	if err := validateApprovalFallback(steps, "POLICY_TYPE_GRANT"); err == nil {
 		t.Fatal("expected an error: \"webhook\" does not support fallback")
 	}
 }
 
 func TestValidateApprovalFallback_NotFiresOnUsersArmWithoutFallback(t *testing.T) {
 	steps := approvalStep("users", map[string]any{"userIds": []any{"u1"}})
-	if err := validateApprovalFallback(steps); err != nil {
+	if err := validateApprovalFallback(steps, "POLICY_TYPE_GRANT"); err != nil {
 		t.Errorf("expected no error for a plain users arm, got: %v", err)
 	}
 }
@@ -249,7 +249,7 @@ func TestValidateApprovalFallback_NotFiresOnUsersArmWithoutFallback(t *testing.T
 
 func TestValidateApprovalFallback_FiresOnManagerFallbackTrueEmptyUserIds(t *testing.T) {
 	steps := approvalStep("manager", map[string]any{"fallback": true, "fallbackUserIds": []any{}})
-	if err := validateApprovalFallback(steps); err == nil {
+	if err := validateApprovalFallback(steps, "POLICY_TYPE_GRANT"); err == nil {
 		t.Fatal("expected an error: manager fallback:true with empty fallbackUserIds 500s server-side")
 	}
 }
@@ -259,21 +259,21 @@ func TestValidateApprovalFallback_FiresOnGroupFallbackTrueGroupEnabledEmptyGroup
 		"appGroupId": "g1", "appId": "a1",
 		"fallback": true, "isGroupFallbackEnabled": true, "fallbackGroupIds": []any{},
 	})
-	if err := validateApprovalFallback(steps); err == nil {
+	if err := validateApprovalFallback(steps, "POLICY_TYPE_GRANT"); err == nil {
 		t.Fatal("expected an error: group fallback with isGroupFallbackEnabled but empty fallbackGroupIds 500s")
 	}
 }
 
 func TestValidateApprovalFallback_NotFiresOnManagerFallbackTrueWithUserIds(t *testing.T) {
 	steps := approvalStep("manager", map[string]any{"fallback": true, "fallbackUserIds": []any{"u1"}})
-	if err := validateApprovalFallback(steps); err != nil {
+	if err := validateApprovalFallback(steps, "POLICY_TYPE_GRANT"); err != nil {
 		t.Errorf("expected no error: manager fallback:true with real fallbackUserIds, got: %v", err)
 	}
 }
 
 func TestValidateApprovalFallback_NotFiresOnFallbackFalse(t *testing.T) {
 	steps := approvalStep("self", map[string]any{"fallback": false})
-	if err := validateApprovalFallback(steps); err != nil {
+	if err := validateApprovalFallback(steps, "POLICY_TYPE_GRANT"); err != nil {
 		t.Errorf("expected no error: fallback:false needs nothing, got: %v", err)
 	}
 }
@@ -285,7 +285,7 @@ func TestValidateApprovalFallback_NotFiresOnGroupFallbackTrueGroupIdsWithoutEnab
 		"appGroupId": "g1", "appId": "a1",
 		"fallback": true, "fallbackUserIds": []any{"u1"},
 	})
-	if err := validateApprovalFallback(steps); err != nil {
+	if err := validateApprovalFallback(steps, "POLICY_TYPE_GRANT"); err != nil {
 		t.Errorf("expected no error: group fallback via fallbackUserIds (default path), got: %v", err)
 	}
 }
@@ -298,7 +298,7 @@ func TestValidateApprovalFallback_FiresOnProvisionStep(t *testing.T) {
 			"steps": []any{map[string]any{"provision": map[string]any{}}},
 		},
 	}
-	if err := validateApprovalFallback(steps); err == nil {
+	if err := validateApprovalFallback(steps, "POLICY_TYPE_GRANT"); err == nil {
 		t.Fatal("expected an error: a provision step is never allowed in a policy body")
 	}
 }
@@ -312,28 +312,31 @@ func TestValidateApprovalFallback_FiresOnApprovalAssignedTrue(t *testing.T) {
 			}}},
 		},
 	}
-	if err := validateApprovalFallback(steps); err == nil {
+	if err := validateApprovalFallback(steps, "POLICY_TYPE_GRANT"); err == nil {
 		t.Fatal("expected an error: approval.assigned is read-only and must be false")
 	}
 }
 
 func TestValidateApprovalFallback_FiresOnManagerAssignedUserIds(t *testing.T) {
 	steps := approvalStep("manager", map[string]any{"assignedUserIds": []any{"u1"}})
-	if err := validateApprovalFallback(steps); err == nil {
+	if err := validateApprovalFallback(steps, "POLICY_TYPE_GRANT"); err == nil {
 		t.Fatal("expected an error: manager.assignedUserIds is server-computed")
 	}
 }
 
 func TestValidateApprovalFallback_FiresOnAgentUserID(t *testing.T) {
 	steps := approvalStep("agent", map[string]any{"agentUserId": "u1", "agentMode": "APPROVAL_AGENT_MODE_FULL_CONTROL"})
-	if err := validateApprovalFallback(steps); err == nil {
+	if err := validateApprovalFallback(steps, "POLICY_TYPE_GRANT"); err == nil {
 		t.Fatal("expected an error: agent.agentUserId is deprecated/system-driven")
 	}
 }
 
 func TestValidateApprovalFallback_NotFiresOnCleanAgentArm(t *testing.T) {
-	steps := approvalStep("agent", map[string]any{"agentMode": "APPROVAL_AGENT_MODE_FULL_CONTROL"})
-	if err := validateApprovalFallback(steps); err != nil {
+	steps := approvalStep("agent", map[string]any{
+		"agentMode":          "APPROVAL_AGENT_MODE_FULL_CONTROL",
+		"agentFailureAction": "APPROVAL_AGENT_FAILURE_ACTION_DENY",
+	})
+	if err := validateApprovalFallback(steps, "POLICY_TYPE_GRANT"); err != nil {
 		t.Errorf("expected no error for a clean agent arm, got: %v", err)
 	}
 }
@@ -347,8 +350,219 @@ func TestValidateApprovalFallback_NotFiresOnCleanApprovalStep(t *testing.T) {
 			}}},
 		},
 	}
-	if err := validateApprovalFallback(steps); err != nil {
+	if err := validateApprovalFallback(steps, "POLICY_TYPE_GRANT"); err != nil {
 		t.Errorf("expected no error for a clean approval step, got: %v", err)
+	}
+}
+
+// ---- Step oneof: a step with no recognized arm reaches the server as a nil step ----
+
+func TestValidateApprovalFallback_FiresOnStepWithNoArm(t *testing.T) {
+	steps := map[string]any{
+		"grant": map[string]any{
+			"steps": []any{map[string]any{}},
+		},
+	}
+	err := validateApprovalFallback(steps, "POLICY_TYPE_GRANT")
+	if err == nil {
+		t.Fatal("expected an error: a step with none of the recognized arms set")
+	}
+	if !strings.Contains(err.Error(), "policy step is nil") {
+		t.Errorf("error should quote the server's \"policy step is nil\" text, got: %v", err)
+	}
+}
+
+func TestValidateApprovalFallback_NotFiresOnEmptyRejectArmBody(t *testing.T) {
+	// The arm is present with an empty body — a legitimate deny-all step,
+	// distinct from a step with no arm set at all.
+	steps := map[string]any{
+		"grant": map[string]any{
+			"steps": []any{map[string]any{"reject": map[string]any{}}},
+		},
+	}
+	if err := validateApprovalFallback(steps, "POLICY_TYPE_GRANT"); err != nil {
+		t.Errorf("expected no error: {\"reject\":{}} is a legitimate step, got: %v", err)
+	}
+}
+
+func TestValidateApprovalFallback_NotFiresOnWaitArm(t *testing.T) {
+	steps := map[string]any{
+		"grant": map[string]any{
+			"steps": []any{map[string]any{"wait": map[string]any{}}},
+		},
+	}
+	if err := validateApprovalFallback(steps, "POLICY_TYPE_GRANT"); err != nil {
+		t.Errorf("expected no error: \"wait\" is a recognized step arm, got: %v", err)
+	}
+}
+
+// ---- Agent rule: agentMode is required ----
+
+func TestValidateApprovalFallback_FiresOnAgentModeUnspecified(t *testing.T) {
+	steps := approvalStep("agent", map[string]any{
+		"agentMode":          "APPROVAL_AGENT_MODE_UNSPECIFIED",
+		"agentFailureAction": "APPROVAL_AGENT_FAILURE_ACTION_DENY",
+	})
+	err := validateApprovalFallback(steps, "POLICY_TYPE_GRANT")
+	if err == nil {
+		t.Fatal("expected an error: agentMode is required")
+	}
+	if !strings.Contains(err.Error(), "agent mode is required") {
+		t.Errorf("error should quote the server's \"agent mode is required\" text, got: %v", err)
+	}
+}
+
+func TestValidateApprovalFallback_NotFiresOnAgentModeSet(t *testing.T) {
+	steps := approvalStep("agent", map[string]any{
+		"agentMode":          "APPROVAL_AGENT_MODE_FULL_CONTROL",
+		"agentFailureAction": "APPROVAL_AGENT_FAILURE_ACTION_DENY",
+	})
+	if err := validateApprovalFallback(steps, "POLICY_TYPE_GRANT"); err != nil {
+		t.Errorf("expected no error: agentMode is set, got: %v", err)
+	}
+}
+
+// ---- Agent rule: agent steps only allowed in grant/certify policies ----
+
+func TestValidateApprovalFallback_FiresOnAgentInRevokePolicy(t *testing.T) {
+	steps := approvalStep("agent", map[string]any{
+		"agentMode":          "APPROVAL_AGENT_MODE_FULL_CONTROL",
+		"agentFailureAction": "APPROVAL_AGENT_FAILURE_ACTION_DENY",
+	})
+	err := validateApprovalFallback(steps, "POLICY_TYPE_REVOKE")
+	if err == nil {
+		t.Fatal("expected an error: agent steps are not allowed in a revoke policy")
+	}
+	if !strings.Contains(err.Error(), "agent approval steps are only allowed in grant and certify policies") {
+		t.Errorf("error should quote the server's own text, got: %v", err)
+	}
+}
+
+func TestValidateApprovalFallback_NotFiresOnAgentInGrantPolicy(t *testing.T) {
+	steps := approvalStep("agent", map[string]any{
+		"agentMode":          "APPROVAL_AGENT_MODE_FULL_CONTROL",
+		"agentFailureAction": "APPROVAL_AGENT_FAILURE_ACTION_DENY",
+	})
+	if err := validateApprovalFallback(steps, "POLICY_TYPE_GRANT"); err != nil {
+		t.Errorf("expected no error: agent steps are allowed in a grant policy, got: %v", err)
+	}
+}
+
+func TestValidateApprovalFallback_AgentPolicyTypeRuleSkippedWhenTypeUnknown(t *testing.T) {
+	// policyType == "" means the caller couldn't resolve it (see the doc
+	// comment); guessing here would be worse than not checking.
+	steps := approvalStep("agent", map[string]any{
+		"agentMode":          "APPROVAL_AGENT_MODE_FULL_CONTROL",
+		"agentFailureAction": "APPROVAL_AGENT_FAILURE_ACTION_DENY",
+	})
+	if err := validateApprovalFallback(steps, ""); err != nil {
+		t.Errorf("expected no error when policyType is unknown, got: %v", err)
+	}
+}
+
+// ---- Agent rule: certify policies require agentMode COMMENT_ONLY ----
+
+func TestValidateApprovalFallback_FiresOnCertifyWithNonCommentOnlyMode(t *testing.T) {
+	steps := approvalStep("agent", map[string]any{
+		"agentMode":          "APPROVAL_AGENT_MODE_FULL_CONTROL",
+		"agentFailureAction": "APPROVAL_AGENT_FAILURE_ACTION_DENY",
+	})
+	err := validateApprovalFallback(steps, "POLICY_TYPE_CERTIFY")
+	if err == nil {
+		t.Fatal("expected an error: certify policies require agentMode COMMENT_ONLY")
+	}
+	if !strings.Contains(err.Error(), `agent mode can only be "Comment only" in certify policies`) {
+		t.Errorf("error should quote the server's own text, got: %v", err)
+	}
+}
+
+func TestValidateApprovalFallback_NotFiresOnCertifyWithCommentOnlyMode(t *testing.T) {
+	steps := approvalStep("agent", map[string]any{
+		"agentMode":          "APPROVAL_AGENT_MODE_COMMENT_ONLY",
+		"agentFailureAction": "APPROVAL_AGENT_FAILURE_ACTION_DENY",
+	})
+	if err := validateApprovalFallback(steps, "POLICY_TYPE_CERTIFY"); err != nil {
+		t.Errorf("expected no error: COMMENT_ONLY is allowed in a certify policy, got: %v", err)
+	}
+}
+
+// ---- Agent rule: CHANGE_POLICY_ONLY mode requires non-empty policyIds ----
+
+func TestValidateApprovalFallback_FiresOnChangePolicyOnlyWithNoPolicyIds(t *testing.T) {
+	steps := approvalStep("agent", map[string]any{
+		"agentMode":          "APPROVAL_AGENT_MODE_CHANGE_POLICY_ONLY",
+		"agentFailureAction": "APPROVAL_AGENT_FAILURE_ACTION_DENY",
+	})
+	err := validateApprovalFallback(steps, "POLICY_TYPE_GRANT")
+	if err == nil {
+		t.Fatal("expected an error: CHANGE_POLICY_ONLY requires policyIds")
+	}
+	if !strings.Contains(err.Error(), "policy ids are required when agent mode is") {
+		t.Errorf("error should quote the server's own text, got: %v", err)
+	}
+}
+
+func TestValidateApprovalFallback_NotFiresOnChangePolicyOnlyWithPolicyIds(t *testing.T) {
+	steps := approvalStep("agent", map[string]any{
+		"agentMode":          "APPROVAL_AGENT_MODE_CHANGE_POLICY_ONLY",
+		"agentFailureAction": "APPROVAL_AGENT_FAILURE_ACTION_DENY",
+		"policyIds":          []any{"other-policy-id"},
+	})
+	if err := validateApprovalFallback(steps, "POLICY_TYPE_GRANT"); err != nil {
+		t.Errorf("expected no error: policyIds is non-empty, got: %v", err)
+	}
+}
+
+// ---- Agent rule: agentFailureAction is required ----
+
+func TestValidateApprovalFallback_FiresOnAgentFailureActionUnspecified(t *testing.T) {
+	steps := approvalStep("agent", map[string]any{
+		"agentMode":          "APPROVAL_AGENT_MODE_FULL_CONTROL",
+		"agentFailureAction": "APPROVAL_AGENT_FAILURE_ACTION_UNSPECIFIED",
+	})
+	err := validateApprovalFallback(steps, "POLICY_TYPE_GRANT")
+	if err == nil {
+		t.Fatal("expected an error: agentFailureAction is required")
+	}
+	if !strings.Contains(err.Error(), "agent failure action is required") {
+		t.Errorf("error should quote the server's own text, got: %v", err)
+	}
+}
+
+func TestValidateApprovalFallback_NotFiresOnAgentFailureActionSet(t *testing.T) {
+	steps := approvalStep("agent", map[string]any{
+		"agentMode":          "APPROVAL_AGENT_MODE_FULL_CONTROL",
+		"agentFailureAction": "APPROVAL_AGENT_FAILURE_ACTION_DENY",
+	})
+	if err := validateApprovalFallback(steps, "POLICY_TYPE_GRANT"); err != nil {
+		t.Errorf("expected no error: agentFailureAction is set, got: %v", err)
+	}
+}
+
+// ---- Agent rule: REASSIGN_TO_USERS requires non-empty reassignToUserIds ----
+
+func TestValidateApprovalFallback_FiresOnReassignToUsersWithNoUserIds(t *testing.T) {
+	steps := approvalStep("agent", map[string]any{
+		"agentMode":          "APPROVAL_AGENT_MODE_FULL_CONTROL",
+		"agentFailureAction": "APPROVAL_AGENT_FAILURE_ACTION_REASSIGN_TO_USERS",
+	})
+	err := validateApprovalFallback(steps, "POLICY_TYPE_GRANT")
+	if err == nil {
+		t.Fatal("expected an error: REASSIGN_TO_USERS requires reassignToUserIds")
+	}
+	if !strings.Contains(err.Error(), "reassign to user ids is required when agent failure action is") {
+		t.Errorf("error should quote the server's own text, got: %v", err)
+	}
+}
+
+func TestValidateApprovalFallback_NotFiresOnReassignToUsersWithUserIds(t *testing.T) {
+	steps := approvalStep("agent", map[string]any{
+		"agentMode":          "APPROVAL_AGENT_MODE_FULL_CONTROL",
+		"agentFailureAction": "APPROVAL_AGENT_FAILURE_ACTION_REASSIGN_TO_USERS",
+		"reassignToUserIds":  []any{"u1"},
+	})
+	if err := validateApprovalFallback(steps, "POLICY_TYPE_GRANT"); err != nil {
+		t.Errorf("expected no error: reassignToUserIds is non-empty, got: %v", err)
 	}
 }
 
