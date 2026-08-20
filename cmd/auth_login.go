@@ -3,6 +3,7 @@ package cmd
 import (
 	"bufio"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"runtime"
@@ -25,14 +26,16 @@ file under your config directory. For non-interactive / CI use, you can skip
 storage entirely and pass credentials each invocation via the C1I_CLIENT_ID
 and C1I_CLIENT_SECRET environment variables (combined with C1I_URL).`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		baseURL, source := GetBaseURLWithSource(cmd)
+		baseURL, source, err := GetBaseURLWithSource()
+		if err != nil {
+			return err
+		}
 
 		if baseURL == "" {
 			if !isTerminal() {
 				return fmt.Errorf("url is required: set --url flag, C1I_URL env var, or url in ~/.c1i.yaml")
 			}
-			var err error
-			baseURL, err = promptForURL(cmd)
+			baseURL, err = promptForURL(cmd, os.Stdin)
 			if err != nil {
 				return err
 			}
@@ -76,11 +79,13 @@ func isTerminal() bool {
 	return fi.Mode()&os.ModeCharDevice != 0
 }
 
-func promptForURL(cmd *cobra.Command) (string, error) {
+// promptForURL reads a URL interactively from in (os.Stdin in production;
+// injectable for tests).
+func promptForURL(cmd *cobra.Command, in io.Reader) (string, error) {
 	out := cmd.OutOrStdout()
-	_, _ = fmt.Fprintf(out, "Enter your C1 URL (e.g. mycompany.conductor.one, mycompany.c1eu.ai, or mycompany for conductor.one): ")
+	_, _ = fmt.Fprintf(out, "Enter your C1 URL (e.g. mycompany.conductor.one or mycompany.c1eu.ai): ")
 
-	scanner := bufio.NewScanner(os.Stdin)
+	scanner := bufio.NewScanner(in)
 	if !scanner.Scan() {
 		return "", fmt.Errorf("url is required: set --url flag, C1I_URL env var, or url in ~/.c1i.yaml")
 	}
@@ -90,7 +95,10 @@ func promptForURL(cmd *cobra.Command) (string, error) {
 		return "", fmt.Errorf("url is required: set --url flag, C1I_URL env var, or url in ~/.c1i.yaml")
 	}
 
-	url, warnings := config.ParseURL(raw)
+	url, warnings, err := config.ParseURL(raw)
+	if err != nil {
+		return "", &usageError{fmt.Errorf("%w (from interactive login prompt)", err)}
+	}
 	warnAboutURL(warnings)
 	return url, nil
 }

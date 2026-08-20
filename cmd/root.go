@@ -156,15 +156,18 @@ func initConfig() {
 // GetBaseURL returns the configured base URL or exits with an error. Anything
 // ParseURL silently rewrote (a non-https scheme, embedded credentials) is
 // printed to stderr as a warning rather than surfaced as an error, so a typo
-// doesn't turn into a hard failure -- but it's no longer silent.
+// doesn't turn into a hard failure -- but it's no longer silent. Delegates to
+// GetBaseURLWithSource so a ParseURL error (e.g. a retired bare short name)
+// is reported with the same source-naming used everywhere else.
 func GetBaseURL() (string, error) {
-	raw := viper.GetString("url")
-	if raw == "" {
+	baseURL, source, err := GetBaseURLWithSource()
+	if err != nil {
+		return "", err
+	}
+	if source == URLSourceNone {
 		return "", fmt.Errorf("url is required: set --url flag, C1I_URL env var, or url in ~%s.c1i.yaml", string(filepath.Separator))
 	}
-	url, warnings := config.ParseURL(raw)
-	warnAboutURL(warnings)
-	return url, nil
+	return baseURL, nil
 }
 
 // warnAboutURL prints any ParseURL warnings to stderr, one per line.
@@ -184,15 +187,38 @@ const (
 	URLSourceConfig
 )
 
-// GetBaseURLWithSource returns the configured base URL and where it came
-// from, warning to stderr about anything ParseURL silently rewrote.
-func GetBaseURLWithSource(cmd *cobra.Command) (string, URLSource) {
-	parse := func(raw string, source URLSource) (string, URLSource) {
-		url, warnings := config.ParseURL(raw)
-		warnAboutURL(warnings)
-		return url, source
+// urlSourceLabel names where a URL value came from, for wrapping a ParseURL
+// error: a stale bare name sitting in ~/.c1i.yaml is the genuinely confusing
+// case, much less so once the message names it.
+func urlSourceLabel(source URLSource) string {
+	switch source {
+	case URLSourceFlag:
+		return "--url flag"
+	case URLSourceEnv:
+		return "C1I_URL environment variable"
+	case URLSourceConfig:
+		return "~/.c1i.yaml"
+	default:
+		return "unknown source"
 	}
-	if f := cmd.Flags().Lookup("url"); f != nil && f.Changed {
+}
+
+// GetBaseURLWithSource returns the configured base URL and where it came
+// from, warning to stderr about anything ParseURL silently rewrote. Looks up
+// the "url" flag on rootCmd.PersistentFlags() directly (not a passed-in
+// *cobra.Command's merged Flags()) so it gives the right answer regardless
+// of which subcommand is actually executing -- GetBaseURL calls this from
+// deep inside arbitrary subcommands' RunE.
+func GetBaseURLWithSource() (string, URLSource, error) {
+	parse := func(raw string, source URLSource) (string, URLSource, error) {
+		url, warnings, err := config.ParseURL(raw)
+		if err != nil {
+			return "", source, &usageError{fmt.Errorf("%w (from %s)", err, urlSourceLabel(source))}
+		}
+		warnAboutURL(warnings)
+		return url, source, nil
+	}
+	if f := rootCmd.PersistentFlags().Lookup("url"); f != nil && f.Changed {
 		return parse(f.Value.String(), URLSourceFlag)
 	}
 	if v := os.Getenv("C1I_URL"); v != "" {
@@ -201,5 +227,5 @@ func GetBaseURLWithSource(cmd *cobra.Command) (string, URLSource) {
 	if v := viper.GetString("url"); v != "" {
 		return parse(v, URLSourceConfig)
 	}
-	return "", URLSourceNone
+	return "", URLSourceNone, nil
 }
