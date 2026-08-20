@@ -118,6 +118,44 @@ func TestClient_IDPathRedirectChainRefused(t *testing.T) {
 	}
 }
 
+// TestClient_DotIDPathRedirectRefused reproduces the live defect for the
+// other id shape that normalizes to the collection: `users get "."` escapes
+// to .../users/. (url.PathEscape leaves "." unescaped, unlike "/" which
+// becomes %2F for the "/" case above), and the real API collapses that
+// single dot segment server-side, 301-ing directly to .../users — one hop,
+// not the two-hop chain the "/" case goes through. Same guard, same refusal
+// branch (target path != request path), different id and a shorter path to
+// it; see resolveAllowedRedirect in client.go.
+func TestClient_DotIDPathRedirectRefused(t *testing.T) {
+	var collectionCalled bool
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.EscapedPath() {
+		case "/api/v1/users/.":
+			w.Header().Set("Location", "/api/v1/users")
+			w.WriteHeader(http.StatusMovedPermanently)
+		case "/api/v1/users":
+			collectionCalled = true
+			_, _ = w.Write([]byte(`{"list":[{"id":"1"},{"id":"2"}]}`))
+		default:
+			t.Fatalf("unexpected request to %s", r.URL.EscapedPath())
+		}
+	}))
+	defer srv.Close()
+
+	c := newTestClient(srv, 0)
+	_, err := c.Get(context.Background(), Path("/api/v1/users/%s", "."), nil)
+	if err == nil {
+		t.Fatal(`expected an error for id ".", got nil`)
+	}
+	var redirErr *RedirectError
+	if !errors.As(err, &redirErr) {
+		t.Fatalf(`error = %T (%v), want *RedirectError`, err, err)
+	}
+	if collectionCalled {
+		t.Error("the collection endpoint was reached; the client followed the redirect instead of refusing it")
+	}
+}
+
 // TestClient_RedirectNotRetried proves a redirect is surfaced immediately,
 // not treated as a transient failure and retried: retrying a permanent
 // redirect wastes the backoff budget on something that will never resolve
