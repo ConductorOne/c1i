@@ -6,4 +6,7 @@ dist/
 .DS_Store
 
 # Scratch space: temp output, test data, debug dumps. Never the repo root.
-dev/
+# Contents ignored, not the directory itself -- git cannot re-include a file
+# whose parent directory is excluded, so dev/README.md would vanish too.
+dev/*
+!dev/README.md
