@@ -391,7 +391,16 @@ func (c *Client) Request(ctx context.Context, method, path string, body []byte, 
 	return c.do(req)
 }
 
+// do is the single chokepoint every request (Get/Post/Put/Patch/Delete/
+// Request, including the `api` escape hatch) funnels through before it hits
+// the wire — so the empty-path-segment guard lives here once, rather than at
+// each of the ~50 call sites that build a path. EscapedPath is checked (not
+// the decoded Path) so an id containing an escaped "/" (%2F) can't be
+// mistaken for a path separator.
 func (c *Client) do(req *http.Request) ([]byte, error) {
+	if p := req.URL.EscapedPath(); pathHasEmptySegment(p) {
+		return nil, &PathError{Method: req.Method, Path: p}
+	}
 	return doWithRetry(c.httpClient, req, c.maxRetries)
 }
 

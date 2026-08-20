@@ -128,11 +128,10 @@ c1i policies validate-cel <condition>
 ```
 
 A policy describes how C1 processes a task: who approves it (an ordered list
-of `policySteps`, each a oneof of approval/provision/accept/reject/wait/form
-(the schema also declares `action`, which the server rejects as an unsupported
-step type);
-an approval step's approver is itself a oneof of ten arms — users, manager,
-group, appOwners, self, entitlementOwners, expression, webhook,
+of `policySteps`, each a oneof of approval/provision/accept/reject/wait/form —
+the schema also declares `action`, which the server rejects as an unsupported
+step type — and an approval step's approver is itself a oneof of ten arms:
+users, manager, group, appOwners, self, entitlementOwners, expression, webhook,
 resourceOwners, agent), and how `rules[]` route a task to one of several
 step sequences by CEL condition. That structure is too deeply nested for a
 flag surface, so `create`/`update` take it from a JSON file (or `-` for
@@ -424,6 +423,12 @@ branch on without parsing text:
 | `5` | API returned `429` (rate limited — back off and retry) |
 | `6` | a remote system failed: API returned `5xx`, or an upstream MCP connector failed |
 | `7` | `mcp gateway call` completed, but the tool itself reported an error (`isError: true` in its result) |
+
+An **empty id argument** is a usage error, not a lookup: `c1i policies get ""`
+exits `2` and sends nothing. Without that guard an empty id renders a trailing
+empty path segment, which the API redirects to the collection endpoint — so the
+command used to print the entire list and exit `0`. The same check applies to a
+raw `api --path` ending in `/`.
 
 Pass `--error-format json` (or `C1I_ERROR_FORMAT=json`) to get a machine-readable
 error object instead of the default `Error: <msg>` line. For API errors it

@@ -71,7 +71,13 @@ never fails proves nothing.
     `cobra.ExactArgs(1)`, read via `args[0]`); parent ids stay flags
     (`--app-id`, `--connector-id` when it is a *parent*). Don't validate the
     positional id with `requireNonEmpty` — `cobra.ExactArgs` enforces presence;
-    match the flat commands (`users get <user-id>`).
+    match the flat commands (`users get <user-id>`). **Presence is not
+    non-emptiness:** `ExactArgs(1)` accepts `""`, which used to render a
+    trailing empty path segment, get redirected to the collection endpoint,
+    and print the whole list with exit 0. The client now refuses any request
+    whose path has an empty segment (`client.PathError` → exit 2), so a
+    per-command check is still unnecessary — but don't reason as though a
+    positional id were guaranteed non-empty.
   - A sub-resource or sub-list nested under **exactly one** owner id in the path
     (`/thing/{id}/…`) also takes that owner id positionally — e.g.
     `functions commits|usage|source <function-id>`,
