@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -385,5 +386,143 @@ func TestPoliciesUpdateBodyFileWithoutPolicyStepsNeverFetchesPolicyType(t *testi
 	}
 	if getReceived {
 		t.Error("a --body-file update with no policySteps should never fetch the policy's current type")
+	}
+}
+
+// newResolverTestCmd builds a bare *cobra.Command with a context, enough for
+// policyTypeResolver.resolve (which only needs cmd.Context() and, via
+// newPoliciesClient, cmd itself — stubbed below to ignore it).
+func newResolverTestCmd(t *testing.T) *cobra.Command {
+	t.Helper()
+	cmd := &cobra.Command{Use: "test"}
+	cmd.SetContext(context.Background())
+	return cmd
+}
+
+// TestPolicyTypeResolverMemoizesFetchFailure is the load-bearing regression
+// test for the fix: a fetch failure (404 here) must be memoized alongside
+// the (empty) value, so a second resolve() call sees the SAME classified
+// error instead of a nil error with an empty type — which would look like
+// "resolved to nothing" and let a caller downgrade a real 404 to exit 2.
+// Asserts: both calls return the identical error, errors.As still finds a
+// *client.APIError carrying 404 (so exitCode still maps it to 4, not 2), and
+// the server receives exactly one request (proving no re-fetch).
+func TestPolicyTypeResolverMemoizesFetchFailure(t *testing.T) {
+	var requestCount int
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requestCount++
+		w.WriteHeader(http.StatusNotFound)
+		_, _ = fmt.Fprint(w, `{"message":"policy not found"}`)
+	}))
+	defer srv.Close()
+	stubPoliciesClient(t, srv)
+
+	resolver := &policyTypeResolver{baseURL: srv.URL}
+	cmd := newResolverTestCmd(t)
+
+	val1, err1 := resolver.resolve(cmd, "zz-does-not-exist")
+	if err1 == nil {
+		t.Fatal("expected the first resolve() to return the 404 as an error")
+	}
+	if val1 != "" {
+		t.Errorf("value on a failed fetch = %q, want empty", val1)
+	}
+
+	val2, err2 := resolver.resolve(cmd, "zz-does-not-exist")
+	if err2 != err1 {
+		t.Errorf("second resolve() returned a different error: %v (first: %v)", err2, err1)
+	}
+	if val2 != "" {
+		t.Errorf("second resolve() value = %q, want empty", val2)
+	}
+
+	var apiErr *client.APIError
+	if !errors.As(err2, &apiErr) {
+		t.Fatalf("errors.As(%v, *client.APIError) = false, want true", err2)
+	}
+	if apiErr.StatusCode != http.StatusNotFound {
+		t.Errorf("apiErr.StatusCode = %d, want %d", apiErr.StatusCode, http.StatusNotFound)
+	}
+	if exitCode(err2) != exitNotFound {
+		t.Errorf("exitCode(%v) = %d, want %d (exitNotFound) — a memoized 404 must not downgrade to exitUsage", err2, exitCode(err2), exitNotFound)
+	}
+
+	if requestCount != 1 {
+		t.Errorf("server received %d requests, want exactly 1 (no re-fetch on the second resolve() call)", requestCount)
+	}
+}
+
+// TestPolicyTypeResolverMemoizesSuccess is the positive half: two resolve()
+// calls after a successful fetch return the same value, and the server is
+// only hit once.
+func TestPolicyTypeResolverMemoizesSuccess(t *testing.T) {
+	var requestCount int
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requestCount++
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = fmt.Fprint(w, `{"policy":{"id":"zz-c1i-test-policy-resolver","policyType":"POLICY_TYPE_GRANT"}}`)
+	}))
+	defer srv.Close()
+	stubPoliciesClient(t, srv)
+
+	resolver := &policyTypeResolver{baseURL: srv.URL}
+	cmd := newResolverTestCmd(t)
+
+	val1, err1 := resolver.resolve(cmd, "zz-c1i-test-policy-resolver")
+	if err1 != nil {
+		t.Fatalf("first resolve(): %v", err1)
+	}
+	if val1 != "POLICY_TYPE_GRANT" {
+		t.Fatalf("first resolve() value = %q, want POLICY_TYPE_GRANT", val1)
+	}
+
+	val2, err2 := resolver.resolve(cmd, "zz-c1i-test-policy-resolver")
+	if err2 != nil {
+		t.Fatalf("second resolve(): %v", err2)
+	}
+	if val2 != val1 {
+		t.Errorf("second resolve() value = %q, want %q (same as first)", val2, val1)
+	}
+
+	if requestCount != 1 {
+		t.Errorf("server received %d requests, want exactly 1 (no re-fetch on the second resolve() call)", requestCount)
+	}
+}
+
+// TestPolicyTypeResolverMemoizesClientConstructionFailure covers the other
+// failure point: newPoliciesClient itself (not the fetch) failing, e.g. bad
+// credentials. A second resolve() call must not retry building the client
+// either — it counts calls to newPoliciesClient directly since this failure
+// never reaches a server.
+func TestPolicyTypeResolverMemoizesClientConstructionFailure(t *testing.T) {
+	var buildCount int
+	orig := newPoliciesClient
+	newPoliciesClient = func(_ *cobra.Command, _ string) (*client.Client, error) {
+		buildCount++
+		return nil, errors.New("no credentials configured")
+	}
+	t.Cleanup(func() { newPoliciesClient = orig })
+
+	resolver := &policyTypeResolver{baseURL: "http://unused.invalid"}
+	cmd := newResolverTestCmd(t)
+
+	val1, err1 := resolver.resolve(cmd, "zz-any-id")
+	if err1 == nil {
+		t.Fatal("expected the first resolve() to surface the client-construction failure")
+	}
+	if val1 != "" {
+		t.Errorf("value on a client-construction failure = %q, want empty", val1)
+	}
+
+	val2, err2 := resolver.resolve(cmd, "zz-any-id")
+	if err2 != err1 {
+		t.Errorf("second resolve() returned a different error: %v (first: %v)", err2, err1)
+	}
+	if val2 != "" {
+		t.Errorf("second resolve() value = %q, want empty", val2)
+	}
+
+	if buildCount != 1 {
+		t.Errorf("newPoliciesClient was called %d times, want exactly 1 (no re-attempt building the client)", buildCount)
 	}
 }

@@ -63,31 +63,9 @@ skip the lookup.`,
 		// display-name/description update never pays for it, and a
 		// policySteps-carrying update only pays for it once regardless of
 		// which flag/file path produced the patch.
-		var c *client.Client
-		var fetchedType string
-		var fetchedErr error
-		var fetchedOnce bool
-		resolveFallbackPolicyType := func() (string, error) {
-			// The failure is memoized alongside the value: a second caller must
-			// see the same classified error, not an empty type that would look
-			// like "resolved to nothing" and downgrade a 401/404 to exit 2.
-			if fetchedOnce {
-				return fetchedType, fetchedErr
-			}
-			fetchedOnce = true
-			c, fetchedErr = newPoliciesClient(cmd, baseURL)
-			if fetchedErr != nil {
-				fetchedErr = fmt.Errorf("authentication failed: %w", fetchedErr)
-				return "", fetchedErr
-			}
-			fetchedType, fetchedErr = fetchPolicyType(cmd, c, id)
-			if fetchedErr != nil {
-				return "", fetchedErr
-			}
-			return fetchedType, nil
-		}
+		resolver := &policyTypeResolver{baseURL: baseURL}
 
-		policy, mask, err := buildUpdatePolicyPatch(cmd, resolveFallbackPolicyType)
+		policy, mask, err := buildUpdatePolicyPatch(cmd, func() (string, error) { return resolver.resolve(cmd, id) })
 		if err != nil {
 			// A fetch failure (auth/not-found/rate-limited/server) reaches
 			// here already classified — surface it as-is so exitCode can map
@@ -106,7 +84,7 @@ skip the lookup.`,
 		effectivePolicyType, _ := policy["policyType"].(string)
 		if effectivePolicyType == "" {
 			if _, hasSteps := policy["policySteps"].(map[string]any); hasSteps {
-				effectivePolicyType, err = resolveFallbackPolicyType()
+				effectivePolicyType, err = resolver.resolve(cmd, id)
 				if err != nil {
 					return err // classified fetch failure — do not wrap in usageError
 				}
@@ -127,6 +105,7 @@ skip the lookup.`,
 			return printDryRun(cmd, "POST", path, body)
 		}
 
+		c := resolver.client
 		if c == nil {
 			c, err = newPoliciesClient(cmd, baseURL)
 			if err != nil {
@@ -142,8 +121,42 @@ skip the lookup.`,
 	},
 }
 
+// policyTypeResolver lazily fetches and memoizes a policy's current type
+// (and client) across the several call sites in RunE and
+// buildUpdatePolicyPatch that may need it for the same update. A failed
+// fetch is memoized alongside the value, so a second caller sees the same
+// classified error rather than an empty type that would look like "resolved
+// to nothing" and downgrade a real 401/404 to exit 2. Not safe for
+// concurrent use; RunE calls it sequentially.
+type policyTypeResolver struct {
+	baseURL string
+	client  *client.Client
+	value   string
+	err     error
+	done    bool
+}
+
+// resolve returns the policy's type, fetching and memoizing it (value and
+// error alike) on the first call.
+func (r *policyTypeResolver) resolve(cmd *cobra.Command, id string) (string, error) {
+	if r.done {
+		return r.value, r.err
+	}
+	r.done = true
+	if r.client == nil {
+		c, err := newPoliciesClient(cmd, r.baseURL)
+		if err != nil {
+			r.err = fmt.Errorf("authentication failed: %w", err)
+			return "", r.err
+		}
+		r.client = c
+	}
+	r.value, r.err = fetchPolicyType(cmd, r.client, id)
+	return r.value, r.err
+}
+
 // fetchPolicyType looks up an existing policy's policyType. Called via
-// resolveFallbackPolicyType whenever an update's patch carries policySteps
+// policyTypeResolver.resolve whenever an update's patch carries policySteps
 // without its own policyType, regardless of whether that patch came from
 // --steps-file or --body-file.
 func fetchPolicyType(cmd *cobra.Command, c *client.Client, id string) (string, error) {

@@ -63,23 +63,12 @@ type nonJSONResponseError struct{ err error }
 func (e *nonJSONResponseError) Error() string { return e.err.Error() }
 func (e *nonJSONResponseError) Unwrap() error { return e.err }
 
-// upstreamError marks a failure in a system this CLI depends on, or in the
-// protocol layer itself, that didn't arrive as an HTTP status this taxonomy
-// can classify by — e.g. the MCP gateway's JSON-RPC-level report that an
-// upstream connector failed (an unreachable external MCP server, a vendor
-// API error surfaced through the connector, ...), or a JSON-RPC
-// protocol-level error (method not found, parse error, invalid request) that
-// this CLI's own fixed, spec-required requests should never trigger. The
-// gateway itself answers HTTP 200 for this class of failure, so there is no
-// real status to attach: wrapping it in a *client.APIError would require
-// inventing one, which would then render as a false "status" in
-// --error-format json — the same "claim about the wire that isn't true"
-// problem this CLI already avoids for help text. This type exists so that
-// class of failure can map to exitUpstream (8) — distinct from the C1 API
-// itself failing (exitServer, 6) — without fabricating a status anywhere.
-// Not exported: nothing outside cmd constructs one today, and keeping it
-// here means exitCode's switch is the single place that has to agree with
-// cmd/mcp_gateway.go's classifyGatewayError on what it means.
+// upstreamError marks a failure beyond C1, or in the protocol layer, that did
+// not arrive as a classifiable HTTP status — an upstream connector failing, or
+// a JSON-RPC protocol error. It maps to exitUpstream (8), distinct from C1
+// itself failing (exitServer, 6). These arrive on an HTTP 200, so wrapping in
+// *client.APIError would mean inventing a status that then renders as a false
+// "status" field in --error-format json.
 type upstreamError struct{ err error }
 
 func (e *upstreamError) Error() string { return e.err.Error() }

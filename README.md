@@ -479,11 +479,7 @@ The `body` is embedded as JSON when the API returned JSON, otherwise as a string
 
 ## Configuration
 
-c1i requires a C1 **URL**. You can pass a full URL, a raw domain, or a legacy short tenant name. Set it via (in order of precedence):
-
-1. `--url` flag
-2. `C1I_URL` environment variable
-3. `~/.c1i.yaml` config file:
+c1i requires a C1 **URL**. You can pass a full URL, a raw domain, or a legacy short tenant name.
 
 `--url` accepts a full URL or a bare domain, and normalizes it: the host is
 lower-cased (so `HTTPS://TENANT.C1EU.AI` and `tenant.c1eu.ai` resolve
@@ -500,6 +496,13 @@ the bare short-name shortcut (`--url mycompany`) always expands to
 > If you previously authenticated with a mixed-case `--url`, your stored
 > credential was keyed by that exact casing and is no longer found now that the
 > host is normalized. Run `c1i auth login` once to re-store it.
+
+Set it via (in order of precedence):
+
+1. `--url` flag
+2. `C1I_URL` environment variable
+3. `~/.c1i.yaml` config file:
+
    ```yaml
    url: https://mycompany.conductor.one
    ```
