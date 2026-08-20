@@ -123,3 +123,71 @@ func TestValidUTF8PositionalArgUnaffected(t *testing.T) {
 		t.Errorf("a well-formed id must not be rejected by the UTF-8 check, got: %v", err)
 	}
 }
+
+// --- Fix 6, closing GAP 2: a non-UTF-8 FLAG value, not just a positional ---
+//
+// Per CLAUDE.md's own convention, a parent-scope id (--app-id,
+// --connector-id, ...) is a FLAG, interpolated into the request path exactly
+// like a positional id -- so the positional-only check above left this
+// argument shape uncovered. Reproduced live:
+// "mcp servers get someid --app-id $'\xff\xfe'" returned a bare 500 (exit
+// 6) before this fix, the same failure class Fix 6 closed for positionals.
+
+// resetMcpServersGetCmdAppIDFlag restores mcpServersGetCmd's --app-id flag to
+// unset after a test drives it through the package-level singleton, so
+// state can't leak into another test.
+func resetMcpServersGetCmdAppIDFlag(t *testing.T) {
+	t.Helper()
+	reset := func() {
+		f := mcpServersGetCmd.Flags().Lookup("app-id")
+		_ = f.Value.Set("")
+		f.Changed = false
+	}
+	t.Cleanup(reset)
+}
+
+func TestNonUTF8FlagValueIsUsageError(t *testing.T) {
+	resetMcpServersGetCmdAppIDFlag(t)
+	t.Setenv("C1I_URL", "https://example.invalid")
+
+	var out bytes.Buffer
+	rootCmd.SetOut(&out)
+	rootCmd.SetErr(&out)
+	rootCmd.SetArgs([]string{"mcp", "servers", "get", "someid", "--app-id", invalidUTF8Arg})
+
+	err := rootCmd.ExecuteContext(context.Background())
+	if err == nil {
+		t.Fatal("expected an error for a non-UTF-8 flag value, got nil")
+	}
+	if !strings.Contains(err.Error(), "not valid UTF-8") {
+		t.Errorf("error = %q, want it to say the value isn't valid UTF-8", err.Error())
+	}
+	if !strings.Contains(err.Error(), "app-id") {
+		t.Errorf("error = %q, want it to name --app-id", err.Error())
+	}
+	if got, want := exitCode(err), exitUsage; got != want {
+		t.Errorf("exitCode = %d, want %d (usage error, not a server-side 500)", got, want)
+	}
+}
+
+// TestValidUTF8FlagValueUnaffected is the regression guard: an ordinary flag
+// value must not be rejected -- it should reach as far as authentication.
+func TestValidUTF8FlagValueUnaffected(t *testing.T) {
+	resetMcpServersGetCmdAppIDFlag(t)
+	t.Setenv("C1I_URL", "https://example.invalid")
+	t.Setenv("C1I_CLIENT_ID", "")
+	t.Setenv("C1I_CLIENT_SECRET", "")
+
+	var out bytes.Buffer
+	rootCmd.SetOut(&out)
+	rootCmd.SetErr(&out)
+	rootCmd.SetArgs([]string{"mcp", "servers", "get", "someid", "--app-id", "a-perfectly-normal-app-id"})
+
+	err := rootCmd.ExecuteContext(context.Background())
+	if err == nil {
+		t.Fatal("expected an error (no credentials configured), got nil")
+	}
+	if strings.Contains(err.Error(), "not valid UTF-8") {
+		t.Errorf("a well-formed flag value must not be rejected by the UTF-8 check, got: %v", err)
+	}
+}

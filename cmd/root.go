@@ -10,6 +10,7 @@ import (
 	"github.com/ConductorOne/c1i/internal/client"
 	"github.com/ConductorOne/c1i/internal/config"
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 	"github.com/spf13/viper"
 )
 
@@ -33,15 +34,20 @@ For raw API exploration, also with no authentication required:
 	// Validate global flag values once, before any command runs, attach a
 	// fresh *fieldsMatchState (cmd/fields.go) to the command's context so
 	// every emitter created during this invocation shares one tracker, and
-	// reject a non-UTF-8 positional argument client-side (see
-	// validateArgsUTF8) before it can reach a command's RunE at all -- this
-	// runs for every command (see TestNoSubcommandDefinesOwnPersistentPreRunE),
-	// so an id built from args[0] is covered without a per-command check.
+	// reject a non-UTF-8 positional argument or flag value client-side (see
+	// validateArgsUTF8 / validateFlagsUTF8) before it can reach a command's
+	// RunE at all -- this runs for every command (see
+	// TestNoSubcommandDefinesOwnPersistentPreRunE), so both an id from
+	// args[0] and a parent-scope id passed as a flag (--app-id,
+	// --connector-id, ...) are covered without a per-command check.
 	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
 		if err := validateErrorFormat(viper.GetString("error_format")); err != nil {
 			return err
 		}
 		if err := validateArgsUTF8(args); err != nil {
+			return err
+		}
+		if err := validateFlagsUTF8(cmd); err != nil {
 			return err
 		}
 		cmd.SetContext(withFieldsMatchState(cmd.Context()))
@@ -73,6 +79,28 @@ func validateArgsUTF8(args []string) error {
 		}
 	}
 	return nil
+}
+
+// validateFlagsUTF8 is validateArgsUTF8's flag-shaped twin: a parent-scope
+// id (--app-id, --connector-id, ...) is a FLAG per this repo's own id-argument
+// convention (see CLAUDE.md), interpolated into the request path exactly
+// like a positional id -- so the positional-only check missed it. Checks
+// every flag actually set on cmd (which, by the time PersistentPreRunE
+// runs, includes inherited persistent flags merged in from every ancestor,
+// not just cmd's own local ones) via its string form; a non-string flag
+// (bool, int, ...) can't fail its own parsing into invalid UTF-8, so
+// checking all of them uniformly is safe, not just id-bearing ones by name.
+func validateFlagsUTF8(cmd *cobra.Command) error {
+	var err error
+	cmd.Flags().VisitAll(func(f *pflag.Flag) {
+		if err != nil || !f.Changed {
+			return
+		}
+		if v := f.Value.String(); !utf8.ValidString(v) {
+			err = &usageError{fmt.Errorf("--%s value %q is not valid UTF-8", f.Name, v)}
+		}
+	})
+	return err
 }
 
 func validateErrorFormat(f string) error {
