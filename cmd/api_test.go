@@ -4,9 +4,11 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -391,5 +393,120 @@ func TestAPIDeleteBodyOptInDryRunPreviewsWithoutSending(t *testing.T) {
 	}
 	if !strings.Contains(previewed, "cleanup") {
 		t.Errorf("dry-run preview = %q, want it to include the body", previewed)
+	}
+}
+
+// --- `api --paginate` + --fields zero-match end-to-end ---
+//
+// twoPageFixtureServer serves a two-page paginated list over POST (matching
+// what `api --body "{}"` sends: --body implies POST, and the api command
+// splices the cursor into the request body's "pageToken" field for
+// POST/PUT/PATCH, not a query param — that's GET/DELETE's mechanism only).
+// A request with no "pageToken" (or "") in its body returns page 1 with
+// nextPageToken "p2"; a request with pageToken "p2" returns page 2 with no
+// nextPageToken, ending pagination. Each page's item shape is supplied by
+// the caller, so the same fixture can produce rows that either all miss
+// --fields or split across pages.
+//
+// NewTLSServer, not NewServer: internal/config.ParseURL unconditionally
+// coerces the resolved base URL to "https://" (see
+// TestAPIDeleteBodyOptInSendsBodyOnWire above), so the fake requester always
+// dials https regardless of what scheme C1I_URL used.
+func twoPageFixtureServer(page1Item, page2Item string) *httptest.Server {
+	return httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var body struct {
+			PageToken string `json:"pageToken"`
+		}
+		b, _ := io.ReadAll(r.Body)
+		_ = json.Unmarshal(b, &body)
+
+		w.Header().Set("Content-Type", "application/json")
+		if body.PageToken == "p2" {
+			_, _ = w.Write([]byte(`{"list":[` + page2Item + `],"nextPageToken":""}`))
+			return
+		}
+		_, _ = w.Write([]byte(`{"list":[` + page1Item + `],"nextPageToken":"p2"}`))
+	}))
+}
+
+// TestAPIPaginateFieldsZeroMatchAcrossAllPagesErrors is the `api --paginate`
+// half of the fix: a --fields spec that matches nothing in EITHER
+// page's row must still write both pages' rows (streaming, never buffered —
+// --paginate exists precisely to walk unbounded results without holding them
+// all in memory) and then fail with exit 2, not silently exit 0 having
+// printed two "{}" rows (the pre-fix behavior, confirmed live against
+// a live tenant before this fix).
+func TestAPIPaginateFieldsZeroMatchAcrossAllPagesErrors(t *testing.T) {
+	srv := twoPageFixtureServer(`{"name":"page1-item"}`, `{"name":"page2-item"}`)
+	defer srv.Close()
+
+	resetAPICmdFlags(t)
+	stubNewAPIClient(t, srv)
+	t.Setenv("C1I_URL", srv.URL)
+	viper.Set("fields", "id")
+	t.Cleanup(func() { viper.Set("fields", "") })
+
+	var out bytes.Buffer
+	apiCmd.SetOut(&out)
+	apiCmd.SetErr(&out)
+	rootCmd.SetArgs([]string{
+		"api",
+		"--path", "/api/v1/search/things",
+		"--body", "{}",
+		"--paginate",
+	})
+
+	err := rootCmd.ExecuteContext(context.Background())
+	if err == nil {
+		t.Fatalf("expected an error (exit 2) when --fields matches nothing on any page; output: %s", out.String())
+	}
+	var usageErr *usageError
+	if !errors.As(err, &usageErr) {
+		t.Fatalf("error = %v (%T), want *usageError (exit code 2)", err, err)
+	}
+	if got, want := exitCode(err), exitUsage; got != want {
+		t.Errorf("exitCode = %d, want %d", got, want)
+	}
+	if !strings.Contains(err.Error(), "matched no keys in any row of the response") {
+		t.Errorf("error = %q, want the list-specific zero-match message", err.Error())
+	}
+	gotLines := strings.Split(strings.TrimSpace(out.String()), "\n")
+	wantLines := []string{`{}`, `{}`}
+	if !reflect.DeepEqual(gotLines, wantLines) {
+		t.Errorf("output lines = %v, want %v (both pages' rows must still be written before the error)", gotLines, wantLines)
+	}
+}
+
+// TestAPIPaginateFieldsPartialMatchAcrossPagesSucceeds is the sparse-data
+// twin, split across pages instead of rows within one page: page 1's item
+// lacks "id", page 2's item has it. A match anywhere in the whole paginated
+// result — not just the first page — must be enough for exit 0.
+func TestAPIPaginateFieldsPartialMatchAcrossPagesSucceeds(t *testing.T) {
+	srv := twoPageFixtureServer(`{"name":"page1-item"}`, `{"id":"only-on-page-2"}`)
+	defer srv.Close()
+
+	resetAPICmdFlags(t)
+	stubNewAPIClient(t, srv)
+	t.Setenv("C1I_URL", srv.URL)
+	viper.Set("fields", "id")
+	t.Cleanup(func() { viper.Set("fields", "") })
+
+	var out bytes.Buffer
+	apiCmd.SetOut(&out)
+	apiCmd.SetErr(&out)
+	rootCmd.SetArgs([]string{
+		"api",
+		"--path", "/api/v1/search/things",
+		"--body", "{}",
+		"--paginate",
+	})
+
+	if err := rootCmd.ExecuteContext(context.Background()); err != nil {
+		t.Fatalf("expected exit 0 (page 2 matched --fields), got error: %v; output: %s", err, out.String())
+	}
+	gotLines := strings.Split(strings.TrimSpace(out.String()), "\n")
+	wantLines := []string{`{}`, `{"id":"only-on-page-2"}`}
+	if !reflect.DeepEqual(gotLines, wantLines) {
+		t.Errorf("output lines = %v, want %v", gotLines, wantLines)
 	}
 }

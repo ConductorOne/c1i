@@ -46,7 +46,7 @@ var tasksListCmd = &cobra.Command{
 			}
 		}
 
-		enc := newEmitter(cmd.OutOrStdout())
+		enc := newEmitter(cmd)
 		emitted := 0
 		for !limitReached(emitted, limit) {
 			pageSize := effectivePageSize(requestedPageSize, limit, emitted)

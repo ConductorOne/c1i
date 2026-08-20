@@ -176,6 +176,28 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- **`--fields` on list commands and `api --paginate` now errors (exit `2`)
+  when the spec matches nothing anywhere in the result, instead of silently
+  printing an empty `{}` per row and exiting `0`.** Single-object `get`
+  commands already treated a total miss as a usage error; list output went
+  through a different code path (the NDJSON emitter) that never checked, so
+  `c1i users list --fields totally.bogus.path` looked like "zero users
+  matched" instead of "your field path is wrong" — an agent reading exit `0`
+  plus empty rows as "no data" rather than "bad flag" could burn a couple of
+  guesses before thinking to drop `--fields` and look at the real shape.
+  Fixed via a single central hook (`rootCmd`'s `PersistentPostRunE`) rather
+  than a check repeated at every list command's call site, so no future list
+  command can add itself without the guard; a tree-walk test fails CI if any
+  subcommand ever defines its own `PersistentPostRunE`/`PersistentPreRunE`
+  and silently disables it. The rule matches the single-object case exactly:
+  it's a *zero-match* check over the **whole result**, not per-row — a field
+  present on some rows and absent on others still exits `0` (sparse data is
+  expected, not an error), and rows are always streamed out as they're
+  fetched, never buffered, so a paginated result's rows are fully printed
+  before the error is returned. Note for anyone piping output
+  (`c1i ... --fields ... | jq ...`): `$?` after a pipe reads the pipe's *last*
+  command, not `c1i`'s, so the stderr message is the durable signal to check
+  for, not a naive `$?`.
 - **A credential stuck in an unreachable OS keyring was misreported as "no
   credentials found: run `c1i auth login`."** `keychain.Load` falls back to
   its 0600 file store both when the keyring has never seen a credential and
