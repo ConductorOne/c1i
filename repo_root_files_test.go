@@ -1,6 +1,7 @@
 package main
 
 import (
+	"os"
 	"os/exec"
 	"sort"
 	"strings"
@@ -31,11 +32,15 @@ var allowedRootFiles = map[string]bool{
 }
 
 func TestNoUnexpectedFilesAtRepoRoot(t *testing.T) {
+	// Distinguish "no checkout to inspect" from "git is broken": skipping on any
+	// git failure would silently downgrade this guard to a passing no-op, which
+	// reads as coverage.
+	if _, err := os.Stat(".git"); err != nil {
+		t.Skipf("not a git checkout (%v), so there is nothing to inspect", err)
+	}
 	out, err := exec.Command("git", "ls-files", "-z").Output()
 	if err != nil {
-		// Not a git checkout (e.g. built from the module cache). The check is
-		// inapplicable rather than passing.
-		t.Skipf("cannot list tracked files, skipping root-file check: %v", err)
+		t.Fatalf("git ls-files failed inside a git checkout: %v", err)
 	}
 
 	var unexpected []string
