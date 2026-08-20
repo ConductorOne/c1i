@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -32,7 +33,17 @@ any request is sent) — including the empty-steps guard, which also
 applies to update: clearing a policy's baseline steps entry (or replacing
 it with an empty array) hits the exact same silent-deny-all default /
 HTTP-500 crash as create does. --allow-deny-all bypasses the deny-all case
-(not the crash case, which is never safe to bypass).`,
+(not the crash case, which is never safe to bypass).
+
+Some of those guards (e.g. agent steps only in grant/certify) depend on
+policyType. If your patch changes policySteps but doesn't state policyType
+(--steps-file without --policy-type, or a --body-file body that omits it),
+this command fetches the policy's current type first so those guards can
+still run. A failed lookup (e.g. the policy doesn't exist, or you're not
+authorized) surfaces as that failure's own exit code, not exit 2; if the
+lookup succeeds but still can't produce a usable type, the command refuses
+with exit 2 rather than send an unguarded request. Pass --policy-type to
+skip the lookup.`,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		id := args[0]
@@ -43,11 +54,15 @@ HTTP-500 crash as create does. --allow-deny-all bypasses the deny-all case
 			return err
 		}
 
-		// Lazily fetches the existing policy's type, only when --steps-file
-		// is used without an explicit --policy-type on this update (needed
-		// to resolve the policySteps baseline map key). Memoized so a
-		// plain display-name/description update never pays for it, and a
-		// steps-file update only pays for it once.
+		// Lazily fetches the existing policy's type, whenever the patch ends
+		// up carrying policySteps without an explicit policyType of its own
+		// (needed both to resolve --steps-file's baseline map key, and to
+		// give the policyType-dependent guards below something to check —
+		// omitting it let an update slip an agent step past every one of
+		// them straight through to the server). Memoized so a plain
+		// display-name/description update never pays for it, and a
+		// policySteps-carrying update only pays for it once regardless of
+		// which flag/file path produced the patch.
 		var c *client.Client
 		var fetchedType string
 		var fetchedOnce bool
@@ -69,12 +84,31 @@ HTTP-500 crash as create does. --allow-deny-all bypasses the deny-all case
 
 		policy, mask, err := buildUpdatePolicyPatch(cmd, resolveFallbackPolicyType)
 		if err != nil {
+			// A fetch failure (auth/not-found/rate-limited/server) reaches
+			// here already classified — surface it as-is so exitCode can map
+			// it correctly (3/4/5/6), rather than flattening it to exitUsage.
+			// Anything else from buildUpdatePolicyPatch (bad flag combo,
+			// unreadable/unparsable file, an unmappable --policy-type) is a
+			// genuine usage problem and becomes exitUsage as before.
+			var apiErr *client.APIError
+			var authErr *client.AuthError
+			if errors.As(err, &apiErr) || errors.As(err, &authErr) {
+				return err
+			}
 			return &usageError{err}
 		}
 
 		effectivePolicyType, _ := policy["policyType"].(string)
 		if effectivePolicyType == "" {
-			effectivePolicyType = fetchedType
+			if _, hasSteps := policy["policySteps"].(map[string]any); hasSteps {
+				effectivePolicyType, err = resolveFallbackPolicyType()
+				if err != nil {
+					return err // classified fetch failure — do not wrap in usageError
+				}
+				if effectivePolicyType == "" {
+					return &usageError{fmt.Errorf("this update sets policySteps but no policyType was given and the existing policy at %q has no resolvable type — pass --policy-type explicitly so the policyType-dependent guards (and the server) know what they're validating", id)}
+				}
+			}
 		}
 		if err := validateUpdatePatch(policy, effectivePolicyType, allowDenyAll); err != nil {
 			return err
@@ -103,9 +137,10 @@ HTTP-500 crash as create does. --allow-deny-all bypasses the deny-all case
 	},
 }
 
-// fetchPolicyType looks up an existing policy's policyType, used only to
-// resolve the policySteps baseline key (policyStepsKey) when --steps-file is
-// supplied without an explicit --policy-type on update.
+// fetchPolicyType looks up an existing policy's policyType. Called via
+// resolveFallbackPolicyType whenever an update's patch carries policySteps
+// without its own policyType, regardless of whether that patch came from
+// --steps-file or --body-file.
 func fetchPolicyType(cmd *cobra.Command, c *client.Client, id string) (string, error) {
 	data, err := c.Get(cmd.Context(), client.Path("/api/v1/policies/%s", id), nil)
 	if err != nil {
@@ -126,10 +161,14 @@ func fetchPolicyType(cmd *cobra.Command, c *client.Client, id string) (string, e
 // update_mask from flags, or reads both (policy verbatim, mask from
 // --update-mask) when --body-file is used. Pure aside from
 // resolveFallbackPolicyType, which is only invoked (and only does network
-// I/O) when --steps-file is supplied without --policy-type. The "id" field
-// is intentionally NOT set here — the caller adds it after guard
-// validation, matching create's shape where the guards see exactly the
-// fields being changed.
+// I/O) here when --steps-file is supplied without --policy-type, to resolve
+// the policySteps baseline map key — a --body-file patch needs the same
+// fallback for the policyType-dependent guards, but can't resolve it here
+// (its policySteps, if any, is opaque JSON with no map key to derive), so
+// the caller (RunE) resolves it again afterward when needed; the closure is
+// memoized, so that costs nothing extra. The "id" field is intentionally
+// NOT set here — the caller adds it after guard validation, matching
+// create's shape where the guards see exactly the fields being changed.
 func buildUpdatePolicyPatch(cmd *cobra.Command, resolveFallbackPolicyType func() (string, error)) (policy map[string]any, mask string, err error) {
 	bodyFile, _ := cmd.Flags().GetString("body-file")
 	usingFlags := cmd.Flags().Changed("display-name") || cmd.Flags().Changed("description") ||

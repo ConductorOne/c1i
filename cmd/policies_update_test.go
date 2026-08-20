@@ -287,3 +287,103 @@ func TestPoliciesUpdateBodyFileRequiresUpdateMask(t *testing.T) {
 		t.Fatal("expected an error: --body-file requires --update-mask")
 	}
 }
+
+// TestPoliciesUpdateBodyFileResolvesPolicyTypeForAgentStepGuard is the
+// load-bearing regression test for the --body-file guard bypass: a patch
+// carrying an agent approval step but no top-level "policyType" must still
+// be checked against the policy's REAL type (fetched from the server), not
+// silently validated with policyType=="" (which skips the "agent steps only
+// in grant/certify" rule entirely and lets the request reach the server,
+// where it 500s). The stub server's POST handler would report success if
+// reached — requestReceived catches that instead of relying on the POST
+// handler failing the test, so this test fails clearly rather than by
+// accident if the guard regresses.
+func TestPoliciesUpdateBodyFileResolvesPolicyTypeForAgentStepGuard(t *testing.T) {
+	const policyID = "zz-c1i-test-policy-6"
+	var getReceived, postReceived bool
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/api/v1/policies/"+policyID:
+			getReceived = true
+			_, _ = fmt.Fprint(w, `{"policy":{"id":"zz-c1i-test-policy-6","policyType":"POLICY_TYPE_REVOKE"}}`)
+		case r.Method == http.MethodPost && r.URL.Path == "/api/v1/policies/"+policyID:
+			postReceived = true
+			_, _ = fmt.Fprint(w, `{"policy":{"id":"zz-c1i-test-policy-6"}}`)
+		default:
+			t.Errorf("unexpected request: %s %s", r.Method, r.URL.Path)
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer srv.Close()
+
+	resetPoliciesUpdateCmdFlags(t)
+	stubPoliciesClient(t, srv)
+	withRealDryRun(t)
+	t.Setenv("C1I_URL", srv.URL)
+
+	// No top-level "policyType" — the omission this defect is about. Agent
+	// approval steps are only allowed in grant/certify policies; the
+	// server-side policy is REVOKE, so this must be refused once the real
+	// type is known.
+	bodyPath := writeTempJSON(t, "body.json", `{"policySteps":{"revoke":{"steps":[`+
+		`{"approval":{"agent":{"agentMode":"APPROVAL_AGENT_MODE_COMMENT_ONLY",`+
+		`"agentFailureAction":"APPROVAL_AGENT_FAILURE_ACTION_SKIP_POLICY_STEP"}}}`+
+		`]}}}`)
+	_ = policiesUpdateCmd.Flags().Set("body-file", bodyPath)
+	_ = policiesUpdateCmd.Flags().Set("update-mask", "policySteps")
+
+	var out bytes.Buffer
+	policiesUpdateCmd.SetOut(&out)
+	policiesUpdateCmd.SetContext(context.Background())
+
+	err := policiesUpdateCmd.RunE(policiesUpdateCmd, []string{policyID})
+	if err == nil {
+		t.Fatal("expected the agent-steps-only-in-grant-or-certify guard to refuse this REVOKE-type update sent via --body-file")
+	}
+	if exitCode(err) != exitUsage {
+		t.Errorf("exitCode(%v) = %d, want %d (exitUsage) — a guard rejection, not a server round trip", err, exitCode(err), exitUsage)
+	}
+	if !getReceived {
+		t.Error("expected the command to fetch the policy's current type since policyType was omitted from a policySteps-carrying patch")
+	}
+	if postReceived {
+		t.Error("the guard should have refused before the update POST ever reached the server")
+	}
+}
+
+// TestPoliciesUpdateBodyFileWithoutPolicyStepsNeverFetchesPolicyType is the
+// negative half of the fix above: a --body-file patch that doesn't touch
+// policySteps at all must never pay for the policyType lookup.
+func TestPoliciesUpdateBodyFileWithoutPolicyStepsNeverFetchesPolicyType(t *testing.T) {
+	const policyID = "zz-c1i-test-policy-7"
+	var getReceived bool
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet {
+			getReceived = true
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = fmt.Fprint(w, `{"policy":{"id":"zz-c1i-test-policy-7"}}`)
+	}))
+	defer srv.Close()
+
+	resetPoliciesUpdateCmdFlags(t)
+	stubPoliciesClient(t, srv)
+	withRealDryRun(t)
+	t.Setenv("C1I_URL", srv.URL)
+
+	bodyPath := writeTempJSON(t, "body.json", `{"displayName":"new name"}`)
+	_ = policiesUpdateCmd.Flags().Set("body-file", bodyPath)
+	_ = policiesUpdateCmd.Flags().Set("update-mask", "displayName")
+
+	var out bytes.Buffer
+	policiesUpdateCmd.SetOut(&out)
+	policiesUpdateCmd.SetContext(context.Background())
+
+	if err := policiesUpdateCmd.RunE(policiesUpdateCmd, []string{policyID}); err != nil {
+		t.Fatalf("RunE: %v", err)
+	}
+	if getReceived {
+		t.Error("a --body-file update with no policySteps should never fetch the policy's current type")
+	}
+}

@@ -31,10 +31,14 @@ var approvalArms = []string{
 	"entitlementOwners", "expression", "webhook", "resourceOwners", "agent",
 }
 
-// stepArms lists every arm of the Step oneof (c1.api.policy.v1.Step.typ),
-// per policies_create.go's --steps-file documentation. A step with none of
-// these keys set reaches the server as a nil step.
-var stepArms = []string{"approval", "provision", "accept", "reject", "wait", "form"}
+// stepArms lists every arm of the Step oneof (c1.api.policy.v1.PolicyStep.
+// step), verified against the platform proto (protos/c1api/c1/api/policy/v1/
+// policy.proto) — seven arms, not six: policies_create.go's --steps-file
+// documentation predates "action" and needs the same fix (out of scope
+// here — see cmd/policies_create.go). A step with none of these keys set
+// reaches the server as a nil step; "action" is recognized but has no
+// support of its own yet (see the dedicated check below).
+var stepArms = []string{"approval", "provision", "accept", "reject", "wait", "form", "action"}
 
 func hasStepArm(step map[string]any) bool {
 	for _, arm := range stepArms {
@@ -264,53 +268,69 @@ func validateRuleConditions(rules []any) error {
 // validateApproval, plus the provision-step rejection in
 // ValidateNonProvisionPolicyStepSlice:
 //
-//  1. A step with none of the six Step oneof arms set (approval, provision,
-//     accept, reject, wait, form) — the server's own error is "policy step
-//     is nil". An arm present with an empty body (e.g. {"reject":{}}) is a
-//     legitimate step and is NOT rejected here.
-//  2. A `provision` step is never allowed in a policy body (it's a
+//  1. A step whose keys match none of the seven Step oneof arms (approval,
+//     provision, accept, reject, wait, form, action) is refused two
+//     different ways depending on WHY it matched none of them: a genuinely
+//     empty step object ({}) reaches the server as a nil step — its own
+//     error is "policy step is nil" (bare, HTTP 500). A step carrying some
+//     OTHER, unrecognized key instead (a typo, or wrong casing) never
+//     reaches that check at all — the server's JSON decoder rejects the
+//     whole request for the unrecognized field first (HTTP 400), verified
+//     against the generated apigw decoder (protojson.UnmarshalOptions with
+//     no DiscardUnknown). An arm present with an empty body (e.g.
+//     {"reject":{}}) is a legitimate step and is NOT rejected here.
+//  2. An `action` step is recognized as a real arm (so case 1 above doesn't
+//     misfire on it) but isn't supported by create/update yet: the
+//     platform's own API->model conversion (PolicyStepToModel) has no case
+//     for it and falls through to a bare "unsupported workflow step type"
+//     error (HTTP 500, not 400 — still a bare error, just a different one
+//     than case 1's).
+//  3. A `provision` step is never allowed in a policy body (it's a
 //     read-only, server-computed step type) — "provision steps are not
 //     allowed in policies", a bare error.
-//  3. `approval.assigned` must not be sent as true — it's a read-only,
+//  4. `approval.assigned` must not be sent as true — it's a read-only,
 //     server-computed field ("assigned is a read-only field and must be
 //     false by default").
-//  4. fallback / fallbackUserIds set on an arm that doesn't support them
+//  5. fallback / fallbackUserIds set on an arm that doesn't support them
 //     (users, appOwners, webhook, agent) — rejected server-side as an
 //     unknown JSON field (400, not 500, but still worth catching early).
-//  5. fallback:true with nothing to fall back to, on any of the six arms
+//  6. fallback:true with nothing to fall back to, on any of the six arms
 //     that support it (manager, group, self, expression, entitlementOwners,
 //     resourceOwners) — each is validated identically: fallbackGroupIds
 //     must be non-empty when isGroupFallbackEnabled is true, otherwise
 //     fallbackUserIds must be non-empty. A bare error either way.
-//  6. `manager.assignedUserIds` must be empty — server-computed
+//  7. `manager.assignedUserIds` must be empty — server-computed
 //     ("manager steps assigned user IDs is set by the task workflow, not
 //     defined on the input").
-//  7. `agent.agentUserId` must be empty — deprecated/system-driven
+//  8. `agent.agentUserId` must be empty — deprecated/system-driven
 //     ("agent approval steps are system-driven and cannot reference an
 //     agent user").
 //
 // The Approval_Agent case in validateApproval has six more bare-error
 // rules, guarded here too. policyType is the caller's already-resolved
-// policy type; "" means unknown (an update that never resolves one — e.g.
-// --body-file with no policyType and no --steps-file fetch, see
-// policies_update.go's resolveFallbackPolicyType) and skips the two rules
-// that need it:
+// policy type (create: from --policy-type; update: from the patch, or the
+// existing policy's type fetched on demand whenever policySteps is present
+// without an explicit policyType — see policies_update.go's
+// resolveFallbackPolicyType). "" means it's genuinely unresolvable (the
+// caller fails closed before reaching here in that case), so the two rules
+// below that need it are unreachable with policyType == "" in practice; the
+// checks still guard defensively.
 //
-//  8. `agentMode` is required ("agent mode is required").
-//  9. Agent steps are only allowed when policyType is GRANT or CERTIFY
+//  9. `agentMode` is required ("agent mode is required").
+//  10. Agent steps are only allowed when policyType is GRANT or CERTIFY
 //     ("agent approval steps are only allowed in grant and certify
 //     policies") — skipped when policyType is unknown.
-//  10. When policyType is CERTIFY, agentMode must be COMMENT_ONLY ("agent
+//  11. When policyType is CERTIFY, agentMode must be COMMENT_ONLY ("agent
 //     mode can only be \"Comment only\" in certify policies").
-//  11. When agentMode is CHANGE_POLICY_ONLY, policyIds must be non-empty
+//  12. When agentMode is CHANGE_POLICY_ONLY, policyIds must be non-empty
 //     ("policy ids are required when agent mode is \"Change policy\"").
 //     The sibling rule — no policyIds entry may equal the policy's own
 //     id — is NOT checked: this guard never has the policy's own id
 //     available (create has none yet; update withholds it until after
 //     validation, see buildUpdatePolicyPatch).
-//  12. `agentFailureAction` is required ("agent failure action is
+//  13. `agentFailureAction` is required ("agent failure action is
 //     required").
-//  13. When agentFailureAction is REASSIGN_TO_USERS, reassignToUserIds
+//  14. When agentFailureAction is REASSIGN_TO_USERS, reassignToUserIds
 //     must be non-empty ("reassign to user ids is required when agent
 //     failure action is \"Reassign to users\"").
 func validateApprovalFallback(policySteps map[string]any, policyType string) error {
@@ -326,7 +346,13 @@ func validateApprovalFallback(policySteps map[string]any, policyType string) err
 				continue
 			}
 			if !hasStepArm(step) {
-				return &usageError{fmt.Errorf("policySteps[%q].steps[%d]: step has none of the recognized arms (approval, provision, accept, reject, wait, form) — the server rejects this with a bare \"policy step is nil\" error (HTTP 500, not 400)", ptype, i)}
+				if len(step) == 0 {
+					return &usageError{fmt.Errorf("policySteps[%q].steps[%d]: step is an empty object — the server rejects this with a bare \"policy step is nil\" error (HTTP 500, not 400)", ptype, i)}
+				}
+				return &usageError{fmt.Errorf("policySteps[%q].steps[%d]: none of its key(s) match a recognized arm (approval, provision, accept, reject, wait, form, action) — if that's a typo or wrong casing, the server's JSON decoder rejects the whole request for the unrecognized field before any handler runs (HTTP 400, not 500)", ptype, i)}
+			}
+			if _, hasAction := step["action"]; hasAction {
+				return &usageError{fmt.Errorf("policySteps[%q].steps[%d]: an \"action\" step is not supported by create/update yet — the platform's API-to-model conversion has no case for it and falls through to a bare \"unsupported workflow step type\" error (HTTP 500, not 400)", ptype, i)}
 			}
 			if _, hasProvision := step["provision"]; hasProvision {
 				return &usageError{fmt.Errorf("policySteps[%q].steps[%d]: a \"provision\" step is never allowed in a policy body — it's read-only and server-computed", ptype, i)}
