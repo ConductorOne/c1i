@@ -3,8 +3,10 @@ package client
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -223,6 +225,14 @@ func TestClient_RedirectLoop_SamePath_Bounded(t *testing.T) {
 	if calls != maxRedirectHops {
 		t.Errorf("server was called %d times, want exactly %d (bounded, not unbounded)", calls, maxRedirectHops)
 	}
+	// Also pinned to a hard-coded literal, not maxRedirectHops itself: the
+	// assertion above compares against the same constant the production code
+	// uses, so it can't catch an accidental change to maxRedirectHops (e.g.
+	// raising it far higher) -- only a literal does. Update this literal
+	// deliberately if maxRedirectHops itself changes.
+	if calls != 5 {
+		t.Errorf("server was called %d times, want exactly 5", calls)
+	}
 }
 
 // TestClient_RedirectLoop_NotRetried proves a bounded redirect-loop failure
@@ -247,6 +257,12 @@ func TestClient_RedirectLoop_NotRetried(t *testing.T) {
 	}
 	if calls != maxRedirectHops {
 		t.Errorf("server was called %d times, want exactly %d (the outer retry budget must not add more)", calls, maxRedirectHops)
+	}
+	// See the matching comment in TestClient_RedirectLoop_SamePath_Bounded:
+	// pinned to a literal so a change to maxRedirectHops itself can't hide
+	// behind this assertion comparing against its own symbol.
+	if calls != 5 {
+		t.Errorf("server was called %d times, want exactly 5", calls)
 	}
 }
 
@@ -348,6 +364,13 @@ func TestResolveAllowedRedirect(t *testing.T) {
 		{"unparseable location", "http://ex ample.test", false},
 		{"same path, subdomain-related host: allowed", "http://tenant.example/x/%2F", true},
 		{"same path, unrelated host: refused", "http://evil.example/x/%2F", false},
+		// base's EscapedPath is "/x/%2F" (one segment: an id containing a
+		// literal slash), decoded Path is "/x//". A target whose literal
+		// path is "/x//" has the SAME decoded Path but a DIFFERENT escaped
+		// path (no percent-encoding at all) -- a different resource (two
+		// segments, the second empty) that a decoded-path comparison would
+		// wrongly call unchanged. Must stay refused.
+		{"escaped separator vs. literal separator (decoded paths coincide): refused", "/x//", false},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -599,5 +622,61 @@ func TestClient_RedirectSingleLabelTarget_Refused(t *testing.T) {
 	}
 	if bareCalls != 0 {
 		t.Fatalf("%s was contacted %d time(s); a single-label target below the floor must never be followed", bareHost, bareCalls)
+	}
+}
+
+// TestClient_RedirectFollowedHop_ReplaysBody proves an allowed (same-path,
+// in-scope-host) redirect on a body-bearing method (PUT here; POST is the
+// same code path) resends the ORIGINAL body on the followed hop, not an
+// empty one: the first hop's Body reader is already drained by the time the
+// 3xx comes back, so redirectedRequest must re-obtain it from GetBody. This
+// matters concretely for this CLI: `policies update` (POST) and `apps
+// set-owners` (PUT) would otherwise silently clear what they meant to set
+// if a canonicalization redirect ever fired on one.
+//
+// The transport disables keep-alives deliberately: with a reused persistent
+// connection, net/http.Transport can transparently retry a broken write via
+// req.GetBody itself, which would mask a missing replay in redirectedRequest
+// by fixing it up one layer further down. Forcing a fresh connection for the
+// second hop makes sure this test is exercising redirectedRequest's own
+// replay, not net/http's unrelated safety net.
+func TestClient_RedirectFollowedHop_ReplaysBody(t *testing.T) {
+	const payload = `{"owner_ids":["abc123"]}`
+
+	var redirected bool
+	var gotMethod string
+	var gotBody []byte
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !redirected {
+			redirected = true
+			w.Header().Set("Location", "/x") // same path, forces a second hop
+			w.WriteHeader(http.StatusMovedPermanently)
+			return
+		}
+		gotMethod = r.Method
+		b, err := io.ReadAll(r.Body)
+		if err != nil {
+			t.Fatalf("reading followed hop's body: %v", err)
+		}
+		gotBody = b
+		_, _ = w.Write([]byte(`{"ok":true}`))
+	}))
+	defer srv.Close()
+
+	hc := &http.Client{Transport: &redirectTripper{next: &http.Transport{DisableKeepAlives: true}}}
+	c := &Client{httpClient: hc, baseURL: srv.URL, maxRetries: 0}
+
+	body, err := c.Put(context.Background(), "/x", json.RawMessage(payload))
+	if err != nil {
+		t.Fatalf("unexpected error following a same-path redirect on a PUT: %v", err)
+	}
+	if string(body) != `{"ok":true}` {
+		t.Errorf("body = %s, want the target's body", body)
+	}
+	if gotMethod != http.MethodPut {
+		t.Errorf("followed hop's method = %q, want %q", gotMethod, http.MethodPut)
+	}
+	if string(gotBody) != payload {
+		t.Errorf("followed hop's body = %q, want %q (an empty body here would silently clear what the request meant to set)", gotBody, payload)
 	}
 }
