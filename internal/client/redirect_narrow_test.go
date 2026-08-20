@@ -376,11 +376,13 @@ func TestHostInScope(t *testing.T) {
 		{"unrelated host, shared suffix label boundary violated", "tenant.example", "eviltenant.example", false},
 		{"unrelated host, shared suffix label boundary violated, reversed", "eviltenant.example", "tenant.example", false},
 		{"completely unrelated host", "tenant.example", "evil.example", false},
-		// This is structurally the tenant-subdomain <-> canonical-apex case
-		// the rule is meant to allow (e.g. leet.conductor.one <-> conductor.one),
-		// not a hole: "example" here is the apex, not an unrelated host that
-		// merely shares a suffix label with it.
-		{"apex is the bare parent of a subdomain: allowed", "tenant.example", "example", true},
+		// A single-label target is never a real canonicalization of a public
+		// tenant host (every real domain family here has a two-label apex),
+		// so the prefix branch has a floor: the target must have >= 2 labels.
+		{"single-label target below the floor: refused", "tenant.example", "example", false},
+		// The identical-host branch is not subject to the floor: a bare
+		// single-label host is a legitimate identical-host (local dev) target.
+		{"identical single-label host (localhost): allowed", "localhost", "localhost", true},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -548,5 +550,54 @@ func TestClient_RedirectUnrelatedHost_Refused(t *testing.T) {
 	}
 	if evilSawAuth != "" {
 		t.Errorf("%s observed Authorization = %q; it must never see any request, let alone the token", evilHost, evilSawAuth)
+	}
+}
+
+// TestClient_RedirectSingleLabelTarget_Refused covers the floor on the
+// prefix-relationship branch: a same-path redirect from a real tenant host
+// down to a bare single-label host must be refused even though it fits the
+// "<label>." prefix pattern, since a single-label target is never a real
+// canonicalization of a public tenant host — and the target must never be
+// contacted at all.
+func TestClient_RedirectSingleLabelTarget_Refused(t *testing.T) {
+	const token = "SECRET-TOKEN"
+	const goodHost = "tenant.example"
+	const bareHost = "example"
+
+	var bareCalls int
+	bareSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		bareCalls++
+		_, _ = w.Write([]byte(`{"stolen":true}`))
+	}))
+	defer bareSrv.Close()
+
+	goodSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Host != goodHost {
+			t.Fatalf("unexpected Host %q", r.Host)
+		}
+		w.Header().Set("Location", "http://"+bareHost+"/x")
+		w.WriteHeader(http.StatusMovedPermanently)
+	}))
+	defer goodSrv.Close()
+
+	hc := &http.Client{Transport: &redirectTripper{next: &authInjectingTripper{
+		token: token,
+		next: &hostRewritingTransport{
+			next: http.DefaultTransport.(*http.Transport),
+			hosts: map[string]string{
+				goodHost: goodSrv.Listener.Addr().String(),
+				bareHost: bareSrv.Listener.Addr().String(),
+			},
+		},
+	}}}
+	c := &Client{httpClient: hc, baseURL: "http://" + goodHost, maxRetries: 0}
+
+	_, err := c.Get(context.Background(), "/x", nil)
+	var redirErr *RedirectError
+	if !errors.As(err, &redirErr) {
+		t.Fatalf("error = %T (%v), want *RedirectError", err, err)
+	}
+	if bareCalls != 0 {
+		t.Fatalf("%s was contacted %d time(s); a single-label target below the floor must never be followed", bareHost, bareCalls)
 	}
 }
