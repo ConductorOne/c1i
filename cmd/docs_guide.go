@@ -360,7 +360,12 @@ via toolset sync).
 
 ## Prerequisites
 
-- Authenticated against the right tenant: "c1i auth whoami"
+- Pointed at the tenant you intend to change, and authenticated. This guide
+  creates objects, so confirm the target before you start — "auth whoami"
+  reports the identity but not the tenant:
+
+      c1i auth status
+      c1i auth whoami
 - At least one candidate owner already exists as a C1 user (owners are
   existing users, never created here — C1 users come from a connected
   directory, not from this or any other write path):
