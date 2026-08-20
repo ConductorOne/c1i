@@ -14,6 +14,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strconv"
 	"strings"
 
 	"github.com/ConductorOne/c1i/internal/client"
@@ -96,17 +97,26 @@ type rpcRequest struct {
 	Params  any    `json:"params,omitempty"`
 }
 
+// Code is a *int, not int: a JSON-RPC error object that omits `code` entirely
+// must decode distinguishably from one carrying a literal `code:0` — the
+// latter is the observed shape of an upstream connector failure (see
+// RPCErrorCode), and collapsing "absent" into Go's int zero value would make
+// the two indistinguishable.
 type rpcError struct {
-	Code    int             `json:"code"`
+	Code    *int            `json:"code"`
 	Message string          `json:"message"`
 	Data    json.RawMessage `json:"data,omitempty"`
 }
 
 func (e *rpcError) Error() string {
-	if len(e.Data) > 0 {
-		return fmt.Sprintf("MCP error %d: %s (%s)", e.Code, e.Message, string(e.Data))
+	code := "absent"
+	if e.Code != nil {
+		code = strconv.Itoa(*e.Code)
 	}
-	return fmt.Sprintf("MCP error %d: %s", e.Code, e.Message)
+	if len(e.Data) > 0 {
+		return fmt.Sprintf("MCP error %s: %s (%s)", code, e.Message, string(e.Data))
+	}
+	return fmt.Sprintf("MCP error %s: %s", code, e.Message)
 }
 
 // RPCErrorCode returns the JSON-RPC error code carried by err, if err is (or
@@ -114,7 +124,9 @@ func (e *rpcError) Error() string {
 // transport-level failure (e.g. *HTTPError — a non-2xx HTTP status) or any
 // other error, letting a caller distinguish "the gateway answered with a
 // JSON-RPC error" from "the request never got a JSON-RPC-shaped response at
-// all."
+// all." code is nil when the JSON-RPC error object omitted the `code` field
+// entirely — distinguishable from a present code of 0 (ok is still true in
+// both cases).
 //
 // This exists so cmd — which owns the process exit-code taxonomy and the
 // types (like *usageError) some of those codes must map to — can react to
@@ -127,15 +139,15 @@ func (e *rpcError) Error() string {
 // to *client.APIError{StatusCode: 502} to reach exit 6 through the existing
 // ">= 500" rule, but that fabricated status then rendered as a false "status"
 // field in --error-format json — a claim about the wire that never happened.
-// cmd/mcp_gateway.go's classifyGatewayError uses this accessor to wrap code 0
-// in a *remoteFailureError (cmd/errors.go) instead: exit 6, no invented
-// status anywhere.
-func RPCErrorCode(err error) (code int, ok bool) {
+// cmd/mcp_gateway.go's classifyGatewayError uses this accessor to wrap a
+// present code of 0 (and -32601/-32700/-32600) in an *upstreamError
+// (cmd/errors.go) instead: exit 8, no invented status anywhere.
+func RPCErrorCode(err error) (code *int, ok bool) {
 	var rpcErr *rpcError
 	if errors.As(err, &rpcErr) {
 		return rpcErr.Code, true
 	}
-	return 0, false
+	return nil, false
 }
 
 type rpcResponse struct {

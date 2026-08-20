@@ -308,7 +308,7 @@ func TestExtractSSEResponseSelectsResponseRegardlessOfIDShape(t *testing.T) {
 		if err != nil {
 			t.Fatalf("decodeMessage(%q) failed: %v", got, err)
 		}
-		if msg.Error == nil || msg.Error.Code != -32700 {
+		if msg.Error == nil || msg.Error.Code == nil || *msg.Error.Code != -32700 {
 			t.Errorf("decoded message = %+v, want Error.Code == -32700", msg)
 		}
 	})
@@ -335,7 +335,7 @@ func TestDecodeMessage(t *testing.T) {
 	if err != nil {
 		t.Fatalf("decode: %v", err)
 	}
-	if msg.Error == nil || msg.Error.Code != -32601 {
+	if msg.Error == nil || msg.Error.Code == nil || *msg.Error.Code != -32601 {
 		t.Errorf("expected error code -32601, got %+v", msg.Error)
 	}
 	// A result round-trips.
@@ -345,6 +345,46 @@ func TestDecodeMessage(t *testing.T) {
 	}
 	if msg.Error != nil || string(msg.Result) != `{"tools":[]}` {
 		t.Errorf("result = %s (err %v)", msg.Result, msg.Error)
+	}
+}
+
+// TestRPCErrorCodePresenceVsAbsence pins the presence-tracking guarantee
+// cmd/mcp_gateway.go's classifyGatewayError depends on: a JSON-RPC error
+// object carrying a literal `"code":0` must decode distinguishably from one
+// that omits the `code` key entirely -- the former is the observed shape of
+// an upstream connector failure, the latter is just an error object without
+// a code. Driven from raw JSON (not by constructing an rpcError by hand) so
+// it actually exercises encoding/json's unmarshaling behavior, not an
+// assumption about it.
+func TestRPCErrorCodePresenceVsAbsence(t *testing.T) {
+	msgZero, err := decodeMessage([]byte(`{"jsonrpc":"2.0","id":1,"error":{"code":0,"message":"boom"}}`))
+	if err != nil {
+		t.Fatalf("decode (code:0): %v", err)
+	}
+	if msgZero.Error == nil || msgZero.Error.Code == nil {
+		t.Fatalf("code:0 must decode to a present, non-nil *int, got %+v", msgZero.Error)
+	}
+	if *msgZero.Error.Code != 0 {
+		t.Errorf("code:0 must dereference to 0, got %d", *msgZero.Error.Code)
+	}
+
+	msgAbsent, err := decodeMessage([]byte(`{"jsonrpc":"2.0","id":1,"error":{"message":"boom"}}`))
+	if err != nil {
+		t.Fatalf("decode (no code key): %v", err)
+	}
+	if msgAbsent.Error == nil {
+		t.Fatalf("expected a non-nil Error object")
+	}
+	if msgAbsent.Error.Code != nil {
+		t.Errorf("an error object with no code key must decode to a nil *int (absent), got a present %d -- this is exactly the presence/zero collapse the fix exists to prevent", *msgAbsent.Error.Code)
+	}
+
+	// RPCErrorCode must propagate that same distinction to cmd/mcp_gateway.go.
+	if code, ok := RPCErrorCode(msgZero.Error); !ok || code == nil || *code != 0 {
+		t.Errorf("RPCErrorCode(code:0 error) = (%v, %v), want (non-nil *0, true)", code, ok)
+	}
+	if code, ok := RPCErrorCode(msgAbsent.Error); !ok || code != nil {
+		t.Errorf("RPCErrorCode(code-absent error) = (%v, %v), want (nil, true)", code, ok)
 	}
 }
 

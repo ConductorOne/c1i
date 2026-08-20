@@ -92,37 +92,50 @@ func newGatewayClient(cmd *cobra.Command) (*mcpgateway.Client, error) {
 // (an *mcpgateway.rpcError, unexported — accessed via RPCErrorCode) so it
 // reaches the right process exit code through cmd/errors.go's exitCode:
 //
-//   - -32602 (invalid params) / -32601 (method not found): the caller named a
-//     tool or method that doesn't exist. Wrapped in *usageError -> exit 2.
-//   - code 0 (an upstream connector failure — an unreachable external MCP
-//     server, a vendor API error surfaced through the connector, ...).
-//     Wrapped in *remoteFailureError -> exit 6. This arrives on an HTTP 200
-//     response (the gateway itself didn't fail), so it is NOT wrapped in a
-//     *client.APIError with an invented status — that was tried and reverted
-//     because it rendered as a false "status" field in --error-format json.
-//   - any other code, or no JSON-RPC code at all (e.g. a transport-level
+//   - -32602 (invalid params): the caller named a tool with bad arguments —
+//     that IS caller-caused. Wrapped in *usageError -> exit 2.
+//   - -32601 (method not found): this client only ever sends four fixed,
+//     spec-required methods (initialize, notifications/initialized,
+//     tools/list, tools/call), so a caller cannot trigger this themselves —
+//     it firing means a protocol-version mismatch or a bug in this CLI, not
+//     a bad invocation. Wrapped in *upstreamError -> exit 8 (moved off
+//     exitUsage, which would otherwise send the user hunting their own
+//     command line for a problem that isn't there).
+//   - -32700 (parse error) / -32600 (invalid request): protocol-level
+//     failures. Wrapped in *upstreamError -> exit 8.
+//   - a JSON-RPC code that is present and 0 (an upstream connector failure —
+//     an unreachable external MCP server, a vendor API error surfaced
+//     through the connector, ...). Wrapped in *upstreamError -> exit 8. This
+//     arrives on an HTTP 200 response (the gateway itself didn't fail), so
+//     it is NOT wrapped in a *client.APIError with an invented status — that
+//     was tried and reverted because it rendered as a false "status" field
+//     in --error-format json.
+//   - any other code, a JSON-RPC error object with no `code` field at all
+//     (RPCErrorCode returns ok=true, code=nil — distinct from a present 0),
+//     or no JSON-RPC code whatsoever (e.g. a transport-level
 //     *mcpgateway.HTTPError, which already classifies via its own Unwrap to
 //     *client.APIError with a real status): left unchanged, exits 1
 //     (generic) as before.
 //
-// *usageError and *remoteFailureError both live in package cmd
-// (internal/mcpgateway must not import cmd), so this reclassification has to
-// happen here rather than in the gateway client — this function is the seam.
-// Call it on the error CallTool/ListTools return, before wrapping with the
-// "%s failed: %w" context each call site already adds; both wrapper types'
-// Error() delegates verbatim to the wrapped error, so the rendered message is
-// unchanged.
+// *usageError and *upstreamError both live in package cmd (internal/mcpgateway
+// must not import cmd), so this reclassification has to happen here rather
+// than in the gateway client — this function is the seam. Call it on the
+// error CallTool/ListTools return, before wrapping with the "%s failed: %w"
+// context each call site already adds; both wrapper types' Error() delegates
+// verbatim to the wrapped error, so the rendered message is unchanged.
 func classifyGatewayError(err error) error {
 	if err == nil {
 		return nil
 	}
-	if code, ok := mcpgateway.RPCErrorCode(err); ok {
-		switch code {
-		case -32602, -32601:
-			return &usageError{err}
-		case 0:
-			return &remoteFailureError{err}
-		}
+	code, ok := mcpgateway.RPCErrorCode(err)
+	if !ok || code == nil {
+		return err
+	}
+	switch *code {
+	case -32602:
+		return &usageError{err}
+	case -32601, -32700, -32600, 0:
+		return &upstreamError{err}
 	}
 	return err
 }

@@ -63,7 +63,12 @@ func TestExitCode(t *testing.T) {
 		{"api 429", &client.APIError{StatusCode: 429}, exitRateLimited},
 		{"api 500", &client.APIError{StatusCode: 500}, exitServer},
 		{"api 503", &client.APIError{StatusCode: 503}, exitServer},
-		{"api 400", &client.APIError{StatusCode: 400}, exitError},
+		// A bare HTTP 400 is caller-caused (bad request body/params), so it now
+		// maps to exitUsage -- a deliberate narrowing of the "unlisted status"
+		// default, scoped to exactly 400. 409 is the negative pair proving
+		// nothing else moved off exitError.
+		{"api 400", &client.APIError{StatusCode: 400}, exitUsage},
+		{"api 409 (unaffected)", &client.APIError{StatusCode: 409}, exitError},
 		{"auth", &client.AuthError{Err: errors.New("no creds")}, exitAuth},
 		// The keyring-unavailable diagnosis (internal/keychain.Load,
 		// see keychain_test.go) still surfaces through loadCredentials as an
@@ -78,6 +83,8 @@ func TestExitCode(t *testing.T) {
 		{"path guard: empty segment", &client.PathError{Method: "GET", Path: "/api/v1/policies/"}, exitUsage},
 		{"wrapped path guard", fmt.Errorf("request failed: %w", &client.PathError{Method: "GET", Path: "/api/v1/policies/"}), exitUsage},
 		{"tool execution", &toolExecutionError{errors.New("isError")}, exitToolError},
+		{"upstream failure", &upstreamError{errors.New("connector down")}, exitUpstream},
+		{"wrapped upstream failure", fmt.Errorf("gateway handshake failed: %w", &upstreamError{errors.New("connector down")}), exitUpstream},
 		{"wrapped api 404", fmt.Errorf("API error: %w", &client.APIError{StatusCode: 404}), exitNotFound},
 		{"wrapped auth", fmt.Errorf("authentication failed: %w", &client.AuthError{Err: errors.New("x")}), exitAuth},
 		{"cobra unknown command", errors.New(`unknown command "bogus" for "c1i"`), exitUsage},
