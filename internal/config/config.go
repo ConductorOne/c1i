@@ -6,31 +6,64 @@ import (
 	"strings"
 )
 
-// ParseURL normalizes any of the following inputs to "https://{host}" (no trailing slash):
+// ParseURL normalizes any of the following inputs to "https://{host}" (no
+// trailing slash), with host lower-cased -- DNS/HTTP hosts are
+// case-insensitive but the keychain key built from one (KeychainService) is
+// not, so a mixed-case --url must normalize the same as its lower-case form
+// or credential lookup spuriously fails:
 //   - Full URL: "https://acme.conductor.one/" → "https://acme.conductor.one"
+//   - Protocol-relative: "//acme.conductor.one" → "https://acme.conductor.one"
 //   - Raw domain: "acme.conductor.one" → "https://acme.conductor.one"
 //   - Legacy short name: "acme" → "https://acme.conductor.one"
-func ParseURL(input string) string {
+//
+// It also returns human-readable warnings for anything silently altered: a
+// non-https scheme (rewritten to https rather than rejected -- a typo
+// shouldn't turn into a hard failure with no server to inspect) and any
+// embedded userinfo, which is always dropped (c1i authenticates via OAuth
+// device flow or a keychain-stored client_id/client_secret, never HTTP Basic
+// in the URL) and never echoed back, password included, in the warning.
+func ParseURL(input string) (result string, warnings []string) {
 	input = strings.TrimSpace(input)
-	if strings.Contains(input, "://") {
-		u, err := url.Parse(input)
+
+	// "//host" is a plausible typo for "https://host" but has no "://", so it
+	// would otherwise miss the fast path below and fall to the raw-domain
+	// branch, which prepends "https://" onto the literal leading "//" and
+	// mangles it into "https:////host".
+	parseable := input
+	if strings.HasPrefix(input, "//") {
+		parseable = "https:" + input
+	}
+
+	if strings.Contains(parseable, "://") {
+		u, err := url.Parse(parseable)
 		if err == nil && u.Host != "" {
-			return "https://" + u.Host
+			if u.User != nil {
+				warnings = append(warnings, fmt.Sprintf(
+					"--url embedded credentials (user %q) were dropped; c1i authenticates via OAuth device flow or a keychain-stored client_id/client_secret, never via the URL",
+					u.User.Username()))
+			}
+			if !strings.EqualFold(u.Scheme, "https") {
+				warnings = append(warnings, fmt.Sprintf("--url scheme %q is not supported; using https instead", u.Scheme))
+			}
+			return "https://" + strings.ToLower(u.Host), warnings
 		}
 	}
 	if strings.Contains(input, ".") {
-		return "https://" + input
+		return "https://" + strings.ToLower(input), warnings
 	}
-	return fmt.Sprintf("https://%s.conductor.one", input)
+	return fmt.Sprintf("https://%s.conductor.one", strings.ToLower(input)), warnings
 }
 
 // KeychainService returns the keychain service name for a given base URL.
+// The host is lower-cased independent of whether baseURL already went
+// through ParseURL, so a caller that bypasses ParseURL can't reintroduce a
+// case-sensitive lookup.
 func KeychainService(baseURL string) string {
 	u, err := url.Parse(baseURL)
 	if err == nil && u.Host != "" {
-		return "c1i/" + u.Host
+		return "c1i/" + strings.ToLower(u.Host)
 	}
-	return "c1i/" + baseURL
+	return "c1i/" + strings.ToLower(baseURL)
 }
 
 // LegacyKeychainService returns the old-style keychain service name if the host
@@ -40,8 +73,9 @@ func LegacyKeychainService(baseURL string) string {
 	if err != nil || u.Host == "" {
 		return ""
 	}
-	if strings.HasSuffix(u.Host, ".conductor.one") {
-		shortName := strings.TrimSuffix(u.Host, ".conductor.one")
+	host := strings.ToLower(u.Host)
+	if strings.HasSuffix(host, ".conductor.one") {
+		shortName := strings.TrimSuffix(host, ".conductor.one")
 		if shortName != "" {
 			return "c1i/" + shortName
 		}

@@ -101,13 +101,25 @@ func initConfig() {
 	_ = viper.ReadInConfig()
 }
 
-// GetBaseURL returns the configured base URL or exits with an error.
+// GetBaseURL returns the configured base URL or exits with an error. Anything
+// ParseURL silently rewrote (a non-https scheme, embedded credentials) is
+// printed to stderr as a warning rather than surfaced as an error, so a typo
+// doesn't turn into a hard failure -- but it's no longer silent.
 func GetBaseURL() (string, error) {
 	raw := viper.GetString("url")
 	if raw == "" {
 		return "", fmt.Errorf("url is required: set --url flag, C1I_URL env var, or url in ~%s.c1i.yaml", string(filepath.Separator))
 	}
-	return config.ParseURL(raw), nil
+	url, warnings := config.ParseURL(raw)
+	warnAboutURL(warnings)
+	return url, nil
+}
+
+// warnAboutURL prints any ParseURL warnings to stderr, one per line.
+func warnAboutURL(warnings []string) {
+	for _, w := range warnings {
+		_, _ = fmt.Fprintf(os.Stderr, "Warning: %s\n", w)
+	}
 }
 
 // URLSource indicates where the URL was resolved from.
@@ -120,16 +132,22 @@ const (
 	URLSourceConfig
 )
 
-// GetBaseURLWithSource returns the configured base URL and where it came from.
+// GetBaseURLWithSource returns the configured base URL and where it came
+// from, warning to stderr about anything ParseURL silently rewrote.
 func GetBaseURLWithSource(cmd *cobra.Command) (string, URLSource) {
+	parse := func(raw string, source URLSource) (string, URLSource) {
+		url, warnings := config.ParseURL(raw)
+		warnAboutURL(warnings)
+		return url, source
+	}
 	if f := cmd.Flags().Lookup("url"); f != nil && f.Changed {
-		return config.ParseURL(f.Value.String()), URLSourceFlag
+		return parse(f.Value.String(), URLSourceFlag)
 	}
 	if v := os.Getenv("C1I_URL"); v != "" {
-		return config.ParseURL(v), URLSourceEnv
+		return parse(v, URLSourceEnv)
 	}
 	if v := viper.GetString("url"); v != "" {
-		return config.ParseURL(v), URLSourceConfig
+		return parse(v, URLSourceConfig)
 	}
 	return "", URLSourceNone
 }

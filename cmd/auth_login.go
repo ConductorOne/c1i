@@ -90,7 +90,9 @@ func promptForURL(cmd *cobra.Command) (string, error) {
 		return "", fmt.Errorf("url is required: set --url flag, C1I_URL env var, or url in ~/.c1i.yaml")
 	}
 
-	return config.ParseURL(raw), nil
+	url, warnings := config.ParseURL(raw)
+	warnAboutURL(warnings)
+	return url, nil
 }
 
 func offerSaveURL(cmd *cobra.Command, baseURL string) {
