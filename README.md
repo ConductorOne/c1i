@@ -346,7 +346,7 @@ both print identical output.
 ## Output Conventions
 
 - **List commands** (`users list`, `apps list`, etc.) output NDJSON (one JSON object per line).
-- **`api`** outputs pretty-printed JSON. With `--paginate`, outputs NDJSON (one list item per line).
+- **`api`** outputs pretty-printed JSON. With `--paginate`, outputs NDJSON (one list item per line). A `200` whose body is not JSON is an error (exit `6`), not a silent pass-through — a `--path` that escapes the API prefix can reach the web app and return HTML, which used to print as though it had succeeded. An empty body still succeeds, since some endpoints answer a write with nothing.
 - **`docs`** commands output NDJSON (`search`, `endpoints`), pretty JSON (`endpoint`, `openapi` is YAML), or plain text (`page`).
 - List commands auto-paginate by default. Pass `--page-token` to fetch a single page manually.
 - `--page-size` controls the per-call batch size (max 100). Use `--limit N` to cap the *total* number of results emitted; auto-pagination stops fetching new pages once the cap is reached.
@@ -421,7 +421,7 @@ branch on without parsing text:
 | `3` | not authenticated, or API returned `401`/`403` |
 | `4` | API returned `404` (not found) |
 | `5` | API returned `429` (rate limited — back off and retry) |
-| `6` | C1 failed: the API returned `5xx` |
+| `6` | C1 failed: the API returned `5xx`, or answered `200` with a body that isn't JSON |
 | `7` | `mcp gateway call` completed, but the tool itself reported an error (`isError: true` in its result) |
 | `8` | a system beyond C1, or the MCP protocol layer, failed — an upstream connector was unreachable or errored, or the gateway returned a protocol-level JSON-RPC error |
 
@@ -456,6 +456,20 @@ The `body` is embedded as JSON when the API returned JSON, otherwise as a string
 ## Configuration
 
 c1i requires a C1 **URL**. You can pass a full URL, a raw domain, or a legacy short tenant name. Set it via (in order of precedence):
+
+`--url` accepts a full URL or a bare domain, and normalizes it: the host is
+lower-cased (so `HTTPS://TENANT.C1EU.AI` and `tenant.c1eu.ai` resolve
+identically), and a protocol-relative `//tenant.example` is handled. A scheme
+other than `https`, or credentials embedded in the URL, are dropped with a
+warning on stderr rather than silently — the request still goes out over
+`https`.
+
+Both `*.conductor.one` and `*.c1eu.ai` (EU) tenant domains are accepted; pass
+whichever your tenant uses.
+
+> If you previously authenticated with a mixed-case `--url`, your stored
+> credential was keyed by that exact casing and is no longer found now that the
+> host is normalized. Run `c1i auth login` once to re-store it.
 
 1. `--url` flag
 2. `C1I_URL` environment variable
