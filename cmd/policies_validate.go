@@ -6,7 +6,7 @@ import (
 )
 
 // This file holds the client-side guards for `policies create`/`update`
-// (ledger C57 + C58): checks that run BEFORE any request is sent, each
+// : checks that run BEFORE any request is sent, each
 // failing as a *usageError (exit 2). They exist because several C1 policy
 // API defects either silently produce a dangerous result (C57: an empty
 // policySteps becomes a deny-everything policy, no error) or return an
@@ -160,7 +160,7 @@ func validatePolicyStepsNonEmpty(policyType string, policySteps map[string]any, 
 		}
 	}
 	if !hasBaseline {
-		return &usageError{fmt.Errorf("policySteps[%q] is missing (or has no steps): the server silently creates a deny-everything policy (a single {\"reject\":{}} step) under this key when it's absent, with no validation error (ledger C57). Pass --steps-file with at least one real step for the %q key, or --allow-deny-all if a deny-all policy is what you actually want", baselineKey, baselineKey)}
+		return &usageError{fmt.Errorf("policySteps[%q] is missing (or has no steps): the server silently creates a deny-everything policy (a single {\"reject\":{}} step) under this key when it's absent, with no validation error. Pass --steps-file with at least one real step for the %q key, or --allow-deny-all if a deny-all policy is what you actually want", baselineKey, baselineKey)}
 	}
 	return nil
 }

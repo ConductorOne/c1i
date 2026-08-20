@@ -39,7 +39,7 @@ stay as flags for the simple top-level fields, mirroring how
 Client-side guards (before any request is sent, exit code 2):
   - refuses to send empty/missing steps for the baseline entry — the server
     silently turns that into a deny-everything policy (a single
-    {"reject":{}} step), with no validation error (ledger C57). Pass
+    {"reject":{}} step), with no validation error. Pass
     --allow-deny-all if that's actually what you want.
   - refuses policyType left unspecified, an empty rules[].condition, a rule
     that doesn't set exactly one outcome (stepKey/policyId vs. the
