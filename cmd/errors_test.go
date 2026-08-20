@@ -74,6 +74,8 @@ func TestExitCode(t *testing.T) {
 				"it is unreachable until the keyring is available again; running 'c1i auth login' now stores a "+
 				"new credential in the file store, not the keyring"))}, exitAuth},
 		{"usage", &usageError{errors.New("bad flag")}, exitUsage},
+		{"path guard: empty segment", &client.PathError{Method: "GET", Path: "/api/v1/policies/"}, exitUsage},
+		{"wrapped path guard", fmt.Errorf("request failed: %w", &client.PathError{Method: "GET", Path: "/api/v1/policies/"}), exitUsage},
 		{"tool execution", &toolExecutionError{errors.New("isError")}, exitToolError},
 		{"wrapped api 404", fmt.Errorf("API error: %w", &client.APIError{StatusCode: 404}), exitNotFound},
 		{"wrapped auth", fmt.Errorf("authentication failed: %w", &client.AuthError{Err: errors.New("x")}), exitAuth},

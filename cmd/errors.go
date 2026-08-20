@@ -162,6 +162,10 @@ func exitCode(err error) int {
 	if errors.As(err, &authErr) {
 		return exitAuth
 	}
+	var pathErr *client.PathError
+	if errors.As(err, &pathErr) {
+		return exitUsage
+	}
 	var toolErr *toolExecutionError
 	if errors.As(err, &toolErr) {
 		return exitToolError
