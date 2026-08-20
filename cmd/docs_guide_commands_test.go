@@ -3,6 +3,7 @@ package cmd
 import (
 	"fmt"
 	"regexp"
+	"slices"
 	"strings"
 	"testing"
 
@@ -125,6 +126,12 @@ func checkUnclaimedMentions(t *testing.T, name, guide string) {
 
 	for _, m := range bareC1iRe.FindAllStringIndex(guide, -1) {
 		start := m[0]
+		// "c1i" inside a path or filename ("~/.c1i.yaml") is not a command
+		// mention; \b treats "." and "/" as boundaries, so check the char
+		// before it ourselves.
+		if start > 0 && strings.ContainsRune("./-_", rune(guide[start-1])) {
+			continue
+		}
 		if isClaimed(start) {
 			continue
 		}
@@ -334,7 +341,11 @@ func validateInvocationsAgainstCobraTree(t *testing.T, invocations []string) {
 			t.Errorf("invocation %q: rootCmd.Find failed: %v", inv, err)
 			continue
 		}
-		if leaf.HasSubCommands() {
+		// `--help` is valid on every command AND every group, and cobra
+		// handles it before arg validation. For a help invocation the only
+		// thing worth checking is that the path resolves and the flags exist.
+		wantsHelp := slices.Contains(tokens, "--help") || slices.Contains(tokens, "-h")
+		if leaf.HasSubCommands() && !wantsHelp {
 			// A group (e.g. "mcp tools" with no final subcommand) has
 			// children of its own. HasSubCommands(), not a Run/RunE-nil
 			// check: attachSubcommandGuards installs a synthetic RunE on
@@ -344,12 +355,15 @@ func validateInvocationsAgainstCobraTree(t *testing.T, invocations []string) {
 			continue
 		}
 
-		leaf.InheritedFlags() // merge inherited flags before lookups
+		leaf.InheritedFlags()      // merge inherited flags before lookups
+		leaf.InitDefaultHelpFlag() // cobra adds --help lazily; without this it looks unregistered
 
 		positionals := collectPositionals(t, inv, leaf, remaining)
 
-		if verr := leaf.ValidateArgs(positionals); verr != nil {
-			t.Errorf("invocation %q: %d positional argument(s) %v rejected by %q: %v", inv, len(positionals), positionals, leaf.CommandPath(), verr)
+		if !wantsHelp {
+			if verr := leaf.ValidateArgs(positionals); verr != nil {
+				t.Errorf("invocation %q: %d positional argument(s) %v rejected by %q: %v", inv, len(positionals), positionals, leaf.CommandPath(), verr)
+			}
 		}
 	}
 }

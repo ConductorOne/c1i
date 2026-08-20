@@ -45,9 +45,14 @@ known gaps: access reviews (`/api/v1/access_review*`) and the entitlement
 *proxy binding* path (a different object from `mcp bindings` — see `c1i docs
 guide delegate-entitlement-provisioning`). Otherwise, discover.
 
-The cobra tree never drifts from what's implemented — pass `--help` at the
-root, at a group, or at a command inside it, and step down from there. For
-task-oriented walkthroughs and the API surface:
+The cobra tree never drifts from what's implemented. Step down it with
+`--help` at each level:
+
+    c1i --help
+    c1i mcp --help
+    c1i mcp servers get --help
+
+For task-oriented walkthroughs and the API surface:
 
     c1i docs guide
     c1i docs endpoints --filter TEXT
@@ -127,8 +132,8 @@ Two things are irreversible in ways their `--help` doesn't make obvious:
 - Entitlement ids are unique only within an app — some system-builtin
   entitlements reuse the same id across every app that has one. Always key
   on `(app_id, id)` together, never `id` alone.
-- `mcp servers test-connection`'s `toolCount` is a JSON string, not a
-  number, unlike every NDJSON row's own `tool_count`/`toolCount` fields.
+- `mcp servers test-connection` returns `toolCount` as a JSON string, not a
+  number. The `tool_count` in NDJSON list rows is a real number.
 
 ## Carry forward
 
