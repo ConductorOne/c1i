@@ -30,8 +30,11 @@ command cannot check that environment.
 The response has no "valid" boolean; success is an empty "markers" array,
 and each compile error becomes one marker with severity ERROR and a
 line/column location. This command additionally prints a synthesized
-"valid" field derived from that (true iff markers is empty) for
-convenience.
+"valid" field derived from that (true iff markers is empty).
+
+An invalid condition prints its markers and then exits 2, so
+"validate-cel '<cond>' && ..." only continues on a condition that
+compiles. Exit 0 means valid.
 
 Quote the condition as a single shell argument, or pass several unquoted
 words (like "docs search") — they're joined with spaces either way:
@@ -76,7 +79,18 @@ words (like "docs search") — they're joined with spaces either way:
 			return fmt.Errorf("marshaling response: %w", err)
 		}
 
-		return writeObject(cmd, enriched)
+		if err := writeObject(cmd, enriched); err != nil {
+			return err
+		}
+
+		// The marker report is the useful output, so print it first and only
+		// then fail. Exiting 0 on an invalid condition would let
+		// `validate-cel "$cond" && use_it` proceed with a broken condition,
+		// which defeats the point of pre-flighting it.
+		if len(markers) > 0 {
+			return &usageError{fmt.Errorf("condition is not valid: %d compile error(s) reported in the markers above", len(markers))}
+		}
+		return nil
 	},
 }
 

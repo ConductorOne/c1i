@@ -124,6 +124,13 @@ func policyRow(p policyListItem) map[string]any {
 	for _, steps := range p.PolicySteps {
 		stepCount += len(steps.Steps)
 	}
+	// deleted_at is nil, not "", on a live policy: `jq 'select(.deleted_at)'`
+	// must not match one. An empty string is truthy in jq, so emitting "" here
+	// would silently select every row.
+	var deletedAt any
+	if p.DeletedAt != "" {
+		deletedAt = p.DeletedAt
+	}
 	return map[string]any{
 		"id":             p.ID,
 		"display_name":   p.DisplayName,
@@ -134,5 +141,6 @@ func policyRow(p policyListItem) map[string]any {
 		"step_count":     stepCount,
 		"created_at":     p.CreatedAt,
 		"updated_at":     p.UpdatedAt,
+		"deleted_at":     deletedAt,
 	}
 }
