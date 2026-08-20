@@ -425,6 +425,12 @@ branch on without parsing text:
 | `6` | a remote system failed: API returned `5xx`, or an upstream MCP connector failed |
 | `7` | `mcp gateway call` completed, but the tool itself reported an error (`isError: true` in its result) |
 
+An **empty id argument** is a usage error, not a lookup: `c1i policies get ""`
+exits `2` and sends nothing. Without that guard an empty id renders a trailing
+empty path segment, which the API redirects to the collection endpoint — so the
+command used to print the entire list and exit `0`. The same check applies to a
+raw `api --path` ending in `/`.
+
 Pass `--error-format json` (or `C1I_ERROR_FORMAT=json`) to get a machine-readable
 error object instead of the default `Error: <msg>` line. For API errors it
 includes the status, method, path, and response body:

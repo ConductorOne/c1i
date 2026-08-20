@@ -200,6 +200,24 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- **An empty id argument no longer returns the whole collection with exit `0`.**
+  `c1i users get ""` (and `apps`, `policies`, `functions`, `automations`) printed
+  the full `{"list":[...]}` and reported success: `cobra.ExactArgs(1)` counts `""`
+  as an argument, the empty id rendered a trailing empty path segment, and the
+  API redirected that to the collection endpoint. The client now refuses any
+  request whose path carries an empty segment — before anything is sent — and
+  exits `2`. One check at the single point every request passes through, so
+  every current and future command is covered, including a raw
+  `api --path /api/v1/policies/`.
+  **Visible behavior change:** `tasks approve ""` and `tasks deny ""` previously
+  exited `4` (that endpoint answers `404` rather than redirecting); they now exit
+  `2`, which correctly classifies an empty argument as caller error rather than
+  "not found".
+- **The refusal message no longer claims to be an API error.** It read
+  `Error: API error: refusing to send GET /api/v1/policies/: …`, which was a
+  false claim — no request reached the wire. Prefixes inherited from call sites
+  are now dropped for this error in both text and `--error-format json` output.
+  Every other error keeps its full context.
 - **`--fields` on list commands and `api --paginate` now errors (exit `2`)
   when the spec matches nothing anywhere in the result, instead of silently
   printing an empty `{}` per row and exiting `0`.** Single-object `get`
