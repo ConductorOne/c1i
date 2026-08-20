@@ -108,10 +108,12 @@ Branch on the exit code, not stderr text. An empty id argument is a usage error
 (`c1i users get ""` exits 2 without sending anything) — worth knowing if you
 build ids programmatically, because it used to return the whole collection with
 exit 0. An id of `/` or `.` is refused the same way: those escape to a path the
-API redirects to the collection, and the REST client never follows a redirect,
-so you get exit 2 instead of a full listing that looks like a successful read.
-That guard is REST-only — `mcp gateway` calls go through a different HTTP client
-that does follow redirects.
+API redirects to the collection, and the REST client refuses a redirect that
+changes the path, so you get exit 2 instead of a full listing that looks like a
+successful read. It also refuses a same-path redirect to an unrelated host, since
+a followed redirect carries your token. It does follow pure host/scheme
+canonicalization. That guard is REST-only — `mcp gateway` calls go through a
+different HTTP client that follows redirects normally.
 
 `6` versus `8`: `6` means C1 itself failed, so waiting and retrying is sensible.
 `8` means C1 answered and something past it did not — a connector is down, or

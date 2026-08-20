@@ -128,9 +128,10 @@ never fails proves nothing.
   matches `"false"`, and `jq 'select(.tool_count > 5)'` compares strings.
   This recurred across six row builders before it was caught.
 - **Errors:** the client returns typed `client.APIError` (carries status),
-  `client.AuthError`, `client.PathError`, and `client.RedirectError` (the client
-  refuses to follow a 3xx — following one silently turns a single-object read
-  into a collection read); `internal/mcpgateway` adds `TransportError` for an
+  `client.AuthError`, `client.PathError`, and `client.RedirectError` (a 3xx is followed only
+  when the path is unchanged AND the host is in the same trust scope — a followed
+  hop is re-authenticated, so an unrestricted follow would leak the bearer
+  token) and `client.RedirectLoopError` (a same-path chain that never settles); `internal/mcpgateway` adds `TransportError` for an
   unreachable gateway. `cmd/errors.go` maps them to exit
   codes — 0 ok, 1 generic, 2 usage (bad flags/args, an empty id, or API 400),
   3 auth (401/403), 4 not-found (404), 5 rate-limited (429), 6 C1 failed

@@ -237,9 +237,16 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   every user and reported success. The REST client now **refuses to follow any
   redirect** and reports the `3xx` and its target as a usage error (exit `2`),
   because following one silently converts a single-object read into a collection
-  read. Verified with `--debug` that normal calls perform zero redirects today
-  and are unaffected. This guard lives in `internal/client`; `internal/mcpgateway`
-  and `internal/login` build their own HTTP clients and still follow redirects.
+  read. A redirect is followed only when the path is identical (a trailing-slash
+  difference counts as a change) AND the target host is in the same trust scope —
+  identical modulo scheme/port, or a `label.`-prefix relationship with at least
+  two labels, covering `apex ↔ www`. The host restriction is a security boundary,
+  not tidiness: a followed redirect is re-authenticated, so following one to an
+  arbitrary host would hand the caller's bearer token to whatever the `Location`
+  named. A chain that doesn't settle within five hops fails as exit `6`.
+  Verified with `--debug` that normal calls perform zero redirects today and are
+  unaffected. This lives in `internal/client`; `internal/mcpgateway` and
+  `internal/login` build their own HTTP clients and still follow redirects.
   Exit `2` is a deliberate simplification: a bad id is the only cause of a `3xx`
   seen so far, but a redirect on an otherwise well-formed request would not be
   the caller's mistake and would still report `2`.
