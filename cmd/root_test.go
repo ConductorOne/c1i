@@ -1,6 +1,9 @@
 package cmd
 
 import (
+	"bytes"
+	"context"
+	"strings"
 	"testing"
 
 	"github.com/spf13/cobra"
@@ -57,5 +60,66 @@ func TestNoSubcommandDefinesOwnPersistentPreRunE(t *testing.T) {
 
 	if rootCmd.PersistentPreRunE == nil {
 		t.Fatal("rootCmd.PersistentPreRunE is nil; withFieldsMatchState is not wired up at all")
+	}
+}
+
+// --- Fix 6: a non-UTF-8 positional id is a client-side usage error ---
+//
+// An id containing a lone surrogate (invalid UTF-8, since surrogates are
+// only meaningful inside UTF-16) used to reach the server unfiltered, which
+// answered with a bare 500 -- a client mistake reporting as a remote
+// failure. This is checked once, in rootCmd's PersistentPreRunE (the same
+// central hook TestNoSubcommandDefinesOwnPersistentPreRunE just proved runs
+// for every command), rather than per-command, and it runs before
+// authentication -- newClient/GetBaseURL are never reached.
+
+// invalidUTF8Arg is a lone UTF-16 surrogate half encoded as raw bytes: valid
+// neither as UTF-8 nor as anything a JSON string could carry.
+const invalidUTF8Arg = "\xed\xa0\x80"
+
+func TestNonUTF8PositionalArgIsUsageError(t *testing.T) {
+	// Isolate from any real credentials/network this machine happens to have
+	// configured -- this check must fire before authentication or a request
+	// is ever attempted, so a bogus, unreachable URL proves that.
+	t.Setenv("C1I_URL", "https://example.invalid")
+
+	var out bytes.Buffer
+	rootCmd.SetOut(&out)
+	rootCmd.SetErr(&out)
+	rootCmd.SetArgs([]string{"users", "get", invalidUTF8Arg})
+
+	err := rootCmd.ExecuteContext(context.Background())
+	if err == nil {
+		t.Fatal("expected an error for a non-UTF-8 positional argument, got nil")
+	}
+	if !strings.Contains(err.Error(), "not valid UTF-8") {
+		t.Errorf("error = %q, want it to say the argument isn't valid UTF-8", err.Error())
+	}
+	if got, want := exitCode(err), exitUsage; got != want {
+		t.Errorf("exitCode = %d, want %d (usage error, not a server-side 500)", got, want)
+	}
+}
+
+// TestValidUTF8PositionalArgUnaffected is the regression guard: an ordinary
+// (well-formed, just nonexistent) id must not be rejected by this check --
+// it should reach as far as authentication, which is where this fake
+// invocation is expected to fail instead (no credentials configured for
+// example.invalid).
+func TestValidUTF8PositionalArgUnaffected(t *testing.T) {
+	t.Setenv("C1I_URL", "https://example.invalid")
+	t.Setenv("C1I_CLIENT_ID", "")
+	t.Setenv("C1I_CLIENT_SECRET", "")
+
+	var out bytes.Buffer
+	rootCmd.SetOut(&out)
+	rootCmd.SetErr(&out)
+	rootCmd.SetArgs([]string{"users", "get", "a-perfectly-normal-id"})
+
+	err := rootCmd.ExecuteContext(context.Background())
+	if err == nil {
+		t.Fatal("expected an error (no credentials configured), got nil")
+	}
+	if strings.Contains(err.Error(), "not valid UTF-8") {
+		t.Errorf("a well-formed id must not be rejected by the UTF-8 check, got: %v", err)
 	}
 }

@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/ConductorOne/c1i/internal/client"
 	"github.com/ConductorOne/c1i/internal/config"
@@ -29,11 +30,18 @@ For raw API exploration, also with no authentication required:
   c1i docs page product/admin/campaigns Fetch a documentation page`,
 	SilenceUsage:  true,
 	SilenceErrors: true,
-	// Validate global flag values once, before any command runs, and attach a
+	// Validate global flag values once, before any command runs, attach a
 	// fresh *fieldsMatchState (cmd/fields.go) to the command's context so
-	// every emitter created during this invocation shares one tracker.
-	PersistentPreRunE: func(cmd *cobra.Command, _ []string) error {
+	// every emitter created during this invocation shares one tracker, and
+	// reject a non-UTF-8 positional argument client-side (see
+	// validateArgsUTF8) before it can reach a command's RunE at all -- this
+	// runs for every command (see TestNoSubcommandDefinesOwnPersistentPreRunE),
+	// so an id built from args[0] is covered without a per-command check.
+	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
 		if err := validateErrorFormat(viper.GetString("error_format")); err != nil {
+			return err
+		}
+		if err := validateArgsUTF8(args); err != nil {
 			return err
 		}
 		cmd.SetContext(withFieldsMatchState(cmd.Context()))
@@ -51,6 +59,22 @@ For raw API exploration, also with no authentication required:
 // how writeError interprets the value) and rejects anything else as a usage
 // error so a typo like --error-format=jsonn fails loudly instead of silently
 // falling back to text.
+// validateArgsUTF8 rejects a positional argument that isn't valid UTF-8 (a
+// lone UTF-16 surrogate, raw invalid bytes, ...) client-side. Without this,
+// an id built from such an argument (client.Path only URL-escapes; it
+// doesn't validate encoding) reaches the server as malformed request data,
+// which answers with a bare 500 (exit 6) instead of the 400 every other
+// hostile-but-valid-UTF-8 id gets -- a client-side mistake reporting as a
+// remote failure.
+func validateArgsUTF8(args []string) error {
+	for _, a := range args {
+		if !utf8.ValidString(a) {
+			return &usageError{fmt.Errorf("argument %q is not valid UTF-8", a)}
+		}
+	}
+	return nil
+}
+
 func validateErrorFormat(f string) error {
 	switch strings.ToLower(f) {
 	case "", "text", "json":
