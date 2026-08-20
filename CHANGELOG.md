@@ -122,6 +122,28 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- **New exit code `8` for a failure beyond C1, and `6` now means only "C1
+  returned `5xx`."** **Breaking change for anything branching on exit codes.**
+  Exit `6` previously covered two situations that call for opposite responses:
+  C1 itself failing, and an upstream MCP connector failing. An agent could not
+  tell "C1 is down, wait and retry" from "the Slack connector is down, retrying
+  won't help." What moved to `8`: an upstream connector failure (a JSON-RPC
+  error carrying code `0`), and protocol-level JSON-RPC errors — `-32601`
+  (method not found), `-32700` (parse error), `-32600` (invalid request).
+  `-32601` moved *from* exit `2`: this client only ever sends four fixed,
+  spec-required methods, so a caller cannot cause "method not found" — it means
+  a protocol mismatch or a bug here, and exit `2` sent people hunting their own
+  command line. A test now pins that method set, so adding an outbound method
+  fails the build rather than silently invalidating the reasoning.
+- **A JSON-RPC error object carrying no `code` field now exits `1`, not `6`.**
+  The field was a plain `int`, so an absent code decoded to `0` — indistinguishable
+  from a genuine code `0`, and therefore misreported as an upstream connector
+  failure. Presence is now tracked, so "no code" is generic and unclassified,
+  which is what it is.
+- **A bare `400` from the API now exits `2` (usage), not `1`.** A malformed value
+  the CLI forwards without local validation — a bad page token, an out-of-range
+  page size, a misspelled enum, a malformed id — is caller error, and no retry
+  will help. `409` and other unlisted statuses still exit `1`.
 - **BREAKING — NDJSON rows emit real JSON booleans and numbers, not strings.**
   List commands stringified every non-string row value, so `stable` came out
   as `"true"` and counts as `"7"`. That silently broke the documented reason

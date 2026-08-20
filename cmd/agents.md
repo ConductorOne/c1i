@@ -96,17 +96,27 @@ campaign ID from a URL is the access review `id` directly.
 |---|---|---|
 | 0 | success | — |
 | 1 | generic / unclassified error | inspect the message |
-| 2 | usage error (bad flags/args) | fix the invocation, don't retry as-is |
+| 2 | usage error (bad flags/args, or API `400`) | fix the invocation, don't retry as-is |
 | 3 | not authenticated, or API `401`/`403` | re-authenticate (`c1i auth login`) |
 | 4 | API `404` | stop — the resource/path doesn't exist |
 | 5 | API `429` | back off and retry |
-| 6 | remote failure: API `5xx`, or an upstream MCP connector failed | retryable, not necessarily your fault |
+| 6 | C1 failed: API `5xx` | retryable, not your fault |
 | 7 | `mcp gateway call` succeeded but the tool reported `isError: true` | inspect the printed result, not just the code |
+| 8 | a system beyond C1, or the protocol layer, failed | retrying the same call usually repeats it — the fix is elsewhere |
 
-Branch on the exit code, not stderr text. For `mcp gateway call`, a
-JSON-RPC-level error (the call itself failed, not the tool) is reclassified:
-`-32602`/`-32601` (bad tool/method name) exits 2; code `0` (an upstream
-connector failure) exits 6; any other code exits 1.
+Branch on the exit code, not stderr text. An empty id argument is a usage error
+(`c1i users get ""` exits 2 without sending anything) — worth knowing if you
+build ids programmatically, because it used to return the whole collection with
+exit 0.
+
+`6` versus `8`: `6` means C1 itself failed, so waiting and retrying is sensible.
+`8` means C1 answered and something past it did not — a connector is down, or
+the protocol disagreed — so the same call will usually fail the same way. For
+`mcp gateway call`, a JSON-RPC-level error (the call failed, not the tool) is
+classified: `-32602` (invalid params, e.g. an unknown tool name) exits 2, since
+that is caused by what you passed; `-32601`/`-32700`/`-32600` and an upstream
+connector failure (code `0`) exit 8; a JSON-RPC error carrying no code at all,
+and any other code, exit 1.
 
 ## Pagination
 
