@@ -34,11 +34,15 @@ you are before doing anything else.
 ## Choosing a command
 
 Prefer a first-class command (`users get`, `mcp servers register`, `grants
-list`, ...) over `c1i api`. First-class commands auto-paginate to
-completion, return typed errors mapped to the exit codes below, and document
-destructive cascades in their own `--help`. `c1i api` gets none of that — it
-sends exactly what you tell it, once, and hands back whatever the server
-returns.
+list`, ...) over `c1i api`. A first-class command paginates to completion
+without being asked, and its `--help` spells out any destructive cascade
+before you trigger one. With `c1i api` you build the request yourself — the
+wire conventions below are yours to get right, and pagination is opt-in via
+`--paginate`, so a list endpoint without it returns only the first page.
+
+Both share the same error classification: `c1i api` surfaces the same typed
+errors and the same exit codes as any other command, so the table below
+applies either way.
 
 `c1i api` is the right tool when no first-class command exists yet. Two
 known gaps: access reviews (`/api/v1/access_review*`) and the entitlement
@@ -58,7 +62,7 @@ For task-oriented walkthroughs and the API surface:
     c1i docs endpoints --filter TEXT
     c1i docs endpoint <path>
 
-    c1i api --path /api/v1/access_reviews
+    c1i api --path /api/v1/access_reviews --paginate
 
 A few wire conventions if you build a raw request: GET endpoints take
 `page_size`/`page_token` as snake_case query params; POST search endpoints
@@ -127,6 +131,9 @@ Two things are irreversible in ways their `--help` doesn't make obvious:
 - Owner and grant provisioning are asynchronous. A read immediately after a
   write can look like a silent no-op for roughly a minute (owners: ~60-90s;
   grants: up to a couple of minutes).
+- `accounts list --unmapped-only` filters after each page is fetched, not
+  server-side. With `--page-token` (which turns off auto-pagination) a page
+  can come back empty while unmapped accounts exist further along.
 - A task's `outcome` field is omitted while it's still open; it only
   appears once the task closes.
 - Entitlement ids are unique only within an app — some system-builtin

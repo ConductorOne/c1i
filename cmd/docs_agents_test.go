@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"bytes"
+	"context"
 	"os"
 	"path/filepath"
 	"strings"
@@ -113,10 +114,6 @@ func TestDocsAgentsSkillAliasMatchesAgents(t *testing.T) {
 		t.Fatalf(`docsAgentsCmd.Aliases does not contain "skill"`)
 	}
 
-	// The alias dispatches to the same *cobra.Command / RunE, so driving
-	// RunE directly (as runDocsAgents does) already covers the alias's
-	// behavior — this test's job is to assert the alias is actually wired up
-	// and that Find() resolves "docs skill" to this same command.
 	leaf, _, err := rootCmd.Find([]string{"docs", "skill"})
 	if err != nil {
 		t.Fatalf(`rootCmd.Find(["docs", "skill"]) failed: %v`, err)
@@ -125,8 +122,38 @@ func TestDocsAgentsSkillAliasMatchesAgents(t *testing.T) {
 		t.Fatalf(`"docs skill" resolved to %q, want docsAgentsCmd`, leaf.CommandPath())
 	}
 
-	skillOut, _ := runDocsAgents(t, nil)
+	// Drive the real tree under BOTH spellings. Comparing two calls to the
+	// same helper would compare a function to itself and could never fail.
+	skillOut := runThroughRoot(t, "docs", "skill")
 	if skillOut != agentsOut {
-		t.Errorf("docs skill output differs from docs agents output")
+		t.Errorf("\"docs skill\" output differs from \"docs agents\" output")
 	}
+	if viaRoot := runThroughRoot(t, "docs", "agents"); viaRoot != agentsOut {
+		t.Errorf("\"docs agents\" via rootCmd differs from the direct RunE output")
+	}
+}
+
+// runThroughRoot executes args against the real rootCmd and returns stdout,
+// so a test can exercise a command by the name a user actually types.
+func runThroughRoot(t *testing.T, args ...string) string {
+	t.Helper()
+	var out bytes.Buffer
+	// runDocsAgents sets writers directly on the package-level
+	// docsAgentsCmd, and cobra prefers a command's own writer over its
+	// parent's — so clear the leaf's writers or output lands in that stale
+	// buffer instead of this one.
+	docsAgentsCmd.SetOut(nil)
+	docsAgentsCmd.SetErr(nil)
+	rootCmd.SetOut(&out)
+	rootCmd.SetErr(&out)
+	rootCmd.SetArgs(args)
+	t.Cleanup(func() {
+		rootCmd.SetOut(nil)
+		rootCmd.SetErr(nil)
+		rootCmd.SetArgs(nil)
+	})
+	if err := rootCmd.ExecuteContext(context.Background()); err != nil {
+		t.Fatalf("%v: unexpected error: %v", args, err)
+	}
+	return out.String()
 }
