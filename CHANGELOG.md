@@ -255,11 +255,14 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   number, array, or `null` inside `steps[]` was silently skipped by the arm check
   and reached the server, which answered with a raw protobuf parse error. Each is
   now refused client-side (exit `2`) naming the JSON kind it found.
-- **A positional id that isn't valid UTF-8 is refused client-side.** It reached
-  the server and returned a bare `500`, reporting a caller mistake as a remote
-  failure (exit `6`). Now exit `2`, checked once for every command rather than
-  per command. A hostile-but-valid-UTF-8 id still goes to the server and gets its
-  normal `400`.
+- **An argument or flag value that isn't valid UTF-8 is refused client-side.**
+  It reached the server and returned a bare `500`, reporting a caller mistake as
+  a remote failure (exit `6`). Now exit `2`, checked once for every command and
+  every flag rather than per command. A hostile-but-valid-UTF-8 id still goes to
+  the server and gets its normal `400`. Note the check is uniform, so a file path
+  containing invalid UTF-8 — legal on Linux, though unusual — is also refused;
+  requiring UTF-8 arguments is deliberate rather than maintaining a list of which
+  flags are exempt.
 
 - **An empty id argument no longer returns the whole collection with exit `0`.**
   `c1i users get ""` (and `apps`, `policies`, `functions`, `automations`) printed
