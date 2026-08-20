@@ -24,13 +24,10 @@ import (
 // own supported version in the initialize result.
 const protocolVersion = "2025-06-18"
 
-// The fixed, spec-required JSON-RPC methods this client ever sends. Adding a
-// new outbound method here (or anywhere else this client sends a method)
-// invalidates the "-32601 can't be caller-caused" invariant that
-// cmd/mcp_gateway.go's classifyGatewayError relies on to map "method not
-// found" to exit 8 instead of exit 2 (usage) — see TestOutboundRPCMethods in
-// gateway_test.go, which fails on any change to this set, and revisit that
-// mapping before touching either.
+// Every JSON-RPC method this client sends. classifyGatewayError maps -32601 to
+// exit 8 (not usage) because this fixed set means a caller cannot cause
+// "method not found" — adding one invalidates that, so TestOutboundRPCMethods
+// fails on any change here.
 const (
 	methodInitialize               = "initialize"
 	methodNotificationsInitialized = "notifications/initialized"
@@ -120,11 +117,8 @@ type rpcRequest struct {
 	Params  any    `json:"params,omitempty"`
 }
 
-// Code is a *int, not int: a JSON-RPC error object that omits `code` entirely
-// must decode distinguishably from one carrying a literal `code:0` — the
-// latter is the observed shape of an upstream connector failure (see
-// RPCErrorCode), and collapsing "absent" into Go's int zero value would make
-// the two indistinguishable.
+// Code is *int so an omitted `code` stays distinguishable from a literal
+// `code:0`, which is the observed shape of an upstream connector failure.
 type rpcError struct {
 	Code    *int            `json:"code"`
 	Message string          `json:"message"`
@@ -155,16 +149,11 @@ func (e *rpcError) Error() string {
 // types (like *usageError) some of those codes must map to — can react to
 // specific JSON-RPC codes without internal/mcpgateway importing package cmd.
 //
-// Deliberately NOT an Unwrap() on rpcError to a *client.APIError: code 0 (the
-// shape observed for an upstream connector failure — an unreachable external
-// MCP server, a vendor API error, ...) arrives on an HTTP 200 response, so
-// there is no real status to attach. An earlier version of this fix unwrapped
-// to *client.APIError{StatusCode: 502} to reach exit 6 through the existing
-// ">= 500" rule, but that fabricated status then rendered as a false "status"
-// field in --error-format json — a claim about the wire that never happened.
-// cmd/mcp_gateway.go's classifyGatewayError uses this accessor to wrap a
-// present code of 0 (and -32601/-32700/-32600) in an *upstreamError
-// (cmd/errors.go) instead: exit 8, no invented status anywhere.
+// Deliberately NOT an Unwrap() to *client.APIError: these errors arrive on an
+// HTTP 200, so there is no status to attach, and inventing one (502, to reach
+// the ">= 500" rule) surfaced as a false "status" field in --error-format json.
+// classifyGatewayError wraps them in an *upstreamError instead — exit 8, no
+// invented status.
 func RPCErrorCode(err error) (code *int, ok bool) {
 	var rpcErr *rpcError
 	if errors.As(err, &rpcErr) {
