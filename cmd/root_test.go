@@ -191,3 +191,17 @@ func TestValidUTF8FlagValueUnaffected(t *testing.T) {
 		t.Errorf("a well-formed flag value must not be rejected by the UTF-8 check, got: %v", err)
 	}
 }
+
+// TestValidateFlagsUTF8IgnoresUnchangedFlagWithInvalidDefaultValue pins the
+// !f.Changed guard's actual intent: a caller must never be blamed for a
+// value they did not supply. A throwaway command registers a string flag
+// whose DEFAULT is deliberately invalid UTF-8; since it's never Set, Changed
+// stays false, and validateFlagsUTF8 must not fire on it.
+func TestValidateFlagsUTF8IgnoresUnchangedFlagWithInvalidDefaultValue(t *testing.T) {
+	cmd := &cobra.Command{Use: "throwaway"}
+	cmd.Flags().String("bogus", invalidUTF8Arg, "test-only flag with an invalid UTF-8 default")
+
+	if err := validateFlagsUTF8(cmd); err != nil {
+		t.Errorf("validateFlagsUTF8 = %v, want nil (the flag was never set by the caller)", err)
+	}
+}
