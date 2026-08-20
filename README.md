@@ -251,6 +251,10 @@ C1 endpoints that require one. `--query key=value` and
 The `docs` commands require no C1 credentials — agents can use them to explore the API before authenticating.
 
 ```sh
+# Print the agent bootstrap doc: output contracts, exit codes, when to
+# prefer first-class commands over raw API calls (write to a file with --output)
+c1i docs agents [--output AGENTS.md]
+
 # Search documentation
 c1i docs search "access reviews"
 
@@ -266,15 +270,15 @@ c1i docs endpoint /api/v1/search/tasks
 # Dump the raw OpenAPI spec
 c1i docs openapi
 
-# Print the agent skill/reference doc (write to a file with --output)
-c1i docs skill [--output SKILL.md]
-
 # Print an embedded, task-oriented runbook (list names if omitted)
 c1i docs guide
 c1i docs guide register-mcp-server
 ```
 
 `docs guide` is embedded static content (no network call), unlike `docs search` / `docs page` which hit the C1 documentation site.
+
+`docs skill` is kept as an alias of `docs agents` for backward compatibility;
+both print identical output.
 
 ## Output Conventions
 

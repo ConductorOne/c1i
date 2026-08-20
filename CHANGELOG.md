@@ -8,6 +8,14 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **`docs agents [-o FILE]`** — print a short, agent-facing bootstrap doc (no
+  auth required, like the other `docs` subcommands): tenant/auth, output
+  contracts, exit codes, pagination, and when to prefer a first-class command
+  over `c1i api`. It does not enumerate every command or flag — use the cobra
+  command tree (`c1i --help`, `c1i <group> --help`) for that, since it can't
+  drift out of sync with the binary the way a static doc can. Root and `docs`
+  help now point agents at it first, instead of framing the goal as finding
+  "the right API calls."
 - **`api --allow-delete-body`** — explicit opt-in that lets `--method DELETE`
   carry a `--body`/`--body-file`. Some C1 endpoints are body-taking DELETEs
   (e.g. `.../remove-membership`, which needs `{"appUserId": "..."}` to say
@@ -139,6 +147,16 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   only the process exit code changes. `mcp gateway call` shipped earlier
   today (this same day) in the PR this follows up on, so there is
   effectively no installed base depending on the old exit-0 behavior.
+
+### Removed
+
+- **`cmd/skill.md` / `docs_skill.go`** — retired into `cmd/agents.md` /
+  `docs agents`. An audit found the bulk of `skill.md` was either redundant
+  with `c1i <cmd> --help` or a raw-REST manual with no equivalent guidance
+  toward first-class commands; per-resource NDJSON field-name tables were
+  dropped outright (they drift on every schema change and nothing validated
+  them). `docs skill` is kept as a cobra alias of `docs agents` — both emit
+  identical output — so existing scripts and habits keep working.
 
 ### Fixed
 
@@ -288,9 +306,9 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   already do to resolve the task's policy step) so the previewed body
   includes `identityUserId` and matches what the real call actually sends —
   an earlier version of this fix left `--dry-run` previewing a body without
-  it while the real call sent one; `cmd/skill.md`/`README.md`'s dry-run
-  sections now list both commands alongside `tasks approve`/`deny` as
-  needing credentials when `--user-id` is omitted. An explicit `--user-id`
+  it while the real call sent one; `README.md`'s dry-run section now lists
+  both commands alongside `tasks approve`/`deny` as needing credentials when
+  `--user-id` is omitted. An explicit `--user-id`
   still needs no extra call, dry-run or not. Verified live end to end: a
   grant created with `--user-id` omitted, then revoked with `--user-id`
   omitted, both populated `identityUserId` with the caller's own id.

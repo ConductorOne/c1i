@@ -3,6 +3,7 @@ package cmd
 import (
 	"fmt"
 	"regexp"
+	"slices"
 	"strings"
 	"testing"
 
@@ -125,6 +126,12 @@ func checkUnclaimedMentions(t *testing.T, name, guide string) {
 
 	for _, m := range bareC1iRe.FindAllStringIndex(guide, -1) {
 		start := m[0]
+		// "c1i" inside a path or filename ("~/.c1i.yaml") is not a command
+		// mention; \b treats "." and "/" as boundaries, so check the char
+		// before it ourselves.
+		if start > 0 && strings.ContainsRune("./-_", rune(guide[start-1])) {
+			continue
+		}
 		if isClaimed(start) {
 			continue
 		}
@@ -308,6 +315,59 @@ func collectPositionals(t *testing.T, inv string, leaf *cobra.Command, remaining
 	return positionals
 }
 
+// validateInvocationsAgainstCobraTree is the shared drift-guard check: every
+// invocation must resolve to a real, executable cobra command (walking
+// rootCmd's actual tree — not a guess about naming), every "--flag"/"-f" it
+// passes must actually be registered on that command (own or inherited), and
+// the leftover positional count must be one the command's own Args
+// validator accepts. Used against both the embedded "docs guide" runbooks
+// and cmd/agents.md, so a drift in either is caught the same way.
+func validateInvocationsAgainstCobraTree(t *testing.T, invocations []string) {
+	t.Helper()
+
+	for _, inv := range invocations {
+		tokens, terr := tokenizeInvocation(inv)
+		if terr != nil {
+			t.Errorf("invocation %q: %v", inv, terr)
+			continue
+		}
+		if len(tokens) == 0 || tokens[0] != "c1i" {
+			t.Errorf("invocation %q did not tokenize with a leading \"c1i\"", inv)
+			continue
+		}
+
+		leaf, remaining, err := rootCmd.Find(tokens[1:])
+		if err != nil {
+			t.Errorf("invocation %q: rootCmd.Find failed: %v", inv, err)
+			continue
+		}
+		// `--help` is valid on every command AND every group, and cobra
+		// handles it before arg validation. For a help invocation the only
+		// thing worth checking is that the path resolves and the flags exist.
+		wantsHelp := slices.Contains(tokens, "--help") || slices.Contains(tokens, "-h")
+		if leaf.HasSubCommands() && !wantsHelp {
+			// A group (e.g. "mcp tools" with no final subcommand) has
+			// children of its own. HasSubCommands(), not a Run/RunE-nil
+			// check: attachSubcommandGuards installs a synthetic RunE on
+			// every group, so a Run/RunE check would stop working once it
+			// has run.
+			t.Errorf("invocation %q resolved only to %q (a command group, not an executable leaf) — the subcommand path is wrong or no longer exists", inv, leaf.CommandPath())
+			continue
+		}
+
+		leaf.InheritedFlags()      // merge inherited flags before lookups
+		leaf.InitDefaultHelpFlag() // cobra adds --help lazily; without this it looks unregistered
+
+		positionals := collectPositionals(t, inv, leaf, remaining)
+
+		if !wantsHelp {
+			if verr := leaf.ValidateArgs(positionals); verr != nil {
+				t.Errorf("invocation %q: %d positional argument(s) %v rejected by %q: %v", inv, len(positionals), positionals, leaf.CommandPath(), verr)
+			}
+		}
+	}
+}
+
 // TestGuideCommandsResolveAgainstCobraTree is the drift guard described
 // above.
 //
@@ -328,41 +388,25 @@ func TestGuideCommandsResolveAgainstCobraTree(t *testing.T) {
 			if len(invocations) == 0 {
 				t.Fatalf("no \"c1i ...\" invocations found in guide %q; extraction regressed?", name)
 			}
-
-			for _, inv := range invocations {
-				tokens, terr := tokenizeInvocation(inv)
-				if terr != nil {
-					t.Errorf("invocation %q: %v", inv, terr)
-					continue
-				}
-				if len(tokens) == 0 || tokens[0] != "c1i" {
-					t.Errorf("invocation %q did not tokenize with a leading \"c1i\"", inv)
-					continue
-				}
-
-				leaf, remaining, err := rootCmd.Find(tokens[1:])
-				if err != nil {
-					t.Errorf("invocation %q: rootCmd.Find failed: %v", inv, err)
-					continue
-				}
-				if leaf.HasSubCommands() {
-					// A group (e.g. "mcp tools" with no final subcommand)
-					// has children of its own. HasSubCommands(), not a
-					// Run/RunE-nil check: attachSubcommandGuards above
-					// installs a synthetic RunE on every group, so a
-					// Run/RunE check would stop working once it has run.
-					t.Errorf("invocation %q resolved only to %q (a command group, not an executable leaf) — the subcommand path is wrong or no longer exists", inv, leaf.CommandPath())
-					continue
-				}
-
-				leaf.InheritedFlags() // merge inherited flags before lookups
-
-				positionals := collectPositionals(t, inv, leaf, remaining)
-
-				if verr := leaf.ValidateArgs(positionals); verr != nil {
-					t.Errorf("invocation %q: %d positional argument(s) %v rejected by %q: %v", inv, len(positionals), positionals, leaf.CommandPath(), verr)
-				}
-			}
+			validateInvocationsAgainstCobraTree(t, invocations)
 		})
 	}
+}
+
+// TestAgentsMDCommandsResolveAgainstCobraTree extends the same drift guard to
+// cmd/agents.md — the embedded agent-facing bootstrap doc has no
+// compile-time link to the cobra commands it names either, so without this
+// it could drift exactly the way the guides could before
+// TestGuideCommandsResolveAgainstCobraTree existed (and the way cmd/skill.md
+// did, unvalidated, for its entire lifetime).
+func TestAgentsMDCommandsResolveAgainstCobraTree(t *testing.T) {
+	attachSubcommandGuards(rootCmd)
+
+	checkUnclaimedMentions(t, "cmd/agents.md", agentsTemplate)
+
+	invocations := extractGuideInvocations(t, agentsTemplate)
+	if len(invocations) == 0 {
+		t.Fatalf("no \"c1i ...\" invocations found in cmd/agents.md; extraction regressed?")
+	}
+	validateInvocationsAgainstCobraTree(t, invocations)
 }

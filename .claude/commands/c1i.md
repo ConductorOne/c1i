@@ -1,13 +1,17 @@
 Run: `go run .` (from the repo root)
 
-The full, current command-by-command reference (every subcommand, its flags,
-positional-arg conventions, and NDJSON field shapes) lives in `cmd/skill.md` —
-run `go run . docs skill` to print it, or open the file directly. That file is
-the single source of truth for command syntax; this doc used to carry a second
-copy of it and the two drifted (stale flags, missing subcommands, a missing
-exit code) until this pass. Don't re-add a per-command copy here — extend
-`cmd/skill.md` instead, and if a flag/behavior claim ever looks off, verify
-against `go run . <cmd> --help` rather than either doc.
+The agent-facing bootstrap doc (tenant/auth, output contracts, exit codes,
+pagination, and when to prefer a first-class command over raw `api`) lives in
+`cmd/agents.md` — run `go run . docs agents` to print it, or open the file
+directly. (`go run . docs skill` is kept as an alias for backward
+compatibility; it prints identical output.) It deliberately does not
+enumerate every subcommand/flag — the cobra command tree itself
+(`go run . --help`, `go run . <group> --help`) is the source of truth for
+that and can't drift the way a static doc can. This doc used to carry a
+second copy of the per-command reference and the two drifted (stale flags,
+missing subcommands, a missing exit code) until that was cut. Don't re-add a
+per-command copy here; if a flag/behavior claim ever looks off, verify
+against `go run . <cmd> --help` rather than any doc.
 
 ## Auth
 
@@ -67,5 +71,6 @@ go run . docs page product/admin/campaigns  # fetch a doc page
 go run . docs endpoints --filter=task       # list API endpoints (filterable)
 go run . docs endpoint /api/v1/search/tasks # full request/response schema
 go run . docs openapi                       # dump raw OpenAPI spec
-go run . docs skill                         # print the embedded agent skill doc (cmd/skill.md)
+go run . docs agents                        # print the embedded agent bootstrap doc (cmd/agents.md)
+go run . docs guide                         # list embedded task-oriented runbooks
 ```
