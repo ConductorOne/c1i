@@ -180,7 +180,8 @@ func resolveAllowedRedirect(base *url.URL, location string) (*url.URL, bool) {
 }
 
 // hostInScope reports whether target's host may be trusted with base's
-// credentials: identical (ignoring scheme/port), or one is "<label>." prepended
+// credentials: identical (ignoring scheme/port — this alone covers a bare host
+// like "localhost"), or one is "<label>." prepended
 // to the other with at least two labels in the target. The "." is inside the
 // comparison to enforce a label boundary, so "eviltenant.example" is not a
 // subdomain of "tenant.example"; the two-label floor rejects a bare apex that
