@@ -231,7 +231,7 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   rather than as a single catalog-wide list; the entry-level `defaultScopes`
   field some assumed carried it is empty on every catalog entry seen in
   production. `mcp servers catalog get --help` documents the details.
-- **BREAKING** — an **empty required flag value** (e.g. `--app-id ""`) now exits `2` (usage),
+- **BREAKING — an empty required flag value** (e.g. `--app-id ""`) now exits `2` (usage),
   matching a missing required flag, instead of `1` (generic). The check
   (`requireNonEmpty`) applies this consistently across every command that uses
   it, so automation branching on exit codes sees a stable usage signal.
@@ -495,10 +495,10 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   verified live: naming a nonexistent tool (`-32602`) or an unimplemented
   method (`-32601`) both exited `1`, and so did every upstream connector
   failure (an unreachable external MCP server, a vendor API error), which
-  arrives as JSON-RPC code `0`. `-32602`/`-32601` now exit `2` (usage — the
-  caller named a tool that doesn't exist). The protocol-level codes and an
-  upstream connector failure exit `8` — see the exit-`8` entry under Changed
-  for that split. Any other JSON-RPC code still exits `1`, unchanged. Error
+  arrives as JSON-RPC code `0`. `-32602` now exits `2` (usage — the caller
+  named a tool with bad arguments). `-32601`, the other protocol-level codes,
+  and an upstream connector failure exit `8` — see the exit-`8` entry under
+  Changed for that split. Any other JSON-RPC code still exits `1`, unchanged. Error
   messages are unchanged, only the exit code.
 
   No HTTP status is fabricated for these: the gateway answers 200, and
