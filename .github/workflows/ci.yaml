@@ -19,6 +19,12 @@ jobs:
         with:
           version: v2.11
           args: --timeout=3m
+      # goreleaser runs `go mod tidy` before building. If that changes anything,
+      # the release build's tree is dirty and Go stamps the version "+dirty".
+      - name: Verify go.mod is tidy
+        run: |
+          go mod tidy
+          git diff --exit-code --stat go.mod go.sum
   go-test:
     runs-on: ubuntu-latest
     steps:
