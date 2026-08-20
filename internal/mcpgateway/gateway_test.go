@@ -712,6 +712,47 @@ func TestHTTPErrorClassificationAcrossStatuses(t *testing.T) {
 	}
 }
 
+// TestTransportFailureReturnsTransportError proves a failure that never
+// produces an HTTP response at all -- here, a closed port, so the request is
+// refused before any bytes come back -- is classified distinctly from
+// HTTPError (a non-2xx status) and rpcError (a JSON-RPC-level error on a 200).
+// Before this fix, c.httpClient.Do's error was returned bare, which collapsed
+// to the generic exit code once wrapped in cmd; TransportError is the seam
+// cmd/mcp_gateway.go's classifyGatewayError needs to route it to exit 8
+// instead.
+func TestTransportFailureReturnsTransportError(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
+	closedURL := srv.URL
+	srv.Close() // nothing is listening on this port now: connection refused
+
+	c := New(closedURL, "test-token", nil)
+	err := c.Initialize(context.Background())
+	if err == nil {
+		t.Fatal("expected an error against a closed port")
+	}
+	var transportErr *TransportError
+	if !errors.As(err, &transportErr) {
+		t.Fatalf("error = %T (%v), want *TransportError", err, err)
+	}
+	if transportErr.RPCMethod != methodInitialize {
+		t.Errorf("RPCMethod = %q, want %q", transportErr.RPCMethod, methodInitialize)
+	}
+
+	// Negative pair: a bad status further down the same code path (HTTPError)
+	// must not also satisfy TransportError -- it's a different failure class
+	// (a real response arrived, just a non-2xx one).
+	srv2 := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusForbidden)
+	}))
+	defer srv2.Close()
+	c2 := New(srv2.URL, "bad-token", srv2.Client())
+	err2 := c2.Initialize(context.Background())
+	var transportErr2 *TransportError
+	if errors.As(err2, &transportErr2) {
+		t.Errorf("an HTTP 403 response must not classify as *TransportError, got %v", err2)
+	}
+}
+
 // TestAcceptHeaderAdvertisesBothMediaTypes pins the exact Accept header value
 // the client sends. The C1 gateway has been observed rejecting a request that
 // advertises only one of the two media types with 400 "Accept must contain

@@ -267,6 +267,8 @@ or bad params (-32602) exits 2, since that is caused by what you passed;
 method-not-found, parse-error and invalid-request (-32601/-32700/-32600), and
 an upstream connector error (code 0 — e.g. an unreachable external MCP server)
 exit 8; a JSON-RPC error carrying no code at all, or any other code, exits 1.
+Failing to reach the gateway at all — a DNS failure or refused connection,
+before any JSON-RPC exchange happens — also exits 8.
 
 The gateway endpoint is derived from --url / C1I_URL by default (inserting
 "-mcp" into the host); if the gateway lives elsewhere, override it with

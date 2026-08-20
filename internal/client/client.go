@@ -13,6 +13,7 @@ import (
 	"os"
 	"runtime/debug"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/ConductorOne/c1i/internal/config"
@@ -80,6 +81,150 @@ type userAgentTripper struct {
 func (uat *userAgentTripper) RoundTrip(req *http.Request) (*http.Response, error) {
 	req.Header.Set("User-Agent", userAgent)
 	return uat.next.RoundTrip(req)
+}
+
+// redirectStatuses is the set of 3xx codes net/http's own Client would
+// otherwise follow (see net/http's internal redirectBehavior). 304 (Not
+// Modified) and the unused 305/306 are deliberately excluded: they aren't
+// Location-based redirects net/http ever follows.
+var redirectStatuses = map[int]bool{
+	http.StatusMovedPermanently:  true, // 301
+	http.StatusFound:             true, // 302
+	http.StatusSeeOther:          true, // 303
+	http.StatusTemporaryRedirect: true, // 307
+	http.StatusPermanentRedirect: true, // 308
+}
+
+// maxRedirectHops bounds how many same-path redirects redirectTripper will
+// follow for one logical request. Real scheme/host canonicalization is one
+// hop, occasionally two (e.g. an upgrade hop plus a regional-domain hop);
+// this leaves headroom for that while still turning a misconfigured
+// canonicalization loop into a bounded, clearly-reported failure rather than
+// a hang.
+const maxRedirectHops = 5
+
+// redirectTripper follows a 3xx only when the target's escaped path matches
+// the request's exactly AND the target host is in the same trust scope as
+// the request host (see hostInScope); anything else — a changed path, or a
+// same-path redirect to an unrelated host — is refused as *RedirectError.
+// The host check exists because this tripper sits outside the oauth2
+// transport: following to an arbitrary host would hand that host the
+// caller's bearer token, which is exactly what net/http's own redirect
+// handling strips Authorization to prevent. It intercepts at the
+// RoundTripper layer rather than via http.Client.CheckRedirect because
+// CheckRedirect's signature only exposes the *next* request, not the
+// response that triggered it, so it can't report the status/Location a
+// refusal needs to show.
+type redirectTripper struct {
+	next http.RoundTripper
+}
+
+func (rt *redirectTripper) RoundTrip(req *http.Request) (*http.Response, error) {
+	for hop := 0; ; hop++ {
+		resp, err := rt.next.RoundTrip(req)
+		if err != nil || !redirectStatuses[resp.StatusCode] {
+			return resp, err
+		}
+		loc := resp.Header.Get("Location")
+		_ = resp.Body.Close()
+
+		target, ok := resolveAllowedRedirect(req.URL, loc)
+		if !ok {
+			return nil, &RedirectError{
+				Method:     req.Method,
+				URL:        req.URL.String(),
+				StatusCode: resp.StatusCode,
+				Location:   loc,
+			}
+		}
+		if hop == maxRedirectHops-1 {
+			return nil, &RedirectLoopError{
+				Method: req.Method,
+				URL:    req.URL.String(),
+				Hops:   hop + 1,
+			}
+		}
+		next, cerr := redirectedRequest(req, target)
+		if cerr != nil {
+			return nil, cerr
+		}
+		req = next
+	}
+}
+
+// resolveAllowedRedirect resolves location — a bare path, a path-relative
+// reference, or an absolute URL — against base per RFC 3986 (the same
+// resolution net/http's own redirect-following uses), and reports the
+// resolved target only when both hold: its escaped path is identical to
+// base's (EscapedPath, not the decoded Path, so a percent-encoded separator
+// like %2F isn't silently decoded into one — matching pathHasEmptySegment
+// and do()'s guard; a trailing-slash difference therefore counts as
+// changed, since that's the exact shape the id-normalizes-to-collection
+// bypass produces), and its host is in the same trust scope as base's (see
+// hostInScope). An empty Location, or one url.Parse rejects, never resolves.
+func resolveAllowedRedirect(base *url.URL, location string) (*url.URL, bool) {
+	if location == "" {
+		return nil, false
+	}
+	target, err := base.Parse(location)
+	if err != nil {
+		return nil, false
+	}
+	if target.EscapedPath() != base.EscapedPath() {
+		return nil, false
+	}
+	if !hostInScope(base, target) {
+		return nil, false
+	}
+	return target, true
+}
+
+// hostInScope reports whether target's host is close enough to base's to
+// trust with base's credentials: identical (ignoring scheme/port — this
+// branch alone covers a bare single-label host like "localhost", which is a
+// legitimate local-development target and not a cross-host hop at all), or
+// one is exactly "<label>." prepended to the other (apex<->www, tenant<->
+// canonical-host within the same domain), provided the target has at least
+// two labels — a single-label target is never a real canonicalization of a
+// public tenant host, and every domain family this CLI talks to has a
+// two-label apex. This is a suffix check on whole labels, not a substring
+// match, so "eviltenant.example" is never mistaken for a subdomain of
+// "tenant.example" — the "." is part of the comparison string precisely to
+// enforce the label boundary. No public-suffix list is used or needed: an
+// unrelated host (different domain entirely) never satisfies this and is
+// refused.
+func hostInScope(base, target *url.URL) bool {
+	a := strings.ToLower(base.Hostname())
+	b := strings.ToLower(target.Hostname())
+	if a == "" || b == "" {
+		return false
+	}
+	if a == b {
+		return true
+	}
+	if !strings.Contains(b, ".") {
+		return false
+	}
+	return strings.HasSuffix(a, "."+b) || strings.HasSuffix(b, "."+a)
+}
+
+// redirectedRequest builds the request for an allowed (same-path) redirect
+// hop: same method and headers as req, pointed at target. The body is
+// re-obtained from GetBody (set by http.NewRequestWithContext for the
+// bytes/strings-backed bodies this package sends) since req's original Body
+// reader was already consumed sending the hop that produced the redirect.
+func redirectedRequest(req *http.Request, target *url.URL) (*http.Request, error) {
+	next := req.Clone(req.Context())
+	next.URL = target
+	next.Host = ""
+	if req.GetBody != nil {
+		body, err := req.GetBody()
+		if err != nil {
+			return nil, fmt.Errorf("rewinding request body for redirect: %w", err)
+		}
+		next.Body = body
+	}
+	return next, nil
 }
 
 type Client struct {
@@ -220,7 +365,6 @@ func New(ctx context.Context, baseURL string, opts ...Option) (*Client, error) {
 	}
 
 	oauthClient := oauth2.NewClient(ctx, tokenSource)
-	oauthClient.Transport = &userAgentTripper{next: oauthClient.Transport}
 
 	c := &Client{
 		httpClient: oauthClient,
@@ -230,9 +374,16 @@ func New(ctx context.Context, baseURL string, opts ...Option) (*Client, error) {
 	for _, opt := range opts {
 		opt(c)
 	}
+	// redirectTripper must be outermost: when it follows an allowed
+	// same-path redirect it calls inner.RoundTrip again for the second hop,
+	// so debugTripper has to sit inside it (not outside, as a single wrap
+	// around the whole chain would) for --debug to log both hops instead of
+	// only the first request and the final response.
+	inner := http.RoundTripper(&userAgentTripper{next: oauthClient.Transport})
 	if c.debug {
-		c.httpClient.Transport = &debugTripper{next: c.httpClient.Transport, out: os.Stderr}
+		inner = &debugTripper{next: inner, out: os.Stderr}
 	}
+	oauthClient.Transport = &redirectTripper{next: inner}
 	return c, nil
 }
 
@@ -247,6 +398,11 @@ func New(ctx context.Context, baseURL string, opts ...Option) (*Client, error) {
 // retries from paying New's real exponential backoff). No production code
 // path calls this; c1i always authenticates through New.
 func NewForTesting(baseURL string, hc *http.Client, opts ...Option) *Client {
+	next := hc.Transport
+	if next == nil {
+		next = http.DefaultTransport
+	}
+	hc.Transport = &redirectTripper{next: next}
 	c := &Client{httpClient: hc, baseURL: baseURL, maxRetries: DefaultMaxRetries}
 	for _, opt := range opts {
 		opt(c)
@@ -440,6 +596,20 @@ func doWithRetry(doer httpDoer, req *http.Request, maxRetries int) ([]byte, erro
 			var tokErr *tokensource.TokenError
 			if errors.As(err, &tokErr) {
 				return nil, &AuthError{fmt.Errorf("token request failed: %w", err)}
+			}
+			// A redirect (see redirectTripper) is permanent for a given
+			// request shape — retrying would just redirect the same way
+			// again — so surface it immediately instead of burning the
+			// retry budget on it. Same for a chain that hit the hop bound:
+			// it already tried following maxRedirectHops times internally,
+			// invisible to this loop, and would do so identically again.
+			var redirErr *RedirectError
+			if errors.As(err, &redirErr) {
+				return nil, redirErr
+			}
+			var redirLoopErr *RedirectLoopError
+			if errors.As(err, &redirLoopErr) {
+				return nil, redirLoopErr
 			}
 			// Transport-level failure (connection reset, timeout, ...). We
 			// can't tell whether the server processed the request, so only

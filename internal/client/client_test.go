@@ -32,7 +32,9 @@ func deterministicBackoff(t *testing.T) *[]time.Duration {
 }
 
 func newTestClient(srv *httptest.Server, maxRetries int) *Client {
-	return &Client{httpClient: srv.Client(), baseURL: srv.URL, maxRetries: maxRetries}
+	hc := srv.Client()
+	hc.Transport = &redirectTripper{next: hc.Transport}
+	return &Client{httpClient: hc, baseURL: srv.URL, maxRetries: maxRetries}
 }
 
 func TestDoWithRetry_RetriesThenSucceeds(t *testing.T) {

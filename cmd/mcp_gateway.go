@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"errors"
 	"fmt"
 	"net/url"
 	"strings"
@@ -88,9 +89,23 @@ func newGatewayClient(cmd *cobra.Command) (*mcpgateway.Client, error) {
 	return gc, nil
 }
 
-// classifyGatewayError reclassifies a JSON-RPC-level error from the gateway
-// (an *mcpgateway.rpcError, unexported — accessed via RPCErrorCode) so it
-// reaches the right process exit code through cmd/errors.go's exitCode:
+// classifyGatewayError reclassifies a gateway-layer error so it reaches the
+// right process exit code through cmd/errors.go's exitCode:
+//
+//   - *mcpgateway.TransportError (a dial failure, connection refused, TLS
+//     failure, or timeout — the request never got an HTTP response at all,
+//     let alone a JSON-RPC one): wrapped in *upstreamError -> exit 8. This is
+//     a system beyond C1 (or the network path to it) failing, the same class
+//     exit 8 already covers for a JSON-RPC-level protocol failure; it is
+//     checked first; and deliberately does not touch *client.AuthError (still
+//     exit 3, e.g. a rejected client_credentials grant during token minting,
+//     which happens before this function ever runs) or *mcpgateway.HTTPError
+//     (still classified via its own Unwrap to *client.APIError — a real
+//     response with a real status arrived, which is a different failure
+//     class than a transport failure).
+//
+// The remaining cases classify a JSON-RPC-level error from the gateway (an
+// *mcpgateway.rpcError, unexported — accessed via RPCErrorCode):
 //
 //   - -32602 (invalid params): the caller named a tool with bad arguments —
 //     that IS caller-caused. Wrapped in *usageError -> exit 2.
@@ -130,6 +145,10 @@ func newGatewayClient(cmd *cobra.Command) (*mcpgateway.Client, error) {
 func classifyGatewayError(err error) error {
 	if err == nil {
 		return nil
+	}
+	var transportErr *mcpgateway.TransportError
+	if errors.As(err, &transportErr) {
+		return &upstreamError{err}
 	}
 	code, ok := mcpgateway.RPCErrorCode(err)
 	if !ok || code == nil {

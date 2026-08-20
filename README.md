@@ -417,13 +417,13 @@ branch on without parsing text:
 |------|---------|
 | `0` | success |
 | `1` | generic / unclassified error |
-| `2` | usage error (bad flags or arguments, or the API returned `400`) |
+| `2` | usage error (bad flags or arguments, an empty id, an id the API redirects to a collection, or the API returned `400`) |
 | `3` | not authenticated, or API returned `401`/`403` |
 | `4` | API returned `404` (not found) |
 | `5` | API returned `429` (rate limited — back off and retry) |
 | `6` | C1 failed: the API returned `5xx`, or answered `200` with a body that isn't JSON |
 | `7` | `mcp gateway call` completed, but the tool itself reported an error (`isError: true` in its result) |
-| `8` | a system beyond C1, or the MCP protocol layer, failed — an upstream connector was unreachable or errored, or the gateway returned a protocol-level JSON-RPC error |
+| `8` | a system beyond C1, or the MCP protocol layer, failed — an upstream connector was unreachable or errored, the gateway itself was unreachable (DNS failure, refused connection), or the gateway returned a protocol-level JSON-RPC error |
 
 `6` and `8` are both "something remote broke," but they call for different
 responses. `6` means C1 itself is failing, so retrying later is reasonable and
@@ -441,6 +441,30 @@ exits `2` and sends nothing. Without that guard an empty id renders a trailing
 empty path segment, which the API redirects to the collection endpoint — so the
 command used to print the entire list and exit `0`. The same check applies to a
 raw `api --path` ending in `/`.
+
+Relatedly, the REST client is **selective about HTTP redirects**. It follows one
+only when both hold: the target path is identical to what was requested (a
+trailing-slash difference counts as a change), and the target host is in the same
+trust scope as the request host — the same host differing only in scheme or port,
+or a `label.`-prefix relationship in either direction with at least two labels,
+which covers `apex ↔ www` canonicalization. Anything else — a different path, or
+the same path on an unrelated host — is refused as an error (exit `2`) naming the
+target.
+
+Both halves matter. The path rule is what closed a real bug: an id of `/` or `.`
+escapes to a path the API redirects to the collection, which turned a
+single-object read into a full listing with exit `0`. The host rule is what keeps
+your token safe: a followed redirect is re-authenticated, so an unrestricted
+follow would hand your bearer token to whatever host the redirect named.
+
+A chain of allowed redirects that doesn't settle within five hops fails as a
+remote error (exit `6`) rather than looping.
+
+This applies to the REST client only. The MCP gateway and the login handshake use
+their own HTTP clients and follow redirects normally. And a bad id is the only
+cause of a refused `3xx` observed so far, which is why it maps to exit `2` — a
+redirect on an otherwise well-formed request would not be the caller's mistake,
+and would still report `2`.
 
 Pass `--error-format json` (or `C1I_ERROR_FORMAT=json`) to get a machine-readable
 error object instead of the default `Error: <msg>` line. For API errors it

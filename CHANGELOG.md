@@ -229,6 +229,33 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- **An id of `/` or `.` no longer returns the whole collection with exit `0`.**
+  The empty-id guard added previously inspects the request this CLI builds, but
+  `/` escapes to `%2F`, and the API redirects that to a trailing-slash path — the
+  exact shape the guard refuses — and then to the bare collection. Go's HTTP
+  client follows redirects below the guard's layer, so `users get "/"` printed
+  every user and reported success. The REST client now **refuses to follow any
+  redirect** and reports the `3xx` and its target as a usage error (exit `2`),
+  because following one silently converts a single-object read into a collection
+  read. A redirect is followed only when the path is identical (a trailing-slash
+  difference counts as a change) AND the target host is in the same trust scope —
+  identical modulo scheme/port, or a `label.`-prefix relationship with at least
+  two labels, covering `apex ↔ www`. The host restriction is a security boundary,
+  not tidiness: a followed redirect is re-authenticated, so following one to an
+  arbitrary host would hand the caller's bearer token to whatever the `Location`
+  named. A chain that doesn't settle within five hops fails as exit `6`.
+  Verified with `--debug` that normal calls perform zero redirects today and are
+  unaffected. This lives in `internal/client`; `internal/mcpgateway` and
+  `internal/login` build their own HTTP clients and still follow redirects.
+  Exit `2` is a deliberate simplification: a bad id is the only cause of a `3xx`
+  seen so far, but a redirect on an otherwise well-formed request would not be
+  the caller's mistake and would still report `2`.
+- **An unreachable MCP gateway now exits `8`, not `1`.** A DNS failure or a
+  refused connection during the gateway handshake returned a bare error that
+  collapsed to generic. Exit `8` already means "a system beyond C1 failed",
+  which is exactly this; the earlier work classified JSON-RPC response codes and
+  never reached the transport path, which fails before any JSON-RPC body exists.
+  A rejected credential still exits `3` and a real C1 `5xx` still exits `6`.
 - **`api` no longer exits `0` printing a non-JSON body.** A `--path` that escapes
   the API prefix can reach the web app, which answers `200` with an HTML
   document; `c1i api` printed it verbatim and reported success, so a downstream
