@@ -125,6 +125,11 @@ NOTE: c1i has no single "grant to everyone" endpoint. This runbook grants the
 entitlement to each user individually via the access-request flow; for a
 large tenant, drive step 5 from a script over the user IDs from step 4.
 
+NOTE: this toolset/binding mechanism only governs exposure of tools
+discovered from a registered connector — it has no effect on C1's own
+built-in c1_* tools, whose gateway exposure tracks the caller's underlying
+role and permissions instead.
+
 ## 1. Create the toolset
 
     c1i mcp toolsets create --app-id "$APP_ID" --connector-id "$CONNECTOR_ID" \
@@ -231,8 +236,14 @@ value than the "$TOOL_ID" used above.
 
 ## 3. The caller holds (or can request) the toolset entitlement
 
-A tool is only exposed to a caller who holds the entitlement of a toolset
-that binds it. Resolve the toolset for an entitlement, then check the grant:
+For a tool discovered from a registered connector (HOSTED/EXTERNAL/tunneled
+MCP server), exposure requires holding the entitlement of a toolset that
+binds it. C1's own built-in c1_* tools are different: they front the C1 API
+directly, and their exposure through the gateway tracks the caller's
+underlying role and permissions, not any MCP toolset grant — granting or
+withholding a toolset has no effect on them. (This is about exposure/listing
+only; whether execution of a c1_* tool is similarly unconfined has not been
+verified.) Resolve the toolset for an entitlement, then check the grant:
 
     c1i mcp toolsets get-by-entitlement "$AEID" --app-id "$APP_ID"
     c1i grants list --app-id "$APP_ID" --entitlement-id "$ENTITLEMENT_ID"
@@ -330,6 +341,357 @@ entitlement visible and trackable through another. Step 2's
 provisionerPolicy.delegated update is the actual provisioning trigger.
 `
 
+// guideConfigureNewApp walks through creating a manually-managed app
+// container, setting its owners, and creating a custom entitlement for it
+// via the 3-call resource-type/resource/entitlement sequence (no first-class
+// "entitlements create" exists). Derived from cmd/apps_create.go,
+// cmd/apps_set_owners.go, cmd/entitlements_get.go, cmd/entitlements_list.go,
+// and cmd/api.go.
+const guideConfigureNewApp = `# Configure a new app
+
+Stand up an app container, assign the C1 users who administer it, and give it
+at least one entitlement so it is ready to hand off to an access-granting
+workflow. Use this for a manually-managed app with no connector (a physical
+badge, a shared credential, a home-grown tool) — not for an app that should
+sync real accounts/entitlements from a SaaS connector (Salesforce, Okta,
+Google Workspace, ...; see "Common failures") or an MCP server (use "c1i
+docs guide register-mcp-server" instead, which creates its own entitlement
+via toolset sync).
+
+## Prerequisites
+
+- Authenticated against the right tenant: "c1i auth whoami"
+- At least one candidate owner already exists as a C1 user (owners are
+  existing users, never created here — C1 users come from a connected
+  directory, not from this or any other write path):
+
+      c1i users list --status enabled
+
+## Steps
+
+### 1. Create the app
+
+    c1i apps create --display-name "Acme Payroll" --description "Manually-managed payroll access"
+
+Prints the created app as pretty JSON under an "app" key. Capture its id:
+
+    APP_ID=<id from the response>
+
+A fresh app already carries one system-builtin entitlement ("Access") and one
+default resource type ("Credential") — it is not entirely empty, just empty
+of anything specific to what you're about to model.
+
+### 2. Set the app's owners
+
+    OWNER_USER_ID=<id from "c1i users list" above>
+    c1i apps set-owners "$APP_ID" --user-id "$OWNER_USER_ID" --wait
+
+"--wait" polls "GET .../ownerids" until the owner appears (or times out) and
+prints "Owners provisioned on app ... after ...". Without "--wait", the PUT
+returns immediately but the owner takes up to ~60-90s to actually show up
+anywhere that reads them back.
+
+### 3. Create a custom entitlement to grant
+
+There is no "entitlements create" — only "entitlements get"/"list". Creating
+one for a manually-managed app is a 3-call sequence instead: a resource
+type, a resource under it, then the entitlement pointing at both. No
+first-class command covers this, so each call goes through "c1i api":
+
+    c1i api --path=/api/v1/apps/$APP_ID/resource_types --body='{"displayName":"Payroll role","resourceType":"CUSTOM"}'
+    RT_ID=<appResourceType.id from the response>
+
+    c1i api --path=/api/v1/apps/$APP_ID/resource_types/$RT_ID/resources --body='{"displayName":"Payroll admin"}'
+    RES_ID=<appResource.id from the response>
+
+    c1i api --path=/api/v1/apps/$APP_ID/entitlements --body='{"displayName":"Payroll admin","slug":"member","alias":"payroll_admin","appResourceTypeId":"'$RT_ID'","appResourceId":"'$RES_ID'"}'
+    ENT_ID=<appEntitlementView.appEntitlement.id from the response>
+
+resourceType is one of ROLE|GROUP|LICENSE|PROJECT|CATALOG|CUSTOM|VAULT|PROFILE_TYPE.
+Omitting a duration defaults the entitlement to standing access
+(durationUnset); pass a durationGrant field (e.g. 3600s) instead for
+time-boxed access.
+
+## Verify
+
+    c1i entitlements list --app-id "$APP_ID"
+
+Auto-paginates to completion; expect the builtin "Access" row plus your new
+entitlement, both present immediately — the entitlement search index is not
+lagged the way owners are.
+
+    c1i entitlements get "$ENT_ID" --app-id "$APP_ID"
+
+Full object; isManuallyManaged is true.
+
+For owners, don't trust the appOwners field embedded in the app object (from
+"c1i apps get <id>") as the source of truth: in testing it stayed empty for
+several minutes after "apps set-owners --wait" had already reported success.
+Check the raw owner list instead, which is what "--wait" itself polls:
+
+    c1i api --path=/api/v1/apps/$APP_ID/ownerids
+
+Expect your "$OWNER_USER_ID" in userIds within the ~60-90s window (already
+satisfied if you used "--wait").
+
+## Common failures
+
+- "apps set-owners" exits 1 with a 400 naming a regex pattern
+  (^[a-zA-Z0-9]{27}$) -> the app id or a "--user-id" isn't a real 27-char
+  C1 id -> fix the id; retrying as-is won't help.
+- "entitlements list --app-id <id>" returns nothing at exit 0 for a
+  well-formed but wrong app id -> the search endpoint doesn't validate the
+  app exists -> confirm the id with "c1i apps get <id>" (a real 404 there
+  exits 4).
+- "c1i apps get <id>" on a deleted or never-existed app -> 404 -> exit 4.
+- Building a SaaS-backed connector (Salesforce, Okta, Google Workspace, ...)
+  by hand through "c1i api" instead of following this runbook -> don't:
+  connector "create" needs a provider-specific catalogId that has no
+  list/discovery endpoint in c1i, and secrets are write-only once set. That
+  path is real but heavy and provider-specific enough that it belongs in its
+  own runbook, not bolted onto a generic one.
+
+Next: grant the entitlement you just created:
+
+    c1i requests create grant --app-id "$APP_ID" --entitlement-id "$ENT_ID" --user-id "$USER_ID"
+
+Or see "c1i docs guide delegate-entitlement-provisioning" if access to this
+app should flow from another entitlement instead of a direct request.
+`
+
+// guideRequestAccess walks the requester side of a grant/revoke access
+// request end to end: finding a real app/entitlement/user, previewing with
+// --dry-run, filing the request, and verifying the resulting grant.
+// Approval mechanics (stepApproverIds, the actions gate, policy.current,
+// and the approve/deny asymmetry) are deliberately out of scope — see
+// guideInspectAndApproveTask, the single source for those. Derived from
+// cmd/requests_create_grant.go, cmd/requests_create_revoke.go,
+// cmd/requests_list.go, cmd/grants_list.go, cmd/entitlements_get.go,
+// cmd/apps_list.go, and cmd/users_list.go.
+const guideRequestAccess = `# Request access
+
+Bind a C1 user to an app entitlement through the request/approve workflow,
+confirm who holds it, and take it away again — the only granting path
+guaranteed to have a working undo.
+
+Before you request anything: this guide covers access requested through
+"requests create grant" / "requests create revoke" only. C1 also supports
+binding a user to an entitlement directly, bypassing the request workflow
+entirely; c1i has no command for that, and if you reach for it anyway via a
+raw API call, know this: the matching direct-removal endpoint only works on
+an SSO application's own sign-in entitlement, or on a catalog/group/
+profile-type entitlement on the built-in C1 app. For an ordinary role or
+custom entitlement on a connector app it refuses outright, and there is no
+other undo path. Don't create access that way unless you already know how
+you'd take it back.
+
+## Prerequisites
+
+- Authenticated:
+
+      c1i auth whoami
+
+- An app and an entitlement that already exist to request against. There is
+  no "entitlements create" — find real ones:
+
+      c1i apps list
+      APP_ID=<id of the target app>
+      c1i entitlements list --app-id "$APP_ID"
+      ENTITLEMENT_ID=<id of the target entitlement>
+
+  Look at the entitlement before requesting it:
+
+      c1i entitlements get "$ENTITLEMENT_ID" --app-id "$APP_ID"
+
+  This is a weak signal, not a guarantee: a populated grantPolicyId does
+  not mean the entitlement is requestable, and an empty one does not mean
+  it isn't — real requestability is decided by catalog membership, which
+  this response does not show and which c1i has no command for reading.
+  The create call in step 2 below is the actual test.
+
+- The target's C1 user id — the directory-sourced identity being granted
+  access, not an app account ("c1i accounts list"), which is how that same
+  identity shows up inside one connected app. A grant binds the user:
+
+      c1i users list --email user@example.com
+      USER_ID=<id from the result>
+
+## Steps
+
+1. Preview the request before sending it (no task is created). "--user-id"
+   defaults to the caller if omitted; "--dry-run" still authenticates, since
+   it resolves self when "--user-id" is omitted:
+
+       c1i requests create grant --app-id "$APP_ID" --entitlement-id "$ENTITLEMENT_ID" --user-id "$USER_ID" --description "<why>" --dry-run
+
+   Confirms the method, path, and body c1i would send.
+
+2. Create the grant request.
+
+       c1i requests create grant --app-id "$APP_ID" --entitlement-id "$ENTITLEMENT_ID" --user-id "$USER_ID" --description "<why>"
+
+   Prints task_id=... state=...; capture it as TASK_ID. A 403 here (target
+   user is not allowed to request that resource) means the entitlement
+   isn't reachable through any request catalog for this user — a
+   console/catalog setting, not something a flag fixes. This is common, not
+   exceptional: plenty of real, synced entitlements fail this way.
+
+3. Find the task if you didn't capture its id. As the requester (your own
+   opens/subjects):
+
+       c1i requests list --state open
+
+4. Resolve the task. See "c1i docs guide inspect-and-approve-task" for who
+   can act on it and the approve/deny/comment mechanics — the requester
+   can't approve their own task, so if you requested access for yourself,
+   someone else (or an auto-approve policy) has to close it.
+
+5. A revoke request is symmetric, and needs the same resolution:
+
+       c1i requests create revoke --app-id "$APP_ID" --entitlement-id "$ENTITLEMENT_ID" --user-id "$USER_ID" --description "<why>"
+
+   Capture the new task id and resolve it exactly like the grant above.
+
+## Verify
+
+    c1i grants list --app-id "$APP_ID" --entitlement-id "$ENTITLEMENT_ID" --user-id "$USER_ID"
+
+Grants are eventually consistent in both directions: after an approved
+grant, expect up to a couple of minutes before the row appears; after an
+approved revoke, the same delay before it disappears. An empty result
+immediately after approval isn't a failure — wait and re-run the same
+command. A revoke task still sitting in TASK_STATE_OPEN past that window
+means it's waiting on an approver, not that the revoke failed.
+
+## Common failures
+
+| Symptom | Cause | Fix |
+|---|---|---|
+| 403 target user is not allowed to request that resource (exit 3) | The entitlement isn't reachable through any request catalog for this user | Configure it in the C1 console (App > Access requests), or target an entitlement that already allows requests |
+| 409 duplicate ticket found, with a task id in the error details (exit 1) | An open task for this exact app + entitlement + user already exists | Act on that task id ("tasks list --state open") instead of creating another |
+| required flag(s) "app-id", "entitlement-id" not set (exit 2) | Both are required on "requests create grant"/"revoke" | Fix the invocation |
+| An auth failure resolving the caller's own id when "--user-id" is omitted (exit 3) | Surfaces before the request call itself runs | Re-authenticate rather than retry as-is |
+| "grants list" returns nothing right after approval | Eventual consistency | Wait roughly a minute or two and re-run the same filter |
+
+Approve/deny/comment failures, and everything about stepApproverIds, the
+actions gate, and the current policy step, live in
+"c1i docs guide inspect-and-approve-task" instead, which is also the next
+step for resolving the task you just opened.
+`
+
+// guideInspectAndApproveTask is the single source for approver-side task
+// mechanics: reading the task's embedded policy (current/next step,
+// stepApproverIds, actions), commenting (unlike approve/deny, not gated by
+// actions), and the approve/deny step-resolution asymmetry (approve requires
+// a resolvable current step; deny proceeds without one). Derived from
+// cmd/tasks_list.go, cmd/requests_get.go, cmd/tasks_comment.go,
+// cmd/tasks_approve.go, cmd/tasks_deny.go, and cmd/tasks.go
+// (resolvePolicyStepID).
+const guideInspectAndApproveTask = `# Inspect and approve a task
+
+Read the policy step governing an open access-request task, confirm you're
+actually authorized to act on it, then approve, deny, or comment on it.
+This does not cover authoring or editing a policy — c1i has no first-class
+command for that; only "c1i api" reaches /api/v1/policies (see the policy
+gap report).
+
+## Prerequisites
+
+Requires authentication ("c1i auth login"). You need the task's own id —
+from a "c1i tasks list" row, a notification, or the output of
+"c1i requests create grant"/"revoke".
+
+## Steps
+
+1. Find the task. As an approver — "my work" rather than "my requests":
+
+       c1i tasks list --state open --assigned-to-me
+       TASK_ID=<id from the row you're acting on>
+
+   NDJSON; --query matches display name or description.
+
+2. Read the full task view before acting on it. The same endpoint answers
+   for any task id, not only ones you created, and it embeds the policy
+   currently governing the task — you don't need to look up the
+   entitlement or the policy separately:
+
+       c1i requests get "$TASK_ID"
+
+   In the JSON, check:
+   - taskView.task.policy.policy.displayName / .id — which policy is
+     driving this task. (An entitlement's own grantPolicyId/revokePolicyId
+     can be empty — inherited from the app's default (see
+     "c1i apps get <app-id>") — so don't infer the governing policy from
+     the entitlement alone; the task view always has the resolved one.)
+   - taskView.task.policy.current.id — the step this task is on right now.
+     This is exactly the value tasks approve/deny send as policyStepId.
+   - taskView.task.policy.next — steps still to come. Empty means your
+     approval, if it's the last one, closes the task; non-empty means
+     another step (often another approver) follows.
+   - taskView.task.stepApproverIds — user ids allowed to act on this step.
+   - taskView.task.actions — what YOU specifically can do on this task
+     right now. If TASK_ACTION_TYPE_APPROVE (or _DENY) isn't listed, don't
+     call approve/deny — it will be rejected even though you can read the
+     task, and even if you're the requester.
+
+3. Not authorized to approve or deny? Comment instead. Unlike approve/deny,
+   commenting is not gated by stepApproverIds/actions — it succeeds for any
+   authenticated caller regardless of step:
+
+       c1i tasks comment "$TASK_ID" --comment "note for the approver"
+
+4. Approve or deny:
+
+       c1i tasks approve "$TASK_ID" --comment "reviewed, looks correct"
+
+   Or:
+
+       c1i tasks deny "$TASK_ID" --comment "not needed"
+
+   Both resolve --policy-step-id to the current step automatically (step
+   2's policy.current.id) — pass it explicitly only if that lookup fails or
+   you deliberately want a non-current step. tasks approve errors if no
+   current step can be resolved (approve requires one); tasks deny
+   proceeds without one when it can't be derived — denying a task in an
+   odd state can succeed where approving the same task fails.
+
+## Verify
+
+    c1i requests get "$TASK_ID"
+
+Check taskView.task.state, not outcome, for whether anything is still
+pending. outcome is omitted while it sits at *_OUTCOME_UNSPECIFIED; the
+NDJSON views ("tasks list", "requests list") drop the key entirely in that
+case rather than print the sentinel. Its absence there means "no result
+yet" — but its presence does NOT mean "closed": a task can be
+TASK_STATE_OPEN and already carry a real, non-UNSPECIFIED outcome (e.g. a
+provisioning failure) while still waiting on a later step. state reaching
+TASK_STATE_CLOSED is the only reliable end signal; use it, not the
+presence of outcome, to decide whether a task is still pending.
+
+If policy.next was non-empty in step 2, expect state to still read open
+with a new policy.current after your action — the chain isn't done until
+every step in it clears, not just the one you touched. Grant/revoke
+provisioning can also lag briefly after approval, so poll rather than
+checking once immediately.
+
+## Common failures
+
+- action not permitted on tasks approve/tasks deny (exit 1) — the
+  authenticated identity isn't on the task's current policy step,
+  confirmed ahead of time by actions in step 2 omitting
+  TASK_ACTION_TYPE_APPROVE/_DENY.
+- could not determine the current policy step for task ...; pass
+  --policy-step-id explicitly, on tasks approve (exit 1) — no current step
+  could be derived (approve requires one). tasks deny never fails this way
+  on the same task; it just proceeds without a step. Supply
+  --policy-step-id explicitly once you've read it via step 2's response.
+- Entitlement-level grantPolicyId/revokePolicyId reading empty is normal,
+  not a bug — it means the entitlement inherits the app's default policy.
+  Read the task's embedded policy.policy, not the entitlement, to see
+  what's actually governing a given task.
+`
+
 // docsGuides maps a guide name to its embedded content. Keep names stable —
 // they're part of the CLI's public surface (an agent may hardcode
 // "c1i docs guide register-mcp-server" in its own tooling).
@@ -338,6 +700,9 @@ var docsGuides = map[string]string{
 	"assign-toolset-everyone":           guideAssignToolsetEveryone,
 	"test-mcp-gateway":                  guideTestMCPGateway,
 	"delegate-entitlement-provisioning": guideDelegateEntitlementProvisioning,
+	"configure-new-app":                 guideConfigureNewApp,
+	"request-access":                    guideRequestAccess,
+	"inspect-and-approve-task":          guideInspectAndApproveTask,
 }
 
 // guideNames returns the available guide names, sorted for stable output.

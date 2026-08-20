@@ -275,7 +275,7 @@ c1i docs guide
 c1i docs guide register-mcp-server
 ```
 
-`docs guide` is embedded static content (no network call), unlike `docs search` / `docs page` which hit the C1 documentation site.
+`docs guide` is embedded static content (no network call), unlike `docs search` / `docs page` which hit the C1 documentation site. Guides ship in two families: registering and operating MCP servers (`register-mcp-server`, `assign-toolset-everyone`, `test-mcp-gateway`, `delegate-entitlement-provisioning`) and everyday app/access-request workflows (`configure-new-app`, `request-access`, `inspect-and-approve-task`). Run `c1i docs guide` with no argument for the full, current list.
 
 `docs skill` is kept as an alias of `docs agents` for backward compatibility;
 both print identical output.
