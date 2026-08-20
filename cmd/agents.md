@@ -102,12 +102,14 @@ campaign ID from a URL is the access review `id` directly.
 | 5 | API `429` | back off and retry |
 | 6 | C1 failed: API `5xx`, or a `200` with a body that isn't JSON | retryable, not your fault |
 | 7 | `mcp gateway call` succeeded but the tool reported `isError: true` | inspect the printed result, not just the code |
-| 8 | a system beyond C1, or the protocol layer, failed | retrying the same call usually repeats it. For a connector failure, check the server with `mcp servers get <connector-id> --app-id <id>` and `mcp servers test-connection`; the upstream may be unreachable or its credentials expired. For a protocol error, it's a version mismatch or a c1i bug — report it, don't work around it |
+| 8 | a system beyond C1, or the protocol layer, failed — including a gateway that is unreachable (DNS failure, refused connection) | retrying the same call usually repeats it. For a connector failure, check the server with `mcp servers get <connector-id> --app-id <id>` and `mcp servers test-connection`; the upstream may be unreachable or its credentials expired. For a protocol error, it's a version mismatch or a c1i bug — report it, don't work around it |
 
 Branch on the exit code, not stderr text. An empty id argument is a usage error
 (`c1i users get ""` exits 2 without sending anything) — worth knowing if you
 build ids programmatically, because it used to return the whole collection with
-exit 0.
+exit 0. An id of `/` or `.` is refused the same way: those escape to a path the
+API redirects to the collection, and `c1i` never follows a redirect, so you get
+exit 2 instead of a full listing that looks like a successful read.
 
 `6` versus `8`: `6` means C1 itself failed, so waiting and retrying is sensible.
 `8` means C1 answered and something past it did not — a connector is down, or

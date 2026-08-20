@@ -442,6 +442,12 @@ empty path segment, which the API redirects to the collection endpoint — so th
 command used to print the entire list and exit `0`. The same check applies to a
 raw `api --path` ending in `/`.
 
+Relatedly, `c1i` **never follows an HTTP redirect**; a `3xx` is reported as an
+error (exit `2`) naming the target. No endpoint legitimately redirects a
+well-formed request, and following one silently changes what was asked: an id of
+`/` or `.` escapes to a path the API redirects to the collection, which turned a
+single-object read into "here is everything" with exit `0`.
+
 Pass `--error-format json` (or `C1I_ERROR_FORMAT=json`) to get a machine-readable
 error object instead of the default `Error: <msg>` line. For API errors it
 includes the status, method, path, and response body:

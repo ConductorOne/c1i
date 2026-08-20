@@ -229,6 +229,22 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- **An id of `/` or `.` no longer returns the whole collection with exit `0`.**
+  The empty-id guard added previously inspects the request this CLI builds, but
+  `/` escapes to `%2F`, and the API redirects that to a trailing-slash path — the
+  exact shape the guard refuses — and then to the bare collection. Go's HTTP
+  client follows redirects below the guard's layer, so `users get "/"` printed
+  every user and reported success. The client now **refuses to follow any
+  redirect** and reports the `3xx` and its target as a usage error (exit `2`).
+  No endpoint legitimately redirects a well-formed request, and following one
+  silently converts a single-object read into a collection read. Verified that
+  normal calls perform zero redirects and are unaffected.
+- **An unreachable MCP gateway now exits `8`, not `1`.** A DNS failure or a
+  refused connection during the gateway handshake returned a bare error that
+  collapsed to generic. Exit `8` already means "a system beyond C1 failed",
+  which is exactly this; the earlier work classified JSON-RPC response codes and
+  never reached the transport path, which fails before any JSON-RPC body exists.
+  A rejected credential still exits `3` and a real C1 `5xx` still exits `6`.
 - **`api` no longer exits `0` printing a non-JSON body.** A `--path` that escapes
   the API prefix can reach the web app, which answers `200` with an HTML
   document; `c1i api` printed it verbatim and reported success, so a downstream
