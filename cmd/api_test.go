@@ -511,6 +511,60 @@ func TestAPIPaginateFieldsPartialMatchAcrossPagesSucceeds(t *testing.T) {
 	}
 }
 
+// --- --path without a leading slash (Fix 3) ---
+
+// TestAPIPathWithoutLeadingSlashIsUsageError pins the fix: a --path missing
+// its leading slash used to get concatenated straight onto baseURL (e.g.
+// "https://host" + "api/v1/users" -> a DNS lookup for "hostapi.v1..."),
+// surfacing as an opaque "no such host" error that never named the real
+// problem. It must now fail fast as a usage error naming --path itself.
+func TestAPIPathWithoutLeadingSlashIsUsageError(t *testing.T) {
+	resetAPICmdFlags(t)
+	t.Setenv("C1I_URL", "https://example.invalid")
+
+	var out bytes.Buffer
+	apiCmd.SetOut(&out)
+	apiCmd.SetErr(&out)
+	rootCmd.SetArgs([]string{"api", "--path", "api/v1/users"})
+
+	err := rootCmd.ExecuteContext(context.Background())
+	if err == nil {
+		t.Fatal("expected an error for a --path without a leading slash, got nil")
+	}
+	if !strings.Contains(err.Error(), "--path") || !strings.Contains(err.Error(), "leading slash") {
+		t.Errorf("error = %q, want it to name --path and the leading-slash requirement", err.Error())
+	}
+	if got, want := exitCode(err), exitUsage; got != want {
+		t.Errorf("exitCode = %d, want %d (usage error: bad --path)", got, want)
+	}
+}
+
+// TestAPIPathWithLeadingSlashStillWorks is the regression guard: a normal,
+// well-formed --path must be unaffected.
+func TestAPIPathWithLeadingSlashStillWorks(t *testing.T) {
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/v1/users" {
+			t.Errorf("server saw path %q, want /api/v1/users", r.URL.Path)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"list":[]}`))
+	}))
+	defer srv.Close()
+
+	resetAPICmdFlags(t)
+	stubNewAPIClient(t, srv)
+	t.Setenv("C1I_URL", srv.URL)
+
+	var out bytes.Buffer
+	apiCmd.SetOut(&out)
+	apiCmd.SetErr(&out)
+	rootCmd.SetArgs([]string{"api", "--path", "/api/v1/users"})
+
+	if err := rootCmd.ExecuteContext(context.Background()); err != nil {
+		t.Fatalf("expected exit 0 for a well-formed --path, got: %v; output: %s", err, out.String())
+	}
+}
+
 // --- non-JSON 200 body (Fix 1) ---
 //
 // `api --path "/api/v1/../../etc/passwd"` (or any path that escapes the API
