@@ -63,7 +63,7 @@ func TestNoSubcommandDefinesOwnPersistentPreRunE(t *testing.T) {
 	}
 }
 
-// --- Fix 6: a non-UTF-8 positional id is a client-side usage error ---
+// --- A non-UTF-8 positional id is a client-side usage error ---
 //
 // An id containing a lone surrogate (invalid UTF-8, since surrogates are
 // only meaningful inside UTF-16) used to reach the server unfiltered, which
@@ -124,14 +124,14 @@ func TestValidUTF8PositionalArgUnaffected(t *testing.T) {
 	}
 }
 
-// --- Fix 6, closing GAP 2: a non-UTF-8 FLAG value, not just a positional ---
+// --- A non-UTF-8 FLAG value, not just a positional ---
 //
 // Per CLAUDE.md's own convention, a parent-scope id (--app-id,
 // --connector-id, ...) is a FLAG, interpolated into the request path exactly
 // like a positional id -- so the positional-only check above left this
 // argument shape uncovered. Reproduced live:
 // "mcp servers get someid --app-id $'\xff\xfe'" returned a bare 500 (exit
-// 6) before this fix, the same failure class Fix 6 closed for positionals.
+// 6) before this fix, the same failure class already closed for positionals.
 
 // resetMcpServersGetCmdAppIDFlag restores mcpServersGetCmd's --app-id flag to
 // unset after a test drives it through the package-level singleton, so

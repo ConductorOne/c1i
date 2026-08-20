@@ -30,8 +30,8 @@ func TestParseURLBasicNormalization(t *testing.T) {
 	}
 }
 
-// TestParseURLCaseInsensitiveHost is sub-issue (c), the priority bug: a
-// legitimate but differently-cased --url must not be rejected. Hosts are
+// TestParseURLCaseInsensitiveHost: a legitimate but differently-cased --url
+// must not be rejected. Hosts are
 // case-insensitive (DNS/HTTP), but the keychain key built from the host
 // (KeychainService) is not, so a mixed-case host that survives unchanged
 // through ParseURL spuriously fails "no credentials found" against a
@@ -141,8 +141,8 @@ func TestParseURLHTTPSchemeIsRejected(t *testing.T) {
 	}
 }
 
-// TestParseURLProtocolRelative is sub-issue (b): "//host" is a plausible
-// typo for "https://host". Before the fix it missed the "://" fast path and
+// TestParseURLProtocolRelative: "//host" is a plausible typo for
+// "https://host". Before the fix it missed the "://" fast path and
 // fell through to the raw-domain branch, which prepended "https://" onto the
 // literal leading "//" and produced "https:////host".
 func TestParseURLProtocolRelative(t *testing.T) {
@@ -178,8 +178,8 @@ func TestParseURLNonHTTPSSchemeIsError(t *testing.T) {
 	}
 }
 
-// TestParseURLDropsEmbeddedCredentialsWithWarning is sub-issue (a), part 2:
-// embedded userinfo is dropped (unchanged -- c1i has no way to send HTTP
+// TestParseURLDropsEmbeddedCredentialsWithWarning: embedded userinfo is
+// dropped (unchanged -- c1i has no way to send HTTP
 // Basic credentials through its OAuth-based client), but that drop must not
 // be silent, and the warning must not leak the password.
 func TestParseURLDropsEmbeddedCredentialsWithWarning(t *testing.T) {
@@ -200,8 +200,8 @@ func TestParseURLDropsEmbeddedCredentialsWithWarning(t *testing.T) {
 	}
 }
 
-// TestParseURLDropsEmbeddedCredentialsSchemeless is GAP 1 from adversarial
-// review: the scheme-having branch above drops/warns about embedded
+// TestParseURLDropsEmbeddedCredentialsSchemeless: the scheme-having branch
+// above drops/warns about embedded
 // userinfo, but a scheme-LESS input ("user:pass@host", the ordinary mistake
 // of pasting a URL and forgetting "https://") took the raw-domain branch
 // untouched -- nothing dropped, nothing warned, and the password rode
@@ -233,7 +233,7 @@ func TestParseURLDropsEmbeddedCredentialsSchemeless(t *testing.T) {
 // TestKeychainServiceLowerCasesHost pins that KeychainService itself is also
 // insensitive to input case, independent of whether the caller already
 // normalized via ParseURL -- defense in depth so a bypassed ParseURL call
-// can't silently reintroduce sub-issue (c).
+// can't silently reintroduce the case-sensitivity bug.
 func TestKeychainServiceLowerCasesHost(t *testing.T) {
 	got := KeychainService("https://ACME.CONDUCTOR.ONE")
 	want := "c1i/acme.conductor.one"
