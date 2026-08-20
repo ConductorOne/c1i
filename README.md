@@ -113,6 +113,70 @@ c1i automations executions list [--state done|error|pending|...] [--template-id 
 
 Each `automations list` row includes `function_ids` (every distinct function the automation invokes), so `--calls-function` can answer "which automations call function X?". `executions list --state` accepts the short forms (`done`, `error`, `pending`, ...) or the full `AUTOMATION_EXECUTION_STATE_*` enum; state and template filtering are applied client-side, so pair a narrow filter with `--limit` to bound the work.
 
+### Policies
+
+```sh
+c1i policies list [--page-size N] [--page-token TOKEN] [--limit N]
+c1i policies get <policy-id>
+c1i policies search [--query <text>] [--display-name <name>] [--policy-type grant|revoke|certify ...] [--include-deleted] [--exclude-policy-id <id> ...] [--page-size N] [--page-token TOKEN] [--limit N]
+c1i policies create --display-name <name> --policy-type grant|revoke|certify [--description <text>] [--steps-file <file|-> ] [--rules-file <file|-> ] [--allow-deny-all]
+c1i policies create --body-file <file|->
+c1i policies update <policy-id> [--display-name <name>] [--description <text>] [--policy-type ...] [--steps-file <file|-> ] [--rules-file <file|-> ] [--allow-deny-all]
+c1i policies update <policy-id> --body-file <file|-> --update-mask <paths>
+c1i policies delete <policy-id>
+c1i policies validate-cel <condition>
+```
+
+A policy describes how C1 processes a task: who approves it (an ordered list
+of `policySteps`, each a oneof of approval/provision/accept/reject/wait/form
+(the schema also declares `action`, which the server rejects as an unsupported
+step type);
+an approval step's approver is itself a oneof of ten arms — users, manager,
+group, appOwners, self, entitlementOwners, expression, webhook,
+resourceOwners, agent), and how `rules[]` route a task to one of several
+step sequences by CEL condition. That structure is too deeply nested for a
+flag surface, so `create`/`update` take it from a JSON file (or `-` for
+stdin) via `--steps-file`/`--rules-file`/`--body-file` — the same pattern
+`mcp servers register` uses for its auth config.
+
+**Client-side guards** (`create` and `update`, before any request is sent,
+exit code 2) exist because several C1 policy API defects are either silent
+or return an opaque `HTTP 500` instead of a `400`:
+
+- Empty/missing steps for a policy's baseline entry are refused —
+  `POST /api/v1/policies` with no `policySteps` succeeds and silently
+  returns a deny-everything policy (a single `{"reject":{}}` step), with no
+  validation error. Pass `--allow-deny-all` if that's genuinely what you
+  want (an explicit `steps:[]` is refused regardless — the server 500s on
+  that, not a safe default).
+- `--policy-type` unspecified, an empty `rules[].condition` (needs the
+  literal `"true"` for a baseline/catch-all rule), a `provision` step,
+  `fallback`/`fallbackUserIds` on an approver arm that doesn't support them
+  (only `users`, `appOwners`, `webhook`, and `agent` lack it — the other six
+  arms each support their own `fallback`/`fallbackUserIds`/
+  `fallbackGroupIds`/`isGroupFallbackEnabled`), and `fallback:true` with
+  nothing to fall back to (a bare server error that surfaces as `HTTP 500`).
+
+`update` sends the API's required `{"policy": {...}, "updateMask": "..."}`
+wrapper for you — a flat body 400s. The `--steps-file`/`--rules-file`
+convenience flags derive the update mask from what you pass; `--body-file`
+requires an explicit `--update-mask`.
+
+`validate-cel` checks a CEL condition without creating or updating anything.
+Its root variable is `subject` (not `user`); this validates the
+`rules[].condition` environment specifically, which is NOT the same
+environment `ExpressionApproval.expressions` run in (see the command's
+`--help`). An invalid condition prints its compile markers and exits 2, so
+`c1i policies validate-cel '<cond>' && ...` only continues on a condition
+that compiles.
+
+A soft-deleted policy still returns from a direct `get` (with `deletedAt`
+populated) but disappears from `list` and the default `search`; only
+`search --include-deleted` finds it there. List and search rows carry
+`deleted_at` so deleted rows are distinguishable without a second call — it
+is `null` on a live policy, so `jq 'select(.deleted_at)'` selects only the
+deleted ones.
+
 ### MCP
 
 Drive the MCP admin surface (servers, tools, toolsets, and bindings). Most commands take `--app-id`; `mcp servers` commands take the server's `<connector-id>` positionally, while tool/toolset/binding commands scope to a server with `--connector-id`.
