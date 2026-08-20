@@ -128,18 +128,19 @@ never fails proves nothing.
   matches `"false"`, and `jq 'select(.tool_count > 5)'` compares strings.
   This recurred across six row builders before it was caught.
 - **Errors:** the client returns typed `client.APIError` (carries status),
-  `client.AuthError`, `client.PathError`, and `client.RedirectError` (a 3xx is followed only
-  when the path is unchanged AND the host is in the same trust scope — a followed
-  hop is re-authenticated, so an unrestricted follow would leak the bearer
-  token) and `client.RedirectLoopError` (a same-path chain that never settles); `internal/mcpgateway` adds `TransportError` for an
-  unreachable gateway. `cmd/errors.go` maps them to exit
-  codes — 0 ok, 1 generic, 2 usage (bad flags/args, an empty id, or API 400),
-  3 auth (401/403), 4 not-found (404), 5 rate-limited (429), 6 C1 failed
-  (API 5xx, or a 200 with a non-JSON body), 7 tool-execution error (`mcp gateway call` result has
-  `isError: true`), 8 a system beyond C1 or the protocol layer failed (an
-  upstream connector failure, or a protocol-level JSON-RPC error). Keep 6 and 8
-  distinct: 6 is worth retrying later, 8 usually is not.
-  Wrap client errors with `%w` so `errors.As` can classify them, and wrap a bad
+  `client.AuthError`, `client.PathError`, and `client.RedirectError` (a 3xx is
+  followed only when the path is unchanged AND the host is in the same trust
+  scope — a followed hop is re-authenticated, so an unrestricted follow would
+  leak the bearer token) and `client.RedirectLoopError` (a same-path chain
+  that never settles); `internal/mcpgateway` adds `TransportError` for an
+  unreachable gateway. `cmd/errors.go` maps them to exit codes — 0 ok, 1
+  generic, 2 usage (bad flags/args, an empty id, or API 400), 3 auth
+  (401/403), 4 not-found (404), 5 rate-limited (429), 6 C1 failed (API 5xx, or
+  a 200 with a non-JSON body), 7 tool-execution error (`mcp gateway call`
+  result has `isError: true`), 8 a system beyond C1 or the protocol layer
+  failed (an upstream connector failure, or a protocol-level JSON-RPC error).
+  Keep 6 and 8 distinct: 6 is worth retrying later, 8 usually is not. Wrap
+  client errors with `%w` so `errors.As` can classify them, and wrap a bad
   flag/arg combination in `&usageError{}` so it exits 2 — a bare `fmt.Errorf`
   silently becomes exit 1.
 - Retries (429/5xx + transport, idempotent-aware) live in the client

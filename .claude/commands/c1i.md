@@ -62,6 +62,7 @@ A C1 URL is required for all API commands, resolved in order: `--url` flag →
 | 8 | a system beyond C1, or the MCP protocol layer, failed (includes an unreachable gateway) |
 
 Typed internally (`client.APIError`, `client.AuthError`, `client.PathError`, `client.RedirectError`,
+`client.RedirectLoopError`,
 and package-`cmd` wrappers for tool and upstream failures), all classified in
 one place, `cmd/errors.go`.
 
