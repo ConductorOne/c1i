@@ -24,6 +24,29 @@ import (
 // own supported version in the initialize result.
 const protocolVersion = "2025-06-18"
 
+// The fixed, spec-required JSON-RPC methods this client ever sends. Adding a
+// new outbound method here (or anywhere else this client sends a method)
+// invalidates the "-32601 can't be caller-caused" invariant that
+// cmd/mcp_gateway.go's classifyGatewayError relies on to map "method not
+// found" to exit 8 instead of exit 2 (usage) — see TestOutboundRPCMethods in
+// gateway_test.go, which fails on any change to this set, and revisit that
+// mapping before touching either.
+const (
+	methodInitialize               = "initialize"
+	methodNotificationsInitialized = "notifications/initialized"
+	methodToolsList                = "tools/list"
+	methodToolsCall                = "tools/call"
+)
+
+// outboundRPCMethods is every method above, gathered so a test can assert
+// against the actual set the code sends rather than a hand-maintained copy.
+var outboundRPCMethods = []string{
+	methodInitialize,
+	methodNotificationsInitialized,
+	methodToolsList,
+	methodToolsCall,
+}
+
 // Client is a single-session MCP gateway client. Not safe for concurrent use;
 // each command builds one, runs its handshake, and discards it.
 type Client struct {
@@ -164,7 +187,7 @@ func (c *Client) Initialize(ctx context.Context) error {
 		"capabilities":    map[string]any{},
 		"clientInfo":      map[string]any{"name": "c1i", "version": "dev"},
 	}
-	if _, err := c.call(ctx, "initialize", params); err != nil {
+	if _, err := c.call(ctx, methodInitialize, params); err != nil {
 		return err
 	}
 	// A Mcp-Session-Id is optional per the MCP transport spec: a stateless
@@ -179,7 +202,7 @@ func (c *Client) Initialize(ctx context.Context) error {
 	// -> tools/* order this method enforces.
 	//
 	// notifications/initialized has no id and expects no result.
-	return c.notify(ctx, "notifications/initialized")
+	return c.notify(ctx, methodNotificationsInitialized)
 }
 
 // maxToolsListPages caps ListTools pagination as a backstop against a server
@@ -217,7 +240,7 @@ func (c *Client) ListTools(ctx context.Context) ([]Tool, error) {
 		if cursor != "" {
 			params["cursor"] = cursor
 		}
-		raw, err := c.call(ctx, "tools/list", params)
+		raw, err := c.call(ctx, methodToolsList, params)
 		if err != nil {
 			return nil, err
 		}
@@ -249,7 +272,7 @@ func (c *Client) CallTool(ctx context.Context, name string, arguments json.RawMe
 		args = json.RawMessage(`{}`)
 	}
 	params := map[string]any{"name": name, "arguments": args}
-	return c.call(ctx, "tools/call", params)
+	return c.call(ctx, methodToolsCall, params)
 }
 
 // call sends a JSON-RPC request expecting a response, and returns its result.

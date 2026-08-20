@@ -96,11 +96,15 @@ func newGatewayClient(cmd *cobra.Command) (*mcpgateway.Client, error) {
 //     that IS caller-caused. Wrapped in *usageError -> exit 2.
 //   - -32601 (method not found): this client only ever sends four fixed,
 //     spec-required methods (initialize, notifications/initialized,
-//     tools/list, tools/call), so a caller cannot trigger this themselves —
-//     it firing means a protocol-version mismatch or a bug in this CLI, not
-//     a bad invocation. Wrapped in *upstreamError -> exit 8 (moved off
-//     exitUsage, which would otherwise send the user hunting their own
-//     command line for a problem that isn't there).
+//     tools/list, tools/call — see mcpgateway's outboundRPCMethods), so a
+//     caller cannot trigger this themselves — it firing means a
+//     protocol-version mismatch or a bug in this CLI, not a bad invocation.
+//     Wrapped in *upstreamError -> exit 8 (moved off exitUsage, which would
+//     otherwise send the user hunting their own command line for a problem
+//     that isn't there). TestOutboundRPCMethods in
+//     internal/mcpgateway/gateway_test.go pins that method set: adding a new
+//     outbound method invalidates this premise and means this case needs
+//     revisiting.
 //   - -32700 (parse error) / -32600 (invalid request): protocol-level
 //     failures. Wrapped in *upstreamError -> exit 8.
 //   - a JSON-RPC code that is present and 0 (an upstream connector failure —

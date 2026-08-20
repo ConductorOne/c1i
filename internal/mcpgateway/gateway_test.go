@@ -8,6 +8,8 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
+	"sort"
 	"strconv"
 	"strings"
 	"testing"
@@ -930,3 +932,43 @@ func TestCallToolSurfacesZeroCodeRPCError(t *testing.T) {
 
 // strconvQuote renders s as a JSON string literal for embedding in a fixture.
 func strconvQuote(s string) string { return strconv.Quote(s) }
+
+// TestOutboundRPCMethods pins outboundRPCMethods (the actual list the request
+// builders in Initialize/ListTools/CallTool reference) to the four
+// spec-required methods this client is known to send today.
+//
+// This is not just a change-detector: cmd/mcp_gateway.go's classifyGatewayError
+// maps JSON-RPC -32601 ("method not found") to exit 8, not exit 2 (usage),
+// specifically BECAUSE this client only ever sends this fixed set of methods —
+// meaning a caller can never trigger -32601 themselves, so it firing must be a
+// protocol-version mismatch or a bug in this CLI, not a bad invocation (see the
+// comment on classifyGatewayError). If this test fails, it's because that set
+// just changed — e.g. a new outbound RPC method was added behind a flag or a
+// server capability. That invalidates the "caller can't cause -32601" premise
+// for the NEW method: a caller could now legitimately hit "method not found"
+// for it (e.g. talking to an older gateway that predates it), and reporting
+// that as exit 8 would send them chasing a CLI bug that isn't there. Before
+// updating this test, go revisit classifyGatewayError in cmd/mcp_gateway.go
+// and decide whether -32601 still belongs at exit 8 unconditionally, or needs
+// to be conditioned on which method it names.
+func TestOutboundRPCMethods(t *testing.T) {
+	want := []string{
+		methodInitialize,
+		methodNotificationsInitialized,
+		methodToolsList,
+		methodToolsCall,
+	}
+	got := append([]string(nil), outboundRPCMethods...)
+	sort.Strings(got)
+	sort.Strings(want)
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("outboundRPCMethods = %v, want %v\n\n"+
+			"This set changed. cmd/mcp_gateway.go's classifyGatewayError maps "+
+			"JSON-RPC -32601 (\"method not found\") to exit 8 on the premise that "+
+			"this client only ever sends a small fixed set of methods, so a "+
+			"caller can never cause -32601 themselves. Adding (or removing) an "+
+			"outbound method invalidates that premise for the changed method — "+
+			"revisit classifyGatewayError in cmd/mcp_gateway.go before updating "+
+			"this test's expected list.", got, want)
+	}
+}
