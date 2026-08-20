@@ -26,7 +26,7 @@ const (
 	exitAuth        = 3 // not authenticated, or API returned 401/403
 	exitNotFound    = 4 // API returned 404
 	exitRateLimited = 5 // API returned 429
-	exitServer      = 6 // API returned 5xx
+	exitServer      = 6 // C1 failed: 5xx, a redirect loop, or a 200 with a non-JSON body
 	exitToolError   = 7 // an MCP tool call completed (transport/protocol succeeded) but the tool itself reported isError
 	exitUpstream    = 8 // an upstream system, or the protocol layer itself, failed -- distinct from the C1 API failing (e.g. an unreachable MCP connector, or a JSON-RPC protocol-level error)
 )

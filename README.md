@@ -421,7 +421,7 @@ branch on without parsing text:
 | `3` | not authenticated, or API returned `401`/`403` |
 | `4` | API returned `404` (not found) |
 | `5` | API returned `429` (rate limited — back off and retry) |
-| `6` | C1 failed: the API returned `5xx`, or answered `200` with a body that isn't JSON |
+| `6` | C1 failed: the API returned `5xx`, a redirect chain never settled, or it answered `200` with a body that isn't JSON |
 | `7` | `mcp gateway call` completed, but the tool itself reported an error (`isError: true` in its result) |
 | `8` | a system beyond C1, or the MCP protocol layer, failed — an upstream connector was unreachable or errored, the gateway itself was unreachable (DNS failure, refused connection), or the gateway returned a protocol-level JSON-RPC error |
 
