@@ -6,9 +6,12 @@ CLI for the C1 (formerly ConductorOne) API. Go module: `github.com/ConductorOne/
 
 The product has been rebranded from **ConductorOne** to **C1**. Rules:
 
-- All user-facing text (help strings, CLI output, README) should use **"C1"**, not "ConductorOne".
-- The GitHub org remains `ConductorOne` — do not rename import paths or the module.
-- The legal entity is still "ConductorOne, Inc." — do not change LICENSE or copyright notices.
+- All user-facing text (help strings, CLI output, README) should use
+  **"C1"**, not "ConductorOne".
+- The GitHub org remains `ConductorOne` — do not rename import paths or the
+  module.
+- The legal entity is still "ConductorOne, Inc." — do not change LICENSE or
+  copyright notices.
 - Domain names (`conductorone.com`, `conductor.one`) are unchanged.
 
 ## Build & Test
@@ -32,14 +35,19 @@ never fails proves nothing.
 - `cmd/` — Cobra command definitions (one file per command)
 - `internal/client/` — Authenticated HTTP client
 - `internal/config/` — URL parsing and keychain service helpers
-- `internal/keychain/` — Credential storage. Three backends, in precedence order: `C1I_CLIENT_ID`/`C1I_CLIENT_SECRET` env vars (read-only), OS keyring (go-keyring), and a 0600 file under `os.UserConfigDir()` (fallback for headless Linux/CI/containers).
+- `internal/keychain/` — Credential storage. Three backends, in precedence
+  order: `C1I_CLIENT_ID`/`C1I_CLIENT_SECRET` env vars (read-only), OS keyring
+  (go-keyring), and a 0600 file under `os.UserConfigDir()` (fallback for
+  headless Linux/CI/containers).
 - `internal/login/` — OAuth device flow
-- `internal/mcpgateway/` — JSON-RPC/streamable-HTTP client for the MCP gateway (backs `mcp gateway call`/`list-tools`)
+- `internal/mcpgateway/` — JSON-RPC/streamable-HTTP client for the MCP
+  gateway (backs `mcp gateway call`/`list-tools`)
 - `internal/tokensource/` — OAuth2 token source
 
 ## Conventions
 
-- Output: NDJSON for list/search commands, pretty JSON for single-object commands, plain text for auth.
+- Output: NDJSON for list/search commands, pretty JSON for single-object
+  commands, plain text for auth.
 - All list commands auto-paginate. `--page-token` disables auto-pagination.
 - `docs` subcommands require no authentication.
 - **Keep comments concise.** Whenever you write or change a comment, say the
@@ -72,14 +80,17 @@ never fails proves nothing.
     (`--app-id`, `--connector-id` when it is a *parent*). Don't validate the
     positional id with `requireNonEmpty` — `cobra.ExactArgs` enforces presence;
     match the flat commands (`users get <user-id>`). **Presence is not
-    non-emptiness:** `ExactArgs(1)` accepts `""`, which used to render a
-    trailing empty path segment, get redirected to the collection endpoint,
-    and print the whole list with exit 0. The **shared REST client** now refuses
-    any request whose path has an empty segment (`client.PathError` → exit 2),
-    so a per-command check is still unnecessary *for commands built on it* — but
-    don't reason as though a positional id were guaranteed non-empty, and see
-    "Adding a new client/subsystem package" below if your command doesn't go
-    through that client.
+    non-emptiness:** `ExactArgs(1)` accepts `""`, `"/"`, or `"."`, and each
+    used to reach the collection endpoint and print the whole list with exit
+    0. The **shared REST client** now closes this two ways: it refuses any
+    request whose path has an empty segment up front (`client.PathError` →
+    exit 2, catches `""`), and it refuses to follow a 3xx whose target path
+    differs from the request's (`client.RedirectError` → exit 2, catches
+    `"/"`/`"."`, which the API 301s to the collection). A per-command check
+    is still unnecessary *for commands built on it* — but don't reason as
+    though a positional id were guaranteed non-empty or single-resource-
+    shaped, and see "Adding a new client/subsystem package" below if your
+    command doesn't go through that client.
   - A sub-resource or sub-list nested under **exactly one** owner id in the path
     (`/thing/{id}/…`) also takes that owner id positionally — e.g.
     `functions commits|usage|source <function-id>`,
@@ -120,29 +131,40 @@ never fails proves nothing.
 - **Output:** list rows go through the `newEmitter(...)`/`.Encode` emitter;
   single-object reads through `writeObject`; **mutation confirmations**
   (create/update/delete) through `writeRawObject` (never projected, so a
-  session-wide `C1I_FIELDS` can't blank a success message).
+  session-wide `C1I_FIELDS` can't blank a success message). A `--fields` that
+  matches no key anywhere in the result is a usage error (exit 2), checked
+  once via rootCmd's `PersistentPreRunE`/`PersistentPostRunE` — never add
+  either hook to a subcommand; it silently disables the check for that whole
+  subtree (`TestNoSubcommandDefinesOwnPersistentPostRunE`).
 - **Row values keep their real JSON types.** A row is `map[string]any`: put
   `bool` and numeric values in as-is, never `strconv.FormatBool`/`Itoa`. NDJSON
   exists here so agents can pipe to `jq`, and stringifying breaks that
   silently — every non-empty string is truthy, so `jq 'select(.stable)'`
   matches `"false"`, and `jq 'select(.tool_count > 5)'` compares strings.
-  This recurred across six row builders before it was caught.
+  This recurred across six row builders before it was caught. The same
+  truthiness trap applies to an absent value: an optional field with nothing
+  to report (e.g. `deleted_at` on a live policy) must be the untyped `nil`
+  (JSON `null`), never `""` — `jq 'select(.deleted_at)'` would otherwise
+  match every row (see `policyRow` in `cmd/policies.go`).
 - **Errors:** the client returns typed `client.APIError` (carries status),
-  `client.AuthError`, `client.PathError`, and `client.RedirectError` (a 3xx is
+  `client.AuthError`, `client.PathError`, `client.RedirectError` (a 3xx is
   followed only when the path is unchanged AND the host is in the same trust
   scope — a followed hop is re-authenticated, so an unrestricted follow would
-  leak the bearer token) and `client.RedirectLoopError` (a same-path chain
-  that never settles); `internal/mcpgateway` adds `TransportError` for an
-  unreachable gateway. `cmd/errors.go` maps them to exit codes — 0 ok, 1
-  generic, 2 usage (bad flags/args, an empty id, or API 400), 3 auth
-  (401/403), 4 not-found (404), 5 rate-limited (429), 6 C1 failed (API 5xx, or
-  a 200 with a non-JSON body), 7 tool-execution error (`mcp gateway call`
-  result has `isError: true`), 8 a system beyond C1 or the protocol layer
-  failed (an upstream connector failure, or a protocol-level JSON-RPC error).
-  Keep 6 and 8 distinct: 6 is worth retrying later, 8 usually is not. Wrap
-  client errors with `%w` so `errors.As` can classify them, and wrap a bad
-  flag/arg combination in `&usageError{}` so it exits 2 — a bare `fmt.Errorf`
-  silently becomes exit 1.
+  leak the bearer token), and `client.RedirectLoopError` (a same-path chain
+  that never settles in 5 hops); `internal/mcpgateway` adds `TransportError`
+  for an unreachable gateway. `cmd/errors.go` maps them — plus its own
+  `usageError`, `toolExecutionError`, `nonJSONResponseError`, and
+  `upstreamError` wrappers, for failures with no natural client-level type —
+  to exit codes: 0 ok, 1 generic, 2 usage (bad flags/args, an empty id, a
+  refused redirect, or API 400), 3 auth (401/403), 4 not-found (404), 5
+  rate-limited (429), 6 C1 failed (API 5xx, a redirect loop, or a 200 with a
+  non-JSON body), 7 tool-execution error (`mcp gateway call` result has
+  `isError: true`), 8 a system beyond C1 or the protocol layer failed (an
+  unreachable gateway, an upstream connector failure, or a protocol-level
+  JSON-RPC error). Keep 6 and 8 distinct: 6 is worth retrying later, 8
+  usually is not. Wrap client errors with `%w` so `errors.As` can classify
+  them, and wrap a bad flag/arg combination in `&usageError{}` so it exits 2
+  — a bare `fmt.Errorf` silently becomes exit 1.
 - Retries (429/5xx + transport, idempotent-aware) live in the client
   (`internal/client/client.go`); commands get them for free via `newClient`.
 - **Help text is a claim about the server.** Don't state a default, scope, or
@@ -178,11 +200,15 @@ a package, verify each of these against the new code:
   failed" distinct from "C1 failed".
 - **Escape ids in paths** (`client.Path`-style), use the shared output helpers in
   `cmd`, and honor the global flags where applicable.
-- **Reject an empty id before sending.** The shared client refuses a path with an
-  empty segment (`client.PathError` → exit 2); a package that issues its own
-  HTTP does not inherit that, and `cobra.ExactArgs` will hand you `""` happily.
-  An empty id appended to a collection path is the shape that produced the
-  silent "returned the whole list with exit 0" bug.
+- **Reject an empty id before sending, and don't trust a 3xx either.** The
+  shared client refuses a path with an empty segment (`client.PathError` →
+  exit 2) and refuses to follow a redirect whose target path differs from
+  the request's (`client.RedirectError` → exit 2) — a package that issues
+  its own HTTP inherits neither: `cobra.ExactArgs` will hand you `""`
+  happily, and Go's default `http.Client` follows a 3xx transparently. An id
+  of `""`, `"/"`, or `"."` reaching the collection endpoint by either path is
+  the shape that produced the silent "returned the whole list with exit 0"
+  bug.
 - **Honor `--debug` and `--max-retries`.** Both are documented as global, and
   both are currently silently inert on the packages that issue their own HTTP —
   so tracing shows nothing and transient failures aren't retried on those paths.
