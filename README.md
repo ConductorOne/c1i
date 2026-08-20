@@ -479,19 +479,27 @@ The `body` is embedded as JSON when the API returned JSON, otherwise as a string
 
 ## Configuration
 
-c1i requires a C1 **URL**. You can pass a full URL, a raw domain, or a legacy short tenant name.
+c1i requires a C1 **URL**.
 
-`--url` accepts a full URL or a bare domain, and normalizes it: the host is
-lower-cased (so `HTTPS://TENANT.C1EU.AI` and `tenant.c1eu.ai` resolve
-identically), and a protocol-relative `//tenant.example` is handled. A scheme
-other than `https`, or credentials embedded in the URL, are dropped with a
-warning on stderr rather than silently — the request still goes out over
-`https`, and an embedded password is never echoed.
+**c1i requires `https`.** A URL with any other scheme is rejected (exit `2`); it
+is not rewritten. Credentials embedded in the URL are dropped with a warning on
+stderr, and an embedded password is never echoed.
 
-Both `*.conductor.one` and `*.c1eu.ai` (EU) tenant domains are accepted. Note
-the bare short-name shortcut (`--url mycompany`) always expands to
-`mycompany.conductor.one`; an EU tenant must be given as a full host
-(`mycompany.c1eu.ai`).
+The scheme may be omitted (`tenant.c1eu.ai`), in which case `https` is assumed.
+The host is lower-cased, so `HTTPS://TENANT.C1EU.AI` and `tenant.c1eu.ai`
+resolve identically, and a protocol-relative `//tenant.example` is handled.
+
+Both `*.conductor.one` and `*.c1eu.ai` (EU) tenant domains are accepted — pass
+whichever your tenant uses. Only the shape of the URL is checked, never the
+domain, so a typo like `mycompany.conductor.on` is accepted here and surfaces
+later as an authentication failure.
+
+A bare name (`--url mycompany`) is rejected: with more than one tenant domain in
+use it is ambiguous, and silently expanding it to `mycompany.conductor.one` would
+point an EU tenant at the wrong region. The error names where the value came
+from, which matters when it is a stale entry in `~/.c1i.yaml` rather than
+something you just typed. A single-label host is fine as long as it arrives as a
+URL (`https://c1-staging`), which is how an internal-resolver name is reached.
 
 > If you previously authenticated with a mixed-case `--url`, your stored
 > credential was keyed by that exact casing and is no longer found now that the
@@ -507,10 +515,10 @@ Set it via (in order of precedence):
    url: https://mycompany.conductor.one
    ```
 
-All of these are equivalent:
+These are equivalent:
 - `--url https://mycompany.conductor.one`
 - `--url mycompany.conductor.one`
-- `--url mycompany`
+- `--url MYCOMPANY.CONDUCTOR.ONE` (the host is lower-cased)
 
 For credential storage, see [Credential sources](#credential-sources) below.
 

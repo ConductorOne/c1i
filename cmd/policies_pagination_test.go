@@ -90,7 +90,7 @@ func decodeNDJSONRows(t *testing.T, out string) []map[string]any {
 func runPoliciesListCmd(t *testing.T, srv *httptest.Server) (string, error) {
 	t.Helper()
 	stubPoliciesClient(t, srv)
-	t.Setenv("C1I_URL", srv.URL)
+	t.Setenv("C1I_URL", "https://example.invalid")
 	var out bytes.Buffer
 	policiesListCmd.SetOut(&out)
 	policiesListCmd.SetContext(context.Background())
@@ -101,7 +101,7 @@ func runPoliciesListCmd(t *testing.T, srv *httptest.Server) (string, error) {
 func runPoliciesSearchCmd(t *testing.T, srv *httptest.Server) (string, error) {
 	t.Helper()
 	stubPoliciesClient(t, srv)
-	t.Setenv("C1I_URL", srv.URL)
+	t.Setenv("C1I_URL", "https://example.invalid")
 	var out bytes.Buffer
 	policiesSearchCmd.SetOut(&out)
 	policiesSearchCmd.SetContext(context.Background())

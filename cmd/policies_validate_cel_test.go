@@ -24,7 +24,7 @@ func TestPoliciesValidateCelReturnsUsageErrorAndPrintsMarkers(t *testing.T) {
 	defer srv.Close()
 
 	stubPoliciesClient(t, srv)
-	t.Setenv("C1I_URL", srv.URL)
+	t.Setenv("C1I_URL", "https://example.invalid")
 
 	var out bytes.Buffer
 	policiesValidateCelCmd.SetOut(&out)
@@ -55,7 +55,7 @@ func TestPoliciesValidateCelEmptyMarkersIsValid(t *testing.T) {
 	defer srv.Close()
 
 	stubPoliciesClient(t, srv)
-	t.Setenv("C1I_URL", srv.URL)
+	t.Setenv("C1I_URL", "https://example.invalid")
 
 	var out bytes.Buffer
 	policiesValidateCelCmd.SetOut(&out)
@@ -82,7 +82,7 @@ func TestPoliciesValidateCelNullMarkersIsValid(t *testing.T) {
 	defer srv.Close()
 
 	stubPoliciesClient(t, srv)
-	t.Setenv("C1I_URL", srv.URL)
+	t.Setenv("C1I_URL", "https://example.invalid")
 
 	var out bytes.Buffer
 	policiesValidateCelCmd.SetOut(&out)

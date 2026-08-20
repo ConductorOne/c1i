@@ -362,7 +362,11 @@ func TestAPIDeleteBodyOptInDryRunPreviewsWithoutSending(t *testing.T) {
 
 	resetAPICmdFlags(t)
 	stubNewAPIClient(t, srv)
-	t.Setenv("C1I_URL", srv.URL)
+	// srv is a plain-http httptest.Server, but stubNewAPIClient bypasses
+	// GetBaseURL's return value entirely (it points the real client straight
+	// at srv.URL) -- this only needs to satisfy GetBaseURL's now-https-only
+	// parse, not name the real target.
+	t.Setenv("C1I_URL", "https://example.invalid")
 
 	origDryRun := viper.GetBool("dry_run")
 	viper.Set("dry_run", true)
@@ -576,10 +580,8 @@ func TestAPIPathWithLeadingSlashStillWorks(t *testing.T) {
 // TestAPINonJSON200BodyIsError is the red case: a 200 whose body isn't valid
 // JSON must be a reported error, not a silent success.
 func TestAPINonJSON200BodyIsError(t *testing.T) {
-	// NewTLSServer, not NewServer: internal/config.ParseURL unconditionally
-	// coerces the resolved base URL to "https://" (see Fix 2), so the fake
-	// requester (via GetBaseURL) always dials https regardless of C1I_URL's
-	// scheme.
+	// NewTLSServer, not NewServer: c1i requires https, so the fake requester
+	// (via GetBaseURL) always dials https.
 	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte("<!doctype html><html><body>not json</body></html>"))

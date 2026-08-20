@@ -87,7 +87,7 @@ func TestPoliciesUpdateSendsWrappedBody(t *testing.T) {
 	resetPoliciesUpdateCmdFlags(t)
 	stubPoliciesClient(t, srv)
 	withRealDryRun(t)
-	t.Setenv("C1I_URL", srv.URL)
+	t.Setenv("C1I_URL", "https://example.invalid")
 
 	_ = policiesUpdateCmd.Flags().Set("display-name", "new name")
 
@@ -136,7 +136,7 @@ func TestPoliciesUpdateDryRunPreviewsWrappedBodyWithoutSending(t *testing.T) {
 
 	resetPoliciesUpdateCmdFlags(t)
 	stubPoliciesClient(t, srv)
-	t.Setenv("C1I_URL", srv.URL)
+	t.Setenv("C1I_URL", "https://example.invalid")
 	orig := viper.GetBool("dry_run")
 	viper.Set("dry_run", true)
 	t.Cleanup(func() { viper.Set("dry_run", orig) })
@@ -172,7 +172,7 @@ func TestPoliciesUpdateGuardFiresOnEmptyStepsFile(t *testing.T) {
 	resetPoliciesUpdateCmdFlags(t)
 	stubPoliciesClient(t, srv)
 	withRealDryRun(t)
-	t.Setenv("C1I_URL", srv.URL)
+	t.Setenv("C1I_URL", "https://example.invalid")
 
 	stepsPath := writeTempJSON(t, "steps.json", `[]`)
 	_ = policiesUpdateCmd.Flags().Set("policy-type", "grant")
@@ -210,7 +210,7 @@ func TestPoliciesUpdateAllowDenyAllBypassesGuardAndSendsRequest(t *testing.T) {
 	resetPoliciesUpdateCmdFlags(t)
 	stubPoliciesClient(t, srv)
 	withRealDryRun(t)
-	t.Setenv("C1I_URL", srv.URL)
+	t.Setenv("C1I_URL", "https://example.invalid")
 
 	// The body must actually TRIP the guard, or this proves nothing about the
 	// bypass: policySteps is present (so the steps guard runs) but the
@@ -250,7 +250,7 @@ func TestPoliciesUpdateWithoutAllowDenyAllIsRefused(t *testing.T) {
 	resetPoliciesUpdateCmdFlags(t)
 	stubPoliciesClient(t, srv)
 	withRealDryRun(t)
-	t.Setenv("C1I_URL", srv.URL)
+	t.Setenv("C1I_URL", "https://example.invalid")
 
 	bodyPath := writeTempJSON(t, "body.json",
 		`{"policyType":"POLICY_TYPE_GRANT","policySteps":{"someOtherKey":{"steps":[{"accept":{}}]}}}`)
@@ -321,7 +321,7 @@ func TestPoliciesUpdateBodyFileResolvesPolicyTypeForAgentStepGuard(t *testing.T)
 	resetPoliciesUpdateCmdFlags(t)
 	stubPoliciesClient(t, srv)
 	withRealDryRun(t)
-	t.Setenv("C1I_URL", srv.URL)
+	t.Setenv("C1I_URL", "https://example.invalid")
 
 	// No top-level "policyType" — the omission this defect is about. Agent
 	// approval steps are only allowed in grant/certify policies; the
@@ -371,7 +371,7 @@ func TestPoliciesUpdateBodyFileWithoutPolicyStepsNeverFetchesPolicyType(t *testi
 	resetPoliciesUpdateCmdFlags(t)
 	stubPoliciesClient(t, srv)
 	withRealDryRun(t)
-	t.Setenv("C1I_URL", srv.URL)
+	t.Setenv("C1I_URL", "https://example.invalid")
 
 	bodyPath := writeTempJSON(t, "body.json", `{"displayName":"new name"}`)
 	_ = policiesUpdateCmd.Flags().Set("body-file", bodyPath)

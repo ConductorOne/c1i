@@ -146,7 +146,7 @@ func TestRequestsCreateGrantDefaultsUserIDToSelf(t *testing.T) {
 
 	resetGrantCmdFlags(t)
 	stubNewGrantClient(t, srv)
-	t.Setenv("C1I_URL", srv.URL)
+	t.Setenv("C1I_URL", "https://example.invalid")
 
 	origDryRun := viper.GetBool("dry_run")
 	viper.Set("dry_run", false)
@@ -201,7 +201,7 @@ func TestRequestsCreateGrantExplicitUserIDSkipsSelfResolution(t *testing.T) {
 
 	resetGrantCmdFlags(t)
 	stubNewGrantClient(t, srv)
-	t.Setenv("C1I_URL", srv.URL)
+	t.Setenv("C1I_URL", "https://example.invalid")
 
 	origDryRun := viper.GetBool("dry_run")
 	viper.Set("dry_run", false)
@@ -258,7 +258,7 @@ func TestRequestsCreateGrantDryRunPreviewsResolvedSelf(t *testing.T) {
 
 	resetGrantCmdFlags(t)
 	stubNewGrantClient(t, srv)
-	t.Setenv("C1I_URL", srv.URL)
+	t.Setenv("C1I_URL", "https://example.invalid")
 
 	origDryRun := viper.GetBool("dry_run")
 	viper.Set("dry_run", true)
@@ -310,7 +310,7 @@ func TestRequestsCreateGrantDryRunExplicitUserIDSkipsSelfResolution(t *testing.T
 
 	resetGrantCmdFlags(t)
 	stubNewGrantClient(t, srv)
-	t.Setenv("C1I_URL", srv.URL)
+	t.Setenv("C1I_URL", "https://example.invalid")
 
 	origDryRun := viper.GetBool("dry_run")
 	viper.Set("dry_run", true)
@@ -410,7 +410,7 @@ func TestRequestsCreateGrantDryRunIntrospectServerFailureClassifies(t *testing.T
 		return client.NewForTesting(srv.URL, srv.Client(), client.WithMaxRetries(0)), nil
 	}
 	t.Cleanup(func() { newGrantClient = origNewGrantClient })
-	t.Setenv("C1I_URL", srv.URL)
+	t.Setenv("C1I_URL", "https://example.invalid")
 
 	origDryRun := viper.GetBool("dry_run")
 	viper.Set("dry_run", true)
@@ -458,7 +458,7 @@ func TestRequestsCreateGrantDryRunIntrospectNetworkFailureExitsGenerically(t *te
 		return client.NewForTesting(deadURL, http.DefaultClient), nil
 	}
 	t.Cleanup(func() { newGrantClient = origNewGrantClient })
-	t.Setenv("C1I_URL", deadURL)
+	t.Setenv("C1I_URL", "https://example.invalid")
 
 	origDryRun := viper.GetBool("dry_run")
 	viper.Set("dry_run", true)
@@ -591,7 +591,7 @@ func TestRequestsCreateRevokeDefaultsUserIDToSelf(t *testing.T) {
 
 	resetRevokeCmdFlags(t)
 	stubNewRevokeClient(t, srv)
-	t.Setenv("C1I_URL", srv.URL)
+	t.Setenv("C1I_URL", "https://example.invalid")
 
 	origDryRun := viper.GetBool("dry_run")
 	viper.Set("dry_run", false)
@@ -646,7 +646,7 @@ func TestRequestsCreateRevokeExplicitUserIDSkipsSelfResolution(t *testing.T) {
 
 	resetRevokeCmdFlags(t)
 	stubNewRevokeClient(t, srv)
-	t.Setenv("C1I_URL", srv.URL)
+	t.Setenv("C1I_URL", "https://example.invalid")
 
 	origDryRun := viper.GetBool("dry_run")
 	viper.Set("dry_run", false)
@@ -696,7 +696,7 @@ func TestRequestsCreateRevokeDryRunPreviewsResolvedSelf(t *testing.T) {
 
 	resetRevokeCmdFlags(t)
 	stubNewRevokeClient(t, srv)
-	t.Setenv("C1I_URL", srv.URL)
+	t.Setenv("C1I_URL", "https://example.invalid")
 
 	origDryRun := viper.GetBool("dry_run")
 	viper.Set("dry_run", true)
@@ -746,7 +746,7 @@ func TestRequestsCreateRevokeDryRunExplicitUserIDSkipsSelfResolution(t *testing.
 
 	resetRevokeCmdFlags(t)
 	stubNewRevokeClient(t, srv)
-	t.Setenv("C1I_URL", srv.URL)
+	t.Setenv("C1I_URL", "https://example.invalid")
 
 	origDryRun := viper.GetBool("dry_run")
 	viper.Set("dry_run", true)
@@ -832,7 +832,7 @@ func TestRequestsCreateRevokeDryRunIntrospectServerFailureClassifies(t *testing.
 		return client.NewForTesting(srv.URL, srv.Client(), client.WithMaxRetries(0)), nil
 	}
 	t.Cleanup(func() { newRevokeClient = origNewRevokeClient })
-	t.Setenv("C1I_URL", srv.URL)
+	t.Setenv("C1I_URL", "https://example.invalid")
 
 	origDryRun := viper.GetBool("dry_run")
 	viper.Set("dry_run", true)
@@ -871,7 +871,7 @@ func TestRequestsCreateRevokeDryRunIntrospectNetworkFailureExitsGenerically(t *t
 		return client.NewForTesting(deadURL, http.DefaultClient), nil
 	}
 	t.Cleanup(func() { newRevokeClient = origNewRevokeClient })
-	t.Setenv("C1I_URL", deadURL)
+	t.Setenv("C1I_URL", "https://example.invalid")
 
 	origDryRun := viper.GetBool("dry_run")
 	viper.Set("dry_run", true)

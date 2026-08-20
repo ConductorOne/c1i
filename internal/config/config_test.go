@@ -13,11 +13,13 @@ func TestParseURLBasicNormalization(t *testing.T) {
 	}{
 		{"full URL with trailing slash", "https://acme.conductor.one/", "https://acme.conductor.one"},
 		{"raw domain", "acme.conductor.one", "https://acme.conductor.one"},
-		{"legacy short name", "acme", "https://acme.conductor.one"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			got, warnings := ParseURL(tc.input)
+			got, warnings, err := ParseURL(tc.input)
+			if err != nil {
+				t.Fatalf("ParseURL(%q) error = %v, want nil", tc.input, err)
+			}
 			if got != tc.want {
 				t.Errorf("ParseURL(%q) = %q, want %q", tc.input, got, tc.want)
 			}
@@ -28,9 +30,9 @@ func TestParseURLBasicNormalization(t *testing.T) {
 	}
 }
 
-// TestParseURLCaseInsensitiveHost is sub-issue (c), the priority bug: a
-// legitimate but differently-cased --url must not be rejected. Hosts are
-// case-insensitive (DNS/HTTP), but the keychain key built from the host
+// TestParseURLCaseInsensitiveHost: a legitimate but differently-cased --url
+// must not be rejected. Hosts are case-insensitive (DNS/HTTP), but the
+// keychain key built from the host
 // (KeychainService) is not, so a mixed-case host that survives unchanged
 // through ParseURL spuriously fails "no credentials found" against a
 // lower-case key stored at login.
@@ -39,8 +41,8 @@ func TestParseURLCaseInsensitiveHost(t *testing.T) {
 		input string
 		want  string
 	}{
-		{"HTTPS://LEET.CONDUCTOR.ONE", "https://leet.conductor.one"},
-		{"LEET.CONDUCTOR.ONE", "https://leet.conductor.one"},
+		{"HTTPS://ACME.CONDUCTOR.ONE", "https://acme.conductor.one"},
+		{"ACME.CONDUCTOR.ONE", "https://acme.conductor.one"},
 		// A second tenant domain family (EU) must normalize identically --
 		// this fix is about URL shape, never about which domain a host
 		// belongs to.
@@ -48,7 +50,10 @@ func TestParseURLCaseInsensitiveHost(t *testing.T) {
 		{"ACME.C1EU.AI", "https://acme.c1eu.ai"},
 	}
 	for _, tc := range cases {
-		got, warnings := ParseURL(tc.input)
+		got, warnings, err := ParseURL(tc.input)
+		if err != nil {
+			t.Fatalf("ParseURL(%q) error = %v, want nil", tc.input, err)
+		}
 		if got != tc.want {
 			t.Errorf("ParseURL(%q) = %q, want %q", tc.input, got, tc.want)
 		}
@@ -58,56 +63,130 @@ func TestParseURLCaseInsensitiveHost(t *testing.T) {
 	}
 }
 
-// TestParseURLBareShortNameCaseUntouched is a snapshot, not a requirement:
-// it pins the bare-short-name branch's PRE-EXISTING case-sensitivity defect
-// (unlike every other branch, its host is NOT lower-cased, so
-// `ParseURL("ACME")` still produces a keychain key case-mismatch) exactly as
-// found, because this fix was told not to touch that branch. The branch is
-// already slated for retirement (a bare short name becoming a usage error,
-// once there's more than one tenant domain family a short name could mean)
-// -- this test goes with it when that lands; don't "fix" the inconsistency
-// here in isolation.
-func TestParseURLBareShortNameCaseUntouched(t *testing.T) {
-	got, warnings := ParseURL("ACME")
-	if want := "https://ACME.conductor.one"; got != want {
-		t.Errorf("ParseURL(%q) = %q, want %q (case preserved, unchanged)", "ACME", got, want)
-	}
-	if len(warnings) != 0 {
-		t.Errorf("warnings = %v, want none", warnings)
+// TestParseURLBareTokenIsError covers the retired shortcut: a bare token (no
+// "://" and no ".") used to silently expand to "<input>.conductor.one",
+// which is now ambiguous with *.c1eu.ai. It must be refused, with a message
+// that is actionable on its own: it names the rejected input, shows both
+// domain families, and calls out that local development needs an explicit
+// scheme.
+func TestParseURLBareTokenIsError(t *testing.T) {
+	for _, in := range []string{"acme", "mycompany", "localhost", "localhost:8080"} {
+		t.Run(in, func(t *testing.T) {
+			got, warnings, err := ParseURL(in)
+			if err == nil {
+				t.Fatalf("ParseURL(%q) error = nil, want an error (bare short names are retired)", in)
+			}
+			if got != "" {
+				t.Errorf("ParseURL(%q) result = %q, want empty on error", in, got)
+			}
+			if len(warnings) != 0 {
+				t.Errorf("ParseURL(%q) warnings = %v, want none on error", in, warnings)
+			}
+			msg := err.Error()
+			for _, want := range []string{in, "conductor.one", "c1eu.ai"} {
+				if !strings.Contains(msg, want) {
+					t.Errorf("ParseURL(%q) error = %q, want it to mention %q", in, msg, want)
+				}
+			}
+			// The bare-name error used to close with local-dev advice to use
+			// an explicit http:// scheme -- that advice never worked (http
+			// was silently coerced to https) and is now plainly wrong (http
+			// is rejected outright). It must not reappear.
+			if strings.Contains(msg, "http") {
+				t.Errorf("ParseURL(%q) error = %q, must not mention http (no supported plain-http path)", in, msg)
+			}
+		})
 	}
 }
 
-// TestParseURLProtocolRelative is sub-issue (b): "//host" is a plausible
-// typo for "https://host". Before the fix it missed the "://" fast path and
+// TestParseURLIPv4LoopbackStillWorks: unlike "localhost", "127.0.0.1" and
+// "127.0.0.1:8080" contain a dot, so they already take the raw-domain
+// branch today and must be unaffected by retiring the bare-token branch.
+func TestParseURLIPv4LoopbackStillWorks(t *testing.T) {
+	cases := map[string]string{
+		"127.0.0.1":      "https://127.0.0.1",
+		"127.0.0.1:8080": "https://127.0.0.1:8080",
+	}
+	for in, want := range cases {
+		got, warnings, err := ParseURL(in)
+		if err != nil {
+			t.Fatalf("ParseURL(%q) error = %v, want nil", in, err)
+		}
+		if got != want {
+			t.Errorf("ParseURL(%q) = %q, want %q", in, got, want)
+		}
+		if len(warnings) != 0 {
+			t.Errorf("ParseURL(%q) warnings = %v, want none", in, warnings)
+		}
+	}
+}
+
+// TestParseURLHTTPSchemeIsRejected: c1i requires https, full stop -- an
+// explicit http:// scheme is no longer a working local-dev escape hatch (it
+// used to be silently coerced to https; that coercion is gone) and there is
+// no loopback/local exception.
+func TestParseURLHTTPSchemeIsRejected(t *testing.T) {
+	got, warnings, err := ParseURL("http://localhost:8080")
+	if err == nil {
+		t.Fatalf("ParseURL(%q) error = nil, want an error (c1i requires https)", "http://localhost:8080")
+	}
+	if got != "" {
+		t.Errorf("ParseURL(%q) result = %q, want empty on error", "http://localhost:8080", got)
+	}
+	if len(warnings) != 0 {
+		t.Errorf("ParseURL(%q) warnings = %v, want none on error", "http://localhost:8080", warnings)
+	}
+	if !strings.Contains(err.Error(), "https") {
+		t.Errorf("ParseURL(%q) error = %q, want it to name the https requirement", "http://localhost:8080", err.Error())
+	}
+}
+
+// TestParseURLProtocolRelative: "//host" is a plausible typo for
+// "https://host". Before the fix it missed the "://" fast path and
 // fell through to the raw-domain branch, which prepended "https://" onto the
 // literal leading "//" and produced "https:////host".
 func TestParseURLProtocolRelative(t *testing.T) {
-	got, _ := ParseURL("//leet.conductor.one")
-	if want := "https://leet.conductor.one"; got != want {
-		t.Errorf("ParseURL(%q) = %q, want %q", "//leet.conductor.one", got, want)
+	got, _, err := ParseURL("//acme.conductor.one")
+	if err != nil {
+		t.Fatalf("ParseURL(%q) error = %v, want nil", "//acme.conductor.one", err)
+	}
+	if want := "https://acme.conductor.one"; got != want {
+		t.Errorf("ParseURL(%q) = %q, want %q", "//acme.conductor.one", got, want)
 	}
 }
 
-// TestParseURLNonHTTPSSchemeWarns is sub-issue (a), part 1: a non-https
-// scheme is rewritten to https (a hard reject would turn a typo into a hard
-// failure with no way to inspect what was actually sent), but silently is
-// no longer acceptable -- the caller must be told.
-func TestParseURLNonHTTPSSchemeWarns(t *testing.T) {
-	got, warnings := ParseURL("ftp://host.example.com")
-	if want := "https://host.example.com"; got != want {
-		t.Errorf("ParseURL(%q) = %q, want %q", "ftp://host.example.com", got, want)
-	}
-	if len(warnings) != 1 || !strings.Contains(warnings[0], "ftp") {
-		t.Errorf("warnings = %v, want one mentioning the rejected scheme", warnings)
+// TestParseURLNonHTTPSSchemeIsError: c1i requires https -- a non-https
+// scheme (this used to be silently rewritten to https with a warning) is
+// now a hard error naming the https requirement, not a silent upgrade.
+func TestParseURLNonHTTPSSchemeIsError(t *testing.T) {
+	for _, in := range []string{"http://host.example.com", "ftp://host.example.com"} {
+		t.Run(in, func(t *testing.T) {
+			got, warnings, err := ParseURL(in)
+			if err == nil {
+				t.Fatalf("ParseURL(%q) error = nil, want an error (c1i requires https)", in)
+			}
+			if got != "" {
+				t.Errorf("ParseURL(%q) result = %q, want empty on error", in, got)
+			}
+			if len(warnings) != 0 {
+				t.Errorf("ParseURL(%q) warnings = %v, want none on error", in, warnings)
+			}
+			if !strings.Contains(err.Error(), "https") {
+				t.Errorf("ParseURL(%q) error = %q, want it to name the https requirement", in, err.Error())
+			}
+		})
 	}
 }
 
-// TestParseURLDropsEmbeddedCredentialsWithWarning is sub-issue (a), part 2:
-// embedded userinfo is dropped (unchanged -- c1i has no way to send HTTP
-// Basic credentials through its OAuth-based client), but that drop must not
-// be silent, and the warning must not leak the password.
+// TestParseURLDropsEmbeddedCredentialsWithWarning: embedded userinfo is
+// dropped (c1i has no way to send HTTP Basic credentials through its
+// OAuth-based client), but that drop must not be silent, and the warning must
+// not leak the password.
 func TestParseURLDropsEmbeddedCredentialsWithWarning(t *testing.T) {
-	got, warnings := ParseURL("https://user:hunter2@host.example.com")
+	got, warnings, err := ParseURL("https://user:hunter2@host.example.com")
+	if err != nil {
+		t.Fatalf("ParseURL(%q) error = %v, want nil", "https://user:hunter2@host.example.com", err)
+	}
 	if want := "https://host.example.com"; got != want {
 		t.Errorf("ParseURL(%q) = %q, want %q", "https://user:hunter2@host.example.com", got, want)
 	}
@@ -121,19 +200,21 @@ func TestParseURLDropsEmbeddedCredentialsWithWarning(t *testing.T) {
 	}
 }
 
-// TestParseURLDropsEmbeddedCredentialsSchemeless is GAP 1 from adversarial
-// review: the scheme-having branch above drops/warns about embedded
-// userinfo, but a scheme-LESS input ("user:pass@host", the ordinary mistake
+// TestParseURLDropsEmbeddedCredentialsSchemeless: the scheme-having branch
+// above drops/warns about embedded userinfo, but a scheme-LESS input ("user:pass@host", the ordinary mistake
 // of pasting a URL and forgetting "https://") took the raw-domain branch
 // untouched -- nothing dropped, nothing warned, and the password rode
 // straight into the base URL c1i then sends on every request (visible in
 // --debug's request trace and in a failed-auth error). Reproduced live:
-// "c1i users list --url \"user:hunter2@leet.conductor.one\" --debug" printed
+// "c1i users list --url \"user:hunter2@acme.conductor.one\" --debug" printed
 // the password three times in stderr before this fix.
 func TestParseURLDropsEmbeddedCredentialsSchemeless(t *testing.T) {
-	got, warnings := ParseURL("user:hunter2@leet.conductor.one")
-	if want := "https://leet.conductor.one"; got != want {
-		t.Errorf("ParseURL(%q) = %q, want %q", "user:hunter2@leet.conductor.one", got, want)
+	got, warnings, err := ParseURL("user:hunter2@acme.conductor.one")
+	if err != nil {
+		t.Fatalf("ParseURL(%q) error = %v, want nil", "user:hunter2@acme.conductor.one", err)
+	}
+	if want := "https://acme.conductor.one"; got != want {
+		t.Errorf("ParseURL(%q) = %q, want %q", "user:hunter2@acme.conductor.one", got, want)
 	}
 	if strings.Contains(got, "hunter2") {
 		t.Errorf("result leaked the password: %q", got)
@@ -151,11 +232,102 @@ func TestParseURLDropsEmbeddedCredentialsSchemeless(t *testing.T) {
 // TestKeychainServiceLowerCasesHost pins that KeychainService itself is also
 // insensitive to input case, independent of whether the caller already
 // normalized via ParseURL -- defense in depth so a bypassed ParseURL call
-// can't silently reintroduce sub-issue (c).
+// can't silently reintroduce the case-sensitivity bug.
 func TestKeychainServiceLowerCasesHost(t *testing.T) {
-	got := KeychainService("https://LEET.CONDUCTOR.ONE")
-	want := "c1i/leet.conductor.one"
+	got := KeychainService("https://ACME.CONDUCTOR.ONE")
+	want := "c1i/acme.conductor.one"
 	if got != want {
 		t.Errorf("KeychainService = %q, want %q", got, want)
+	}
+}
+
+// TestLegacyKeychainCredentialNotOrphanedByShortcutRetirement: a
+// user who previously ran "--url acme" (when that expanded to
+// "https://acme.conductor.one") and stored a credential must still resolve
+// it once the shortcut is retired and they type the full host instead.
+// Both KeychainService and LegacyKeychainService derive their key from the
+// RESOLVED base URL, never from what the user originally typed, so they are
+// unaffected by ParseURL's bare-token branch being removed -- this pins that
+// invariant.
+func TestLegacyKeychainCredentialNotOrphanedByShortcutRetirement(t *testing.T) {
+	// What the old shortcut used to resolve "acme" to.
+	oldExpansion := "https://acme.conductor.one"
+	// What a user must now type instead.
+	newFull, _, err := ParseURL("acme.conductor.one")
+	if err != nil {
+		t.Fatalf("ParseURL(%q) error = %v, want nil", "acme.conductor.one", err)
+	}
+	if newFull != oldExpansion {
+		t.Fatalf("ParseURL(%q) = %q, want %q (must match what the retired shortcut used to produce)", "acme.conductor.one", newFull, oldExpansion)
+	}
+	if got, want := KeychainService(newFull), KeychainService(oldExpansion); got != want {
+		t.Errorf("KeychainService(%q) = %q, want %q (same as the old shortcut's expansion)", newFull, got, want)
+	}
+	if got, want := LegacyKeychainService(newFull), LegacyKeychainService(oldExpansion); got != want {
+		t.Errorf("LegacyKeychainService(%q) = %q, want %q (same as the old shortcut's expansion)", newFull, got, want)
+	}
+}
+
+// TestParseURLBareTokenErrorDoesNotEchoPassword: the bare-token rejection
+// echoes the offending input, and a scheme-less "user:pass@acme" has no dot,
+// so it lands here rather than on the parsed path that scrubs userinfo.
+// Echoing it verbatim printed the password to stderr on every source.
+func TestParseURLBareTokenErrorDoesNotEchoPassword(t *testing.T) {
+	for _, input := range []string{"user:hunter2@acme", "user:hunter2@localhost", "hunter2@acme"} {
+		_, _, err := ParseURL(input)
+		if err == nil {
+			t.Fatalf("ParseURL(%q) error = nil, want a bare-token error", input)
+		}
+		if strings.Contains(err.Error(), "hunter2") {
+			t.Errorf("ParseURL(%q) error echoes the password: %v", input, err)
+		}
+	}
+}
+
+// TestParseURLSingleLabelHostWithSchemeAccepted: a single-label host is
+// rejected only as a bare token. Given a scheme it is used as typed -- no
+// domain is guessed -- which is how an internal-resolver name is reached.
+// Pinned because the function's rejection of "c1-staging" invites "fixing"
+// this into a rejection too.
+func TestParseURLSingleLabelHostWithSchemeAccepted(t *testing.T) {
+	cases := []struct{ in, want string }{
+		{"https://c1-staging", "https://c1-staging"},
+		{"//c1-staging", "https://c1-staging"},
+		{"https://C1-STAGING", "https://c1-staging"},
+		{"https://localhost:8443", "https://localhost:8443"},
+	}
+	for _, c := range cases {
+		got, _, err := ParseURL(c.in)
+		if err != nil {
+			t.Errorf("ParseURL(%q) error = %v, want nil", c.in, err)
+			continue
+		}
+		if got != c.want {
+			t.Errorf("ParseURL(%q) = %q, want %q", c.in, got, c.want)
+		}
+	}
+}
+
+// TestParseURLDegeneratePathWarnsWhenDroppingCredentials: when url.Parse fails
+// or finds no host, ParseURL falls back to the literal input and strips
+// userinfo. The strip was silent, which contradicted both this function's
+// contract and the changelog: a dropped credential must always be reported.
+func TestParseURLDegeneratePathWarnsWhenDroppingCredentials(t *testing.T) {
+	for _, input := range []string{"https://user:hunter2@", "https://user:hunter2@ac\x00me"} {
+		got, warnings, err := ParseURL(input)
+		if err != nil {
+			t.Fatalf("ParseURL(%q) error = %v, want nil", input, err)
+		}
+		if len(warnings) == 0 {
+			t.Errorf("ParseURL(%q) dropped credentials silently, want a warning", input)
+		}
+		for _, w := range warnings {
+			if strings.Contains(w, "hunter2") {
+				t.Errorf("ParseURL(%q) warning echoes the password: %q", input, w)
+			}
+		}
+		if strings.Contains(got, "hunter2") {
+			t.Errorf("ParseURL(%q) = %q, still carries the password", input, got)
+		}
 	}
 }

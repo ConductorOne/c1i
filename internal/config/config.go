@@ -15,18 +15,28 @@ import (
 //   - Full URL: "https://acme.conductor.one/" → "https://acme.conductor.one"
 //   - Protocol-relative: "//acme.conductor.one" → "https://acme.conductor.one"
 //   - Raw domain: "ACME.conductor.one" → "https://acme.conductor.one"
-//   - Legacy short name: "acme" → "https://acme.conductor.one" (case
-//     preserved as typed -- see the dedicated comment at that branch below)
 //
-// It also returns human-readable warnings for anything silently altered: a
-// non-https scheme (rewritten to https rather than rejected -- a typo
-// shouldn't turn into a hard failure with no server to inspect) and any
+// A single-label host is accepted when it arrives as a URL
+// ("https://c1-staging", "//c1-staging") -- no domain is guessed, the host is
+// used as typed, which is how an internal-resolver name is reached. It is only
+// a bare token (no "://" and no ".", e.g. "acme" or "localhost") that is
+// rejected: with more than one valid tenant domain family, expanding it to
+// one of them by default is a silent wrong-tenant risk. err is non-nil only
+// for this case, and the caller should name where input came from (--url
+// flag, C1I_URL, config file, interactive prompt) in how it surfaces err --
+// see GetBaseURLWithSource.
+//
+// A scheme other than https (e.g. "http://", "ftp://") is rejected outright
+// -- c1i requires https, full stop, no silent upgrade and no exception for
+// loopback/local hosts.
+//
+// It also returns human-readable warnings for anything silently altered:
 // embedded userinfo. Userinfo is dropped (c1i authenticates via OAuth
 // device flow or a keychain-stored client_id/client_secret, never HTTP
 // Basic in the URL) and never echoed back, password included, in the
 // warning -- true for a scheme-less "user:pass@host" too (an ordinary
 // paste-and-forgot-the-scheme mistake), not only when "://" is present.
-func ParseURL(input string) (result string, warnings []string) {
+func ParseURL(input string) (result string, warnings []string, err error) {
 	input = strings.TrimSpace(input)
 
 	// "//host" is a plausible typo for "https://host" but has no "://", so it
@@ -49,37 +59,46 @@ func ParseURL(input string) (result string, warnings []string) {
 	if strings.Contains(parseable, "://") {
 		u, err := url.Parse(parseable)
 		if err == nil && u.Host != "" {
+			if hasScheme && !strings.EqualFold(u.Scheme, "https") {
+				return "", nil, fmt.Errorf("c1i requires https; got scheme %q", u.Scheme)
+			}
 			if u.User != nil {
 				warnings = append(warnings, fmt.Sprintf(
-					"--url embedded credentials (user %q) were dropped; c1i authenticates via OAuth device flow or a keychain-stored client_id/client_secret, never via the URL",
-					u.User.Username()))
+					"--url embedded credentials (user %q) were dropped; %s",
+					u.User.Username(), credentialsNotInURL))
 			}
-			if hasScheme && !strings.EqualFold(u.Scheme, "https") {
-				warnings = append(warnings, fmt.Sprintf("--url scheme %q is not supported; using https instead", u.Scheme))
-			}
-			return "https://" + strings.ToLower(u.Host), warnings
+			return "https://" + strings.ToLower(u.Host), warnings, nil
 		}
 		// url.Parse failed, or found no host: fall back to the literal input,
 		// lower-cased -- but strip anything before a trailing "@" first so a
 		// malformed "user:pass@" fragment still can't echo a password even
-		// on this degenerate path.
-		return "https://" + strings.ToLower(withoutUserinfoFallback(input)), warnings
+		// on this degenerate path. There is no parsed URL to name the user
+		// from, but the drop must still not be silent.
+		stripped := withoutUserinfo(input)
+		if stripped != input {
+			warnings = append(warnings, "--url embedded credentials were dropped; "+credentialsNotInURL)
+		}
+		return "https://" + strings.ToLower(stripped), warnings, nil
 	}
-	if strings.Contains(input, ".") {
-		return "https://" + strings.ToLower(input), warnings
-	}
-	// Bare short name ("acme" -> "acme.conductor.one"): deliberately NOT
-	// lower-cased. With more than one tenant domain family now valid
-	// (*.conductor.one, *.c1eu.ai, ...), which family a bare short name
-	// expands to is a genuinely open question this fix does not decide --
-	// left exactly as-is, case included, pending that separate decision.
-	return fmt.Sprintf("https://%s.conductor.one", input), warnings
+	// Bare token, e.g. "acme" or "localhost": retired. It used to expand to
+	// "<input>.conductor.one", but with a second tenant domain family
+	// (*.c1eu.ai) now valid, guessing which one is a silent wrong-tenant
+	// risk -- an EU customer typing "acme" would land on a US host.
+	return "", nil, fmt.Errorf(
+		"url %q is not a full host: c1i no longer expands a bare name to a domain; "+
+			"pass a full host such as acme.conductor.one or acme.c1eu.ai",
+		withoutUserinfo(input))
 }
 
-// withoutUserinfoFallback strips a "user:pass@" prefix (if any) from s. Only
-// used on ParseURL's rare url.Parse-failed/no-host path, as a last line of
-// defense so that path can't echo a password either.
-func withoutUserinfoFallback(s string) string {
+// credentialsNotInURL is shared by both credential-dropping warnings so they
+// cannot drift apart.
+const credentialsNotInURL = "c1i authenticates via OAuth device flow or a keychain-stored client_id/client_secret, never via the URL"
+
+// withoutUserinfo strips a "user:pass@" prefix (if any) from s. Applied on
+// every ParseURL path that echoes or returns raw input, so none of them can
+// print a password -- including the error paths, where there is no parsed URL
+// to take a host from.
+func withoutUserinfo(s string) string {
 	if i := strings.LastIndex(s, "@"); i != -1 {
 		return s[i+1:]
 	}

@@ -122,6 +122,38 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- **BREAKING — c1i requires `https`; another scheme is rejected, not rewritten.**
+  A non-`https` URL used to be silently rewritten to `https://<host>` with a
+  warning, so a caller who typed `http://` got a request they did not ask for.
+  It now exits `2` naming the scheme. There is no plain-`http` path and no
+  override — a bearer token is never sent over a scheme the caller did not ask
+  for.
+  This also removes advice that never worked: the bare-name error previously
+  suggested an explicit scheme "e.g. `http://localhost:8080`" for local
+  development, which the rewrite had always defeated.
+  A single-label host still works with an explicit scheme (`https://c1-staging`),
+  which is how an internal-resolver hostname is reached.
+
+- **BREAKING — a bare tenant name is no longer expanded to a domain.**
+  This changes exit codes for anything branching on them: `--url mycompany`
+  used to become `https://mycompany.conductor.one` and proceed, so a script saw
+  exit `0` when that guess happened to work — or a downstream `3`/`4`/`6` when it
+  did not. It now exits `2` deterministically, before any request is sent.
+  With a second tenant domain family in use (`*.c1eu.ai`, for EU tenants) the
+  expansion was ambiguous, and it silently pointed an EU tenant at a US host —
+  a confusing auth failure, or worse, a different real tenant. The error names
+  where the value came from: the `--url` flag, `C1I_URL`, `~/.c1i.yaml`, or the
+  interactive login prompt. That matters most for a stale entry in the config
+  file, where nothing on the command line mentions it. Pass a full host instead
+  — `mycompany.conductor.one` or `mycompany.c1eu.ai`. A bare `localhost` is
+  rejected too, where it previously became the meaningless
+  `https://localhost.conductor.one`.
+  Stored credentials for `*.conductor.one` tenants are unaffected: both the
+  primary and legacy keychain keys derive from the resolved URL, and the retired
+  shortcut resolved to exactly what the full host resolves to, so no
+  re-authentication is needed. An EU tenant never had a credential reachable
+  through the shortcut, which only ever expanded to `.conductor.one`.
+
 - **New exit code `8` for a failure beyond C1, and `6` now means only "C1
   returned `5xx`."** **Breaking change for anything branching on exit codes:**
   exit `6` previously covered two situations that call for opposite responses:
@@ -269,9 +301,9 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   lower-cased, so `HTTPS://TENANT.CONDUCTOR.ONE` works — it previously failed as
   "not authenticated", because the credential key was case-sensitive while DNS
   and HTTP hosts are not. A protocol-relative `//tenant.example` is handled
-  rather than mangled into `https:////tenant.example`. A non-`https` scheme or
-  credentials embedded in the URL are dropped with a warning on stderr instead
-  of silently; the password is never echoed.
+  rather than mangled into `https:////tenant.example`. Credentials embedded in
+  the URL are dropped with a warning on stderr instead of silently; the password
+  is never echoed.
   **If you previously authenticated with a mixed-case `--url`**, that credential
   was stored under the old exact-case key and is no longer found. Run
   `c1i auth login` once to re-store it.
