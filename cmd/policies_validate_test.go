@@ -1,17 +1,31 @@
 package cmd
 
 import (
+	"errors"
 	"strings"
 	"testing"
 )
+
+// requireUsageError fails the test unless err is a *usageError. A guard that
+// returns a bare error instead would still fail the request, but silently
+// exit 1 (generic failure) instead of 2 (usage) — the distinction every
+// guard test in this file now pins, not just "err != nil".
+func requireUsageError(t *testing.T, err error) {
+	t.Helper()
+	if err == nil {
+		t.Fatal("expected an error, got nil")
+	}
+	var usageErr *usageError
+	if !errors.As(err, &usageErr) {
+		t.Fatalf("error is not a *usageError (would exit 1, not 2): %v (%T)", err, err)
+	}
+}
 
 // ---- Guard 1: empty/missing policySteps ----
 
 func TestValidatePolicyStepsNonEmpty_FiresOnMissing(t *testing.T) {
 	err := validatePolicyStepsNonEmpty("POLICY_TYPE_GRANT", nil, false)
-	if err == nil {
-		t.Fatal("expected an error when policySteps is nil/missing")
-	}
+	requireUsageError(t, err)
 	if !strings.Contains(err.Error(), "deny-everything") {
 		t.Errorf("error should explain the deny-all default, got: %v", err)
 	}
@@ -22,9 +36,7 @@ func TestValidatePolicyStepsNonEmpty_FiresOnEmptyStepsArray(t *testing.T) {
 		"grant": map[string]any{"steps": []any{}},
 	}
 	err := validatePolicyStepsNonEmpty("POLICY_TYPE_GRANT", steps, false)
-	if err == nil {
-		t.Fatal("expected an error when the baseline steps array is empty")
-	}
+	requireUsageError(t, err)
 }
 
 func TestValidatePolicyStepsNonEmpty_FiresOnWrongKey(t *testing.T) {
@@ -36,9 +48,7 @@ func TestValidatePolicyStepsNonEmpty_FiresOnWrongKey(t *testing.T) {
 		},
 	}
 	err := validatePolicyStepsNonEmpty("POLICY_TYPE_GRANT", steps, false)
-	if err == nil {
-		t.Fatal("expected an error when steps are present but keyed wrong (server would never find them)")
-	}
+	requireUsageError(t, err)
 }
 
 func TestValidatePolicyStepsNonEmpty_NotFiresOnRealSteps(t *testing.T) {
@@ -63,23 +73,17 @@ func TestValidatePolicyStepsNonEmpty_AllowDenyAllDoesNotBypassExplicitEmptyArray
 	// of intent; --allow-deny-all must not be able to wave that through.
 	steps := map[string]any{"grant": map[string]any{"steps": []any{}}}
 	err := validatePolicyStepsNonEmpty("POLICY_TYPE_GRANT", steps, true)
-	if err == nil {
-		t.Fatal("expected --allow-deny-all to NOT bypass an explicit empty steps array (it 500s, not a safe deny-all)")
-	}
+	requireUsageError(t, err)
 }
 
 // ---- Guard 2: policyType required ----
 
 func TestValidatePolicyType_FiresOnEmpty(t *testing.T) {
-	if err := validatePolicyType(""); err == nil {
-		t.Fatal("expected an error for empty policyType")
-	}
+	requireUsageError(t, validatePolicyType(""))
 }
 
 func TestValidatePolicyType_FiresOnUnspecified(t *testing.T) {
-	if err := validatePolicyType("POLICY_TYPE_UNSPECIFIED"); err == nil {
-		t.Fatal("expected an error for POLICY_TYPE_UNSPECIFIED")
-	}
+	requireUsageError(t, validatePolicyType("POLICY_TYPE_UNSPECIFIED"))
 }
 
 func TestValidatePolicyType_NotFiresOnValidType(t *testing.T) {
@@ -94,16 +98,12 @@ func TestValidatePolicyType_NotFiresOnValidType(t *testing.T) {
 
 func TestValidateRuleConditions_FiresOnEmpty(t *testing.T) {
 	rules := []any{map[string]any{"condition": "", "stepKey": "grant"}}
-	if err := validateRuleConditions(rules); err == nil {
-		t.Fatal("expected an error for empty rules[].condition")
-	}
+	requireUsageError(t, validateRuleConditions(rules))
 }
 
 func TestValidateRuleConditions_FiresOnWhitespaceOnly(t *testing.T) {
 	rules := []any{map[string]any{"condition": "   ", "stepKey": "grant"}}
-	if err := validateRuleConditions(rules); err == nil {
-		t.Fatal("expected an error for a whitespace-only condition")
-	}
+	requireUsageError(t, validateRuleConditions(rules))
 }
 
 func TestValidateRuleConditions_NotFiresOnLiteralTrue(t *testing.T) {
@@ -124,16 +124,12 @@ func TestValidateRuleConditions_NotFiresOnRealCondition(t *testing.T) {
 
 func TestValidateRuleOutcomes_FiresOnNeither(t *testing.T) {
 	rules := []any{map[string]any{"condition": "true"}}
-	if err := validateRuleOutcomes(rules); err == nil {
-		t.Fatal("expected an error when a rule sets neither stepKey/policyId nor the deprecated policyKey")
-	}
+	requireUsageError(t, validateRuleOutcomes(rules))
 }
 
 func TestValidateRuleOutcomes_FiresOnBoth(t *testing.T) {
 	rules := []any{map[string]any{"condition": "true", "stepKey": "grant", "policyKey": "grant"}}
-	if err := validateRuleOutcomes(rules); err == nil {
-		t.Fatal("expected an error when a rule sets both stepKey and the deprecated policyKey")
-	}
+	requireUsageError(t, validateRuleOutcomes(rules))
 }
 
 func TestValidateRuleOutcomes_NotFiresOnStepKeyOnly(t *testing.T) {
@@ -155,9 +151,7 @@ func TestValidateRuleOutcomes_NotFiresOnDeprecatedPolicyKeyOnly(t *testing.T) {
 func TestValidateRuleStepKeys_FiresOnMismatchedKey(t *testing.T) {
 	rules := []any{map[string]any{"condition": "true", "stepKey": "nonexistent"}}
 	policySteps := map[string]any{"grant": map[string]any{"steps": []any{map[string]any{"reject": map[string]any{}}}}}
-	if err := validateRuleStepKeys(rules, policySteps); err == nil {
-		t.Fatal("expected an error: stepKey references a key not present in policySteps")
-	}
+	requireUsageError(t, validateRuleStepKeys(rules, policySteps))
 }
 
 func TestValidateRuleStepKeys_FiresOnKeyWithEmptySteps(t *testing.T) {
@@ -166,9 +160,7 @@ func TestValidateRuleStepKeys_FiresOnKeyWithEmptySteps(t *testing.T) {
 		"grant":     map[string]any{"steps": []any{map[string]any{"reject": map[string]any{}}}},
 		"escalated": map[string]any{"steps": []any{}},
 	}
-	if err := validateRuleStepKeys(rules, policySteps); err == nil {
-		t.Fatal("expected an error: stepKey matches a policySteps entry with no steps")
-	}
+	requireUsageError(t, validateRuleStepKeys(rules, policySteps))
 }
 
 func TestValidateRuleStepKeys_NotFiresOnMatchingKey(t *testing.T) {
@@ -219,23 +211,17 @@ func approvalStep(arm string, armBody map[string]any) map[string]any {
 
 func TestValidateApprovalFallback_FiresOnUsersArmWithFallback(t *testing.T) {
 	steps := approvalStep("users", map[string]any{"userIds": []any{"u1"}, "fallback": true})
-	if err := validateApprovalFallback(steps, "POLICY_TYPE_GRANT"); err == nil {
-		t.Fatal("expected an error: \"users\" does not support fallback")
-	}
+	requireUsageError(t, validateApprovalFallback(steps, "POLICY_TYPE_GRANT"))
 }
 
 func TestValidateApprovalFallback_FiresOnAppOwnersArmWithFallbackUserIds(t *testing.T) {
 	steps := approvalStep("appOwners", map[string]any{"fallbackUserIds": []any{"u1"}})
-	if err := validateApprovalFallback(steps, "POLICY_TYPE_GRANT"); err == nil {
-		t.Fatal("expected an error: \"appOwners\" does not support fallbackUserIds")
-	}
+	requireUsageError(t, validateApprovalFallback(steps, "POLICY_TYPE_GRANT"))
 }
 
 func TestValidateApprovalFallback_FiresOnWebhookArmWithFallback(t *testing.T) {
 	steps := approvalStep("webhook", map[string]any{"webhookId": "wh1", "fallback": true})
-	if err := validateApprovalFallback(steps, "POLICY_TYPE_GRANT"); err == nil {
-		t.Fatal("expected an error: \"webhook\" does not support fallback")
-	}
+	requireUsageError(t, validateApprovalFallback(steps, "POLICY_TYPE_GRANT"))
 }
 
 func TestValidateApprovalFallback_NotFiresOnUsersArmWithoutFallback(t *testing.T) {
@@ -249,9 +235,7 @@ func TestValidateApprovalFallback_NotFiresOnUsersArmWithoutFallback(t *testing.T
 
 func TestValidateApprovalFallback_FiresOnManagerFallbackTrueEmptyUserIds(t *testing.T) {
 	steps := approvalStep("manager", map[string]any{"fallback": true, "fallbackUserIds": []any{}})
-	if err := validateApprovalFallback(steps, "POLICY_TYPE_GRANT"); err == nil {
-		t.Fatal("expected an error: manager fallback:true with empty fallbackUserIds 500s server-side")
-	}
+	requireUsageError(t, validateApprovalFallback(steps, "POLICY_TYPE_GRANT"))
 }
 
 func TestValidateApprovalFallback_FiresOnGroupFallbackTrueGroupEnabledEmptyGroupIds(t *testing.T) {
@@ -259,9 +243,7 @@ func TestValidateApprovalFallback_FiresOnGroupFallbackTrueGroupEnabledEmptyGroup
 		"appGroupId": "g1", "appId": "a1",
 		"fallback": true, "isGroupFallbackEnabled": true, "fallbackGroupIds": []any{},
 	})
-	if err := validateApprovalFallback(steps, "POLICY_TYPE_GRANT"); err == nil {
-		t.Fatal("expected an error: group fallback with isGroupFallbackEnabled but empty fallbackGroupIds 500s")
-	}
+	requireUsageError(t, validateApprovalFallback(steps, "POLICY_TYPE_GRANT"))
 }
 
 func TestValidateApprovalFallback_NotFiresOnManagerFallbackTrueWithUserIds(t *testing.T) {
@@ -298,9 +280,7 @@ func TestValidateApprovalFallback_FiresOnProvisionStep(t *testing.T) {
 			"steps": []any{map[string]any{"provision": map[string]any{}}},
 		},
 	}
-	if err := validateApprovalFallback(steps, "POLICY_TYPE_GRANT"); err == nil {
-		t.Fatal("expected an error: a provision step is never allowed in a policy body")
-	}
+	requireUsageError(t, validateApprovalFallback(steps, "POLICY_TYPE_GRANT"))
 }
 
 func TestValidateApprovalFallback_FiresOnApprovalAssignedTrue(t *testing.T) {
@@ -312,23 +292,17 @@ func TestValidateApprovalFallback_FiresOnApprovalAssignedTrue(t *testing.T) {
 			}}},
 		},
 	}
-	if err := validateApprovalFallback(steps, "POLICY_TYPE_GRANT"); err == nil {
-		t.Fatal("expected an error: approval.assigned is read-only and must be false")
-	}
+	requireUsageError(t, validateApprovalFallback(steps, "POLICY_TYPE_GRANT"))
 }
 
 func TestValidateApprovalFallback_FiresOnManagerAssignedUserIds(t *testing.T) {
 	steps := approvalStep("manager", map[string]any{"assignedUserIds": []any{"u1"}})
-	if err := validateApprovalFallback(steps, "POLICY_TYPE_GRANT"); err == nil {
-		t.Fatal("expected an error: manager.assignedUserIds is server-computed")
-	}
+	requireUsageError(t, validateApprovalFallback(steps, "POLICY_TYPE_GRANT"))
 }
 
 func TestValidateApprovalFallback_FiresOnAgentUserID(t *testing.T) {
 	steps := approvalStep("agent", map[string]any{"agentUserId": "u1", "agentMode": "APPROVAL_AGENT_MODE_FULL_CONTROL"})
-	if err := validateApprovalFallback(steps, "POLICY_TYPE_GRANT"); err == nil {
-		t.Fatal("expected an error: agent.agentUserId is deprecated/system-driven")
-	}
+	requireUsageError(t, validateApprovalFallback(steps, "POLICY_TYPE_GRANT"))
 }
 
 func TestValidateApprovalFallback_NotFiresOnCleanAgentArm(t *testing.T) {
@@ -364,9 +338,7 @@ func TestValidateApprovalFallback_FiresOnStepWithNoArm(t *testing.T) {
 		},
 	}
 	err := validateApprovalFallback(steps, "POLICY_TYPE_GRANT")
-	if err == nil {
-		t.Fatal("expected an error: a step with none of the recognized arms set")
-	}
+	requireUsageError(t, err)
 	if !strings.Contains(err.Error(), "policy step is nil") {
 		t.Errorf("error should quote the server's \"policy step is nil\" text, got: %v", err)
 	}
@@ -404,9 +376,7 @@ func TestValidateApprovalFallback_FiresOnAgentModeUnspecified(t *testing.T) {
 		"agentFailureAction": "APPROVAL_AGENT_FAILURE_ACTION_DENY",
 	})
 	err := validateApprovalFallback(steps, "POLICY_TYPE_GRANT")
-	if err == nil {
-		t.Fatal("expected an error: agentMode is required")
-	}
+	requireUsageError(t, err)
 	if !strings.Contains(err.Error(), "agent mode is required") {
 		t.Errorf("error should quote the server's \"agent mode is required\" text, got: %v", err)
 	}
@@ -430,9 +400,7 @@ func TestValidateApprovalFallback_FiresOnAgentInRevokePolicy(t *testing.T) {
 		"agentFailureAction": "APPROVAL_AGENT_FAILURE_ACTION_DENY",
 	})
 	err := validateApprovalFallback(steps, "POLICY_TYPE_REVOKE")
-	if err == nil {
-		t.Fatal("expected an error: agent steps are not allowed in a revoke policy")
-	}
+	requireUsageError(t, err)
 	if !strings.Contains(err.Error(), "agent approval steps are only allowed in grant and certify policies") {
 		t.Errorf("error should quote the server's own text, got: %v", err)
 	}
@@ -468,9 +436,7 @@ func TestValidateApprovalFallback_FiresOnCertifyWithNonCommentOnlyMode(t *testin
 		"agentFailureAction": "APPROVAL_AGENT_FAILURE_ACTION_DENY",
 	})
 	err := validateApprovalFallback(steps, "POLICY_TYPE_CERTIFY")
-	if err == nil {
-		t.Fatal("expected an error: certify policies require agentMode COMMENT_ONLY")
-	}
+	requireUsageError(t, err)
 	if !strings.Contains(err.Error(), `agent mode can only be "Comment only" in certify policies`) {
 		t.Errorf("error should quote the server's own text, got: %v", err)
 	}
@@ -494,9 +460,7 @@ func TestValidateApprovalFallback_FiresOnChangePolicyOnlyWithNoPolicyIds(t *test
 		"agentFailureAction": "APPROVAL_AGENT_FAILURE_ACTION_DENY",
 	})
 	err := validateApprovalFallback(steps, "POLICY_TYPE_GRANT")
-	if err == nil {
-		t.Fatal("expected an error: CHANGE_POLICY_ONLY requires policyIds")
-	}
+	requireUsageError(t, err)
 	if !strings.Contains(err.Error(), "policy ids are required when agent mode is") {
 		t.Errorf("error should quote the server's own text, got: %v", err)
 	}
@@ -521,9 +485,7 @@ func TestValidateApprovalFallback_FiresOnAgentFailureActionUnspecified(t *testin
 		"agentFailureAction": "APPROVAL_AGENT_FAILURE_ACTION_UNSPECIFIED",
 	})
 	err := validateApprovalFallback(steps, "POLICY_TYPE_GRANT")
-	if err == nil {
-		t.Fatal("expected an error: agentFailureAction is required")
-	}
+	requireUsageError(t, err)
 	if !strings.Contains(err.Error(), "agent failure action is required") {
 		t.Errorf("error should quote the server's own text, got: %v", err)
 	}
@@ -547,9 +509,7 @@ func TestValidateApprovalFallback_FiresOnReassignToUsersWithNoUserIds(t *testing
 		"agentFailureAction": "APPROVAL_AGENT_FAILURE_ACTION_REASSIGN_TO_USERS",
 	})
 	err := validateApprovalFallback(steps, "POLICY_TYPE_GRANT")
-	if err == nil {
-		t.Fatal("expected an error: REASSIGN_TO_USERS requires reassignToUserIds")
-	}
+	requireUsageError(t, err)
 	if !strings.Contains(err.Error(), "reassign to user ids is required when agent failure action is") {
 		t.Errorf("error should quote the server's own text, got: %v", err)
 	}
