@@ -20,7 +20,9 @@ only way to find it via a listing rather than a direct get. Honors
 
 A policy referenced by another policy (via a rule's policyId outcome, or as
 another policy's baselinePolicyId) cannot be deleted while that reference
-exists.`,
+exists: the server returns 400 naming the referencing policy ("cannot delete
+policy because ..."), so no dangling reference is left behind. Verified
+against platform source (assertNotReferenced).`,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		baseURL, err := GetBaseURL()

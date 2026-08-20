@@ -38,10 +38,9 @@ var approvalArms = []string{
 // The other six arms (manager, group, self, entitlementOwners, expression,
 // resourceOwners) each declare their OWN fallback + fallbackUserIds +
 // fallbackGroupIds + isGroupFallbackEnabled fields, validated identically —
-// contrary to an earlier assumption that fallback was manager-only. Verified
-// against platform source (pkg/models/policy/policy_validate.go's
-// validateApproval, one fallback-arm case per type) and independently
-// against the live public OpenAPI schema.
+// fallback is NOT manager-only. Verified against platform source
+// (pkg/models/policy/policy_validate.go's validateApproval, one fallback-arm
+// case per type) and independently against the live public OpenAPI schema.
 var approverArmsWithoutFallback = map[string]bool{
 	"users":     true,
 	"appOwners": true,
@@ -105,8 +104,7 @@ func validatePolicyType(policyType string) error {
 	return nil
 }
 
-// validatePolicyStepsNonEmpty guards a specific policyType's
-// baseline entry, plus a related crash the original write-up didn't cover.
+// validatePolicyStepsNonEmpty guards a specific policyType's baseline entry.
 //
 // Two distinct server behaviors are in play, verified against
 // pkg/models/policy/policy.go:
