@@ -28,8 +28,10 @@ warning, and every result after that is silently wrong.
 Credentials resolve in this order: `C1I_CLIENT_ID` + `C1I_CLIENT_SECRET` env
 vars (read-only — c1i never writes them), the OS keyring, then a `0600` file
 used automatically where no keyring exists (headless Linux, CI, containers).
-`c1i auth login` to authenticate; `c1i auth whoami` to confirm who and where
-you are before doing anything else.
+`c1i auth login` to authenticate; `c1i auth status` to confirm which tenant
+you're pointed at (it prints the base URL) and `c1i auth whoami` to confirm
+which identity you're acting as (userId, principleId, email, displayName —
+no tenant URL in its output) before doing anything else.
 
 ## Choosing a command
 
@@ -134,8 +136,11 @@ Two things are irreversible in ways their `--help` doesn't make obvious:
 - `accounts list --unmapped-only` filters after each page is fetched, not
   server-side. With `--page-token` (which turns off auto-pagination) a page
   can come back empty while unmapped accounts exist further along.
-- A task's `outcome` field is omitted while it's still open; it only
-  appears once the task closes.
+- A task's `outcome` field is omitted while it's unspecified, not while the
+  task is open — a task can be `TASK_STATE_OPEN` and already carry a real,
+  non-UNSPECIFIED outcome (e.g. a provisioning failure mid-flow). Use
+  `state`, not the presence of `outcome`, to tell whether a task is still
+  pending.
 - Entitlement ids are unique only within an app — some system-builtin
   entitlements reuse the same id across every app that has one. Always key
   on `(app_id, id)` together, never `id` alone.
