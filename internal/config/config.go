@@ -16,7 +16,10 @@ import (
 //   - Protocol-relative: "//acme.conductor.one" → "https://acme.conductor.one"
 //   - Raw domain: "ACME.conductor.one" → "https://acme.conductor.one"
 //
-// A bare token (no "://" and no ".", e.g. "acme" or "localhost") is
+// A single-label host is accepted when it arrives as a URL
+// ("https://c1-staging", "//c1-staging") -- no domain is guessed, the host is
+// used as typed, which is how an internal-resolver name is reached. It is only
+// a bare token (no "://" and no ".", e.g. "acme" or "localhost") that is
 // rejected: with more than one valid tenant domain family, expanding it to
 // one of them by default is a silent wrong-tenant risk. err is non-nil only
 // for this case, and the caller should name where input came from (--url
@@ -70,7 +73,7 @@ func ParseURL(input string) (result string, warnings []string, err error) {
 		// lower-cased -- but strip anything before a trailing "@" first so a
 		// malformed "user:pass@" fragment still can't echo a password even
 		// on this degenerate path.
-		return "https://" + strings.ToLower(withoutUserinfoFallback(input)), warnings, nil
+		return "https://" + strings.ToLower(withoutUserinfo(input)), warnings, nil
 	}
 	// Bare token, e.g. "acme" or "localhost": retired. It used to expand to
 	// "<input>.conductor.one", but with a second tenant domain family
@@ -78,13 +81,15 @@ func ParseURL(input string) (result string, warnings []string, err error) {
 	// risk -- an EU customer typing "acme" would land on a US host.
 	return "", nil, fmt.Errorf(
 		"url %q is not a full host: c1i no longer expands a bare name to a domain; "+
-			"pass a full host such as acme.conductor.one or acme.c1eu.ai", input)
+			"pass a full host such as acme.conductor.one or acme.c1eu.ai",
+		withoutUserinfo(input))
 }
 
-// withoutUserinfoFallback strips a "user:pass@" prefix (if any) from s. Only
-// used on ParseURL's rare url.Parse-failed/no-host path, as a last line of
-// defense so that path can't echo a password either.
-func withoutUserinfoFallback(s string) string {
+// withoutUserinfo strips a "user:pass@" prefix (if any) from s. Applied on
+// every ParseURL path that echoes or returns raw input, so none of them can
+// print a password -- including the error paths, where there is no parsed URL
+// to take a host from.
+func withoutUserinfo(s string) string {
 	if i := strings.LastIndex(s, "@"); i != -1 {
 		return s[i+1:]
 	}

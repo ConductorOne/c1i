@@ -301,9 +301,9 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   lower-cased, so `HTTPS://TENANT.CONDUCTOR.ONE` works — it previously failed as
   "not authenticated", because the credential key was case-sensitive while DNS
   and HTTP hosts are not. A protocol-relative `//tenant.example` is handled
-  rather than mangled into `https:////tenant.example`. A non-`https` scheme or
-  credentials embedded in the URL are dropped with a warning on stderr instead
-  of silently; the password is never echoed.
+  rather than mangled into `https:////tenant.example`. Credentials embedded in
+  the URL are dropped with a warning on stderr instead of silently; the password
+  is never echoed.
   **If you previously authenticated with a mixed-case `--url`**, that credential
   was stored under the old exact-case key and is no longer found. Run
   `c1i auth login` once to re-store it.

@@ -31,8 +31,8 @@ func TestParseURLBasicNormalization(t *testing.T) {
 }
 
 // TestParseURLCaseInsensitiveHost: a legitimate but differently-cased --url
-// must not be rejected. Hosts are
-// case-insensitive (DNS/HTTP), but the keychain key built from the host
+// must not be rejected. Hosts are case-insensitive (DNS/HTTP), but the
+// keychain key built from the host
 // (KeychainService) is not, so a mixed-case host that survives unchanged
 // through ParseURL spuriously fails "no credentials found" against a
 // lower-case key stored at login.
@@ -179,9 +179,9 @@ func TestParseURLNonHTTPSSchemeIsError(t *testing.T) {
 }
 
 // TestParseURLDropsEmbeddedCredentialsWithWarning: embedded userinfo is
-// dropped (unchanged -- c1i has no way to send HTTP
-// Basic credentials through its OAuth-based client), but that drop must not
-// be silent, and the warning must not leak the password.
+// dropped (c1i has no way to send HTTP Basic credentials through its
+// OAuth-based client), but that drop must not be silent, and the warning must
+// not leak the password.
 func TestParseURLDropsEmbeddedCredentialsWithWarning(t *testing.T) {
 	got, warnings, err := ParseURL("https://user:hunter2@host.example.com")
 	if err != nil {
@@ -201,8 +201,7 @@ func TestParseURLDropsEmbeddedCredentialsWithWarning(t *testing.T) {
 }
 
 // TestParseURLDropsEmbeddedCredentialsSchemeless: the scheme-having branch
-// above drops/warns about embedded
-// userinfo, but a scheme-LESS input ("user:pass@host", the ordinary mistake
+// above drops/warns about embedded userinfo, but a scheme-LESS input ("user:pass@host", the ordinary mistake
 // of pasting a URL and forgetting "https://") took the raw-domain branch
 // untouched -- nothing dropped, nothing warned, and the password rode
 // straight into the base URL c1i then sends on every request (visible in
@@ -266,5 +265,45 @@ func TestLegacyKeychainCredentialNotOrphanedByShortcutRetirement(t *testing.T) {
 	}
 	if got, want := LegacyKeychainService(newFull), LegacyKeychainService(oldExpansion); got != want {
 		t.Errorf("LegacyKeychainService(%q) = %q, want %q (same as the old shortcut's expansion)", newFull, got, want)
+	}
+}
+
+// TestParseURLBareTokenErrorDoesNotEchoPassword: the bare-token rejection
+// echoes the offending input, and a scheme-less "user:pass@acme" has no dot,
+// so it lands here rather than on the parsed path that scrubs userinfo.
+// Echoing it verbatim printed the password to stderr on every source.
+func TestParseURLBareTokenErrorDoesNotEchoPassword(t *testing.T) {
+	for _, input := range []string{"user:hunter2@acme", "user:hunter2@localhost", "hunter2@acme"} {
+		_, _, err := ParseURL(input)
+		if err == nil {
+			t.Fatalf("ParseURL(%q) error = nil, want a bare-token error", input)
+		}
+		if strings.Contains(err.Error(), "hunter2") {
+			t.Errorf("ParseURL(%q) error echoes the password: %v", input, err)
+		}
+	}
+}
+
+// TestParseURLSingleLabelHostWithSchemeAccepted: a single-label host is
+// rejected only as a bare token. Given a scheme it is used as typed -- no
+// domain is guessed -- which is how an internal-resolver name is reached.
+// Pinned because the function's rejection of "c1-staging" invites "fixing"
+// this into a rejection too.
+func TestParseURLSingleLabelHostWithSchemeAccepted(t *testing.T) {
+	cases := []struct{ in, want string }{
+		{"https://c1-staging", "https://c1-staging"},
+		{"//c1-staging", "https://c1-staging"},
+		{"https://C1-STAGING", "https://c1-staging"},
+		{"https://localhost:8443", "https://localhost:8443"},
+	}
+	for _, c := range cases {
+		got, _, err := ParseURL(c.in)
+		if err != nil {
+			t.Errorf("ParseURL(%q) error = %v, want nil", c.in, err)
+			continue
+		}
+		if got != c.want {
+			t.Errorf("ParseURL(%q) = %q, want %q", c.in, got, c.want)
+		}
 	}
 }

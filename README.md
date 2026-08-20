@@ -490,13 +490,16 @@ The host is lower-cased, so `HTTPS://TENANT.C1EU.AI` and `tenant.c1eu.ai`
 resolve identically, and a protocol-relative `//tenant.example` is handled.
 
 Both `*.conductor.one` and `*.c1eu.ai` (EU) tenant domains are accepted — pass
-whichever your tenant uses. A name with no dot *and* no scheme (`--url
-mycompany`) is rejected: with more than one tenant domain in use it is
-ambiguous, and silently expanding it to `mycompany.conductor.one` would point an
-EU tenant at the wrong region. The error names where the value came from, which
-matters when it is a stale entry in `~/.c1i.yaml` rather than something you just
-typed. The same single-label host works when you give the scheme explicitly
-(`https://c1-staging`), which is how an internal-resolver name is reached.
+whichever your tenant uses. Only the shape of the URL is checked, never the
+domain, so a typo like `mycompany.conductor.on` is accepted here and surfaces
+later as an authentication failure.
+
+A bare name (`--url mycompany`) is rejected: with more than one tenant domain in
+use it is ambiguous, and silently expanding it to `mycompany.conductor.one` would
+point an EU tenant at the wrong region. The error names where the value came
+from, which matters when it is a stale entry in `~/.c1i.yaml` rather than
+something you just typed. A single-label host is fine as long as it arrives as a
+URL (`https://c1-staging`), which is how an internal-resolver name is reached.
 
 > If you previously authenticated with a mixed-case `--url`, your stored
 > credential was keyed by that exact casing and is no longer found now that the
