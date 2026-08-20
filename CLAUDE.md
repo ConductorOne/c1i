@@ -131,21 +131,24 @@ never fails proves nothing.
 - **Output:** list rows go through the `newEmitter(...)`/`.Encode` emitter;
   single-object reads through `writeObject`; **mutation confirmations**
   (create/update/delete) through `writeRawObject` (never projected, so a
-  session-wide `C1I_FIELDS` can't blank a success message). A `--fields` that
-  matches no key anywhere in the result is a usage error (exit 2), checked
-  once via rootCmd's `PersistentPreRunE`/`PersistentPostRunE` — never add
-  either hook to a subcommand; it silently disables the check for that whole
-  subtree (`TestNoSubcommandDefinesOwnPersistentPostRunE`).
+  session-wide `C1I_FIELDS` can't blank a success message). A `--fields` that matches
+  no key anywhere in the result is a usage error (exit 2), enforced in two
+  separate places: the list path counts matches across rows via rootCmd's
+  `PersistentPreRunE`/`PersistentPostRunE`, and `writeObject` checks the
+  single-object path inline (`projectionMatchedNothing`). Never add either hook
+  to a subcommand — it silently disables the list-side check for that whole
+  subtree (`TestNoSubcommandDefinesOwnPersistentPreRunE`,
+  `...PostRunE`).
 - **Row values keep their real JSON types.** A row is `map[string]any`: put
   `bool` and numeric values in as-is, never `strconv.FormatBool`/`Itoa`. NDJSON
   exists here so agents can pipe to `jq`, and stringifying breaks that
   silently — every non-empty string is truthy, so `jq 'select(.stable)'`
   matches `"false"`, and `jq 'select(.tool_count > 5)'` compares strings.
   This recurred across six row builders before it was caught. The same
-  truthiness trap applies to an absent value: an optional field with nothing
-  to report (e.g. `deleted_at` on a live policy) must be the untyped `nil`
-  (JSON `null`), never `""` — `jq 'select(.deleted_at)'` would otherwise
-  match every row (see `policyRow` in `cmd/policies.go`).
+  truthiness trap applies to absence: never emit `""` for a field with nothing
+  to report, or `jq 'select(.field)'` matches every row. Either omit the key
+  (`serverCountRow`'s `last_called_at`, `taskRow`'s `outcome`) or emit untyped
+  `nil` (`policyRow`'s `deleted_at`) — follow the surrounding row's convention.
 - **Errors:** the client returns typed `client.APIError` (carries status),
   `client.AuthError`, `client.PathError`, `client.RedirectError` (a 3xx is
   followed only when the path is unchanged AND the host is in the same trust
