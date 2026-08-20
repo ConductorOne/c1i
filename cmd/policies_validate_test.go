@@ -308,7 +308,7 @@ func TestValidateApprovalFallback_FiresOnAgentUserID(t *testing.T) {
 func TestValidateApprovalFallback_NotFiresOnCleanAgentArm(t *testing.T) {
 	steps := approvalStep("agent", map[string]any{
 		"agentMode":          "APPROVAL_AGENT_MODE_FULL_CONTROL",
-		"agentFailureAction": "APPROVAL_AGENT_FAILURE_ACTION_DENY",
+		"agentFailureAction": "APPROVAL_AGENT_FAILURE_ACTION_SKIP_POLICY_STEP",
 	})
 	if err := validateApprovalFallback(steps, "POLICY_TYPE_GRANT"); err != nil {
 		t.Errorf("expected no error for a clean agent arm, got: %v", err)
@@ -373,7 +373,7 @@ func TestValidateApprovalFallback_NotFiresOnWaitArm(t *testing.T) {
 func TestValidateApprovalFallback_FiresOnAgentModeUnspecified(t *testing.T) {
 	steps := approvalStep("agent", map[string]any{
 		"agentMode":          "APPROVAL_AGENT_MODE_UNSPECIFIED",
-		"agentFailureAction": "APPROVAL_AGENT_FAILURE_ACTION_DENY",
+		"agentFailureAction": "APPROVAL_AGENT_FAILURE_ACTION_SKIP_POLICY_STEP",
 	})
 	err := validateApprovalFallback(steps, "POLICY_TYPE_GRANT")
 	requireUsageError(t, err)
@@ -385,7 +385,7 @@ func TestValidateApprovalFallback_FiresOnAgentModeUnspecified(t *testing.T) {
 func TestValidateApprovalFallback_NotFiresOnAgentModeSet(t *testing.T) {
 	steps := approvalStep("agent", map[string]any{
 		"agentMode":          "APPROVAL_AGENT_MODE_FULL_CONTROL",
-		"agentFailureAction": "APPROVAL_AGENT_FAILURE_ACTION_DENY",
+		"agentFailureAction": "APPROVAL_AGENT_FAILURE_ACTION_SKIP_POLICY_STEP",
 	})
 	if err := validateApprovalFallback(steps, "POLICY_TYPE_GRANT"); err != nil {
 		t.Errorf("expected no error: agentMode is set, got: %v", err)
@@ -397,7 +397,7 @@ func TestValidateApprovalFallback_NotFiresOnAgentModeSet(t *testing.T) {
 func TestValidateApprovalFallback_FiresOnAgentInRevokePolicy(t *testing.T) {
 	steps := approvalStep("agent", map[string]any{
 		"agentMode":          "APPROVAL_AGENT_MODE_FULL_CONTROL",
-		"agentFailureAction": "APPROVAL_AGENT_FAILURE_ACTION_DENY",
+		"agentFailureAction": "APPROVAL_AGENT_FAILURE_ACTION_SKIP_POLICY_STEP",
 	})
 	err := validateApprovalFallback(steps, "POLICY_TYPE_REVOKE")
 	requireUsageError(t, err)
@@ -409,7 +409,7 @@ func TestValidateApprovalFallback_FiresOnAgentInRevokePolicy(t *testing.T) {
 func TestValidateApprovalFallback_NotFiresOnAgentInGrantPolicy(t *testing.T) {
 	steps := approvalStep("agent", map[string]any{
 		"agentMode":          "APPROVAL_AGENT_MODE_FULL_CONTROL",
-		"agentFailureAction": "APPROVAL_AGENT_FAILURE_ACTION_DENY",
+		"agentFailureAction": "APPROVAL_AGENT_FAILURE_ACTION_SKIP_POLICY_STEP",
 	})
 	if err := validateApprovalFallback(steps, "POLICY_TYPE_GRANT"); err != nil {
 		t.Errorf("expected no error: agent steps are allowed in a grant policy, got: %v", err)
@@ -421,7 +421,7 @@ func TestValidateApprovalFallback_AgentPolicyTypeRuleSkippedWhenTypeUnknown(t *t
 	// comment); guessing here would be worse than not checking.
 	steps := approvalStep("agent", map[string]any{
 		"agentMode":          "APPROVAL_AGENT_MODE_FULL_CONTROL",
-		"agentFailureAction": "APPROVAL_AGENT_FAILURE_ACTION_DENY",
+		"agentFailureAction": "APPROVAL_AGENT_FAILURE_ACTION_SKIP_POLICY_STEP",
 	})
 	if err := validateApprovalFallback(steps, ""); err != nil {
 		t.Errorf("expected no error when policyType is unknown, got: %v", err)
@@ -433,7 +433,7 @@ func TestValidateApprovalFallback_AgentPolicyTypeRuleSkippedWhenTypeUnknown(t *t
 func TestValidateApprovalFallback_FiresOnCertifyWithNonCommentOnlyMode(t *testing.T) {
 	steps := approvalStep("agent", map[string]any{
 		"agentMode":          "APPROVAL_AGENT_MODE_FULL_CONTROL",
-		"agentFailureAction": "APPROVAL_AGENT_FAILURE_ACTION_DENY",
+		"agentFailureAction": "APPROVAL_AGENT_FAILURE_ACTION_SKIP_POLICY_STEP",
 	})
 	err := validateApprovalFallback(steps, "POLICY_TYPE_CERTIFY")
 	requireUsageError(t, err)
@@ -445,7 +445,7 @@ func TestValidateApprovalFallback_FiresOnCertifyWithNonCommentOnlyMode(t *testin
 func TestValidateApprovalFallback_NotFiresOnCertifyWithCommentOnlyMode(t *testing.T) {
 	steps := approvalStep("agent", map[string]any{
 		"agentMode":          "APPROVAL_AGENT_MODE_COMMENT_ONLY",
-		"agentFailureAction": "APPROVAL_AGENT_FAILURE_ACTION_DENY",
+		"agentFailureAction": "APPROVAL_AGENT_FAILURE_ACTION_SKIP_POLICY_STEP",
 	})
 	if err := validateApprovalFallback(steps, "POLICY_TYPE_CERTIFY"); err != nil {
 		t.Errorf("expected no error: COMMENT_ONLY is allowed in a certify policy, got: %v", err)
@@ -457,7 +457,7 @@ func TestValidateApprovalFallback_NotFiresOnCertifyWithCommentOnlyMode(t *testin
 func TestValidateApprovalFallback_FiresOnChangePolicyOnlyWithNoPolicyIds(t *testing.T) {
 	steps := approvalStep("agent", map[string]any{
 		"agentMode":          "APPROVAL_AGENT_MODE_CHANGE_POLICY_ONLY",
-		"agentFailureAction": "APPROVAL_AGENT_FAILURE_ACTION_DENY",
+		"agentFailureAction": "APPROVAL_AGENT_FAILURE_ACTION_SKIP_POLICY_STEP",
 	})
 	err := validateApprovalFallback(steps, "POLICY_TYPE_GRANT")
 	requireUsageError(t, err)
@@ -469,7 +469,7 @@ func TestValidateApprovalFallback_FiresOnChangePolicyOnlyWithNoPolicyIds(t *test
 func TestValidateApprovalFallback_NotFiresOnChangePolicyOnlyWithPolicyIds(t *testing.T) {
 	steps := approvalStep("agent", map[string]any{
 		"agentMode":          "APPROVAL_AGENT_MODE_CHANGE_POLICY_ONLY",
-		"agentFailureAction": "APPROVAL_AGENT_FAILURE_ACTION_DENY",
+		"agentFailureAction": "APPROVAL_AGENT_FAILURE_ACTION_SKIP_POLICY_STEP",
 		"policyIds":          []any{"other-policy-id"},
 	})
 	if err := validateApprovalFallback(steps, "POLICY_TYPE_GRANT"); err != nil {
@@ -494,7 +494,7 @@ func TestValidateApprovalFallback_FiresOnAgentFailureActionUnspecified(t *testin
 func TestValidateApprovalFallback_NotFiresOnAgentFailureActionSet(t *testing.T) {
 	steps := approvalStep("agent", map[string]any{
 		"agentMode":          "APPROVAL_AGENT_MODE_FULL_CONTROL",
-		"agentFailureAction": "APPROVAL_AGENT_FAILURE_ACTION_DENY",
+		"agentFailureAction": "APPROVAL_AGENT_FAILURE_ACTION_SKIP_POLICY_STEP",
 	})
 	if err := validateApprovalFallback(steps, "POLICY_TYPE_GRANT"); err != nil {
 		t.Errorf("expected no error: agentFailureAction is set, got: %v", err)
