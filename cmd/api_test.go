@@ -362,7 +362,11 @@ func TestAPIDeleteBodyOptInDryRunPreviewsWithoutSending(t *testing.T) {
 
 	resetAPICmdFlags(t)
 	stubNewAPIClient(t, srv)
-	t.Setenv("C1I_URL", srv.URL)
+	// srv is a plain-http httptest.Server, but stubNewAPIClient bypasses
+	// GetBaseURL's return value entirely (it points the real client straight
+	// at srv.URL) -- this only needs to satisfy GetBaseURL's now-https-only
+	// parse, not name the real target.
+	t.Setenv("C1I_URL", "https://example.invalid")
 
 	origDryRun := viper.GetBool("dry_run")
 	viper.Set("dry_run", true)

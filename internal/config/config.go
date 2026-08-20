@@ -23,9 +23,11 @@ import (
 // flag, C1I_URL, config file, interactive prompt) in how it surfaces err --
 // see GetBaseURLWithSource.
 //
-// It also returns human-readable warnings for anything silently altered: a
-// non-https scheme (rewritten to https rather than rejected -- a typo
-// shouldn't turn into a hard failure with no server to inspect) and any
+// A scheme other than https (e.g. "http://", "ftp://") is rejected outright
+// -- c1i requires https, full stop, no silent upgrade and no exception for
+// loopback/local hosts.
+//
+// It also returns human-readable warnings for anything silently altered:
 // embedded userinfo. Userinfo is dropped (c1i authenticates via OAuth
 // device flow or a keychain-stored client_id/client_secret, never HTTP
 // Basic in the URL) and never echoed back, password included, in the
@@ -54,13 +56,13 @@ func ParseURL(input string) (result string, warnings []string, err error) {
 	if strings.Contains(parseable, "://") {
 		u, err := url.Parse(parseable)
 		if err == nil && u.Host != "" {
+			if hasScheme && !strings.EqualFold(u.Scheme, "https") {
+				return "", nil, fmt.Errorf("c1i requires https; got scheme %q", u.Scheme)
+			}
 			if u.User != nil {
 				warnings = append(warnings, fmt.Sprintf(
 					"--url embedded credentials (user %q) were dropped; c1i authenticates via OAuth device flow or a keychain-stored client_id/client_secret, never via the URL",
 					u.User.Username()))
-			}
-			if hasScheme && !strings.EqualFold(u.Scheme, "https") {
-				warnings = append(warnings, fmt.Sprintf("--url scheme %q is not supported; using https instead", u.Scheme))
 			}
 			return "https://" + strings.ToLower(u.Host), warnings, nil
 		}
@@ -70,17 +72,13 @@ func ParseURL(input string) (result string, warnings []string, err error) {
 		// on this degenerate path.
 		return "https://" + strings.ToLower(withoutUserinfoFallback(input)), warnings, nil
 	}
-	if strings.Contains(input, ".") {
-		return "https://" + strings.ToLower(input), warnings, nil
-	}
 	// Bare token, e.g. "acme" or "localhost": retired. It used to expand to
 	// "<input>.conductor.one", but with a second tenant domain family
 	// (*.c1eu.ai) now valid, guessing which one is a silent wrong-tenant
 	// risk -- an EU customer typing "acme" would land on a US host.
 	return "", nil, fmt.Errorf(
 		"url %q is not a full host: c1i no longer expands a bare name to a domain; "+
-			"pass a full host such as acme.conductor.one or acme.c1eu.ai; "+
-			"for local development, use an explicit scheme, e.g. http://localhost:8080", input)
+			"pass a full host such as acme.conductor.one or acme.c1eu.ai", input)
 }
 
 // withoutUserinfoFallback strips a "user:pass@" prefix (if any) from s. Only

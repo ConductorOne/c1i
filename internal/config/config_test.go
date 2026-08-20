@@ -83,10 +83,17 @@ func TestParseURLBareTokenIsError(t *testing.T) {
 				t.Errorf("ParseURL(%q) warnings = %v, want none on error", in, warnings)
 			}
 			msg := err.Error()
-			for _, want := range []string{in, "conductor.one", "c1eu.ai", "http://localhost:8080"} {
+			for _, want := range []string{in, "conductor.one", "c1eu.ai"} {
 				if !strings.Contains(msg, want) {
 					t.Errorf("ParseURL(%q) error = %q, want it to mention %q", in, msg, want)
 				}
+			}
+			// The bare-name error used to close with local-dev advice to use
+			// an explicit http:// scheme -- that advice never worked (http
+			// was silently coerced to https) and is now plainly wrong (http
+			// is rejected outright). It must not reappear.
+			if strings.Contains(msg, "http") {
+				t.Errorf("ParseURL(%q) error = %q, must not mention http (no supported plain-http path)", in, msg)
 			}
 		})
 	}
@@ -114,15 +121,23 @@ func TestParseURLIPv4LoopbackStillWorks(t *testing.T) {
 	}
 }
 
-// TestParseURLLocalhostWithSchemeStillWorks: an explicit scheme is the
-// documented escape hatch for local development, and must keep working.
-func TestParseURLLocalhostWithSchemeStillWorks(t *testing.T) {
-	got, _, err := ParseURL("http://localhost:8080")
-	if err != nil {
-		t.Fatalf("ParseURL(%q) error = %v, want nil", "http://localhost:8080", err)
+// TestParseURLHTTPSchemeIsRejected: c1i requires https, full stop -- an
+// explicit http:// scheme is no longer a working local-dev escape hatch (it
+// used to be silently coerced to https; that coercion is gone) and there is
+// no loopback/local exception.
+func TestParseURLHTTPSchemeIsRejected(t *testing.T) {
+	got, warnings, err := ParseURL("http://localhost:8080")
+	if err == nil {
+		t.Fatalf("ParseURL(%q) error = nil, want an error (c1i requires https)", "http://localhost:8080")
 	}
-	if want := "https://localhost:8080"; got != want {
-		t.Errorf("ParseURL(%q) = %q, want %q", "http://localhost:8080", got, want)
+	if got != "" {
+		t.Errorf("ParseURL(%q) result = %q, want empty on error", "http://localhost:8080", got)
+	}
+	if len(warnings) != 0 {
+		t.Errorf("ParseURL(%q) warnings = %v, want none on error", "http://localhost:8080", warnings)
+	}
+	if !strings.Contains(err.Error(), "https") {
+		t.Errorf("ParseURL(%q) error = %q, want it to name the https requirement", "http://localhost:8080", err.Error())
 	}
 }
 
@@ -140,20 +155,26 @@ func TestParseURLProtocolRelative(t *testing.T) {
 	}
 }
 
-// TestParseURLNonHTTPSSchemeWarns is sub-issue (a), part 1: a non-https
-// scheme is rewritten to https (a hard reject would turn a typo into a hard
-// failure with no way to inspect what was actually sent), but silently is
-// no longer acceptable -- the caller must be told.
-func TestParseURLNonHTTPSSchemeWarns(t *testing.T) {
-	got, warnings, err := ParseURL("ftp://host.example.com")
-	if err != nil {
-		t.Fatalf("ParseURL(%q) error = %v, want nil", "ftp://host.example.com", err)
-	}
-	if want := "https://host.example.com"; got != want {
-		t.Errorf("ParseURL(%q) = %q, want %q", "ftp://host.example.com", got, want)
-	}
-	if len(warnings) != 1 || !strings.Contains(warnings[0], "ftp") {
-		t.Errorf("warnings = %v, want one mentioning the rejected scheme", warnings)
+// TestParseURLNonHTTPSSchemeIsError: c1i requires https -- a non-https
+// scheme (this used to be silently rewritten to https with a warning) is
+// now a hard error naming the https requirement, not a silent upgrade.
+func TestParseURLNonHTTPSSchemeIsError(t *testing.T) {
+	for _, in := range []string{"http://host.example.com", "ftp://host.example.com"} {
+		t.Run(in, func(t *testing.T) {
+			got, warnings, err := ParseURL(in)
+			if err == nil {
+				t.Fatalf("ParseURL(%q) error = nil, want an error (c1i requires https)", in)
+			}
+			if got != "" {
+				t.Errorf("ParseURL(%q) result = %q, want empty on error", in, got)
+			}
+			if len(warnings) != 0 {
+				t.Errorf("ParseURL(%q) warnings = %v, want none on error", in, warnings)
+			}
+			if !strings.Contains(err.Error(), "https") {
+				t.Errorf("ParseURL(%q) error = %q, want it to name the https requirement", in, err.Error())
+			}
+		})
 	}
 }
 

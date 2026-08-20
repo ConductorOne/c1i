@@ -153,7 +153,7 @@ func TestAuthLoginPromptDoesNotAdvertiseShortcut(t *testing.T) {
 	}
 }
 
-// --- localhost is refused; the working local-dev escape hatches are not ---
+// --- localhost is refused both bare and with a non-https scheme ---
 
 func TestGetBaseURLLocalhostBareIsUsageError(t *testing.T) {
 	resetRootURLFlag(t)
@@ -166,8 +166,8 @@ func TestGetBaseURLLocalhostBareIsUsageError(t *testing.T) {
 	if got, want := exitCode(err), exitUsage; got != want {
 		t.Errorf("exitCode = %d, want %d", got, want)
 	}
-	if !strings.Contains(err.Error(), "http://localhost:8080") {
-		t.Errorf("error = %q, want it to suggest an explicit scheme", err.Error())
+	if strings.Contains(err.Error(), "http://") {
+		t.Errorf("error = %q, must not advertise a plain-http local-dev path (there is none)", err.Error())
 	}
 }
 
@@ -184,10 +184,12 @@ func TestGetBaseURLLocalhostWithPortBareIsUsageError(t *testing.T) {
 	}
 }
 
-// TestGetBaseURLLocalhostWithSchemeUnaffected: an explicit scheme must not
-// be rejected -- the command should get past URL parsing entirely and fail
-// only for lack of credentials against the (fake) local target.
-func TestGetBaseURLLocalhostWithSchemeUnaffected(t *testing.T) {
+// TestGetBaseURLHTTPSchemeIsRejected: c1i requires https -- an explicit
+// http:// scheme is no longer a working local-dev escape hatch (it used to
+// be silently coerced to https; that coercion is gone) and there is no
+// loopback/local exception. This must fail URL parsing itself (exit 2), not
+// merely fail later for lack of credentials.
+func TestGetBaseURLHTTPSchemeIsRejected(t *testing.T) {
 	resetRootURLFlag(t)
 	t.Setenv("C1I_URL", "")
 	t.Setenv("C1I_CLIENT_ID", "")
@@ -195,10 +197,13 @@ func TestGetBaseURLLocalhostWithSchemeUnaffected(t *testing.T) {
 
 	err := runRootWithArgs(t, []string{"users", "get", "someid", "--url", "http://localhost:8080"})
 	if err == nil {
-		t.Fatal("expected an error (no credentials configured), got nil")
+		t.Fatal("expected an error for --url http://localhost:8080, got nil")
 	}
-	if strings.Contains(err.Error(), "is not a full host") {
-		t.Errorf("http://localhost:8080 must not be rejected by the bare-token check, got: %v", err)
+	if got, want := exitCode(err), exitUsage; got != want {
+		t.Errorf("exitCode = %d, want %d", got, want)
+	}
+	if !strings.Contains(err.Error(), "https") {
+		t.Errorf("error = %q, want it to name the https requirement", err.Error())
 	}
 }
 
