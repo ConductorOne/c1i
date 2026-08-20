@@ -35,6 +35,22 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `provisionerPolicy.delegated`, verified live against a test tenant).
   Content is embedded as Go string constants — no network call, unlike
   `docs search` / `docs page`.
+- **`docs guide` gains three app/access-request runbooks:
+  `configure-new-app`, `request-access`, and `inspect-and-approve-task`.**
+  `configure-new-app` stands up a manually-managed app, sets its owners, and
+  creates a custom entitlement for it via the 3-call resource-type/resource/
+  entitlement sequence (no first-class `entitlements create` exists).
+  `request-access` walks the requester side of a grant/revoke request —
+  finding a real app/entitlement/user, previewing with `--dry-run`, filing
+  the request, and verifying the resulting grant — and notes that real
+  requestability is decided by catalog membership, not an entitlement's
+  `grantPolicyId` (a weak signal either way). `inspect-and-approve-task` is
+  the single source for approver-side mechanics: reading a task's embedded
+  policy (`stepApproverIds`, the `actions` gate, `policy.current`/`.next`),
+  commenting (unlike approve/deny, not gated the same way), and the
+  approve/deny step-resolution asymmetry (approve requires a resolvable
+  current step; deny proceeds without one). All three were consolidated from
+  drafts independently verified against a live test tenant.
 - **`auth token`** — mint and print a short-lived OAuth2 bearer token from the
   stored credentials, for driving raw API calls yourself (e.g. `curl -H
   "Authorization: Bearer $(c1i auth token)"`). Prints just the token by default;
@@ -182,6 +198,20 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   (`c1i ... --fields ... | jq ...`): `$?` after a pipe reads the pipe's *last*
   command, not `c1i`'s, so the stderr message is the durable signal to check
   for, not a naive `$?`.
+- **A credential stuck in an unreachable OS keyring was misreported as "no
+  credentials found: run `c1i auth login`."** `keychain.Load` falls back to
+  its 0600 file store both when the keyring has never seen a credential and
+  when the keyring is merely unreachable (headless Linux/containers without
+  a D-Bus session bus) — but it discarded that distinction once it decided to
+  fall through, so a real credential sitting inert in the keyring looked
+  identical to never having logged in. Following the old advice made things
+  worse: it wrote a second, file-backed credential while the original
+  keyring entry stayed unreachable. Load now says plainly that the file
+  store is empty *and* the keyring is currently unavailable, names the
+  underlying keyring error, and notes that `auth login` will store a new
+  credential in the file store rather than recover the keyring one. The
+  genuinely-never-logged-in message is unchanged, and this still surfaces as
+  `client.AuthError` (exit 3), same as before.
 - **The `docs guide` drift guard (`TestGuideCommandsResolveAgainstCobraTree`)
   now validates positional-argument counts, short flags, and single-quoted
   values, and flags "c1i ..." text it can't check.** An audit of the guard
@@ -445,6 +475,33 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `cobra.ExactArgs(1)`), and command groups (`mcp`, `mcp servers`, ...) keep
   their existing "print help on no args / error on an unknown subcommand"
   behavior unchanged.
+- **`docs guide test-mcp-gateway` no longer claims every gateway-exposed tool
+  needs a toolset grant.** Disproven live: a caller with no grant on the C1
+  app's `search_tools` entitlement still gets `search_tools` back from `mcp
+  gateway list-tools`. The guide now distinguishes tools discovered from a
+  registered connector (HOSTED/EXTERNAL/tunneled MCP server) — which do
+  require holding the entitlement of a binding toolset — from C1's own
+  built-in `c1_*` tools, whose gateway exposure tracks the caller's
+  underlying role and permissions instead, unaffected by any toolset grant.
+  This is about exposure/listing only; whether `c1_*` tool *execution* is
+  similarly unconfined was not re-verified. `docs guide
+  assign-toolset-everyone` gets a matching one-sentence caveat, since the
+  toolset mechanism it walks through has no effect on `c1_*` tools either.
+- **`cmd/agents.md` no longer implies a task's `outcome` only appears once
+  it closes.** Disproven live: two tasks were `TASK_STATE_OPEN` and already
+  carried `GRANT_OUTCOME_ERROR` (provisioning failed mid-flow). The
+  omission mechanism was right — `outcome` is dropped while unspecified —
+  but the semantic inference wasn't: an open task can already carry a real
+  outcome, so the doc now says to key off `state`, not the presence of
+  `outcome`, to tell whether a task is still pending.
+- **`cmd/agents.md`'s tenant/auth section named the wrong command for
+  confirming the tenant.** It pointed at `c1i auth whoami` for "who and
+  where you are," but `whoami`'s output (`userId`, `principleId`, `email`,
+  `displayName`, `counts`) never includes the tenant URL — `c1i auth
+  status` is what prints it (`Authenticated to <base-url>`). The doc now
+  names `auth status` for the tenant and `auth whoami` for the identity,
+  which matters here specifically because the surrounding section is about
+  not silently targeting the wrong tenant.
 
 ### Testing
 
