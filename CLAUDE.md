@@ -158,16 +158,24 @@ never fails proves nothing.
   for an unreachable gateway. `cmd/errors.go` maps them — plus its own
   `usageError`, `toolExecutionError`, `nonJSONResponseError`, and
   `upstreamError` wrappers, for failures with no natural client-level type —
-  to exit codes: 0 ok, 1 generic, 2 usage (bad flags/args, an empty id, a
-  refused redirect, or API 400), 3 auth (401/403), 4 not-found (404), 5
-  rate-limited (429), 6 C1 failed (API 5xx, a redirect loop, or a 200 with a
-  non-JSON body), 7 tool-execution error (`mcp gateway call` result has
-  `isError: true`), 8 a system beyond C1 or the protocol layer failed (an
-  unreachable gateway, an upstream connector failure, or a protocol-level
-  JSON-RPC error). Keep 6 and 8 distinct: 6 is worth retrying later, 8
-  usually is not. Wrap client errors with `%w` so `errors.As` can classify
-  them, and wrap a bad flag/arg combination in `&usageError{}` so it exits 2
-  — a bare `fmt.Errorf` silently becomes exit 1.
+  to exit codes:
+
+  | Code | Meaning |
+  |------|---------|
+  | `0` | ok |
+  | `1` | generic |
+  | `2` | usage (bad flags/args, an empty id, a refused redirect, or API `400`) |
+  | `3` | auth (`401`/`403`) |
+  | `4` | not-found (`404`) |
+  | `5` | rate-limited (`429`) |
+  | `6` | C1 failed (API `5xx`, a redirect loop, or a `200` with a non-JSON body) |
+  | `7` | tool-execution error (`mcp gateway call` result has `isError: true`) |
+  | `8` | a system beyond C1 or the protocol layer failed (an unreachable gateway, an upstream connector failure, or a protocol-level JSON-RPC error) |
+
+  Keep 6 and 8 distinct: 6 is worth retrying later, 8 usually is not. Wrap
+  client errors with `%w` so `errors.As` can classify them, and wrap a bad
+  flag/arg combination in `&usageError{}` so it exits 2 — a bare `fmt.Errorf`
+  silently becomes exit 1.
 - Retries (429/5xx + transport, idempotent-aware) live in the client
   (`internal/client/client.go`); commands get them for free via `newClient`.
 - **Help text is a claim about the server.** Don't state a default, scope, or

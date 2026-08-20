@@ -5,6 +5,7 @@ import (
 	"go/parser"
 	"go/token"
 	"os"
+	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
@@ -13,10 +14,11 @@ import (
 
 // This file guards two enumerations that are duplicated across several
 // documents and have drifted repeatedly because an edit to one copy misses
-// the others: the exit-code taxonomy (cmd/errors.go's exit* constants,
-// restated in README.md, cmd/agents.md, .claude/commands/c1i.md, and
-// CLAUDE.md) and the typed-error list (every concrete error type that
-// ultimately determines the exit code, restated in CLAUDE.md and
+// the others: the exit-code taxonomy (every exit* constant declared anywhere
+// in package cmd, restated in README.md, cmd/agents.md,
+// .claude/commands/c1i.md, and CLAUDE.md) and the typed-error list (every
+// concrete error type an errors.As check inside exitCode or
+// classifyGatewayError resolves to, restated in CLAUDE.md and
 // .claude/commands/c1i.md).
 //
 // Both guards discover their "source of truth" set by parsing the actual Go
@@ -29,9 +31,24 @@ import (
 // errors.As check is picked up automatically and checked against the docs
 // the next time this test runs.
 //
+// All four documents restate the exit-code taxonomy as a "| code | meaning |"
+// markdown table, so Guard 1 uses one extraction path (extractTableBlock +
+// codesInTable) for all of them — including CLAUDE.md, whose "Errors:"
+// bullet used to carry this as prose. There is deliberately no prose parser
+// here: a table cell can't be reworded into a sentence that hides its own
+// leading code the way prose could.
+//
 // Every extraction step below either succeeds or calls t.Fatalf naming the
 // document/section it could not parse — never a silent skip that would read
 // as coverage it isn't providing.
+//
+// Known limits, left undetected on purpose (this is a guard test, not a
+// general-purpose classifier): Guard 2 only sees classification done via
+// errors.As inside exitCode or classifyGatewayError — a type assertion
+// (err.(*T)), a type switch, or classification added in some other function
+// is invisible to it. Guard 2 also dedupes discovered types by bare name
+// (last dot-segment), so two same-named types in different packages would
+// share one doc mention; no such collision exists today.
 
 // exitConstant is one constant from cmd/errors.go's exit-code block.
 type exitConstant struct {
@@ -39,61 +56,76 @@ type exitConstant struct {
 	value int
 }
 
-// parseExitConstants parses cmd/errors.go and returns every top-level
-// "exitXxx = N" integer constant it declares, in source order. This is the
-// source of truth for Guard 1 — not a copy of the names living here, which
-// would go stale exactly like the docs it's meant to check.
+// parseExitConstants parses every non-test .go file in the cmd package
+// directory and returns every top-level "exitXxx = N" integer constant
+// declared anywhere in it, in file-glob-then-source order. Scanning the
+// whole package rather than just errors.go is deliberate: an exit* constant
+// declared in any other file in package cmd must still be caught by this
+// guard, not silently invisible to it.
 func parseExitConstants(t *testing.T) []exitConstant {
 	t.Helper()
 
-	const path = "errors.go"
-	fset := token.NewFileSet()
-	file, err := parser.ParseFile(fset, path, nil, 0)
+	paths, err := filepath.Glob("*.go")
 	if err != nil {
-		t.Fatalf("parsing %s: %v", path, err)
+		t.Fatalf("globbing cmd/*.go: %v", err)
+	}
+	if len(paths) == 0 {
+		t.Fatalf("found no .go files in the cmd package directory — has the test's working directory changed?")
 	}
 
 	var consts []exitConstant
-	for _, decl := range file.Decls {
-		gd, ok := decl.(*ast.GenDecl)
-		if !ok || gd.Tok != token.CONST {
+	for _, path := range paths {
+		if strings.HasSuffix(path, "_test.go") {
 			continue
 		}
-		for _, spec := range gd.Specs {
-			vs, ok := spec.(*ast.ValueSpec)
-			if !ok {
+		fset := token.NewFileSet()
+		file, err := parser.ParseFile(fset, path, nil, 0)
+		if err != nil {
+			t.Fatalf("parsing %s: %v", path, err)
+		}
+		for _, decl := range file.Decls {
+			gd, ok := decl.(*ast.GenDecl)
+			if !ok || gd.Tok != token.CONST {
 				continue
 			}
-			for i, name := range vs.Names {
-				if !strings.HasPrefix(name.Name, "exit") {
+			for _, spec := range gd.Specs {
+				vs, ok := spec.(*ast.ValueSpec)
+				if !ok {
 					continue
 				}
-				if i >= len(vs.Values) {
-					continue // no explicit value on this spec (e.g. iota continuation) — not used by this const block today
+				for i, name := range vs.Names {
+					if !strings.HasPrefix(name.Name, "exit") {
+						continue
+					}
+					if i >= len(vs.Values) {
+						continue // no explicit value on this spec (e.g. iota continuation) — not used by this const block today
+					}
+					lit, ok := vs.Values[i].(*ast.BasicLit)
+					if !ok || lit.Kind != token.INT {
+						t.Fatalf("%s: constant %s's value is not a plain integer literal (got %T) — parseExitConstants can't evaluate it; give it a literal int or update this parser", path, name.Name, vs.Values[i])
+					}
+					n, err := strconv.Atoi(lit.Value)
+					if err != nil {
+						t.Fatalf("%s: constant %s = %q did not parse as an int: %v", path, name.Name, lit.Value, err)
+					}
+					consts = append(consts, exitConstant{name: name.Name, value: n})
 				}
-				lit, ok := vs.Values[i].(*ast.BasicLit)
-				if !ok || lit.Kind != token.INT {
-					t.Fatalf("%s: constant %s's value is not a plain integer literal (got %T) — parseExitConstants can't evaluate it; give it a literal int or update this parser", path, name.Name, vs.Values[i])
-				}
-				n, err := strconv.Atoi(lit.Value)
-				if err != nil {
-					t.Fatalf("%s: constant %s = %q did not parse as an int: %v", path, name.Name, lit.Value, err)
-				}
-				consts = append(consts, exitConstant{name: name.Name, value: n})
 			}
 		}
 	}
 	if len(consts) == 0 {
-		t.Fatalf("%s: found no \"exitXxx\" constants — has the exit-code const block moved or been renamed? parseExitConstants can't discover the source of truth without it", path)
+		t.Fatalf("cmd/*.go: found no \"exitXxx\" constants — has the exit-code const block moved or been renamed? parseExitConstants can't discover the source of truth without it")
 	}
 	return consts
 }
 
 // tableRowCodeRe matches a markdown table row whose first cell is a bare or
-// backtick-wrapped integer: "| 6 | ... |" or "| `6` | ... |". The docs
-// deliberately phrase the rest of each row differently, so only the leading
-// code cell is extracted.
-var tableRowCodeRe = regexp.MustCompile("(?m)^\\|\\s*`?(\\d+)`?\\s*\\|")
+// backtick-wrapped integer: "| 6 | ... |" or "| `6` | ... |", optionally
+// indented (CLAUDE.md's table sits inside a list-item continuation, so its
+// rows carry the item's leading spaces; the other three docs' tables don't).
+// The docs deliberately phrase the rest of each row differently, so only the
+// leading code cell is extracted.
+var tableRowCodeRe = regexp.MustCompile("(?m)^[ \t]*\\|\\s*`?(\\d+)`?\\s*\\|")
 
 // maxHeadingToTableLookahead bounds how many non-table lines extractTableBlock
 // will scan past a heading before giving up — enough for a short intro
@@ -154,114 +186,10 @@ func codesInTable(t *testing.T, docPath, tableBlock string) map[int]bool {
 	return found
 }
 
-// claudeErrorsBulletRe / claudeNextBulletRe bound CLAUDE.md's "- **Errors:**"
-// bullet: from its own heading line to (but not including) the next
-// top-level list item.
-var (
-	claudeErrorsBulletRe = regexp.MustCompile(`(?m)^- \*\*Errors:\*\*`)
-	claudeNextBulletRe   = regexp.MustCompile(`(?m)^- `)
-)
-
-// extractClaudeErrorsBullet returns the full text of CLAUDE.md's "Errors:"
-// bullet (heading line through its last continuation line), which is the one
-// place in CLAUDE.md that restates both the exit-code taxonomy and the typed
-// error list. Fails the test if the bullet, or its end boundary, can't be
-// found.
-func extractClaudeErrorsBullet(t *testing.T, content string) string {
-	t.Helper()
-
-	loc := claudeErrorsBulletRe.FindStringIndex(content)
-	if loc == nil {
-		t.Fatalf("CLAUDE.md: could not find the \"- **Errors:**\" bullet — has it been renamed or restructured?")
-	}
-	firstLineEnd := strings.IndexByte(content[loc[1]:], '\n')
-	if firstLineEnd == -1 {
-		t.Fatalf("CLAUDE.md: the \"- **Errors:**\" bullet has no content after its heading line")
-	}
-	searchFrom := loc[1] + firstLineEnd + 1
-	endLoc := claudeNextBulletRe.FindStringIndex(content[searchFrom:])
-	if endLoc == nil {
-		t.Fatalf("CLAUDE.md: could not find the next top-level bullet after \"- **Errors:**\" to bound its extent")
-	}
-	return content[loc[0] : searchFrom+endLoc[0]]
-}
-
-// exitCodesAnchorRe locates the phrase "exit codes" (case-insensitive) that
-// introduces the enumeration in CLAUDE.md's "Errors:" bullet. Extraction
-// starts after this anchor rather than at the top of the bullet so that
-// whatever punctuation follows it ("— 0 ok, ..." vs ": 0 ok, ...") doesn't
-// matter — only the anchor phrase itself has to survive a rewording.
-var exitCodesAnchorRe = regexp.MustCompile(`(?i)exit codes`)
-
-// leadingIntRe matches a leading run of digits once a clause has had its
-// surrounding punctuation/whitespace trimmed.
-var leadingIntRe = regexp.MustCompile(`^\d+`)
-
-// splitTopLevelClauses splits s on "," and ";" that are not nested inside
-// parentheses, returning each clause (untrimmed). CLAUDE.md's enumeration
-// nests per-code detail in parens ("2 usage (bad flags/args, an empty id, or
-// API 400)"), so a plain comma split would fragment a single code's clause
-// into several pieces at its own internal commas; only top-level separators
-// should end a clause.
-func splitTopLevelClauses(s string) []string {
-	var clauses []string
-	depth := 0
-	start := 0
-	for i, r := range s {
-		switch r {
-		case '(':
-			depth++
-		case ')':
-			if depth > 0 {
-				depth--
-			}
-		case ',', ';':
-			if depth == 0 {
-				clauses = append(clauses, s[start:i])
-				start = i + 1
-			}
-		}
-	}
-	clauses = append(clauses, s[start:])
-	return clauses
-}
-
-// codesInClaudeProse extracts the set of exit-code integers named in a
-// CLAUDE.md bullet's prose. It finds the "exit codes" anchor, splits the
-// remainder into top-level clauses, and — for each clause that, once
-// trimmed of quoting/punctuation, begins with a bare integer — records that
-// integer. This depends only on the anchor phrase and comma-separated-list
-// shape, not on any specific delimiter character or wording around each
-// code, so a rewording of the surrounding sentence doesn't break it. Fails
-// the test if the anchor or any codes can't be found — that means the
-// prose no longer follows this list shape at all.
-func codesInClaudeProse(t *testing.T, bullet string) map[int]bool {
-	t.Helper()
-
-	loc := exitCodesAnchorRe.FindStringIndex(bullet)
-	if loc == nil {
-		t.Fatalf("CLAUDE.md: located the \"Errors:\" bullet but found no %q anchor phrase in it — has the bullet stopped enumerating exit codes, or reworded past recognition?", "exit codes")
-	}
-
-	found := map[int]bool{}
-	for _, clause := range splitTopLevelClauses(bullet[loc[1]:]) {
-		c := strings.TrimSpace(clause)
-		c = strings.TrimLeft(c, "`:—- \t\n")
-		m := leadingIntRe.FindString(c)
-		if m == "" {
-			continue
-		}
-		n, err := strconv.Atoi(m)
-		if err != nil {
-			continue
-		}
-		found[n] = true
-	}
-	if len(found) == 0 {
-		t.Fatalf("CLAUDE.md: found the \"exit codes\" anchor but extracted zero exit-code numbers after it — has the \"0 ok, 1 generic, ...\" comma-separated list shape changed?")
-	}
-	return found
-}
+// claudeErrorsHeadingRe locates CLAUDE.md's "- **Errors:**" bullet, whose
+// table extractTableBlock finds the same way it finds the other three docs'
+// headings: scan forward for the first run of "|"-prefixed lines.
+var claudeErrorsHeadingRe = regexp.MustCompile(`(?m)^- \*\*Errors:\*\*`)
 
 // readDocFile reads path (relative to the cmd package directory, i.e. one
 // level under the module root) and fails the test loudly if it's missing —
@@ -277,10 +205,10 @@ func readDocFile(t *testing.T, path string) string {
 }
 
 // TestExitCodeTaxonomyDocumentedEverywhere is Guard 1: every exit* constant
-// in cmd/errors.go must appear, by its integer value, in README.md's,
-// cmd/agents.md's, .claude/commands/c1i.md's, and CLAUDE.md's exit-code
-// enumerations. It does not compare prose — the four documents deliberately
-// phrase each row differently — only the code number.
+// declared anywhere in package cmd must appear, by its integer value, in
+// README.md's, cmd/agents.md's, .claude/commands/c1i.md's, and CLAUDE.md's
+// exit-code tables. It does not compare prose — the four tables deliberately
+// phrase each row's meaning differently — only the leading code cell.
 //
 // cmd/agents.md is read through the same agentsTemplate the "c1i docs
 // agents" command embeds and serves, so this test covers what actually ships
@@ -292,7 +220,7 @@ func TestExitCodeTaxonomyDocumentedEverywhere(t *testing.T) {
 	readmeTable := extractTableBlock(t, "README.md", readDocFile(t, "../README.md"), regexp.MustCompile(`(?m)^### Errors & exit codes$`))
 	agentsTable := extractTableBlock(t, "cmd/agents.md (embedded)", agentsTemplate, regexp.MustCompile(`(?m)^## Exit codes$`))
 	c1iTable := extractTableBlock(t, ".claude/commands/c1i.md", readDocFile(t, "../.claude/commands/c1i.md"), regexp.MustCompile(`(?m)^## Errors & exit codes$`))
-	claudeBullet := extractClaudeErrorsBullet(t, readDocFile(t, "../CLAUDE.md"))
+	claudeTable := extractTableBlock(t, "CLAUDE.md", readDocFile(t, "../CLAUDE.md"), claudeErrorsHeadingRe)
 
 	docs := []struct {
 		name  string
@@ -301,7 +229,7 @@ func TestExitCodeTaxonomyDocumentedEverywhere(t *testing.T) {
 		{"README.md", codesInTable(t, "README.md", readmeTable)},
 		{"cmd/agents.md (embedded)", codesInTable(t, "cmd/agents.md (embedded)", agentsTable)},
 		{".claude/commands/c1i.md", codesInTable(t, ".claude/commands/c1i.md", c1iTable)},
-		{"CLAUDE.md", codesInClaudeProse(t, claudeBullet)},
+		{"CLAUDE.md", codesInTable(t, "CLAUDE.md", claudeTable)},
 	}
 
 	for _, c := range consts {
