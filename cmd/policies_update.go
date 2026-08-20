@@ -65,19 +65,24 @@ skip the lookup.`,
 		// which flag/file path produced the patch.
 		var c *client.Client
 		var fetchedType string
+		var fetchedErr error
 		var fetchedOnce bool
 		resolveFallbackPolicyType := func() (string, error) {
+			// The failure is memoized alongside the value: a second caller must
+			// see the same classified error, not an empty type that would look
+			// like "resolved to nothing" and downgrade a 401/404 to exit 2.
 			if fetchedOnce {
-				return fetchedType, nil
+				return fetchedType, fetchedErr
 			}
 			fetchedOnce = true
-			c, err = newPoliciesClient(cmd, baseURL)
-			if err != nil {
-				return "", fmt.Errorf("authentication failed: %w", err)
+			c, fetchedErr = newPoliciesClient(cmd, baseURL)
+			if fetchedErr != nil {
+				fetchedErr = fmt.Errorf("authentication failed: %w", fetchedErr)
+				return "", fetchedErr
 			}
-			fetchedType, err = fetchPolicyType(cmd, c, id)
-			if err != nil {
-				return "", err
+			fetchedType, fetchedErr = fetchPolicyType(cmd, c, id)
+			if fetchedErr != nil {
+				return "", fetchedErr
 			}
 			return fetchedType, nil
 		}
