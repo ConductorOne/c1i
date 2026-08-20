@@ -84,7 +84,11 @@ policies.`,
 }
 
 func init() {
-	policiesListCmd.Flags().Int("page-size", 50, "Results per page (max 100)")
+	// This endpoint can return more items in one page than asked for (it
+	// over-fetches to absorb server-side filtering and does not trim back), so
+	// the count is a request, not a guarantee. Cursor-following and --limit are
+	// unaffected. `policies search` is exact — different backend.
+	policiesListCmd.Flags().Int("page-size", 50, "Results per page (max 100); one page may return more than requested, so use --limit for an exact count")
 	policiesListCmd.Flags().String("page-token", "", "Pagination cursor")
 	addLimitFlag(policiesListCmd)
 	policiesCmd.AddCommand(policiesListCmd)
