@@ -6,6 +6,19 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.4.1] - 2026-08-20
+
+### Fixed
+
+- **`c1i version` reported `v0.4.0+dirty` on the 0.4.0 binaries.** The version
+  comes from version-control state at build time, and the release build's own
+  `go mod tidy` step rewrote `go.mod` before compiling — so every binary was
+  stamped as built from a modified tree. `go.mod` listed `spf13/pflag` as an
+  indirect dependency while the code imports it directly. Only the reported
+  string was wrong: the binaries were otherwise correct and their checksums
+  verified. CI now fails when `go mod tidy` changes anything, so a release
+  build is no longer the first thing to notice.
+
 ## [0.4.0] - 2026-08-20
 
 ### Added
@@ -777,7 +790,8 @@ First changelog entry; releases through v0.1.5 predate this file (see the
 
 - CI enforces `gofmt` via golangci-lint; module-wide formatting normalized.
 
-[Unreleased]: https://github.com/ConductorOne/c1i/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/ConductorOne/c1i/compare/v0.4.1...HEAD
+[0.4.1]: https://github.com/ConductorOne/c1i/releases/tag/v0.4.1
 [0.4.0]: https://github.com/ConductorOne/c1i/releases/tag/v0.4.0
 [0.3.0]: https://github.com/ConductorOne/c1i/releases/tag/v0.3.0
 [0.2.1]: https://github.com/ConductorOne/c1i/releases/tag/v0.2.1
