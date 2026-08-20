@@ -122,6 +122,24 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- **BREAKING — a bare tenant name is no longer expanded to a domain.** `--url
+  mycompany` used to become `https://mycompany.conductor.one`. With a second
+  tenant domain family in use (`*.c1eu.ai`, for EU tenants) that expansion is
+  ambiguous, and it silently pointed an EU tenant at a US host — either a
+  confusing auth failure or, worse, a different real tenant. A bare name with no
+  dot now exits `2` and names where the value came from: the `--url` flag,
+  `C1I_URL`, `~/.c1i.yaml`, or the interactive login prompt. Naming the source
+  matters most for a stale entry in the config file, where nothing on the command
+  line mentions it. Pass a full host instead — `mycompany.conductor.one` or
+  `mycompany.c1eu.ai`, with or without the scheme. For a local development
+  target, give an explicit scheme (`http://localhost:8080`); a bare `localhost`
+  is rejected too, where it previously became the meaningless
+  `https://localhost.conductor.one`.
+  Stored credentials are unaffected: both the primary and legacy keychain keys
+  derive from the resolved URL, and the retired shortcut resolved to exactly what
+  the full host resolves to, so re-authentication is not required.
+
+
 - **New exit code `8` for a failure beyond C1, and `6` now means only "C1
   returned `5xx`."** **Breaking change for anything branching on exit codes:**
   exit `6` previously covered two situations that call for opposite responses:
