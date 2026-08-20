@@ -183,6 +183,10 @@ func exitCode(err error) int {
 	if errors.As(err, &pathErr) {
 		return exitUsage
 	}
+	var redirErr *client.RedirectError
+	if errors.As(err, &redirErr) {
+		return exitUsage
+	}
 	var toolErr *toolExecutionError
 	if errors.As(err, &toolErr) {
 		return exitToolError
@@ -254,11 +258,18 @@ func writeError(w io.Writer, err error, format string) {
 // displayError returns the error to print. A *client.PathError never reaches
 // the wire — do() refuses the request before sending — so any "API error:"
 // (or similar) prefix a call site wrapped it in is a false claim; print the
-// PathError's own message instead of the full wrapped chain.
+// PathError's own message instead of the full wrapped chain. A
+// *client.RedirectError gets the same treatment: it's the client's own
+// refusal to follow a 3xx, not a response the wrapping "API error:" prefix
+// accurately describes either.
 func displayError(err error) error {
 	var pathErr *client.PathError
 	if errors.As(err, &pathErr) {
 		return pathErr
+	}
+	var redirErr *client.RedirectError
+	if errors.As(err, &redirErr) {
+		return redirErr
 	}
 	return err
 }

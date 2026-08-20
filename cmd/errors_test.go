@@ -82,6 +82,8 @@ func TestExitCode(t *testing.T) {
 		{"usage", &usageError{errors.New("bad flag")}, exitUsage},
 		{"path guard: empty segment", &client.PathError{Method: "GET", Path: "/api/v1/policies/"}, exitUsage},
 		{"wrapped path guard", fmt.Errorf("request failed: %w", &client.PathError{Method: "GET", Path: "/api/v1/policies/"}), exitUsage},
+		{"redirect guard: 301", &client.RedirectError{Method: "GET", URL: "https://x/api/v1/users/%2F", StatusCode: 301, Location: "/api/v1/users/"}, exitUsage},
+		{"wrapped redirect guard", fmt.Errorf("API error: %w", &client.RedirectError{Method: "GET", URL: "https://x/api/v1/users/%2F", StatusCode: 301, Location: "/api/v1/users/"}), exitUsage},
 		{"tool execution", &toolExecutionError{errors.New("isError")}, exitToolError},
 		{"upstream failure", &upstreamError{errors.New("connector down")}, exitUpstream},
 		{"wrapped upstream failure", fmt.Errorf("gateway handshake failed: %w", &upstreamError{errors.New("connector down")}), exitUpstream},
@@ -213,6 +215,23 @@ func TestWriteErrorTextPathErrorDropsInheritedPrefix(t *testing.T) {
 				t.Errorf("message does not explain the empty path segment: %q", got)
 			}
 		})
+	}
+}
+
+// TestWriteErrorTextRedirectErrorDropsInheritedPrefix mirrors the PathError
+// case above for *client.RedirectError: the client refuses the redirect
+// itself (redirectTripper), so it never reaches the wire either, and a call
+// site's "API error:" wrap is just as false a claim for it.
+func TestWriteErrorTextRedirectErrorDropsInheritedPrefix(t *testing.T) {
+	var buf bytes.Buffer
+	redirErr := &client.RedirectError{Method: "GET", URL: "https://x/api/v1/users/%2F", StatusCode: 301, Location: "/api/v1/users/"}
+	writeError(&buf, fmt.Errorf("API error: %w", redirErr), "text")
+	got := buf.String()
+	if strings.Contains(got, "API error:") {
+		t.Errorf("message still carries the false API error: claim: %q", got)
+	}
+	if !strings.Contains(got, "301") || !strings.Contains(got, "/api/v1/users/") {
+		t.Errorf("message does not name the redirect target: %q", got)
 	}
 }
 

@@ -82,6 +82,50 @@ func (uat *userAgentTripper) RoundTrip(req *http.Request) (*http.Response, error
 	return uat.next.RoundTrip(req)
 }
 
+// redirectStatuses is the set of 3xx codes net/http's own Client would
+// otherwise follow (see net/http's internal redirectBehavior). 304 (Not
+// Modified) and the unused 305/306 are deliberately excluded: they aren't
+// Location-based redirects net/http ever follows.
+var redirectStatuses = map[int]bool{
+	http.StatusMovedPermanently:  true, // 301
+	http.StatusFound:             true, // 302
+	http.StatusSeeOther:          true, // 303
+	http.StatusTemporaryRedirect: true, // 307
+	http.StatusPermanentRedirect: true, // 308
+}
+
+// redirectTripper turns any 3xx response into a *RedirectError instead of
+// letting http.Client follow it. This API performs zero redirects for any
+// request this CLI issues today (verified with --debug against a normal
+// call), and silently following one can turn a single-object read into a
+// collection read (an id of "/" or "." 301s to the parent collection). It
+// intercepts at the RoundTripper layer, one level below http.Client's own
+// redirect-following logic, rather than via http.Client.CheckRedirect:
+// CheckRedirect's signature only exposes the *next* request, not the
+// response that triggered it, so it can't report the status code or
+// Location a caller needs to see. Returning an error from RoundTrip means
+// Client.Do never receives a 3xx response to act on — so its redirect
+// logic never runs, on the first hop, before any retry/backoff or a second
+// request happens.
+type redirectTripper struct {
+	next http.RoundTripper
+}
+
+func (rt *redirectTripper) RoundTrip(req *http.Request) (*http.Response, error) {
+	resp, err := rt.next.RoundTrip(req)
+	if err != nil || !redirectStatuses[resp.StatusCode] {
+		return resp, err
+	}
+	loc := resp.Header.Get("Location")
+	_ = resp.Body.Close()
+	return nil, &RedirectError{
+		Method:     req.Method,
+		URL:        req.URL.String(),
+		StatusCode: resp.StatusCode,
+		Location:   loc,
+	}
+}
+
 type Client struct {
 	httpClient *http.Client
 	baseURL    string
@@ -220,7 +264,7 @@ func New(ctx context.Context, baseURL string, opts ...Option) (*Client, error) {
 	}
 
 	oauthClient := oauth2.NewClient(ctx, tokenSource)
-	oauthClient.Transport = &userAgentTripper{next: oauthClient.Transport}
+	oauthClient.Transport = &redirectTripper{next: &userAgentTripper{next: oauthClient.Transport}}
 
 	c := &Client{
 		httpClient: oauthClient,
@@ -247,6 +291,11 @@ func New(ctx context.Context, baseURL string, opts ...Option) (*Client, error) {
 // retries from paying New's real exponential backoff). No production code
 // path calls this; c1i always authenticates through New.
 func NewForTesting(baseURL string, hc *http.Client, opts ...Option) *Client {
+	next := hc.Transport
+	if next == nil {
+		next = http.DefaultTransport
+	}
+	hc.Transport = &redirectTripper{next: next}
 	c := &Client{httpClient: hc, baseURL: baseURL, maxRetries: DefaultMaxRetries}
 	for _, opt := range opts {
 		opt(c)
@@ -440,6 +489,14 @@ func doWithRetry(doer httpDoer, req *http.Request, maxRetries int) ([]byte, erro
 			var tokErr *tokensource.TokenError
 			if errors.As(err, &tokErr) {
 				return nil, &AuthError{fmt.Errorf("token request failed: %w", err)}
+			}
+			// A redirect (see redirectTripper) is permanent for a given
+			// request shape — retrying would just redirect the same way
+			// again — so surface it immediately instead of burning the
+			// retry budget on it.
+			var redirErr *RedirectError
+			if errors.As(err, &redirErr) {
+				return nil, redirErr
 			}
 			// Transport-level failure (connection reset, timeout, ...). We
 			// can't tell whether the server processed the request, so only

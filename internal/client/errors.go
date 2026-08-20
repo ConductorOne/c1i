@@ -38,3 +38,26 @@ type PathError struct {
 func (e *PathError) Error() string {
 	return fmt.Sprintf("refusing to send %s %s: empty path segment (an id argument was likely empty)", e.Method, e.Path)
 }
+
+// RedirectError is returned when a request receives a 3xx response. c1i's
+// http.Client never follows a redirect (see redirectTripper in client.go)
+// because this API performs zero redirects for any legitimately-formed
+// request; the only cause observed in practice is an id argument (e.g. "/"
+// or ".") that the server normalizes onto a different resource's path —
+// following it would silently turn a single-object read into a collection
+// read. That's the same failure class PathError guards, one layer up: the
+// outbound request here is well-formed (PathError's check already passed),
+// it's the server's *response* that redirects elsewhere, which is a shape
+// PathError's request-construction check cannot see. Classified as
+// exitUsage in cmd/errors.go, matching PathError, since every case observed
+// so far is an id argument that didn't address a single resource.
+type RedirectError struct {
+	Method     string
+	URL        string
+	StatusCode int
+	Location   string
+}
+
+func (e *RedirectError) Error() string {
+	return fmt.Sprintf("refusing to follow redirect: %s %s returned %d to %q (an id argument that doesn't address a single resource is the only known cause)", e.Method, e.URL, e.StatusCode, e.Location)
+}
