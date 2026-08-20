@@ -78,7 +78,7 @@ func isTerminal() bool {
 
 func promptForURL(cmd *cobra.Command) (string, error) {
 	out := cmd.OutOrStdout()
-	_, _ = fmt.Fprintf(out, "Enter your C1 URL (e.g. mycompany.conductor.one or mycompany): ")
+	_, _ = fmt.Fprintf(out, "Enter your C1 URL (e.g. mycompany.conductor.one, mycompany.c1eu.ai, or mycompany for conductor.one): ")
 
 	scanner := bufio.NewScanner(os.Stdin)
 	if !scanner.Scan() {

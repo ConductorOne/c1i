@@ -131,7 +131,7 @@ never fails proves nothing.
   `client.AuthError`, and `client.PathError`; `cmd/errors.go` maps them to exit
   codes — 0 ok, 1 generic, 2 usage (bad flags/args, an empty id, or API 400),
   3 auth (401/403), 4 not-found (404), 5 rate-limited (429), 6 C1 failed
-  (API 5xx), 7 tool-execution error (`mcp gateway call` result has
+  (API 5xx, or a 200 with a non-JSON body), 7 tool-execution error (`mcp gateway call` result has
   `isError: true`), 8 a system beyond C1 or the protocol layer failed (an
   upstream connector failure, or a protocol-level JSON-RPC error). Keep 6 and 8
   distinct: 6 is worth retrying later, 8 usually is not.

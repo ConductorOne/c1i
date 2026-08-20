@@ -57,7 +57,7 @@ A C1 URL is required for all API commands, resolved in order: `--url` flag →
 | 3 | not authenticated, or API `401`/`403` |
 | 4 | API `404` (not found) |
 | 5 | API `429` (rate limited) |
-| 6 | C1 failed: API `5xx` |
+| 6 | C1 failed: API `5xx`, or a `200` with a body that isn't JSON |
 | 7 | MCP tool call completed but the tool itself reported `isError: true` |
 | 8 | a system beyond C1, or the MCP protocol layer, failed |
 

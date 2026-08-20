@@ -261,7 +261,6 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   per command. A hostile-but-valid-UTF-8 id still goes to the server and gets its
   normal `400`.
 
-
 - **An empty id argument no longer returns the whole collection with exit `0`.**
   `c1i users get ""` (and `apps`, `policies`, `functions`, `automations`) printed
   the full `{"list":[...]}` and reported success: `cobra.ExactArgs(1)` counts `""`
