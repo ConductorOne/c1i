@@ -74,10 +74,12 @@ never fails proves nothing.
     match the flat commands (`users get <user-id>`). **Presence is not
     non-emptiness:** `ExactArgs(1)` accepts `""`, which used to render a
     trailing empty path segment, get redirected to the collection endpoint,
-    and print the whole list with exit 0. The client now refuses any request
-    whose path has an empty segment (`client.PathError` → exit 2), so a
-    per-command check is still unnecessary — but don't reason as though a
-    positional id were guaranteed non-empty.
+    and print the whole list with exit 0. The **shared REST client** now refuses
+    any request whose path has an empty segment (`client.PathError` → exit 2),
+    so a per-command check is still unnecessary *for commands built on it* — but
+    don't reason as though a positional id were guaranteed non-empty, and see
+    "Adding a new client/subsystem package" below if your command doesn't go
+    through that client.
   - A sub-resource or sub-list nested under **exactly one** owner id in the path
     (`/thing/{id}/…`) also takes that owner id positionally — e.g.
     `functions commits|usage|source <function-id>`,
@@ -125,11 +127,14 @@ never fails proves nothing.
   silently — every non-empty string is truthy, so `jq 'select(.stable)'`
   matches `"false"`, and `jq 'select(.tool_count > 5)'` compares strings.
   This recurred across six row builders before it was caught.
-- **Errors:** the client returns typed `client.APIError` (carries status) and
-  `client.AuthError`; `cmd/errors.go` maps them to exit codes — 0 ok, 1 generic,
-  2 usage, 3 auth (401/403), 4 not-found (404), 5 rate-limited (429), 6 remote
-  system failed (API 5xx, or an upstream MCP connector failure), 7
-  tool-execution error (`mcp gateway call` result has `isError: true`).
+- **Errors:** the client returns typed `client.APIError` (carries status),
+  `client.AuthError`, and `client.PathError`; `cmd/errors.go` maps them to exit
+  codes — 0 ok, 1 generic, 2 usage (bad flags/args, an empty id, or API 400),
+  3 auth (401/403), 4 not-found (404), 5 rate-limited (429), 6 C1 failed
+  (API 5xx), 7 tool-execution error (`mcp gateway call` result has
+  `isError: true`), 8 a system beyond C1 or the protocol layer failed (an
+  upstream connector failure, or a protocol-level JSON-RPC error). Keep 6 and 8
+  distinct: 6 is worth retrying later, 8 usually is not.
   Wrap client errors with `%w` so `errors.As` can classify them, and wrap a bad
   flag/arg combination in `&usageError{}` so it exits 2 — a bare `fmt.Errorf`
   silently becomes exit 1.
@@ -162,10 +167,21 @@ a package, verify each of these against the new code:
   never the first page only. Silent truncation reads as success.
 - **Return typed, classifiable errors.** A non-2xx / auth failure must surface as
   (or wrap, with `%w`) an error type that `cmd/errors.go` maps to the exit-code
-  taxonomy (3 auth, 4 not-found, 5 rate-limited, 6 server) — not a bare
-  `fmt.Errorf`, which collapses to exit 1.
+  taxonomy (3 auth, 4 not-found, 5 rate-limited, 6 C1 5xx, 8 upstream/protocol
+  failure) — not a bare `fmt.Errorf`, which collapses to exit 1. A protocol
+  client is exactly the case exit 8 exists for: keep "the service beyond C1
+  failed" distinct from "C1 failed".
 - **Escape ids in paths** (`client.Path`-style), use the shared output helpers in
   `cmd`, and honor the global flags where applicable.
+- **Reject an empty id before sending.** The shared client refuses a path with an
+  empty segment (`client.PathError` → exit 2); a package that issues its own
+  HTTP does not inherit that, and `cobra.ExactArgs` will hand you `""` happily.
+  An empty id appended to a collection path is the shape that produced the
+  silent "returned the whole list with exit 0" bug.
+- **Honor `--debug` and `--max-retries`.** Both are documented as global, and
+  both are currently silently inert on the packages that issue their own HTTP —
+  so tracing shows nothing and transient failures aren't retried on those paths.
+  Don't add a fourth.
 
 When implementing a wire protocol or stream parser (JSON-RPC, SSE, MCP, …), code
 and test against the **full input space the spec permits**, not just the shape a

@@ -126,17 +126,27 @@ func TestGatewayErrorExitCodes(t *testing.T) {
 
 // TestGatewayJSONRPCErrorExitCodes pins the process exit code for a JSON-RPC-
 // level error returned by tools/call, across every code cmd now
-// distinguishes for the gateway: -32602 (invalid params) / -32601 (method
-// not found) -- the caller named a tool or method that doesn't exist -- map
-// to exitUsage (2); code 0 -- the shape observed for an upstream connector
-// failure (see internal/mcpgateway's rpcError.Unwrap) -- maps to exitServer
-// (6); and any other code (e.g. -32603, internal error) is left unmapped and
-// still exits 1 (generic), exactly as before this change.
+// distinguishes for the gateway:
+//
+//   - -32602 (invalid params) -- caller-caused (bad tool arguments) -- maps
+//     to exitUsage (2).
+//   - -32601 (method not found), -32700 (parse error), -32600 (invalid
+//     request), and a JSON-RPC code that is present and 0 (the shape
+//     observed for an upstream connector failure, see internal/mcpgateway's
+//     rpcError) -- all upstream/protocol-layer failures distinct from C1
+//     itself failing -- map to exitUpstream (8). -32601 moved here from
+//     exitUsage: this client only ever sends four fixed, spec-required
+//     methods, so a caller cannot trigger it themselves; it firing means a
+//     protocol-version mismatch or a bug in this CLI. Code 0 moved here from
+//     exitServer.
+//   - any other code (e.g. -32603, internal error), or a JSON-RPC error
+//     object with no `code` field at all, is left unmapped and still exits 1
+//     (generic), exactly as before this change.
 //
 // It drives a real httptest.Server round trip through *mcpgateway.Client and
 // wraps the resulting error exactly as mcp_gateway_call.go's RunE does
 // ("tools/call failed: %w", classifyGatewayError(err)), so it proves the
-// actual wiring -- classifyGatewayError, rpcError.Unwrap, and exitCode
+// actual wiring -- classifyGatewayError, RPCErrorCode, and exitCode
 // together -- rather than re-implementing it. It also pins that the rendered
 // error message is unchanged by classification: only the exit code changes.
 func TestGatewayJSONRPCErrorExitCodes(t *testing.T) {
@@ -146,8 +156,10 @@ func TestGatewayJSONRPCErrorExitCodes(t *testing.T) {
 		want int
 	}{
 		{"invalid params", -32602, exitUsage},
-		{"method not found", -32601, exitUsage},
-		{"upstream connector failure", 0, exitServer},
+		{"method not found", -32601, exitUpstream},
+		{"parse error", -32700, exitUpstream},
+		{"invalid request", -32600, exitUpstream},
+		{"upstream connector failure (code present and 0)", 0, exitUpstream},
 		{"internal error (unmapped code)", -32603, exitError},
 	}
 	for _, tc := range cases {
@@ -211,6 +223,49 @@ func TestGatewayJSONRPCErrorExitCodes(t *testing.T) {
 				t.Errorf("code %d: --error-format json output %s carries a \"status\" field for a failure with no real HTTP status", tc.code, buf.String())
 			}
 		})
+	}
+}
+
+// TestGatewayJSONRPCErrorNoCodeExitsGeneric is the negative pair for
+// "upstream connector failure (code present and 0)" above: a JSON-RPC error
+// object that omits the `code` field entirely must exit 1 (generic), not 8 --
+// only a *present* 0 is the upstream-connector-failure signal. Before
+// rpcError.Code became a *int, an absent code and a present 0 both decoded to
+// Go's int zero value and were indistinguishable, so this genuinely drives a
+// raw response with no "code" key (not just code:0) through the real
+// classifyGatewayError/exitCode wiring.
+func TestGatewayJSONRPCErrorNoCodeExitsGeneric(t *testing.T) {
+	reqN := 0
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		reqN++
+		w.Header().Set("Content-Type", "application/json")
+		switch reqN {
+		case 1: // initialize
+			_, _ = fmt.Fprint(w, `{"jsonrpc":"2.0","id":1,"result":{}}`)
+		case 2: // notifications/initialized
+			w.WriteHeader(http.StatusAccepted)
+		default: // tools/call -- error object with no "code" key at all
+			_, _ = fmt.Fprint(w, `{"jsonrpc":"2.0","id":2,"error":{"message":"boom"}}`)
+		}
+	}))
+	defer srv.Close()
+
+	gc := mcpgateway.New(srv.URL, "test-token", srv.Client())
+	if err := gc.Initialize(context.Background()); err != nil {
+		t.Fatalf("unexpected Initialize failure: %v", err)
+	}
+	_, callErr := gc.CallTool(context.Background(), "my_tool", nil)
+	if callErr == nil {
+		t.Fatal("expected CallTool to fail")
+	}
+
+	wrapped := fmt.Errorf("tools/call failed: %w", classifyGatewayError(callErr))
+	if got := exitCode(wrapped); got != exitError {
+		t.Errorf("exitCode = %d, want exitError (%d, generic) for a JSON-RPC error with no code field; err: %v", got, exitError, wrapped)
+	}
+	var upErr *upstreamError
+	if errors.As(wrapped, &upErr) {
+		t.Errorf("error chain contains *upstreamError for a code-absent JSON-RPC error; only code-present-and-0 should reach exitUpstream, got %v", wrapped)
 	}
 }
 

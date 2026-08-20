@@ -263,8 +263,10 @@ Confirm "$TOOL_NAME" appears, then invoke it. Arguments are a JSON object via
 
 A tool result with isError: true exits 7. A JSON-RPC-level failure (the call
 itself failed, not the tool) is classified by its code: an unknown tool name
-(-32602) or method (-32601) exits 2; an upstream connector error (code 0 —
-e.g. an unreachable external MCP server) exits 6; any other code exits 1.
+or bad params (-32602) exits 2, since that is caused by what you passed;
+method-not-found, parse-error and invalid-request (-32601/-32700/-32600), and
+an upstream connector error (code 0 — e.g. an unreachable external MCP server)
+exit 8; a JSON-RPC error carrying no code at all, or any other code, exits 1.
 
 The gateway endpoint is derived from --url / C1I_URL by default (inserting
 "-mcp" into the host); if the gateway lives elsewhere, override it with

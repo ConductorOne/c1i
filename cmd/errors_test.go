@@ -63,7 +63,12 @@ func TestExitCode(t *testing.T) {
 		{"api 429", &client.APIError{StatusCode: 429}, exitRateLimited},
 		{"api 500", &client.APIError{StatusCode: 500}, exitServer},
 		{"api 503", &client.APIError{StatusCode: 503}, exitServer},
-		{"api 400", &client.APIError{StatusCode: 400}, exitError},
+		// A bare HTTP 400 is caller-caused (bad request body/params), so it now
+		// maps to exitUsage -- a deliberate narrowing of the "unlisted status"
+		// default, scoped to exactly 400. 409 is the negative pair proving
+		// nothing else moved off exitError.
+		{"api 400", &client.APIError{StatusCode: 400}, exitUsage},
+		{"api 409 (unaffected)", &client.APIError{StatusCode: 409}, exitError},
 		{"auth", &client.AuthError{Err: errors.New("no creds")}, exitAuth},
 		// The keyring-unavailable diagnosis (internal/keychain.Load,
 		// see keychain_test.go) still surfaces through loadCredentials as an
@@ -78,6 +83,8 @@ func TestExitCode(t *testing.T) {
 		{"path guard: empty segment", &client.PathError{Method: "GET", Path: "/api/v1/policies/"}, exitUsage},
 		{"wrapped path guard", fmt.Errorf("request failed: %w", &client.PathError{Method: "GET", Path: "/api/v1/policies/"}), exitUsage},
 		{"tool execution", &toolExecutionError{errors.New("isError")}, exitToolError},
+		{"upstream failure", &upstreamError{errors.New("connector down")}, exitUpstream},
+		{"wrapped upstream failure", fmt.Errorf("gateway handshake failed: %w", &upstreamError{errors.New("connector down")}), exitUpstream},
 		{"wrapped api 404", fmt.Errorf("API error: %w", &client.APIError{StatusCode: 404}), exitNotFound},
 		{"wrapped auth", fmt.Errorf("authentication failed: %w", &client.AuthError{Err: errors.New("x")}), exitAuth},
 		{"cobra unknown command", errors.New(`unknown command "bogus" for "c1i"`), exitUsage},
@@ -91,6 +98,48 @@ func TestExitCode(t *testing.T) {
 				t.Errorf("exitCode(%v) = %d, want %d", tc.err, got, tc.want)
 			}
 		})
+	}
+}
+
+// TestExitCodeConstantsArePinned guards the published exit-code contract
+// (documented in README.md, cmd/agents.md, and .claude/commands/c1i.md, and
+// relied on by agents that branch on these integers). A mutation that
+// changed exitUpstream from 8 to 6 survived the full test suite because
+// every assertion compared against the symbolic constant, so both sides
+// moved together. These comparisons use literal integers so a renumbering
+// (or an accidental alias between two codes) shows up here even though every
+// other test still passes; if you're deliberately changing one of these
+// values, update README.md, cmd/agents.md, and .claude/commands/c1i.md too.
+func TestExitCodeConstantsArePinned(t *testing.T) {
+	cases := []struct {
+		name string
+		got  int
+		want int
+	}{
+		{"exitOK", exitOK, 0},
+		{"exitError", exitError, 1},
+		{"exitUsage", exitUsage, 2},
+		{"exitAuth", exitAuth, 3},
+		{"exitNotFound", exitNotFound, 4},
+		{"exitRateLimited", exitRateLimited, 5},
+		{"exitServer", exitServer, 6},
+		{"exitToolError", exitToolError, 7},
+		{"exitUpstream", exitUpstream, 8},
+	}
+	seen := make(map[int]string, len(cases))
+	for _, tc := range cases {
+		if tc.got != tc.want {
+			t.Errorf("%s = %d, want %d -- this is a published exit-code contract "+
+				"(documented in README.md, cmd/agents.md, and .claude/commands/c1i.md) "+
+				"that agents branch on; if this change is deliberate, update those docs too",
+				tc.name, tc.got, tc.want)
+		}
+		if other, dup := seen[tc.got]; dup {
+			t.Errorf("%s and %s both equal %d -- two exit codes must never alias to the "+
+				"same integer, since agents distinguish failure classes by this value",
+				tc.name, other, tc.got)
+		}
+		seen[tc.got] = tc.name
 	}
 }
 

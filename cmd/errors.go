@@ -26,8 +26,9 @@ const (
 	exitAuth        = 3 // not authenticated, or API returned 401/403
 	exitNotFound    = 4 // API returned 404
 	exitRateLimited = 5 // API returned 429
-	exitServer      = 6 // a remote system failed: API returned 5xx, or an upstream MCP connector failed
+	exitServer      = 6 // API returned 5xx
 	exitToolError   = 7 // an MCP tool call completed (transport/protocol succeeded) but the tool itself reported isError
+	exitUpstream    = 8 // an upstream system, or the protocol layer itself, failed -- distinct from the C1 API failing (e.g. an unreachable MCP connector, or a JSON-RPC protocol-level error)
 )
 
 // usageError marks an error as a CLI-usage problem (bad flag/args) so it maps to
@@ -51,24 +52,27 @@ type toolExecutionError struct{ err error }
 func (e *toolExecutionError) Error() string { return e.err.Error() }
 func (e *toolExecutionError) Unwrap() error { return e.err }
 
-// remoteFailureError marks a failure in a system this CLI depends on that
-// didn't arrive as an HTTP status this taxonomy can classify by — e.g. the
-// MCP gateway's JSON-RPC-level report that an upstream connector failed (an
-// unreachable external MCP server, a vendor API error surfaced through the
-// connector, ...). The gateway itself answers HTTP 200 for this class of
-// failure, so there is no real status to attach: wrapping it in a
-// *client.APIError would require inventing one, which would then render as a
-// false "status" in --error-format json — the same "claim about the wire
-// that isn't true" problem this CLI already avoids for help text. This type
-// exists so that class of failure can still map to exitServer (6) — a remote
-// system failed — without fabricating a status anywhere. Not exported:
-// nothing outside cmd constructs one today, and keeping it here means
-// exitCode's switch is the single place that has to agree with
+// upstreamError marks a failure in a system this CLI depends on, or in the
+// protocol layer itself, that didn't arrive as an HTTP status this taxonomy
+// can classify by — e.g. the MCP gateway's JSON-RPC-level report that an
+// upstream connector failed (an unreachable external MCP server, a vendor
+// API error surfaced through the connector, ...), or a JSON-RPC
+// protocol-level error (method not found, parse error, invalid request) that
+// this CLI's own fixed, spec-required requests should never trigger. The
+// gateway itself answers HTTP 200 for this class of failure, so there is no
+// real status to attach: wrapping it in a *client.APIError would require
+// inventing one, which would then render as a false "status" in
+// --error-format json — the same "claim about the wire that isn't true"
+// problem this CLI already avoids for help text. This type exists so that
+// class of failure can map to exitUpstream (8) — distinct from the C1 API
+// itself failing (exitServer, 6) — without fabricating a status anywhere.
+// Not exported: nothing outside cmd constructs one today, and keeping it
+// here means exitCode's switch is the single place that has to agree with
 // cmd/mcp_gateway.go's classifyGatewayError on what it means.
-type remoteFailureError struct{ err error }
+type upstreamError struct{ err error }
 
-func (e *remoteFailureError) Error() string { return e.err.Error() }
-func (e *remoteFailureError) Unwrap() error { return e.err }
+func (e *upstreamError) Error() string { return e.err.Error() }
+func (e *upstreamError) Unwrap() error { return e.err }
 
 // Run executes the root command, renders any error per --error-format, and
 // returns the process exit code. main() is just os.Exit(cmd.Run()).
@@ -152,6 +156,8 @@ func exitCode(err error) int {
 			return exitNotFound
 		case apiErr.StatusCode == 429:
 			return exitRateLimited
+		case apiErr.StatusCode == 400:
+			return exitUsage
 		case apiErr.StatusCode >= 500:
 			return exitServer
 		default:
@@ -170,9 +176,9 @@ func exitCode(err error) int {
 	if errors.As(err, &toolErr) {
 		return exitToolError
 	}
-	var remoteErr *remoteFailureError
-	if errors.As(err, &remoteErr) {
-		return exitServer
+	var upstreamErr *upstreamError
+	if errors.As(err, &upstreamErr) {
+		return exitUpstream
 	}
 	var usageErr *usageError
 	if errors.As(err, &usageErr) {

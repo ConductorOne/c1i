@@ -122,6 +122,35 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- **New exit code `8` for a failure beyond C1, and `6` now means only "C1
+  returned `5xx`."** **Breaking change for anything branching on exit codes:**
+  exit `6` previously covered two situations that call for opposite responses:
+  C1 itself failing, and an upstream MCP connector failing. An agent could not
+  tell "C1 is down, wait and retry" from "the Slack connector is down, retrying
+  won't help." What moved to `8`: an upstream connector failure (a JSON-RPC
+  error carrying code `0`), and protocol-level JSON-RPC errors — `-32601`
+  (method not found), `-32700` (parse error), `-32600` (invalid request).
+  `-32601` moved *from* exit `2`: this client only ever sends four fixed,
+  spec-required methods, so a caller cannot cause "method not found" — it means
+  a protocol mismatch or a bug here, and exit `2` sent people hunting their own
+  command line. A test now pins that method set, so adding an outbound method
+  fails the build rather than silently invalidating the reasoning.
+- **A JSON-RPC error object carrying no `code` field now exits `1`, not `6`.**
+  The field was a plain `int`, so an absent code decoded to `0` — indistinguishable
+  from a genuine code `0`, and therefore misreported as an upstream connector
+  failure. Presence is now tracked, so "no code" is generic and unclassified,
+  which is what it is.
+- **A bare `400` from the API now exits `2` (usage), not `1`.** Most `400`s here
+  are a value the CLI forwarded without local validation — a bad page token, an
+  out-of-range page size, a misspelled enum, a malformed id — and for those,
+  exit `2` is right and no retry will help. Be aware of the limit, though: some
+  `400`s are state or business-rule rejections rather than bad input. Approving
+  an already-closed task returns `400 task is closed`, and that now reports exit
+  `2` even though nothing about the invocation was wrong. Exit `2` on an API
+  `400` therefore means "the server rejected this request outright" — read the
+  message before concluding your flags were wrong. Mapping `400` to the nearest
+  existing bucket was a deliberate simplification rather than adding per-status
+  carve-outs. `409` and other unlisted statuses still exit `1`.
 - **BREAKING — NDJSON rows emit real JSON booleans and numbers, not strings.**
   List commands stringified every non-string row value, so `stable` came out
   as `"true"` and counts as `"7"`. That silently broke the documented reason
@@ -204,15 +233,19 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `c1i users get ""` (and `apps`, `policies`, `functions`, `automations`) printed
   the full `{"list":[...]}` and reported success: `cobra.ExactArgs(1)` counts `""`
   as an argument, the empty id rendered a trailing empty path segment, and the
-  API redirected that to the collection endpoint. The client now refuses any
-  request whose path carries an empty segment — before anything is sent — and
-  exits `2`. One check at the single point every request passes through, so
-  every current and future command is covered, including a raw
-  `api --path /api/v1/policies/`.
-  **Visible behavior change:** `tasks approve ""` and `tasks deny ""` previously
-  exited `4` (that endpoint answers `404` rather than redirecting); they now exit
-  `2`, which correctly classifies an empty argument as caller error rather than
-  "not found".
+  API redirected that to the collection endpoint. The shared REST client now
+  refuses any request whose path carries an empty segment — before anything is
+  sent — and exits `2`. It is one check at the point every REST request passes
+  through, so every command built on that client is covered, including a raw
+  `api --path /api/v1/policies/`. It does **not** cover the three subsystems
+  that issue HTTP themselves (`internal/tokensource`, `internal/login`,
+  `internal/mcpgateway`); none of those builds a path from a caller-supplied id
+  today, but `mcp gateway call` takes a positional argument and is guarded by
+  its own JSON-RPC validation rather than by this check.
+  **Breaking change for anything branching on exit codes:** `tasks approve ""`
+  and `tasks deny ""` previously exited `4` (that endpoint answers `404` rather
+  than redirecting); they now exit `2`, which correctly classifies an empty
+  argument as caller error rather than "not found".
 - **The refusal message no longer claims to be an API error.** It read
   `Error: API error: refusing to send GET /api/v1/policies/: …`, which was a
   false claim — no request reached the wire. Prefixes inherited from call sites

@@ -14,6 +14,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strconv"
 	"strings"
 
 	"github.com/ConductorOne/c1i/internal/client"
@@ -22,6 +23,26 @@ import (
 // protocolVersion is the MCP revision c1i negotiates. The gateway echoes its
 // own supported version in the initialize result.
 const protocolVersion = "2025-06-18"
+
+// Every JSON-RPC method this client sends. classifyGatewayError maps -32601 to
+// exit 8 (not usage) because this fixed set means a caller cannot cause
+// "method not found" — adding one invalidates that, so TestOutboundRPCMethods
+// fails on any change here.
+const (
+	methodInitialize               = "initialize"
+	methodNotificationsInitialized = "notifications/initialized"
+	methodToolsList                = "tools/list"
+	methodToolsCall                = "tools/call"
+)
+
+// outboundRPCMethods is every method above, gathered so a test can assert
+// against the actual set the code sends rather than a hand-maintained copy.
+var outboundRPCMethods = []string{
+	methodInitialize,
+	methodNotificationsInitialized,
+	methodToolsList,
+	methodToolsCall,
+}
 
 // Client is a single-session MCP gateway client. Not safe for concurrent use;
 // each command builds one, runs its handshake, and discards it.
@@ -96,17 +117,23 @@ type rpcRequest struct {
 	Params  any    `json:"params,omitempty"`
 }
 
+// Code is *int so an omitted `code` stays distinguishable from a literal
+// `code:0`, which is the observed shape of an upstream connector failure.
 type rpcError struct {
-	Code    int             `json:"code"`
+	Code    *int            `json:"code"`
 	Message string          `json:"message"`
 	Data    json.RawMessage `json:"data,omitempty"`
 }
 
 func (e *rpcError) Error() string {
-	if len(e.Data) > 0 {
-		return fmt.Sprintf("MCP error %d: %s (%s)", e.Code, e.Message, string(e.Data))
+	code := "absent"
+	if e.Code != nil {
+		code = strconv.Itoa(*e.Code)
 	}
-	return fmt.Sprintf("MCP error %d: %s", e.Code, e.Message)
+	if len(e.Data) > 0 {
+		return fmt.Sprintf("MCP error %s: %s (%s)", code, e.Message, string(e.Data))
+	}
+	return fmt.Sprintf("MCP error %s: %s", code, e.Message)
 }
 
 // RPCErrorCode returns the JSON-RPC error code carried by err, if err is (or
@@ -114,28 +141,25 @@ func (e *rpcError) Error() string {
 // transport-level failure (e.g. *HTTPError — a non-2xx HTTP status) or any
 // other error, letting a caller distinguish "the gateway answered with a
 // JSON-RPC error" from "the request never got a JSON-RPC-shaped response at
-// all."
+// all." code is nil when the JSON-RPC error object omitted the `code` field
+// entirely — distinguishable from a present code of 0 (ok is still true in
+// both cases).
 //
 // This exists so cmd — which owns the process exit-code taxonomy and the
 // types (like *usageError) some of those codes must map to — can react to
 // specific JSON-RPC codes without internal/mcpgateway importing package cmd.
 //
-// Deliberately NOT an Unwrap() on rpcError to a *client.APIError: code 0 (the
-// shape observed for an upstream connector failure — an unreachable external
-// MCP server, a vendor API error, ...) arrives on an HTTP 200 response, so
-// there is no real status to attach. An earlier version of this fix unwrapped
-// to *client.APIError{StatusCode: 502} to reach exit 6 through the existing
-// ">= 500" rule, but that fabricated status then rendered as a false "status"
-// field in --error-format json — a claim about the wire that never happened.
-// cmd/mcp_gateway.go's classifyGatewayError uses this accessor to wrap code 0
-// in a *remoteFailureError (cmd/errors.go) instead: exit 6, no invented
-// status anywhere.
-func RPCErrorCode(err error) (code int, ok bool) {
+// Deliberately NOT an Unwrap() to *client.APIError: these errors arrive on an
+// HTTP 200, so there is no status to attach, and inventing one (502, to reach
+// the ">= 500" rule) surfaced as a false "status" field in --error-format json.
+// classifyGatewayError wraps them in an *upstreamError instead — exit 8, no
+// invented status.
+func RPCErrorCode(err error) (code *int, ok bool) {
 	var rpcErr *rpcError
 	if errors.As(err, &rpcErr) {
 		return rpcErr.Code, true
 	}
-	return 0, false
+	return nil, false
 }
 
 type rpcResponse struct {
@@ -152,7 +176,7 @@ func (c *Client) Initialize(ctx context.Context) error {
 		"capabilities":    map[string]any{},
 		"clientInfo":      map[string]any{"name": "c1i", "version": "dev"},
 	}
-	if _, err := c.call(ctx, "initialize", params); err != nil {
+	if _, err := c.call(ctx, methodInitialize, params); err != nil {
 		return err
 	}
 	// A Mcp-Session-Id is optional per the MCP transport spec: a stateless
@@ -167,7 +191,7 @@ func (c *Client) Initialize(ctx context.Context) error {
 	// -> tools/* order this method enforces.
 	//
 	// notifications/initialized has no id and expects no result.
-	return c.notify(ctx, "notifications/initialized")
+	return c.notify(ctx, methodNotificationsInitialized)
 }
 
 // maxToolsListPages caps ListTools pagination as a backstop against a server
@@ -205,7 +229,7 @@ func (c *Client) ListTools(ctx context.Context) ([]Tool, error) {
 		if cursor != "" {
 			params["cursor"] = cursor
 		}
-		raw, err := c.call(ctx, "tools/list", params)
+		raw, err := c.call(ctx, methodToolsList, params)
 		if err != nil {
 			return nil, err
 		}
@@ -237,7 +261,7 @@ func (c *Client) CallTool(ctx context.Context, name string, arguments json.RawMe
 		args = json.RawMessage(`{}`)
 	}
 	params := map[string]any{"name": name, "arguments": args}
-	return c.call(ctx, "tools/call", params)
+	return c.call(ctx, methodToolsCall, params)
 }
 
 // call sends a JSON-RPC request expecting a response, and returns its result.

@@ -53,15 +53,17 @@ A C1 URL is required for all API commands, resolved in order: `--url` flag →
 |---|---|
 | 0 | success |
 | 1 | generic / unclassified error |
-| 2 | usage error (bad flags/args, unknown command) |
+| 2 | usage error (bad flags/args, unknown command, an empty id argument, or API `400`) |
 | 3 | not authenticated, or API `401`/`403` |
 | 4 | API `404` (not found) |
 | 5 | API `429` (rate limited) |
-| 6 | a remote system failed: API `5xx`, or an upstream MCP connector failed |
+| 6 | C1 failed: API `5xx` |
 | 7 | MCP tool call completed but the tool itself reported `isError: true` |
+| 8 | a system beyond C1, or the MCP protocol layer, failed |
 
-Typed internally via `client.APIError`/`client.AuthError`, classified in
-`cmd/errors.go`.
+Typed internally (`client.APIError`, `client.AuthError`, `client.PathError`,
+and package-`cmd` wrappers for tool and upstream failures), all classified in
+one place, `cmd/errors.go`.
 
 ## Documentation
 
