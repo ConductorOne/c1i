@@ -74,10 +74,12 @@ never fails proves nothing.
     match the flat commands (`users get <user-id>`). **Presence is not
     non-emptiness:** `ExactArgs(1)` accepts `""`, which used to render a
     trailing empty path segment, get redirected to the collection endpoint,
-    and print the whole list with exit 0. The client now refuses any request
-    whose path has an empty segment (`client.PathError` → exit 2), so a
-    per-command check is still unnecessary — but don't reason as though a
-    positional id were guaranteed non-empty.
+    and print the whole list with exit 0. The **shared REST client** now refuses
+    any request whose path has an empty segment (`client.PathError` → exit 2),
+    so a per-command check is still unnecessary *for commands built on it* — but
+    don't reason as though a positional id were guaranteed non-empty, and see
+    "Adding a new client/subsystem package" below if your command doesn't go
+    through that client.
   - A sub-resource or sub-list nested under **exactly one** owner id in the path
     (`/thing/{id}/…`) also takes that owner id positionally — e.g.
     `functions commits|usage|source <function-id>`,
@@ -166,6 +168,15 @@ a package, verify each of these against the new code:
   `fmt.Errorf`, which collapses to exit 1.
 - **Escape ids in paths** (`client.Path`-style), use the shared output helpers in
   `cmd`, and honor the global flags where applicable.
+- **Reject an empty id before sending.** The shared client refuses a path with an
+  empty segment (`client.PathError` → exit 2); a package that issues its own
+  HTTP does not inherit that, and `cobra.ExactArgs` will hand you `""` happily.
+  An empty id appended to a collection path is the shape that produced the
+  silent "returned the whole list with exit 0" bug.
+- **Honor `--debug` and `--max-retries`.** Both are documented as global, and
+  both are currently silently inert on the packages that issue their own HTTP —
+  so tracing shows nothing and transient failures aren't retried on those paths.
+  Don't add a fourth.
 
 When implementing a wire protocol or stream parser (JSON-RPC, SSE, MCP, …), code
 and test against the **full input space the spec permits**, not just the shape a

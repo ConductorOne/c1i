@@ -204,15 +204,19 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `c1i users get ""` (and `apps`, `policies`, `functions`, `automations`) printed
   the full `{"list":[...]}` and reported success: `cobra.ExactArgs(1)` counts `""`
   as an argument, the empty id rendered a trailing empty path segment, and the
-  API redirected that to the collection endpoint. The client now refuses any
-  request whose path carries an empty segment — before anything is sent — and
-  exits `2`. One check at the single point every request passes through, so
-  every current and future command is covered, including a raw
-  `api --path /api/v1/policies/`.
-  **Visible behavior change:** `tasks approve ""` and `tasks deny ""` previously
-  exited `4` (that endpoint answers `404` rather than redirecting); they now exit
-  `2`, which correctly classifies an empty argument as caller error rather than
-  "not found".
+  API redirected that to the collection endpoint. The shared REST client now
+  refuses any request whose path carries an empty segment — before anything is
+  sent — and exits `2`. It is one check at the point every REST request passes
+  through, so every command built on that client is covered, including a raw
+  `api --path /api/v1/policies/`. It does **not** cover the three subsystems
+  that issue HTTP themselves (`internal/tokensource`, `internal/login`,
+  `internal/mcpgateway`); none of those builds a path from a caller-supplied id
+  today, but `mcp gateway call` takes a positional argument and is guarded by
+  its own JSON-RPC validation rather than by this check.
+  **Breaking change for anything branching on exit codes:** `tasks approve ""`
+  and `tasks deny ""` previously exited `4` (that endpoint answers `404` rather
+  than redirecting); they now exit `2`, which correctly classifies an empty
+  argument as caller error rather than "not found".
 - **The refusal message no longer claims to be an API error.** It read
   `Error: API error: refusing to send GET /api/v1/policies/: …`, which was a
   false claim — no request reached the wire. Prefixes inherited from call sites
