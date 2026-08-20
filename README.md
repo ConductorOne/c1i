@@ -128,7 +128,9 @@ c1i policies validate-cel <condition>
 ```
 
 A policy describes how C1 processes a task: who approves it (an ordered list
-of `policySteps`, each a oneof of approval/provision/accept/reject/wait/form;
+of `policySteps`, each a oneof of approval/provision/accept/reject/wait/form
+(the schema also declares `action`, which the server rejects as an unsupported
+step type);
 an approval step's approver is itself a oneof of ten arms — users, manager,
 group, appOwners, self, entitlementOwners, expression, webhook,
 resourceOwners, agent), and how `rules[]` route a task to one of several

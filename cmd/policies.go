@@ -18,14 +18,14 @@ var policiesCmd = &cobra.Command{
 it, what happens on escalation or timeout, and how the underlying resource
 gets provisioned.
 
-A policy's shape is deeply nested (policySteps holds an ordered list of steps,
-each a oneof of approval/provision/accept/reject/wait/form; an approval step's
-approver is itself a oneof of users/manager/group/appOwners/self/
-entitlementOwners/expression/webhook/resourceOwners/agent). Modeling all of
-that as flags would be unusable, so "create"/"update" take the nested pieces
-from a JSON file (or "-" for stdin) — the same pattern "mcp servers register"
-uses for its auth config — while the flat top-level fields (display name,
-description, policy type) stay as flags.
+A policy's shape is deeply nested: policySteps holds an ordered list of steps,
+each one of six usable types (approval, provision, accept, reject, wait, form),
+and an approval step's approver is itself a oneof of users/manager/group/
+appOwners/self/entitlementOwners/expression/webhook/resourceOwners/agent.
+Modeling all of that as flags would be unusable, so "create"/"update" take the
+nested pieces from a JSON file (or "-" for stdin) — the same pattern that
+"mcp servers register" uses for its auth config — while the flat top-level
+fields (display name, description, policy type) stay as flags.
 
 Known footgun this command family exists to prevent: POST /api/v1/policies
 with only displayName and policyType succeeds and returns a policy whose
