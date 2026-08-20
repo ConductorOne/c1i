@@ -426,11 +426,14 @@ branch on without parsing text:
 | `8` | a system beyond C1, or the MCP protocol layer, failed — an upstream connector was unreachable or errored, or the gateway returned a protocol-level JSON-RPC error |
 
 `6` and `8` are both "something remote broke," but they call for different
-responses: `6` means C1 itself is failing, so retrying later is reasonable and
+responses. `6` means C1 itself is failing, so retrying later is reasonable and
 there is nothing to fix at your end. `8` means C1 answered fine and something
-past it did not — a specific connector is down, or the protocol handshake
-disagreed — so retrying the same call usually returns the same failure, and the
-fix is elsewhere. Before this split both arrived as `6`, which made "C1 is down"
+past it did not, so the same call will usually fail the same way: if a connector
+is at fault, inspect it (`c1i mcp servers get <connector-id> --app-id <id>`, and
+`mcp servers test-connection` for an EXTERNAL server) — it may be unreachable or
+its credentials may have expired; if it's a protocol-level JSON-RPC error, that
+indicates a version mismatch or a bug in c1i, worth reporting rather than
+working around. Before this split both arrived as `6`, which made "C1 is down"
 indistinguishable from "the Slack connector is down."
 
 An **empty id argument** is a usage error, not a lookup: `c1i policies get ""`

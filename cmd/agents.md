@@ -96,13 +96,13 @@ campaign ID from a URL is the access review `id` directly.
 |---|---|---|
 | 0 | success | — |
 | 1 | generic / unclassified error | inspect the message |
-| 2 | usage error (bad flags/args, or API `400`) | fix the invocation, don't retry as-is |
+| 2 | usage error (bad flags/args, an empty id, or API `400`) | fix the invocation, don't retry as-is — but on an API `400`, read the message first: it can also be a state rejection (e.g. `task is closed`) rather than a bad argument |
 | 3 | not authenticated, or API `401`/`403` | re-authenticate (`c1i auth login`) |
 | 4 | API `404` | stop — the resource/path doesn't exist |
 | 5 | API `429` | back off and retry |
 | 6 | C1 failed: API `5xx` | retryable, not your fault |
 | 7 | `mcp gateway call` succeeded but the tool reported `isError: true` | inspect the printed result, not just the code |
-| 8 | a system beyond C1, or the protocol layer, failed | retrying the same call usually repeats it — the fix is elsewhere |
+| 8 | a system beyond C1, or the protocol layer, failed | retrying the same call usually repeats it. For a connector failure, check the server with `mcp servers get <connector-id> --app-id <id>` and `mcp servers test-connection`; the upstream may be unreachable or its credentials expired. For a protocol error, it's a version mismatch or a c1i bug — report it, don't work around it |
 
 Branch on the exit code, not stderr text. An empty id argument is a usage error
 (`c1i users get ""` exits 2 without sending anything) — worth knowing if you

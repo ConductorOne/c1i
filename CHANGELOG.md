@@ -123,8 +123,8 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ### Changed
 
 - **New exit code `8` for a failure beyond C1, and `6` now means only "C1
-  returned `5xx`."** **Breaking change for anything branching on exit codes.**
-  Exit `6` previously covered two situations that call for opposite responses:
+  returned `5xx`."** **Breaking change for anything branching on exit codes:**
+  exit `6` previously covered two situations that call for opposite responses:
   C1 itself failing, and an upstream MCP connector failing. An agent could not
   tell "C1 is down, wait and retry" from "the Slack connector is down, retrying
   won't help." What moved to `8`: an upstream connector failure (a JSON-RPC
@@ -140,10 +140,17 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   from a genuine code `0`, and therefore misreported as an upstream connector
   failure. Presence is now tracked, so "no code" is generic and unclassified,
   which is what it is.
-- **A bare `400` from the API now exits `2` (usage), not `1`.** A malformed value
-  the CLI forwards without local validation — a bad page token, an out-of-range
-  page size, a misspelled enum, a malformed id — is caller error, and no retry
-  will help. `409` and other unlisted statuses still exit `1`.
+- **A bare `400` from the API now exits `2` (usage), not `1`.** Most `400`s here
+  are a value the CLI forwarded without local validation — a bad page token, an
+  out-of-range page size, a misspelled enum, a malformed id — and for those,
+  exit `2` is right and no retry will help. Be aware of the limit, though: some
+  `400`s are state or business-rule rejections rather than bad input. Approving
+  an already-closed task returns `400 task is closed`, and that now reports exit
+  `2` even though nothing about the invocation was wrong. Exit `2` on an API
+  `400` therefore means "the server rejected this request outright" — read the
+  message before concluding your flags were wrong. Mapping `400` to the nearest
+  existing bucket was a deliberate simplification rather than adding per-status
+  carve-outs. `409` and other unlisted statuses still exit `1`.
 - **BREAKING — NDJSON rows emit real JSON booleans and numbers, not strings.**
   List commands stringified every non-string row value, so `stable` came out
   as `"true"` and counts as `"7"`. That silently broke the documented reason

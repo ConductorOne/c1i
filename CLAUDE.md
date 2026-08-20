@@ -167,8 +167,10 @@ a package, verify each of these against the new code:
   never the first page only. Silent truncation reads as success.
 - **Return typed, classifiable errors.** A non-2xx / auth failure must surface as
   (or wrap, with `%w`) an error type that `cmd/errors.go` maps to the exit-code
-  taxonomy (3 auth, 4 not-found, 5 rate-limited, 6 server) — not a bare
-  `fmt.Errorf`, which collapses to exit 1.
+  taxonomy (3 auth, 4 not-found, 5 rate-limited, 6 C1 5xx, 8 upstream/protocol
+  failure) — not a bare `fmt.Errorf`, which collapses to exit 1. A protocol
+  client is exactly the case exit 8 exists for: keep "the service beyond C1
+  failed" distinct from "C1 failed".
 - **Escape ids in paths** (`client.Path`-style), use the shared output helpers in
   `cmd`, and honor the global flags where applicable.
 - **Reject an empty id before sending.** The shared client refuses a path with an
