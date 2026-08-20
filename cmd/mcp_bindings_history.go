@@ -63,7 +63,7 @@ transaction.`,
 			basePath = client.Path("/api/v1/apps/%s/connectors/%s/tool_bindings/by_tool/%s/history", appID, connectorID, toolID)
 		}
 
-		enc := newEmitter(cmd.OutOrStdout())
+		enc := newEmitter(cmd)
 		emitted := 0
 		for !limitReached(emitted, limit) {
 			pageSize := effectivePageSize(requestedPageSize, limit, emitted)

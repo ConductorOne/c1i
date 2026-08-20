@@ -148,8 +148,7 @@ var apiCmd = &cobra.Command{
 			return fmt.Errorf("authentication failed: %w", err)
 		}
 
-		out := cmd.OutOrStdout()
-		enc := newEmitter(out)
+		enc := newEmitter(cmd)
 		pageToken := ""
 		prevToken := ""
 		emitted := 0

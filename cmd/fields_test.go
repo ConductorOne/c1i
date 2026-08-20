@@ -20,7 +20,9 @@ func TestFieldPathsAndEmitterReadViper(t *testing.T) {
 	}
 
 	var buf bytes.Buffer
-	if err := newEmitter(&buf).Encode(map[string]any{
+	cmd := &cobra.Command{}
+	cmd.SetOut(&buf)
+	if err := newEmitter(cmd).Encode(map[string]any{
 		"id": "1", "user": map[string]any{"email": "x@y.z", "name": "n"}, "drop": "gone",
 	}); err != nil {
 		t.Fatalf("encode: %v", err)

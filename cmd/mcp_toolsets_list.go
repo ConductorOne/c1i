@@ -34,7 +34,7 @@ var mcpToolsetsListCmd = &cobra.Command{
 		manualPaging := cmd.Flags().Changed("page-token")
 		limit := getIntFlag(cmd, "limit")
 
-		enc := newEmitter(cmd.OutOrStdout())
+		enc := newEmitter(cmd)
 		emitted := 0
 		for !limitReached(emitted, limit) {
 			pageSize := effectivePageSize(requestedPageSize, limit, emitted)

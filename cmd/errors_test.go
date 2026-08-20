@@ -64,6 +64,15 @@ func TestExitCode(t *testing.T) {
 		{"api 503", &client.APIError{StatusCode: 503}, exitServer},
 		{"api 400", &client.APIError{StatusCode: 400}, exitError},
 		{"auth", &client.AuthError{Err: errors.New("no creds")}, exitAuth},
+		// The keyring-unavailable diagnosis (internal/keychain.Load,
+		// see keychain_test.go) still surfaces through loadCredentials as an
+		// *AuthError like any other credential failure, so it must still map
+		// to exitAuth despite its longer, more specific message.
+		{"auth: keyring unavailable diagnosis", &client.AuthError{Err: fmt.Errorf("loading credentials: %w", errors.New(
+			"no credentials found for c1i/example.test in the file store, and the OS keyring is currently "+
+				"unavailable (unsupported platform: linux) — if a credential was saved to the keyring earlier, "+
+				"it is unreachable until the keyring is available again; running 'c1i auth login' now stores a "+
+				"new credential in the file store, not the keyring"))}, exitAuth},
 		{"usage", &usageError{errors.New("bad flag")}, exitUsage},
 		{"tool execution", &toolExecutionError{errors.New("isError")}, exitToolError},
 		{"wrapped api 404", fmt.Errorf("API error: %w", &client.APIError{StatusCode: 404}), exitNotFound},

@@ -6,11 +6,14 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/ConductorOne/c1i/internal/tokensource"
+	"github.com/zalando/go-keyring"
 )
 
 // deterministicBackoff makes sleeps instant and jitter a no-op for the duration
@@ -448,6 +451,44 @@ func TestDoNetworkErrorIsNotAuth(t *testing.T) {
 	var authErr *AuthError
 	if errors.As(err, &authErr) {
 		t.Error("a plain network error must not be classified as AuthError")
+	}
+}
+
+// TestLoadCredentialsKeyringUnavailableStillClassifiesAsAuthError exercises
+// loadCredentials end-to-end (real keychain package, mocked OS keyring) for
+// the diagnosis case: the keyring is unreachable and the file store has no
+// entry either. The diagnostic wording keychain.Load now returns for that
+// case must still surface as *AuthError — cmd/errors.go's exitCode maps
+// *AuthError to exit 3 regardless of message text, so a diagnosability fix
+// here must not change what error type wraps it.
+func TestLoadCredentialsKeyringUnavailableStillClassifiesAsAuthError(t *testing.T) {
+	keyring.MockInitWithError(keyring.ErrUnsupportedPlatform)
+	dir := t.TempDir()
+	switch runtime.GOOS {
+	case "windows":
+		t.Setenv("AppData", dir)
+	case "darwin":
+		t.Setenv("HOME", dir)
+	default:
+		t.Setenv("XDG_CONFIG_HOME", dir)
+	}
+	t.Setenv("C1I_CLIENT_ID", "")
+	t.Setenv("C1I_CLIENT_SECRET", "")
+	_ = os.Unsetenv("C1I_CLIENT_ID")
+	_ = os.Unsetenv("C1I_CLIENT_SECRET")
+
+	// example.test is not a *.conductor.one host, so loadCredentials makes a
+	// single keychain.Load call with no legacy-key fallback to complicate it.
+	_, _, err := loadCredentials("https://example.test")
+	if err == nil {
+		t.Fatal("expected an error: keyring unavailable and no file-backed credential")
+	}
+	var authErr *AuthError
+	if !errors.As(err, &authErr) {
+		t.Fatalf("expected *AuthError, got %T: %v", err, err)
+	}
+	if !strings.Contains(authErr.Error(), "keyring is currently unavailable") {
+		t.Errorf("AuthError = %q, want it to carry the keyring-unavailable diagnosis", authErr.Error())
 	}
 }
 

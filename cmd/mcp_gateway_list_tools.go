@@ -24,7 +24,7 @@ each tool's input JSON schema.`,
 		}
 
 		full, _ := cmd.Flags().GetBool("full")
-		enc := newEmitter(cmd.OutOrStdout())
+		enc := newEmitter(cmd)
 		for _, t := range tools {
 			row := map[string]any{"name": t.Name, "description": t.Description}
 			if full && len(t.InputSchema) > 0 {

@@ -2,9 +2,9 @@ package cmd
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"sort"
 	"strings"
 	"unicode"
@@ -317,28 +317,122 @@ func setPath(out map[string]any, path []string, val any) {
 	}
 }
 
+// fieldsMatchState tracks, across every row emitted by a single list-command
+// invocation, whether --fields matched anything anywhere. A
+// list command projects each row independently as it streams (--paginate
+// commands fetch potentially-unbounded results and must not buffer them just
+// to answer this question), so no single Encode call can know whether the
+// requested paths are bogus versus simply absent on this particular row.
+// Instead every emitter sharing one invocation accumulates into the same
+// state, and checkFieldsMatchedAnyRow inspects it once, after the command
+// finishes successfully.
+//
+// This is intentionally NOT a package-level variable. It is threaded through
+// cmd.Context() (withFieldsMatchState / fieldsMatchStateFromContext) so each
+// command invocation gets its own, independent instance: many tests in this
+// package drive rootCmd.ExecuteContext repeatedly in the same test binary,
+// and a shared global would leak match state between them (and would be the
+// same class of hidden, easy-to-forget coupling a repeated per-call-site
+// defer would have been).
+type fieldsMatchState struct {
+	sawRow  bool // at least one row was emitted (the result wasn't empty)
+	matched bool // at least one row's projection kept at least one field
+}
+
+// fieldsMatchStateKey is the context key fieldsMatchState is stored under.
+// Unexported struct type per Go convention for context keys: it can't
+// collide with any key from another package.
+type fieldsMatchStateKey struct{}
+
+// withFieldsMatchState attaches a fresh *fieldsMatchState to ctx. Called
+// once, from rootCmd's PersistentPreRunE (cmd/root.go), before any command's
+// RunE runs — so every newEmitter created during that invocation shares the
+// same tracker via the command's context.
+func withFieldsMatchState(ctx context.Context) context.Context {
+	return context.WithValue(ctx, fieldsMatchStateKey{}, &fieldsMatchState{})
+}
+
+// fieldsMatchStateFromContext returns the tracker withFieldsMatchState
+// attached, or nil when none was attached — e.g. ctx is nil, or a unit test
+// builds a bare *cobra.Command and calls newEmitter directly without driving
+// it through rootCmd's PersistentPreRunE. A nil result just means Encode
+// skips the bookkeeping; projection itself is unaffected either way.
+func fieldsMatchStateFromContext(ctx context.Context) *fieldsMatchState {
+	if ctx == nil {
+		return nil
+	}
+	st, _ := ctx.Value(fieldsMatchStateKey{}).(*fieldsMatchState)
+	return st
+}
+
+// checkFieldsMatchedAnyRow is rootCmd's PersistentPostRunE (cmd/root.go) —
+// the single central hook for the list-side half of the --fields zero-match
+// fix (see writeObject/projectionMatchedNothing above for the
+// single-object half, which this mirrors). cobra only calls
+// PersistentPostRunE after a command's RunE has already returned nil, so a
+// pre-existing failure (a 404, a usage error, ...) is returned exactly as-is
+// and is never reachable here — this check can only ever run on an
+// otherwise-successful command, and can only ever make a successful exit
+// stricter, never mask a failure.
+//
+// Do NOT add a PersistentPostRunE to any subcommand: cobra runs only the
+// NEAREST ancestor's PersistentPostRunE (the same rule it uses for
+// PersistentPreRunE), so an override would silently stop this check from
+// running for that subcommand and everything under it — the exact
+// silent-miss failure mode this whole design exists to avoid.
+// TestNoSubcommandDefinesOwnPersistentPostRunE (cmd/root_test.go) walks the
+// whole command tree and fails CI if that ever happens.
+func checkFieldsMatchedAnyRow(cmd *cobra.Command, _ []string) error {
+	st := fieldsMatchStateFromContext(cmd.Context())
+	if st == nil || !st.sawRow || st.matched {
+		return nil
+	}
+	return &usageError{fmt.Errorf("--fields %q matched no keys in any row of the response", viper.GetString("fields"))}
+}
+
 // emitter writes NDJSON rows, applying --fields projection when set. List
 // commands use it in place of a bare json.Encoder so field selection is
 // consistent across every list surface.
 type emitter struct {
 	enc   *json.Encoder
 	paths [][]string
+	state *fieldsMatchState
 }
 
-// newEmitter builds an emitter writing to w, reading the projection from the
-// global --fields flag.
-func newEmitter(w io.Writer) *emitter {
-	return &emitter{enc: json.NewEncoder(w), paths: fieldPaths()}
+// newEmitter builds an emitter writing to cmd's stdout, reading the
+// projection from the global --fields flag. When --fields is set, it also
+// picks up the invocation's *fieldsMatchState from cmd.Context() (attached by
+// rootCmd's PersistentPreRunE) so every row Encode writes gets folded into
+// the one check checkFieldsMatchedAnyRow runs after the command returns.
+func newEmitter(cmd *cobra.Command) *emitter {
+	return &emitter{
+		enc:   json.NewEncoder(cmd.OutOrStdout()),
+		paths: fieldPaths(),
+		state: fieldsMatchStateFromContext(cmd.Context()),
+	}
 }
 
-// Encode writes v as one NDJSON line, projected to --fields when set. The name
-// and signature match json.Encoder.Encode so an emitter is a drop-in
+// Encode writes v as one NDJSON line, projected to --fields when set. The
+// name and signature match json.Encoder.Encode so an emitter is a drop-in
 // replacement for the bare encoder list commands used before.
+//
+// A row's projection is written out unconditionally — even when it projects
+// to nothing at all ("{}") — because streaming can't know in advance whether
+// a later row (possibly on a later page under --paginate) will match; see
+// checkFieldsMatchedAnyRow for where the zero-match-in-the-whole-result case
+// is actually judged and turned into an error.
 func (e *emitter) Encode(v any) error {
 	if len(e.paths) == 0 {
 		return e.enc.Encode(v)
 	}
-	return e.enc.Encode(projectValue(v, e.paths))
+	projected := projectValue(v, e.paths)
+	if e.state != nil {
+		e.state.sawRow = true
+		if !projectionMatchedNothing(projected) {
+			e.state.matched = true
+		}
+	}
+	return e.enc.Encode(projected)
 }
 
 // writeObject pretty-prints a single JSON response to stdout, applying --fields

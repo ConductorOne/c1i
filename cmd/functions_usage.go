@@ -31,7 +31,7 @@ last_executed_at, args.`,
 			return fmt.Errorf("authentication failed: %w", err)
 		}
 
-		enc := newEmitter(cmd.OutOrStdout())
+		enc := newEmitter(cmd)
 		pageToken := ""
 		matched := 0
 		for {

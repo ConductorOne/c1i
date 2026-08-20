@@ -34,6 +34,13 @@ const (
 	acctClientSecret = "client_secret"
 )
 
+// ErrNoCredentials indicates the file backend has no stored credential for a
+// service. It lets Load tell "never logged in" (file store genuinely empty)
+// apart from "credential exists in the keyring but the keyring is currently
+// unreachable" — loadFile's error text alone can't be classified with
+// errors.Is, so it wraps this sentinel.
+var ErrNoCredentials = errors.New("no credentials found")
+
 // Store persists credentials. Tries the OS keyring first; falls back to a
 // 0600 file when no keyring is available. Env vars are never written.
 // Returns the backend used so callers can inform the user.
@@ -59,21 +66,33 @@ func Load(service string) (string, string, Backend, error) {
 		return id, sec, BackendEnv, nil
 	}
 
-	id, sec, err := loadKeyring(service)
+	id, sec, keyringErr := loadKeyring(service)
+	unavailable := false
 	switch {
-	case err == nil:
+	case keyringErr == nil:
 		return id, sec, BackendKeyring, nil
-	case errors.Is(err, keyring.ErrNotFound):
-		// Fall through to file.
-	case isKeyringUnavailable(err):
-		// Fall through to file.
+	case errors.Is(keyringErr, keyring.ErrNotFound):
+		// Fall through to file: nothing was ever stored.
+	case isKeyringUnavailable(keyringErr):
+		// Fall through to file, but remember why: a credential may exist in
+		// the keyring and simply be unreachable right now. If the file store
+		// also comes up empty, that distinction changes what we tell the user.
+		unavailable = true
 	default:
-		return "", "", "", fmt.Errorf("loading from keyring: %w", err)
+		return "", "", "", fmt.Errorf("loading from keyring: %w", keyringErr)
 	}
 
-	id, sec, err = loadFile(service)
-	if err != nil {
-		return "", "", "", err
+	id, sec, fileErr := loadFile(service)
+	if fileErr != nil {
+		if unavailable && errors.Is(fileErr, ErrNoCredentials) {
+			return "", "", "", fmt.Errorf(
+				"no credentials found for %s in the file store, and the OS keyring is currently unavailable (%w) — "+
+					"if a credential was saved to the keyring earlier, it is unreachable until the keyring is "+
+					"available again; running 'c1i auth login' now stores a new credential in the file store, "+
+					"not the keyring",
+				service, keyringErr)
+		}
+		return "", "", "", fileErr
 	}
 	return id, sec, BackendFile, nil
 }
@@ -211,7 +230,7 @@ func loadFile(service string) (string, string, error) {
 	b, err := os.ReadFile(p)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
-			return "", "", fmt.Errorf("no credentials found for %s: run 'c1i auth login'", service)
+			return "", "", fmt.Errorf("%w for %s: run 'c1i auth login'", ErrNoCredentials, service)
 		}
 		return "", "", fmt.Errorf("reading credentials: %w", err)
 	}
