@@ -6,6 +6,8 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-08-20
+
 ### Added
 
 - **`policies list|get|search|create|update|delete|validate-cel`** — first-class
@@ -56,7 +58,7 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   server's tools are approved, entitled, and served through the gateway), and
   `delegate-entitlement-provisioning` (an entitlement "proxy binding" alone
   grants nothing — this walks through the required second step,
-  `provisionerPolicy.delegated`, verified live against a test tenant).
+  `provisionerPolicy.delegated`).
   Content is embedded as Go string constants — no network call, unlike
   `docs search` / `docs page`.
 - **`docs guide` gains three app/access-request runbooks:
@@ -73,8 +75,7 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   policy (`stepApproverIds`, the `actions` gate, `policy.current`/`.next`),
   commenting (unlike approve/deny, not gated the same way), and the
   approve/deny step-resolution asymmetry (approve requires a resolvable
-  current step; deny proceeds without one). All three were consolidated from
-  drafts independently verified against a live test tenant.
+  current step; deny proceeds without one).
 - **`auth token`** — mint and print a short-lived OAuth2 bearer token from the
   stored credentials, for driving raw API calls yourself (e.g. `curl -H
   "Authorization: Bearer $(c1i auth token)"`). Prints just the token by default;
@@ -154,8 +155,8 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   re-authentication is needed. An EU tenant never had a credential reachable
   through the shortcut, which only ever expanded to `.conductor.one`.
 
-- **New exit code `8` for a failure beyond C1, and `6` now means only "C1
-  returned `5xx`."** **Breaking change for anything branching on exit codes:**
+- **New exit code `8` for a failure beyond C1, so `6` no longer covers an
+  upstream failure.** **Breaking change for anything branching on exit codes:**
   exit `6` previously covered two situations that call for opposite responses:
   C1 itself failing, and an upstream MCP connector failing. An agent could not
   tell "C1 is down, wait and retry" from "the Slack connector is down, retrying
@@ -167,12 +168,12 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   a protocol mismatch or a bug here, and exit `2` sent people hunting their own
   command line. A test now pins that method set, so adding an outbound method
   fails the build rather than silently invalidating the reasoning.
-- **A JSON-RPC error object carrying no `code` field now exits `1`, not `6`.**
+- **BREAKING — a JSON-RPC error object carrying no `code` field now exits `1`, not `6`.**
   The field was a plain `int`, so an absent code decoded to `0` — indistinguishable
   from a genuine code `0`, and therefore misreported as an upstream connector
   failure. Presence is now tracked, so "no code" is generic and unclassified,
   which is what it is.
-- **A bare `400` from the API now exits `2` (usage), not `1`.** Most `400`s here
+- **BREAKING — a bare `400` from the API now exits `2` (usage), not `1`.** Most `400`s here
   are a value the CLI forwarded without local validation — a bad page token, an
   out-of-range page size, a misspelled enum, a malformed id — and for those,
   exit `2` is right and no retry will help. Be aware of the limit, though: some
@@ -211,8 +212,7 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   - `accounts set-owner --app-user-id X --app-id A --user-id U` → `accounts set-owner X --app-id A --user-id U`.
   Collection (`list`/`search`), create, and relationship (`mcp bindings *`)
   commands are unchanged (their ids stay flags). The old flags now error with
-  "unknown flag". The convention is documented in CLAUDE.md and enforced across
-  the README and the embedded agent skill.
+  "unknown flag".
 - **Ctrl-C now cancels cleanly.** The root command wires `cmd.Context()` to a
   `signal.NotifyContext` on SIGINT/SIGTERM, so a long-running command (e.g.
   `apps set-owners --wait` polling for async owner provisioning) sees its
@@ -231,7 +231,7 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   rather than as a single catalog-wide list; the entry-level `defaultScopes`
   field some assumed carried it is empty on every catalog entry seen in
   production. `mcp servers catalog get --help` documents the details.
-- An **empty required flag value** (e.g. `--app-id ""`) now exits `2` (usage),
+- **BREAKING** — an **empty required flag value** (e.g. `--app-id ""`) now exits `2` (usage),
   matching a missing required flag, instead of `1` (generic). The check
   (`requireNonEmpty`) applies this consistently across every command that uses
   it, so automation branching on exit codes sees a stable usage signal.
@@ -245,9 +245,7 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   failure class entirely. **The full result is still printed to stdout
   exactly as before**, `isError` and all, so an in-band consumer (e.g. an
   LLM host reading the error text out of the `content` array) is unaffected;
-  only the process exit code changes. `mcp gateway call` shipped earlier
-  today (this same day) in the PR this follows up on, so there is
-  effectively no installed base depending on the old exit-0 behavior.
+  only the process exit code changes.
 
 ### Removed
 
@@ -498,21 +496,14 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   method (`-32601`) both exited `1`, and so did every upstream connector
   failure (an unreachable external MCP server, a vendor API error), which
   arrives as JSON-RPC code `0`. `-32602`/`-32601` now exit `2` (usage — the
-  caller named a tool or method that doesn't exist) and code `0` now exits `6`
-  (server — a system the gateway depends on failed); any other JSON-RPC code
-  still exits `1`, unchanged. Error messages are unchanged, only the exit
-  code. `internal/mcpgateway` cannot construct a `*usageError` (it lives in
-  package `cmd`), so it exposes the code (`mcpgateway.RPCErrorCode`) and
-  `cmd/mcp_gateway.go`'s new `classifyGatewayError` wraps it: `-32602`/
-  `-32601` in `*usageError`, code `0` in a new `*remoteFailureError`
-  (`cmd/errors.go`) that also maps to `6`. Code `0` is deliberately not
-  reached by unwrapping to a `*client.APIError` with an invented status: the
-  gateway answers HTTP 200 for this failure class, so a `*client.APIError`
-  would fabricate a status that never happened, and — since `writeError`
-  renders `apiErr.StatusCode` under `--error-format json` — that fabricated
-  status would then appear as a false "fact about the wire" in
-  machine-readable output. `*remoteFailureError` carries no status at all, so
-  `--error-format json` on this failure class emits only `{"error": "..."}` .
+  caller named a tool that doesn't exist). The protocol-level codes and an
+  upstream connector failure exit `8` — see the exit-`8` entry under Changed
+  for that split. Any other JSON-RPC code still exits `1`, unchanged. Error
+  messages are unchanged, only the exit code.
+
+  No HTTP status is fabricated for these: the gateway answers 200, and
+  `--error-format json` renders a status when one is present, so inventing one
+  would put a false fact about the wire into machine-readable output.
 - **`requests create grant`/`requests create revoke --user-id`'s "defaults to
   self if omitted" is now true for both.** Omitting it used to send no
   `identityUserId` at all, which the API rejects with a
@@ -544,8 +535,8 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   reply to a different in-flight request can no longer be mistaken for the
   caller's own.
 - **`extractSSEResponse` no longer falls back to "the last event" when no
-  event answers the request.** Found by adversarial review of the fix
-  above (#49/#54): if a stream carried no event matching the request's id
+  event answers the request.** A follow-up review of the fix above found that
+  if a stream carried no event matching the request's id
   and none carrying `result`/`error` — e.g. only a progress notification —
   the old third-tier fallback returned that notification's bytes as if they
   were the response. `decodeMessage` parses that fine (it has neither
@@ -559,8 +550,8 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   today; it guarded a spec-permitted shape the client advertises support for
   but has not observed.
 - **`extractSSEResponse`'s result/error scan no longer discards a response
-  whose `id` isn't a plain non-null integer.** Found by adversarial review
-  of the fix directly above: that fix's tier-2 scan (the event carrying
+  whose `id` isn't a plain non-null integer.** A follow-up review of the fix
+  directly above found that its tier-2 scan (the event carrying
   `result`/`error`) was gated on the event's `id` decoding as a non-null
   `*int`, so an event with a string `id`, or with `id: null`, was skipped by
   tier 2 and fell through to the new raw-body return — turning a legitimate
@@ -582,8 +573,8 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   notification or a server-initiated request, both of which carry
   `method`/`params` and never `result`/`error`.
 - **`mcp gateway call` no longer fails open when `isError` is present but not
-  a JSON boolean.** Also found by adversarial review of #49/#54, which added
-  the `isError` check in the first place: `toolResultIsError` decoded into a
+  a JSON boolean.** A follow-up review of the change that added the `isError`
+  check found that `toolResultIsError` decoded into a
   `bool` field, so a server sending `isError` as the string `"true"`, a
   number, an object, or an array made `json.Unmarshal` fail on the type
   mismatch — and the old code treated that decode failure as `isError: false`
@@ -671,22 +662,6 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   names `auth status` for the tenant and `auth whoami` for the identity,
   which matters here specifically because the surrounding section is about
   not silently targeting the wrong tenant.
-
-### Testing
-
-- **The `docs guide` runbooks, the positional-ID convention, and the gateway's
-  SSE id-matching are now pinned by tests.** These were the three places where
-  correct behavior rested on nothing but review attention: the embedded
-  runbooks are static strings with no compile-time link to the commands they
-  document; PR #50's flag→positional migration had no arg-parsing coverage at
-  all; and two of the three SSE id-selection cases passed even with id
-  matching deleted, because the only `result`-bearing event happened to be the
-  right one. Each is now covered by a test that provably fails when the
-  behavior regresses — the guide test resolves every `c1i …` invocation
-  against the live cobra tree, the arg test asserts the migrated commands take
-  one positional and no longer register the retired flag (and that collection
-  commands keep theirs), and the SSE cases now carry decoys so tier-2 fallback
-  alone picks the wrong event.
 
 ## [0.3.0] - 2026-07-16
 
@@ -802,6 +777,8 @@ First changelog entry; releases through v0.1.5 predate this file (see the
 
 - CI enforces `gofmt` via golangci-lint; module-wide formatting normalized.
 
+[Unreleased]: https://github.com/ConductorOne/c1i/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/ConductorOne/c1i/releases/tag/v0.4.0
 [0.3.0]: https://github.com/ConductorOne/c1i/releases/tag/v0.3.0
 [0.2.1]: https://github.com/ConductorOne/c1i/releases/tag/v0.2.1
 [0.2.0]: https://github.com/ConductorOne/c1i/releases/tag/v0.2.0
