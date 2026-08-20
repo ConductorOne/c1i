@@ -456,7 +456,7 @@ func TestDoNetworkErrorIsNotAuth(t *testing.T) {
 
 // TestLoadCredentialsKeyringUnavailableStillClassifiesAsAuthError exercises
 // loadCredentials end-to-end (real keychain package, mocked OS keyring) for
-// the ledger-C63 case: the keyring is unreachable and the file store has no
+// the diagnosis case: the keyring is unreachable and the file store has no
 // entry either. The diagnostic wording keychain.Load now returns for that
 // case must still surface as *AuthError — cmd/errors.go's exitCode maps
 // *AuthError to exit 3 regardless of message text, so a diagnosability fix

@@ -64,7 +64,7 @@ func TestExitCode(t *testing.T) {
 		{"api 503", &client.APIError{StatusCode: 503}, exitServer},
 		{"api 400", &client.APIError{StatusCode: 400}, exitError},
 		{"auth", &client.AuthError{Err: errors.New("no creds")}, exitAuth},
-		// Ledger C63: the keyring-unavailable diagnosis (internal/keychain.Load,
+		// The keyring-unavailable diagnosis (internal/keychain.Load,
 		// see keychain_test.go) still surfaces through loadCredentials as an
 		// *AuthError like any other credential failure, so it must still map
 		// to exitAuth despite its longer, more specific message.

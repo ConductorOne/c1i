@@ -191,7 +191,7 @@ func TestLoadNeverLoggedInMessageUnchanged(t *testing.T) {
 }
 
 // TestLoadKeyringUnavailableAndFileEmptyDiagnosesReachability is the
-// load-bearing regression test for ledger C63: when the keyring is
+// load-bearing regression test: when the keyring is
 // unreachable (not merely empty) AND the file store has no entry either, Load
 // must say so — a credential may be sitting in the keyring, unreachable,
 // while "run 'c1i auth login'" (the generic never-logged-in message) would
