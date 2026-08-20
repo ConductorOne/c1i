@@ -307,3 +307,27 @@ func TestParseURLSingleLabelHostWithSchemeAccepted(t *testing.T) {
 		}
 	}
 }
+
+// TestParseURLDegeneratePathWarnsWhenDroppingCredentials: when url.Parse fails
+// or finds no host, ParseURL falls back to the literal input and strips
+// userinfo. The strip was silent, which contradicted both this function's
+// contract and the changelog: a dropped credential must always be reported.
+func TestParseURLDegeneratePathWarnsWhenDroppingCredentials(t *testing.T) {
+	for _, input := range []string{"https://user:hunter2@", "https://user:hunter2@ac\x00me"} {
+		got, warnings, err := ParseURL(input)
+		if err != nil {
+			t.Fatalf("ParseURL(%q) error = %v, want nil", input, err)
+		}
+		if len(warnings) == 0 {
+			t.Errorf("ParseURL(%q) dropped credentials silently, want a warning", input)
+		}
+		for _, w := range warnings {
+			if strings.Contains(w, "hunter2") {
+				t.Errorf("ParseURL(%q) warning echoes the password: %q", input, w)
+			}
+		}
+		if strings.Contains(got, "hunter2") {
+			t.Errorf("ParseURL(%q) = %q, still carries the password", input, got)
+		}
+	}
+}

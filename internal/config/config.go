@@ -64,16 +64,21 @@ func ParseURL(input string) (result string, warnings []string, err error) {
 			}
 			if u.User != nil {
 				warnings = append(warnings, fmt.Sprintf(
-					"--url embedded credentials (user %q) were dropped; c1i authenticates via OAuth device flow or a keychain-stored client_id/client_secret, never via the URL",
-					u.User.Username()))
+					"--url embedded credentials (user %q) were dropped; %s",
+					u.User.Username(), credentialsNotInURL))
 			}
 			return "https://" + strings.ToLower(u.Host), warnings, nil
 		}
 		// url.Parse failed, or found no host: fall back to the literal input,
 		// lower-cased -- but strip anything before a trailing "@" first so a
 		// malformed "user:pass@" fragment still can't echo a password even
-		// on this degenerate path.
-		return "https://" + strings.ToLower(withoutUserinfo(input)), warnings, nil
+		// on this degenerate path. There is no parsed URL to name the user
+		// from, but the drop must still not be silent.
+		stripped := withoutUserinfo(input)
+		if stripped != input {
+			warnings = append(warnings, "--url embedded credentials were dropped; "+credentialsNotInURL)
+		}
+		return "https://" + strings.ToLower(stripped), warnings, nil
 	}
 	// Bare token, e.g. "acme" or "localhost": retired. It used to expand to
 	// "<input>.conductor.one", but with a second tenant domain family
@@ -84,6 +89,10 @@ func ParseURL(input string) (result string, warnings []string, err error) {
 			"pass a full host such as acme.conductor.one or acme.c1eu.ai",
 		withoutUserinfo(input))
 }
+
+// credentialsNotInURL is shared by both credential-dropping warnings so they
+// cannot drift apart.
+const credentialsNotInURL = "c1i authenticates via OAuth device flow or a keychain-stored client_id/client_secret, never via the URL"
 
 // withoutUserinfo strips a "user:pass@" prefix (if any) from s. Applied on
 // every ParseURL path that echoes or returns raw input, so none of them can
