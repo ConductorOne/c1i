@@ -489,14 +489,21 @@ func projectionMatchedNothing(v any) bool {
 // --fields. Use it for mutation confirmations (create/update/delete), whose
 // status objects must never be trimmed away by a session-wide C1I_FIELDS — a
 // projection that matched none of the confirmation's keys would silently emit
-// "{}" and hide whether the change succeeded. Falls back to raw bytes if the
-// data isn't valid JSON.
+// "{}" and hide whether the change succeeded.
+//
+// An empty (or whitespace-only) body is treated as a legitimate no-content
+// success — some endpoints answer 2xx with nothing — and writes nothing.
+// Anything else that isn't valid JSON is a *nonJSONResponseError instead of a
+// silent verbatim dump: a 200 with an HTML/text body (e.g. a path that
+// escaped the API prefix) must not read as success to a downstream parser.
 func writeRawObject(cmd *cobra.Command, data []byte) error {
+	if len(bytes.TrimSpace(data)) == 0 {
+		return nil
+	}
 	out := cmd.OutOrStdout()
 	var pretty bytes.Buffer
 	if err := json.Indent(&pretty, data, "", "  "); err != nil {
-		_, _ = out.Write(data)
-		return nil
+		return &nonJSONResponseError{fmt.Errorf("response was not JSON: %w", err)}
 	}
 	pretty.WriteByte('\n')
 	_, _ = out.Write(pretty.Bytes())
