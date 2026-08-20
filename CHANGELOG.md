@@ -160,6 +160,31 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- **The `docs guide` drift guard (`TestGuideCommandsResolveAgainstCobraTree`)
+  now validates positional-argument counts, short flags, and single-quoted
+  values, and flags "c1i ..." text it can't check.** An audit of the guard
+  found it only checked `--flag` names, so a guide invocation with a missing,
+  extra, or unregistered short flag passed the guard while the real binary
+  exited 2. It now resolves each invocation's Args validator against the
+  positionals actually left over (distinguishing them from flag values,
+  including inline `--flag=value`/`-fvalue` forms), checks `-f` shorthand
+  flags via `ShorthandLookup`, and tokenizes single-quoted values (previously
+  only double quotes were tracked, so a single-quoted JSON value containing
+  a space and a literal `--` was misread as an unregistered flag). It also
+  now fails on a `c1i ...` mention that sits outside the three shapes it
+  extracts (an unquoted mid-sentence reference, or a line not starting with
+  `c1i`) when that mention carries a `--flag`-shaped token, rather than
+  silently skipping it.
+- **`docs guide register-mcp-server` and `mcp servers test-connection --help`
+  both described the response fields in the wrong case.** Both documented
+  `tool_count` / `failure_reason`; the live response is camelCase
+  (`toolCount`, as a string, and `failureReason`), verified against a test
+  tenant. `register`'s and `resync-tools`' help text make no comparable
+  output-field claims, so neither needed a matching fix.
+- **`README.md`'s `mcp servers test-connection` line had no HOSTED-vs-EXTERNAL
+  annotation**, inconsistent with `cmd/skill.md` and with README's own
+  `resync-tools` line. Both README lines now note `# EXTERNAL only; 400 on
+  HOSTED`.
 - **`docs endpoints --filter` now names the known hidden endpoint families
   instead of only pointing at `docs search`.** A filter that matches nothing
   used to say only "try `docs search`," which reads as "this endpoint

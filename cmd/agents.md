@@ -19,11 +19,11 @@ Get this right first. A wrong tenant returns plausible-looking data with
 exit 0 — nothing downstream tells you it was the wrong one.
 
 `--url` (or `C1I_URL`) selects the tenant. With neither set, c1i falls back
-silently to whatever `url:` names in `~/.c1i.yaml`. Pass `--url` explicitly
-on every invocation instead of relying on an exported `C1I_URL` — if it gets
-lost between shell calls (a fresh shell per call is common), you fall
-through to `~/.c1i.yaml`'s tenant with no warning, and every result after
-that is silently wrong.
+silently to whatever `url:` names in `~/.c1i.yaml`.
+Pass `--url` explicitly on every invocation instead of relying on an
+exported `C1I_URL` — if it gets lost between shell calls (a fresh shell per
+call is common), you fall through to the config file's tenant with no
+warning, and every result after that is silently wrong.
 
 Credentials resolve in this order: `C1I_CLIENT_ID` + `C1I_CLIENT_SECRET` env
 vars (read-only — c1i never writes them), the OS keyring, then a `0600` file
@@ -45,9 +45,9 @@ known gaps: access reviews (`/api/v1/access_review*`) and the entitlement
 *proxy binding* path (a different object from `mcp bindings` — see `c1i docs
 guide delegate-entitlement-provisioning`). Otherwise, discover.
 
-The cobra tree never drifts from what's implemented — step into it with
-`--help` at any level (`c1i --help`, then a group, then a command inside it).
-For task-oriented walkthroughs and the API surface:
+The cobra tree never drifts from what's implemented — pass `--help` at the
+root, at a group, or at a command inside it, and step down from there. For
+task-oriented walkthroughs and the API surface:
 
     c1i docs guide
     c1i docs endpoints --filter TEXT
@@ -127,6 +127,8 @@ Two things are irreversible in ways their `--help` doesn't make obvious:
 - Entitlement ids are unique only within an app — some system-builtin
   entitlements reuse the same id across every app that has one. Always key
   on `(app_id, id)` together, never `id` alone.
+- `mcp servers test-connection`'s `toolCount` is a JSON string, not a
+  number, unlike every NDJSON row's own `tool_count`/`toolCount` fields.
 
 ## Carry forward
 
