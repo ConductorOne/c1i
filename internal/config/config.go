@@ -25,9 +25,11 @@ import (
 // It also returns human-readable warnings for anything silently altered: a
 // non-https scheme (rewritten to https rather than rejected -- a typo
 // shouldn't turn into a hard failure with no server to inspect) and any
-// embedded userinfo, which is always dropped (c1i authenticates via OAuth
-// device flow or a keychain-stored client_id/client_secret, never HTTP Basic
-// in the URL) and never echoed back, password included, in the warning.
+// embedded userinfo. Userinfo is dropped (c1i authenticates via OAuth
+// device flow or a keychain-stored client_id/client_secret, never HTTP
+// Basic in the URL) and never echoed back, password included, in the
+// warning -- true for a scheme-less "user:pass@host" too (an ordinary
+// paste-and-forgot-the-scheme mistake), not only when "://" is present.
 func ParseURL(input string) (result string, warnings []string) {
 	input = strings.TrimSpace(input)
 
@@ -36,8 +38,16 @@ func ParseURL(input string) (result string, warnings []string) {
 	// branch, which prepends "https://" onto the literal leading "//" and
 	// mangles it into "https:////host".
 	parseable := input
+	hasScheme := strings.Contains(input, "://")
 	if strings.HasPrefix(input, "//") {
 		parseable = "https:" + input
+		hasScheme = true
+	} else if !hasScheme && strings.Contains(input, ".") {
+		// Raw domain, no scheme -- give url.Parse a scheme purely so it can
+		// still find "user:pass@host" the same way the scheme-having branch
+		// does. hasScheme stays false: we chose https ourselves, so there's
+		// no caller-supplied scheme to warn about.
+		parseable = "https://" + input
 	}
 
 	if strings.Contains(parseable, "://") {
@@ -48,11 +58,16 @@ func ParseURL(input string) (result string, warnings []string) {
 					"--url embedded credentials (user %q) were dropped; c1i authenticates via OAuth device flow or a keychain-stored client_id/client_secret, never via the URL",
 					u.User.Username()))
 			}
-			if !strings.EqualFold(u.Scheme, "https") {
+			if hasScheme && !strings.EqualFold(u.Scheme, "https") {
 				warnings = append(warnings, fmt.Sprintf("--url scheme %q is not supported; using https instead", u.Scheme))
 			}
 			return "https://" + strings.ToLower(u.Host), warnings
 		}
+		// url.Parse failed, or found no host: fall back to the literal input,
+		// lower-cased -- but strip anything before a trailing "@" first so a
+		// malformed "user:pass@" fragment still can't echo a password even
+		// on this degenerate path.
+		return "https://" + strings.ToLower(withoutUserinfoFallback(input)), warnings
 	}
 	if strings.Contains(input, ".") {
 		return "https://" + strings.ToLower(input), warnings
@@ -63,6 +78,16 @@ func ParseURL(input string) (result string, warnings []string) {
 	// expands to is a genuinely open question this fix does not decide --
 	// left exactly as-is, case included, pending that separate decision.
 	return fmt.Sprintf("https://%s.conductor.one", input), warnings
+}
+
+// withoutUserinfoFallback strips a "user:pass@" prefix (if any) from s. Only
+// used on ParseURL's rare url.Parse-failed/no-host path, as a last line of
+// defense so that path can't echo a password either.
+func withoutUserinfoFallback(s string) string {
+	if i := strings.LastIndex(s, "@"); i != -1 {
+		return s[i+1:]
+	}
+	return s
 }
 
 // KeychainService returns the keychain service name for a given base URL.

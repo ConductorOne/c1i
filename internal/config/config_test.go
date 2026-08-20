@@ -121,6 +121,33 @@ func TestParseURLDropsEmbeddedCredentialsWithWarning(t *testing.T) {
 	}
 }
 
+// TestParseURLDropsEmbeddedCredentialsSchemeless is GAP 1 from adversarial
+// review: the scheme-having branch above drops/warns about embedded
+// userinfo, but a scheme-LESS input ("user:pass@host", the ordinary mistake
+// of pasting a URL and forgetting "https://") took the raw-domain branch
+// untouched -- nothing dropped, nothing warned, and the password rode
+// straight into the base URL c1i then sends on every request (visible in
+// --debug's request trace and in a failed-auth error). Reproduced live:
+// "c1i users list --url \"user:hunter2@leet.conductor.one\" --debug" printed
+// the password three times in stderr before this fix.
+func TestParseURLDropsEmbeddedCredentialsSchemeless(t *testing.T) {
+	got, warnings := ParseURL("user:hunter2@leet.conductor.one")
+	if want := "https://leet.conductor.one"; got != want {
+		t.Errorf("ParseURL(%q) = %q, want %q", "user:hunter2@leet.conductor.one", got, want)
+	}
+	if strings.Contains(got, "hunter2") {
+		t.Errorf("result leaked the password: %q", got)
+	}
+	if len(warnings) != 1 || !strings.Contains(warnings[0], "user") {
+		t.Errorf("warnings = %v, want one mentioning the dropped credentials", warnings)
+	}
+	for _, w := range warnings {
+		if strings.Contains(w, "hunter2") {
+			t.Errorf("warning leaked the password: %q", w)
+		}
+	}
+}
+
 // TestKeychainServiceLowerCasesHost pins that KeychainService itself is also
 // insensitive to input case, independent of whether the caller already
 // normalized via ParseURL -- defense in depth so a bypassed ParseURL call
