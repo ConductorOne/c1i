@@ -229,6 +229,41 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- **`api` no longer exits `0` printing a non-JSON body.** A `--path` that escapes
+  the API prefix can reach the web app, which answers `200` with an HTML
+  document; `c1i api` printed it verbatim and reported success, so a downstream
+  parser broke with no signal. A `200` whose body is not JSON is now an error
+  (exit `6`). Exit `6` rather than `1` because the failure is known, not
+  unclassified: the remote replied, just not with the JSON contract `api`
+  promises — the same "replied but not usefully" case `6` already covers for
+  `5xx`, wearing a success status code. An empty body still succeeds, since some
+  endpoints answer a write with nothing.
+- **`--url` is normalized instead of silently coerced.** The host is now
+  lower-cased, so `HTTPS://TENANT.CONDUCTOR.ONE` works — it previously failed as
+  "not authenticated", because the credential key was case-sensitive while DNS
+  and HTTP hosts are not. A protocol-relative `//tenant.example` is handled
+  rather than mangled into `https:////tenant.example`. A non-`https` scheme or
+  credentials embedded in the URL are dropped with a warning on stderr instead
+  of silently; the password is never echoed.
+  **If you previously authenticated with a mixed-case `--url`**, that credential
+  was stored under the old exact-case key and is no longer found. Run
+  `c1i auth login` once to re-store it.
+- **`api --path` without a leading slash says so.** It concatenated onto the
+  host, producing `https://tenant.conductor.oneapi/v1/users` and a DNS error that
+  never named the real problem. Now a usage error (exit `2`) quoting the path.
+- **The `policies --steps-file` guard rejects a non-object step.** A string,
+  number, array, or `null` inside `steps[]` was silently skipped by the arm check
+  and reached the server, which answered with a raw protobuf parse error. Each is
+  now refused client-side (exit `2`) naming the JSON kind it found.
+- **An argument or flag value that isn't valid UTF-8 is refused client-side.**
+  It reached the server and returned a bare `500`, reporting a caller mistake as
+  a remote failure (exit `6`). Now exit `2`, checked once for every command and
+  every flag rather than per command. A hostile-but-valid-UTF-8 id still goes to
+  the server and gets its normal `400`. Note the check is uniform, so a file path
+  containing invalid UTF-8 — legal on Linux, though unusual — is also refused;
+  requiring UTF-8 arguments is deliberate rather than maintaining a list of which
+  flags are exempt.
+
 - **An empty id argument no longer returns the whole collection with exit `0`.**
   `c1i users get ""` (and `apps`, `policies`, `functions`, `automations`) printed
   the full `{"list":[...]}` and reported success: `cobra.ExactArgs(1)` counts `""`

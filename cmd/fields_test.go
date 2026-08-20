@@ -220,13 +220,16 @@ func TestWriteObjectProjects(t *testing.T) {
 		t.Errorf("expected pretty-printed full object, got %s", buf.Bytes())
 	}
 
-	// Invalid JSON falls back to raw passthrough.
+	// Invalid (non-empty) JSON is an error (Fix 1), not a silent raw
+	// passthrough: a 200 with a non-JSON body must not read as success.
 	buf.Reset()
-	if err := writeObject(cmd, []byte(`not json`)); err != nil {
-		t.Fatalf("writeObject raw: %v", err)
+	err := writeObject(cmd, []byte(`not json`))
+	var nonJSONErr *nonJSONResponseError
+	if !errors.As(err, &nonJSONErr) {
+		t.Fatalf("writeObject raw: got %v, want a *nonJSONResponseError", err)
 	}
-	if got := buf.String(); got != "not json" {
-		t.Errorf("raw passthrough = %q, want %q", got, "not json")
+	if buf.String() != "" {
+		t.Errorf("expected no output on a non-JSON body, got %q", buf.String())
 	}
 
 	// With --fields set, writeObject projects the single object.

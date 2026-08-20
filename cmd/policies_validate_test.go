@@ -344,6 +344,40 @@ func TestValidateApprovalFallback_FiresOnStepWithNoArm(t *testing.T) {
 	}
 }
 
+// TestValidateApprovalFallback_FiresOnNonObjectStepElement is Fix 4: a
+// steps[] element that isn't a JSON object (a string, a number, an array, or
+// null) fails the s.(map[string]any) type assertion and used to just
+// "continue" past it silently -- reaching the server as a raw protobuf
+// parse error instead of the friendly "recognized arm" message the guard
+// advertises for every other malformed shape.
+func TestValidateApprovalFallback_FiresOnNonObjectStepElement(t *testing.T) {
+	cases := []struct {
+		name string
+		elem any
+	}{
+		{"string", "str"},
+		{"number", float64(1)},
+		{"nested array of number", []any{float64(1)}},
+		{"nested array of object", []any{map[string]any{"foo": "bar"}}},
+		{"null", nil},
+		{"deeply nested array", []any{[]any{[]any{float64(1)}}}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			steps := map[string]any{
+				"grant": map[string]any{
+					"steps": []any{tc.elem},
+				},
+			}
+			err := validateApprovalFallback(steps, "POLICY_TYPE_GRANT")
+			requireUsageError(t, err)
+			if !strings.Contains(err.Error(), "must be a JSON object") {
+				t.Errorf("error should say the element must be a JSON object, got: %v", err)
+			}
+		})
+	}
+}
+
 func TestValidateApprovalFallback_NotFiresOnEmptyRejectArmBody(t *testing.T) {
 	// The arm is present with an empty body — a legitimate deny-all step,
 	// distinct from a step with no arm set at all.

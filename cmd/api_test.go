@@ -510,3 +510,152 @@ func TestAPIPaginateFieldsPartialMatchAcrossPagesSucceeds(t *testing.T) {
 		t.Errorf("output lines = %v, want %v", gotLines, wantLines)
 	}
 }
+
+// --- --path without a leading slash (Fix 3) ---
+
+// TestAPIPathWithoutLeadingSlashIsUsageError pins the fix: a --path missing
+// its leading slash used to get concatenated straight onto baseURL (e.g.
+// "https://host" + "api/v1/users" -> a DNS lookup for "hostapi.v1..."),
+// surfacing as an opaque "no such host" error that never named the real
+// problem. It must now fail fast as a usage error naming --path itself.
+func TestAPIPathWithoutLeadingSlashIsUsageError(t *testing.T) {
+	resetAPICmdFlags(t)
+	t.Setenv("C1I_URL", "https://example.invalid")
+
+	var out bytes.Buffer
+	apiCmd.SetOut(&out)
+	apiCmd.SetErr(&out)
+	rootCmd.SetArgs([]string{"api", "--path", "api/v1/users"})
+
+	err := rootCmd.ExecuteContext(context.Background())
+	if err == nil {
+		t.Fatal("expected an error for a --path without a leading slash, got nil")
+	}
+	if !strings.Contains(err.Error(), "--path") || !strings.Contains(err.Error(), "leading slash") {
+		t.Errorf("error = %q, want it to name --path and the leading-slash requirement", err.Error())
+	}
+	if got, want := exitCode(err), exitUsage; got != want {
+		t.Errorf("exitCode = %d, want %d (usage error: bad --path)", got, want)
+	}
+}
+
+// TestAPIPathWithLeadingSlashStillWorks is the regression guard: a normal,
+// well-formed --path must be unaffected.
+func TestAPIPathWithLeadingSlashStillWorks(t *testing.T) {
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/v1/users" {
+			t.Errorf("server saw path %q, want /api/v1/users", r.URL.Path)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"list":[]}`))
+	}))
+	defer srv.Close()
+
+	resetAPICmdFlags(t)
+	stubNewAPIClient(t, srv)
+	t.Setenv("C1I_URL", srv.URL)
+
+	var out bytes.Buffer
+	apiCmd.SetOut(&out)
+	apiCmd.SetErr(&out)
+	rootCmd.SetArgs([]string{"api", "--path", "/api/v1/users"})
+
+	if err := rootCmd.ExecuteContext(context.Background()); err != nil {
+		t.Fatalf("expected exit 0 for a well-formed --path, got: %v; output: %s", err, out.String())
+	}
+}
+
+// --- non-JSON 200 body (Fix 1) ---
+//
+// `api --path "/api/v1/../../etc/passwd"` (or any path that escapes the API
+// prefix) can land on a server that answers 200 with an HTML document
+// instead of the JSON api documents itself as returning. Before the fix,
+// writeRawObject's json.Indent failure fell back to printing the raw bytes
+// and returning nil -- a silent "success" a downstream parser can't detect.
+
+// TestAPINonJSON200BodyIsError is the red case: a 200 whose body isn't valid
+// JSON must be a reported error, not a silent success.
+func TestAPINonJSON200BodyIsError(t *testing.T) {
+	// NewTLSServer, not NewServer: internal/config.ParseURL unconditionally
+	// coerces the resolved base URL to "https://" (see Fix 2), so the fake
+	// requester (via GetBaseURL) always dials https regardless of C1I_URL's
+	// scheme.
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte("<!doctype html><html><body>not json</body></html>"))
+	}))
+	defer srv.Close()
+
+	resetAPICmdFlags(t)
+	stubNewAPIClient(t, srv)
+	t.Setenv("C1I_URL", srv.URL)
+
+	var out bytes.Buffer
+	apiCmd.SetOut(&out)
+	apiCmd.SetErr(&out)
+	rootCmd.SetArgs([]string{"api", "--path", "/api/v1/../../etc/passwd"})
+
+	err := rootCmd.ExecuteContext(context.Background())
+	if err == nil {
+		t.Fatalf("expected an error for a non-JSON 200 body, got nil; output: %s", out.String())
+	}
+	if !strings.Contains(err.Error(), "not JSON") && !strings.Contains(err.Error(), "not valid JSON") {
+		t.Errorf("error = %q, want it to say the response wasn't JSON", err.Error())
+	}
+	if got, want := exitCode(err), exitServer; got != want {
+		t.Errorf("exitCode = %d, want %d (remote responded 200 but not with usable JSON)", got, want)
+	}
+}
+
+// TestAPIEmpty200BodySucceeds pins the case the fix must not break: some
+// endpoints legitimately answer 2xx with an empty body (a delete with
+// nothing to return). That must still be exit 0 with no output.
+func TestAPIEmpty200BodySucceeds(t *testing.T) {
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srv.Close()
+
+	resetAPICmdFlags(t)
+	stubNewAPIClient(t, srv)
+	t.Setenv("C1I_URL", srv.URL)
+
+	var out bytes.Buffer
+	apiCmd.SetOut(&out)
+	apiCmd.SetErr(&out)
+	rootCmd.SetArgs([]string{"api", "--path", "/api/v1/things/1", "--method", "DELETE"})
+
+	if err := rootCmd.ExecuteContext(context.Background()); err != nil {
+		t.Fatalf("expected exit 0 for a legitimately empty 200 body, got: %v; output: %s", err, out.String())
+	}
+	if out.String() != "" {
+		t.Errorf("expected no output for an empty body, got: %q", out.String())
+	}
+}
+
+// TestAPINormalJSONBodyStillWorks is the ordinary case: a real JSON response
+// must still print and exit 0.
+func TestAPINormalJSONBodyStillWorks(t *testing.T) {
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"id":"1","name":"n"}`))
+	}))
+	defer srv.Close()
+
+	resetAPICmdFlags(t)
+	stubNewAPIClient(t, srv)
+	t.Setenv("C1I_URL", srv.URL)
+
+	var out bytes.Buffer
+	apiCmd.SetOut(&out)
+	apiCmd.SetErr(&out)
+	rootCmd.SetArgs([]string{"api", "--path", "/api/v1/things/1"})
+
+	if err := rootCmd.ExecuteContext(context.Background()); err != nil {
+		t.Fatalf("expected exit 0 for a normal JSON body, got: %v; output: %s", err, out.String())
+	}
+	var got map[string]any
+	if jsonErr := json.Unmarshal(out.Bytes(), &got); jsonErr != nil {
+		t.Fatalf("output not valid JSON: %v (%s)", jsonErr, out.String())
+	}
+}

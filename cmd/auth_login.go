@@ -78,7 +78,7 @@ func isTerminal() bool {
 
 func promptForURL(cmd *cobra.Command) (string, error) {
 	out := cmd.OutOrStdout()
-	_, _ = fmt.Fprintf(out, "Enter your C1 URL (e.g. mycompany.conductor.one or mycompany): ")
+	_, _ = fmt.Fprintf(out, "Enter your C1 URL (e.g. mycompany.conductor.one, mycompany.c1eu.ai, or mycompany for conductor.one): ")
 
 	scanner := bufio.NewScanner(os.Stdin)
 	if !scanner.Scan() {
@@ -90,7 +90,9 @@ func promptForURL(cmd *cobra.Command) (string, error) {
 		return "", fmt.Errorf("url is required: set --url flag, C1I_URL env var, or url in ~/.c1i.yaml")
 	}
 
-	return config.ParseURL(raw), nil
+	url, warnings := config.ParseURL(raw)
+	warnAboutURL(warnings)
+	return url, nil
 }
 
 func offerSaveURL(cmd *cobra.Command, baseURL string) {

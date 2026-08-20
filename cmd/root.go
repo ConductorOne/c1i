@@ -5,10 +5,12 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/ConductorOne/c1i/internal/client"
 	"github.com/ConductorOne/c1i/internal/config"
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 	"github.com/spf13/viper"
 )
 
@@ -29,11 +31,23 @@ For raw API exploration, also with no authentication required:
   c1i docs page product/admin/campaigns Fetch a documentation page`,
 	SilenceUsage:  true,
 	SilenceErrors: true,
-	// Validate global flag values once, before any command runs, and attach a
+	// Validate global flag values once, before any command runs, attach a
 	// fresh *fieldsMatchState (cmd/fields.go) to the command's context so
-	// every emitter created during this invocation shares one tracker.
-	PersistentPreRunE: func(cmd *cobra.Command, _ []string) error {
+	// every emitter created during this invocation shares one tracker, and
+	// reject a non-UTF-8 positional argument or flag value client-side (see
+	// validateArgsUTF8 / validateFlagsUTF8) before it can reach a command's
+	// RunE at all -- this runs for every command (see
+	// TestNoSubcommandDefinesOwnPersistentPreRunE), so both an id from
+	// args[0] and a parent-scope id passed as a flag (--app-id,
+	// --connector-id, ...) are covered without a per-command check.
+	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
 		if err := validateErrorFormat(viper.GetString("error_format")); err != nil {
+			return err
+		}
+		if err := validateArgsUTF8(args); err != nil {
+			return err
+		}
+		if err := validateFlagsUTF8(cmd); err != nil {
 			return err
 		}
 		cmd.SetContext(withFieldsMatchState(cmd.Context()))
@@ -51,6 +65,44 @@ For raw API exploration, also with no authentication required:
 // how writeError interprets the value) and rejects anything else as a usage
 // error so a typo like --error-format=jsonn fails loudly instead of silently
 // falling back to text.
+// validateArgsUTF8 rejects a positional argument that isn't valid UTF-8 (a
+// lone UTF-16 surrogate, raw invalid bytes, ...) client-side. Without this,
+// an id built from such an argument (client.Path only URL-escapes; it
+// doesn't validate encoding) reaches the server as malformed request data,
+// which answers with a bare 500 (exit 6) instead of the 400 every other
+// hostile-but-valid-UTF-8 id gets -- a client-side mistake reporting as a
+// remote failure.
+func validateArgsUTF8(args []string) error {
+	for _, a := range args {
+		if !utf8.ValidString(a) {
+			return &usageError{fmt.Errorf("argument %q is not valid UTF-8", a)}
+		}
+	}
+	return nil
+}
+
+// validateFlagsUTF8 is validateArgsUTF8's flag-shaped twin: a parent-scope
+// id (--app-id, --connector-id, ...) is a FLAG per this repo's own id-argument
+// convention (see CLAUDE.md), interpolated into the request path exactly
+// like a positional id -- so the positional-only check missed it. Checks
+// every flag actually set on cmd (which, by the time PersistentPreRunE
+// runs, includes inherited persistent flags merged in from every ancestor,
+// not just cmd's own local ones) via its string form; a non-string flag
+// (bool, int, ...) can't fail its own parsing into invalid UTF-8, so
+// checking all of them uniformly is safe, not just id-bearing ones by name.
+func validateFlagsUTF8(cmd *cobra.Command) error {
+	var err error
+	cmd.Flags().VisitAll(func(f *pflag.Flag) {
+		if err != nil || !f.Changed {
+			return
+		}
+		if v := f.Value.String(); !utf8.ValidString(v) {
+			err = &usageError{fmt.Errorf("--%s value %q is not valid UTF-8", f.Name, v)}
+		}
+	})
+	return err
+}
+
 func validateErrorFormat(f string) error {
 	switch strings.ToLower(f) {
 	case "", "text", "json":
@@ -66,7 +118,7 @@ func init() {
 	rootCmd.SetFlagErrorFunc(func(_ *cobra.Command, err error) error {
 		return &usageError{err}
 	})
-	rootCmd.PersistentFlags().String("url", "", "C1 URL (e.g. https://mycompany.conductor.one)")
+	rootCmd.PersistentFlags().String("url", "", "C1 URL (e.g. https://mycompany.conductor.one or https://mycompany.c1eu.ai)")
 	_ = viper.BindPFlag("url", rootCmd.PersistentFlags().Lookup("url"))
 	_ = viper.BindEnv("url", "C1I_URL")
 
@@ -101,13 +153,25 @@ func initConfig() {
 	_ = viper.ReadInConfig()
 }
 
-// GetBaseURL returns the configured base URL or exits with an error.
+// GetBaseURL returns the configured base URL or exits with an error. Anything
+// ParseURL silently rewrote (a non-https scheme, embedded credentials) is
+// printed to stderr as a warning rather than surfaced as an error, so a typo
+// doesn't turn into a hard failure -- but it's no longer silent.
 func GetBaseURL() (string, error) {
 	raw := viper.GetString("url")
 	if raw == "" {
 		return "", fmt.Errorf("url is required: set --url flag, C1I_URL env var, or url in ~%s.c1i.yaml", string(filepath.Separator))
 	}
-	return config.ParseURL(raw), nil
+	url, warnings := config.ParseURL(raw)
+	warnAboutURL(warnings)
+	return url, nil
+}
+
+// warnAboutURL prints any ParseURL warnings to stderr, one per line.
+func warnAboutURL(warnings []string) {
+	for _, w := range warnings {
+		_, _ = fmt.Fprintf(os.Stderr, "Warning: %s\n", w)
+	}
 }
 
 // URLSource indicates where the URL was resolved from.
@@ -120,16 +184,22 @@ const (
 	URLSourceConfig
 )
 
-// GetBaseURLWithSource returns the configured base URL and where it came from.
+// GetBaseURLWithSource returns the configured base URL and where it came
+// from, warning to stderr about anything ParseURL silently rewrote.
 func GetBaseURLWithSource(cmd *cobra.Command) (string, URLSource) {
+	parse := func(raw string, source URLSource) (string, URLSource) {
+		url, warnings := config.ParseURL(raw)
+		warnAboutURL(warnings)
+		return url, source
+	}
 	if f := cmd.Flags().Lookup("url"); f != nil && f.Changed {
-		return config.ParseURL(f.Value.String()), URLSourceFlag
+		return parse(f.Value.String(), URLSourceFlag)
 	}
 	if v := os.Getenv("C1I_URL"); v != "" {
-		return config.ParseURL(v), URLSourceEnv
+		return parse(v, URLSourceEnv)
 	}
 	if v := viper.GetString("url"); v != "" {
-		return config.ParseURL(v), URLSourceConfig
+		return parse(v, URLSourceConfig)
 	}
 	return "", URLSourceNone
 }

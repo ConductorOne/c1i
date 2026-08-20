@@ -52,6 +52,17 @@ type toolExecutionError struct{ err error }
 func (e *toolExecutionError) Error() string { return e.err.Error() }
 func (e *toolExecutionError) Unwrap() error { return e.err }
 
+// nonJSONResponseError marks an HTTP-success response whose body isn't valid
+// JSON (e.g. a path that escapes the API prefix and lands on a server that
+// answers 200 with an HTML document). Maps to exitServer: the request itself
+// was well-formed, so this isn't a usage error; it's the remote side failing
+// to honor the JSON contract this CLI depends on, the same "remote responded
+// but not usefully" bucket exitServer already covers for 5xx.
+type nonJSONResponseError struct{ err error }
+
+func (e *nonJSONResponseError) Error() string { return e.err.Error() }
+func (e *nonJSONResponseError) Unwrap() error { return e.err }
+
 // upstreamError marks a failure in a system this CLI depends on, or in the
 // protocol layer itself, that didn't arrive as an HTTP status this taxonomy
 // can classify by — e.g. the MCP gateway's JSON-RPC-level report that an
@@ -179,6 +190,10 @@ func exitCode(err error) int {
 	var upstreamErr *upstreamError
 	if errors.As(err, &upstreamErr) {
 		return exitUpstream
+	}
+	var nonJSONErr *nonJSONResponseError
+	if errors.As(err, &nonJSONErr) {
+		return exitServer
 	}
 	var usageErr *usageError
 	if errors.As(err, &usageErr) {

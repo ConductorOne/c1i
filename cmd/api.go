@@ -45,6 +45,13 @@ var apiCmd = &cobra.Command{
 		}
 
 		path, _ := cmd.Flags().GetString("path")
+		// Without a leading slash, path gets concatenated straight onto
+		// baseURL (e.g. "https://host" + "api/v1/users" -> the host becomes
+		// "hostapi", not "host") and fails as a DNS lookup error that never
+		// names the real problem: the path itself.
+		if !strings.HasPrefix(path, "/") {
+			return &usageError{fmt.Errorf("--path %q must start with a leading slash (e.g. \"/api/v1/users\")", path)}
+		}
 		method, _ := cmd.Flags().GetString("method")
 		body, _ := cmd.Flags().GetString("body")
 		bodyFile, _ := cmd.Flags().GetString("body-file")

@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"encoding/json"
 	"fmt"
 	"strings"
 )
@@ -39,6 +40,26 @@ var approvalArms = []string{
 // reaches the server as a nil step; "action" is recognized but has no
 // support of its own yet (see the dedicated check below).
 var stepArms = []string{"approval", "provision", "accept", "reject", "wait", "form", "action"}
+
+// jsonKindName names v's decoded JSON type for an error message (e.g. "a
+// string", "an array"), covering every shape json.Unmarshal into `any` can
+// produce.
+func jsonKindName(v any) string {
+	switch v.(type) {
+	case nil:
+		return "null"
+	case string:
+		return "a string"
+	case float64, json.Number:
+		return "a number"
+	case bool:
+		return "a boolean"
+	case []any:
+		return "an array"
+	default:
+		return fmt.Sprintf("a %T", v)
+	}
+}
 
 func hasStepArm(step map[string]any) bool {
 	for _, arm := range stepArms {
@@ -343,7 +364,12 @@ func validateApprovalFallback(policySteps map[string]any, policyType string) err
 		for i, s := range steps {
 			step, ok := s.(map[string]any)
 			if !ok {
-				continue
+				// A string/number/array/null element fails this type
+				// assertion the same way an unset step does, so without an
+				// explicit check it silently "continue"s past the whole
+				// element -- reaching the server as a raw protobuf parse
+				// error instead of this guard's friendly message.
+				return &usageError{fmt.Errorf("policySteps[%q].steps[%d] must be a JSON object (got %s), keyed by one of the recognized arms (approval, provision, accept, reject, wait, form, action)", ptype, i, jsonKindName(s))}
 			}
 			if !hasStepArm(step) {
 				if len(step) == 0 {
