@@ -144,8 +144,13 @@ func TestWriteErrorTextPathErrorDropsInheritedPrefix(t *testing.T) {
 		err  error
 	}{
 		{"bare", fmt.Errorf("API error: %w", &client.PathError{Method: "GET", Path: "/api/v1/policies/"})},
+		// The wrap chain itself contains "API error:" (as an inner layer
+		// beneath another wrap), so the "no false claim survives" assertion
+		// below is only true if multi-level errors.As unwrapping actually
+		// reaches the PathError and replaces the whole chain — a single-level
+		// unwrap, or no unwrap at all, would leave "API error:" in the output.
 		{"doubly wrapped", fmt.Errorf("failed to fetch task to determine current policy step: %w",
-			&client.PathError{Method: "GET", Path: "/api/v1/tasks/"})},
+			fmt.Errorf("API error: %w", &client.PathError{Method: "GET", Path: "/api/v1/tasks/"}))},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -159,6 +164,71 @@ func TestWriteErrorTextPathErrorDropsInheritedPrefix(t *testing.T) {
 				t.Errorf("message does not explain the empty path segment: %q", got)
 			}
 		})
+	}
+}
+
+// TestWriteErrorTextAPIErrorKeepsPrefix guards displayError's PathError
+// special-case from being widened to other error types: a wrapped
+// *client.APIError must keep its inherited "API error: " prefix and its
+// status/body context in the printed text, unlike a PathError.
+func TestWriteErrorTextAPIErrorKeepsPrefix(t *testing.T) {
+	var buf bytes.Buffer
+	apiErr := &client.APIError{Method: "GET", Path: "/api/v1/x", StatusCode: 404, Body: `{"message":"not found"}`}
+	writeError(&buf, fmt.Errorf("API error: %w", apiErr), "text")
+	got := buf.String()
+	if !strings.Contains(got, "API error:") {
+		t.Errorf("wrapped API error lost its inherited prefix: %q", got)
+	}
+	if !strings.Contains(got, "404") || !strings.Contains(got, "not found") {
+		t.Errorf("wrapped API error lost its status/body context: %q", got)
+	}
+}
+
+// TestWriteErrorJSONAPIErrorKeepsPrefix is the --error-format json twin of
+// TestWriteErrorTextAPIErrorKeepsPrefix: the "error" field's string content
+// must still carry the inherited prefix, not just the structured
+// status/method/path fields TestWriteErrorJSON already checks.
+func TestWriteErrorJSONAPIErrorKeepsPrefix(t *testing.T) {
+	var buf bytes.Buffer
+	apiErr := &client.APIError{Method: "GET", Path: "/api/v1/x", StatusCode: 404, Body: `{"message":"not found"}`}
+	writeError(&buf, fmt.Errorf("API error: %w", apiErr), "json")
+
+	var got map[string]any
+	if err := json.Unmarshal(buf.Bytes(), &got); err != nil {
+		t.Fatalf("output is not JSON: %v (%s)", err, buf.String())
+	}
+	errStr, _ := got["error"].(string)
+	if !strings.Contains(errStr, "API error:") {
+		t.Errorf("json error field lost its inherited prefix: %q", errStr)
+	}
+}
+
+// TestWriteErrorTextAuthErrorKeepsPrefix is the *client.AuthError analog of
+// TestWriteErrorTextAPIErrorKeepsPrefix.
+func TestWriteErrorTextAuthErrorKeepsPrefix(t *testing.T) {
+	var buf bytes.Buffer
+	authErr := &client.AuthError{Err: errors.New("no creds")}
+	writeError(&buf, fmt.Errorf("authentication failed: %w", authErr), "text")
+	got := buf.String()
+	if !strings.Contains(got, "authentication failed:") {
+		t.Errorf("wrapped auth error lost its inherited prefix: %q", got)
+	}
+}
+
+// TestWriteErrorJSONAuthErrorKeepsPrefix is the --error-format json twin of
+// TestWriteErrorTextAuthErrorKeepsPrefix.
+func TestWriteErrorJSONAuthErrorKeepsPrefix(t *testing.T) {
+	var buf bytes.Buffer
+	authErr := &client.AuthError{Err: errors.New("no creds")}
+	writeError(&buf, fmt.Errorf("authentication failed: %w", authErr), "json")
+
+	var got map[string]any
+	if err := json.Unmarshal(buf.Bytes(), &got); err != nil {
+		t.Fatalf("output is not JSON: %v (%s)", err, buf.String())
+	}
+	errStr, _ := got["error"].(string)
+	if !strings.Contains(errStr, "authentication failed:") {
+		t.Errorf("json error field lost its inherited prefix: %q", errStr)
 	}
 }
 
