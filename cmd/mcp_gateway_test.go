@@ -20,7 +20,7 @@ func TestDeriveGatewayURL(t *testing.T) {
 	cases := []struct{ in, want string }{
 		{"https://acme.conductor.one", "https://acme-mcp.conductor.one/v1"},
 		{"https://acme.conductor.one/", "https://acme-mcp.conductor.one/v1"},
-		{"http://localhost:8080", "http://localhost-mcp:8080/v1"},
+		{"https://localhost:8080", "https://localhost-mcp:8080/v1"},
 	}
 	for _, c := range cases {
 		got, err := deriveGatewayURL(c.in)

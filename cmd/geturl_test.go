@@ -136,7 +136,7 @@ func TestPromptForURLValidInputUnaffected(t *testing.T) {
 	}
 }
 
-// TestAuthLoginPromptDoesNotAdvertiseShortcut pins item 7: the prompt used
+// TestAuthLoginPromptDoesNotAdvertiseShortcut: the prompt used
 // to read "...or mycompany for conductor.one", advertising the now-retired
 // shortcut. It must be gone.
 func TestAuthLoginPromptDoesNotAdvertiseShortcut(t *testing.T) {
@@ -212,9 +212,9 @@ func TestGetBaseURLHTTPSchemeIsRejected(t *testing.T) {
 // past URL parsing (and fail only for lack of credentials).
 func TestGetBaseURLFullHostsUnaffected(t *testing.T) {
 	cases := []string{
-		"leet.conductor.one",
-		"https://leet.conductor.one",
-		"LEET.CONDUCTOR.ONE",
+		"acme.conductor.one",
+		"https://acme.conductor.one",
+		"ACME.CONDUCTOR.ONE",
 		"acme.c1eu.ai",
 		"https://acme.c1eu.ai",
 		"ACME.C1EU.AI",

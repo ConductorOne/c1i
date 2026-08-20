@@ -41,8 +41,8 @@ func TestParseURLCaseInsensitiveHost(t *testing.T) {
 		input string
 		want  string
 	}{
-		{"HTTPS://LEET.CONDUCTOR.ONE", "https://leet.conductor.one"},
-		{"LEET.CONDUCTOR.ONE", "https://leet.conductor.one"},
+		{"HTTPS://ACME.CONDUCTOR.ONE", "https://acme.conductor.one"},
+		{"ACME.CONDUCTOR.ONE", "https://acme.conductor.one"},
 		// A second tenant domain family (EU) must normalize identically --
 		// this fix is about URL shape, never about which domain a host
 		// belongs to.
@@ -146,12 +146,12 @@ func TestParseURLHTTPSchemeIsRejected(t *testing.T) {
 // fell through to the raw-domain branch, which prepended "https://" onto the
 // literal leading "//" and produced "https:////host".
 func TestParseURLProtocolRelative(t *testing.T) {
-	got, _, err := ParseURL("//leet.conductor.one")
+	got, _, err := ParseURL("//acme.conductor.one")
 	if err != nil {
-		t.Fatalf("ParseURL(%q) error = %v, want nil", "//leet.conductor.one", err)
+		t.Fatalf("ParseURL(%q) error = %v, want nil", "//acme.conductor.one", err)
 	}
-	if want := "https://leet.conductor.one"; got != want {
-		t.Errorf("ParseURL(%q) = %q, want %q", "//leet.conductor.one", got, want)
+	if want := "https://acme.conductor.one"; got != want {
+		t.Errorf("ParseURL(%q) = %q, want %q", "//acme.conductor.one", got, want)
 	}
 }
 
@@ -207,15 +207,15 @@ func TestParseURLDropsEmbeddedCredentialsWithWarning(t *testing.T) {
 // untouched -- nothing dropped, nothing warned, and the password rode
 // straight into the base URL c1i then sends on every request (visible in
 // --debug's request trace and in a failed-auth error). Reproduced live:
-// "c1i users list --url \"user:hunter2@leet.conductor.one\" --debug" printed
+// "c1i users list --url \"user:hunter2@acme.conductor.one\" --debug" printed
 // the password three times in stderr before this fix.
 func TestParseURLDropsEmbeddedCredentialsSchemeless(t *testing.T) {
-	got, warnings, err := ParseURL("user:hunter2@leet.conductor.one")
+	got, warnings, err := ParseURL("user:hunter2@acme.conductor.one")
 	if err != nil {
-		t.Fatalf("ParseURL(%q) error = %v, want nil", "user:hunter2@leet.conductor.one", err)
+		t.Fatalf("ParseURL(%q) error = %v, want nil", "user:hunter2@acme.conductor.one", err)
 	}
-	if want := "https://leet.conductor.one"; got != want {
-		t.Errorf("ParseURL(%q) = %q, want %q", "user:hunter2@leet.conductor.one", got, want)
+	if want := "https://acme.conductor.one"; got != want {
+		t.Errorf("ParseURL(%q) = %q, want %q", "user:hunter2@acme.conductor.one", got, want)
 	}
 	if strings.Contains(got, "hunter2") {
 		t.Errorf("result leaked the password: %q", got)
@@ -235,14 +235,14 @@ func TestParseURLDropsEmbeddedCredentialsSchemeless(t *testing.T) {
 // normalized via ParseURL -- defense in depth so a bypassed ParseURL call
 // can't silently reintroduce sub-issue (c).
 func TestKeychainServiceLowerCasesHost(t *testing.T) {
-	got := KeychainService("https://LEET.CONDUCTOR.ONE")
-	want := "c1i/leet.conductor.one"
+	got := KeychainService("https://ACME.CONDUCTOR.ONE")
+	want := "c1i/acme.conductor.one"
 	if got != want {
 		t.Errorf("KeychainService = %q, want %q", got, want)
 	}
 }
 
-// TestLegacyKeychainCredentialNotOrphanedByShortcutRetirement is item 6: a
+// TestLegacyKeychainCredentialNotOrphanedByShortcutRetirement: a
 // user who previously ran "--url acme" (when that expanded to
 // "https://acme.conductor.one") and stored a credential must still resolve
 // it once the shortcut is retired and they type the full host instead.
