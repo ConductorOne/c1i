@@ -234,11 +234,15 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `/` escapes to `%2F`, and the API redirects that to a trailing-slash path — the
   exact shape the guard refuses — and then to the bare collection. Go's HTTP
   client follows redirects below the guard's layer, so `users get "/"` printed
-  every user and reported success. The client now **refuses to follow any
-  redirect** and reports the `3xx` and its target as a usage error (exit `2`).
-  No endpoint legitimately redirects a well-formed request, and following one
-  silently converts a single-object read into a collection read. Verified that
-  normal calls perform zero redirects and are unaffected.
+  every user and reported success. The REST client now **refuses to follow any
+  redirect** and reports the `3xx` and its target as a usage error (exit `2`),
+  because following one silently converts a single-object read into a collection
+  read. Verified with `--debug` that normal calls perform zero redirects today
+  and are unaffected. This guard lives in `internal/client`; `internal/mcpgateway`
+  and `internal/login` build their own HTTP clients and still follow redirects.
+  Exit `2` is a deliberate simplification: a bad id is the only cause of a `3xx`
+  seen so far, but a redirect on an otherwise well-formed request would not be
+  the caller's mistake and would still report `2`.
 - **An unreachable MCP gateway now exits `8`, not `1`.** A DNS failure or a
   refused connection during the gateway handshake returned a bare error that
   collapsed to generic. Exit `8` already means "a system beyond C1 failed",

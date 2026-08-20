@@ -417,13 +417,13 @@ branch on without parsing text:
 |------|---------|
 | `0` | success |
 | `1` | generic / unclassified error |
-| `2` | usage error (bad flags or arguments, or the API returned `400`) |
+| `2` | usage error (bad flags or arguments, an empty id, an id the API redirects to a collection, or the API returned `400`) |
 | `3` | not authenticated, or API returned `401`/`403` |
 | `4` | API returned `404` (not found) |
 | `5` | API returned `429` (rate limited — back off and retry) |
 | `6` | C1 failed: the API returned `5xx`, or answered `200` with a body that isn't JSON |
 | `7` | `mcp gateway call` completed, but the tool itself reported an error (`isError: true` in its result) |
-| `8` | a system beyond C1, or the MCP protocol layer, failed — an upstream connector was unreachable or errored, or the gateway returned a protocol-level JSON-RPC error |
+| `8` | a system beyond C1, or the MCP protocol layer, failed — an upstream connector was unreachable or errored, the gateway itself was unreachable (DNS failure, refused connection), or the gateway returned a protocol-level JSON-RPC error |
 
 `6` and `8` are both "something remote broke," but they call for different
 responses. `6` means C1 itself is failing, so retrying later is reasonable and
@@ -442,11 +442,18 @@ empty path segment, which the API redirects to the collection endpoint — so th
 command used to print the entire list and exit `0`. The same check applies to a
 raw `api --path` ending in `/`.
 
-Relatedly, `c1i` **never follows an HTTP redirect**; a `3xx` is reported as an
-error (exit `2`) naming the target. No endpoint legitimately redirects a
-well-formed request, and following one silently changes what was asked: an id of
-`/` or `.` escapes to a path the API redirects to the collection, which turned a
-single-object read into "here is everything" with exit `0`.
+Relatedly, the **REST client never follows an HTTP redirect**; a `3xx` from the
+C1 API is reported as an error (exit `2`) naming the target. Following one
+silently changes what was asked: an id of `/` or `.` escapes to a path the API
+redirects to the collection, which turned a single-object read into a full
+listing with exit `0`. Normal calls were verified with `--debug` to perform zero
+redirects, so nothing is expected to need one — but this guard covers the REST
+client only. The MCP gateway and the login handshake use their own HTTP clients
+and still follow redirects.
+
+A bad id is the only cause of a `3xx` observed so far, which is why it maps to
+exit `2`; a redirect on an otherwise well-formed request would not be the
+caller's mistake, and would still report `2`.
 
 Pass `--error-format json` (or `C1I_ERROR_FORMAT=json`) to get a machine-readable
 error object instead of the default `Error: <msg>` line. For API errors it
