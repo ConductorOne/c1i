@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"strings"
 	"testing"
 
 	"github.com/ConductorOne/c1i/internal/client"
@@ -128,6 +129,36 @@ func TestWriteErrorJSON(t *testing.T) {
 	body, ok := got["body"].(map[string]any)
 	if !ok || body["message"] != "not found" {
 		t.Errorf("body not embedded as JSON object: %#v", got["body"])
+	}
+}
+
+// A PathError never reaches the wire (do() refuses the request before
+// sending), so any "API error:"-style prefix a call site wraps it in is a
+// false claim. writeError must strip those inherited prefixes and print the
+// PathError's own explanation instead — for both a bare PathError and one
+// buried under other %w wrapping (e.g. resolvePolicyStepID's "failed to
+// fetch task..." wrap in cmd/tasks.go).
+func TestWriteErrorTextPathErrorDropsInheritedPrefix(t *testing.T) {
+	cases := []struct {
+		name string
+		err  error
+	}{
+		{"bare", fmt.Errorf("API error: %w", &client.PathError{Method: "GET", Path: "/api/v1/policies/"})},
+		{"doubly wrapped", fmt.Errorf("failed to fetch task to determine current policy step: %w",
+			&client.PathError{Method: "GET", Path: "/api/v1/tasks/"})},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			var buf bytes.Buffer
+			writeError(&buf, tc.err, "text")
+			got := buf.String()
+			if strings.Contains(got, "API error:") {
+				t.Errorf("message still carries the false API error: claim: %q", got)
+			}
+			if !strings.Contains(got, "empty path segment") {
+				t.Errorf("message does not explain the empty path segment: %q", got)
+			}
+		})
 	}
 }
 

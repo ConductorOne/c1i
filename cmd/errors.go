@@ -212,7 +212,7 @@ func isCobraUsageError(err error) bool {
 // "Error: <msg>" text line.
 func writeError(w io.Writer, err error, format string) {
 	if strings.EqualFold(format, "json") {
-		obj := map[string]any{"error": err.Error()}
+		obj := map[string]any{"error": displayError(err).Error()}
 		var apiErr *client.APIError
 		if errors.As(err, &apiErr) {
 			obj["status"] = apiErr.StatusCode
@@ -227,7 +227,19 @@ func writeError(w io.Writer, err error, format string) {
 			return
 		}
 	}
-	_, _ = fmt.Fprintf(w, "Error: %v\n", err)
+	_, _ = fmt.Fprintf(w, "Error: %v\n", displayError(err))
+}
+
+// displayError returns the error to print. A *client.PathError never reaches
+// the wire — do() refuses the request before sending — so any "API error:"
+// (or similar) prefix a call site wrapped it in is a false claim; print the
+// PathError's own message instead of the full wrapped chain.
+func displayError(err error) error {
+	var pathErr *client.PathError
+	if errors.As(err, &pathErr) {
+		return pathErr
+	}
+	return err
 }
 
 // rawJSONOrString embeds s as structured JSON when it is a JSON object/array, so
