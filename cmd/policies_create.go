@@ -153,7 +153,7 @@ func init() {
 	policiesCreateCmd.Flags().String("steps-file", "", "JSON array: the baseline policySteps.steps content (file, or \"-\" for stdin)")
 	policiesCreateCmd.Flags().String("rules-file", "", "JSON array of routing rules: [{\"condition\":\"<CEL>\",\"stepKey\":\"<key>\"}] (file, or \"-\" for stdin)")
 	policiesCreateCmd.Flags().String("body-file", "", "Full CreatePolicyRequest JSON body, verbatim (file, or \"-\" for stdin); mutually exclusive with the flags above")
-	policiesCreateCmd.Flags().Bool("allow-deny-all", false, "Allow creating a policy with no steps (or an explicit deny-all) — bypasses the C57 empty-steps guard on purpose")
+	policiesCreateCmd.Flags().Bool("allow-deny-all", false, "Allow creating a policy with no steps (or an explicit deny-all) — bypasses the empty-steps guard on purpose")
 	annotateRequired(policiesCreateCmd, "display-name", "policy-type")
 	policiesCmd.AddCommand(policiesCreateCmd)
 }

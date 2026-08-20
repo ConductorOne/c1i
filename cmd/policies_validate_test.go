@@ -5,15 +5,15 @@ import (
 	"testing"
 )
 
-// ---- Guard 1 (C57): empty/missing policySteps ----
+// ---- Guard 1: empty/missing policySteps ----
 
 func TestValidatePolicyStepsNonEmpty_FiresOnMissing(t *testing.T) {
 	err := validatePolicyStepsNonEmpty("POLICY_TYPE_GRANT", nil, false)
 	if err == nil {
 		t.Fatal("expected an error when policySteps is nil/missing")
 	}
-	if !strings.Contains(err.Error(), "C57") && !strings.Contains(err.Error(), "deny-everything") {
-		t.Errorf("error should explain the C57 deny-all default, got: %v", err)
+	if !strings.Contains(err.Error(), "deny-everything") {
+		t.Errorf("error should explain the deny-all default, got: %v", err)
 	}
 }
 
@@ -68,7 +68,7 @@ func TestValidatePolicyStepsNonEmpty_AllowDenyAllDoesNotBypassExplicitEmptyArray
 	}
 }
 
-// ---- Guard 2 (C58): policyType required ----
+// ---- Guard 2: policyType required ----
 
 func TestValidatePolicyType_FiresOnEmpty(t *testing.T) {
 	if err := validatePolicyType(""); err == nil {
@@ -90,7 +90,7 @@ func TestValidatePolicyType_NotFiresOnValidType(t *testing.T) {
 	}
 }
 
-// ---- Guard 3 (C58): empty rules[].condition ----
+// ---- Guard 3: empty rules[].condition ----
 
 func TestValidateRuleConditions_FiresOnEmpty(t *testing.T) {
 	rules := []any{map[string]any{"condition": "", "stepKey": "grant"}}
@@ -404,7 +404,7 @@ func TestMapPolicyType(t *testing.T) {
 func TestValidateCreateBody_FiresWithNoPolicySteps(t *testing.T) {
 	body := map[string]any{"displayName": "x", "policyType": "POLICY_TYPE_GRANT"}
 	if err := validateCreateBody(body, false); err == nil {
-		t.Fatal("expected the C57 guard to fire for a create body with no policySteps")
+		t.Fatal("expected the empty-steps guard to fire for a create body with no policySteps")
 	}
 }
 

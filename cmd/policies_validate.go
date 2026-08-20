@@ -8,7 +8,7 @@ import (
 // This file holds the client-side guards for `policies create`/`update`
 // : checks that run BEFORE any request is sent, each
 // failing as a *usageError (exit 2). They exist because several C1 policy
-// API defects either silently produce a dangerous result (C57: an empty
+// API defects either silently produce a dangerous result (an empty
 // policySteps becomes a deny-everything policy, no error) or return an
 // unhelpful status. Most of the rejections this file pins are plain
 // fmt.Errorf values from pkg/models/policy/policy_validate.go's
@@ -72,7 +72,7 @@ var approverArmsWithFallback = map[string]bool{
 // keyed under the wrong map key (e.g. the literal enum string
 // "POLICY_TYPE_GRANT"), ends up with a request the server can't match to
 // the baseline (HasSteps checks policy.PolicySteps[key] by this exact key) —
-// which falls back to EXACTLY the C57 deny-all default this command family
+// which falls back to EXACTLY the deny-all default this command family
 // exists to prevent, even though the caller did supply steps. So this
 // mapping is applied unconditionally when building policySteps from
 // --steps-file; a caller supplying the full body verbatim via --body-file
@@ -94,7 +94,7 @@ func policyStepsKey(policyType string) (string, error) {
 	}
 }
 
-// validatePolicyType guards C58: policyType is effectively required (the
+// validatePolicyType guards policyType: is effectively required (the
 // server 400s without it, via a validate.rules enum{not_in:[0]} constraint
 // enforced before the handler runs) even though it happens to be absent
 // from the OpenAPI schema's declared "required" list.
@@ -105,8 +105,8 @@ func validatePolicyType(policyType string) error {
 	return nil
 }
 
-// validatePolicyStepsNonEmpty guards C57 for a specific policyType's
-// baseline entry, plus a related crash the C57 write-up didn't cover.
+// validatePolicyStepsNonEmpty guards a specific policyType's
+// baseline entry, plus a related crash the original write-up didn't cover.
 //
 // Two distinct server behaviors are in play, verified against
 // pkg/models/policy/policy.go:
@@ -115,19 +115,18 @@ func validatePolicyType(policyType string) error {
 //     is PRESENT in the map — not whether its steps are non-empty. When the
 //     key is absent (and baselinePolicyId is unset), EnsureBaselineSteps
 //     silently injects a single {"reject":{}} step (deny-everything, no
-//     error) — this is C57.
+//     error) — this is the silent deny-all default.
 //  2. When the key IS present but its steps array is explicitly empty,
-//     EnsureBaselineSteps does NOT fire (HasSteps already sees the key), so
-//     the request instead reaches ValidatePolicyGraph's plain
-//     `errors.New("policy steps cannot be empty")` — a bare error that maps
-//     to HTTP 500, not 400. So an explicit `"steps": []` is WORSE than
-//     omitting the key, and this half of the guard is never bypassed by
-//     allowDenyAll: there is no scenario where sending an empty array on
-//     purpose is safe.
+//     EnsureBaselineSteps does NOT fire (HasSteps already sees the key), and
+//     the server rejects it cleanly: 400, "invalid PolicySteps.Steps: value
+//     must contain at least 1 item(s)" (verified live). So an empty array is
+//     the SAFER mistake — it fails loudly, where an absent key succeeds
+//     silently. We still pre-flight it to save a round trip and name the
+//     remedy, and allowDenyAll does not bypass it because an empty array is
+//     never what a caller actually wants.
 //
 // allowDenyAll (--allow-deny-all) only bypasses case 1 — the caller's
-// explicit opt-in to accept the server's silent deny-all default. It does
-// not, and must not, bypass case 2, which simply crashes.
+// explicit opt-in to accept the server's silent deny-all default.
 func validatePolicyStepsNonEmpty(policyType string, policySteps map[string]any, allowDenyAll bool) error {
 	for key, v := range policySteps {
 		entry, ok := v.(map[string]any)
@@ -137,7 +136,7 @@ func validatePolicyStepsNonEmpty(policyType string, policySteps map[string]any, 
 		if raw, present := entry["steps"]; present {
 			arr, _ := raw.([]any)
 			if len(arr) == 0 {
-				return &usageError{fmt.Errorf("policySteps[%q].steps is explicitly empty: the server returns HTTP 500 for this (a bare \"policy steps cannot be empty\" error), rather than either accepting it or 400ing — omit the %q key entirely instead of sending an empty array", key, key)}
+				return &usageError{fmt.Errorf("policySteps[%q].steps is explicitly empty: the server rejects this with a 400 (%q must contain at least 1 item). Supply a real step, or omit the %q key entirely and pass --allow-deny-all if you intend a deny-all policy", key, "steps", key)}
 			}
 		}
 	}
@@ -229,7 +228,7 @@ func validateRuleStepKeys(rules []any, policySteps map[string]any) error {
 	return nil
 }
 
-// validateRuleConditions guards C58: an empty rules[].condition 400s with a
+// validateRuleConditions guards an empty rules[].condition 400s with a
 // length-bounds message that doesn't explain the fix — a baseline/catch-all
 // rule needs the literal condition "true", not an empty string.
 func validateRuleConditions(rules []any) error {

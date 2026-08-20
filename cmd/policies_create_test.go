@@ -34,7 +34,7 @@ func writeTempJSON(t *testing.T, name, content string) string {
 
 // TestBuildCreatePolicyBodyFromFlags pins the flat body shape and confirms
 // --steps-file is wrapped under the LOWERCASE baseline key ("grant"), not
-// the enum constant — the exact mistake that would silently recreate C57
+// the enum constant — the exact mistake that would silently recreate the deny-all default
 // even though steps were supplied.
 func TestBuildCreatePolicyBodyFromFlags(t *testing.T) {
 	cmd := newPoliciesCreateFlagCmd(t)

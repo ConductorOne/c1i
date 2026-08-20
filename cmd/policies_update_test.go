@@ -211,7 +211,12 @@ func TestPoliciesUpdateAllowDenyAllBypassesGuardAndSendsRequest(t *testing.T) {
 	withRealDryRun(t)
 	t.Setenv("C1I_URL", srv.URL)
 
-	bodyPath := writeTempJSON(t, "body.json", `{"policyType":"POLICY_TYPE_GRANT"}`)
+	// The body must actually TRIP the guard, or this proves nothing about the
+	// bypass: policySteps is present (so the steps guard runs) but the
+	// baseline "grant" key is absent, which is exactly the silent deny-all
+	// case --allow-deny-all exists to permit.
+	bodyPath := writeTempJSON(t, "body.json",
+		`{"policyType":"POLICY_TYPE_GRANT","policySteps":{"someOtherKey":{"steps":[{"accept":{}}]}}}`)
 	_ = policiesUpdateCmd.Flags().Set("body-file", bodyPath)
 	_ = policiesUpdateCmd.Flags().Set("update-mask", "policySteps")
 	_ = policiesUpdateCmd.Flags().Set("allow-deny-all", "true")
@@ -231,6 +236,46 @@ func TestPoliciesUpdateAllowDenyAllBypassesGuardAndSendsRequest(t *testing.T) {
 // TestPoliciesUpdateBodyFileRequiresUpdateMask pins that --body-file without
 // --update-mask is refused (there would be nothing to tell the server what
 // changed).
+// TestPoliciesUpdateWithoutAllowDenyAllIsRefused is the other half of the
+// bypass pair above. A bypass test on its own proves little: it asserts the
+// request reaches the server, which also happens if the guard is simply
+// broken. Only this negative — the SAME payload refused when the flag is
+// absent — shows the flag is what permits it.
+func TestPoliciesUpdateWithoutAllowDenyAllIsRefused(t *testing.T) {
+	const policyID = "zz-c1i-test-policy-3"
+	var requestReceived bool
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requestReceived = true
+	}))
+	defer srv.Close()
+
+	resetPoliciesUpdateCmdFlags(t)
+	stubPoliciesClient(t, srv)
+	withRealDryRun(t)
+	t.Setenv("C1I_URL", srv.URL)
+
+	bodyPath := writeTempJSON(t, "body.json",
+		`{"policyType":"POLICY_TYPE_GRANT","policySteps":{"someOtherKey":{"steps":[{"accept":{}}]}}}`)
+	_ = policiesUpdateCmd.Flags().Set("body-file", bodyPath)
+	_ = policiesUpdateCmd.Flags().Set("update-mask", "policySteps")
+	// deliberately NOT setting --allow-deny-all
+
+	var out bytes.Buffer
+	policiesUpdateCmd.SetOut(&out)
+	policiesUpdateCmd.SetContext(context.Background())
+
+	err := policiesUpdateCmd.RunE(policiesUpdateCmd, []string{policyID})
+	if err == nil {
+		t.Fatal("expected the missing-baseline guard to refuse this without --allow-deny-all")
+	}
+	if exitCode(err) != exitUsage {
+		t.Errorf("exitCode(%v) = %d, want %d (a guard rejection is a usage error)", err, exitCode(err), exitUsage)
+	}
+	if requestReceived {
+		t.Error("guard rejected the input but a request still reached the server")
+	}
+}
+
 func TestPoliciesUpdateBodyFileRequiresUpdateMask(t *testing.T) {
 	resetPoliciesUpdateCmdFlags(t)
 	bodyPath := writeTempJSON(t, "body.json", `{"displayName":"x"}`)

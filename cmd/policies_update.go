@@ -28,7 +28,7 @@ object yourself via --body-file plus an explicit --update-mask (both
 required together) — mutually exclusive with the convenience flags.
 
 The same client-side guards as "create" run here too (exit code 2 before
-any request is sent) — including the C57 empty-steps guard, which also
+any request is sent) — including the empty-steps guard, which also
 applies to update: clearing a policy's baseline steps entry (or replacing
 it with an empty array) hits the exact same silent-deny-all default /
 HTTP-500 crash as create does. --allow-deny-all bypasses the deny-all case
@@ -212,6 +212,6 @@ func init() {
 	policiesUpdateCmd.Flags().String("rules-file", "", "JSON array: replaces rules[] (file, or \"-\" for stdin)")
 	policiesUpdateCmd.Flags().String("body-file", "", "Full Policy JSON object, verbatim (file, or \"-\" for stdin); requires --update-mask; mutually exclusive with the flags above")
 	policiesUpdateCmd.Flags().String("update-mask", "", "Comma-separated field paths to update (required with --body-file; ignored/derived otherwise)")
-	policiesUpdateCmd.Flags().Bool("allow-deny-all", false, "Allow leaving/setting a policy with no steps — bypasses the C57 empty-steps guard on purpose")
+	policiesUpdateCmd.Flags().Bool("allow-deny-all", false, "Allow leaving/setting a policy with no steps — bypasses the empty-steps guard on purpose")
 	policiesCmd.AddCommand(policiesUpdateCmd)
 }
