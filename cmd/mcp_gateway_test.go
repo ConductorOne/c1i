@@ -269,6 +269,82 @@ func TestGatewayJSONRPCErrorNoCodeExitsGeneric(t *testing.T) {
 	}
 }
 
+// TestGatewayTransportFailureExitsUpstream proves a transport-level failure
+// -- the request never reaching a server that could answer at all, unlike
+// TestGatewayErrorExitCodes' HTTPError cases -- classifies to exit 8, both at
+// the handshake (Initialize, wrapped exactly as newGatewayClient does) and
+// after a successful handshake (ListTools, wrapped exactly as
+// mcp_gateway_list_tools.go's RunE does). It closes a real httptest.Server
+// to get a guaranteed connection-refused target rather than relying on an
+// unreachable hostname, so the test has no network dependency.
+//
+// The negative pair alongside it re-asserts (from TestGatewayErrorExitCodes)
+// that an actual 401 response still classifies as exitAuth: this change must
+// not sweep a credential failure into exit 8 just because it also travels
+// through classifyGatewayError.
+func TestGatewayTransportFailureExitsUpstream(t *testing.T) {
+	closedSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
+	closedURL := closedSrv.URL
+	closedSrv.Close() // nothing is listening on this port now: connection refused
+
+	t.Run("handshake", func(t *testing.T) {
+		gc := mcpgateway.New(closedURL, "test-token", nil)
+		err := gc.Initialize(context.Background())
+		if err == nil {
+			t.Fatal("expected Initialize to fail against a closed port")
+		}
+		wrapped := fmt.Errorf("gateway handshake failed: %w", classifyGatewayError(err))
+		if got := exitCode(wrapped); got != exitUpstream {
+			t.Errorf("exitCode = %d, want exitUpstream (%d); err: %v", got, exitUpstream, wrapped)
+		}
+	})
+
+	t.Run("post-handshake tools/list", func(t *testing.T) {
+		reqN := 0
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			reqN++
+			w.Header().Set("Content-Type", "application/json")
+			switch reqN {
+			case 1: // initialize
+				_, _ = fmt.Fprint(w, `{"jsonrpc":"2.0","id":1,"result":{}}`)
+			case 2: // notifications/initialized
+				w.WriteHeader(http.StatusAccepted)
+			}
+		}))
+		gc := mcpgateway.New(srv.URL, "test-token", srv.Client())
+		if err := gc.Initialize(context.Background()); err != nil {
+			t.Fatalf("unexpected Initialize failure: %v", err)
+		}
+		srv.Close() // sever the connection before tools/list
+
+		_, err := gc.ListTools(context.Background())
+		if err == nil {
+			t.Fatal("expected ListTools to fail once the server is gone")
+		}
+		wrapped := fmt.Errorf("tools/list failed: %w", classifyGatewayError(err))
+		if got := exitCode(wrapped); got != exitUpstream {
+			t.Errorf("exitCode = %d, want exitUpstream (%d); err: %v", got, exitUpstream, wrapped)
+		}
+	})
+
+	t.Run("negative pair: auth stays exitAuth", func(t *testing.T) {
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusUnauthorized)
+		}))
+		defer srv.Close()
+
+		gc := mcpgateway.New(srv.URL, "test-token", srv.Client())
+		err := gc.Initialize(context.Background())
+		if err == nil {
+			t.Fatal("expected Initialize to fail against a 401")
+		}
+		wrapped := fmt.Errorf("gateway handshake failed: %w", classifyGatewayError(err))
+		if got := exitCode(wrapped); got != exitAuth {
+			t.Errorf("exitCode = %d, want exitAuth (%d); err: %v", got, exitAuth, wrapped)
+		}
+	})
+}
+
 // TestGatewayCallIsErrorExitCode covers the four required scenarios for a
 // tool's own reported failure: a tools/call result with isError:true (exit 7,
 // full result still printed), a result with isError:false or with isError

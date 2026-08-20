@@ -110,6 +110,26 @@ func (e *HTTPError) Unwrap() error {
 	}
 }
 
+// TransportError wraps a failure to reach the gateway at all -- a dial
+// failure, connection refused, TLS failure, or a request timeout -- as
+// opposed to HTTPError (the gateway answered, just with a non-2xx status) or
+// rpcError (the gateway answered 200 with a JSON-RPC-level error). It occurs
+// before any HTTP response exists, so unlike HTTPError there is no status
+// code to classify by. RPCMethod is the JSON-RPC method that was being sent
+// when the transport failed, for the same reason HTTPError carries it: MCP
+// is a single-endpoint protocol, so nothing else identifies which call this
+// was.
+type TransportError struct {
+	RPCMethod string
+	Err       error
+}
+
+func (e *TransportError) Error() string {
+	return fmt.Sprintf("gateway %s request failed: %v", e.RPCMethod, e.Err)
+}
+
+func (e *TransportError) Unwrap() error { return e.Err }
+
 type rpcRequest struct {
 	JSONRPC string `json:"jsonrpc"`
 	ID      *int   `json:"id,omitempty"`
@@ -329,7 +349,7 @@ func (c *Client) post(ctx context.Context, rpcMethod string, payload []byte, wan
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
-		return nil, "", err
+		return nil, "", &TransportError{RPCMethod: rpcMethod, Err: err}
 	}
 	defer func() { _ = resp.Body.Close() }()
 
