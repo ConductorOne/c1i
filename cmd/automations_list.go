@@ -72,7 +72,7 @@ var automationsListCmd = &cobra.Command{
 		// when no client-side filter is active.
 		clientFilter := enabledOnly || callsFunction != ""
 
-		enc := newEmitter(cmd.OutOrStdout())
+		enc := newEmitter(cmd)
 		emitted := 0
 		for !limitReached(emitted, limit) {
 			pageSize := requestedPageSize

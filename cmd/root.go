@@ -29,10 +29,22 @@ For raw API exploration, also with no authentication required:
   c1i docs page product/admin/campaigns Fetch a documentation page`,
 	SilenceUsage:  true,
 	SilenceErrors: true,
-	// Validate global flag values once, before any command runs.
-	PersistentPreRunE: func(_ *cobra.Command, _ []string) error {
-		return validateErrorFormat(viper.GetString("error_format"))
+	// Validate global flag values once, before any command runs, and attach a
+	// fresh *fieldsMatchState (cmd/fields.go) to the command's context so
+	// every emitter created during this invocation shares one tracker.
+	PersistentPreRunE: func(cmd *cobra.Command, _ []string) error {
+		if err := validateErrorFormat(viper.GetString("error_format")); err != nil {
+			return err
+		}
+		cmd.SetContext(withFieldsMatchState(cmd.Context()))
+		return nil
 	},
+	// The single central hook for the --fields zero-match-in-list check
+	// (ledger C30) — see checkFieldsMatchedAnyRow (cmd/fields.go) for what it
+	// does and why it must live here alone, and
+	// TestNoSubcommandDefinesOwnPersistentPostRunE (cmd/root_test.go) for the
+	// tree-wide guard that keeps it that way.
+	PersistentPostRunE: checkFieldsMatchedAnyRow,
 }
 
 // validateErrorFormat accepts "", "text", or "json" (case-insensitive, matching

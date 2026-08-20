@@ -94,7 +94,7 @@ var docsEndpointsCmd = &cobra.Command{
 			return endpoints[i].Method < endpoints[j].Method
 		})
 
-		enc := newEmitter(cmd.OutOrStdout())
+		enc := newEmitter(cmd)
 		for _, e := range endpoints {
 			_ = enc.Encode(e)
 		}

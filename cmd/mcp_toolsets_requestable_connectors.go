@@ -46,7 +46,7 @@ Unlike most other "list" commands this endpoint is not paginated server-side
 			return fmt.Errorf("failed to parse response: %w", err)
 		}
 
-		enc := newEmitter(cmd.OutOrStdout())
+		enc := newEmitter(cmd)
 		for _, cn := range resp.Connectors {
 			_ = enc.Encode(map[string]string{
 				"app_id":       cn.AppID,
