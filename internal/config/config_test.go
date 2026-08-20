@@ -13,11 +13,13 @@ func TestParseURLBasicNormalization(t *testing.T) {
 	}{
 		{"full URL with trailing slash", "https://acme.conductor.one/", "https://acme.conductor.one"},
 		{"raw domain", "acme.conductor.one", "https://acme.conductor.one"},
-		{"legacy short name", "acme", "https://acme.conductor.one"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			got, warnings := ParseURL(tc.input)
+			got, warnings, err := ParseURL(tc.input)
+			if err != nil {
+				t.Fatalf("ParseURL(%q) error = %v, want nil", tc.input, err)
+			}
 			if got != tc.want {
 				t.Errorf("ParseURL(%q) = %q, want %q", tc.input, got, tc.want)
 			}
@@ -48,7 +50,10 @@ func TestParseURLCaseInsensitiveHost(t *testing.T) {
 		{"ACME.C1EU.AI", "https://acme.c1eu.ai"},
 	}
 	for _, tc := range cases {
-		got, warnings := ParseURL(tc.input)
+		got, warnings, err := ParseURL(tc.input)
+		if err != nil {
+			t.Fatalf("ParseURL(%q) error = %v, want nil", tc.input, err)
+		}
 		if got != tc.want {
 			t.Errorf("ParseURL(%q) = %q, want %q", tc.input, got, tc.want)
 		}
@@ -58,22 +63,66 @@ func TestParseURLCaseInsensitiveHost(t *testing.T) {
 	}
 }
 
-// TestParseURLBareShortNameCaseUntouched is a snapshot, not a requirement:
-// it pins the bare-short-name branch's PRE-EXISTING case-sensitivity defect
-// (unlike every other branch, its host is NOT lower-cased, so
-// `ParseURL("ACME")` still produces a keychain key case-mismatch) exactly as
-// found, because this fix was told not to touch that branch. The branch is
-// already slated for retirement (a bare short name becoming a usage error,
-// once there's more than one tenant domain family a short name could mean)
-// -- this test goes with it when that lands; don't "fix" the inconsistency
-// here in isolation.
-func TestParseURLBareShortNameCaseUntouched(t *testing.T) {
-	got, warnings := ParseURL("ACME")
-	if want := "https://ACME.conductor.one"; got != want {
-		t.Errorf("ParseURL(%q) = %q, want %q (case preserved, unchanged)", "ACME", got, want)
+// TestParseURLBareTokenIsError covers the retired shortcut: a bare token (no
+// "://" and no ".") used to silently expand to "<input>.conductor.one",
+// which is now ambiguous with *.c1eu.ai. It must be refused, with a message
+// that is actionable on its own: it names the rejected input, shows both
+// domain families, and calls out that local development needs an explicit
+// scheme.
+func TestParseURLBareTokenIsError(t *testing.T) {
+	for _, in := range []string{"acme", "mycompany", "localhost", "localhost:8080"} {
+		t.Run(in, func(t *testing.T) {
+			got, warnings, err := ParseURL(in)
+			if err == nil {
+				t.Fatalf("ParseURL(%q) error = nil, want an error (bare short names are retired)", in)
+			}
+			if got != "" {
+				t.Errorf("ParseURL(%q) result = %q, want empty on error", in, got)
+			}
+			if len(warnings) != 0 {
+				t.Errorf("ParseURL(%q) warnings = %v, want none on error", in, warnings)
+			}
+			msg := err.Error()
+			for _, want := range []string{in, "conductor.one", "c1eu.ai", "http://localhost:8080"} {
+				if !strings.Contains(msg, want) {
+					t.Errorf("ParseURL(%q) error = %q, want it to mention %q", in, msg, want)
+				}
+			}
+		})
 	}
-	if len(warnings) != 0 {
-		t.Errorf("warnings = %v, want none", warnings)
+}
+
+// TestParseURLIPv4LoopbackStillWorks: unlike "localhost", "127.0.0.1" and
+// "127.0.0.1:8080" contain a dot, so they already take the raw-domain
+// branch today and must be unaffected by retiring the bare-token branch.
+func TestParseURLIPv4LoopbackStillWorks(t *testing.T) {
+	cases := map[string]string{
+		"127.0.0.1":      "https://127.0.0.1",
+		"127.0.0.1:8080": "https://127.0.0.1:8080",
+	}
+	for in, want := range cases {
+		got, warnings, err := ParseURL(in)
+		if err != nil {
+			t.Fatalf("ParseURL(%q) error = %v, want nil", in, err)
+		}
+		if got != want {
+			t.Errorf("ParseURL(%q) = %q, want %q", in, got, want)
+		}
+		if len(warnings) != 0 {
+			t.Errorf("ParseURL(%q) warnings = %v, want none", in, warnings)
+		}
+	}
+}
+
+// TestParseURLLocalhostWithSchemeStillWorks: an explicit scheme is the
+// documented escape hatch for local development, and must keep working.
+func TestParseURLLocalhostWithSchemeStillWorks(t *testing.T) {
+	got, _, err := ParseURL("http://localhost:8080")
+	if err != nil {
+		t.Fatalf("ParseURL(%q) error = %v, want nil", "http://localhost:8080", err)
+	}
+	if want := "https://localhost:8080"; got != want {
+		t.Errorf("ParseURL(%q) = %q, want %q", "http://localhost:8080", got, want)
 	}
 }
 
@@ -82,7 +131,10 @@ func TestParseURLBareShortNameCaseUntouched(t *testing.T) {
 // fell through to the raw-domain branch, which prepended "https://" onto the
 // literal leading "//" and produced "https:////host".
 func TestParseURLProtocolRelative(t *testing.T) {
-	got, _ := ParseURL("//leet.conductor.one")
+	got, _, err := ParseURL("//leet.conductor.one")
+	if err != nil {
+		t.Fatalf("ParseURL(%q) error = %v, want nil", "//leet.conductor.one", err)
+	}
 	if want := "https://leet.conductor.one"; got != want {
 		t.Errorf("ParseURL(%q) = %q, want %q", "//leet.conductor.one", got, want)
 	}
@@ -93,7 +145,10 @@ func TestParseURLProtocolRelative(t *testing.T) {
 // failure with no way to inspect what was actually sent), but silently is
 // no longer acceptable -- the caller must be told.
 func TestParseURLNonHTTPSSchemeWarns(t *testing.T) {
-	got, warnings := ParseURL("ftp://host.example.com")
+	got, warnings, err := ParseURL("ftp://host.example.com")
+	if err != nil {
+		t.Fatalf("ParseURL(%q) error = %v, want nil", "ftp://host.example.com", err)
+	}
 	if want := "https://host.example.com"; got != want {
 		t.Errorf("ParseURL(%q) = %q, want %q", "ftp://host.example.com", got, want)
 	}
@@ -107,7 +162,10 @@ func TestParseURLNonHTTPSSchemeWarns(t *testing.T) {
 // Basic credentials through its OAuth-based client), but that drop must not
 // be silent, and the warning must not leak the password.
 func TestParseURLDropsEmbeddedCredentialsWithWarning(t *testing.T) {
-	got, warnings := ParseURL("https://user:hunter2@host.example.com")
+	got, warnings, err := ParseURL("https://user:hunter2@host.example.com")
+	if err != nil {
+		t.Fatalf("ParseURL(%q) error = %v, want nil", "https://user:hunter2@host.example.com", err)
+	}
 	if want := "https://host.example.com"; got != want {
 		t.Errorf("ParseURL(%q) = %q, want %q", "https://user:hunter2@host.example.com", got, want)
 	}
@@ -131,7 +189,10 @@ func TestParseURLDropsEmbeddedCredentialsWithWarning(t *testing.T) {
 // "c1i users list --url \"user:hunter2@leet.conductor.one\" --debug" printed
 // the password three times in stderr before this fix.
 func TestParseURLDropsEmbeddedCredentialsSchemeless(t *testing.T) {
-	got, warnings := ParseURL("user:hunter2@leet.conductor.one")
+	got, warnings, err := ParseURL("user:hunter2@leet.conductor.one")
+	if err != nil {
+		t.Fatalf("ParseURL(%q) error = %v, want nil", "user:hunter2@leet.conductor.one", err)
+	}
 	if want := "https://leet.conductor.one"; got != want {
 		t.Errorf("ParseURL(%q) = %q, want %q", "user:hunter2@leet.conductor.one", got, want)
 	}
@@ -157,5 +218,32 @@ func TestKeychainServiceLowerCasesHost(t *testing.T) {
 	want := "c1i/leet.conductor.one"
 	if got != want {
 		t.Errorf("KeychainService = %q, want %q", got, want)
+	}
+}
+
+// TestLegacyKeychainCredentialNotOrphanedByShortcutRetirement is item 6: a
+// user who previously ran "--url acme" (when that expanded to
+// "https://acme.conductor.one") and stored a credential must still resolve
+// it once the shortcut is retired and they type the full host instead.
+// Both KeychainService and LegacyKeychainService derive their key from the
+// RESOLVED base URL, never from what the user originally typed, so they are
+// unaffected by ParseURL's bare-token branch being removed -- this pins that
+// invariant.
+func TestLegacyKeychainCredentialNotOrphanedByShortcutRetirement(t *testing.T) {
+	// What the old shortcut used to resolve "acme" to.
+	oldExpansion := "https://acme.conductor.one"
+	// What a user must now type instead.
+	newFull, _, err := ParseURL("acme.conductor.one")
+	if err != nil {
+		t.Fatalf("ParseURL(%q) error = %v, want nil", "acme.conductor.one", err)
+	}
+	if newFull != oldExpansion {
+		t.Fatalf("ParseURL(%q) = %q, want %q (must match what the retired shortcut used to produce)", "acme.conductor.one", newFull, oldExpansion)
+	}
+	if got, want := KeychainService(newFull), KeychainService(oldExpansion); got != want {
+		t.Errorf("KeychainService(%q) = %q, want %q (same as the old shortcut's expansion)", newFull, got, want)
+	}
+	if got, want := LegacyKeychainService(newFull), LegacyKeychainService(oldExpansion); got != want {
+		t.Errorf("LegacyKeychainService(%q) = %q, want %q (same as the old shortcut's expansion)", newFull, got, want)
 	}
 }
