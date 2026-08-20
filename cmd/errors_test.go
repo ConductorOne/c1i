@@ -101,6 +101,48 @@ func TestExitCode(t *testing.T) {
 	}
 }
 
+// TestExitCodeConstantsArePinned guards the published exit-code contract
+// (documented in README.md, cmd/agents.md, and .claude/commands/c1i.md, and
+// relied on by agents that branch on these integers). A mutation that
+// changed exitUpstream from 8 to 6 survived the full test suite because
+// every assertion compared against the symbolic constant, so both sides
+// moved together. These comparisons use literal integers so a renumbering
+// (or an accidental alias between two codes) shows up here even though every
+// other test still passes; if you're deliberately changing one of these
+// values, update README.md, cmd/agents.md, and .claude/commands/c1i.md too.
+func TestExitCodeConstantsArePinned(t *testing.T) {
+	cases := []struct {
+		name string
+		got  int
+		want int
+	}{
+		{"exitOK", exitOK, 0},
+		{"exitError", exitError, 1},
+		{"exitUsage", exitUsage, 2},
+		{"exitAuth", exitAuth, 3},
+		{"exitNotFound", exitNotFound, 4},
+		{"exitRateLimited", exitRateLimited, 5},
+		{"exitServer", exitServer, 6},
+		{"exitToolError", exitToolError, 7},
+		{"exitUpstream", exitUpstream, 8},
+	}
+	seen := make(map[int]string, len(cases))
+	for _, tc := range cases {
+		if tc.got != tc.want {
+			t.Errorf("%s = %d, want %d -- this is a published exit-code contract "+
+				"(documented in README.md, cmd/agents.md, and .claude/commands/c1i.md) "+
+				"that agents branch on; if this change is deliberate, update those docs too",
+				tc.name, tc.got, tc.want)
+		}
+		if other, dup := seen[tc.got]; dup {
+			t.Errorf("%s and %s both equal %d -- two exit codes must never alias to the "+
+				"same integer, since agents distinguish failure classes by this value",
+				tc.name, other, tc.got)
+		}
+		seen[tc.got] = tc.name
+	}
+}
+
 func TestWriteErrorText(t *testing.T) {
 	var buf bytes.Buffer
 	writeError(&buf, errors.New("boom"), "text")
