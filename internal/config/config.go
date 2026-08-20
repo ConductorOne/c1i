@@ -7,14 +7,20 @@ import (
 )
 
 // ParseURL normalizes any of the following inputs to "https://{host}" (no
-// trailing slash), with host lower-cased -- DNS/HTTP hosts are
-// case-insensitive but the keychain key built from one (KeychainService) is
-// not, so a mixed-case --url must normalize the same as its lower-case form
-// or credential lookup spuriously fails:
+// trailing slash). A host that arrives WITH a dot (a full URL, a
+// protocol-relative URL, or a raw domain) is lower-cased -- DNS/HTTP hosts
+// are case-insensitive but the keychain key built from one
+// (KeychainService) is not, so a mixed-case --url must normalize the same
+// as its lower-case form or credential lookup spuriously fails. This is
+// deliberately about URL SHAPE only, never about which tenant domain family
+// a host belongs to (there is more than one valid one, e.g.
+// *.conductor.one and *.c1eu.ai, and more may follow) -- nothing here
+// allowlists or validates against a specific suffix.
 //   - Full URL: "https://acme.conductor.one/" → "https://acme.conductor.one"
 //   - Protocol-relative: "//acme.conductor.one" → "https://acme.conductor.one"
-//   - Raw domain: "acme.conductor.one" → "https://acme.conductor.one"
-//   - Legacy short name: "acme" → "https://acme.conductor.one"
+//   - Raw domain: "ACME.conductor.one" → "https://acme.conductor.one"
+//   - Legacy short name: "acme" → "https://acme.conductor.one" (case
+//     preserved as typed -- see the dedicated comment at that branch below)
 //
 // It also returns human-readable warnings for anything silently altered: a
 // non-https scheme (rewritten to https rather than rejected -- a typo
@@ -51,7 +57,12 @@ func ParseURL(input string) (result string, warnings []string) {
 	if strings.Contains(input, ".") {
 		return "https://" + strings.ToLower(input), warnings
 	}
-	return fmt.Sprintf("https://%s.conductor.one", strings.ToLower(input)), warnings
+	// Bare short name ("acme" -> "acme.conductor.one"): deliberately NOT
+	// lower-cased. With more than one tenant domain family now valid
+	// (*.conductor.one, *.c1eu.ai, ...), which family a bare short name
+	// expands to is a genuinely open question this fix does not decide --
+	// left exactly as-is, case included, pending that separate decision.
+	return fmt.Sprintf("https://%s.conductor.one", input), warnings
 }
 
 // KeychainService returns the keychain service name for a given base URL.
@@ -67,15 +78,19 @@ func KeychainService(baseURL string) string {
 }
 
 // LegacyKeychainService returns the old-style keychain service name if the host
-// is a *.conductor.one domain, or empty string otherwise.
+// is a *.conductor.one domain, or empty string otherwise. Deliberately
+// unchanged by the case-insensitivity fix above: it exists only to migrate a
+// pre-existing legacy key format for *.conductor.one, and by the time
+// baseURL reaches here it has already been through ParseURL (which now
+// lower-cases the host), so this never sees the mixed-case input ParseURL
+// itself had to handle.
 func LegacyKeychainService(baseURL string) string {
 	u, err := url.Parse(baseURL)
 	if err != nil || u.Host == "" {
 		return ""
 	}
-	host := strings.ToLower(u.Host)
-	if strings.HasSuffix(host, ".conductor.one") {
-		shortName := strings.TrimSuffix(host, ".conductor.one")
+	if strings.HasSuffix(u.Host, ".conductor.one") {
+		shortName := strings.TrimSuffix(u.Host, ".conductor.one")
 		if shortName != "" {
 			return "c1i/" + shortName
 		}

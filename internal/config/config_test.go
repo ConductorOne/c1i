@@ -41,7 +41,11 @@ func TestParseURLCaseInsensitiveHost(t *testing.T) {
 	}{
 		{"HTTPS://LEET.CONDUCTOR.ONE", "https://leet.conductor.one"},
 		{"LEET.CONDUCTOR.ONE", "https://leet.conductor.one"},
-		{"ACME", "https://acme.conductor.one"},
+		// A second tenant domain family (EU) must normalize identically --
+		// this fix is about URL shape, never about which domain a host
+		// belongs to.
+		{"HTTPS://ACME.C1EU.AI", "https://acme.c1eu.ai"},
+		{"ACME.C1EU.AI", "https://acme.c1eu.ai"},
 	}
 	for _, tc := range cases {
 		got, warnings := ParseURL(tc.input)
@@ -51,6 +55,23 @@ func TestParseURLCaseInsensitiveHost(t *testing.T) {
 		if len(warnings) != 0 {
 			t.Errorf("ParseURL(%q) warnings = %v, want none (case alone isn't a warning-worthy rewrite)", tc.input, warnings)
 		}
+	}
+}
+
+// TestParseURLBareShortNameCaseUntouched pins that the bare-short-name
+// expansion ("acme" -> "acme.conductor.one") is deliberately left exactly as
+// it was: unlike every other branch, its host is NOT lower-cased. Which
+// domain family a bare short name should expand to is a genuinely open
+// question now that more than one is valid (*.conductor.one, *.c1eu.ai);
+// this fix does not decide it, so this branch's behavior -- case included
+// -- must not shift in passing.
+func TestParseURLBareShortNameCaseUntouched(t *testing.T) {
+	got, warnings := ParseURL("ACME")
+	if want := "https://ACME.conductor.one"; got != want {
+		t.Errorf("ParseURL(%q) = %q, want %q (case preserved, unchanged)", "ACME", got, want)
+	}
+	if len(warnings) != 0 {
+		t.Errorf("warnings = %v, want none", warnings)
 	}
 }
 
