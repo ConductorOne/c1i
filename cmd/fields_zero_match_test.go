@@ -12,7 +12,7 @@ import (
 	"github.com/spf13/viper"
 )
 
-// This file covers ledger C30: --fields on a LIST command (or `api
+// This file covers --fields on a LIST command (or `api
 // --paginate`) used to behave inconsistently with the single-object `get`
 // case — a spec that matched nothing in the entire result silently printed
 // "{}" per row and exited 0, instead of erroring like the single-object path

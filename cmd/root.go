@@ -40,7 +40,7 @@ For raw API exploration, also with no authentication required:
 		return nil
 	},
 	// The single central hook for the --fields zero-match-in-list check
-	// (ledger C30) — see checkFieldsMatchedAnyRow (cmd/fields.go) for what it
+	// — see checkFieldsMatchedAnyRow (cmd/fields.go) for what it
 	// does and why it must live here alone, and
 	// TestNoSubcommandDefinesOwnPersistentPostRunE (cmd/root_test.go) for the
 	// tree-wide guard that keeps it that way.

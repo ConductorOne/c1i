@@ -318,7 +318,7 @@ func setPath(out map[string]any, path []string, val any) {
 }
 
 // fieldsMatchState tracks, across every row emitted by a single list-command
-// invocation, whether --fields matched anything anywhere. See ledger C30: a
+// invocation, whether --fields matched anything anywhere. A
 // list command projects each row independently as it streams (--paginate
 // commands fetch potentially-unbounded results and must not buffer them just
 // to answer this question), so no single Encode call can know whether the
@@ -367,7 +367,7 @@ func fieldsMatchStateFromContext(ctx context.Context) *fieldsMatchState {
 
 // checkFieldsMatchedAnyRow is rootCmd's PersistentPostRunE (cmd/root.go) —
 // the single central hook for the list-side half of the --fields zero-match
-// fix (ledger C30; see writeObject/projectionMatchedNothing above for the
+// fix (see writeObject/projectionMatchedNothing above for the
 // single-object half, which this mirrors). cobra only calls
 // PersistentPostRunE after a command's RunE has already returned nil, so a
 // pre-existing failure (a 404, a usage error, ...) is returned exactly as-is

@@ -7,7 +7,7 @@ import (
 )
 
 // TestNoSubcommandDefinesOwnPersistentPostRunE guards an invariant the
-// --fields zero-match-in-list check (ledger C30, checkFieldsMatchedAnyRow in
+// --fields zero-match-in-list check (checkFieldsMatchedAnyRow in
 // cmd/fields.go) depends on: cobra runs only the NEAREST ancestor's
 // PersistentPostRunE/PersistentPostRun (the same rule it applies to
 // PersistentPreRunE), so if any subcommand ever defined its own, rootCmd's

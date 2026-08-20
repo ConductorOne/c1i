@@ -396,7 +396,7 @@ func TestAPIDeleteBodyOptInDryRunPreviewsWithoutSending(t *testing.T) {
 	}
 }
 
-// --- ledger C30: `api --paginate` + --fields zero-match end-to-end ---
+// --- `api --paginate` + --fields zero-match end-to-end ---
 //
 // twoPageFixtureServer serves a two-page paginated list over POST (matching
 // what `api --body "{}"` sends: --body implies POST, and the api command
@@ -430,7 +430,7 @@ func twoPageFixtureServer(page1Item, page2Item string) *httptest.Server {
 }
 
 // TestAPIPaginateFieldsZeroMatchAcrossAllPagesErrors is the `api --paginate`
-// half of ledger C30's fix: a --fields spec that matches nothing in EITHER
+// half of the fix: a --fields spec that matches nothing in EITHER
 // page's row must still write both pages' rows (streaming, never buffered —
 // --paginate exists precisely to walk unbounded results without holding them
 // all in memory) and then fail with exit 2, not silently exit 0 having
