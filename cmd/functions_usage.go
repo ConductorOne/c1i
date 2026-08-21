@@ -3,6 +3,7 @@ package cmd
 import (
 	"encoding/json"
 	"fmt"
+	"strconv"
 
 	"github.com/spf13/cobra"
 )
@@ -26,19 +27,25 @@ last_executed_at, args.`,
 			return err
 		}
 
-		c, err := newClient(cmd, baseURL)
+		c, err := newListClient(cmd, baseURL)
 		if err != nil {
 			return fmt.Errorf("authentication failed: %w", err)
 		}
 
+		requestedPageSize := clampPageSize(getIntFlag(cmd, "page-size"))
+		pageToken, _ := cmd.Flags().GetString("page-token")
+		manualPaging := cmd.Flags().Changed("page-token")
+		limit := getIntFlag(cmd, "limit")
+
 		enc := newEmitter(cmd)
-		pageToken := ""
-		matched := 0
-		for {
-			params := map[string]string{"page_size": "100"}
+		emitted := 0
+		for !limitReached(emitted, limit) {
+			pageSize := effectivePageSize(requestedPageSize, limit, emitted)
+			params := map[string]string{"page_size": strconv.Itoa(pageSize)}
 			if pageToken != "" {
 				params["page_token"] = pageToken
 			}
+
 			data, err := c.Get(cmd.Context(), "/api/v1/automations", params)
 			if err != nil {
 				return fmt.Errorf("API error: %w", err)
@@ -81,17 +88,20 @@ last_executed_at, args.`,
 						"last_executed_at": a.LastExecutedAt,
 						"args":             argKeys,
 					})
-					matched++
+					emitted++
+					if limitReached(emitted, limit) {
+						return nil
+					}
 				}
 			}
 
-			if resp.NextPageToken == "" {
+			if resp.NextPageToken == "" || manualPaging {
 				break
 			}
 			pageToken = resp.NextPageToken
 		}
 
-		if matched == 0 {
+		if emitted == 0 {
 			_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "no automations call function %s\n", functionID)
 		}
 		return nil
@@ -99,5 +109,8 @@ last_executed_at, args.`,
 }
 
 func init() {
+	functionsUsageCmd.Flags().Int("page-size", 50, "Results per page (max 100)")
+	functionsUsageCmd.Flags().String("page-token", "", "Pagination cursor")
+	addLimitFlag(functionsUsageCmd)
 	functionsCmd.AddCommand(functionsUsageCmd)
 }
