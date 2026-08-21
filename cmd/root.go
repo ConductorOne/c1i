@@ -164,7 +164,7 @@ func GetBaseURL() (string, error) {
 		return "", err
 	}
 	if source == URLSourceNone {
-		return "", fmt.Errorf("url is required: set --url flag, C1I_URL env var, or url in ~%s.c1i.yaml", string(filepath.Separator))
+		return "", &usageError{fmt.Errorf("url is required: set --url flag, C1I_URL env var, or url in ~%s.c1i.yaml", string(filepath.Separator))}
 	}
 	return baseURL, nil
 }
@@ -174,6 +174,21 @@ func warnAboutURL(warnings []string) {
 	for _, w := range warnings {
 		_, _ = fmt.Fprintf(os.Stderr, "Warning: %s\n", w)
 	}
+}
+
+// warnAboutURLSource flags an ambiguous tenant resolution to stderr: only
+// ~/.c1i.yaml. It is not mentioned anywhere on the command line, unlike
+// --url or C1I_URL — the incident this exists for was an agent losing an
+// exported C1I_URL between shell calls and falling through to the config
+// file's tenant; the harmful step was the config-file read, not the earlier
+// C1I_URL calls, which were correct. Warning on C1I_URL too would fire on
+// every normal invocation of a legitimate workflow, which trains people to
+// stop reading it — weakening the one warning that actually matters.
+func warnAboutURLSource(baseURL string, source URLSource) {
+	if source != URLSourceConfig {
+		return
+	}
+	_, _ = fmt.Fprintf(os.Stderr, "Warning: no --url flag given; targeting %s (from %s)\n", baseURL, urlSourceLabel(source))
 }
 
 // URLSource indicates where the URL was resolved from.
@@ -215,6 +230,7 @@ func GetBaseURLWithSource() (string, URLSource, error) {
 			return "", source, &usageError{fmt.Errorf("%w (from %s)", err, urlSourceLabel(source))}
 		}
 		warnAboutURL(warnings)
+		warnAboutURLSource(url, source)
 		return url, source, nil
 	}
 	if f := rootCmd.PersistentFlags().Lookup("url"); f != nil && f.Changed {

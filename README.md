@@ -525,6 +525,18 @@ These are equivalent:
 - `--url mycompany.conductor.one`
 - `--url MYCOMPANY.CONDUCTOR.ONE` (the host is lower-cased)
 
+**Every command prints which tenant it's about to use when the URL came from
+`~/.c1i.yaml`.** Nothing on the command line names the config file, so a
+stale entry there sends a command to the wrong tenant with no visible sign
+otherwise. `--url` and `C1I_URL` don't print this warning: both are explicit
+choices made for that invocation, and warning on every normal use of
+`C1I_URL` would just train you to stop reading it. The warning goes to
+stderr, once per invocation (never once per page of a paginated list):
+
+```
+Warning: no --url flag given; targeting https://mycompany.conductor.one (from ~/.c1i.yaml)
+```
+
 For credential storage, see [Credential sources](#credential-sources) below.
 
 ### Retries

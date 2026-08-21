@@ -22,7 +22,26 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   — so `jq 'select(.entitlement_deleted_at)'` finds grants whose backing object
   is gone.
 
+- **Every command now warns to stderr which tenant it's targeting when the
+  URL came from `~/.c1i.yaml`.** Nothing on the command line names the
+  config file, so a stale entry there used to send a command to the wrong
+  tenant with no visible sign — this is the fall-through step in the
+  incident that motivated this change: an agent exported `C1I_URL` in one
+  shell call, lost it in the next, and silently got results from whatever
+  tenant `~/.c1i.yaml` named. `--url` and `C1I_URL` don't print this warning
+  — both are an explicit choice for that invocation, and warning on every
+  normal `C1I_URL` use would just train people to stop reading it. The
+  warning is stderr-only (stdout stays clean NDJSON/JSON) and prints once
+  per invocation, not once per request in a paginated list.
+
 ### Changed
+
+- **BREAKING — no `--url`, `C1I_URL`, or `~/.c1i.yaml` at all now exits `2`
+  (usage), not `1` (generic).** A missing URL is a missing required argument,
+  the same class of problem `requireNonEmpty` already maps to `2` for a
+  missing flag — this path returned a bare error instead of the `usageError`
+  wrapper, so it fell through to `1`. Message text is unchanged, only the
+  exit code.
 
 - **BREAKING — more list rows emit real JSON numbers and `null`, not strings.**
   The same fix as the earlier stringified-values change, applied to the fields
