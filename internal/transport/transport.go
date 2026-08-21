@@ -63,13 +63,19 @@ var (
 	}
 )
 
-var userAgent = func() string {
-	version := "dev"
+// Version is the c1i release version embedded via VCS build info ("dev" when
+// unavailable, e.g. a plain `go run`). It is the single source for every
+// client-identity string this CLI sends: the user-agent below, the MCP
+// clientInfo.version an `mcp gateway` handshake reports (internal/mcpgateway
+// reads this directly), and cmd.Version (`c1i version`, aliased to this).
+var Version = func() string {
 	if info, ok := debug.ReadBuildInfo(); ok && info.Main.Version != "" && info.Main.Version != "(devel)" {
-		version = info.Main.Version
+		return info.Main.Version
 	}
-	return "c1.ai/c1i (version=" + version + ")"
+	return "dev"
 }()
+
+var userAgent = "c1.ai/c1i (version=" + Version + ")"
 
 type userAgentTripper struct {
 	next http.RoundTripper

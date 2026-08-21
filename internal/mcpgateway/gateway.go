@@ -204,7 +204,7 @@ func (c *Client) Initialize(ctx context.Context) error {
 	params := map[string]any{
 		"protocolVersion": protocolVersion,
 		"capabilities":    map[string]any{},
-		"clientInfo":      map[string]any{"name": "c1i", "version": "dev"},
+		"clientInfo":      map[string]any{"name": "c1i", "version": transport.Version},
 	}
 	if _, err := c.call(ctx, methodInitialize, params); err != nil {
 		return err

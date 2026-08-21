@@ -1105,3 +1105,47 @@ func TestDebugTracesGatewayRequest(t *testing.T) {
 		t.Errorf("stderr trace = %q, want a 200 response line", trace)
 	}
 }
+
+// TestInitializeSendsRealClientVersion proves the MCP handshake's
+// clientInfo.version reports the actual build version (via
+// transport.Version), not a hardcoded "dev" literal that would make a
+// released binary misidentify itself to the gateway. transport.Version is
+// overridden to a value that is never "dev" for the duration of the test —
+// go test itself normally reports "(devel)" -> "dev" for its own build, so
+// without the override this test would pass even against a hardcoded "dev"
+// literal in gateway.go, proving nothing.
+func TestInitializeSendsRealClientVersion(t *testing.T) {
+	origVersion := transport.Version
+	transport.Version = "1.2.3-test"
+	t.Cleanup(func() { transport.Version = origVersion })
+
+	var gotVersion string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		var req struct {
+			Method string `json:"method"`
+			Params struct {
+				ClientInfo struct {
+					Version string `json:"version"`
+				} `json:"clientInfo"`
+			} `json:"params"`
+		}
+		_ = json.Unmarshal(body, &req)
+		// Initialize also fires notifications/initialized right after, which
+		// carries no params at all -- only capture the initialize call's own.
+		if req.Method == methodInitialize {
+			gotVersion = req.Params.ClientInfo.Version
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = io.WriteString(w, `{"jsonrpc":"2.0","id":1,"result":{}}`)
+	}))
+	defer srv.Close()
+
+	c := New(srv.URL, "test-token", srv.Client())
+	if err := c.Initialize(context.Background()); err != nil {
+		t.Fatalf("Initialize: %v", err)
+	}
+	if gotVersion != "1.2.3-test" {
+		t.Errorf("clientInfo.version = %q, want %q (transport.Version, not a hardcoded literal)", gotVersion, "1.2.3-test")
+	}
+}
