@@ -100,11 +100,10 @@ var automationsListCmd = &cobra.Command{
 		clientFilter := enabledOnly || callsFunction != ""
 
 		enc := newEmitter(cmd)
-		emitted := 0
-		for !limitReached(emitted, limit) {
+		for !limitReached(enc.Written(), limit) {
 			pageSize := requestedPageSize
 			if !clientFilter {
-				pageSize = effectivePageSize(requestedPageSize, limit, emitted)
+				pageSize = effectivePageSize(requestedPageSize, limit, enc.Written())
 			}
 			params := map[string]string{
 				"page_size": strconv.Itoa(pageSize),
@@ -135,8 +134,7 @@ var automationsListCmd = &cobra.Command{
 				}
 
 				_ = enc.Encode(automationRow(a))
-				emitted++
-				if limitReached(emitted, limit) {
+				if limitReached(enc.Written(), limit) {
 					return nil
 				}
 			}

@@ -158,9 +158,8 @@ var apiCmd = &cobra.Command{
 		enc := newEmitter(cmd)
 		pageToken := ""
 		prevToken := ""
-		emitted := 0
 
-		for !limitReached(emitted, limit) {
+		for !limitReached(enc.Written(), limit) {
 			reqPath := path
 			var bodyBytes []byte
 			switch method {
@@ -233,8 +232,7 @@ var apiCmd = &cobra.Command{
 				if err := enc.Encode(item); err != nil {
 					return fmt.Errorf("failed to write output: %w", err)
 				}
-				emitted++
-				if limitReached(emitted, limit) {
+				if limitReached(enc.Written(), limit) {
 					return nil
 				}
 			}

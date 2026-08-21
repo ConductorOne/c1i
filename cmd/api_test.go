@@ -515,6 +515,69 @@ func TestAPIPaginateFieldsPartialMatchAcrossPagesSucceeds(t *testing.T) {
 	}
 }
 
+// TestAPIPaginateLimitWithSparseFieldsContinuesPastFilteredPage catches a
+// regression the empty-row-skip fix (above) introduced: --limit is compared
+// against a plain per-item counter incremented every time enc.Encode is
+// CALLED, not every time it actually WRITES. Once Encode started silently
+// skipping empty-projection rows, "called" and "written" diverged — a
+// --limit that should count WRITTEN rows (addLimitFlag's documented
+// contract) was actually counting SCANNED rows, so a filtered-out row could
+// trip the limit and stop pagination before a real match on a later page
+// was ever reached.
+//
+// Page 1's item misses --fields entirely (projects to {}, skipped); page 2's
+// item matches. With --limit 1, the fix must still fetch page 2 and write
+// exactly one line, not stop after page 1's single scanned-but-unwritten
+// item.
+func TestAPIPaginateLimitWithSparseFieldsContinuesPastFilteredPage(t *testing.T) {
+	var requestCount int
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requestCount++
+		var body struct {
+			PageToken string `json:"pageToken"`
+		}
+		b, _ := io.ReadAll(r.Body)
+		_ = json.Unmarshal(b, &body)
+
+		w.Header().Set("Content-Type", "application/json")
+		if body.PageToken == "p2" {
+			_, _ = w.Write([]byte(`{"list":[{"id":"only-on-page-2"}],"nextPageToken":""}`))
+			return
+		}
+		_, _ = w.Write([]byte(`{"list":[{"name":"page1-item-no-id"}],"nextPageToken":"p2"}`))
+	}))
+	defer srv.Close()
+
+	resetAPICmdFlags(t)
+	stubNewAPIClient(t, srv)
+	t.Setenv("C1I_URL", srv.URL)
+	viper.Set("fields", "id")
+	t.Cleanup(func() { viper.Set("fields", "") })
+
+	var out bytes.Buffer
+	apiCmd.SetOut(&out)
+	apiCmd.SetErr(&out)
+	rootCmd.SetArgs([]string{
+		"api",
+		"--path", "/api/v1/search/things",
+		"--body", "{}",
+		"--paginate",
+		"--limit", "1",
+	})
+
+	if err := rootCmd.ExecuteContext(context.Background()); err != nil {
+		t.Fatalf("expected exit 0 (page 2's row matched --fields), got error: %v; output: %s", err, out.String())
+	}
+	if requestCount != 2 {
+		t.Fatalf("server received %d requests, want 2 (page 1's filtered-out row must not stop pagination before page 2 is fetched)", requestCount)
+	}
+	gotLines := strings.Split(strings.TrimSpace(out.String()), "\n")
+	wantLines := []string{`{"id":"only-on-page-2"}`}
+	if !reflect.DeepEqual(gotLines, wantLines) {
+		t.Errorf("output lines = %v, want %v (exactly --limit 1 WRITTEN row, not 1 scanned row)", gotLines, wantLines)
+	}
+}
+
 // --- --path without a leading slash (Fix 3) ---
 
 // TestAPIPathWithoutLeadingSlashIsUsageError pins the fix: a --path missing

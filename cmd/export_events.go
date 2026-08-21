@@ -107,10 +107,9 @@ them to an external system.
 		limit := getIntFlag(cmd, "limit")
 
 		enc := newEmitter(cmd)
-		emitted := 0
-		for !limitReached(emitted, limit) {
+		for !limitReached(enc.Written(), limit) {
 			body := exportEventsBody(
-				effectivePageSize(requestedPageSize, limit, emitted),
+				effectivePageSize(requestedPageSize, limit, enc.Written()),
 				pageToken, since, until, sinceEventUID, sortDirection,
 			)
 
@@ -134,8 +133,7 @@ them to an external system.
 				// standard JSON encoding (which \u-escapes <, >, and & — valid
 				// JSON that any parser reads back identically).
 				_ = enc.Encode(event)
-				emitted++
-				if limitReached(emitted, limit) {
+				if limitReached(enc.Written(), limit) {
 					return nil
 				}
 			}

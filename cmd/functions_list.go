@@ -76,11 +76,10 @@ var functionsListCmd = &cobra.Command{
 		clientFilter := publishedOnly || draftOnly
 
 		enc := newEmitter(cmd)
-		emitted := 0
-		for !limitReached(emitted, limit) {
+		for !limitReached(enc.Written(), limit) {
 			pageSize := requestedPageSize
 			if !clientFilter {
-				pageSize = effectivePageSize(requestedPageSize, limit, emitted)
+				pageSize = effectivePageSize(requestedPageSize, limit, enc.Written())
 			}
 			params := map[string]string{
 				"page_size": strconv.Itoa(pageSize),
@@ -111,8 +110,7 @@ var functionsListCmd = &cobra.Command{
 					continue
 				}
 				_ = enc.Encode(functionRow(f))
-				emitted++
-				if limitReached(emitted, limit) {
+				if limitReached(enc.Written(), limit) {
 					return nil
 				}
 			}

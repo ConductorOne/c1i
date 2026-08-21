@@ -35,9 +35,8 @@ var mcpToolsetsListCmd = &cobra.Command{
 		limit := getIntFlag(cmd, "limit")
 
 		enc := newEmitter(cmd)
-		emitted := 0
-		for !limitReached(emitted, limit) {
-			pageSize := effectivePageSize(requestedPageSize, limit, emitted)
+		for !limitReached(enc.Written(), limit) {
+			pageSize := effectivePageSize(requestedPageSize, limit, enc.Written())
 			params := map[string]string{
 				"page_size": strconv.Itoa(pageSize),
 			}
@@ -61,8 +60,7 @@ var mcpToolsetsListCmd = &cobra.Command{
 
 			for _, p := range resp.Profiles {
 				_ = enc.Encode(toolsetRow(p))
-				emitted++
-				if limitReached(emitted, limit) {
+				if limitReached(enc.Written(), limit) {
 					return nil
 				}
 			}

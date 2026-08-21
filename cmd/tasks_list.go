@@ -47,9 +47,8 @@ var tasksListCmd = &cobra.Command{
 		}
 
 		enc := newEmitter(cmd)
-		emitted := 0
-		for !limitReached(emitted, limit) {
-			pageSize := effectivePageSize(requestedPageSize, limit, emitted)
+		for !limitReached(enc.Written(), limit) {
+			pageSize := effectivePageSize(requestedPageSize, limit, enc.Written())
 			body := map[string]any{
 				"pageSize": pageSize,
 			}
@@ -78,8 +77,7 @@ var tasksListCmd = &cobra.Command{
 
 			for _, item := range resp.List {
 				_ = enc.Encode(taskRow(item.Task))
-				emitted++
-				if limitReached(emitted, limit) {
+				if limitReached(enc.Written(), limit) {
 					return nil
 				}
 			}

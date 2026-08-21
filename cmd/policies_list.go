@@ -34,9 +34,8 @@ policies.`,
 		limit := getIntFlag(cmd, "limit")
 
 		enc := newEmitter(cmd)
-		emitted := 0
-		for !limitReached(emitted, limit) {
-			pageSize := effectivePageSize(requestedPageSize, limit, emitted)
+		for !limitReached(enc.Written(), limit) {
+			pageSize := effectivePageSize(requestedPageSize, limit, enc.Written())
 			// GET /api/v1/policies takes snake_case query params
 			// (page_size/page_token), unlike the search/create bodies below
 			// it (which are ordinary camelCase protojson) — verified against
@@ -63,8 +62,7 @@ policies.`,
 
 			for _, p := range resp.List {
 				_ = enc.Encode(policyRow(p))
-				emitted++
-				if limitReached(emitted, limit) {
+				if limitReached(enc.Written(), limit) {
 					return nil
 				}
 			}

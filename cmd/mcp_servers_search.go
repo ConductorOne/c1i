@@ -47,9 +47,8 @@ TSDB read each) so you can spot idle servers.`,
 		limit := getIntFlag(cmd, "limit")
 
 		enc := newEmitter(cmd)
-		emitted := 0
-		for !limitReached(emitted, limit) {
-			pageSize := effectivePageSize(requestedPageSize, limit, emitted)
+		for !limitReached(enc.Written(), limit) {
+			pageSize := effectivePageSize(requestedPageSize, limit, enc.Written())
 			body := map[string]any{
 				"appId":    appID,
 				"pageSize": pageSize,
@@ -91,8 +90,7 @@ TSDB read each) so you can spot idle servers.`,
 					toolCount = &tc
 				}
 				_ = enc.Encode(serverCountRow(r.MCPServer, toolCount))
-				emitted++
-				if limitReached(emitted, limit) {
+				if limitReached(enc.Written(), limit) {
 					return nil
 				}
 			}

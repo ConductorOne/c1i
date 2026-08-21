@@ -394,9 +394,10 @@ func checkFieldsMatchedAnyRow(cmd *cobra.Command, _ []string) error {
 // commands use it in place of a bare json.Encoder so field selection is
 // consistent across every list surface.
 type emitter struct {
-	enc   *json.Encoder
-	paths [][]string
-	state *fieldsMatchState
+	enc     *json.Encoder
+	paths   [][]string
+	state   *fieldsMatchState
+	written int
 }
 
 // newEmitter builds an emitter writing to cmd's stdout, reading the
@@ -425,6 +426,7 @@ func newEmitter(cmd *cobra.Command) *emitter {
 // row here only changes what gets printed, never that verdict.
 func (e *emitter) Encode(v any) error {
 	if len(e.paths) == 0 {
+		e.written++
 		return e.enc.Encode(v)
 	}
 	projected := projectValue(v, e.paths)
@@ -438,7 +440,21 @@ func (e *emitter) Encode(v any) error {
 	if empty {
 		return nil
 	}
+	e.written++
 	return e.enc.Encode(projected)
+}
+
+// Written reports how many rows Encode has actually written to stdout so
+// far, as opposed to how many times it's been called. The two diverge once
+// --fields is set: a call whose projection is empty is skipped (see Encode
+// above), so it's scanned but not written. --limit must cap WRITTEN rows
+// (addLimitFlag's documented contract), so every list command's pagination
+// loop drives limitReached/effectivePageSize off this instead of a
+// separately incremented local counter — a local counter tracks calls, and
+// once calls and writes diverge, comparing --limit against calls can stop
+// pagination before a later page's real matches are ever reached.
+func (e *emitter) Written() int {
+	return e.written
 }
 
 // writeObject pretty-prints a single JSON response to stdout, applying --fields

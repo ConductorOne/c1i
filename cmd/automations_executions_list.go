@@ -70,12 +70,11 @@ the server returns. Combine with --limit to bound the work.`,
 		clientFilter := stateFilter != "" || templateID != ""
 
 		enc := newEmitter(cmd)
-		emitted := 0
 		prevToken := ""
-		for !limitReached(emitted, limit) {
+		for !limitReached(enc.Written(), limit) {
 			pageSize := requestedPageSize
 			if !clientFilter {
-				pageSize = effectivePageSize(requestedPageSize, limit, emitted)
+				pageSize = effectivePageSize(requestedPageSize, limit, enc.Written())
 			}
 			params := map[string]string{
 				"page_size": strconv.Itoa(pageSize),
@@ -105,8 +104,7 @@ the server returns. Combine with --limit to bound the work.`,
 					continue
 				}
 				_ = enc.Encode(executionRow(e))
-				emitted++
-				if limitReached(emitted, limit) {
+				if limitReached(enc.Written(), limit) {
 					return nil
 				}
 			}

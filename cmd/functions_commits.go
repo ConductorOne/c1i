@@ -31,9 +31,8 @@ var functionsCommitsCmd = &cobra.Command{
 		limit := getIntFlag(cmd, "limit")
 
 		enc := newEmitter(cmd)
-		emitted := 0
-		for !limitReached(emitted, limit) {
-			pageSize := effectivePageSize(requestedPageSize, limit, emitted)
+		for !limitReached(enc.Written(), limit) {
+			pageSize := effectivePageSize(requestedPageSize, limit, enc.Written())
 			params := map[string]string{
 				"page_size": strconv.Itoa(pageSize),
 			}
@@ -68,8 +67,7 @@ var functionsCommitsCmd = &cobra.Command{
 					"message":     c.Message,
 					"created_at":  c.CreatedAt,
 				})
-				emitted++
-				if limitReached(emitted, limit) {
+				if limitReached(enc.Written(), limit) {
 					return nil
 				}
 			}

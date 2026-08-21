@@ -121,10 +121,9 @@ tenant.
 		limit := getIntFlag(cmd, "limit")
 
 		enc := newEmitter(cmd)
-		emitted := 0
-		for !limitReached(emitted, limit) {
+		for !limitReached(enc.Written(), limit) {
 			body := buildRequestSearchBody(requestSearchFilters{
-				pageSize:      effectivePageSize(requestedPageSize, limit, emitted),
+				pageSize:      effectivePageSize(requestedPageSize, limit, enc.Written()),
 				pageToken:     pageToken,
 				scopeUserID:   scopeUserID,
 				appID:         appID,
@@ -145,8 +144,7 @@ tenant.
 
 			for _, item := range resp.List {
 				_ = enc.Encode(taskRow(item.Task))
-				emitted++
-				if limitReached(emitted, limit) {
+				if limitReached(enc.Written(), limit) {
 					return nil
 				}
 			}
