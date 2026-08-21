@@ -125,6 +125,17 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   actually present. A consumer counting output lines for a sparse `--fields`
   spec will see fewer lines than before.
 
+  `--limit` now also counts rows actually **written**, not rows scanned, so
+  it composes correctly with a sparse `--fields`: previously a filtered-out
+  (skipped) row still counted against `--limit`, so `--limit N` combined
+  with a sparse field could stop pagination having written fewer than `N`
+  lines, or before a later page's real matches were ever fetched —
+  live-verified as `tasks list --fields outcome --limit 5` returning only 4
+  lines pre-fix, 5 post-fix. Combining `--limit` with a sparse `--fields`
+  may now fetch further pages than before, since more pages can be needed
+  to actually reach `limit` written rows; `--limit` alone, or `--fields`
+  alone, is unaffected.
+
 - **`functions source --out-dir` writes files `0600` instead of `0644`**, and
   the directory `0700` instead of `0755` — now including a pre-existing
   directory, not just one this command creates. Fetched function source is
