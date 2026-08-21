@@ -416,21 +416,27 @@ func newEmitter(cmd *cobra.Command) *emitter {
 // name and signature match json.Encoder.Encode so an emitter is a drop-in
 // replacement for the bare encoder list commands used before.
 //
-// A row's projection is written out unconditionally — even when it projects
-// to nothing at all ("{}") — because streaming can't know in advance whether
-// a later row (possibly on a later page under --paginate) will match; see
-// checkFieldsMatchedAnyRow for where the zero-match-in-the-whole-result case
-// is actually judged and turned into an error.
+// A row whose projection is empty ("{}") carries no information, so it is
+// skipped rather than written — this is decided per row, with no buffering,
+// so it's safe even under --paginate's unbounded result sets. Whether the
+// whole invocation ever matched anything is still tracked in e.state and
+// judged once at the end by checkFieldsMatchedAnyRow, which is what turns an
+// all-rows-empty result into the zero-match usage error; skipping the empty
+// row here only changes what gets printed, never that verdict.
 func (e *emitter) Encode(v any) error {
 	if len(e.paths) == 0 {
 		return e.enc.Encode(v)
 	}
 	projected := projectValue(v, e.paths)
+	empty := projectionMatchedNothing(projected)
 	if e.state != nil {
 		e.state.sawRow = true
-		if !projectionMatchedNothing(projected) {
+		if !empty {
 			e.state.matched = true
 		}
+	}
+	if empty {
+		return nil
 	}
 	return e.enc.Encode(projected)
 }

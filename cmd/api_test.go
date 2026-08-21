@@ -434,12 +434,13 @@ func twoPageFixtureServer(page1Item, page2Item string) *httptest.Server {
 }
 
 // TestAPIPaginateFieldsZeroMatchAcrossAllPagesErrors is the `api --paginate`
-// half of the fix: a --fields spec that matches nothing in EITHER
-// page's row must still write both pages' rows (streaming, never buffered —
-// --paginate exists precisely to walk unbounded results without holding them
-// all in memory) and then fail with exit 2, not silently exit 0 having
-// printed two "{}" rows (the pre-fix behavior, confirmed live against
-// a live tenant before this fix).
+// half of the fix: a --fields spec that matches nothing in EITHER page's row
+// projects every row to "{}", so both are skipped (streaming, never
+// buffered — --paginate exists precisely to walk unbounded results without
+// holding them all in memory) and stdout ends up completely empty, then the
+// command fails with exit 2 — not the pre-fix behavior of silently exiting 0
+// having printed two "{}" rows (confirmed live against a live tenant before
+// this fix).
 func TestAPIPaginateFieldsZeroMatchAcrossAllPagesErrors(t *testing.T) {
 	srv := twoPageFixtureServer(`{"name":"page1-item"}`, `{"name":"page2-item"}`)
 	defer srv.Close()
@@ -474,17 +475,16 @@ func TestAPIPaginateFieldsZeroMatchAcrossAllPagesErrors(t *testing.T) {
 	if !strings.Contains(err.Error(), "matched no keys in any row of the response") {
 		t.Errorf("error = %q, want the list-specific zero-match message", err.Error())
 	}
-	gotLines := strings.Split(strings.TrimSpace(out.String()), "\n")
-	wantLines := []string{`{}`, `{}`}
-	if !reflect.DeepEqual(gotLines, wantLines) {
-		t.Errorf("output lines = %v, want %v (both pages' rows must still be written before the error)", gotLines, wantLines)
+	if out.Len() != 0 {
+		t.Errorf("output = %q, want completely empty stdout (both pages' rows projected to {} and must be skipped)", out.String())
 	}
 }
 
 // TestAPIPaginateFieldsPartialMatchAcrossPagesSucceeds is the sparse-data
 // twin, split across pages instead of rows within one page: page 1's item
 // lacks "id", page 2's item has it. A match anywhere in the whole paginated
-// result — not just the first page — must be enough for exit 0.
+// result — not just the first page — must be enough for exit 0, and page 1's
+// empty projection must be skipped rather than written as "{}".
 func TestAPIPaginateFieldsPartialMatchAcrossPagesSucceeds(t *testing.T) {
 	srv := twoPageFixtureServer(`{"name":"page1-item"}`, `{"id":"only-on-page-2"}`)
 	defer srv.Close()
@@ -509,9 +509,9 @@ func TestAPIPaginateFieldsPartialMatchAcrossPagesSucceeds(t *testing.T) {
 		t.Fatalf("expected exit 0 (page 2 matched --fields), got error: %v; output: %s", err, out.String())
 	}
 	gotLines := strings.Split(strings.TrimSpace(out.String()), "\n")
-	wantLines := []string{`{}`, `{"id":"only-on-page-2"}`}
+	wantLines := []string{`{"id":"only-on-page-2"}`}
 	if !reflect.DeepEqual(gotLines, wantLines) {
-		t.Errorf("output lines = %v, want %v", gotLines, wantLines)
+		t.Errorf("output lines = %v, want %v (page 1's empty projection must be skipped, not written as {})", gotLines, wantLines)
 	}
 }
 
