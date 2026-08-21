@@ -13,6 +13,7 @@ import (
 
 	"github.com/ConductorOne/c1i/internal/client"
 	"github.com/ConductorOne/c1i/internal/mcpgateway"
+	"github.com/ConductorOne/c1i/internal/transport"
 	"github.com/spf13/cobra"
 )
 
@@ -75,7 +76,10 @@ func TestGatewayErrorExitCodes(t *testing.T) {
 				}))
 				defer srv.Close()
 
-				gc := mcpgateway.New(srv.URL, "test-token", srv.Client())
+				// WithMaxRetries(0): a 429 is otherwise retried by the shared
+				// transport (real, multi-second backoff) -- the exit-code
+				// classification this test pins doesn't depend on retry count.
+				gc := mcpgateway.New(srv.URL, "test-token", srv.Client(), transport.WithMaxRetries(0))
 				err := gc.Initialize(context.Background())
 				if err == nil {
 					t.Fatalf("status %d: expected Initialize to fail", tc.status)
@@ -107,7 +111,8 @@ func TestGatewayErrorExitCodes(t *testing.T) {
 				}))
 				defer srv.Close()
 
-				gc := mcpgateway.New(srv.URL, "test-token", srv.Client())
+				// See the matching comment in the "handshake" subtest above.
+				gc := mcpgateway.New(srv.URL, "test-token", srv.Client(), transport.WithMaxRetries(0))
 				if err := gc.Initialize(context.Background()); err != nil {
 					t.Fatalf("status %d: unexpected Initialize failure: %v", tc.status, err)
 				}
