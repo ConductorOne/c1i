@@ -6,6 +6,42 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- **`deleted_at` on more list rows.** `apps`, `entitlements`, `connectors`,
+  `functions`, `mcp tools`, and `mcp toolsets` list rows now carry
+  `deleted_at`, and `grants list` carries `entitlement_deleted_at` and
+  `app_user_deleted_at` for the objects behind a grant. The response structs
+  did not declare the field at all, so the CLI was discarding what the API
+  sent.
+
+  For the six primary listings this is forward-looking rather than immediately
+  useful: those endpoints exclude soft-deleted records, so the value is `null`
+  in practice and there is no flag to request deleted rows. It matters on
+  `grants list`, where a grant outlives the entitlement or account it points at
+  — so `jq 'select(.entitlement_deleted_at)'` finds grants whose backing object
+  is gone.
+
+### Changed
+
+- **BREAKING — more list rows emit real JSON numbers and `null`, not strings.**
+  The same fix as the earlier stringified-values change, applied to the fields
+  it missed. `apps list`'s `user_count` and `entitlements list`'s `grant_count`
+  were quoted strings, and `jq` orders every string above every number, so
+  `select(.grant_count > 5)` matched **every** row — 3000 of 3000 on one
+  tenant, where 146 qualify. They are now numbers. Absent values that came out
+  as `""` are now `null`: `grants list`'s `deprovision_at`, `automations
+  list`'s `last_executed_at`, `automations executions list`'s `completed_at`,
+  `functions list`'s `published_commit_id`, and `mcp servers connections
+  list`'s `connected_at`, `authorized_as_email`, and `authorized_as_name`. `""`
+  is truthy in `jq`, so a presence filter over those matched every row too —
+  579 of 579 grants, none of which had one set.
+
+  Key names and ordering are unchanged; only value types. A consumer comparing
+  these against strings, or testing an absent value with `== ""`, must switch
+  to the native types — and note that `jq -r` now prints `null` where it
+  printed an empty line.
+
 ### Security
 
 - **The v0.4.0 and v0.4.1 binaries contain reachable standard-library
