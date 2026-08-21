@@ -35,7 +35,10 @@ policies.`,
 
 		enc := newEmitter(cmd)
 		for !limitReached(enc.Written(), limit) {
-			pageSize := effectivePageSize(requestedPageSize, limit, enc.Written())
+			pageSize := requestedPageSize
+			if !enc.Filtered() {
+				pageSize = effectivePageSize(requestedPageSize, limit, enc.Written())
+			}
 			// GET /api/v1/policies takes snake_case query params
 			// (page_size/page_token), unlike the search/create bodies below
 			// it (which are ordinary camelCase protojson) — verified against

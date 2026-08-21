@@ -34,21 +34,28 @@ last_executed_at, args.`,
 
 		// Page size tracks --page-size alone, unlike the effectivePageSize
 		// shrink other list commands apply toward --limit. That shrink
-		// assumes rows fetched and rows emitted are 1:1; this command
-		// filters automations client-side by callFunction.functionId, so
-		// "emitted" counts matches, not automations scanned. Feeding that
-		// into effectivePageSize would send page_size=1 for every
-		// automation scanned until a match turns up — one HTTP round trip
-		// per automation instead of a handful of batched pages. Any list
-		// command that filters after the fetch inherits this same trap.
+		// assumes rows fetched and rows written are 1:1; this command
+		// filters automations client-side by callFunction.functionId (and a
+		// --fields projection can drop a row too), so a fetched row here is
+		// not necessarily written. Feeding that into effectivePageSize would
+		// send page_size=1 for every automation scanned until a match turns
+		// up — one HTTP round trip per automation instead of a handful of
+		// batched pages. Any list command that filters after the fetch
+		// inherits this same trap (see emitter.Filtered).
 		pageSize := clampPageSize(getIntFlag(cmd, "page-size"))
 		pageToken, _ := cmd.Flags().GetString("page-token")
 		manualPaging := cmd.Flags().Changed("page-token")
 		limit := getIntFlag(cmd, "limit")
 
 		enc := newEmitter(cmd)
+		// emitted counts automations that call functionID (the client-side
+		// filter above), used only for the "no automations call function"
+		// message below. The stop condition uses enc.Written() instead: a
+		// --fields projection can also drop a fetched-and-filter-matched row
+		// (see emitter.Filtered), so emitted alone would overcount rows
+		// actually written to stdout.
 		emitted := 0
-		for !limitReached(emitted, limit) {
+		for !limitReached(enc.Written(), limit) {
 			params := map[string]string{"page_size": strconv.Itoa(pageSize)}
 			if pageToken != "" {
 				params["page_token"] = pageToken
@@ -97,7 +104,7 @@ last_executed_at, args.`,
 						"args":             argKeys,
 					})
 					emitted++
-					if limitReached(emitted, limit) {
+					if limitReached(enc.Written(), limit) {
 						return nil
 					}
 				}

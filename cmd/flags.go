@@ -44,20 +44,40 @@ func limitReached(emitted, limit int) bool {
 	return limit > 0 && emitted >= limit
 }
 
-// effectivePageSize tightens the per-call page size when --limit is
-// smaller than --page-size, so a `--limit 3` query doesn't fetch 50
-// items and discard 47 of them. When `limit` is unset (<=0), the
-// requested page-size is returned unchanged.
+// effectivePageSize tightens the per-call page size toward `limit` when
+// `limit` is smaller than the requested page size, so an ordinary
+// `--limit 3` query doesn't fetch 50 items and discard 47 of them. This is
+// only correct when every fetched row becomes one written row — that
+// one-to-one assumption is what lets "3 remaining" mean "ask for 3 more".
 //
-// Edge: if the remaining headroom (limit - emitted) is somehow zero or
+// A caller whose rows can be dropped after fetching (a client-side filter,
+// or a --fields projection that empties a row — see emitter.Filtered) must
+// NOT call this at all while that filtering is active: `written` stays near
+// zero while filtered rows keep coming in, so `limit - written` stays near
+// `limit` for the whole scan and every page ends up asking for `limit` (or
+// fewer) items instead of the real page size — turning what should be a
+// handful of full pages into many tiny, mostly-wasted ones. Skip the call
+// and pass `requested` straight through instead; see the callers that check
+// `clientFilter`/`enc.Filtered()` before calling this.
+//
+// General rule this function keeps getting fed the wrong counter for: a
+// counter driving a REQUEST-SHAPING decision (this function) must count
+// rows fetched (or, in the safe 1:1 case, rows written — same number); a
+// counter driving a STOP decision (limitReached) must count rows actually
+// written. Conflating the two is the recurring bug.
+//
+// When `limit` is unset (<=0), the requested page-size is returned
+// unchanged.
+//
+// Edge: if the remaining headroom (limit - written) is somehow zero or
 // negative (the outer loop should have stopped already), we still return
 // at least 1 — better to make a small wasteful call than to send
 // pageSize=0 and get an undefined response from the API.
-func effectivePageSize(requested, limit, emitted int) int {
+func effectivePageSize(requested, limit, written int) int {
 	if limit <= 0 {
 		return requested
 	}
-	remaining := limit - emitted
+	remaining := limit - written
 	if remaining < 1 {
 		return 1
 	}

@@ -63,17 +63,18 @@ the server returns. Combine with --limit to bound the work.`,
 		limit := getIntFlag(cmd, "limit")
 
 		// --state/--template-id filter client-side, so a fetched row is not
-		// necessarily emitted. effectivePageSize tightens based on the emitted
-		// count, which would shrink the per-call page toward 1 while paging
-		// past non-matching rows (request amplification). Only tighten when no
-		// client-side filter is active.
+		// necessarily written. --fields can also drop a fetched row (see
+		// emitter.Filtered). Either way, effectivePageSize must not shrink the
+		// per-call page toward the written count while paging past rows that
+		// never get written (request amplification); only tighten when neither
+		// is active.
 		clientFilter := stateFilter != "" || templateID != ""
 
 		enc := newEmitter(cmd)
 		prevToken := ""
 		for !limitReached(enc.Written(), limit) {
 			pageSize := requestedPageSize
-			if !clientFilter {
+			if !clientFilter && !enc.Filtered() {
 				pageSize = effectivePageSize(requestedPageSize, limit, enc.Written())
 			}
 			params := map[string]string{

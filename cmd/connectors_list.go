@@ -61,7 +61,10 @@ var connectorsListCmd = &cobra.Command{
 
 		enc := newEmitter(cmd)
 		for !limitReached(enc.Written(), limit) {
-			pageSize := effectivePageSize(requestedPageSize, limit, enc.Written())
+			pageSize := requestedPageSize
+			if !enc.Filtered() {
+				pageSize = effectivePageSize(requestedPageSize, limit, enc.Written())
+			}
 			params := map[string]string{
 				"page_size": strconv.Itoa(pageSize),
 			}

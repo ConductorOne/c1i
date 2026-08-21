@@ -38,7 +38,10 @@ var mcpToolsSearchCmd = &cobra.Command{
 
 		enc := newEmitter(cmd)
 		for !limitReached(enc.Written(), limit) {
-			pageSize := effectivePageSize(requestedPageSize, limit, enc.Written())
+			pageSize := requestedPageSize
+			if !enc.Filtered() {
+				pageSize = effectivePageSize(requestedPageSize, limit, enc.Written())
+			}
 			body := map[string]any{
 				"appId":       appID,
 				"connectorId": connectorID,

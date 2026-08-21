@@ -457,6 +457,15 @@ func (e *emitter) Written() int {
 	return e.written
 }
 
+// Filtered reports whether a --fields/C1I_FIELDS projection is active, i.e.
+// whether a fetched row might not become a written one (see Encode). List
+// commands must check this (alongside any of their own client-side filters)
+// before calling effectivePageSize — see that function's doc for why feeding
+// it a progress count while rows can be dropped collapses the page size.
+func (e *emitter) Filtered() bool {
+	return len(e.paths) > 0
+}
+
 // writeObject pretty-prints a single JSON response to stdout, applying --fields
 // projection when set. Use it for read/get output. It falls back to raw
 // pretty-printing when projection is off or the bytes aren't valid JSON.

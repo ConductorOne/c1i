@@ -118,3 +118,77 @@ func TestTasksListLimitWithSparseFieldsContinuesPastFilteredPage(t *testing.T) {
 		t.Errorf("row = %v, want %v", rows[0], want)
 	}
 }
+
+// TestTasksListPageSizeStaysFullDuringSparseFieldsScan pins the request-size
+// half of the fix: effectivePageSize must NOT be fed enc.Written() while
+// --fields is active, because "remaining = limit - written" stays pinned
+// near `limit` for as long as matches stay sparse, collapsing every page
+// request down to `limit` (or less) instead of the real requested page
+// size. Two pages of --page-size worth of non-matching rows, then a third
+// page with enough matches to satisfy --limit: every request's "pageSize"
+// body field must equal the full requested page size throughout, never
+// shrink toward --limit.
+func TestTasksListPageSizeStaysFullDuringSparseFieldsScan(t *testing.T) {
+	const requestedPageSize = 10
+	var gotPageSizes []float64
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body := decodeJSONBody(t, r)
+		if ps, ok := body["pageSize"].(float64); ok {
+			gotPageSizes = append(gotPageSizes, ps)
+		}
+		tok, _ := body["pageToken"].(string)
+		w.Header().Set("Content-Type", "application/json")
+		switch tok {
+		case "":
+			_, _ = fmt.Fprint(w, taskPage(make([]string, requestedPageSize), "tok1"))
+		case "tok1":
+			_, _ = fmt.Fprint(w, taskPage(make([]string, requestedPageSize), "tok2"))
+		case "tok2":
+			_, _ = fmt.Fprint(w, taskPage([]string{
+				"TASK_OUTCOME_APPROVED", "TASK_OUTCOME_APPROVED", "TASK_OUTCOME_APPROVED",
+			}, ""))
+		default:
+			t.Errorf("unexpected pageToken: %q", tok)
+			w.WriteHeader(http.StatusInternalServerError)
+		}
+	}))
+	defer srv.Close()
+
+	resetCmdFlags(t, tasksListCmd)
+	orig := newListClient
+	newListClient = func(_ *cobra.Command, _ string) (*client.Client, error) {
+		return client.NewForTesting(srv.URL, srv.Client()), nil
+	}
+	t.Cleanup(func() { newListClient = orig })
+	t.Setenv("C1I_URL", "https://example.invalid")
+
+	viper.Set("fields", "outcome")
+	t.Cleanup(func() { viper.Set("fields", "") })
+	if err := tasksListCmd.Flags().Set("page-size", fmt.Sprint(requestedPageSize)); err != nil {
+		t.Fatalf("setting --page-size: %v", err)
+	}
+	if err := tasksListCmd.Flags().Set("limit", "3"); err != nil {
+		t.Fatalf("setting --limit: %v", err)
+	}
+
+	var out bytes.Buffer
+	tasksListCmd.SetOut(&out)
+	tasksListCmd.SetContext(context.Background())
+	if err := tasksListCmd.RunE(tasksListCmd, []string{}); err != nil {
+		t.Fatalf("RunE: %v", err)
+	}
+
+	if len(gotPageSizes) != 3 {
+		t.Fatalf("server received %d requests, want 3", len(gotPageSizes))
+	}
+	for i, ps := range gotPageSizes {
+		if ps != requestedPageSize {
+			t.Errorf("request %d: pageSize = %v, want %v (must stay at the requested page size, not collapse toward --limit while --fields is filtering out rows)", i, ps, requestedPageSize)
+		}
+	}
+
+	rows := decodeNDJSONRows(t, out.String())
+	if len(rows) != 3 {
+		t.Fatalf("got %d rows, want exactly 3 (--limit 3)", len(rows))
+	}
+}

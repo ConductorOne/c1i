@@ -108,8 +108,12 @@ them to an external system.
 
 		enc := newEmitter(cmd)
 		for !limitReached(enc.Written(), limit) {
+			pageSize := requestedPageSize
+			if !enc.Filtered() {
+				pageSize = effectivePageSize(requestedPageSize, limit, enc.Written())
+			}
 			body := exportEventsBody(
-				effectivePageSize(requestedPageSize, limit, enc.Written()),
+				pageSize,
 				pageToken, since, until, sinceEventUID, sortDirection,
 			)
 

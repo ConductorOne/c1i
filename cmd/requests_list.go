@@ -122,8 +122,12 @@ tenant.
 
 		enc := newEmitter(cmd)
 		for !limitReached(enc.Written(), limit) {
+			pageSize := requestedPageSize
+			if !enc.Filtered() {
+				pageSize = effectivePageSize(requestedPageSize, limit, enc.Written())
+			}
 			body := buildRequestSearchBody(requestSearchFilters{
-				pageSize:      effectivePageSize(requestedPageSize, limit, enc.Written()),
+				pageSize:      pageSize,
 				pageToken:     pageToken,
 				scopeUserID:   scopeUserID,
 				appID:         appID,
