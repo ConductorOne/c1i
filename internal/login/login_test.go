@@ -5,7 +5,9 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/ConductorOne/c1i/internal/client"
 )
@@ -214,5 +216,67 @@ func TestPollForTokenFiveHundredWithPendingBodyIsAServerError(t *testing.T) {
 				t.Errorf("made %d requests, want 1 — a 5xx should fail fast, not keep polling", requests)
 			}
 		})
+	}
+}
+
+// TestStartDeviceFlowTimesOut proves a hung device-authorization endpoint
+// doesn't hang c1i auth login forever: before this package used
+// internal/transport, every request here went through http.DefaultClient,
+// which has no Timeout at all, so a connection that never answers would
+// block indefinitely. requestTimeout is overridden here (it's a var, not a
+// const, for exactly this) so the test doesn't have to wait out the real 30s.
+func TestStartDeviceFlowTimesOut(t *testing.T) {
+	orig := requestTimeout
+	requestTimeout = 50 * time.Millisecond
+	t.Cleanup(func() { requestTimeout = orig })
+
+	block := make(chan struct{})
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		<-block
+	}))
+	defer srv.Close()
+
+	done := make(chan error, 1)
+	go func() {
+		_, err := StartDeviceFlow(context.Background(), srv.URL)
+		done <- err
+	}()
+
+	// Unblock the handler (so the deferred srv.Close() above doesn't itself
+	// hang waiting for the still-active connection) before asserting, not via
+	// another deferred call: defers run LIFO, and registering this after
+	// srv.Close() would run it AFTER Close already started waiting.
+	defer close(block)
+
+	select {
+	case err := <-done:
+		if err == nil {
+			t.Fatal("expected a timeout error")
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("StartDeviceFlow did not return within 5s -- a hung device-authorization endpoint must time out, not hang")
+	}
+}
+
+// TestDeviceFlowSendsUserAgent proves every request in the device flow
+// carries the shared transport's user-agent — before this package used
+// internal/transport, these requests went through http.DefaultClient and
+// sent Go's default User-Agent instead.
+func TestDeviceFlowSendsUserAgent(t *testing.T) {
+	var gotUA string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotUA = r.Header.Get("User-Agent")
+		w.WriteHeader(http.StatusServiceUnavailable)
+	}))
+	defer srv.Close()
+
+	_, _ = StartDeviceFlow(context.Background(), srv.URL)
+	if !strings.HasPrefix(gotUA, "c1.ai/c1i") {
+		t.Errorf("device_authorization User-Agent = %q, want it to start with c1.ai/c1i", gotUA)
+	}
+
+	_, _ = createPersonalClient(context.Background(), srv.URL, "tok")
+	if !strings.HasPrefix(gotUA, "c1.ai/c1i") {
+		t.Errorf("personal_clients User-Agent = %q, want it to start with c1.ai/c1i", gotUA)
 	}
 }

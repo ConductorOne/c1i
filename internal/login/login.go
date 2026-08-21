@@ -5,17 +5,27 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
 	"net/url"
 	"strings"
 	"time"
 
 	"github.com/ConductorOne/c1i/internal/client"
+	"github.com/ConductorOne/c1i/internal/transport"
 )
 
 // C1iClientID is the public OAuth client ID for the c1i CLI.
 const C1iClientID = "juQSPDsPrdMDpPpR6fGdeLLSs8g"
+
+// requestTimeout bounds a single HTTP call in the device flow (device
+// authorization, one token poll, or personal-client creation) — generous for
+// a simple request/response, but finite so a hung auth host can't stall
+// `c1i auth login` forever. transport.DefaultTimeout (10 minutes, sized for a
+// long-running MCP tool call) would technically also bound it, but a login
+// call has no reason to need anywhere near that long, so this overrides it
+// with a tighter, purpose-fit value. A var, not a const, so a test can lower
+// it instead of waiting out the real duration.
+var requestTimeout = 30 * time.Second
 
 type DeviceCode struct {
 	DeviceCode      string `json:"device_code"`
@@ -31,7 +41,7 @@ type Credentials struct {
 }
 
 // StartDeviceFlow initiates the OAuth device authorization flow.
-func StartDeviceFlow(ctx context.Context, baseURL string) (*DeviceCode, error) {
+func StartDeviceFlow(ctx context.Context, baseURL string, opts ...transport.Option) (*DeviceCode, error) {
 	deviceURL := baseURL + "/auth/v1/device_authorization"
 
 	vals := url.Values{}
@@ -43,13 +53,7 @@ func StartDeviceFlow(ctx context.Context, baseURL string) (*DeviceCode, error) {
 	}
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer func() { _ = resp.Body.Close() }()
-
-	body, err := io.ReadAll(resp.Body)
+	resp, err := transport.New(nil, append(opts, transport.WithTimeout(requestTimeout))...).Do(req)
 	if err != nil {
 		return nil, err
 	}
@@ -57,11 +61,11 @@ func StartDeviceFlow(ctx context.Context, baseURL string) (*DeviceCode, error) {
 	if resp.StatusCode != http.StatusOK {
 		// Wrap as APIError so cmd/errors.go maps the status to the exit-code
 		// taxonomy (auth/rate-limited/server) instead of collapsing to exit 1.
-		return nil, fmt.Errorf("device authorization failed: %w", &client.APIError{Method: http.MethodPost, Path: req.URL.Path, StatusCode: resp.StatusCode, Body: string(body)})
+		return nil, fmt.Errorf("device authorization failed: %w", &client.APIError{Method: http.MethodPost, Path: req.URL.Path, StatusCode: resp.StatusCode, Body: string(resp.Body)})
 	}
 
 	var code DeviceCode
-	if err := json.Unmarshal(body, &code); err != nil {
+	if err := json.Unmarshal(resp.Body, &code); err != nil {
 		return nil, fmt.Errorf("failed to parse device code response: %w", err)
 	}
 
@@ -77,9 +81,17 @@ func StartDeviceFlow(ctx context.Context, baseURL string) (*DeviceCode, error) {
 	return &code, nil
 }
 
-// PollForToken polls the token endpoint until the user approves or the code expires.
-func PollForToken(ctx context.Context, baseURL string, code *DeviceCode) (*Credentials, error) {
+// PollForToken polls the token endpoint until the user approves or the code
+// expires. Each poll goes through the shared transport (timeout, user-agent,
+// debug tracing, path/redirect guards) but with no retry layer of its own:
+// the polling loop below IS this call's retry strategy, on the RFC 8628
+// interval, so a second retry layer underneath would just double up delays.
+// A 5xx therefore fails this poll immediately rather than being retried
+// in-place — see the status handling below, which treats it identically to
+// any other unparseable non-2xx body.
+func PollForToken(ctx context.Context, baseURL string, code *DeviceCode, opts ...transport.Option) (*Credentials, error) {
 	tokenURL := baseURL + "/auth/v1/token"
+	t := transport.New(nil, append(opts, transport.WithMaxRetries(0), transport.WithTimeout(requestTimeout))...)
 
 	vals := url.Values{}
 	vals.Set("client_id", C1iClientID)
@@ -108,13 +120,7 @@ func PollForToken(ctx context.Context, baseURL string, code *DeviceCode) (*Crede
 		}
 		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 
-		resp, err := http.DefaultClient.Do(req)
-		if err != nil {
-			return nil, err
-		}
-
-		body, err := io.ReadAll(resp.Body)
-		_ = resp.Body.Close()
+		resp, err := t.Do(req)
 		if err != nil {
 			return nil, err
 		}
@@ -122,7 +128,7 @@ func PollForToken(ctx context.Context, baseURL string, code *DeviceCode) (*Crede
 		if resp.StatusCode != http.StatusOK {
 			apiErr := func() error {
 				return fmt.Errorf("token request failed: %w", &client.APIError{
-					Method: http.MethodPost, Path: req.URL.Path, StatusCode: resp.StatusCode, Body: string(body),
+					Method: http.MethodPost, Path: req.URL.Path, StatusCode: resp.StatusCode, Body: string(resp.Body),
 				})
 			}
 
@@ -136,7 +142,7 @@ func PollForToken(ctx context.Context, baseURL string, code *DeviceCode) (*Crede
 			// {"message":"..."} — leaves Error empty and must NOT be read as
 			// one, or a server failure would classify as an auth failure
 			// (exit 3) instead of exit 6.
-			if err := json.Unmarshal(body, &errResp); err != nil || errResp.Error == "" {
+			if err := json.Unmarshal(resp.Body, &errResp); err != nil || errResp.Error == "" {
 				return nil, apiErr()
 			}
 
@@ -174,15 +180,15 @@ func PollForToken(ctx context.Context, baseURL string, code *DeviceCode) (*Crede
 		var tokenResp struct {
 			AccessToken string `json:"access_token"`
 		}
-		if err := json.Unmarshal(body, &tokenResp); err != nil {
+		if err := json.Unmarshal(resp.Body, &tokenResp); err != nil {
 			return nil, fmt.Errorf("failed to parse token response: %w", err)
 		}
 
-		return createPersonalClient(ctx, baseURL, tokenResp.AccessToken)
+		return createPersonalClient(ctx, baseURL, tokenResp.AccessToken, opts...)
 	}
 }
 
-func createPersonalClient(ctx context.Context, baseURL, accessToken string) (*Credentials, error) {
+func createPersonalClient(ctx context.Context, baseURL, accessToken string, opts ...transport.Option) (*Credentials, error) {
 	pccURL := baseURL + "/api/v1/iam/personal_clients"
 
 	reqBody, _ := json.Marshal(map[string]string{
@@ -196,19 +202,13 @@ func createPersonalClient(ctx context.Context, baseURL, accessToken string) (*Cr
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+accessToken)
 
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer func() { _ = resp.Body.Close() }()
-
-	body, err := io.ReadAll(resp.Body)
+	resp, err := transport.New(nil, append(opts, transport.WithTimeout(requestTimeout))...).Do(req)
 	if err != nil {
 		return nil, err
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("failed to create personal client: %w", &client.APIError{Method: http.MethodPost, Path: req.URL.Path, StatusCode: resp.StatusCode, Body: string(body)})
+		return nil, fmt.Errorf("failed to create personal client: %w", &client.APIError{Method: http.MethodPost, Path: req.URL.Path, StatusCode: resp.StatusCode, Body: string(resp.Body)})
 	}
 
 	var clientResp struct {
@@ -217,7 +217,7 @@ func createPersonalClient(ctx context.Context, baseURL, accessToken string) (*Cr
 		} `json:"client"`
 		ClientSecret string `json:"clientSecret"`
 	}
-	if err := json.Unmarshal(body, &clientResp); err != nil {
+	if err := json.Unmarshal(resp.Body, &clientResp); err != nil {
 		return nil, fmt.Errorf("failed to parse client response: %w", err)
 	}
 
