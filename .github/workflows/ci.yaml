@@ -47,6 +47,17 @@ jobs:
         run: |
           go install github.com/securego/gosec/v2/cmd/gosec@v2.28.0
           gosec -quiet -nosec-require-rules -nosec-require-justification ./...
+      # A secret can be removed from HEAD and still sit exposed in a public
+      # repo's history, so this needs full history, not the default shallow
+      # clone.
+      - name: Checkout full history for gitleaks
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Run gitleaks
+        run: |
+          go install github.com/zricethezav/gitleaks/v8@v8.30.1
+          gitleaks detect --source . --no-banner
   go-test:
     runs-on: ubuntu-latest
     steps:
