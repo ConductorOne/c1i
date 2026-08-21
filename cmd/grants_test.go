@@ -26,7 +26,7 @@ func TestGrantRow(t *testing.T) {
 		t.Fatalf("unmarshal: %v", err)
 	}
 	row := grantRow(item)
-	want := map[string]string{
+	want := map[string]any{
 		"app_id":                   "appA",
 		"entitlement_id":           "ent1",
 		"entitlement_display_name": "Admin",
@@ -68,5 +68,63 @@ func TestGrantRowAppIDFallback(t *testing.T) {
 	}
 	if row["grant_source_count"] != 0 {
 		t.Errorf("grant_source_count = %v (%T), want int 0 for a direct grant", row["grant_source_count"], row["grant_source_count"])
+	}
+}
+
+// TestGrantRowDeprovisionAtIsNullNotEmptyString pins that deprovision_at is
+// untyped nil, not "", when a grant has no scheduled deprovision — "" is
+// truthy in jq, so `jq 'select(.deprovision_at)'` would otherwise match
+// every row regardless of whether one is actually scheduled.
+func TestGrantRowDeprovisionAtIsNullNotEmptyString(t *testing.T) {
+	raw := `{"appEntitlementUserBinding":{"appUser":{"appUser":{"id":"au1","appId":"appA"}}},"entitlement":{"appEntitlement":{"id":"ent1"}}}`
+	var item grantListItem
+	if err := json.Unmarshal([]byte(raw), &item); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	row := grantRow(item)
+	if got := row["deprovision_at"]; got != nil {
+		t.Errorf("deprovision_at = %#v, want untyped nil for an unset value", got)
+	}
+}
+
+// TestGrantRowNestedDeletedAt pins that a grant to a soft-deleted
+// entitlement or a soft-deleted account is still an active binding
+// server-side, so the row must surface the nested deletedAt of each — the
+// grant itself is not what's deleted here.
+func TestGrantRowNestedDeletedAt(t *testing.T) {
+	raw := `{
+		"appEntitlementUserBinding": {
+			"appUser": { "appUser": {
+				"id": "au1", "appId": "appA", "deletedAt": "2026-03-01T00:00:00Z"
+			}}
+		},
+		"entitlement": { "appEntitlement": {
+			"id": "ent1", "appId": "appA", "deletedAt": "2026-02-01T00:00:00Z"
+		}}
+	}`
+	var item grantListItem
+	if err := json.Unmarshal([]byte(raw), &item); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	row := grantRow(item)
+	if row["entitlement_deleted_at"] != "2026-02-01T00:00:00Z" {
+		t.Errorf("entitlement_deleted_at = %v, want 2026-02-01T00:00:00Z", row["entitlement_deleted_at"])
+	}
+	if row["app_user_deleted_at"] != "2026-03-01T00:00:00Z" {
+		t.Errorf("app_user_deleted_at = %v, want 2026-03-01T00:00:00Z", row["app_user_deleted_at"])
+	}
+
+	// A live grant's nested deletedAt fields must be nil, not "".
+	liveRaw := `{"appEntitlementUserBinding":{"appUser":{"appUser":{"id":"au1","appId":"appA"}}},"entitlement":{"appEntitlement":{"id":"ent1"}}}`
+	var liveItem grantListItem
+	if err := json.Unmarshal([]byte(liveRaw), &liveItem); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	liveRow := grantRow(liveItem)
+	if liveRow["entitlement_deleted_at"] != nil {
+		t.Errorf("entitlement_deleted_at = %#v, want untyped nil for a live entitlement", liveRow["entitlement_deleted_at"])
+	}
+	if liveRow["app_user_deleted_at"] != nil {
+		t.Errorf("app_user_deleted_at = %#v, want untyped nil for a live account", liveRow["app_user_deleted_at"])
 	}
 }
