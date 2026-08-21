@@ -16,17 +16,21 @@ contracts, exit codes, and when to reach for `c1i api`. Save it locally with
 ## Tenant and auth
 
 Get this right first. A wrong tenant returns plausible-looking data with
-exit 0 — nothing downstream tells you it was the wrong one.
+exit 0.
 
 `--url` (or `C1I_URL`) selects the tenant. With neither set, c1i falls back
-silently to whatever `url:` names in `~/.c1i.yaml`. It must be a full host —
+to whatever `url:` names in `~/.c1i.yaml`. It must be a full host —
 `mycompany.conductor.one` or `mycompany.c1eu.ai` (EU) — and `https` is required:
 a bare `mycompany` and a non-https scheme are both usage errors (exit `2`)
 before any request is sent.
-Pass `--url` explicitly on every invocation instead of relying on an
-exported `C1I_URL` — if it gets lost between shell calls (a fresh shell per
-call is common), you fall through to the config file's tenant with no
-warning, and every result after that is silently wrong.
+Every command prints a `Warning: no --url flag given; targeting <url> (from
+...)` line to stderr unless you passed `--url` on that exact invocation — but
+don't rely on catching it: pass `--url` explicitly on every invocation
+instead of an exported `C1I_URL`. A fresh shell per call is common, and an
+env var that gets lost between calls falls through to the config file's
+tenant; the warning names which tenant that is, but stdout stays clean JSON
+either way, so a result piped straight into the next step is silently from
+whichever tenant `~/.c1i.yaml` names if you aren't reading stderr.
 
 Credentials resolve in this order: `C1I_CLIENT_ID` + `C1I_CLIENT_SECRET` env
 vars (read-only — c1i never writes them), the OS keyring, then a `0600` file

@@ -525,6 +525,17 @@ These are equivalent:
 - `--url mycompany.conductor.one`
 - `--url MYCOMPANY.CONDUCTOR.ONE` (the host is lower-cased)
 
+**Every command prints which tenant it's about to use unless you passed
+`--url` explicitly.** `--url` on the command line is unambiguous; `C1I_URL`
+and `~/.c1i.yaml` name a tenant with nothing on the command line to show it,
+so a lost `export` or a stale config entry sends a command to the wrong
+tenant with no visible sign otherwise. The warning goes to stderr, once per
+invocation (never once per page of a paginated list):
+
+```
+Warning: no --url flag given; targeting https://mycompany.conductor.one (from C1I_URL environment variable)
+```
+
 For credential storage, see [Credential sources](#credential-sources) below.
 
 ### Retries
