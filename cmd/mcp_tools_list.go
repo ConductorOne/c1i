@@ -92,10 +92,11 @@ type toolView struct {
 	State              string `json:"state"`
 	Visibility         string `json:"visibility"`
 	DefaultVisibility  string `json:"defaultVisibility"`
+	DeletedAt          string `json:"deletedAt"`
 }
 
-func toolRow(t toolView) map[string]string {
-	return map[string]string{
+func toolRow(t toolView) map[string]any {
+	return map[string]any{
 		"id":                 t.ID,
 		"app_id":             t.AppID,
 		"connector_id":       t.ConnectorID,
@@ -106,6 +107,7 @@ func toolRow(t toolView) map[string]string {
 		"classification":     t.Classification,
 		"state":              t.State,
 		"visibility":         firstNonEmpty(t.Visibility, t.DefaultVisibility),
+		"deleted_at":         nilIfEmpty(t.DeletedAt),
 	}
 }
 

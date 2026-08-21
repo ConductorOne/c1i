@@ -8,6 +8,29 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// appListItem is the subset of the App message surfaced in `apps list` rows.
+type appListItem struct {
+	ID          string    `json:"id"`
+	DisplayName string    `json:"displayName"`
+	Description string    `json:"description"`
+	UserCount   flexInt64 `json:"userCount"`
+	IconURL     string    `json:"iconUrl"`
+	DeletedAt   string    `json:"deletedAt"`
+}
+
+// appRow flattens an appListItem into the NDJSON output row. user_count keeps
+// its real numeric type (the API sends it as a JSON string) and deleted_at is
+// nil, not "", on a live app — see CLAUDE.md's row-fidelity convention.
+func appRow(a appListItem) map[string]any {
+	return map[string]any{
+		"id":           a.ID,
+		"display_name": a.DisplayName,
+		"description":  a.Description,
+		"user_count":   int64(a.UserCount),
+		"deleted_at":   nilIfEmpty(a.DeletedAt),
+	}
+}
+
 var appsListCmd = &cobra.Command{
 	Use:   "list",
 	Short: "List applications (NDJSON output)",
@@ -44,26 +67,15 @@ var appsListCmd = &cobra.Command{
 			}
 
 			var resp struct {
-				List []struct {
-					ID          string `json:"id"`
-					DisplayName string `json:"displayName"`
-					Description string `json:"description"`
-					UserCount   string `json:"userCount"`
-					IconURL     string `json:"iconUrl"`
-				} `json:"list"`
-				NextPageToken string `json:"nextPageToken"`
+				List          []appListItem `json:"list"`
+				NextPageToken string        `json:"nextPageToken"`
 			}
 			if err := json.Unmarshal(data, &resp); err != nil {
 				return fmt.Errorf("failed to parse response: %w", err)
 			}
 
 			for _, a := range resp.List {
-				_ = enc.Encode(map[string]string{
-					"id":           a.ID,
-					"display_name": a.DisplayName,
-					"description":  a.Description,
-					"user_count":   a.UserCount,
-				})
+				_ = enc.Encode(appRow(a))
 				emitted++
 				if limitReached(emitted, limit) {
 					return nil

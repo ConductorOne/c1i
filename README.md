@@ -71,6 +71,11 @@ filter is required. Each NDJSON row includes the entitlement, the account
 `deprovision_at`), and `grant_source_count` — `0` for a direct grant, or the
 number of groups/roles the access is inherited through.
 
+A grant outlives the entitlement or account it points at, so rows also carry
+`entitlement_deleted_at` and `app_user_deleted_at`: `jq
+'select(.entitlement_deleted_at)'` finds grants whose backing object is gone.
+Absent timestamps are `null`, never `""`.
+
 ### Tasks
 
 ```sh

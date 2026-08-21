@@ -60,3 +60,36 @@ func TestFirstNonEmpty(t *testing.T) {
 		}
 	}
 }
+
+// TestToolRowDeletedAtIsNullNotEmptyString pins that deleted_at is untyped
+// nil, not "", on a live tool. "mcp servers delete" cascades into a server's
+// tools, so this is what would let a listing distinguish a cascaded-deleted
+// tool from a live one.
+func TestToolRowDeletedAtIsNullNotEmptyString(t *testing.T) {
+	tests := []struct {
+		name      string
+		deletedAt string
+		want      any
+	}{
+		{name: "live tool", deletedAt: "", want: nil},
+		{name: "deleted tool", deletedAt: "2026-01-02T03:04:05Z", want: "2026-01-02T03:04:05Z"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			row := toolRow(toolView{ID: "t1", DeletedAt: tt.deletedAt})
+			got, ok := row["deleted_at"]
+			if !ok {
+				t.Fatal("row has no deleted_at key")
+			}
+			if tt.want == nil {
+				if got != nil {
+					t.Fatalf("deleted_at = %#v, want untyped nil", got)
+				}
+				return
+			}
+			if got != tt.want {
+				t.Errorf("deleted_at = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}

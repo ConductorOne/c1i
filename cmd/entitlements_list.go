@@ -7,6 +7,37 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// entitlementListItem is one row of the search/entitlements response.
+type entitlementListItem struct {
+	AppEntitlement struct {
+		ID          string    `json:"id"`
+		AppID       string    `json:"appId"`
+		DisplayName string    `json:"displayName"`
+		Description string    `json:"description"`
+		Slug        string    `json:"slug"`
+		GrantCount  flexInt64 `json:"grantCount"`
+		Purpose     string    `json:"purpose"`
+		DeletedAt   string    `json:"deletedAt"`
+	} `json:"appEntitlement"`
+}
+
+// entitlementRow flattens an entitlementListItem into the NDJSON output row.
+// grant_count keeps its real numeric type (the API sends it as a JSON
+// string) and deleted_at is nil, not "", on a live entitlement.
+func entitlementRow(item entitlementListItem) map[string]any {
+	e := item.AppEntitlement
+	return map[string]any{
+		"id":           e.ID,
+		"app_id":       e.AppID,
+		"display_name": e.DisplayName,
+		"description":  e.Description,
+		"slug":         e.Slug,
+		"grant_count":  int64(e.GrantCount),
+		"purpose":      e.Purpose,
+		"deleted_at":   nilIfEmpty(e.DeletedAt),
+	}
+}
+
 var entitlementsListCmd = &cobra.Command{
 	Use:   "list",
 	Short: "Search and list application entitlements (NDJSON output)",
@@ -51,34 +82,15 @@ var entitlementsListCmd = &cobra.Command{
 			}
 
 			var resp struct {
-				List []struct {
-					AppEntitlement struct {
-						ID          string `json:"id"`
-						AppID       string `json:"appId"`
-						DisplayName string `json:"displayName"`
-						Description string `json:"description"`
-						Slug        string `json:"slug"`
-						GrantCount  string `json:"grantCount"`
-						Purpose     string `json:"purpose"`
-					} `json:"appEntitlement"`
-				} `json:"list"`
-				NextPageToken string `json:"nextPageToken"`
+				List          []entitlementListItem `json:"list"`
+				NextPageToken string                `json:"nextPageToken"`
 			}
 			if err := json.Unmarshal(data, &resp); err != nil {
 				return fmt.Errorf("failed to parse response: %w", err)
 			}
 
 			for _, item := range resp.List {
-				e := item.AppEntitlement
-				_ = enc.Encode(map[string]string{
-					"id":           e.ID,
-					"app_id":       e.AppID,
-					"display_name": e.DisplayName,
-					"description":  e.Description,
-					"slug":         e.Slug,
-					"grant_count":  e.GrantCount,
-					"purpose":      e.Purpose,
-				})
+				_ = enc.Encode(entitlementRow(item))
 				emitted++
 				if limitReached(emitted, limit) {
 					return nil

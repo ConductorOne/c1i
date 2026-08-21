@@ -115,6 +115,17 @@ func (f *flexInt64) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
+// nilIfEmpty converts an empty string to untyped nil so an absent value
+// round-trips as JSON null, not "" — "" is truthy in jq, so `jq
+// 'select(.field)'` would otherwise match every row. See cmd/policies.go's
+// policyRow for the convention this codifies.
+func nilIfEmpty(s string) any {
+	if s == "" {
+		return nil
+	}
+	return s
+}
+
 // serverView is the subset of MCPServerView we surface in NDJSON list rows.
 // The full object (with all read-only *_configured booleans and OAuth2
 // details) is available via `get` / `--fields` on the pretty-JSON commands.

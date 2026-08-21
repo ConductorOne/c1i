@@ -44,6 +44,33 @@ func uniqueFunctionIDs(steps []automationStep) []string {
 	return ids
 }
 
+// automationListItem is one row of GET /api/v1/automations.
+type automationListItem struct {
+	ID                 string           `json:"id"`
+	DisplayName        string           `json:"displayName"`
+	Description        string           `json:"description"`
+	Enabled            bool             `json:"enabled"`
+	LastExecutedAt     string           `json:"lastExecutedAt"`
+	PrimaryTriggerType string           `json:"primaryTriggerType"`
+	IsDraft            bool             `json:"isDraft"`
+	AutomationSteps    []automationStep `json:"automationSteps"`
+}
+
+// automationRow flattens an automationListItem into the NDJSON output row.
+// last_executed_at is nil, not "", for an automation that has never run.
+func automationRow(a automationListItem) map[string]any {
+	return map[string]any{
+		"id":                   a.ID,
+		"display_name":         a.DisplayName,
+		"description":          a.Description,
+		"enabled":              a.Enabled,
+		"last_executed_at":     nilIfEmpty(a.LastExecutedAt),
+		"primary_trigger_type": a.PrimaryTriggerType,
+		"is_draft":             a.IsDraft,
+		"function_ids":         uniqueFunctionIDs(a.AutomationSteps),
+	}
+}
+
 var automationsListCmd = &cobra.Command{
 	Use:   "list",
 	Short: "List automations (NDJSON output)",
@@ -92,17 +119,8 @@ var automationsListCmd = &cobra.Command{
 			}
 
 			var resp struct {
-				List []struct {
-					ID                 string           `json:"id"`
-					DisplayName        string           `json:"displayName"`
-					Description        string           `json:"description"`
-					Enabled            bool             `json:"enabled"`
-					LastExecutedAt     string           `json:"lastExecutedAt"`
-					PrimaryTriggerType string           `json:"primaryTriggerType"`
-					IsDraft            bool             `json:"isDraft"`
-					AutomationSteps    []automationStep `json:"automationSteps"`
-				} `json:"list"`
-				NextPageToken string `json:"nextPageToken"`
+				List          []automationListItem `json:"list"`
+				NextPageToken string               `json:"nextPageToken"`
 			}
 			if err := json.Unmarshal(data, &resp); err != nil {
 				return fmt.Errorf("failed to parse response: %w", err)
@@ -116,16 +134,7 @@ var automationsListCmd = &cobra.Command{
 					continue
 				}
 
-				_ = enc.Encode(map[string]any{
-					"id":                   a.ID,
-					"display_name":         a.DisplayName,
-					"description":          a.Description,
-					"enabled":              a.Enabled,
-					"last_executed_at":     a.LastExecutedAt,
-					"primary_trigger_type": a.PrimaryTriggerType,
-					"is_draft":             a.IsDraft,
-					"function_ids":         uniqueFunctionIDs(a.AutomationSteps),
-				})
+				_ = enc.Encode(automationRow(a))
 				emitted++
 				if limitReached(emitted, limit) {
 					return nil

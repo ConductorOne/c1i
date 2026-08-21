@@ -85,6 +85,7 @@ type toolsetView struct {
 	Description      string `json:"description"`
 	AppEntitlementID string `json:"appEntitlementId"`
 	ToolCount        int32  `json:"toolCount"`
+	DeletedAt        string `json:"deletedAt"`
 }
 
 func toolsetRow(t toolsetView) map[string]any {
@@ -96,6 +97,7 @@ func toolsetRow(t toolsetView) map[string]any {
 		"description":        t.Description,
 		"app_entitlement_id": t.AppEntitlementID,
 		"tool_count":         int64(t.ToolCount),
+		"deleted_at":         nilIfEmpty(t.DeletedAt),
 	}
 }
 

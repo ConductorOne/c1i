@@ -9,6 +9,32 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// connectorListItem is one row of GET /api/v1/apps/{appId}/connectors.
+type connectorListItem struct {
+	Connector struct {
+		ID          string `json:"id"`
+		AppID       string `json:"appId"`
+		DisplayName string `json:"displayName"`
+		Status      struct {
+			Status string `json:"status"`
+		} `json:"status"`
+		DeletedAt string `json:"deletedAt"`
+	} `json:"connector"`
+}
+
+// connectorRow flattens a connectorListItem into the NDJSON output row.
+// deleted_at is nil, not "", on a live connector.
+func connectorRow(item connectorListItem) map[string]any {
+	conn := item.Connector
+	return map[string]any{
+		"id":           conn.ID,
+		"app_id":       conn.AppID,
+		"display_name": conn.DisplayName,
+		"status":       conn.Status.Status,
+		"deleted_at":   nilIfEmpty(conn.DeletedAt),
+	}
+}
+
 var connectorsListCmd = &cobra.Command{
 	Use:   "list",
 	Short: "List connectors for an application (NDJSON output)",
@@ -51,30 +77,15 @@ var connectorsListCmd = &cobra.Command{
 			}
 
 			var resp struct {
-				List []struct {
-					Connector struct {
-						ID          string `json:"id"`
-						AppID       string `json:"appId"`
-						DisplayName string `json:"displayName"`
-						Status      struct {
-							Status string `json:"status"`
-						} `json:"status"`
-					} `json:"connector"`
-				} `json:"list"`
-				NextPageToken string `json:"nextPageToken"`
+				List          []connectorListItem `json:"list"`
+				NextPageToken string              `json:"nextPageToken"`
 			}
 			if err := json.Unmarshal(data, &resp); err != nil {
 				return fmt.Errorf("failed to parse response: %w", err)
 			}
 
 			for _, item := range resp.List {
-				conn := item.Connector
-				_ = enc.Encode(map[string]string{
-					"id":           conn.ID,
-					"app_id":       conn.AppID,
-					"display_name": conn.DisplayName,
-					"status":       conn.Status.Status,
-				})
+				_ = enc.Encode(connectorRow(item))
 				emitted++
 				if limitReached(emitted, limit) {
 					return nil
