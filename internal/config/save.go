@@ -18,7 +18,7 @@ func SaveToConfigFile(key, value string) error {
 	path := filepath.Join(home, ".c1i.yaml")
 
 	data := make(map[string]any)
-	if existing, err := os.ReadFile(path); err == nil {
+	if existing, err := os.ReadFile(path); err == nil { // #nosec G304 -- path is fixed (~/.c1i.yaml), not caller input
 		_ = yaml.Unmarshal(existing, &data)
 	}
 

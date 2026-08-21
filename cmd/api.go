@@ -79,7 +79,7 @@ var apiCmd = &cobra.Command{
 			if bodyFile == "-" {
 				raw, err = io.ReadAll(cmd.InOrStdin())
 			} else {
-				raw, err = os.ReadFile(bodyFile)
+				raw, err = os.ReadFile(bodyFile) // #nosec G304 -- user-supplied --body-file path is intentional
 			}
 			if err != nil {
 				return fmt.Errorf("reading --body-file: %w", err)

@@ -15,6 +15,7 @@ import (
 // wherever the command ran, which is usually here.
 var allowedRootFiles = map[string]bool{
 	".gitignore":              true,
+	".gitleaksignore":         true,
 	".golangci.yml":           true,
 	".goreleaser.yaml":        true,
 	"CHANGELOG.md":            true,

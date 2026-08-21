@@ -187,9 +187,9 @@ func storeAndVerify(cmd *cobra.Command, baseURL, clientID, clientSecret string) 
 func openBrowser(url string) error {
 	switch runtime.GOOS {
 	case "darwin":
-		return exec.Command("open", url).Start()
+		return exec.Command("open", url).Start() // #nosec G204 -- no shell is invoked; opening the login URL is the point
 	case "linux":
-		return exec.Command("xdg-open", url).Start()
+		return exec.Command("xdg-open", url).Start() // #nosec G204 -- no shell is invoked; opening the login URL is the point
 	default:
 		return nil
 	}

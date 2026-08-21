@@ -74,7 +74,7 @@ func readJSONBytes(cmd *cobra.Command, path string) ([]byte, error) {
 	if path == "-" {
 		return io.ReadAll(cmd.InOrStdin())
 	}
-	return os.ReadFile(path) //nolint:gosec // user-supplied file path is intentional
+	return os.ReadFile(path) // #nosec G304 -- user-supplied --*-file path is intentional
 }
 
 // readJSONArrayFile reads a JSON array from path (file or "-" for stdin).
