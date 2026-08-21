@@ -36,6 +36,19 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- **BREAKING — `mcp servers search` no longer reports `tool_count: 0` when
+  `--tool-state` is omitted.** The API only computes a per-server tool count
+  when the request carries a `tool_state` filter; a filterless request never
+  runs the count and leaves the field at its unset zero value. The CLI was
+  surfacing that unset zero as `tool_count: 0`, indistinguishable from a
+  server that genuinely has none — live-verified on a server with 729 tools
+  (47 approved, 664 pending, 18 removed) that reported `tool_count: 0` by
+  default and the correct `47` with `--tool-state approved`. `tool_count` is
+  now omitted entirely unless `--tool-state` is passed; a `jq 'select(.tool_count
+  == 0)'` pipeline no longer matches every filterless row regardless of how
+  many tools a server actually has. Passing `--tool-state` is unaffected,
+  including a genuine 0 for a state with no matching tools.
+
 - **BREAKING — no `--url`, `C1I_URL`, or `~/.c1i.yaml` at all now exits `2`
   (usage), not `1` (generic).** A missing URL is a missing required argument,
   the same class of problem `requireNonEmpty` already maps to `2` for a

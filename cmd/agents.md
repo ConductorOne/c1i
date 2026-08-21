@@ -170,6 +170,10 @@ Two things are irreversible in ways their `--help` doesn't make obvious:
   on `(app_id, id)` together, never `id` alone.
 - `mcp servers test-connection` returns `toolCount` as a JSON string, not a
   number. The `tool_count` in NDJSON list rows is a real number.
+- `mcp servers search` only includes `tool_count` when you pass
+  `--tool-state`; the API doesn't compute a count without a state filter, so
+  a filterless search omits the key rather than showing a 0 that would look
+  identical to a server with no tools.
 
 ## Carry forward
 

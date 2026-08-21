@@ -1,11 +1,17 @@
 package cmd
 
 import (
+	"bytes"
+	"context"
 	"encoding/json"
+	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"reflect"
 	"strings"
 	"testing"
 
+	"github.com/ConductorOne/c1i/internal/client"
 	"github.com/spf13/cobra"
 )
 
@@ -55,7 +61,8 @@ func TestServerRowAndCount(t *testing.T) {
 			t.Errorf("row[%q] = %v, want %q", k, row[k], w)
 		}
 	}
-	countRow := serverCountRow(v, 7)
+	seven := int64(7)
+	countRow := serverCountRow(v, &seven)
 	// tool_count must be a real JSON number (int64(7)), not the string "7" —
 	// otherwise a `jq '.tool_count > 5'` pipeline does a string comparison
 	// instead of a numeric one.
@@ -326,11 +333,146 @@ func TestUpdateCredentialsMaskFromFlags(t *testing.T) {
 // TestServerCountRowLastCalled pins that last_called_at appears only when the
 // view carries it, so search rows don't show a misleading always-empty column.
 func TestServerCountRowLastCalled(t *testing.T) {
-	if _, ok := serverCountRow(serverView{}, 3)["last_called_at"]; ok {
+	three := int64(3)
+	if _, ok := serverCountRow(serverView{}, &three)["last_called_at"]; ok {
 		t.Error("last_called_at should be absent when unset")
 	}
-	row := serverCountRow(serverView{LastCalledAt: "2026-07-14T00:00:00Z"}, 3)
+	row := serverCountRow(serverView{LastCalledAt: "2026-07-14T00:00:00Z"}, &three)
 	if row["last_called_at"] != "2026-07-14T00:00:00Z" {
 		t.Errorf("last_called_at = %q, want the timestamp", row["last_called_at"])
+	}
+}
+
+// TestServerCountRowNilToolCountOmitsKey pins the fix for the silent-0 bug:
+// a nil toolCount (search called without --tool-state, where the API never
+// computes a count) must omit tool_count, not emit a misleading 0 that a
+// server with hundreds of tools would also produce.
+func TestServerCountRowNilToolCountOmitsKey(t *testing.T) {
+	if _, ok := serverCountRow(serverView{}, nil)["tool_count"]; ok {
+		t.Error("tool_count should be absent when toolCount is nil")
+	}
+	zero := int64(0)
+	row := serverCountRow(serverView{}, &zero)
+	v, ok := row["tool_count"]
+	if !ok {
+		t.Fatal("tool_count should be present (as a genuine 0) when toolCount is non-nil")
+	}
+	if v != int64(0) {
+		t.Errorf("tool_count = %v, want int64(0)", v)
+	}
+}
+
+// stubSearchClient points mcpServersSearchCmd at an httptest.Server, mirroring
+// list_pagination_test.go's runListPaginationCase but for a single one-off
+// request/response pair rather than a paginated table case.
+func stubSearchClient(t *testing.T, srv *httptest.Server) {
+	t.Helper()
+	orig := newListClient
+	newListClient = func(_ *cobra.Command, _ string) (*client.Client, error) {
+		return client.NewForTesting(srv.URL, srv.Client()), nil
+	}
+	t.Cleanup(func() { newListClient = orig })
+}
+
+func runSearchCmd(t *testing.T) string {
+	t.Helper()
+	var out bytes.Buffer
+	mcpServersSearchCmd.SetOut(&out)
+	mcpServersSearchCmd.SetContext(context.Background())
+	if err := mcpServersSearchCmd.RunE(mcpServersSearchCmd, nil); err != nil {
+		t.Fatalf("RunE: %v", err)
+	}
+	return out.String()
+}
+
+// TestMCPServersSearchOmitsToolCountWithoutFilter is the reproduction for a
+// silent-wrong-data bug: SearchWithToolCount (rpc_mcp_server.go, c1's API
+// server) only computes toolCount when the request carries a tool_state
+// filter — it skips CountToolsByState entirely when tool_state is
+// UNSPECIFIED, leaving toolCount at its unset zero value. Live-verified on
+// leet.conductor.one: a filterless search returned toolCount "0" for an Okta
+// server with 47 approved tools, while --tool-state approved returned "47"
+// for the same server. The CLI must not surface that unset zero as a real
+// count.
+func TestMCPServersSearchOmitsToolCountWithoutFilter(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		body := decodeJSONBody(t, r)
+		if _, ok := body["toolState"]; ok {
+			t.Errorf("request must not carry toolState when --tool-state is unset, got: %v", body)
+		}
+		_, _ = fmt.Fprint(w, `{"list":[{"mcpServer":{"connectorId":"c1","appId":"app1","displayName":"Okta"},"toolCount":"0"}],"nextPageToken":""}`)
+	}))
+	defer srv.Close()
+
+	resetCmdFlags(t, mcpServersSearchCmd)
+	stubSearchClient(t, srv)
+	t.Setenv("C1I_URL", "https://example.invalid")
+	_ = mcpServersSearchCmd.Flags().Set("app-id", "app1")
+
+	var row map[string]any
+	if err := json.Unmarshal([]byte(runSearchCmd(t)), &row); err != nil {
+		t.Fatalf("unmarshal row: %v", err)
+	}
+	if v, ok := row["tool_count"]; ok {
+		t.Errorf(`tool_count = %v, want the key omitted — the server never computed a count without --tool-state`, v)
+	}
+}
+
+// TestMCPServersSearchIncludesToolCountWithFilter proves --tool-state still
+// surfaces a real computed count as a JSON number, including a genuine 0 for
+// a state that (unlike the no-filter case) truly has no matching tools.
+func TestMCPServersSearchIncludesToolCountWithFilter(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		body := decodeJSONBody(t, r)
+		if body["toolState"] != "MCP_TOOL_STATE_APPROVED" {
+			t.Errorf(`toolState = %v, want "MCP_TOOL_STATE_APPROVED"`, body["toolState"])
+		}
+		_, _ = fmt.Fprint(w, `{"list":[{"mcpServer":{"connectorId":"c1","appId":"app1","displayName":"Okta"},"toolCount":"47"}],"nextPageToken":""}`)
+	}))
+	defer srv.Close()
+
+	resetCmdFlags(t, mcpServersSearchCmd)
+	stubSearchClient(t, srv)
+	t.Setenv("C1I_URL", "https://example.invalid")
+	_ = mcpServersSearchCmd.Flags().Set("app-id", "app1")
+	_ = mcpServersSearchCmd.Flags().Set("tool-state", "approved")
+
+	var row map[string]any
+	if err := json.Unmarshal([]byte(runSearchCmd(t)), &row); err != nil {
+		t.Fatalf("unmarshal row: %v", err)
+	}
+	if row["tool_count"] != float64(47) {
+		t.Errorf("tool_count = %v (%T), want 47", row["tool_count"], row["tool_count"])
+	}
+}
+
+// TestMCPServersSearchIncludesGenuineZeroToolCount proves a real zero (a
+// state that truly has no matching tools, e.g. "disabled") is still shown —
+// only the unset, uncomputed case is omitted, not every zero.
+func TestMCPServersSearchIncludesGenuineZeroToolCount(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = fmt.Fprint(w, `{"list":[{"mcpServer":{"connectorId":"c1","appId":"app1","displayName":"Okta"},"toolCount":"0"}],"nextPageToken":""}`)
+	}))
+	defer srv.Close()
+
+	resetCmdFlags(t, mcpServersSearchCmd)
+	stubSearchClient(t, srv)
+	t.Setenv("C1I_URL", "https://example.invalid")
+	_ = mcpServersSearchCmd.Flags().Set("app-id", "app1")
+	_ = mcpServersSearchCmd.Flags().Set("tool-state", "disabled")
+
+	var row map[string]any
+	if err := json.Unmarshal([]byte(runSearchCmd(t)), &row); err != nil {
+		t.Fatalf("unmarshal row: %v", err)
+	}
+	v, ok := row["tool_count"]
+	if !ok {
+		t.Fatal("tool_count key missing, want a present genuine 0")
+	}
+	if v != float64(0) {
+		t.Errorf("tool_count = %v, want 0", v)
 	}
 }
