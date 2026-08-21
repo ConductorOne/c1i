@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"reflect"
 	"sort"
 	"strconv"
@@ -15,6 +16,7 @@ import (
 	"testing"
 
 	"github.com/ConductorOne/c1i/internal/client"
+	"github.com/ConductorOne/c1i/internal/transport"
 )
 
 func TestExtractSSEResponse(t *testing.T) {
@@ -695,7 +697,11 @@ func TestHTTPErrorClassificationAcrossStatuses(t *testing.T) {
 			}))
 			defer srv.Close()
 
-			c := New(srv.URL, "test-token", srv.Client())
+			// WithMaxRetries(0): a 429 is otherwise retried by the shared
+			// transport (real, multi-second backoff) — the classification this
+			// test pins doesn't depend on retry count. See
+			// TestMaxRetriesAffectsGatewayRetries for that behavior itself.
+			c := New(srv.URL, "test-token", srv.Client(), transport.WithMaxRetries(0))
 			err := c.Initialize(context.Background())
 			if err == nil {
 				t.Fatalf("expected an error for status %d", status)
@@ -1011,5 +1017,91 @@ func TestOutboundRPCMethods(t *testing.T) {
 			"outbound method invalidates that premise for the changed method — "+
 			"revisit classifyGatewayError in cmd/mcp_gateway.go before updating "+
 			"this test's expected list.", got, want)
+	}
+}
+
+// TestMaxRetriesAffectsGatewayRetries proves --max-retries (threaded in via
+// transport.WithMaxRetries) demonstrably changes gateway request behavior: a
+// 429 (always retryable, regardless of method — see isRetryableStatus in
+// internal/transport) is retried up to the configured budget, and the same
+// server called with a budget of 0 sees exactly one request. Before this
+// package used internal/transport, New had no way to configure retries at
+// all, and every gateway call got exactly one attempt no matter what
+// --max-retries said.
+func TestMaxRetriesAffectsGatewayRetries(t *testing.T) {
+	t.Run("budget of 2 retries 3 times total", func(t *testing.T) {
+		var calls int
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			calls++
+			w.WriteHeader(http.StatusTooManyRequests)
+		}))
+		defer srv.Close()
+
+		c := New(srv.URL, "test-token", srv.Client(), transport.WithMaxRetries(2))
+		if err := c.Initialize(context.Background()); err == nil {
+			t.Fatal("expected an error: the server never answers with 2xx")
+		}
+		if calls != 3 { // initial + 2 retries
+			t.Errorf("calls = %d, want 3", calls)
+		}
+	})
+
+	t.Run("budget of 0 never retries", func(t *testing.T) {
+		var calls int
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			calls++
+			w.WriteHeader(http.StatusTooManyRequests)
+		}))
+		defer srv.Close()
+
+		c := New(srv.URL, "test-token", srv.Client(), transport.WithMaxRetries(0))
+		if err := c.Initialize(context.Background()); err == nil {
+			t.Fatal("expected an error: the server never answers with 2xx")
+		}
+		if calls != 1 {
+			t.Errorf("calls = %d, want 1 (--max-retries=0 must disable retries on the gateway path too)", calls)
+		}
+	})
+}
+
+// TestDebugTracesGatewayRequest proves transport.WithDebug(true), threaded
+// through New, traces a gateway request to stderr — the wiring
+// cmd/mcp_gateway.go's newGatewayClient relies on for `c1i mcp gateway
+// list-tools --debug` to emit anything at all. Before this package used
+// internal/transport, New had no debug option, and --debug was silently
+// inert on every gateway command.
+func TestDebugTracesGatewayRequest(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Mcp-Session-Id", "sess")
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = io.WriteString(w, `{"jsonrpc":"2.0","id":1,"result":{}}`)
+	}))
+	defer srv.Close()
+
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	orig := os.Stderr
+	os.Stderr = w
+	t.Cleanup(func() { os.Stderr = orig })
+
+	c := New(srv.URL, "test-token", srv.Client(), transport.WithDebug(true))
+	if err := c.Initialize(context.Background()); err != nil {
+		t.Fatalf("Initialize: %v", err)
+	}
+
+	os.Stderr = orig
+	_ = w.Close()
+	out, err := io.ReadAll(r)
+	if err != nil {
+		t.Fatal(err)
+	}
+	trace := string(out)
+	if !strings.Contains(trace, "> POST "+srv.URL) {
+		t.Errorf("stderr trace = %q, want a request line for the POST to the gateway endpoint", trace)
+	}
+	if !strings.Contains(trace, "200 OK") {
+		t.Errorf("stderr trace = %q, want a 200 response line", trace)
 	}
 }
