@@ -44,7 +44,7 @@ Skip to step 3 if you're registering an EXTERNAL server instead.
 Before registering an EXTERNAL server, confirm it's reachable with your
 credentials:
 
-    c1i mcp servers test-connection --url https://your-mcp-server.example/mcp \
+    c1i mcp servers test-connection --server-url https://your-mcp-server.example/mcp \
       --transport streamable-http --auth bearer-token --bearer-token "$TOKEN"
 
 The response reports "reachable" (bool), "toolCount" (string), and a
@@ -73,7 +73,7 @@ HOSTED:
 EXTERNAL:
 
     c1i mcp servers register --app-id "$APP_ID" --type external \
-      --display-name "My Server" --url https://your-mcp-server.example/mcp \
+      --display-name "My Server" --server-url https://your-mcp-server.example/mcp \
       --transport streamable-http --auth bearer-token --bearer-token "$TOKEN"
 
 The command prints the created server as pretty JSON — note its

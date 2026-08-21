@@ -33,6 +33,10 @@ config file's tenant silently on stdout — the stderr warning only appears on
 the call that already fell through, and a result piped straight into the
 next step won't show it at all if you aren't reading stderr.
 
+`--url` means the tenant on every command, including the `mcp servers`
+subcommands that also take an external server's address — that one is
+`--server-url`.
+
 Credentials resolve in this order: `C1I_CLIENT_ID` + `C1I_CLIENT_SECRET` env
 vars (read-only — c1i never writes them), the OS keyring, then a `0600` file
 used automatically where no keyring exists (headless Linux, CI, containers).

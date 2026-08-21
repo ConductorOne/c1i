@@ -116,8 +116,8 @@ func TestValidationGuardsExitUsage(t *testing.T) {
 			cmds: []*cobra.Command{mcpServersTestConnectionCmd},
 		},
 		{
-			name: "mcp servers test-connection: --url and --external-config-file mutually exclusive",
-			args: []string{"mcp", "servers", "test-connection", "--url", "https://x.example", "--external-config-file", "/nonexistent"},
+			name: "mcp servers test-connection: --server-url and --external-config-file mutually exclusive",
+			args: []string{"mcp", "servers", "test-connection", "--server-url", "https://x.example", "--external-config-file", "/nonexistent"},
 			cmds: []*cobra.Command{mcpServersTestConnectionCmd},
 		},
 		{

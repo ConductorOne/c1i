@@ -169,21 +169,21 @@ func buildHostedConfig(cmd *cobra.Command) (map[string]any, error) {
 }
 
 // buildExternalConfig assembles the externalConfig object from
-// --external-config-file (verbatim) or from the convenience flags (--url,
+// --external-config-file (verbatim) or from the convenience flags (--server-url,
 // --transport, auth). The two are mutually exclusive.
 func buildExternalConfig(cmd *cobra.Command) (map[string]any, error) {
 	file, _ := cmd.Flags().GetString("external-config-file")
-	usingFlags := cmd.Flags().Changed("url") || cmd.Flags().Changed("transport") ||
+	usingFlags := cmd.Flags().Changed("server-url") || cmd.Flags().Changed("transport") ||
 		sharedAuthFlagsChanged(cmd)
 	if file != "" {
 		if usingFlags {
-			return nil, &usageError{fmt.Errorf("--external-config-file is mutually exclusive with --url/--transport and the auth flags (--auth/--bearer-token/--token-sharing/…)")}
+			return nil, &usageError{fmt.Errorf("--external-config-file is mutually exclusive with --server-url/--transport and the auth flags (--auth/--bearer-token/--token-sharing/…)")}
 		}
 		return readConfigFile(cmd, file)
 	}
 
 	cfg := map[string]any{}
-	if url, _ := cmd.Flags().GetString("url"); url != "" {
+	if url, _ := cmd.Flags().GetString("server-url"); url != "" {
 		cfg["url"] = url
 	}
 	if transport, _ := cmd.Flags().GetString("transport"); transport != "" {

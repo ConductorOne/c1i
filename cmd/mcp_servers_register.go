@@ -15,7 +15,7 @@ var mcpServersRegisterCmd = &cobra.Command{
 
 HOSTED servers run inside C1 from a catalog impl — browse
 "c1i mcp servers catalog list" and pass the entry's id via --catalog-id.
-EXTERNAL servers point at a third-party MCP URL via --url.
+EXTERNAL servers point at a third-party MCP URL via --server-url.
 
 Auth (convenience flags cover the simple methods):
   --auth none
@@ -74,7 +74,7 @@ requires --app-id. Approve discovered tools afterward with
 		body, err := buildRegisterBody(cmd)
 		if err != nil {
 			// buildRegisterBody only fails on bad input (invalid --type,
-			// missing --catalog-id/--url, unreadable/invalid config file), so
+			// missing --catalog-id/--server-url, unreadable/invalid config file), so
 			// map these to the usage exit code (2) like the flag checks above.
 			return &usageError{err}
 		}
@@ -142,7 +142,7 @@ func buildRegisterBody(cmd *cobra.Command) (map[string]any, error) {
 		}
 		if !cmd.Flags().Changed("external-config-file") {
 			if _, ok := cfg["url"]; !ok {
-				return nil, fmt.Errorf("--url is required for --type external (or pass --external-config-file)")
+				return nil, fmt.Errorf("--server-url is required for --type external (or pass --external-config-file)")
 			}
 		}
 		body["externalConfig"] = cfg
@@ -167,7 +167,7 @@ func init() {
 	mcpServersRegisterCmd.Flags().StringSlice("config-field", nil, "Extra config field key=value (HOSTED, repeatable)")
 	mcpServersRegisterCmd.Flags().String("hosted-config-file", "", "Full hostedConfig JSON (file or \"-\" for stdin)")
 	// EXTERNAL config
-	mcpServersRegisterCmd.Flags().String("url", "", "External MCP server URL (EXTERNAL)")
+	mcpServersRegisterCmd.Flags().String("server-url", "", "External MCP server URL (EXTERNAL)")
 	mcpServersRegisterCmd.Flags().String("transport", "", "Transport: streamable-http or sse (EXTERNAL)")
 	mcpServersRegisterCmd.Flags().String("external-config-file", "", "Full externalConfig JSON (file or \"-\" for stdin)")
 	// Config-template generator (no auth / no network)

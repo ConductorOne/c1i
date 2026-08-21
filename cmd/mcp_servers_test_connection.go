@@ -14,7 +14,7 @@ credentials. Returns reachable (did MCP initialize + tools/list both succeed),
 toolCount (string), and a sanitized failureReason.
 
 Two modes:
-  create — supply the config to probe: --url [--transport] [auth flags], or
+  create — supply the config to probe: --server-url [--transport] [auth flags], or
            --external-config-file for full-fidelity config.
   edit   — probe an existing external server: <connector-id> + --app-id, with
            any changed fields named by --update-mask (omit for a stored-config
@@ -53,7 +53,7 @@ supported for external MCP servers").`,
 
 		// External config is required in create mode; in edit mode it carries
 		// only the changed fields (named by --update-mask) and may be omitted.
-		hasConfigInput := cmd.Flags().Changed("url") || cmd.Flags().Changed("transport") ||
+		hasConfigInput := cmd.Flags().Changed("server-url") || cmd.Flags().Changed("transport") ||
 			cmd.Flags().Changed("auth") || cmd.Flags().Changed("external-config-file")
 		if hasConfigInput || !editMode {
 			ext, err := buildExternalConfig(cmd)
@@ -63,7 +63,7 @@ supported for external MCP servers").`,
 			if len(ext) > 0 {
 				body["externalConfig"] = ext
 			} else if !editMode {
-				return &usageError{fmt.Errorf("provide the config to probe: --url (with optional --transport/--auth) or --external-config-file, or pass <connector-id> and --app-id to probe an existing server")}
+				return &usageError{fmt.Errorf("provide the config to probe: --server-url (with optional --transport/--auth) or --external-config-file, or pass <connector-id> and --app-id to probe an existing server")}
 			}
 		}
 
@@ -82,7 +82,7 @@ supported for external MCP servers").`,
 
 func init() {
 	mcpServersTestConnectionCmd.Flags().String("app-id", "", "Application ID of an existing external server (edit mode)")
-	mcpServersTestConnectionCmd.Flags().String("url", "", "External MCP server URL (create mode)")
+	mcpServersTestConnectionCmd.Flags().String("server-url", "", "External MCP server URL (create mode)")
 	mcpServersTestConnectionCmd.Flags().String("transport", "", "Transport: streamable-http or sse")
 	mcpServersTestConnectionCmd.Flags().String("external-config-file", "", "Full externalConfig JSON (file or \"-\" for stdin)")
 	mcpServersTestConnectionCmd.Flags().String("update-mask", "", "Comma-separated changed externalConfig paths (edit mode)")

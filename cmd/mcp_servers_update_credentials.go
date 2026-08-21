@@ -45,7 +45,7 @@ Supply the new config with the same convenience auth flags as register, or the
 full --hosted-config-file / --external-config-file JSON.
 
 The update_mask is derived from the fields you supply — e.g. --auth bearer-token
-masks "bearerToken"; --url masks "url". Pass --update-mask with comma-separated
+masks "bearerToken"; --server-url masks "url". Pass --update-mask with comma-separated
 proto field paths to override. Note the mask uses the auth oneof case name
 ("bearerToken", "customHeader", "basicAuth", "oauth2", "none"), not the
 "hostedConfig"/"externalConfig" wrapper.`,
@@ -90,7 +90,7 @@ proto field paths to override. Note the mask uses the auth oneof case name
 		// the backend nothing to apply. Require the caller to supply what to set.
 		// An explicit --update-mask is trusted as intent.
 		if len(cfg) == 0 && mask == "" {
-			return &usageError{fmt.Errorf("nothing to update: supply the new config via the auth flags (--auth/--bearer-token/…), --config-field, --url, or --%s-config-file", strings.ToLower(typ))}
+			return &usageError{fmt.Errorf("nothing to update: supply the new config via the auth flags (--auth/--bearer-token/…), --config-field, --server-url, or --%s-config-file", strings.ToLower(typ))}
 		}
 		// Derive the mask from the fields the caller set, BEFORE the catalog-id
 		// injection below. The update_mask must name the proto paths inside the
@@ -153,7 +153,7 @@ func init() {
 	mcpServersUpdateCredentialsCmd.Flags().StringSlice("config-field", nil, "Extra config field key=value (HOSTED, repeatable)")
 	mcpServersUpdateCredentialsCmd.Flags().String("hosted-config-file", "", "Full hostedConfig JSON (file or \"-\" for stdin)")
 	// EXTERNAL config
-	mcpServersUpdateCredentialsCmd.Flags().String("url", "", "External MCP server URL (EXTERNAL)")
+	mcpServersUpdateCredentialsCmd.Flags().String("server-url", "", "External MCP server URL (EXTERNAL)")
 	mcpServersUpdateCredentialsCmd.Flags().String("transport", "", "Transport: streamable-http or sse (EXTERNAL)")
 	mcpServersUpdateCredentialsCmd.Flags().String("external-config-file", "", "Full externalConfig JSON (file or \"-\" for stdin)")
 	// Shared auth

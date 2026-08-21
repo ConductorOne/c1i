@@ -191,12 +191,12 @@ c1i mcp servers list               --app-id <id> [--page-size N] [--limit N]
 c1i mcp servers get                <connector-id> --app-id <id>
 c1i mcp servers search             --app-id <id> [--query <text>] [--tool-state approved|pending|disabled|removed] [--include-last-called-at] [--limit N]
 c1i mcp servers register           --app-id <id> --type hosted   --display-name <name> --catalog-id <cid> [--auth ... ] [--config-field k=v ...]
-c1i mcp servers register           --app-id <id> --type external --display-name <name> --url <url> [--transport streamable-http|sse] [--auth ...]
+c1i mcp servers register           --app-id <id> --type external --display-name <name> --server-url <url> [--transport streamable-http|sse] [--auth ...]
 c1i mcp servers update             <connector-id> --app-id <id> [--display-name <name>] [--description <text>] [--data-sensitivity ...] [--tool-prefix <p>] [--require-tool-approval]
 c1i mcp servers update-credentials <connector-id> --app-id <id> --type hosted|external [--auth ...] [--update-mask <paths>]
 c1i mcp servers delete             <connector-id> --app-id <id>
 c1i mcp servers resync-tools       <connector-id> --app-id <id>   # EXTERNAL only; 400 on HOSTED
-c1i mcp servers test-connection    (--url <url> [--transport ...] [--auth ...] | <connector-id> --app-id <id>)   # EXTERNAL only; 400 on HOSTED
+c1i mcp servers test-connection    (--server-url <url> [--transport ...] [--auth ...] | <connector-id> --app-id <id>)   # EXTERNAL only; 400 on HOSTED
 c1i mcp servers discover-oidc      --issuer-url <url>
 c1i mcp servers catalog list       [--query <text>] [--page-size N] [--limit N]
 c1i mcp servers catalog get        <catalog-id>
