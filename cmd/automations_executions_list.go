@@ -9,6 +9,32 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// executionListItem is one row of GET /api/v1/automation_executions.
+type executionListItem struct {
+	ID                   string `json:"id"`
+	AutomationTemplateID string `json:"automationTemplateId"`
+	State                string `json:"state"`
+	CreatedAt            string `json:"createdAt"`
+	CompletedAt          string `json:"completedAt"`
+	Duration             string `json:"duration"`
+	IsDraft              bool   `json:"isDraft"`
+}
+
+// executionRow flattens an executionListItem into the NDJSON output row.
+// completed_at is nil, not "", for a non-terminal execution (pending,
+// creating, waiting).
+func executionRow(e executionListItem) map[string]any {
+	return map[string]any{
+		"id":                     e.ID,
+		"automation_template_id": e.AutomationTemplateID,
+		"state":                  e.State,
+		"created_at":             e.CreatedAt,
+		"completed_at":           nilIfEmpty(e.CompletedAt),
+		"duration":               e.Duration,
+		"is_draft":               e.IsDraft,
+	}
+}
+
 var automationsExecutionsListCmd = &cobra.Command{
 	Use:   "list",
 	Short: "List automation executions (NDJSON output)",
@@ -64,16 +90,8 @@ the server returns. Combine with --limit to bound the work.`,
 			}
 
 			var resp struct {
-				AutomationExecutions []struct {
-					ID                   string `json:"id"`
-					AutomationTemplateID string `json:"automationTemplateId"`
-					State                string `json:"state"`
-					CreatedAt            string `json:"createdAt"`
-					CompletedAt          string `json:"completedAt"`
-					Duration             string `json:"duration"`
-					IsDraft              bool   `json:"isDraft"`
-				} `json:"automationExecutions"`
-				NextPageToken string `json:"nextPageToken"`
+				AutomationExecutions []executionListItem `json:"automationExecutions"`
+				NextPageToken        string              `json:"nextPageToken"`
 			}
 			if err := json.Unmarshal(data, &resp); err != nil {
 				return fmt.Errorf("failed to parse response: %w", err)
@@ -86,15 +104,7 @@ the server returns. Combine with --limit to bound the work.`,
 				if templateID != "" && e.AutomationTemplateID != templateID {
 					continue
 				}
-				_ = enc.Encode(map[string]any{
-					"id":                     e.ID,
-					"automation_template_id": e.AutomationTemplateID,
-					"state":                  e.State,
-					"created_at":             e.CreatedAt,
-					"completed_at":           e.CompletedAt,
-					"duration":               e.Duration,
-					"is_draft":               e.IsDraft,
-				})
+				_ = enc.Encode(executionRow(e))
 				emitted++
 				if limitReached(emitted, limit) {
 					return nil
