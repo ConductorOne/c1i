@@ -394,9 +394,10 @@ func checkFieldsMatchedAnyRow(cmd *cobra.Command, _ []string) error {
 // commands use it in place of a bare json.Encoder so field selection is
 // consistent across every list surface.
 type emitter struct {
-	enc   *json.Encoder
-	paths [][]string
-	state *fieldsMatchState
+	enc     *json.Encoder
+	paths   [][]string
+	state   *fieldsMatchState
+	written int
 }
 
 // newEmitter builds an emitter writing to cmd's stdout, reading the
@@ -416,23 +417,53 @@ func newEmitter(cmd *cobra.Command) *emitter {
 // name and signature match json.Encoder.Encode so an emitter is a drop-in
 // replacement for the bare encoder list commands used before.
 //
-// A row's projection is written out unconditionally — even when it projects
-// to nothing at all ("{}") — because streaming can't know in advance whether
-// a later row (possibly on a later page under --paginate) will match; see
-// checkFieldsMatchedAnyRow for where the zero-match-in-the-whole-result case
-// is actually judged and turned into an error.
+// A row whose projection is empty ("{}") carries no information, so it is
+// skipped rather than written — this is decided per row, with no buffering,
+// so it's safe even under --paginate's unbounded result sets. Whether the
+// whole invocation ever matched anything is still tracked in e.state and
+// judged once at the end by checkFieldsMatchedAnyRow, which is what turns an
+// all-rows-empty result into the zero-match usage error; skipping the empty
+// row here only changes what gets printed, never that verdict.
 func (e *emitter) Encode(v any) error {
 	if len(e.paths) == 0 {
+		e.written++
 		return e.enc.Encode(v)
 	}
 	projected := projectValue(v, e.paths)
+	empty := projectionMatchedNothing(projected)
 	if e.state != nil {
 		e.state.sawRow = true
-		if !projectionMatchedNothing(projected) {
+		if !empty {
 			e.state.matched = true
 		}
 	}
+	if empty {
+		return nil
+	}
+	e.written++
 	return e.enc.Encode(projected)
+}
+
+// Written reports how many rows Encode has actually written to stdout so
+// far, as opposed to how many times it's been called. The two diverge once
+// --fields is set: a call whose projection is empty is skipped (see Encode
+// above), so it's scanned but not written. --limit must cap WRITTEN rows
+// (addLimitFlag's documented contract), so every list command's pagination
+// loop drives limitReached/effectivePageSize off this instead of a
+// separately incremented local counter — a local counter tracks calls, and
+// once calls and writes diverge, comparing --limit against calls can stop
+// pagination before a later page's real matches are ever reached.
+func (e *emitter) Written() int {
+	return e.written
+}
+
+// Filtered reports whether a --fields/C1I_FIELDS projection is active, i.e.
+// whether a fetched row might not become a written one (see Encode). List
+// commands must check this (alongside any of their own client-side filters)
+// before calling effectivePageSize — see that function's doc for why feeding
+// it a progress count while rows can be dropped collapses the page size.
+func (e *emitter) Filtered() bool {
+	return len(e.paths) > 0
 }
 
 // writeObject pretty-prints a single JSON response to stdout, applying --fields

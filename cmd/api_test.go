@@ -434,12 +434,13 @@ func twoPageFixtureServer(page1Item, page2Item string) *httptest.Server {
 }
 
 // TestAPIPaginateFieldsZeroMatchAcrossAllPagesErrors is the `api --paginate`
-// half of the fix: a --fields spec that matches nothing in EITHER
-// page's row must still write both pages' rows (streaming, never buffered —
-// --paginate exists precisely to walk unbounded results without holding them
-// all in memory) and then fail with exit 2, not silently exit 0 having
-// printed two "{}" rows (the pre-fix behavior, confirmed live against
-// a live tenant before this fix).
+// half of the fix: a --fields spec that matches nothing in EITHER page's row
+// projects every row to "{}", so both are skipped (streaming, never
+// buffered — --paginate exists precisely to walk unbounded results without
+// holding them all in memory) and stdout ends up completely empty, then the
+// command fails with exit 2 — not the pre-fix behavior of silently exiting 0
+// having printed two "{}" rows (confirmed live against a live tenant before
+// this fix).
 func TestAPIPaginateFieldsZeroMatchAcrossAllPagesErrors(t *testing.T) {
 	srv := twoPageFixtureServer(`{"name":"page1-item"}`, `{"name":"page2-item"}`)
 	defer srv.Close()
@@ -474,17 +475,16 @@ func TestAPIPaginateFieldsZeroMatchAcrossAllPagesErrors(t *testing.T) {
 	if !strings.Contains(err.Error(), "matched no keys in any row of the response") {
 		t.Errorf("error = %q, want the list-specific zero-match message", err.Error())
 	}
-	gotLines := strings.Split(strings.TrimSpace(out.String()), "\n")
-	wantLines := []string{`{}`, `{}`}
-	if !reflect.DeepEqual(gotLines, wantLines) {
-		t.Errorf("output lines = %v, want %v (both pages' rows must still be written before the error)", gotLines, wantLines)
+	if out.Len() != 0 {
+		t.Errorf("output = %q, want completely empty stdout (both pages' rows projected to {} and must be skipped)", out.String())
 	}
 }
 
 // TestAPIPaginateFieldsPartialMatchAcrossPagesSucceeds is the sparse-data
 // twin, split across pages instead of rows within one page: page 1's item
 // lacks "id", page 2's item has it. A match anywhere in the whole paginated
-// result — not just the first page — must be enough for exit 0.
+// result — not just the first page — must be enough for exit 0, and page 1's
+// empty projection must be skipped rather than written as "{}".
 func TestAPIPaginateFieldsPartialMatchAcrossPagesSucceeds(t *testing.T) {
 	srv := twoPageFixtureServer(`{"name":"page1-item"}`, `{"id":"only-on-page-2"}`)
 	defer srv.Close()
@@ -509,9 +509,72 @@ func TestAPIPaginateFieldsPartialMatchAcrossPagesSucceeds(t *testing.T) {
 		t.Fatalf("expected exit 0 (page 2 matched --fields), got error: %v; output: %s", err, out.String())
 	}
 	gotLines := strings.Split(strings.TrimSpace(out.String()), "\n")
-	wantLines := []string{`{}`, `{"id":"only-on-page-2"}`}
+	wantLines := []string{`{"id":"only-on-page-2"}`}
 	if !reflect.DeepEqual(gotLines, wantLines) {
-		t.Errorf("output lines = %v, want %v", gotLines, wantLines)
+		t.Errorf("output lines = %v, want %v (page 1's empty projection must be skipped, not written as {})", gotLines, wantLines)
+	}
+}
+
+// TestAPIPaginateLimitWithSparseFieldsContinuesPastFilteredPage catches a
+// regression the empty-row-skip fix (above) introduced: --limit is compared
+// against a plain per-item counter incremented every time enc.Encode is
+// CALLED, not every time it actually WRITES. Once Encode started silently
+// skipping empty-projection rows, "called" and "written" diverged — a
+// --limit that should count WRITTEN rows (addLimitFlag's documented
+// contract) was actually counting SCANNED rows, so a filtered-out row could
+// trip the limit and stop pagination before a real match on a later page
+// was ever reached.
+//
+// Page 1's item misses --fields entirely (projects to {}, skipped); page 2's
+// item matches. With --limit 1, the fix must still fetch page 2 and write
+// exactly one line, not stop after page 1's single scanned-but-unwritten
+// item.
+func TestAPIPaginateLimitWithSparseFieldsContinuesPastFilteredPage(t *testing.T) {
+	var requestCount int
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requestCount++
+		var body struct {
+			PageToken string `json:"pageToken"`
+		}
+		b, _ := io.ReadAll(r.Body)
+		_ = json.Unmarshal(b, &body)
+
+		w.Header().Set("Content-Type", "application/json")
+		if body.PageToken == "p2" {
+			_, _ = w.Write([]byte(`{"list":[{"id":"only-on-page-2"}],"nextPageToken":""}`))
+			return
+		}
+		_, _ = w.Write([]byte(`{"list":[{"name":"page1-item-no-id"}],"nextPageToken":"p2"}`))
+	}))
+	defer srv.Close()
+
+	resetAPICmdFlags(t)
+	stubNewAPIClient(t, srv)
+	t.Setenv("C1I_URL", srv.URL)
+	viper.Set("fields", "id")
+	t.Cleanup(func() { viper.Set("fields", "") })
+
+	var out bytes.Buffer
+	apiCmd.SetOut(&out)
+	apiCmd.SetErr(&out)
+	rootCmd.SetArgs([]string{
+		"api",
+		"--path", "/api/v1/search/things",
+		"--body", "{}",
+		"--paginate",
+		"--limit", "1",
+	})
+
+	if err := rootCmd.ExecuteContext(context.Background()); err != nil {
+		t.Fatalf("expected exit 0 (page 2's row matched --fields), got error: %v; output: %s", err, out.String())
+	}
+	if requestCount != 2 {
+		t.Fatalf("server received %d requests, want 2 (page 1's filtered-out row must not stop pagination before page 2 is fetched)", requestCount)
+	}
+	gotLines := strings.Split(strings.TrimSpace(out.String()), "\n")
+	wantLines := []string{`{"id":"only-on-page-2"}`}
+	if !reflect.DeepEqual(gotLines, wantLines) {
+		t.Errorf("output lines = %v, want %v (exactly --limit 1 WRITTEN row, not 1 scanned row)", gotLines, wantLines)
 	}
 }
 

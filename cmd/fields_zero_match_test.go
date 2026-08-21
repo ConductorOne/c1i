@@ -22,10 +22,12 @@ import (
 // a live tenant: `users list --fields totally.bogus.path`
 // printed two "{}" rows and exited 0 on unfixed main.
 //
-// The fix is: emit rows normally as they stream (never buffer — --paginate
-// commands fetch potentially-unbounded results), and judge the WHOLE result
-// once, after the command finishes successfully, via rootCmd's
-// PersistentPostRunE (checkFieldsMatchedAnyRow in cmd/fields.go). Error only
+// The fix is: a row whose projection is empty ("{}") carries no information,
+// so the emitter skips writing it — still streamed one row at a time, never
+// buffered (--paginate commands fetch potentially-unbounded results), just
+// not written when there's nothing in it. The zero-match verdict is still
+// judged once, after the command finishes successfully, via rootCmd's
+// PersistentPostRunE (checkFieldsMatchedAnyRow in cmd/fields.go): error only
 // when every row emitted for the entire invocation missed every requested
 // path; a genuinely empty result (zero rows) is left alone, since there's
 // nothing to judge a match against.
@@ -80,12 +82,15 @@ func newTestListTree(rows []any, rowErr error) (*cobra.Command, *bytes.Buffer) {
 // per row, or because it only looks at the first row — is worse than the bug
 // it's supposed to fix, since --fields/C1I_FIELDS is a session-wide spec
 // routinely applied across responses that don't all share every field.
+//
+// A row that projects to "{}" carries no information, so it must be SKIPPED
+// rather than written: only row 2's projection reaches stdout.
 func TestFieldsListSparseDataDoesNotError(t *testing.T) {
 	viper.Set("fields", "id")
 	t.Cleanup(func() { viper.Set("fields", "") })
 
 	root, buf := newTestListTree([]any{
-		map[string]any{"name": "no id on this row"}, // projects to {}
+		map[string]any{"name": "no id on this row"}, // projects to {}, skipped
 		map[string]any{"id": "1"},                   // projects to {"id":"1"}
 	}, nil)
 
@@ -93,9 +98,9 @@ func TestFieldsListSparseDataDoesNotError(t *testing.T) {
 		t.Fatalf("sparse data (field present on row 2, absent on row 1) must not error, got: %v (output: %s)", err, buf.String())
 	}
 	got := strings.Split(strings.TrimSpace(buf.String()), "\n")
-	want := []string{`{}`, `{"id":"1"}`}
+	want := []string{`{"id":"1"}`}
 	if !reflect.DeepEqual(got, want) {
-		t.Errorf("output lines = %v, want %v (both rows still written, exit 0)", got, want)
+		t.Errorf("output lines = %v, want %v (row 1's empty projection must be skipped, not written as {})", got, want)
 	}
 }
 
@@ -116,10 +121,13 @@ func TestFieldsListZeroRowsDoesNotError(t *testing.T) {
 }
 
 // TestFieldsListAllRowsMissErrors is the flip side of the sparse-data case:
-// when --fields matches nothing in ANY row across the whole result, the
-// command must still print every row (streaming, never buffered) and THEN
-// fail with a *usageError (exit 2), using a message distinguishable from the
-// single-object case ("...matched no keys in the response").
+// when --fields matches nothing in ANY row across the whole result, every
+// row's projection is empty and therefore skipped — stdout must be
+// completely empty — and the command must THEN fail with a *usageError
+// (exit 2), using a message distinguishable from the single-object case
+// ("...matched no keys in the response"). This is the core regression this
+// fix targets: a consumer piping stdout without checking the exit code must
+// never see N lines of "{}" and mistake them for real (if empty) rows.
 func TestFieldsListAllRowsMissErrors(t *testing.T) {
 	viper.Set("fields", "totally.bogus.path")
 	t.Cleanup(func() { viper.Set("fields", "") })
@@ -140,10 +148,8 @@ func TestFieldsListAllRowsMissErrors(t *testing.T) {
 	if !strings.Contains(err.Error(), "matched no keys in any row of the response") {
 		t.Errorf("error = %q, want the list-specific message (distinguishable from the single-object %q)", err.Error(), "matched no keys in the response")
 	}
-	got := strings.Split(strings.TrimSpace(buf.String()), "\n")
-	want := []string{`{}`, `{}`}
-	if !reflect.DeepEqual(got, want) {
-		t.Errorf("output lines = %v, want %v (rows must still be written before the error — streaming, not buffered)", got, want)
+	if buf.Len() != 0 {
+		t.Errorf("output = %q, want completely empty stdout (every row's projection was empty and must be skipped, not written as {})", buf.String())
 	}
 }
 

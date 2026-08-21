@@ -51,9 +51,11 @@ var appsListCmd = &cobra.Command{
 		limit := getIntFlag(cmd, "limit")
 
 		enc := newEmitter(cmd)
-		emitted := 0
-		for !limitReached(emitted, limit) {
-			pageSize := effectivePageSize(requestedPageSize, limit, emitted)
+		for !limitReached(enc.Written(), limit) {
+			pageSize := requestedPageSize
+			if !enc.Filtered() {
+				pageSize = effectivePageSize(requestedPageSize, limit, enc.Written())
+			}
 			params := map[string]string{
 				"page_size": strconv.Itoa(pageSize),
 			}
@@ -76,8 +78,7 @@ var appsListCmd = &cobra.Command{
 
 			for _, a := range resp.List {
 				_ = enc.Encode(appRow(a))
-				emitted++
-				if limitReached(emitted, limit) {
+				if limitReached(enc.Written(), limit) {
 					return nil
 				}
 			}

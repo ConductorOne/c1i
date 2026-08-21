@@ -111,6 +111,54 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   to the native types — and note that `jq -r` now prints `null` where it
   printed an empty line.
 
+- **BREAKING — a list row (or `api --paginate` item) whose `--fields`/
+  `C1I_FIELDS` projection matches nothing is no longer printed.** Each row was
+  projected independently as it streamed, so a bogus field name still wrote
+  one `{}` per row before the whole-result zero-match check (further down the
+  pipeline) turned it into exit `2` — a consumer piping stdout without
+  checking the exit code saw only syntactically valid, semantically empty
+  JSON and no signal anything was wrong; live-verified as 46 lines of `{}`
+  from `apps list --fields <typo>`, still exit `2`. A row that projects to
+  `{}` is now skipped instead of written; the zero-match exit `2` is
+  unchanged (stdout is simply empty when nothing matched anywhere), and a
+  field present on only some rows now prints only the rows where it's
+  actually present. A consumer counting output lines for a sparse `--fields`
+  spec will see fewer lines than before.
+
+  `--limit` now also counts rows actually **written**, not rows scanned, so
+  it composes correctly with a sparse `--fields`: previously a filtered-out
+  (skipped) row still counted against `--limit`, so `--limit N` combined
+  with a sparse field could stop pagination having written fewer than `N`
+  lines, or before a later page's real matches were ever fetched —
+  live-verified as `tasks list --fields outcome --limit 5` returning only 4
+  lines pre-fix, 5 post-fix. Combining `--limit` with a sparse `--fields`
+  may now fetch further pages than before, since more pages can be needed
+  to actually reach `limit` written rows; `--limit` alone, or `--fields`
+  alone, is unaffected.
+
+  The per-page request size stays at the requested `--page-size` throughout
+  such a scan; it no longer collapses toward `--limit` (as small as a
+  handful of rows per request instead of the intended page size) just
+  because matches are sparse — that collapse would have made the "fetch
+  more pages" tradeoff above far more expensive than it needs to be, turning
+  a few full-sized pages into many mostly-wasted small ones.
+
+  **Worst case, worth knowing plainly: a `--fields` spec that matches
+  nothing at all, combined with `--limit`, scans the collection to
+  completion before erroring** — there is no way to know "nothing ever
+  matched" short of exhausting it, and a typo is the ordinary way to reach
+  this case. Live-measured: `tasks list --fields <typo> --limit 2 --debug`
+  made 193 requests and scanned ~9,650 rows over ~41s before exiting `2`
+  on this tenant; on `entitlements list` (~35,000 rows here) that's
+  minutes. This is not a new failure mode `--fields` introduces — it's the
+  same rule `accounts list --unmapped-only` and `functions usage` already
+  have for their own client-side filtering (documented in `cmd/agents.md`):
+  a filter applied after the fetch can't bound the work when nothing
+  matches, no matter what `--limit` says. `--fields`/`--limit` now simply
+  joins that existing, documented behavior rather than being a special
+  case. No cap or first-page validation was added for this — the latter
+  would false-error on a legitimately sparse (but real) field.
+
 - **`functions source --out-dir` writes files `0600` instead of `0644`**, and
   the directory `0700` instead of `0755` — now including a pre-existing
   directory, not just one this command creates. Fetched function source is

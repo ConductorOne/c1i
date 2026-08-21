@@ -85,7 +85,10 @@ campaign ID from a URL is the access review `id` directly.
 
 ## Reading output
 
-- List commands emit NDJSON: one object per line. Pipe to `jq`.
+- List commands emit NDJSON: one object per line — but with `--fields`/
+  `C1I_FIELDS` set, a row whose projection matches nothing is skipped
+  entirely (never printed as `{}`), so the line count can be less than the
+  underlying result count. Pipe to `jq`.
 - Single-object reads emit pretty-printed JSON.
 - Mutation confirmations (create/update/delete) are never field-projected —
   `--fields`/`C1I_FIELDS` can't blank a success message.
@@ -164,6 +167,14 @@ Two things are irreversible in ways their `--help` doesn't make obvious:
   `callFunction.functionId`, same as `accounts list --unmapped-only` above.
   With `--page-token` a page can come back with zero rows while a matching
   automation exists on another page.
+- Same rule, worse case: a `--fields`/`C1I_FIELDS` spec that matches nothing
+  anywhere, combined with `--limit`, scans the whole collection before
+  erroring exit `2` — like `--unmapped-only` above, a post-fetch filter can't
+  bound the work when nothing has matched yet. A typo is the ordinary way to
+  hit this. Measured: `tasks list --fields <typo> --limit 2` made 193
+  requests over ~41s on a ~9,650-row tenant; a 35,000-row `entitlements list`
+  would take minutes. No cap exists for this on purpose — a first-page-only
+  check would false-error on a real field that's just sparse.
 - A task's `outcome` field is omitted while it's unspecified, not while the
   task is open — a task can be `TASK_STATE_OPEN` and already carry a real,
   non-UNSPECIFIED outcome (e.g. a provisioning failure mid-flow). Use

@@ -37,9 +37,11 @@ var accountsListCmd = &cobra.Command{
 		limit := getIntFlag(cmd, "limit")
 
 		enc := newEmitter(cmd)
-		emitted := 0
-		for !limitReached(emitted, limit) {
-			pageSize := effectivePageSize(requestedPageSize, limit, emitted)
+		for !limitReached(enc.Written(), limit) {
+			pageSize := requestedPageSize
+			if !enc.Filtered() {
+				pageSize = effectivePageSize(requestedPageSize, limit, enc.Written())
+			}
 			body := map[string]any{
 				"appId":    appID,
 				"pageSize": pageSize,
@@ -98,8 +100,7 @@ var accountsListCmd = &cobra.Command{
 					"app_user_type":    a.AppUserType,
 					"status":           a.Status.Status,
 				})
-				emitted++
-				if limitReached(emitted, limit) {
+				if limitReached(enc.Written(), limit) {
 					return nil
 				}
 			}
