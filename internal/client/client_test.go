@@ -118,6 +118,44 @@ func TestDoWrapsTokenErrorAsAuth(t *testing.T) {
 	}
 }
 
+// countingErrRoundTripper always fails like errRoundTripper, but counts every
+// RoundTrip call -- so a test can distinguish "retries were disabled" from
+// "the fail-fast wiring is actually in place", which a WithMaxRetries(0) test
+// (like TestDoWrapsTokenErrorAsAuth above) cannot: both look identical at
+// maxRetries=0.
+type countingErrRoundTripper struct {
+	err   error
+	calls *int
+}
+
+func (r countingErrRoundTripper) RoundTrip(*http.Request) (*http.Response, error) {
+	*r.calls++
+	return nil, r.err
+}
+
+// TestNewForTestingFailsFastOnTokenErrorDespiteRetryBudget proves
+// NewForTesting mirrors New's WithNonRetryable(isTokenError): a rejected
+// client_credentials grant must fail on the first attempt even when
+// WithMaxRetries leaves plenty of budget, not burn it re-minting a token that
+// will never succeed. Unlike TestDoWrapsTokenErrorAsAuth (WithMaxRetries(0),
+// which can't tell "fails fast" apart from "retries are just off"), this
+// pins the call count with a nonzero budget -- verified red (5 calls: 1 +
+// 4 retries) with transport.WithNonRetryable(isTokenError) removed from
+// NewForTesting, green (1 call) with it restored.
+func TestNewForTestingFailsFastOnTokenErrorDespiteRetryBudget(t *testing.T) {
+	var calls int
+	rt := countingErrRoundTripper{err: &tokensource.TokenError{StatusCode: 401}, calls: &calls}
+	c := NewForTesting("https://example.conductor.one", &http.Client{Transport: rt}, WithMaxRetries(4))
+	_, err := c.Get(context.Background(), "/api/v1/x", nil)
+	var authErr *AuthError
+	if !errors.As(err, &authErr) {
+		t.Fatalf("expected AuthError for token rejection, got %T: %v", err, err)
+	}
+	if calls != 1 {
+		t.Errorf("calls = %d, want 1 (a rejected client_credentials grant must fail fast, not retry with a 4-retry budget)", calls)
+	}
+}
+
 func TestDoNetworkErrorIsNotAuth(t *testing.T) {
 	c := NewForTesting("https://example.conductor.one", &http.Client{Transport: errRoundTripper{errors.New("dial tcp: connection refused")}}, WithMaxRetries(0))
 	_, err := c.Get(context.Background(), "/api/v1/x", nil)

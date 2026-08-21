@@ -196,6 +196,11 @@ func New(ctx context.Context, baseURL string, opts ...Option) (*Client, error) {
 // triggers 5xx/network retries from paying the real exponential backoff). No
 // production code path calls this; c1i always authenticates through New.
 //
+// Mirrors New's WithNonRetryable(isTokenError) too: a testing constructor
+// that quietly skipped it would be a trap for any test built on it, since a
+// rejected client_credentials grant would then burn the retry budget instead
+// of failing on the first attempt.
+//
 // Only hc.Transport is used (falling back to http.DefaultTransport if nil);
 // hc's own Timeout/CheckRedirect/Jar are not, since the returned Client
 // applies its own timeout and redirect handling. No caller sets those on the
@@ -206,7 +211,11 @@ func NewForTesting(baseURL string, hc *http.Client, opts ...Option) *Client {
 		base = hc.Transport
 	}
 	cfg := resolve(opts)
-	t := transport.New(base, transport.WithMaxRetries(cfg.maxRetries), transport.WithDebug(cfg.debug))
+	t := transport.New(base,
+		transport.WithMaxRetries(cfg.maxRetries),
+		transport.WithDebug(cfg.debug),
+		transport.WithNonRetryable(isTokenError),
+	)
 	return &Client{t: t, baseURL: baseURL}
 }
 
