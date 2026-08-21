@@ -160,8 +160,14 @@ func checkUnclaimedMentions(t *testing.T, name, guide string) {
 		}
 
 		leaf, _, err := rootCmd.Find(strings.Fields(afterMention))
-		if err != nil {
-			t.Errorf("guide %q: %q: rootCmd.Find failed while resolving the command path named here: %v", name, trimmedLine, err)
+		// leaf == rootCmd means the first word after "c1i" matched no
+		// top-level command, so this mention never named a command path —
+		// checked by identity, not just err != nil, because Find's error
+		// here depends on rootCmd.Args, which another test's
+		// attachSubcommandGuards call may already have set. A rename deeper
+		// in a real path still resolves to a non-root leaf/group, still
+		// caught below.
+		if err != nil || leaf == rootCmd {
 			continue
 		}
 		leaf.InheritedFlags() // merge inherited flags before lookups
@@ -264,7 +270,12 @@ func shorthandFromToken(tok string) (shorthand string, hasInlineValue bool, ok b
 // value ("--foo=bar", "-fbar") consumes no extra token; a non-bool flag
 // given space-separated consumes the next token as its value (matching
 // pflag); a literal "--" sends the rest to positionals.
-func collectPositionals(t *testing.T, inv string, leaf *cobra.Command, remaining []string) []string {
+//
+// dropUsageMarkers (README invocations only, see normalizeReadmeUsage) drops
+// a bare "|" or "..." that reaches this point unconsumed instead of counting
+// it as a positional — README uses them as an alternation/repeat marker,
+// never real argv; one already consumed as some flag's value is unaffected.
+func collectPositionals(t *testing.T, inv string, leaf *cobra.Command, remaining []string, dropUsageMarkers bool) []string {
 	t.Helper()
 
 	var positionals []string
@@ -277,6 +288,9 @@ func collectPositionals(t *testing.T, inv string, leaf *cobra.Command, remaining
 			i++
 			positionals = append(positionals, remaining[i:]...)
 			return positionals
+
+		case dropUsageMarkers && (tok == "|" || tok == "..."):
+			i++
 
 		case strings.HasPrefix(tok, "--"):
 			name := flagNameFromToken(tok)
@@ -320,9 +334,11 @@ func collectPositionals(t *testing.T, inv string, leaf *cobra.Command, remaining
 // rootCmd's actual tree — not a guess about naming), every "--flag"/"-f" it
 // passes must actually be registered on that command (own or inherited), and
 // the leftover positional count must be one the command's own Args
-// validator accepts. Used against both the embedded "docs guide" runbooks
-// and cmd/agents.md, so a drift in either is caught the same way.
-func validateInvocationsAgainstCobraTree(t *testing.T, invocations []string) {
+// validator accepts. Used against the embedded "docs guide" runbooks,
+// cmd/agents.md, and README.md, so a drift in any of them is caught the same
+// way. dropUsageMarkers is forwarded to collectPositionals — pass true only
+// for invocations already run through normalizeReadmeUsage.
+func validateInvocationsAgainstCobraTree(t *testing.T, invocations []string, dropUsageMarkers bool) {
 	t.Helper()
 
 	for _, inv := range invocations {
@@ -358,7 +374,7 @@ func validateInvocationsAgainstCobraTree(t *testing.T, invocations []string) {
 		leaf.InheritedFlags()      // merge inherited flags before lookups
 		leaf.InitDefaultHelpFlag() // cobra adds --help lazily; without this it looks unregistered
 
-		positionals := collectPositionals(t, inv, leaf, remaining)
+		positionals := collectPositionals(t, inv, leaf, remaining, dropUsageMarkers)
 
 		if !wantsHelp {
 			if verr := leaf.ValidateArgs(positionals); verr != nil {
@@ -388,7 +404,7 @@ func TestGuideCommandsResolveAgainstCobraTree(t *testing.T) {
 			if len(invocations) == 0 {
 				t.Fatalf("no \"c1i ...\" invocations found in guide %q; extraction regressed?", name)
 			}
-			validateInvocationsAgainstCobraTree(t, invocations)
+			validateInvocationsAgainstCobraTree(t, invocations, false)
 		})
 	}
 }
@@ -408,5 +424,95 @@ func TestAgentsMDCommandsResolveAgainstCobraTree(t *testing.T) {
 	if len(invocations) == 0 {
 		t.Fatalf("no \"c1i ...\" invocations found in cmd/agents.md; extraction regressed?")
 	}
-	validateInvocationsAgainstCobraTree(t, invocations)
+	validateInvocationsAgainstCobraTree(t, invocations, false)
+}
+
+// normalizeReadmeUsage flattens a README.md usage line's "[optional]"
+// groups and "(a | b)" alternation into the shape
+// validateInvocationsAgainstCobraTree expects, ahead of the guides/
+// cmd/agents.md, which never use this notation. Brackets/parens are deleted
+// outright, keeping their content validated as if required; a bare "|" or
+// "..." is left in place for collectPositionals to drop, since deleting it
+// here would shift later tokens (e.g. "--transport ... --auth ..." would
+// collapse to "--transport --auth", silently swallowing --auth as
+// --transport's value instead of checking it as a flag). Quoted spans are
+// copied through untouched. An unbalanced bracket/paren or unterminated
+// quote fails the test loudly rather than parsing a mangled line.
+func normalizeReadmeUsage(t *testing.T, inv string) string {
+	t.Helper()
+
+	if strings.Count(inv, "[") != strings.Count(inv, "]") {
+		t.Fatalf("invocation %q: unbalanced [ ] in README usage notation — cannot normalize", inv)
+	}
+	if strings.Count(inv, "(") != strings.Count(inv, ")") {
+		t.Fatalf("invocation %q: unbalanced ( ) in README usage notation — cannot normalize", inv)
+	}
+
+	var out strings.Builder
+	var quote rune
+	for _, r := range inv {
+		switch {
+		case quote != 0:
+			out.WriteRune(r)
+			if r == quote {
+				quote = 0
+			}
+		case r == '"' || r == '\'':
+			quote = r
+			out.WriteRune(r)
+		case r == '[' || r == ']' || r == '(' || r == ')':
+			// optionality/grouping delimiter — drop, keep the content.
+		default:
+			out.WriteRune(r)
+		}
+	}
+	if quote != 0 {
+		t.Fatalf("invocation %q: unterminated %c-quoted value while normalizing README usage notation", inv, quote)
+	}
+	return out.String()
+}
+
+// fencedCodeBlockRe matches a markdown fenced code block, capturing its body.
+var fencedCodeBlockRe = regexp.MustCompile("(?s)```[^\n]*\n(.*?)```")
+
+// extractFencedCodeBlocks returns the concatenated bodies of every fenced
+// code block in doc, in order. Unlike the guides/cmd/agents.md (plain runbook
+// text, no fences), README.md's prose sometimes starts a sentence with the
+// literal word "c1i" ("c1i requires a C1 **URL**."); scoping
+// extractGuideInvocations' line-prefix scan to fenced bodies keeps it from
+// reading that as an invocation. checkUnclaimedMentions still runs over the
+// full document — its check doesn't depend on line position.
+func extractFencedCodeBlocks(doc string) string {
+	var sb strings.Builder
+	for _, m := range fencedCodeBlockRe.FindAllStringSubmatch(doc, -1) {
+		sb.WriteString(m[1])
+	}
+	return sb.String()
+}
+
+// TestReadmeCommandsResolveAgainstCobraTree extends the same drift guard to
+// README.md — both the largest command surface in the repo by line count and
+// the first thing a customer reads, with no compile-time link to the cobra
+// tree it documents either.
+func TestReadmeCommandsResolveAgainstCobraTree(t *testing.T) {
+	attachSubcommandGuards(rootCmd)
+	// README documents "c1i completion <shell>"; cobra only registers that
+	// command lazily from Execute(), which this test never calls.
+	rootCmd.InitDefaultCompletionCmd()
+
+	readme := readDocFile(t, "../README.md")
+
+	checkUnclaimedMentions(t, "README.md", readme)
+
+	codeBlocks := extractFencedCodeBlocks(readme)
+	invocations := extractGuideInvocations(t, codeBlocks)
+	if len(invocations) == 0 {
+		t.Fatalf("no \"c1i ...\" invocations found in README.md's fenced code blocks; extraction regressed?")
+	}
+	t.Logf("found %d c1i invocation(s) in README.md", len(invocations))
+
+	for i, inv := range invocations {
+		invocations[i] = normalizeReadmeUsage(t, inv)
+	}
+	validateInvocationsAgainstCobraTree(t, invocations, true)
 }
