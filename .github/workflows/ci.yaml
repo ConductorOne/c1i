@@ -25,6 +25,12 @@ jobs:
         run: |
           go mod tidy
           git diff --exit-code --stat go.mod go.sum
+      # Release binaries embed the stdlib, so an unpatched toolchain ships as a
+      # vulnerability in the artifact. v0.4.0 shipped with 14 reachable ones.
+      - name: Check for known vulnerabilities
+        run: |
+          go install golang.org/x/vuln/cmd/govulncheck@latest
+          govulncheck ./...
   go-test:
     runs-on: ubuntu-latest
     steps:
