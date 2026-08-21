@@ -264,7 +264,7 @@ func TestBuildRegisterBodyExternalRequiresURL(t *testing.T) {
 	_ = cmd.Flags().Set("type", "external")
 	_ = cmd.Flags().Set("display-name", "X")
 	if _, err := buildRegisterBody(cmd); err == nil {
-		t.Error("expected error when --url missing for external")
+		t.Error("expected error when --server-url missing for external")
 	}
 }
 
