@@ -61,11 +61,15 @@ func TestValidationGuardsExitUsage(t *testing.T) {
 			args: []string{"mcp", "bindings", "delete", "--app-id", "a", "--connector-id", "c", "--toolset-id", "t", "--tool-id", ""},
 			cmds: []*cobra.Command{mcpBindingsDeleteCmd},
 		},
-		// mcp bindings by-tools has the identical fix (same line shape,
-		// cmd/mcp_bindings_by_tools.go) but constructs its client before
-		// checking --tool-id, unlike create/delete above, so exercising it
-		// here would need real (or faked-JWK) credentials rather than
-		// proving the fix; it's covered by live verification instead.
+		{
+			// Also pins the ordering fix: mcp_bindings_by_tools.go used to
+			// construct its client before this check, unlike create/delete
+			// above, so this case would previously have needed real
+			// credentials to reach the guard at all.
+			name: "mcp bindings by-tools: --tool-id empty",
+			args: []string{"mcp", "bindings", "by-tools", "--app-id", "a", "--connector-id", "c", "--tool-id", ""},
+			cmds: []*cobra.Command{mcpBindingsByToolsCmd},
+		},
 		{
 			name: "mcp bindings history: neither --toolset-id nor --tool-id",
 			args: []string{"mcp", "bindings", "history", "--app-id", "a", "--connector-id", "c"},
