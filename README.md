@@ -479,11 +479,13 @@ follow would hand your bearer token to whatever host the redirect named.
 A chain of allowed redirects that doesn't settle within five hops fails as a
 remote error (exit `6`) rather than looping.
 
-This applies to the REST client only. The MCP gateway and the login handshake use
-their own HTTP clients and follow redirects normally. And a bad id is the only
-cause of a refused `3xx` observed so far, which is why it maps to exit `2` — a
-redirect on an otherwise well-formed request would not be the caller's mistake,
-and would still report `2`.
+This applies everywhere the CLI sends HTTP: the REST client, the MCP gateway, and
+the login handshake all share the same transport, so the path and redirect
+guards, `--debug` tracing, and `--max-retries` all cover the gateway and login
+too, not just REST commands. A bad id is the only cause of a refused `3xx`
+observed so far, which is why it maps to exit `2` — a redirect on an otherwise
+well-formed request would not be the caller's mistake, and would still report
+`2`.
 
 Pass `--error-format json` (or `C1I_ERROR_FORMAT=json`) to get a machine-readable
 error object instead of the default `Error: <msg>` line. For API errors it

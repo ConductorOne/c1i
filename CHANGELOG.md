@@ -187,6 +187,32 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `debug.ReadBuildInfo()`) already carries its own leading `v`. Cosmetic, but
   `cmd/agents.md` is `go:embed`-ed, so it shipped inside every binary.
 
+- **`--debug` and `--max-retries` were silently inert on `mcp gateway`
+  commands, and `c1i auth login` had no request timeout at all.** `mcp
+  gateway list-tools --debug` (and `call`) now trace like every REST command;
+  `--max-retries` now retries a 429 from the gateway (5xx/transport failures
+  still don't retry a JSON-RPC call, since it isn't safe to assume one had no
+  side effect); and a hung auth host can no longer hang `auth login` forever.
+  The bearer-minting request both paths depend on (`client.Token`, also used
+  by `auth token`) gets the same fix. All of these, plus every device-flow
+  request `auth login` makes, now also send the CLI's user-agent and are
+  covered by the same empty-path and redirect-trust-scope guards a REST
+  command gets.
+
+  Internal refactor: the auth-independent parts of the API client (retry/
+  backoff, timeout, user-agent, debug tracing, the path guard, the redirect
+  trust-scope guard) moved into a new `internal/transport` package below
+  `internal/client`, which `internal/login`, `internal/tokensource`, and
+  `internal/mcpgateway` now build on directly instead of each hand-rolling
+  (or, in three of these four cases, simply lacking) their own subset.
+
+- **The MCP gateway handshake reported a hardcoded `"dev"` client version**,
+  so a released binary always misidentified itself to the gateway
+  (`clientInfo.version` in the `initialize` request) regardless of what
+  `c1i version` printed. It now reports the same build-derived version as
+  everything else — the same fix category as the retry/debug/timeout gaps
+  above: the gateway path missing something the REST client already had.
+
 ### Security
 
 - **`gosec` and `gitleaks` now gate CI**, alongside the vulnerability scan.
