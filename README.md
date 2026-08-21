@@ -103,7 +103,7 @@ c1i functions list [--published-only | --draft-only] [--page-size N] [--page-tok
 c1i functions get <function-id>
 c1i functions source <function-id> [--commit <id>] [--out-dir <path>]
 c1i functions commits <function-id> [--page-size N] [--page-token TOKEN] [--limit N]
-c1i functions usage <function-id>
+c1i functions usage <function-id> [--page-size N] [--page-token TOKEN] [--limit N]
 ```
 
 `functions source` auto-resolves the function's published commit (falling back to its head/latest draft) and base64-decodes the source files. Without `--out-dir`, each file is printed to stdout with a `// ===== <name> =====` delimiter; with `--out-dir`, files are written to disk. `functions usage` scans every automation and emits one row per step that calls the given function — useful before deleting a draft.

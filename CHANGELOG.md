@@ -8,6 +8,11 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **`functions usage` gained `--page-size`, `--page-token`, and `--limit`.**
+  It already auto-paginated through every automation but had no way to opt
+  out, unlike every other auto-paginating command. It now follows the same
+  pattern as `functions commits`.
+
 - **`deleted_at` on more list rows.** `apps`, `entitlements`, `connectors`,
   `functions`, `mcp tools`, and `mcp toolsets` list rows now carry
   `deleted_at`, and `grants list` carries `entitlement_deleted_at` and
