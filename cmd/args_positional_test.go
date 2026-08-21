@@ -198,6 +198,13 @@ func TestArgsUseConsistencyAcrossTree(t *testing.T) {
 						t.Errorf("%s: Use %q documents %d required positional(s), but Args rejected exactly that many",
 							path, c.Use, spec.required)
 					}
+					// A Use carrying both shapes ("get <id> [<extra>]") lands here, so the
+					// optional half needs checking too or it goes entirely unverified. No
+					// upper-bound assertion: a variadic Use is legitimate here.
+					if spec.optional > 0 && !argsAccepts(c, spec.required+spec.optional) {
+						t.Errorf("%s: Use %q documents %d required plus %d optional positional(s), but Args rejected %d arg(s)",
+							path, c.Use, spec.required, spec.optional, spec.required+spec.optional)
+					}
 				case spec.optional > 0:
 					// A nil Args would vacuously pass both checks below via
 					// cobra's ArbitraryArgs fallback, yet attachSubcommandGuards
