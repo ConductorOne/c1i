@@ -108,7 +108,7 @@ named exactly as the function has them — usually main.ts and main.test.ts).`,
 
 		if outDir != "" {
 			if err := hardenOutDir(outDir, cmd.ErrOrStderr()); err != nil {
-				return fmt.Errorf("failed to create out-dir: %w", err)
+				return err
 			}
 		}
 
@@ -154,33 +154,77 @@ func unsafeSourceName(name string) bool {
 	return name == "" || name == "." || name == ".." || name != filepath.Base(name)
 }
 
-// hardenOutDir ensures outDir exists and is no more permissive than 0750.
-// Fetched function source is developer-authored code that commonly inlines
-// credentials, so os.MkdirAll alone isn't enough: its mode argument only
-// applies to a directory it creates, and is a silent no-op on a path that
-// already exists (e.g. a script's own prior `mkdir` or an earlier run of
-// this command against a wider umask). A pre-existing directory already at
-// or stricter than 0750 is left alone — this only tightens, never widens,
-// and a tightening is reported to warn so it isn't silent.
+// outDirMode is the permission --out-dir is created or tightened to. It
+// matches the 0600 file mode with one posture (owner-only, nothing more):
+// the files inside are already unreadable to group/other, so group access
+// to the directory itself buys nothing against this fix's threat model — it
+// would only let a group member list filenames and stat metadata, and a
+// filename alone can be informative (e.g. "stripe-webhook-secret.ts").
+const outDirMode = 0o700
+
+// unixMode reports m's permission bits plus the traditional setuid (04000),
+// setgid (02000), and sticky (01000) bits combined into one number, e.g.
+// 0700 or 02750 — the conventional 4-digit chmod notation. Go's os.FileMode
+// stores those three bits outside the range Mode.Perm() returns, so a caller
+// that only looks at Perm() can't tell whether a directory carried one.
+func unixMode(m os.FileMode) int {
+	perm := int(m.Perm())
+	if m&os.ModeSetuid != 0 {
+		perm |= 0o4000
+	}
+	if m&os.ModeSetgid != 0 {
+		perm |= 0o2000
+	}
+	if m&os.ModeSticky != 0 {
+		perm |= 0o1000
+	}
+	return perm
+}
+
+// hardenOutDir ensures outDir exists and is no more permissive than
+// outDirMode, with setuid/setgid/sticky always stripped outright rather
+// than preserved. Fetched function source is developer-authored code that
+// commonly inlines credentials, so os.MkdirAll alone isn't enough: its mode
+// argument only applies to a directory it creates, and is a silent no-op on
+// a path that already exists (e.g. a script's own prior `mkdir` or an
+// earlier run of this command against a wider umask). A pre-existing
+// directory already at or stricter than outDirMode, with no special bits
+// set, is left alone — this only tightens, never widens, and a tightening
+// is reported to warn so it isn't silent.
+//
+// The special bits get no permission-bit exemption: at outDirMode there is
+// no group or other access left, so setgid's group-ownership inheritance
+// and sticky's shared-directory protection are both meaningless on this
+// directory. Stripping them unconditionally is therefore the coherent
+// choice, not an oversight of Perm()'s masking — a directory otherwise
+// already at outDirMode but carrying either bit is still tightened.
 func hardenOutDir(outDir string, warn io.Writer) error {
-	if err := os.MkdirAll(outDir, 0o750); err != nil {
-		return err
+	if err := os.MkdirAll(outDir, outDirMode); err != nil {
+		return fmt.Errorf("failed to create out-dir: %w", err)
 	}
 	info, err := os.Stat(outDir)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to create out-dir: %w", err)
 	}
-	if extra := info.Mode().Perm() &^ 0o750; extra != 0 {
-		if err := os.Chmod(outDir, 0o750); err != nil { // #nosec G302 -- outDir is a directory, not a file; 0750 (owner rwx, group rx) is the intended directory mode, matching the MkdirAll call above
-			return err
+	oldMode := info.Mode()
+	oldPerm := oldMode.Perm()
+	// AND, not a flat outDirMode assignment: the result can only drop bits
+	// oldPerm already had, so a directory already stricter than outDirMode
+	// (e.g. 0500) keeps its stricter perm instead of gaining bits back —
+	// stripping a special bit below must never double as a widening.
+	newPerm := oldPerm & outDirMode
+	special := oldMode&(os.ModeSetuid|os.ModeSetgid|os.ModeSticky) != 0
+	if newPerm != oldPerm || special {
+		if err := os.Chmod(outDir, newPerm); err != nil { // #nosec G302 -- outDir is a directory, not a file; newPerm is at most 0700 (owner rwx only), the intended ceiling
+			return fmt.Errorf("failed to tighten out-dir permissions: %w", err)
 		}
-		_, _ = fmt.Fprintf(warn, "tightened %s from %04o to 0750 (fetched source may contain credentials)\n", outDir, info.Mode().Perm())
+		_, _ = fmt.Fprintf(warn, "tightened %s from %04o to %04o (fetched source may contain credentials)\n", outDir, unixMode(oldMode), newPerm)
 	}
 	return nil
 }
 
 func init() {
 	functionsSourceCmd.Flags().String("commit", "", "Specific commit ID to fetch (default: the function's publishedCommitId, falling back to head)")
-	functionsSourceCmd.Flags().String("out-dir", "", "Write files to this directory instead of stdout. Files are written 0600 and the directory is created (or tightened, never widened) to at most 0750 — fetched source may inline credentials")
+	functionsSourceCmd.Flags().String("out-dir", "", "Write files to this directory instead of stdout. Files are written 0600 and the directory is created (or tightened, never widened, special bits stripped) to at most 0700 — fetched source may inline credentials")
 	functionsCmd.AddCommand(functionsSourceCmd)
 }
