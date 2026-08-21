@@ -96,3 +96,36 @@ func TestUniqueFunctionIDs(t *testing.T) {
 		t.Errorf("uniqueFunctionIDs(nil) should be nil")
 	}
 }
+
+// TestAutomationRowLastExecutedAtIsNullNotEmptyString pins that
+// last_executed_at is untyped nil, not "", for an automation that has never
+// run — "" is truthy in jq and would make `jq 'select(.last_executed_at)'`
+// match every row.
+func TestAutomationRowLastExecutedAtIsNullNotEmptyString(t *testing.T) {
+	tests := []struct {
+		name           string
+		lastExecutedAt string
+		want           any
+	}{
+		{name: "never executed", lastExecutedAt: "", want: nil},
+		{name: "executed", lastExecutedAt: "2026-01-02T03:04:05Z", want: "2026-01-02T03:04:05Z"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			row := automationRow(automationListItem{ID: "a1", LastExecutedAt: tt.lastExecutedAt})
+			got, ok := row["last_executed_at"]
+			if !ok {
+				t.Fatal("row has no last_executed_at key")
+			}
+			if tt.want == nil {
+				if got != nil {
+					t.Fatalf("last_executed_at = %#v, want untyped nil", got)
+				}
+				return
+			}
+			if got != tt.want {
+				t.Errorf("last_executed_at = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
