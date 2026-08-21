@@ -38,6 +38,15 @@ jobs:
             echo "== govulncheck GOOS=$goos"
             GOOS=$goos govulncheck ./...
           done
+      # c1i ships as a public release binary; gosec catches injection- and
+      # traversal-class bugs gofmt/go vet don't. Findings are triaged with
+      # per-line #nosec comments, never a blanket rule exclusion.
+      - name: Run gosec
+        env:
+          GOTOOLCHAIN: auto
+        run: |
+          go install github.com/securego/gosec/v2/cmd/gosec@v2.28.0
+          gosec -quiet -nosec-require-rules -nosec-require-justification ./...
   go-test:
     runs-on: ubuntu-latest
     steps:
