@@ -1,7 +1,11 @@
 package cmd
 
 import (
+	"bytes"
 	"encoding/json"
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -109,5 +113,94 @@ func TestUnsafeSourceName(t *testing.T) {
 		if !unsafeSourceName(n) {
 			t.Errorf("expected %q to be rejected", n)
 		}
+	}
+}
+
+// statPerm returns the permission bits of path, failing the test on error.
+func statPerm(t *testing.T, path string) os.FileMode {
+	t.Helper()
+	info, err := os.Stat(path)
+	if err != nil {
+		t.Fatalf("stat %s: %v", path, err)
+	}
+	return info.Mode().Perm()
+}
+
+// TestHardenOutDirCreatesFresh proves a directory that does not exist yet is
+// created at 0750, with no warning (there is nothing to tighten).
+func TestHardenOutDirCreatesFresh(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "fresh")
+	var warn bytes.Buffer
+	if err := hardenOutDir(dir, &warn); err != nil {
+		t.Fatalf("hardenOutDir: %v", err)
+	}
+	if got := statPerm(t, dir); got != 0o750 {
+		t.Errorf("fresh dir mode = %o, want 0750", got)
+	}
+	if warn.Len() != 0 {
+		t.Errorf("expected no warning for a freshly created dir, got %q", warn.String())
+	}
+}
+
+// TestHardenOutDirTightensPreExisting proves a pre-existing directory that is
+// more permissive than 0750 (e.g. 0777, mkdir+chmod'd by a script before the
+// first run) is tightened on a later run, not left as-is — this is the bug:
+// MkdirAll's mode argument is a no-op on a path that already exists.
+func TestHardenOutDirTightensPreExisting(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "shared")
+	if err := os.Mkdir(dir, 0o777); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	var warn bytes.Buffer
+	if err := hardenOutDir(dir, &warn); err != nil {
+		t.Fatalf("hardenOutDir: %v", err)
+	}
+	if got := statPerm(t, dir); got != 0o750 {
+		t.Errorf("pre-existing 0777 dir mode after harden = %o, want 0750", got)
+	}
+	if warn.Len() == 0 {
+		t.Errorf("expected a warning when tightening a pre-existing dir's permissions")
+	}
+	if !strings.Contains(warn.String(), dir) {
+		t.Errorf("warning %q does not name the tightened directory %q", warn.String(), dir)
+	}
+}
+
+// TestHardenOutDirNeverWidens proves a pre-existing directory already
+// stricter than 0750 (e.g. 0700, owner-only) is left untouched — hardenOutDir
+// must never loosen permissions, only tighten them.
+func TestHardenOutDirNeverWidens(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "strict")
+	if err := os.Mkdir(dir, 0o700); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	var warn bytes.Buffer
+	if err := hardenOutDir(dir, &warn); err != nil {
+		t.Fatalf("hardenOutDir: %v", err)
+	}
+	if got := statPerm(t, dir); got != 0o700 {
+		t.Errorf("strict 0700 dir mode after harden = %o, want unchanged 0700", got)
+	}
+	if warn.Len() != 0 {
+		t.Errorf("expected no warning for a dir already stricter than 0750, got %q", warn.String())
+	}
+}
+
+// TestHardenOutDirLeavesExactModeAlone proves a pre-existing directory
+// already exactly at 0750 is left alone with no spurious warning.
+func TestHardenOutDirLeavesExactModeAlone(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "exact")
+	if err := os.Mkdir(dir, 0o750); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	var warn bytes.Buffer
+	if err := hardenOutDir(dir, &warn); err != nil {
+		t.Fatalf("hardenOutDir: %v", err)
+	}
+	if got := statPerm(t, dir); got != 0o750 {
+		t.Errorf("exact 0750 dir mode after harden = %o, want unchanged 0750", got)
+	}
+	if warn.Len() != 0 {
+		t.Errorf("expected no warning for a dir already at 0750, got %q", warn.String())
 	}
 }

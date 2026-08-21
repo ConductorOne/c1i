@@ -80,12 +80,17 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   printed an empty line.
 
 - **`functions source --out-dir` writes files `0600` instead of `0644`**, and
-  the directory `0750` instead of `0755`. Fetched function source is
+  the directory `0750` instead of `0755` — now including a pre-existing
+  directory, not just one this command creates. Fetched function source is
   developer-authored code, and code commonly inlines credentials — API keys,
   webhook secrets, third-party tokens. The CLI cannot tell whether a given
   function's source does, so it no longer writes it group- or world-readable.
-  Anyone relying on the old modes to share that directory will need to widen
-  them deliberately.
+  `--out-dir` pointed at an existing, more permissive directory (e.g. a
+  script's own prior `mkdir dir && chmod 777 dir`) is tightened to `0750`,
+  with a warning to stderr naming the old mode — never silently, and never
+  loosened if it was already stricter than `0750`. Anyone relying on the old
+  modes, or on that directory staying wide open, will need to widen it back
+  deliberately after running this command.
 
 ### Security
 

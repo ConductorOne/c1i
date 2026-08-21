@@ -4,6 +4,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"sort"
@@ -106,8 +107,7 @@ named exactly as the function has them — usually main.ts and main.test.ts).`,
 		sort.Strings(names)
 
 		if outDir != "" {
-			// 0750: no reason for the directory to be group/world-readable.
-			if err := os.MkdirAll(outDir, 0o750); err != nil {
+			if err := hardenOutDir(outDir, cmd.ErrOrStderr()); err != nil {
 				return fmt.Errorf("failed to create out-dir: %w", err)
 			}
 		}
@@ -152,6 +152,31 @@ named exactly as the function has them — usually main.ts and main.test.ts).`,
 // the output directory.
 func unsafeSourceName(name string) bool {
 	return name == "" || name == "." || name == ".." || name != filepath.Base(name)
+}
+
+// hardenOutDir ensures outDir exists and is no more permissive than 0750.
+// Fetched function source is developer-authored code that commonly inlines
+// credentials, so os.MkdirAll alone isn't enough: its mode argument only
+// applies to a directory it creates, and is a silent no-op on a path that
+// already exists (e.g. a script's own prior `mkdir` or an earlier run of
+// this command against a wider umask). A pre-existing directory already at
+// or stricter than 0750 is left alone — this only tightens, never widens,
+// and a tightening is reported to warn so it isn't silent.
+func hardenOutDir(outDir string, warn io.Writer) error {
+	if err := os.MkdirAll(outDir, 0o750); err != nil {
+		return err
+	}
+	info, err := os.Stat(outDir)
+	if err != nil {
+		return err
+	}
+	if extra := info.Mode().Perm() &^ 0o750; extra != 0 {
+		if err := os.Chmod(outDir, 0o750); err != nil { // #nosec G302 -- outDir is a directory, not a file; 0750 (owner rwx, group rx) is the intended directory mode, matching the MkdirAll call above
+			return err
+		}
+		_, _ = fmt.Fprintf(warn, "tightened %s from %04o to 0750 (fetched source may contain credentials)\n", outDir, info.Mode().Perm())
+	}
+	return nil
 }
 
 func init() {
