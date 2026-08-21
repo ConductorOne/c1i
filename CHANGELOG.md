@@ -202,7 +202,6 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   $SHELL)"` with an unset or misspelled `$SHELL` silently evaluated help text
   instead of erroring.
 
-
 - **`c1i docs agents` rendered a doubled `v` in its header**, e.g.
   `(vv0.4.1-...)`. The template read `(v{{VERSION}})`, but `Version` (from
   `debug.ReadBuildInfo()`) already carries its own leading `v`. Cosmetic, but
