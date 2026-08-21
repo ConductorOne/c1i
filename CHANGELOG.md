@@ -22,15 +22,18 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   — so `jq 'select(.entitlement_deleted_at)'` finds grants whose backing object
   is gone.
 
-- **Every command now warns to stderr which tenant it's targeting, unless
-  `--url` was passed explicitly on that invocation.** `--url` is unambiguous
-  by definition; `C1I_URL` and `~/.c1i.yaml` name a tenant with nothing on
-  the command line to show it, so a lost `export` or a stale config entry
-  used to send a command to the wrong tenant with no visible sign — exactly
-  what happened when an agent exported `C1I_URL` in one shell call, lost it
-  in the next, and silently got results from a different tenant. The warning
-  is stderr-only (stdout stays clean NDJSON/JSON) and prints once per
-  invocation, not once per request in a paginated list.
+- **Every command now warns to stderr which tenant it's targeting when the
+  URL came from `~/.c1i.yaml`.** Nothing on the command line names the
+  config file, so a stale entry there used to send a command to the wrong
+  tenant with no visible sign — this is the fall-through step in the
+  incident that motivated this change: an agent exported `C1I_URL` in one
+  shell call, lost it in the next, and silently got results from whatever
+  tenant `~/.c1i.yaml` named. `--url` and `C1I_URL` don't print this warning
+  — both are an explicit choice for that invocation, and warning on every
+  normal `C1I_URL` use would just train people to stop reading it. The
+  warning is stderr-only (stdout stays clean NDJSON/JSON) and prints once
+  per invocation, not once per request in a paginated list.
+
 ### Changed
 
 - **BREAKING — more list rows emit real JSON numbers and `null`, not strings.**

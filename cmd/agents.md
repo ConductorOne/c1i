@@ -24,13 +24,14 @@ to whatever `url:` names in `~/.c1i.yaml`. It must be a full host —
 a bare `mycompany` and a non-https scheme are both usage errors (exit `2`)
 before any request is sent.
 Every command prints a `Warning: no --url flag given; targeting <url> (from
-...)` line to stderr unless you passed `--url` on that exact invocation — but
-don't rely on catching it: pass `--url` explicitly on every invocation
-instead of an exported `C1I_URL`. A fresh shell per call is common, and an
-env var that gets lost between calls falls through to the config file's
-tenant; the warning names which tenant that is, but stdout stays clean JSON
-either way, so a result piped straight into the next step is silently from
-whichever tenant `~/.c1i.yaml` names if you aren't reading stderr.
+~/.c1i.yaml)` line to stderr when the URL came from the config file —
+`--url` and `C1I_URL` print nothing, since both are an explicit choice for
+that invocation. Don't rely on catching it: pass `--url` explicitly on every
+invocation instead of an exported `C1I_URL`. A fresh shell per call is
+common, and an env var that gets lost between calls falls through to the
+config file's tenant silently on stdout — the stderr warning only appears on
+the call that already fell through, and a result piped straight into the
+next step won't show it at all if you aren't reading stderr.
 
 Credentials resolve in this order: `C1I_CLIENT_ID` + `C1I_CLIENT_SECRET` env
 vars (read-only — c1i never writes them), the OS keyring, then a `0600` file
