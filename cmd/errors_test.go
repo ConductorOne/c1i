@@ -63,14 +63,25 @@ func TestExitCode(t *testing.T) {
 		{"api 429", &client.APIError{StatusCode: 429}, exitRateLimited},
 		{"api 500", &client.APIError{StatusCode: 500}, exitServer},
 		{"api 503", &client.APIError{StatusCode: 503}, exitServer},
-		// Every 4xx that isn't auth/not-found/rate-limited is caller-caused
-		// (bad request body/params/conflict/size/etc.), so it maps to
-		// exitUsage rather than falling to the generic exitError default.
+		// 408 is the one 4xx carved out of the usage range: grpc-gateway's
+		// standard code table sends codes.Canceled to 408, which is C1's side
+		// canceling/timing out, not a bad argument -- it groups with the
+		// other "retry later" statuses instead of exitUsage.
+		{"api 408", &client.APIError{StatusCode: 408}, exitServer},
+		// Every other 4xx that isn't auth/not-found/rate-limited/408 is
+		// caller-caused (bad request body/params/conflict/size/etc.), so it
+		// maps to exitUsage rather than falling to the generic exitError
+		// default.
 		{"api 400", &client.APIError{StatusCode: 400}, exitUsage},
 		{"api 409", &client.APIError{StatusCode: 409}, exitUsage},
 		{"api 413", &client.APIError{StatusCode: 413}, exitUsage},
 		{"api 414", &client.APIError{StatusCode: 414}, exitUsage},
 		{"api 422", &client.APIError{StatusCode: 422}, exitUsage},
+		// 425 stays in the usage range deliberately: no gRPC code maps to
+		// it, so there's no evidence this API can ever return it -- this is
+		// the negative pair proving 408 alone moved, not the whole low 4xx
+		// range.
+		{"api 425", &client.APIError{StatusCode: 425}, exitUsage},
 		{"auth", &client.AuthError{Err: errors.New("no creds")}, exitAuth},
 		// The keyring-unavailable diagnosis (internal/keychain.Load,
 		// see keychain_test.go) still surfaces through loadCredentials as an

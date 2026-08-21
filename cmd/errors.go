@@ -156,10 +156,19 @@ func exitCode(err error) int {
 			return exitNotFound
 		case apiErr.StatusCode == 429:
 			return exitRateLimited
+		// 408 is not caller-caused: C1's REST layer maps gRPC status codes to
+		// HTTP through grpc-gateway's standard table, which sends
+		// codes.Canceled to 408 -- a canceled/deadline-adjacent request, not
+		// a bad argument. Group it with the other "C1-side, retry later"
+		// statuses instead of the usage range below, so an agent branching on
+		// exit code retries instead of re-examining flags that were fine.
+		case apiErr.StatusCode == 408:
+			return exitServer
 		// Every other 4xx (400, 409, 413, 414, 422, ...) means the caller sent
 		// something the server rejected -- a usage error, not exitError. A
 		// per-status list would drift; this rule covers whatever the API adds
-		// next too.
+		// next too. (425 stays in this range: no gRPC code maps to it, so
+		// there's no evidence this API can ever return it.)
 		case apiErr.StatusCode >= 400 && apiErr.StatusCode < 500:
 			return exitUsage
 		case apiErr.StatusCode >= 500:
