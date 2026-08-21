@@ -125,11 +125,47 @@ func parseUsePositionals(use string) positionalSpec {
 //     tree-wide gap, not something this migration introduced - asserting
 //     rejection here would fail on dozens of unrelated commands. See the
 //     discrepancy note in the task report for detail.
+//
+// Both the set of commands walked and their Args must be pinned to a
+// deterministic point - otherwise "checked", and which commands it covers,
+// varies with unrelated test execution order:
+//
+//   - Cobra lazily adds "help" and a "completion" group to rootCmd inside
+//     ExecuteC() - the first time ANY test in this binary calls
+//     Execute/ExecuteContext, never before. Production's Run() calls
+//     attachSubcommandGuards(rootCmd) before rootCmd.ExecuteContext ever
+//     reaches ExecuteC(), so in the shipped binary neither command is ever
+//     touched by this guard's stamp - they keep cobra's own defaults for
+//     real, for better or worse (the "completion" group's own Args: NoArgs
+//     is dead code there - cobra's execute() returns flag.ErrHelp for a
+//     non-runnable command before ValidateArgs ever runs, so an unknown
+//     completion subcommand reads as success today; pre-existing, unrelated
+//     to this migration, and out of scope for this guard). isCobraLazyBuiltin
+//     excludes both, deterministically matching that production ordering
+//     instead of depending on whether some unrelated test already called
+//     Execute.
+//   - attachSubcommandGuards installs a synthetic RunE on every group
+//     command (e.g. "mcp", "accounts") that has none, which flips cobra's
+//     Runnable() to true for it - a real effect: production always has this
+//     applied (Run() calls it before ExecuteContext) before any command
+//     executes, so a group genuinely is part of the checked surface. Calling
+//     it explicitly here - instead of relying on some other test having
+//     already called it on the shared rootCmd - is what makes that
+//     promotion happen the same way regardless of test order. The call is
+//     documented idempotent and safe to repeat.
+func isCobraLazyBuiltin(parent, c *cobra.Command) bool {
+	return parent == rootCmd && (c.Name() == "help" || c.Name() == "completion")
+}
+
 func TestArgsUseConsistencyAcrossTree(t *testing.T) {
+	attachSubcommandGuards(rootCmd)
 	checked := 0
 	var walk func(cmd *cobra.Command)
 	walk = func(cmd *cobra.Command) {
 		for _, c := range cmd.Commands() {
+			if isCobraLazyBuiltin(cmd, c) {
+				continue
+			}
 			if c.Runnable() {
 				checked++
 				spec := parseUsePositionals(c.Use)
