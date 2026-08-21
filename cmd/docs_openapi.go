@@ -149,7 +149,7 @@ Examples:
 
 		pathObj, ok := paths[target].(map[string]any)
 		if !ok {
-			return fmt.Errorf("endpoint %s not found", target)
+			return &usageError{fmt.Errorf("endpoint %s not found", target)}
 		}
 
 		resolved := resolveRefs(pathObj, spec, 0, nil)

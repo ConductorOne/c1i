@@ -41,7 +41,7 @@ classification, visibility).`,
 		// upstream MCP server" soft-delete signal. Letting an admin set it by
 		// hand contaminates that meaning — block it here.
 		if state == "MCP_TOOL_STATE_REMOVED" {
-			return fmt.Errorf("--state=removed is system-managed by sync; use \"mcp tools delete\" to soft-delete a tool, or --state=disabled to block it")
+			return &usageError{fmt.Errorf("--state=removed is system-managed by sync; use \"mcp tools delete\" to soft-delete a tool, or --state=disabled to block it")}
 		}
 
 		body := map[string]any{

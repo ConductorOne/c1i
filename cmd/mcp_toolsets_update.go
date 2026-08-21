@@ -50,7 +50,7 @@ Editing the AppEntitlement created behind the toolset is not supported here.`,
 			paths = append(paths, "description")
 		}
 		if len(paths) == 0 {
-			return fmt.Errorf("nothing to update: pass --display-name and/or --description")
+			return &usageError{fmt.Errorf("nothing to update: pass --display-name and/or --description")}
 		}
 
 		body := map[string]any{

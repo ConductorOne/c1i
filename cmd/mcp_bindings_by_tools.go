@@ -33,7 +33,7 @@ no bindings are still emitted with an empty toolsets array.`,
 		connectorID, _ := cmd.Flags().GetString("connector-id")
 		toolIDs, _ := cmd.Flags().GetStringSlice("tool-id")
 		if len(toolIDs) == 0 {
-			return fmt.Errorf("flag --tool-id requires at least one value")
+			return &usageError{fmt.Errorf("flag --tool-id requires at least one value")}
 		}
 
 		body := map[string]any{

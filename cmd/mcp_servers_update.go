@@ -66,7 +66,7 @@ require_tool_approval. Auth config and URL are NOT updatable here — use
 			paths = append(paths, "requireToolApproval")
 		}
 		if len(paths) == 0 {
-			return fmt.Errorf("nothing to update: pass at least one of --display-name, --description, --data-sensitivity, --tool-prefix, --require-tool-approval")
+			return &usageError{fmt.Errorf("nothing to update: pass at least one of --display-name, --description, --data-sensitivity, --tool-prefix, --require-tool-approval")}
 		}
 
 		body := map[string]any{

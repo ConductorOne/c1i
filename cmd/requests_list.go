@@ -111,7 +111,7 @@ tenant.
 			// Never silently fall through to a tenant-wide listing if we can't
 			// resolve the caller — that would leak far more than "my requests".
 			if scopeUserID == "" {
-				return fmt.Errorf("could not determine the current user; pass --user-id or --all")
+				return &usageError{fmt.Errorf("could not determine the current user; pass --user-id or --all")}
 			}
 		}
 

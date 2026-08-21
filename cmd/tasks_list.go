@@ -42,7 +42,7 @@ var tasksListCmd = &cobra.Command{
 			// Guard against silently listing tenant-wide if the current user
 			// can't be resolved: --assigned-to-me must narrow to the caller.
 			if myUserID == "" {
-				return fmt.Errorf("could not determine the current user for --assigned-to-me")
+				return &usageError{fmt.Errorf("could not determine the current user for --assigned-to-me")}
 			}
 		}
 

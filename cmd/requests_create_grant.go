@@ -82,7 +82,7 @@ var requestsCreateGrantCmd = &cobra.Command{
 				return err
 			}
 			if userID == "" {
-				return fmt.Errorf("could not determine the current user; pass --user-id")
+				return &usageError{fmt.Errorf("could not determine the current user; pass --user-id")}
 			}
 		}
 

@@ -39,7 +39,7 @@ supported for external MCP servers").`,
 		body := map[string]any{}
 		if editMode {
 			if connectorID == "" {
-				return fmt.Errorf("edit mode requires <connector-id> as a positional argument (in addition to --app-id)")
+				return &usageError{fmt.Errorf("edit mode requires <connector-id> as a positional argument (in addition to --app-id)")}
 			}
 			if err := requireNonEmpty(cmd, "app-id"); err != nil {
 				return err
@@ -63,7 +63,7 @@ supported for external MCP servers").`,
 			if len(ext) > 0 {
 				body["externalConfig"] = ext
 			} else if !editMode {
-				return fmt.Errorf("provide the config to probe: --url (with optional --transport/--auth) or --external-config-file, or pass <connector-id> and --app-id to probe an existing server")
+				return &usageError{fmt.Errorf("provide the config to probe: --url (with optional --transport/--auth) or --external-config-file, or pass <connector-id> and --app-id to probe an existing server")}
 			}
 		}
 

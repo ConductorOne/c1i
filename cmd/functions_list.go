@@ -60,7 +60,7 @@ var functionsListCmd = &cobra.Command{
 		publishedOnly, _ := cmd.Flags().GetBool("published-only")
 		draftOnly, _ := cmd.Flags().GetBool("draft-only")
 		if publishedOnly && draftOnly {
-			return fmt.Errorf("--published-only and --draft-only are mutually exclusive")
+			return &usageError{fmt.Errorf("--published-only and --draft-only are mutually exclusive")}
 		}
 
 		requestedPageSize := clampPageSize(getIntFlag(cmd, "page-size"))
