@@ -63,12 +63,14 @@ func TestExitCode(t *testing.T) {
 		{"api 429", &client.APIError{StatusCode: 429}, exitRateLimited},
 		{"api 500", &client.APIError{StatusCode: 500}, exitServer},
 		{"api 503", &client.APIError{StatusCode: 503}, exitServer},
-		// A bare HTTP 400 is caller-caused (bad request body/params), so it now
-		// maps to exitUsage -- a deliberate narrowing of the "unlisted status"
-		// default, scoped to exactly 400. 409 is the negative pair proving
-		// nothing else moved off exitError.
+		// Every 4xx that isn't auth/not-found/rate-limited is caller-caused
+		// (bad request body/params/conflict/size/etc.), so it maps to
+		// exitUsage rather than falling to the generic exitError default.
 		{"api 400", &client.APIError{StatusCode: 400}, exitUsage},
-		{"api 409 (unaffected)", &client.APIError{StatusCode: 409}, exitError},
+		{"api 409", &client.APIError{StatusCode: 409}, exitUsage},
+		{"api 413", &client.APIError{StatusCode: 413}, exitUsage},
+		{"api 414", &client.APIError{StatusCode: 414}, exitUsage},
+		{"api 422", &client.APIError{StatusCode: 422}, exitUsage},
 		{"auth", &client.AuthError{Err: errors.New("no creds")}, exitAuth},
 		// The keyring-unavailable diagnosis (internal/keychain.Load,
 		// see keychain_test.go) still surfaces through loadCredentials as an

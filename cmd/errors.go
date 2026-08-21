@@ -156,7 +156,11 @@ func exitCode(err error) int {
 			return exitNotFound
 		case apiErr.StatusCode == 429:
 			return exitRateLimited
-		case apiErr.StatusCode == 400:
+		// Every other 4xx (400, 409, 413, 414, 422, ...) means the caller sent
+		// something the server rejected -- a usage error, not exitError. A
+		// per-status list would drift; this rule covers whatever the API adds
+		// next too.
+		case apiErr.StatusCode >= 400 && apiErr.StatusCode < 500:
 			return exitUsage
 		case apiErr.StatusCode >= 500:
 			return exitServer
