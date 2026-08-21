@@ -126,7 +126,10 @@ named exactly as the function has them — usually main.ts and main.test.ts).`,
 					return fmt.Errorf("refusing to write file with unsafe name %q", name)
 				}
 				path := filepath.Join(outDir, name)
-				if err := os.WriteFile(path, decoded, 0o644); err != nil { // #nosec G306 -- source code the user asked to fetch, not sensitive
+				// 0600: fetched source may be developer-authored code that inlines
+				// credentials (API keys, webhook secrets, tokens); same reasoning
+				// as the --out-dir permission above, applied to the file itself.
+				if err := os.WriteFile(path, decoded, 0o600); err != nil {
 					return fmt.Errorf("failed to write %s: %w", path, err)
 				}
 				_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "wrote %s (%d bytes)\n", path, len(decoded))

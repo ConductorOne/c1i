@@ -227,7 +227,7 @@ func loadFile(service string) (string, string, error) {
 	if err != nil {
 		return "", "", err
 	}
-	b, err := os.ReadFile(p) // #nosec G304 -- p is built from UserConfigDir, not caller input
+	b, err := os.ReadFile(p) // #nosec G304 -- service derives from --url, but sanitizeService strips path-traversal characters before the join
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
 			return "", "", fmt.Errorf("%w for %s: run 'c1i auth login'", ErrNoCredentials, service)
