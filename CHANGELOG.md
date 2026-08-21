@@ -92,6 +92,13 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   modes, or on that directory staying wide open, will need to widen it back
   deliberately after running this command.
 
+### Fixed
+
+- **`c1i docs agents` rendered a doubled `v` in its header**, e.g.
+  `(vv0.4.1-...)`. The template read `(v{{VERSION}})`, but `Version` (from
+  `debug.ReadBuildInfo()`) already carries its own leading `v`. Cosmetic, but
+  `cmd/agents.md` is `go:embed`-ed, so it shipped inside every binary.
+
 ### Security
 
 - **`gosec` and `gitleaks` now gate CI**, alongside the vulnerability scan.
