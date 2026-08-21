@@ -176,6 +176,19 @@ func warnAboutURL(warnings []string) {
 	}
 }
 
+// warnAboutURLSource flags an ambiguous tenant resolution to stderr. An
+// explicit --url is unambiguous by definition; C1I_URL and ~/.c1i.yaml both
+// name a tenant with nothing on the command line to show it, so a lost
+// export or a stale config entry sends a command to the wrong tenant with no
+// visible sign — this is the one line that makes the target visible either
+// way. Only URLSourceFlag is silent.
+func warnAboutURLSource(baseURL string, source URLSource) {
+	if source == URLSourceFlag {
+		return
+	}
+	_, _ = fmt.Fprintf(os.Stderr, "Warning: no --url flag given; targeting %s (from %s)\n", baseURL, urlSourceLabel(source))
+}
+
 // URLSource indicates where the URL was resolved from.
 type URLSource int
 
@@ -215,6 +228,7 @@ func GetBaseURLWithSource() (string, URLSource, error) {
 			return "", source, &usageError{fmt.Errorf("%w (from %s)", err, urlSourceLabel(source))}
 		}
 		warnAboutURL(warnings)
+		warnAboutURLSource(url, source)
 		return url, source, nil
 	}
 	if f := rootCmd.PersistentFlags().Lookup("url"); f != nil && f.Changed {
