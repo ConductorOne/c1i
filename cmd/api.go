@@ -142,7 +142,7 @@ var apiCmd = &cobra.Command{
 				bodyObj := map[string]any{}
 				if body != "" {
 					if err := json.Unmarshal([]byte(body), &bodyObj); err != nil {
-						return fmt.Errorf("invalid JSON body: %w", err)
+						return &usageError{fmt.Errorf("invalid JSON body: %w", err)}
 					}
 				}
 				previewBody = bodyObj
@@ -183,7 +183,7 @@ var apiCmd = &cobra.Command{
 				if body != "" {
 					var discard any
 					if err := json.Unmarshal([]byte(body), &discard); err != nil {
-						return fmt.Errorf("invalid JSON body: %w", err)
+						return &usageError{fmt.Errorf("invalid JSON body: %w", err)}
 					}
 					bodyBytes = []byte(body)
 				}
@@ -191,7 +191,7 @@ var apiCmd = &cobra.Command{
 				var bodyObj map[string]any
 				if body != "" {
 					if err := json.Unmarshal([]byte(body), &bodyObj); err != nil {
-						return fmt.Errorf("invalid JSON body: %w", err)
+						return &usageError{fmt.Errorf("invalid JSON body: %w", err)}
 					}
 				} else {
 					bodyObj = map[string]any{}
