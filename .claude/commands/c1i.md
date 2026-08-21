@@ -55,11 +55,11 @@ rejected rather than rewritten. A bare `mycompany` is rejected as ambiguous.
 |---|---|
 | 0 | success |
 | 1 | generic / unclassified error |
-| 2 | usage error (bad flags/args, unknown command, an empty id argument, an id the API redirects to a collection, or any API `4xx` other than `401`/`403`/`404`/`429`) |
+| 2 | usage error (bad flags/args, unknown command, an empty id argument, an id the API redirects to a collection, or any API `4xx` other than `401`/`403`/`404`/`408`/`429`) |
 | 3 | not authenticated, or API `401`/`403` |
 | 4 | API `404` (not found) |
 | 5 | API `429` (rate limited) |
-| 6 | C1 failed: API `5xx`, a `200` with a body that isn't JSON, or a redirect loop (`RedirectLoopError`) |
+| 6 | C1 failed: API `5xx` or `408`, a `200` with a body that isn't JSON, or a redirect loop (`RedirectLoopError`) |
 | 7 | MCP tool call completed but the tool itself reported `isError: true` |
 | 8 | a system beyond C1, or the MCP protocol layer, failed (includes an unreachable gateway) |
 
