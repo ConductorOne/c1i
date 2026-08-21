@@ -106,7 +106,7 @@ c1i functions commits <function-id> [--page-size N] [--page-token TOKEN] [--limi
 c1i functions usage <function-id> [--page-size N] [--page-token TOKEN] [--limit N]
 ```
 
-`functions source` auto-resolves the function's published commit (falling back to its head/latest draft) and base64-decodes the source files. Without `--out-dir`, each file is printed to stdout with a `// ===== <name> =====` delimiter; with `--out-dir`, files are written to disk. `functions usage` scans every automation and emits one row per step that calls the given function — useful before deleting a draft.
+`functions source` auto-resolves the function's published commit (falling back to its head/latest draft) and base64-decodes the source files. Without `--out-dir`, each file is printed to stdout with a `// ===== <name> =====` delimiter; with `--out-dir`, files are written to disk. Fetched source is developer-authored code that commonly inlines credentials, so files are written `0600` and the directory is created — or, if it already exists, tightened, never widened — to at most `0750`; a tightened pre-existing directory prints a warning to stderr naming its old mode. `functions usage` scans every automation and emits one row per step that calls the given function — useful before deleting a draft.
 
 ### Automations
 

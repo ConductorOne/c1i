@@ -116,6 +116,18 @@ func TestUnsafeSourceName(t *testing.T) {
 	}
 }
 
+// TestOutDirFlagHelpDocumentsModes guards against the flag help drifting
+// from what --out-dir actually does: files land at 0600, the directory is
+// held to at most 0750, because fetched source may inline credentials.
+func TestOutDirFlagHelpDocumentsModes(t *testing.T) {
+	usage := functionsSourceCmd.Flags().Lookup("out-dir").Usage
+	for _, want := range []string{"0600", "0750", "credentials"} {
+		if !strings.Contains(usage, want) {
+			t.Errorf("--out-dir help %q does not mention %q", usage, want)
+		}
+	}
+}
+
 // statPerm returns the permission bits of path, failing the test on error.
 func statPerm(t *testing.T, path string) os.FileMode {
 	t.Helper()
