@@ -2,7 +2,8 @@ version: 2
 
 before:
   hooks:
-    - go mod tidy
+    # No `go mod tidy` here: it rewrote go.mod mid-build and shipped v0.4.0 as
+    # "+dirty". CI and the release workflow both assert tidiness instead.
     - go generate ./...
 
 builds:

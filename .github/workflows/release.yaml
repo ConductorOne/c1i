@@ -28,6 +28,27 @@ jobs:
           for goos in linux darwin windows; do
             GOOS=$goos govulncheck ./...
           done
+      # v0.4.0 shipped every binary stamped "v0.4.0+dirty": the version comes from
+      # VCS state at compile time, and goreleaser validates a clean tree BEFORE
+      # running its own hooks, one of which rewrote go.mod. Assert here instead --
+      # a wrong stamp fails the release loudly rather than publishing quietly.
+      - name: Verify the release will stamp a clean version
+        run: |
+          set -euo pipefail
+          go generate ./...
+          go mod tidy
+          if ! git diff --exit-code; then
+            echo "::error::a release hook modified the tree; binaries would be stamped +dirty"
+            exit 1
+          fi
+          go build -o /tmp/c1i-stamp .
+          got="$(/tmp/c1i-stamp --version)"
+          if [ "$got" != "${GITHUB_REF_NAME}" ]; then
+            echo "::error::version stamp is '${got}', expected '${GITHUB_REF_NAME}'"
+            exit 1
+          fi
+          echo "version stamp verified: ${got}"
+
       - name: Run GoReleaser
         uses: goreleaser/goreleaser-action@v6
         with:
