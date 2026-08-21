@@ -82,6 +82,13 @@ func (e *upstreamError) Unwrap() error { return e.err }
 // commands — e.g. "apps set-owners --wait" polling for async provisioning —
 // can honor cancellation instead of only a --*-timeout flag.
 func Run() int {
+	// Cobra creates "completion" lazily inside ExecuteC, i.e. after the guards
+	// below would have run -- so it never got the synthetic RunE that turns an
+	// unknown subcommand into a usage error, and "completion bogus-shell" printed
+	// help and exited 0. Creating it here puts it under the same guard as every
+	// other group. Deliberately not InitDefaultHelpCmd: cobra's help is runnable
+	// with a nil Args, so the NoArgs stamp below would break "c1i help <command>".
+	rootCmd.InitDefaultCompletionCmd()
 	attachSubcommandGuards(rootCmd)
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
