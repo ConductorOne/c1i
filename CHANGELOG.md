@@ -143,6 +143,22 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   more pages" tradeoff above far more expensive than it needs to be, turning
   a few full-sized pages into many mostly-wasted small ones.
 
+  **Worst case, worth knowing plainly: a `--fields` spec that matches
+  nothing at all, combined with `--limit`, scans the collection to
+  completion before erroring** — there is no way to know "nothing ever
+  matched" short of exhausting it, and a typo is the ordinary way to reach
+  this case. Live-measured: `tasks list --fields <typo> --limit 2 --debug`
+  made 193 requests and scanned ~9,650 rows over ~41s before exiting `2`
+  on this tenant; on `entitlements list` (~35,000 rows here) that's
+  minutes. This is not a new failure mode `--fields` introduces — it's the
+  same rule `accounts list --unmapped-only` and `functions usage` already
+  have for their own client-side filtering (documented in `cmd/agents.md`):
+  a filter applied after the fetch can't bound the work when nothing
+  matches, no matter what `--limit` says. `--fields`/`--limit` now simply
+  joins that existing, documented behavior rather than being a special
+  case. No cap or first-page validation was added for this — the latter
+  would false-error on a legitimately sparse (but real) field.
+
 - **`functions source --out-dir` writes files `0600` instead of `0644`**, and
   the directory `0700` instead of `0755` — now including a pre-existing
   directory, not just one this command creates. Fetched function source is

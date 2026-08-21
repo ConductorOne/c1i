@@ -411,6 +411,17 @@ c1i functions get <id> --fields id,displayName,publishedCommitId
     to `jq` (`c1i ... | jq ...`), remember `$?` reads the pipe's last command,
     not `c1i`'s — the stderr message is the durable signal here, not the exit
     code you'd read from a naive `$?` after the pipe.
+  - **Worst case: a `--fields` spec that matches nothing at all, paired with
+    `--limit`, scans the collection to completion before erroring** — "nothing
+    ever matched" can't be known short of exhausting every page, and a typo is
+    the ordinary way to hit this. Live-measured: `tasks list --fields <typo>
+    --limit 2` made 193 requests over ~41s before exiting `2` on a tenant with
+    ~9,650 tasks; on a 35,000-row `entitlements list` that's minutes. This
+    isn't specific to `--fields` — it's the same rule `accounts list
+    --unmapped-only` and `functions usage` already follow for their own
+    client-side filtering (a filter applied after the fetch can't bound the
+    work when nothing matches, no matter what `--limit` says); `--fields`
+    combined with `--limit` is one more instance of it, not a new behavior.
 - Missing fields are silently omitted, so requesting a superset is safe.
 - Also settable via `C1I_FIELDS`. Applies to read output — list commands, `api`,
   and single-object `get` commands. Mutation confirmations (create/update/delete)
