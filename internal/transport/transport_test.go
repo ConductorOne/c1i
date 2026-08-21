@@ -491,3 +491,23 @@ func captureStderr(t *testing.T, fn func()) string {
 	}
 	return string(out)
 }
+
+// TestNew_WiresTimeout pins that New actually sets the constructed Client's
+// underlying http.Client.Timeout -- both the DefaultTimeout fallback and a
+// WithTimeout override reach the wire, not just the buildConfig struct used
+// to compute them. This is the highest-blast-radius declared behavior (every
+// request this CLI sends now has a timeout that didn't exist before), so it
+// gets its own pinning test rather than relying on the slower/hang-based
+// tests elsewhere to catch a regression here indirectly.
+func TestNew_WiresTimeout(t *testing.T) {
+	c := New(http.DefaultTransport)
+	if c.httpClient.Timeout != DefaultTimeout {
+		t.Errorf("httpClient.Timeout = %v, want DefaultTimeout (%v)", c.httpClient.Timeout, DefaultTimeout)
+	}
+
+	const want = 42 * time.Second
+	c = New(http.DefaultTransport, WithTimeout(want))
+	if c.httpClient.Timeout != want {
+		t.Errorf("httpClient.Timeout = %v, want the WithTimeout override (%v)", c.httpClient.Timeout, want)
+	}
+}

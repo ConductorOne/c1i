@@ -68,6 +68,14 @@ var (
 // client-identity string this CLI sends: the user-agent below, the MCP
 // clientInfo.version an `mcp gateway` handshake reports (internal/mcpgateway
 // reads this directly), and cmd.Version (`c1i version`, aliased to this).
+//
+// Exported and mutable (not a function returning an unexported value)
+// specifically so a test can override it to a value that's never "dev" --
+// see internal/mcpgateway's TestInitializeSendsRealClientVersion, which
+// depends on this to distinguish "reads Version" from "hardcodes dev"; go
+// test's own build normally reports "(devel)" -> "dev" too, so without an
+// injectable override that test would pass by coincidence even against a
+// hardcoded literal. Nothing in production code writes to it.
 var Version = func() string {
 	if info, ok := debug.ReadBuildInfo(); ok && info.Main.Version != "" && info.Main.Version != "(devel)" {
 		return info.Main.Version
