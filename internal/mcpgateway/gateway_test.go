@@ -1150,40 +1150,76 @@ func TestInitializeSendsRealClientVersion(t *testing.T) {
 	}
 }
 
-// TestUnreadableBodyClassifiesAsTransportError proves a 2xx response whose
-// body can't be fully read (the connection drops mid-body, so io.ReadAll
-// fails) surfaces as *TransportError, not a bare unwrapped error. This
-// matters for the exit code: cmd/mcp_gateway.go's classifyGatewayError maps
-// *TransportError to exit 8 (a system beyond C1 failed) rather than the
-// generic exit 1 a bare error collapses to — an unreadable body is a
-// transport failure, not a usage problem, the same reasoning as any other
-// failure to complete the exchange.
-func TestUnreadableBodyClassifiesAsTransportError(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		hj, ok := w.(http.Hijacker)
-		if !ok {
-			t.Fatal("ResponseWriter does not support hijacking")
-		}
-		conn, buf, err := hj.Hijack()
-		if err != nil {
-			t.Fatalf("hijack: %v", err)
-		}
-		defer func() { _ = conn.Close() }()
-		// Declare more bytes than are actually sent, then close the
-		// connection: the client's body read fails with an unexpected EOF
-		// instead of completing, rather than the request hanging.
-		_, _ = buf.WriteString("HTTP/1.1 200 OK\r\nContent-Length: 1000\r\nContent-Type: application/json\r\n\r\n{\"short\":true}")
-		_ = buf.Flush()
-	}))
-	defer srv.Close()
-
-	c := New(srv.URL, "test-token", srv.Client())
-	err := c.Initialize(context.Background())
-	if err == nil {
-		t.Fatal("expected an error from a 2xx response whose body can't be fully read")
+// TestUnreadableBodyClassification is table-driven over the arrived status
+// (or its absence) for a response whose body can't be fully read (the
+// connection drops mid-body, so io.ReadAll fails on a real short-read/
+// unexpected-EOF, not a synthetic error) -- pinning the three-branch claim
+// CHANGELOG.md makes for this: a status-carrying response classifies
+// exactly as a complete response with that status would (HTTPError, whose
+// StatusCode a caller like cmd/errors.go's exitCode uses to pick exit 4 for
+// 404 or exit 6 for 500 -- that status->exit mapping itself is pinned
+// separately by TestHTTPErrorClassificationAcrossStatuses in this file and
+// cmd's TestGatewayErrorExitCodes, so this test's job is only to prove a
+// truncated body doesn't derail that classification), while a 2xx (nothing
+// to key off) classifies as *TransportError (exit 8 via
+// cmd/mcp_gateway.go's classifyGatewayError). Before this refactor moved
+// body-reading inside transport.Do, every one of these three cases was a
+// bare, unclassified error (exit 1) regardless of status.
+func TestUnreadableBodyClassification(t *testing.T) {
+	cases := []struct {
+		name       string
+		statusLine string
+		wantStatus int // 0 means "no status: must classify as TransportError"
+	}{
+		{"2xx: TransportError, no status to key off", "HTTP/1.1 200 OK", 0},
+		{"404: HTTPError carrying the real status", "HTTP/1.1 404 Not Found", http.StatusNotFound},
+		{"500: HTTPError carrying the real status", "HTTP/1.1 500 Internal Server Error", http.StatusInternalServerError},
 	}
-	var transportErr *TransportError
-	if !errors.As(err, &transportErr) {
-		t.Fatalf("error = %T (%v), want *TransportError", err, err)
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				hj, ok := w.(http.Hijacker)
+				if !ok {
+					t.Fatal("ResponseWriter does not support hijacking")
+				}
+				conn, buf, err := hj.Hijack()
+				if err != nil {
+					t.Fatalf("hijack: %v", err)
+				}
+				defer func() { _ = conn.Close() }()
+				// Declare more bytes than are actually sent, then close the
+				// connection: the client's body read fails with an
+				// unexpected EOF instead of completing, rather than the
+				// request hanging.
+				_, _ = buf.WriteString(tc.statusLine + "\r\nContent-Length: 1000\r\nContent-Type: application/json\r\n\r\n{\"short\":true}")
+				_ = buf.Flush()
+			}))
+			defer srv.Close()
+
+			c := New(srv.URL, "test-token", srv.Client())
+			err := c.Initialize(context.Background())
+			if err == nil {
+				t.Fatal("expected an error from a response whose body can't be fully read")
+			}
+
+			if tc.wantStatus == 0 {
+				var transportErr *TransportError
+				if !errors.As(err, &transportErr) {
+					t.Fatalf("error = %T (%v), want *TransportError", err, err)
+				}
+				return
+			}
+			httpErr, ok := err.(*HTTPError)
+			if !ok {
+				t.Fatalf("error = %T (%v), want *HTTPError", err, err)
+			}
+			if httpErr.StatusCode != tc.wantStatus {
+				t.Errorf("HTTPError.StatusCode = %d, want %d", httpErr.StatusCode, tc.wantStatus)
+			}
+			var transportErr *TransportError
+			if errors.As(err, &transportErr) {
+				t.Errorf("a %d response with a truncated body must not also classify as *TransportError, got %v", tc.wantStatus, err)
+			}
+		})
 	}
 }
