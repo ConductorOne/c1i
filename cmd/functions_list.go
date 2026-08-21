@@ -8,6 +8,41 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// functionListItem is one row of GET /api/v1/functions.
+type functionListItem struct {
+	ID                string `json:"id"`
+	DisplayName       string `json:"displayName"`
+	Description       string `json:"description"`
+	FunctionType      string `json:"functionType"`
+	PublishedCommitID string `json:"publishedCommitId"`
+	Head              string `json:"head"`
+	IsDraft           bool   `json:"isDraft"`
+	UseSpn            bool   `json:"useSpn"`
+	DeletedAt         string `json:"deletedAt"`
+}
+
+// functionIsPublished reports whether a function has a live published commit
+// (as opposed to a draft or a function that has never been published).
+func functionIsPublished(f functionListItem) bool {
+	return f.PublishedCommitID != "" && !f.IsDraft
+}
+
+// functionRow flattens a functionListItem into the NDJSON output row.
+// published_commit_id and deleted_at are nil, not "", when unset/live.
+func functionRow(f functionListItem) map[string]any {
+	return map[string]any{
+		"id":                  f.ID,
+		"display_name":        f.DisplayName,
+		"description":         f.Description,
+		"function_type":       f.FunctionType,
+		"published_commit_id": nilIfEmpty(f.PublishedCommitID),
+		"head":                f.Head,
+		"is_draft":            f.IsDraft,
+		"use_spn":             f.UseSpn,
+		"deleted_at":          nilIfEmpty(f.DeletedAt),
+	}
+}
+
 var functionsListCmd = &cobra.Command{
 	Use:   "list",
 	Short: "List C1 functions (NDJSON output)",
@@ -60,40 +95,22 @@ var functionsListCmd = &cobra.Command{
 			}
 
 			var resp struct {
-				List []struct {
-					ID                string `json:"id"`
-					DisplayName       string `json:"displayName"`
-					Description       string `json:"description"`
-					FunctionType      string `json:"functionType"`
-					PublishedCommitID string `json:"publishedCommitId"`
-					Head              string `json:"head"`
-					IsDraft           bool   `json:"isDraft"`
-					UseSpn            bool   `json:"useSpn"`
-				} `json:"list"`
-				NextPageToken string `json:"nextPageToken"`
+				List          []functionListItem `json:"list"`
+				NextPageToken string             `json:"nextPageToken"`
 			}
 			if err := json.Unmarshal(data, &resp); err != nil {
 				return fmt.Errorf("failed to parse response: %w", err)
 			}
 
 			for _, f := range resp.List {
-				published := f.PublishedCommitID != "" && !f.IsDraft
+				published := functionIsPublished(f)
 				if publishedOnly && !published {
 					continue
 				}
 				if draftOnly && published {
 					continue
 				}
-				_ = enc.Encode(map[string]any{
-					"id":                  f.ID,
-					"display_name":        f.DisplayName,
-					"description":         f.Description,
-					"function_type":       f.FunctionType,
-					"published_commit_id": f.PublishedCommitID,
-					"head":                f.Head,
-					"is_draft":            f.IsDraft,
-					"use_spn":             f.UseSpn,
-				})
+				_ = enc.Encode(functionRow(f))
 				emitted++
 				if limitReached(emitted, limit) {
 					return nil
