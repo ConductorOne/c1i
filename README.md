@@ -422,7 +422,7 @@ branch on without parsing text:
 |------|---------|
 | `0` | success |
 | `1` | generic / unclassified error |
-| `2` | usage error (bad flags or arguments, an empty id, an id the API redirects to a collection, or the API returned `400`) |
+| `2` | usage error (bad flags or arguments, an empty id, an id the API redirects to a collection, or the API returned any `4xx` other than `401`/`403`/`404`/`429`) |
 | `3` | not authenticated, or API returned `401`/`403` |
 | `4` | API returned `404` (not found) |
 | `5` | API returned `429` (rate limited — back off and retry) |

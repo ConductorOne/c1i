@@ -55,7 +55,7 @@ rejected rather than rewritten. A bare `mycompany` is rejected as ambiguous.
 |---|---|
 | 0 | success |
 | 1 | generic / unclassified error |
-| 2 | usage error (bad flags/args, unknown command, an empty id argument, an id the API redirects to a collection, or API `400`) |
+| 2 | usage error (bad flags/args, unknown command, an empty id argument, an id the API redirects to a collection, or any API `4xx` other than `401`/`403`/`404`/`429`) |
 | 3 | not authenticated, or API `401`/`403` |
 | 4 | API `404` (not found) |
 | 5 | API `429` (rate limited) |

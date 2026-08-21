@@ -176,7 +176,7 @@ tracked root file outside its allowlist. Stage explicit paths rather than `-A`.
   |------|---------|
   | `0` | ok |
   | `1` | generic |
-  | `2` | usage (bad flags/args, an empty id, a refused redirect, or API `400`) |
+  | `2` | usage (bad flags/args, an empty id, a refused redirect, or any API `4xx` other than `401`/`403`/`404`/`429`) |
   | `3` | auth (`401`/`403`) |
   | `4` | not-found (`404`) |
   | `5` | rate-limited (`429`) |
