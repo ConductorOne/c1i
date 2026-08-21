@@ -10,13 +10,9 @@ import (
 
 // allowedRootFiles lists every file permitted at the repository root.
 //
-// It is an allowlist rather than a pattern of known-bad names because the
-// failure it guards is an unexpected file *arriving*: a release commit once
-// swept 18 scratch files into this repo -- command output redirected into the
-// working directory, picked up by `git add -A` -- and no name pattern would
-// have predicted them. Scratch output lands wherever the command ran, which is
-// almost always here. Adding a root file is rare and deliberate; adding it to
-// this list should be too.
+// An allowlist rather than a pattern of known-bad names: the failure is an
+// unexpected file arriving, and no pattern predicts one. Scratch output lands
+// wherever the command ran, which is usually here.
 var allowedRootFiles = map[string]bool{
 	".gitignore":              true,
 	".golangci.yml":           true,

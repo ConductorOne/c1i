@@ -24,6 +24,9 @@ go build ./...
 go vet ./...
 go test ./...
 golangci-lint run --timeout=3m ./...   # includes gofmt formatting; CI gates on this
+go mod tidy && git diff --exit-code go.mod go.sum   # CI gates on this
+gosec -quiet ./...                     # CI gates on this
+govulncheck ./...                      # CI gates on this, per GOOS
 ```
 
 Never weaken, loosen, or delete a test to make a change pass. For a new test,

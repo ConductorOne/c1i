@@ -6,6 +6,18 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security
+
+- **The v0.4.0 and v0.4.1 binaries contain reachable standard-library
+  vulnerabilities; upgrade rather than continuing to run them.** They were built
+  with Go 1.25.7, and a release binary embeds the standard library, so the
+  vulnerability ships inside the artifact. Scanning as that toolchain reports 14
+  reachable on Linux and 13 on macOS and Windows, across `net/url`, `net/http`,
+  `crypto/tls`, `crypto/x509`, `encoding/asn1`, `net/textproto`, `net`, and `os`.
+  This release builds with Go 1.26.7 and upgrades `x/text` and `x/sys`;
+  `govulncheck` now reports none, and CI and the release build both gate on it,
+  scanned per platform because reachability is build-tag dependent.
+
 ## [0.4.1] - 2026-08-20
 
 ### Fixed
