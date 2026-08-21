@@ -175,7 +175,7 @@ func fetchOpenAPISpec(cmd *cobra.Command) ([]byte, error) {
 
 	if info, err := os.Stat(cachePath); err == nil {
 		if time.Since(info.ModTime()) < cacheMaxAge {
-			return os.ReadFile(cachePath)
+			return os.ReadFile(cachePath) // #nosec G304 -- cachePath is a fixed internal path (openAPICachePath), not caller input
 		}
 	}
 
@@ -187,7 +187,7 @@ func fetchOpenAPISpec(cmd *cobra.Command) ([]byte, error) {
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		// Fall back to cache on network error.
-		if data, readErr := os.ReadFile(cachePath); readErr == nil {
+		if data, readErr := os.ReadFile(cachePath); readErr == nil { // #nosec G304 -- cachePath is a fixed internal path (openAPICachePath), not caller input
 			return data, nil
 		}
 		return nil, fmt.Errorf("fetching OpenAPI spec: %w", err)
@@ -195,7 +195,7 @@ func fetchOpenAPISpec(cmd *cobra.Command) ([]byte, error) {
 	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
-		if data, readErr := os.ReadFile(cachePath); readErr == nil {
+		if data, readErr := os.ReadFile(cachePath); readErr == nil { // #nosec G304 -- cachePath is a fixed internal path (openAPICachePath), not caller input
 			return data, nil
 		}
 		return nil, fmt.Errorf("fetching OpenAPI spec: HTTP %d", resp.StatusCode)
@@ -207,7 +207,7 @@ func fetchOpenAPISpec(cmd *cobra.Command) ([]byte, error) {
 	}
 
 	_ = os.MkdirAll(filepath.Dir(cachePath), 0o700)
-	_ = os.WriteFile(cachePath, data, 0o644)
+	_ = os.WriteFile(cachePath, data, 0o644) // #nosec G306 -- cached OpenAPI spec is public C1 API documentation, not sensitive
 
 	return data, nil
 }

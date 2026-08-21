@@ -106,7 +106,7 @@ func readConfigFile(cmd *cobra.Command, path string) (map[string]any, error) {
 	if path == "-" {
 		data, err = io.ReadAll(cmd.InOrStdin())
 	} else {
-		data, err = os.ReadFile(path) //nolint:gosec // user-supplied config path is intentional
+		data, err = os.ReadFile(path) // #nosec G304 -- user-supplied config-file path is intentional
 	}
 	if err != nil {
 		return nil, fmt.Errorf("reading config file: %w", err)

@@ -62,7 +62,7 @@ var (
 		if d <= 0 {
 			return 0
 		}
-		return d/2 + time.Duration(rand.Int63n(int64(d/2)+1))
+		return d/2 + time.Duration(rand.Int63n(int64(d/2)+1)) // #nosec G404 -- retry backoff jitter, not security-sensitive
 	}
 )
 

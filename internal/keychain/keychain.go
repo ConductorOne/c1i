@@ -28,7 +28,7 @@ const (
 
 const (
 	envClientID     = "C1I_CLIENT_ID"
-	envClientSecret = "C1I_CLIENT_SECRET"
+	envClientSecret = "C1I_CLIENT_SECRET" // #nosec G101 -- env var name, not a credential value
 
 	acctClientID     = "client_id"
 	acctClientSecret = "client_secret"
@@ -207,7 +207,7 @@ func storeFile(service, clientID, clientSecret string) error {
 	if err := os.MkdirAll(filepath.Dir(p), 0o700); err != nil {
 		return fmt.Errorf("creating credentials dir: %w", err)
 	}
-	b, err := json.Marshal(fileCreds{ClientID: clientID, ClientSecret: clientSecret})
+	b, err := json.Marshal(fileCreds{ClientID: clientID, ClientSecret: clientSecret}) // #nosec G117 -- serializing for the 0600 credentials file, not logging or a response
 	if err != nil {
 		return err
 	}
@@ -227,7 +227,7 @@ func loadFile(service string) (string, string, error) {
 	if err != nil {
 		return "", "", err
 	}
-	b, err := os.ReadFile(p)
+	b, err := os.ReadFile(p) // #nosec G304 -- p is built from UserConfigDir, not caller input
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
 			return "", "", fmt.Errorf("%w for %s: run 'c1i auth login'", ErrNoCredentials, service)

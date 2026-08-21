@@ -47,13 +47,13 @@ func authArmTemplate(mode string) (map[string]any, error) {
 			"authorizeUrl": "https://provider.example/oauth/authorize",
 			"tokenUrl":     "https://provider.example/oauth/token",
 			"scopes":       []string{"<scope>"},
-		}}, nil
+		}}, nil // #nosec G101 -- placeholder template values (e.g. "<oauth-client-secret>"), not real secrets
 	case "aws-sigv4", "aws":
 		return map[string]any{"awsSigv4": map[string]any{
 			"accessKeyId":     "<aws-access-key-id>",
 			"secretAccessKey": "<aws-secret-access-key>",
 			"sessionToken":    "",
-		}}, nil
+		}}, nil // #nosec G101 -- placeholder template values (e.g. "<aws-secret-access-key>"), not real secrets
 	case "google-service-account", "google":
 		return map[string]any{"googleServiceAccount": map[string]any{
 			"credentialsJson": "<service-account-credentials-json-string>",

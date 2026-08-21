@@ -106,7 +106,8 @@ named exactly as the function has them — usually main.ts and main.test.ts).`,
 		sort.Strings(names)
 
 		if outDir != "" {
-			if err := os.MkdirAll(outDir, 0o755); err != nil {
+			// 0750: no reason for the directory to be group/world-readable.
+			if err := os.MkdirAll(outDir, 0o750); err != nil {
 				return fmt.Errorf("failed to create out-dir: %w", err)
 			}
 		}
@@ -125,7 +126,7 @@ named exactly as the function has them — usually main.ts and main.test.ts).`,
 					return fmt.Errorf("refusing to write file with unsafe name %q", name)
 				}
 				path := filepath.Join(outDir, name)
-				if err := os.WriteFile(path, decoded, 0o644); err != nil {
+				if err := os.WriteFile(path, decoded, 0o644); err != nil { // #nosec G306 -- source code the user asked to fetch, not sensitive
 					return fmt.Errorf("failed to write %s: %w", path, err)
 				}
 				_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "wrote %s (%d bytes)\n", path, len(decoded))

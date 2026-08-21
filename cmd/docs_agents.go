@@ -35,7 +35,7 @@ plain Markdown.
 
 		output, _ := cmd.Flags().GetString("output")
 		if output != "" {
-			if err := os.WriteFile(output, []byte(content), 0o644); err != nil {
+			if err := os.WriteFile(output, []byte(content), 0o644); err != nil { // #nosec G306 -- content is the static, public agents.md doc, not sensitive
 				return fmt.Errorf("writing agents file: %w", err)
 			}
 			_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "Wrote AGENTS.md to %s\n", output)
