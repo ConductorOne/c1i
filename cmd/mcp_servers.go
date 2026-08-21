@@ -165,12 +165,17 @@ func serverRow(s serverView) map[string]any {
 }
 
 // serverCountRow is a serverRow with the per-server tool count appended, used
-// by `search` (which wraps each view in {mcpServer, toolCount}). last_called_at
-// is included only when the view carries it (i.e. --include-last-called-at),
-// so the column doesn't appear as a misleading always-empty field otherwise.
-func serverCountRow(s serverView, toolCount int64) map[string]any {
+// by `search` (which wraps each view in {mcpServer, toolCount}). The API only
+// computes toolCount when the request carries a tool_state filter — a
+// filterless request leaves it at zero without counting anything, so a nil
+// toolCount (no --tool-state given) omits the key rather than showing that
+// unset zero as a real count. last_called_at follows the same shape, included
+// only when the view carries it (i.e. --include-last-called-at).
+func serverCountRow(s serverView, toolCount *int64) map[string]any {
 	row := serverRow(s)
-	row["tool_count"] = toolCount
+	if toolCount != nil {
+		row["tool_count"] = *toolCount
+	}
 	if s.LastCalledAt != "" {
 		row["last_called_at"] = s.LastCalledAt
 	}

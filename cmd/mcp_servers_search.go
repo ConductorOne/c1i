@@ -12,9 +12,14 @@ var mcpServersSearchCmd = &cobra.Command{
 	Use:   "search",
 	Short: "Search MCP servers within an app, with per-server tool counts (NDJSON output)",
 	Long: `Search the MCP servers registered under a single app (app_id required),
-returning each server plus a count of its tools in the requested state.
+returning each server plus, when --tool-state is given, a count of its tools
+in that state.
 
-Use --tool-state to choose which tool state the count reflects.
+The server only computes a count when --tool-state is set; a filterless
+search leaves the count uncomputed rather than "all tools," so "tool_count"
+is omitted from the row instead of showing a 0 that would look identical to
+a server with no tools (verified live: a server with hundreds of tools in
+other states still returns 0 for a filterless search).
 --include-last-called-at adds a "last_called_at" timestamp per row (one extra
 TSDB read each) so you can spot idle servers.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
@@ -80,7 +85,12 @@ TSDB read each) so you can spot idle servers.`,
 			}
 
 			for _, r := range resp.List {
-				_ = enc.Encode(serverCountRow(r.MCPServer, int64(r.ToolCount)))
+				var toolCount *int64
+				if toolState != "" {
+					tc := int64(r.ToolCount)
+					toolCount = &tc
+				}
+				_ = enc.Encode(serverCountRow(r.MCPServer, toolCount))
 				emitted++
 				if limitReached(emitted, limit) {
 					return nil
@@ -100,7 +110,7 @@ TSDB read each) so you can spot idle servers.`,
 func init() {
 	mcpServersSearchCmd.Flags().String("app-id", "", "Application ID")
 	mcpServersSearchCmd.Flags().String("query", "", "Fuzzy search on display_name")
-	mcpServersSearchCmd.Flags().String("tool-state", "", "Tool state the count reflects: pending, approved, disabled, removed")
+	mcpServersSearchCmd.Flags().String("tool-state", "", "Tool state to count: pending, approved, disabled, removed. Without it, tool_count is omitted (the server does not compute a count)")
 	mcpServersSearchCmd.Flags().Bool("include-last-called-at", false, "Populate last_called_at per row (extra read per server)")
 	mcpServersSearchCmd.Flags().Int("page-size", 50, "Results per page (max 100)")
 	mcpServersSearchCmd.Flags().String("page-token", "", "Pagination cursor")
