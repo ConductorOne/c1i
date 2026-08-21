@@ -13,6 +13,7 @@ import (
 
 	"github.com/ConductorOne/c1i/internal/client"
 	"github.com/ConductorOne/c1i/internal/mcpgateway"
+	"github.com/ConductorOne/c1i/internal/transport"
 	"github.com/spf13/cobra"
 )
 
@@ -75,7 +76,10 @@ func TestGatewayErrorExitCodes(t *testing.T) {
 				}))
 				defer srv.Close()
 
-				gc := mcpgateway.New(srv.URL, "test-token", srv.Client())
+				// WithMaxRetries(0): a 429 is otherwise retried by the shared
+				// transport (real, multi-second backoff) -- the exit-code
+				// classification this test pins doesn't depend on retry count.
+				gc := mcpgateway.New(srv.URL, "test-token", srv.Client(), transport.WithMaxRetries(0))
 				err := gc.Initialize(context.Background())
 				if err == nil {
 					t.Fatalf("status %d: expected Initialize to fail", tc.status)
@@ -107,7 +111,8 @@ func TestGatewayErrorExitCodes(t *testing.T) {
 				}))
 				defer srv.Close()
 
-				gc := mcpgateway.New(srv.URL, "test-token", srv.Client())
+				// See the matching comment in the "handshake" subtest above.
+				gc := mcpgateway.New(srv.URL, "test-token", srv.Client(), transport.WithMaxRetries(0))
 				if err := gc.Initialize(context.Background()); err != nil {
 					t.Fatalf("status %d: unexpected Initialize failure: %v", tc.status, err)
 				}
@@ -535,4 +540,55 @@ func TestGatewayCallIsErrorExitCode(t *testing.T) {
 			t.Error("a JSON-RPC error response must not be classified as *toolExecutionError")
 		}
 	})
+}
+
+// TestGatewayUnreadableBodyExitCodes is the exit-code-level companion to
+// internal/mcpgateway's TestUnreadableBodyClassification (which pins the
+// error *type* a truncated body produces, one package down from where exit
+// codes are decided). This drives the same http.Hijacker-truncated-body
+// technique through the real classifyGatewayError/exitCode path this
+// package owns, so the CHANGELOG's literal "404 -> exit 4, 500 -> exit 6,
+// 2xx -> exit 8" claim is backed at the layer that actually produces those
+// numbers, not just at the error-type layer.
+func TestGatewayUnreadableBodyExitCodes(t *testing.T) {
+	cases := []struct {
+		name       string
+		statusLine string
+		want       int
+	}{
+		{"2xx truncated body -> exit 8 (nothing to key off)", "HTTP/1.1 200 OK", exitUpstream},
+		{"404 truncated body -> exit 4 (real status still drives it)", "HTTP/1.1 404 Not Found", exitNotFound},
+		{"500 truncated body -> exit 6 (real status still drives it)", "HTTP/1.1 500 Internal Server Error", exitServer},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				hj, ok := w.(http.Hijacker)
+				if !ok {
+					t.Fatal("ResponseWriter does not support hijacking")
+				}
+				conn, buf, err := hj.Hijack()
+				if err != nil {
+					t.Fatalf("hijack: %v", err)
+				}
+				defer func() { _ = conn.Close() }()
+				// Declare more bytes than are actually sent, then close the
+				// connection: the client's body read fails with an
+				// unexpected EOF instead of completing.
+				_, _ = buf.WriteString(tc.statusLine + "\r\nContent-Length: 1000\r\nContent-Type: application/json\r\n\r\n{\"short\":true}")
+				_ = buf.Flush()
+			}))
+			defer srv.Close()
+
+			gc := mcpgateway.New(srv.URL, "test-token", srv.Client())
+			err := gc.Initialize(context.Background())
+			if err == nil {
+				t.Fatal("expected an error from a response whose body can't be fully read")
+			}
+			wrapped := fmt.Errorf("gateway handshake failed: %w", classifyGatewayError(err))
+			if got := exitCode(wrapped); got != tc.want {
+				t.Errorf("exitCode = %d, want %d (err: %v)", got, tc.want, wrapped)
+			}
+		})
+	}
 }

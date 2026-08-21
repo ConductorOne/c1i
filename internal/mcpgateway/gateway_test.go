@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"reflect"
 	"sort"
 	"strconv"
@@ -15,6 +16,7 @@ import (
 	"testing"
 
 	"github.com/ConductorOne/c1i/internal/client"
+	"github.com/ConductorOne/c1i/internal/transport"
 )
 
 func TestExtractSSEResponse(t *testing.T) {
@@ -695,7 +697,11 @@ func TestHTTPErrorClassificationAcrossStatuses(t *testing.T) {
 			}))
 			defer srv.Close()
 
-			c := New(srv.URL, "test-token", srv.Client())
+			// WithMaxRetries(0): a 429 is otherwise retried by the shared
+			// transport (real, multi-second backoff) — the classification this
+			// test pins doesn't depend on retry count. See
+			// TestMaxRetriesAffectsGatewayRetries for that behavior itself.
+			c := New(srv.URL, "test-token", srv.Client(), transport.WithMaxRetries(0))
 			err := c.Initialize(context.Background())
 			if err == nil {
 				t.Fatalf("expected an error for status %d", status)
@@ -1011,5 +1017,209 @@ func TestOutboundRPCMethods(t *testing.T) {
 			"outbound method invalidates that premise for the changed method — "+
 			"revisit classifyGatewayError in cmd/mcp_gateway.go before updating "+
 			"this test's expected list.", got, want)
+	}
+}
+
+// TestMaxRetriesAffectsGatewayRetries proves --max-retries (threaded in via
+// transport.WithMaxRetries) demonstrably changes gateway request behavior: a
+// 429 (always retryable, regardless of method — see isRetryableStatus in
+// internal/transport) is retried up to the configured budget, and the same
+// server called with a budget of 0 sees exactly one request. Before this
+// package used internal/transport, New had no way to configure retries at
+// all, and every gateway call got exactly one attempt no matter what
+// --max-retries said.
+func TestMaxRetriesAffectsGatewayRetries(t *testing.T) {
+	t.Run("budget of 2 retries 3 times total", func(t *testing.T) {
+		var calls int
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			calls++
+			w.WriteHeader(http.StatusTooManyRequests)
+		}))
+		defer srv.Close()
+
+		c := New(srv.URL, "test-token", srv.Client(), transport.WithMaxRetries(2))
+		if err := c.Initialize(context.Background()); err == nil {
+			t.Fatal("expected an error: the server never answers with 2xx")
+		}
+		if calls != 3 { // initial + 2 retries
+			t.Errorf("calls = %d, want 3", calls)
+		}
+	})
+
+	t.Run("budget of 0 never retries", func(t *testing.T) {
+		var calls int
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			calls++
+			w.WriteHeader(http.StatusTooManyRequests)
+		}))
+		defer srv.Close()
+
+		c := New(srv.URL, "test-token", srv.Client(), transport.WithMaxRetries(0))
+		if err := c.Initialize(context.Background()); err == nil {
+			t.Fatal("expected an error: the server never answers with 2xx")
+		}
+		if calls != 1 {
+			t.Errorf("calls = %d, want 1 (--max-retries=0 must disable retries on the gateway path too)", calls)
+		}
+	})
+}
+
+// TestDebugTracesGatewayRequest proves transport.WithDebug(true), threaded
+// through New, traces a gateway request to stderr — the wiring
+// cmd/mcp_gateway.go's newGatewayClient relies on for `c1i mcp gateway
+// list-tools --debug` to emit anything at all. Before this package used
+// internal/transport, New had no debug option, and --debug was silently
+// inert on every gateway command.
+func TestDebugTracesGatewayRequest(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Mcp-Session-Id", "sess")
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = io.WriteString(w, `{"jsonrpc":"2.0","id":1,"result":{}}`)
+	}))
+	defer srv.Close()
+
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	orig := os.Stderr
+	os.Stderr = w
+	t.Cleanup(func() { os.Stderr = orig })
+
+	c := New(srv.URL, "test-token", srv.Client(), transport.WithDebug(true))
+	if err := c.Initialize(context.Background()); err != nil {
+		t.Fatalf("Initialize: %v", err)
+	}
+
+	os.Stderr = orig
+	_ = w.Close()
+	out, err := io.ReadAll(r)
+	if err != nil {
+		t.Fatal(err)
+	}
+	trace := string(out)
+	if !strings.Contains(trace, "> POST "+srv.URL) {
+		t.Errorf("stderr trace = %q, want a request line for the POST to the gateway endpoint", trace)
+	}
+	if !strings.Contains(trace, "200 OK") {
+		t.Errorf("stderr trace = %q, want a 200 response line", trace)
+	}
+}
+
+// TestInitializeSendsRealClientVersion proves the MCP handshake's
+// clientInfo.version reports the actual build version (via
+// transport.Version), not a hardcoded "dev" literal that would make a
+// released binary misidentify itself to the gateway. transport.Version is
+// overridden to a value that is never "dev" for the duration of the test —
+// go test itself normally reports "(devel)" -> "dev" for its own build, so
+// without the override this test would pass even against a hardcoded "dev"
+// literal in gateway.go, proving nothing.
+func TestInitializeSendsRealClientVersion(t *testing.T) {
+	origVersion := transport.Version
+	transport.Version = "1.2.3-test"
+	t.Cleanup(func() { transport.Version = origVersion })
+
+	var gotVersion string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		var req struct {
+			Method string `json:"method"`
+			Params struct {
+				ClientInfo struct {
+					Version string `json:"version"`
+				} `json:"clientInfo"`
+			} `json:"params"`
+		}
+		_ = json.Unmarshal(body, &req)
+		// Initialize also fires notifications/initialized right after, which
+		// carries no params at all -- only capture the initialize call's own.
+		if req.Method == methodInitialize {
+			gotVersion = req.Params.ClientInfo.Version
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = io.WriteString(w, `{"jsonrpc":"2.0","id":1,"result":{}}`)
+	}))
+	defer srv.Close()
+
+	c := New(srv.URL, "test-token", srv.Client())
+	if err := c.Initialize(context.Background()); err != nil {
+		t.Fatalf("Initialize: %v", err)
+	}
+	if gotVersion != "1.2.3-test" {
+		t.Errorf("clientInfo.version = %q, want %q (transport.Version, not a hardcoded literal)", gotVersion, "1.2.3-test")
+	}
+}
+
+// TestUnreadableBodyClassification is table-driven over the arrived status
+// (or its absence) for a response whose body can't be fully read (the
+// connection drops mid-body, so io.ReadAll fails on a real short-read/
+// unexpected-EOF, not a synthetic error) -- pinning the three-branch claim
+// CHANGELOG.md makes for this: a status-carrying response classifies
+// exactly as a complete response with that status would (HTTPError, whose
+// StatusCode a caller like cmd/errors.go's exitCode uses to pick exit 4 for
+// 404 or exit 6 for 500 -- that status->exit mapping itself is pinned
+// separately by TestHTTPErrorClassificationAcrossStatuses in this file and
+// cmd's TestGatewayErrorExitCodes, so this test's job is only to prove a
+// truncated body doesn't derail that classification), while a 2xx (nothing
+// to key off) classifies as *TransportError (exit 8 via
+// cmd/mcp_gateway.go's classifyGatewayError). Before this refactor moved
+// body-reading inside transport.Do, every one of these three cases was a
+// bare, unclassified error (exit 1) regardless of status.
+func TestUnreadableBodyClassification(t *testing.T) {
+	cases := []struct {
+		name       string
+		statusLine string
+		wantStatus int // 0 means "no status: must classify as TransportError"
+	}{
+		{"2xx: TransportError, no status to key off", "HTTP/1.1 200 OK", 0},
+		{"404: HTTPError carrying the real status", "HTTP/1.1 404 Not Found", http.StatusNotFound},
+		{"500: HTTPError carrying the real status", "HTTP/1.1 500 Internal Server Error", http.StatusInternalServerError},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				hj, ok := w.(http.Hijacker)
+				if !ok {
+					t.Fatal("ResponseWriter does not support hijacking")
+				}
+				conn, buf, err := hj.Hijack()
+				if err != nil {
+					t.Fatalf("hijack: %v", err)
+				}
+				defer func() { _ = conn.Close() }()
+				// Declare more bytes than are actually sent, then close the
+				// connection: the client's body read fails with an
+				// unexpected EOF instead of completing, rather than the
+				// request hanging.
+				_, _ = buf.WriteString(tc.statusLine + "\r\nContent-Length: 1000\r\nContent-Type: application/json\r\n\r\n{\"short\":true}")
+				_ = buf.Flush()
+			}))
+			defer srv.Close()
+
+			c := New(srv.URL, "test-token", srv.Client())
+			err := c.Initialize(context.Background())
+			if err == nil {
+				t.Fatal("expected an error from a response whose body can't be fully read")
+			}
+
+			if tc.wantStatus == 0 {
+				var transportErr *TransportError
+				if !errors.As(err, &transportErr) {
+					t.Fatalf("error = %T (%v), want *TransportError", err, err)
+				}
+				return
+			}
+			httpErr, ok := err.(*HTTPError)
+			if !ok {
+				t.Fatalf("error = %T (%v), want *HTTPError", err, err)
+			}
+			if httpErr.StatusCode != tc.wantStatus {
+				t.Errorf("HTTPError.StatusCode = %d, want %d", httpErr.StatusCode, tc.wantStatus)
+			}
+			var transportErr *TransportError
+			if errors.As(err, &transportErr) {
+				t.Errorf("a %d response with a truncated body must not also classify as *TransportError, got %v", tc.wantStatus, err)
+			}
+		})
 	}
 }

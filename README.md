@@ -479,11 +479,13 @@ follow would hand your bearer token to whatever host the redirect named.
 A chain of allowed redirects that doesn't settle within five hops fails as a
 remote error (exit `6`) rather than looping.
 
-This applies to the REST client only. The MCP gateway and the login handshake use
-their own HTTP clients and follow redirects normally. And a bad id is the only
-cause of a refused `3xx` observed so far, which is why it maps to exit `2` — a
-redirect on an otherwise well-formed request would not be the caller's mistake,
-and would still report `2`.
+This applies everywhere the CLI sends HTTP: the REST client, the MCP gateway, and
+the login handshake all share the same transport, so the path and redirect
+guards, `--debug` tracing, and `--max-retries` all cover the gateway and login
+too, not just REST commands. A bad id is the only cause of a refused `3xx`
+observed so far, which is why it maps to exit `2` — a redirect on an otherwise
+well-formed request would not be the caller's mistake, and would still report
+`2`.
 
 Pass `--error-format json` (or `C1I_ERROR_FORMAT=json`) to get a machine-readable
 error object instead of the default `Error: <msg>` line. For API errors it
@@ -577,6 +579,20 @@ precedence:
 
 Set `--max-retries 0` to disable retries entirely. Non-retryable responses
 (4xx other than 429, and 501/505) fail immediately.
+
+This covers the token mint too: minting or refreshing the OAuth2 bearer
+c1i authenticates with is itself a request, subject to the same 429 retry
+(never 5xx/network, since it's a POST) and the same `--max-retries` budget.
+
+Every request also gets a fixed timeout, per attempt (a retried request
+gets a fresh budget, not a shrinking share of one deadline): 10 minutes
+for a REST or MCP gateway request, 30 seconds for `auth login`'s
+device-flow requests and the OAuth2 token mint/refresh above — tighter
+because those are fast request/response exchanges, not the kind of call
+that legitimately runs long. Neither is configurable. 10 minutes leaves
+roughly 3x headroom over the longest request this CLI is known to make
+(an MCP `tools/call` invoking a slow tool, observed at 182 seconds), so
+there's no known case that needs a longer one.
 
 ### Dry run
 

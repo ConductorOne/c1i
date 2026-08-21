@@ -7,6 +7,7 @@ import (
 
 	"github.com/ConductorOne/c1i/internal/client"
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 )
 
 var authTokenCmd = &cobra.Command{
@@ -31,7 +32,10 @@ disk; a new one is minted on each invocation.`,
 			return err
 		}
 
-		tok, err := client.Token(cmd.Context(), baseURL)
+		tok, err := client.Token(cmd.Context(), baseURL,
+			client.WithMaxRetries(viper.GetInt("max_retries")),
+			client.WithDebug(viper.GetBool("debug")),
+		)
 		if err != nil {
 			// Only frame genuine auth failures (bad/missing credentials, a
 			// rejected mint) as "not authenticated" → exit 3. A ctx

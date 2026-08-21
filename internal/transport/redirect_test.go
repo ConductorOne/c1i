@@ -1,7 +1,6 @@
-package client
+package transport
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"net/http"
@@ -39,7 +38,7 @@ func TestClient_RefusesRedirect(t *testing.T) {
 			defer srv.Close()
 
 			c := newTestClient(srv, 0)
-			_, err := c.Get(context.Background(), "/redirect", nil)
+			_, err := get(t, c, srv.URL+"/redirect")
 			if err == nil {
 				t.Fatalf("status %d: expected an error, got nil", status)
 			}
@@ -66,12 +65,12 @@ func TestClient_RefusesRedirect(t *testing.T) {
 		defer srv.Close()
 
 		c := newTestClient(srv, 0)
-		body, err := c.Get(context.Background(), "/x", nil)
+		resp, err := get(t, c, srv.URL+"/x")
 		if err != nil {
 			t.Fatalf("unexpected error for a plain 200: %v", err)
 		}
-		if string(body) != `{"ok":true}` {
-			t.Errorf("body = %s, want {\"ok\":true}", body)
+		if string(resp.Body) != `{"ok":true}` {
+			t.Errorf("body = %s, want {\"ok\":true}", resp.Body)
 		}
 	})
 }
@@ -79,10 +78,10 @@ func TestClient_RefusesRedirect(t *testing.T) {
 // TestClient_IDPathRedirectChainRefused reproduces the live defect this
 // guards against: `users get "/"` escapes to .../users/%2F, which the real
 // API 301s to .../users/ (a trailing-empty-segment path — exactly the shape
-// client.PathError already refuses), which itself 301s to .../users (the
-// bare collection, HTTP 200). PathError's guard only inspects the request
-// this CLI constructs; it can't see a redirect target the *server* produces,
-// so without this fix the second hop reaches the collection endpoint and
+// PathError already refuses), which itself 301s to .../users (the bare
+// collection, HTTP 200). PathError's guard only inspects the request this
+// CLI constructs; it can't see a redirect target the *server* produces, so
+// without this fix the second hop reaches the collection endpoint and
 // returns it with exit 0. The client must refuse at the very first redirect
 // and the collection endpoint must never be reached.
 func TestClient_IDPathRedirectChainRefused(t *testing.T) {
@@ -105,7 +104,7 @@ func TestClient_IDPathRedirectChainRefused(t *testing.T) {
 	defer srv.Close()
 
 	c := newTestClient(srv, 0)
-	_, err := c.Get(context.Background(), Path("/api/v1/users/%s", "/"), nil)
+	_, err := get(t, c, srv.URL+"/api/v1/users/%2F")
 	if err == nil {
 		t.Fatal(`expected an error for id "/", got nil`)
 	}
@@ -125,7 +124,7 @@ func TestClient_IDPathRedirectChainRefused(t *testing.T) {
 // single dot segment server-side, 301-ing directly to .../users — one hop,
 // not the two-hop chain the "/" case goes through. Same guard, same refusal
 // branch (target path != request path), different id and a shorter path to
-// it; see resolveAllowedRedirect in client.go.
+// it; see resolveAllowedRedirect.
 func TestClient_DotIDPathRedirectRefused(t *testing.T) {
 	var collectionCalled bool
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -143,7 +142,7 @@ func TestClient_DotIDPathRedirectRefused(t *testing.T) {
 	defer srv.Close()
 
 	c := newTestClient(srv, 0)
-	_, err := c.Get(context.Background(), Path("/api/v1/users/%s", "."), nil)
+	_, err := get(t, c, srv.URL+"/api/v1/users/.")
 	if err == nil {
 		t.Fatal(`expected an error for id ".", got nil`)
 	}
@@ -172,7 +171,7 @@ func TestClient_RedirectNotRetried(t *testing.T) {
 	defer srv.Close()
 
 	c := newTestClient(srv, 3) // would retry up to 3 additional times if misclassified
-	_, err := c.Get(context.Background(), "/redirect", nil)
+	_, err := get(t, c, srv.URL+"/redirect")
 	var redirErr *RedirectError
 	if !errors.As(err, &redirErr) {
 		t.Fatalf("error = %T (%v), want *RedirectError", err, err)

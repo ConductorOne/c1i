@@ -187,6 +187,72 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `debug.ReadBuildInfo()`) already carries its own leading `v`. Cosmetic, but
   `cmd/agents.md` is `go:embed`-ed, so it shipped inside every binary.
 
+- **`--debug` and `--max-retries` were silently inert on `mcp gateway`
+  commands, and `c1i auth login` had no request timeout at all.** `mcp
+  gateway list-tools --debug` (and `call`) now trace like every REST command;
+  `--max-retries` now retries a 429 from the gateway (5xx/transport failures
+  still don't retry a JSON-RPC call, since it isn't safe to assume one had no
+  side effect); and a hung auth host can no longer hang `auth login` forever.
+  All of the device-flow requests `auth login` makes now also send the CLI's
+  user-agent and are covered by the same empty-path and redirect-trust-scope
+  guards a REST command gets.
+
+- **Every authenticated command's token mint and refresh now retries a
+  429**, where it previously failed immediately as a not-authenticated
+  error. This is the client_credentials request `newClient` makes on every
+  command's first call and on token expiry, not just `auth login`/`auth
+  token` — the retry lives in the shared transport those share, so the
+  blast radius is every command, not the handful that talk to the token
+  endpoint directly. This closes a real gap against README's own
+  claim that 429 is retried "for every command": before this
+  release that was false for the token mint specifically. Live-verified:
+  `auth token --max-retries 2` against an endpoint that 429s once then
+  succeeds now exits `0` where it previously exited `3` after the first
+  429.
+
+- **A new per-attempt timeout applies to every HTTP request this CLI
+  sends** — previously there was no timeout at all on any of them,
+  authenticated or not, so a hung connection could block a command
+  indefinitely. It's 10 minutes for REST and MCP gateway requests (sized
+  for the longest observed real call, an MCP `tools/call` tool invocation
+  at 182 seconds — roughly 3x headroom), and 30 seconds for `auth login`'s
+  device-flow requests and every command's OAuth2 token mint/refresh
+  (deliberately tighter: those are all fast request/response exchanges
+  with no reason to need minutes). Per attempt, not per command: a
+  retried request gets a fresh budget, not a shrinking share of one
+  deadline. Fixed, not configurable — if you hit either ceiling for real,
+  report it and it can grow a flag then.
+
+- **BREAKING — an MCP gateway response whose body can't be fully read no
+  longer exits a flat `1`.** Body-reading moved inside the shared
+  transport, which now classifies by whether a status arrived at all: a
+  non-2xx status classifies exactly as a complete response with that
+  status would (e.g. exit `4` for a 404, exit `6` for a 500 — verified for
+  both), and a 2xx status (nothing to key off) classifies as
+  `*mcpgateway.TransportError`, exit `8`, since a body that can't be read
+  at all isn't a well-formed response. Before, every case here was a bare,
+  unclassified error (exit `1`) regardless of status. Narrow: an
+  already-rare I/O-error path (the connection drops mid-response), and for
+  the non-2xx branch this is a strict improvement (the real status now
+  drives the exit code instead of collapsing to generic).
+
+- **The MCP gateway handshake reported a hardcoded `"dev"` client version**,
+  so a released binary always misidentified itself to the gateway
+  (`clientInfo.version` in the `initialize` request) regardless of what
+  `c1i version` printed. It now reports the same build-derived version as
+  everything else — the same fix category as the retry/debug/timeout gaps
+  above: the gateway path missing something the REST client already had.
+
+  Internal refactor behind all five entries above: the auth-independent
+  parts of the API client — retry/backoff, user-agent, debug tracing, the
+  path guard, and the redirect trust-scope guard, all of which already
+  existed in `internal/client` — moved into a new `internal/transport`
+  package below it; the per-attempt timeout did not exist anywhere before
+  and is new in that same package. `internal/login`, `internal/tokensource`,
+  and `internal/mcpgateway` now build on `internal/transport` directly
+  instead of each hand-rolling (or, in these three cases, simply lacking)
+  their own subset.
+
 ### Security
 
 - **`gosec` and `gitleaks` now gate CI**, alongside the vulnerability scan.

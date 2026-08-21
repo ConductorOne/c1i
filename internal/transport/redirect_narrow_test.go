@@ -1,9 +1,8 @@
-package client
+package transport
 
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -43,13 +42,13 @@ func TestClient_RedirectPathChanged_Refused(t *testing.T) {
 			defer srv.Close()
 
 			c := newTestClient(srv, 0)
-			body, err := c.Get(context.Background(), Path("/x/%s", "/"), nil)
+			resp, err := get(t, c, srv.URL+"/x/%2F")
 			var redirErr *RedirectError
 			if !errors.As(err, &redirErr) {
 				t.Fatalf("status %d: error = %T (%v), want *RedirectError", status, err, err)
 			}
-			if body != nil {
-				t.Errorf("status %d: body = %q, want nil (no body on refusal)", status, body)
+			if resp != nil {
+				t.Errorf("status %d: resp = %+v, want nil (no response on refusal)", status, resp)
 			}
 			if targetCalled {
 				t.Errorf("status %d: the path-changed target was reached; it must be refused", status)
@@ -84,12 +83,12 @@ func TestClient_RedirectDifferentHost_SamePath_Followed(t *testing.T) {
 	defer initial.Close()
 
 	c := newTestClient(initial, 0)
-	body, err := c.Get(context.Background(), "/x/abc", nil)
+	resp, err := get(t, c, initial.URL+"/x/abc")
 	if err != nil {
 		t.Fatalf("unexpected error following a same-path, different-host redirect: %v", err)
 	}
-	if string(body) != `{"id":"abc"}` {
-		t.Errorf("body = %s, want the target server's body", body)
+	if string(resp.Body) != `{"id":"abc"}` {
+		t.Errorf("body = %s, want the target server's body", resp.Body)
 	}
 }
 
@@ -136,13 +135,13 @@ func TestClient_RedirectSchemeOnly_SamePath_Followed(t *testing.T) {
 	defer srv.Close()
 
 	hc := &http.Client{Transport: &redirectTripper{next: &schemeSwappingTransport{next: http.DefaultTransport.(*http.Transport)}}}
-	c := &Client{httpClient: hc, baseURL: srv.URL, maxRetries: 0}
-	body, err := c.Get(context.Background(), "/x/abc", nil)
+	c := &Client{httpClient: hc, maxRetries: 0}
+	resp, err := get(t, c, srv.URL+"/x/abc")
 	if err != nil {
 		t.Fatalf("unexpected error following a scheme-only redirect: %v", err)
 	}
-	if string(body) != `{"id":"abc"}` {
-		t.Errorf("body = %s, want the server's body", body)
+	if string(resp.Body) != `{"id":"abc"}` {
+		t.Errorf("body = %s, want the server's body", resp.Body)
 	}
 }
 
@@ -166,12 +165,12 @@ func TestClient_RedirectRelativeLocation(t *testing.T) {
 		defer srv.Close()
 
 		c := newTestClient(srv, 0)
-		body, err := c.Get(context.Background(), "/x/abc", nil)
+		resp, err := get(t, c, srv.URL+"/x/abc")
 		if err != nil {
 			t.Fatalf("unexpected error following a same-path relative redirect: %v", err)
 		}
-		if string(body) != `{"id":"abc"}` {
-			t.Errorf("body = %s, want the server's body", body)
+		if string(resp.Body) != `{"id":"abc"}` {
+			t.Errorf("body = %s, want the server's body", resp.Body)
 		}
 	})
 
@@ -192,7 +191,7 @@ func TestClient_RedirectRelativeLocation(t *testing.T) {
 		defer srv.Close()
 
 		c := newTestClient(srv, 0)
-		_, err := c.Get(context.Background(), "/x/abc", nil)
+		_, err := get(t, c, srv.URL+"/x/abc")
 		var redirErr *RedirectError
 		if !errors.As(err, &redirErr) {
 			t.Fatalf("error = %T (%v), want *RedirectError", err, err)
@@ -217,7 +216,7 @@ func TestClient_RedirectLoop_SamePath_Bounded(t *testing.T) {
 	defer srv.Close()
 
 	c := newTestClient(srv, 0)
-	_, err := c.Get(context.Background(), "/loop", nil)
+	_, err := get(t, c, srv.URL+"/loop")
 	var loopErr *RedirectLoopError
 	if !errors.As(err, &loopErr) {
 		t.Fatalf("error = %T (%v), want *RedirectLoopError", err, err)
@@ -236,7 +235,7 @@ func TestClient_RedirectLoop_SamePath_Bounded(t *testing.T) {
 }
 
 // TestClient_RedirectLoop_NotRetried proves a bounded redirect-loop failure
-// doesn't additionally burn the outer retry budget: doWithRetry must
+// doesn't additionally burn the outer retry budget: sendWithRetry must
 // surface it on the first attempt, since retrying would just chase the same
 // loop again.
 func TestClient_RedirectLoop_NotRetried(t *testing.T) {
@@ -250,7 +249,7 @@ func TestClient_RedirectLoop_NotRetried(t *testing.T) {
 	defer srv.Close()
 
 	c := newTestClient(srv, 3) // would retry up to 3 additional times if misclassified
-	_, err := c.Get(context.Background(), "/loop", nil)
+	_, err := get(t, c, srv.URL+"/loop")
 	var loopErr *RedirectLoopError
 	if !errors.As(err, &loopErr) {
 		t.Fatalf("error = %T (%v), want *RedirectLoopError", err, err)
@@ -268,8 +267,8 @@ func TestClient_RedirectLoop_NotRetried(t *testing.T) {
 
 // TestClient_DebugTracesBothHops confirms --debug still traces each hop of
 // an allowed (same-path) redirect individually — not just one aggregate
-// line for the whole chain — by constructing the same tripper ordering
-// New() builds (redirectTripper -> debugTripper -> ... ) and asserting the
+// line for the whole chain — by constructing the same tripper ordering New()
+// builds (redirectTripper -> debugTripper -> ... ) and asserting the
 // captured trace has a request/response line pair for each hop.
 func TestClient_DebugTracesBothHops(t *testing.T) {
 	target := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -286,9 +285,9 @@ func TestClient_DebugTracesBothHops(t *testing.T) {
 	var buf bytes.Buffer
 	hc := initial.Client()
 	hc.Transport = &redirectTripper{next: &debugTripper{next: hc.Transport, out: &buf}}
-	c := &Client{httpClient: hc, baseURL: initial.URL, maxRetries: 0}
+	c := &Client{httpClient: hc, maxRetries: 0}
 
-	_, err := c.Get(context.Background(), "/x", nil)
+	_, err := get(t, c, initial.URL+"/x")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -333,7 +332,7 @@ func TestClient_IDPathRedirectChainRefused_StillRefused(t *testing.T) {
 	defer srv.Close()
 
 	c := newTestClient(srv, 0)
-	_, err := c.Get(context.Background(), Path("/api/v1/users/%s", "/"), nil)
+	_, err := get(t, c, srv.URL+"/api/v1/users/%2F")
 	var redirErr *RedirectError
 	if !errors.As(err, &redirErr) {
 		t.Fatalf(`error = %T (%v), want *RedirectError`, err, err)
@@ -418,12 +417,12 @@ func TestHostInScope(t *testing.T) {
 	}
 }
 
-// authInjectingTripper stands in for the oauth2 transport in production:
-// it attaches a bearer token to every request it forwards, with no
-// awareness of host. It exists so these tests can observe, on the wire,
-// exactly what the coordinator's finding was about — whether that token
-// reaches a redirect target — rather than inferring it from the error type
-// alone.
+// authInjectingTripper stands in for a credential-attaching transport in
+// production (an oauth2 transport, or a plain Authorization header a caller
+// sets per request): it attaches a bearer token to every request it
+// forwards, with no awareness of host. It exists so these tests can observe,
+// on the wire, exactly what a redirect target sees — whether that token
+// reaches it — rather than inferring it from the error type alone.
 type authInjectingTripper struct {
 	next  http.RoundTripper
 	token string
@@ -495,14 +494,14 @@ func TestClient_RedirectSubdomainHost_SamePath_Followed(t *testing.T) {
 				hosts: map[string]string{fromHost: realAddr, toHost: realAddr},
 			},
 		}}}
-		c := &Client{httpClient: hc, baseURL: "http://" + fromHost, maxRetries: 0}
+		c := &Client{httpClient: hc, maxRetries: 0}
 
-		body, err := c.Get(context.Background(), "/x", nil)
+		resp, err := get(t, c, "http://"+fromHost+"/x")
 		if err != nil {
 			t.Fatalf("unexpected error following %s -> %s: %v", fromHost, toHost, err)
 		}
-		if string(body) != `{"ok":true}` {
-			t.Errorf("body = %s, want the target's body", body)
+		if string(resp.Body) != `{"ok":true}` {
+			t.Errorf("body = %s, want the target's body", resp.Body)
 		}
 		if !toHostCalled {
 			t.Fatalf("%s was never contacted; the same-scope redirect must be followed", toHost)
@@ -520,11 +519,11 @@ func TestClient_RedirectSubdomainHost_SamePath_Followed(t *testing.T) {
 	})
 }
 
-// TestClient_RedirectUnrelatedHost_Refused is the coordinator's finding,
-// closed: a same-path redirect to a host outside the request host's trust
-// scope must be refused, and — the point of the fix — the unrelated host
-// must never be contacted at all, so it never has the chance to see the
-// bearer token attached by the transport beneath redirectTripper.
+// TestClient_RedirectUnrelatedHost_Refused: a same-path redirect to a host
+// outside the request host's trust scope must be refused, and — the point of
+// the guard — the unrelated host must never be contacted at all, so it never
+// has the chance to see the bearer token attached by the transport beneath
+// redirectTripper.
 func TestClient_RedirectUnrelatedHost_Refused(t *testing.T) {
 	const token = "SECRET-TOKEN"
 	const goodHost = "tenant.example"
@@ -558,15 +557,15 @@ func TestClient_RedirectUnrelatedHost_Refused(t *testing.T) {
 			},
 		},
 	}}}
-	c := &Client{httpClient: hc, baseURL: "http://" + goodHost, maxRetries: 0}
+	c := &Client{httpClient: hc, maxRetries: 0}
 
-	body, err := c.Get(context.Background(), "/x", nil)
+	resp, err := get(t, c, "http://"+goodHost+"/x")
 	var redirErr *RedirectError
 	if !errors.As(err, &redirErr) {
 		t.Fatalf("error = %T (%v), want *RedirectError", err, err)
 	}
-	if body != nil {
-		t.Errorf("body = %q, want nil (no body on refusal)", body)
+	if resp != nil {
+		t.Errorf("resp = %+v, want nil (no response on refusal)", resp)
 	}
 	if evilCalls != 0 {
 		t.Fatalf("%s was contacted %d time(s); an out-of-scope redirect must never be followed", evilHost, evilCalls)
@@ -613,9 +612,9 @@ func TestClient_RedirectSingleLabelTarget_Refused(t *testing.T) {
 			},
 		},
 	}}}
-	c := &Client{httpClient: hc, baseURL: "http://" + goodHost, maxRetries: 0}
+	c := &Client{httpClient: hc, maxRetries: 0}
 
-	_, err := c.Get(context.Background(), "/x", nil)
+	_, err := get(t, c, "http://"+goodHost+"/x")
 	var redirErr *RedirectError
 	if !errors.As(err, &redirErr) {
 		t.Fatalf("error = %T (%v), want *RedirectError", err, err)
@@ -631,8 +630,8 @@ func TestClient_RedirectSingleLabelTarget_Refused(t *testing.T) {
 // empty one: the first hop's Body reader is already drained by the time the
 // 3xx comes back, so redirectedRequest must re-obtain it from GetBody. This
 // matters concretely for this CLI: `policies update` (POST) and `apps
-// set-owners` (PUT) would otherwise silently clear what they meant to set
-// if a canonicalization redirect ever fired on one.
+// set-owners` (PUT) would otherwise silently clear what they meant to set if
+// a canonicalization redirect ever fired on one.
 //
 // The transport disables keep-alives deliberately: with a reused persistent
 // connection, net/http.Transport can transparently retry a broken write via
@@ -664,14 +663,18 @@ func TestClient_RedirectFollowedHop_ReplaysBody(t *testing.T) {
 	defer srv.Close()
 
 	hc := &http.Client{Transport: &redirectTripper{next: &http.Transport{DisableKeepAlives: true}}}
-	c := &Client{httpClient: hc, baseURL: srv.URL, maxRetries: 0}
+	c := &Client{httpClient: hc, maxRetries: 0}
 
-	body, err := c.Put(context.Background(), "/x", json.RawMessage(payload))
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodPut, srv.URL+"/x", strings.NewReader(payload))
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp, err := c.Do(req)
 	if err != nil {
 		t.Fatalf("unexpected error following a same-path redirect on a PUT: %v", err)
 	}
-	if string(body) != `{"ok":true}` {
-		t.Errorf("body = %s, want the target's body", body)
+	if string(resp.Body) != `{"ok":true}` {
+		t.Errorf("body = %s, want the target's body", resp.Body)
 	}
 	if gotMethod != http.MethodPut {
 		t.Errorf("followed hop's method = %q, want %q", gotMethod, http.MethodPut)

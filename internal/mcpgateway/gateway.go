@@ -12,12 +12,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"net/http"
 	"strconv"
 	"strings"
 
 	"github.com/ConductorOne/c1i/internal/client"
+	"github.com/ConductorOne/c1i/internal/transport"
 )
 
 // protocolVersion is the MCP revision c1i negotiates. The gateway echoes its
@@ -47,20 +47,30 @@ var outboundRPCMethods = []string{
 // Client is a single-session MCP gateway client. Not safe for concurrent use;
 // each command builds one, runs its handshake, and discards it.
 type Client struct {
-	endpoint   string
-	token      string
-	httpClient *http.Client
-	sessionID  string
-	nextID     int
+	endpoint  string
+	token     string
+	transport *transport.Client
+	sessionID string
+	nextID    int
 }
 
 // New returns a client targeting endpoint (the gateway's streamable-HTTP URL)
-// authenticated with the given bearer token.
-func New(endpoint, token string, httpClient *http.Client) *Client {
-	if httpClient == nil {
-		httpClient = http.DefaultClient
+// authenticated with the given bearer token. Requests go through the shared
+// transport (retry/backoff, timeout, user-agent, debug tracing, the path and
+// redirect guards); opts configures it (e.g. transport.WithDebug,
+// transport.WithMaxRetries, sourced from the same --debug/--max-retries flags
+// every REST command gets).
+//
+// httpClient, if non-nil, supplies the base RoundTripper (its Transport,
+// falling back to http.DefaultTransport if that's nil too) — e.g. an
+// httptest.Server's client in a test. Its own Timeout/CheckRedirect/Jar are
+// not used; the returned Client applies its own.
+func New(endpoint, token string, httpClient *http.Client, opts ...transport.Option) *Client {
+	var base http.RoundTripper
+	if httpClient != nil {
+		base = httpClient.Transport
 	}
-	return &Client{endpoint: endpoint, token: token, httpClient: httpClient}
+	return &Client{endpoint: endpoint, token: token, transport: transport.New(base, opts...)}
 }
 
 // Tool is one entry from tools/list.
@@ -194,7 +204,7 @@ func (c *Client) Initialize(ctx context.Context) error {
 	params := map[string]any{
 		"protocolVersion": protocolVersion,
 		"capabilities":    map[string]any{},
-		"clientInfo":      map[string]any{"name": "c1i", "version": "dev"},
+		"clientInfo":      map[string]any{"name": "c1i", "version": transport.Version},
 	}
 	if _, err := c.call(ctx, methodInitialize, params); err != nil {
 		return err
@@ -347,16 +357,17 @@ func (c *Client) post(ctx context.Context, rpcMethod string, payload []byte, wan
 		req.Header.Set("Mcp-Session-Id", c.sessionID)
 	}
 
-	resp, err := c.httpClient.Do(req)
+	resp, err := c.transport.Do(req)
 	if err != nil {
+		// Do returns an error here for a failure to complete the exchange at
+		// all: a dial/TLS failure, an empty-path or redirect-guard refusal
+		// (neither expected against the fixed gateway endpoint, but the
+		// shared transport applies them unconditionally), or a retry budget
+		// exhausted on a transport-level error. None of those produced an
+		// HTTP response, which is exactly what TransportError means.
 		return nil, "", &TransportError{RPCMethod: rpcMethod, Err: err}
 	}
-	defer func() { _ = resp.Body.Close() }()
-
-	data, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, "", err
-	}
+	data := resp.Body
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		return nil, "", &HTTPError{
 			StatusCode: resp.StatusCode,

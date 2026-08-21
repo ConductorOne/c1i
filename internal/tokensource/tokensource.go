@@ -14,6 +14,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/ConductorOne/c1i/internal/transport"
 	"github.com/go-jose/go-jose/v4"
 	"github.com/go-jose/go-jose/v4/jwt"
 	"golang.org/x/oauth2"
@@ -23,8 +24,11 @@ const assertionType = "urn:ietf:params:oauth:client-assertion-type:jwt-bearer"
 
 // tokenRequestTimeout bounds a single client-credentials mint. Generous for a
 // simple token POST, but finite so a hung/black-holed token host can't stall
-// the CLI forever (the request uses context.Background()).
-const tokenRequestTimeout = 30 * time.Second
+// the CLI forever (the request uses context.Background()). It overrides
+// transport's own (much longer) default, since a token mint should fail fast
+// rather than sit at transport.DefaultTimeout. A var, not a const, so a test
+// can lower it instead of waiting out the real duration.
+var tokenRequestTimeout = 30 * time.Second
 
 var (
 	v1SecretTokenIdentifier = []byte("v1")
@@ -52,7 +56,7 @@ type c1TokenSource struct {
 	clientID     string
 	clientSecret *jose.JSONWebKey
 	tokenHost    string
-	httpClient   *http.Client
+	transport    *transport.Client
 }
 
 func parseSecret(input []byte) (*jose.JSONWebKey, error) {
@@ -155,18 +159,17 @@ func (c *c1TokenSource) Token() (*oauth2.Token, error) {
 	}
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 
-	resp, err := c.httpClient.Do(req)
+	resp, err := c.transport.Do(req)
 	if err != nil {
 		return nil, err
 	}
-	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		return nil, &TokenError{StatusCode: resp.StatusCode}
 	}
 
 	c1t := &c1Token{}
-	err = json.NewDecoder(resp.Body).Decode(c1t)
+	err = json.Unmarshal(resp.Body, c1t)
 	if err != nil {
 		return nil, err
 	}
@@ -182,19 +185,22 @@ func (c *c1TokenSource) Token() (*oauth2.Token, error) {
 	}, nil
 }
 
-func NewTokenSource(ctx context.Context, clientID string, clientSecret string, tokenHost string) (oauth2.TokenSource, error) {
+// NewTokenSource returns a TokenSource that mints via the client_credentials
+// JWT-bearer grant. opts are forwarded to the transport it mints through
+// (e.g. to share a caller's --debug/--max-retries with the token request), but
+// the request timeout is always tokenRequestTimeout regardless of what opts
+// contains.
+func NewTokenSource(ctx context.Context, clientID string, clientSecret string, tokenHost string, opts ...transport.Option) (oauth2.TokenSource, error) {
 	secret, err := parseSecret([]byte(clientSecret))
 	if err != nil {
 		return nil, err
 	}
 
+	t := transport.New(nil, append(opts, transport.WithTimeout(tokenRequestTimeout))...)
 	return oauth2.ReuseTokenSource(nil, &c1TokenSource{
 		clientID:     clientID,
 		clientSecret: secret,
 		tokenHost:    strings.TrimPrefix(tokenHost, "https://"),
-		// Bound the token-mint request: it runs on context.Background(), so
-		// without a timeout a hung token host would block the caller (and any
-		// goroutine that raced the mint against a caller ctx) indefinitely.
-		httpClient: &http.Client{Timeout: tokenRequestTimeout},
+		transport:    t,
 	}), nil
 }
