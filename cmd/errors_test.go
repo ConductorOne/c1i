@@ -63,16 +63,13 @@ func TestExitCode(t *testing.T) {
 		{"api 429", &client.APIError{StatusCode: 429}, exitRateLimited},
 		{"api 500", &client.APIError{StatusCode: 500}, exitServer},
 		{"api 503", &client.APIError{StatusCode: 503}, exitServer},
-		// 408 and 499 are the two 4xx carved out of the usage range: neither
-		// is caller-caused, so exitUsage would be dishonest, but neither is
-		// "C1 failed" either, so exitServer would be too -- they fall to the
-		// generic exitError. 499 is the reachable one (apigw_v1.
-		// HTTPStatusFromCode, which serves /api/v1/*, maps codes.Canceled to
-		// 499); 408 is defensive (only pkg/uweb.code2http maps Canceled to
-		// 408, and that's the OAuth/SSO path, which surfaces as *AuthError
-		// long before exitCode's *APIError branch runs). Neither is
-		// forceable live, so both are proven here rather than against the
-		// real API.
+		// 408 and 499 are the two 4xx carved out of the usage range: both mean
+		// the request ended without the caller having done anything wrong, so
+		// neither is exitUsage; neither is evidence C1 itself failed, so
+		// neither is exitServer either -- both fall to the generic exitError.
+		// This API has been observed to produce both, from different error
+		// paths, but neither is forceable live, so both are proven here
+		// rather than against the real API.
 		{"api 408", &client.APIError{StatusCode: 408}, exitError},
 		{"api 499", &client.APIError{StatusCode: 499}, exitError},
 		// Every other 4xx that isn't auth/not-found/rate-limited/408/499 is

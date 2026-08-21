@@ -156,22 +156,11 @@ func exitCode(err error) int {
 			return exitNotFound
 		case apiErr.StatusCode == 429:
 			return exitRateLimited
-		// 408 and 499 are not caller-caused, so they don't belong in the
-		// usage range below -- but they're not "C1 failed" either, so they
-		// don't belong in exitServer. Fall to the generic exitError instead:
-		// something ended the request and it wasn't the caller's flags.
-		//
-		// 499 is the reachable case: apigw_v1.HTTPStatusFromCode (the table
-		// that actually serves /api/v1/* -- traced through *.pb.apigw.go ->
-		// ginapi.ErrorResponse) maps codes.Canceled to 499, matching the
-		// vendored grpc-gateway/v2/runtime.HTTPStatusFromCode's own
-		// Canceled->499. 408 is defensive: the only table in the platform
-		// that maps Canceled->408 is pkg/uweb.code2http, used solely by the
-		// OAuth/SSO subsystem internal/tokensource.Token() hits, and every
-		// failure on that path is wrapped in *client.AuthError before
-		// exitCode ever sees it (exitAuth, above) -- so this branch is
-		// unreached today, kept only in case a future endpoint's status
-		// mapping changes.
+		// 408 and 499 both mean the request ended without the caller having
+		// done anything wrong, so neither is a usage error; and neither is
+		// evidence that C1 itself failed, so neither is exitServer. Both
+		// fall to the generic exitError. (This API has been observed to
+		// produce both, from different error paths.)
 		case apiErr.StatusCode == 408 || apiErr.StatusCode == 499:
 			return exitError
 		// Every other 4xx (400, 409, 413, 414, 422, ...) means the caller sent
