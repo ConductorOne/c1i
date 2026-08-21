@@ -47,15 +47,19 @@ func TestWarnAboutURLSourceFlagIsSilent(t *testing.T) {
 	}
 }
 
-func TestWarnAboutURLSourceEnvWarns(t *testing.T) {
+// TestWarnAboutURLSourceEnvIsSilent is as load-bearing as the config-warns
+// case: C1I_URL is exactly the source lost between shell calls in the
+// incident this feature addresses, but the harmful step was the later
+// fall-through to the config file, not the earlier (correct) C1I_URL calls.
+// Warning here too would fire on every normal invocation of a legitimate
+// workflow and train people to stop reading it -- guard against someone
+// "helpfully" widening the rule back to include this source.
+func TestWarnAboutURLSourceEnvIsSilent(t *testing.T) {
 	out := captureStderr(t, func() {
 		warnAboutURLSource("https://acme.conductor.one", URLSourceEnv)
 	})
-	if !strings.Contains(out, "https://acme.conductor.one") {
-		t.Errorf("warning = %q, want it to name the resolved tenant URL", out)
-	}
-	if !strings.Contains(out, "C1I_URL environment variable") {
-		t.Errorf("warning = %q, want it to name the C1I_URL environment variable", out)
+	if out != "" {
+		t.Errorf("warnAboutURLSource with URLSourceEnv wrote %q to stderr, want nothing (C1I_URL is explicit, just invisible on the command line)", out)
 	}
 }
 
@@ -94,10 +98,11 @@ func TestGetBaseURLWithSourceSilentForExplicitFlag(t *testing.T) {
 	}
 }
 
-// TestGetBaseURLWithSourceWarnsForEnvSource proves the warning fires for
-// C1I_URL -- the exact source lost between shell calls in the incident this
-// feature addresses -- and that it names the env var and the resolved URL.
-func TestGetBaseURLWithSourceWarnsForEnvSource(t *testing.T) {
+// TestGetBaseURLWithSourceSilentForEnvSource is the end-to-end twin of
+// TestWarnAboutURLSourceEnvIsSilent: C1I_URL alone must not produce the
+// tenant-source warning through a real command invocation either, not just
+// via warnAboutURLSource directly.
+func TestGetBaseURLWithSourceSilentForEnvSource(t *testing.T) {
 	resetRootURLFlag(t)
 	t.Setenv("C1I_URL", "acme.conductor.one")
 
@@ -109,25 +114,19 @@ func TestGetBaseURLWithSourceWarnsForEnvSource(t *testing.T) {
 		_ = rootCmd.ExecuteContext(t.Context())
 	})
 
-	if !strings.Contains(stderr, "Warning: no --url flag given") {
-		t.Errorf("stderr = %q, want the tenant-source warning", stderr)
-	}
-	if !strings.Contains(stderr, "C1I_URL environment variable") {
-		t.Errorf("stderr = %q, want it to name the C1I_URL environment variable", stderr)
-	}
-	if !strings.Contains(stderr, "https://acme.conductor.one") {
-		t.Errorf("stderr = %q, want it to name the resolved tenant URL", stderr)
+	if strings.Contains(stderr, "Warning: no --url flag given") {
+		t.Errorf("stderr = %q, C1I_URL alone must not trigger the tenant-source warning", stderr)
 	}
 	if strings.Contains(stdout.String(), "Warning") {
 		t.Errorf("stdout = %q, the tenant-source warning must never reach stdout", stdout.String())
 	}
 }
 
-// TestGetBaseURLWithSourceWarnsForConfigSource is TestGetBaseURLWithSourceWarnsForEnvSource's
-// twin for the config-file source, driven the same way
-// TestGetBaseURLBareTokenFromConfigNamesConfigFile drives it: via viper.Set
-// rather than a real ~/.c1i.yaml (see that test's comment on why). The live
-// verification separately drives an actual temporary config file end to end.
+// TestGetBaseURLWithSourceWarnsForConfigSource proves the one source that
+// does warn, driven the same way TestGetBaseURLBareTokenFromConfigNamesConfigFile
+// drives it: via viper.Set rather than a real ~/.c1i.yaml (see that test's
+// comment on why). The live verification separately drives an actual
+// temporary config file end to end.
 func TestGetBaseURLWithSourceWarnsForConfigSource(t *testing.T) {
 	resetRootURLFlag(t)
 	t.Setenv("C1I_URL", "")
@@ -163,7 +162,10 @@ func TestGetBaseURLWithSourceWarnsForConfigSource(t *testing.T) {
 // on invocation count instead.
 func TestGetBaseURLWithSourceWarnsOnceForPaginatedList(t *testing.T) {
 	resetRootURLFlag(t)
-	t.Setenv("C1I_URL", "acme.conductor.one")
+	t.Setenv("C1I_URL", "")
+	orig := viper.GetString("url")
+	viper.Set("url", "acme.conductor.one")
+	t.Cleanup(func() { viper.Set("url", orig) })
 
 	var stdout bytes.Buffer
 	stderr := captureStderr(t, func() {

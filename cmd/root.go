@@ -176,14 +176,16 @@ func warnAboutURL(warnings []string) {
 	}
 }
 
-// warnAboutURLSource flags an ambiguous tenant resolution to stderr. An
-// explicit --url is unambiguous by definition; C1I_URL and ~/.c1i.yaml both
-// name a tenant with nothing on the command line to show it, so a lost
-// export or a stale config entry sends a command to the wrong tenant with no
-// visible sign — this is the one line that makes the target visible either
-// way. Only URLSourceFlag is silent.
+// warnAboutURLSource flags an ambiguous tenant resolution to stderr: only
+// ~/.c1i.yaml. It is not mentioned anywhere on the command line, unlike
+// --url or C1I_URL — the incident this exists for was an agent losing an
+// exported C1I_URL between shell calls and falling through to the config
+// file's tenant; the harmful step was the config-file read, not the earlier
+// C1I_URL calls, which were correct. Warning on C1I_URL too would fire on
+// every normal invocation of a legitimate workflow, which trains people to
+// stop reading it — weakening the one warning that actually matters.
 func warnAboutURLSource(baseURL string, source URLSource) {
-	if source == URLSourceFlag {
+	if source != URLSourceConfig {
 		return
 	}
 	_, _ = fmt.Fprintf(os.Stderr, "Warning: no --url flag given; targeting %s (from %s)\n", baseURL, urlSourceLabel(source))
