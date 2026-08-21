@@ -176,11 +176,11 @@ tracked root file outside its allowlist. Stage explicit paths rather than `-A`.
   |------|---------|
   | `0` | ok |
   | `1` | generic |
-  | `2` | usage (bad flags/args, an empty id, a refused redirect, or any API `4xx` other than `401`/`403`/`404`/`408`/`429`) |
+  | `2` | usage (bad flags/args, an empty id, a refused redirect, or any API `4xx` other than `401`/`403`/`404`/`408`/`429`/`499`) |
   | `3` | auth (`401`/`403`) |
   | `4` | not-found (`404`) |
   | `5` | rate-limited (`429`) |
-  | `6` | C1 failed (API `5xx` or `408`, a redirect loop, or a `200` with a non-JSON body) |
+  | `6` | C1 failed (API `5xx`, a redirect loop, or a `200` with a non-JSON body) |
   | `7` | tool-execution error (`mcp gateway call` result has `isError: true`) |
   | `8` | a system beyond C1 or the protocol layer failed (an unreachable gateway, an upstream connector failure, or a protocol-level JSON-RPC error) |
 

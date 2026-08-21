@@ -63,12 +63,13 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 - **BREAKING — a wide sweep of bad-flags/args conditions now exits `2`
   (usage) instead of `1` (generic), and every 4xx API status other than
-  401/403/404/408/429 now exits `2` instead of `1`.** Both are the same
+  401/403/404/408/429/499 now exits `2` instead of `1`.** Both are the same
   underlying defect: a bare `fmt.Errorf` (or an unlisted HTTP status)
   falling through `cmd/errors.go`'s `exitCode()` to the generic code instead
   of the documented usage one. Affected commands include `auth login`
   (`--client-id` without `--client-secret`, no URL configured at all),
-  `functions list` (`--published-only`/`--draft-only`), `mcp bindings
+  `api` (malformed `--body`/`--body-file` JSON), `functions list`
+  (`--published-only`/`--draft-only`), `mcp bindings
   create|delete|by-tools|history` (empty/conflicting `--tool-id`/
   `--toolset-id`), `mcp servers update|update-credentials|test-connection`
   and `mcp toolsets update` (nothing to update, an invalid `--type`/`--auth`,
@@ -78,18 +79,28 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   current user/policy step, pass the flag explicitly" guards in `requests
   create-grant|create-revoke|list`, `tasks list --assigned-to-me`, and `tasks
   approve`. The 4xx rule is a status-range check (`400 <= code < 500`, minus
-  the four already-classified codes), not a per-status list, so it also
+  the five already-classified codes), not a per-status list, so it also
   covers 409/413/414/422 and any future status the API adds without another
   code change.
 
-  `408` is carved out of the range rather than swept in: C1's REST layer maps
-  gRPC status codes to HTTP via grpc-gateway's standard table, which maps
-  `codes.Canceled` to `408` — a canceled/deadline-adjacent request, not a bad
-  argument, so it stays with the other "C1-side, worth retrying later"
-  statuses (exit `6`) instead of becoming a usage error an agent would
-  respond to by re-checking its flags. `425` has no such path (no gRPC code
-  maps to it) and is left in the usage range on that basis, not by omission.
-  Message text is unchanged everywhere; only the exit code.
+  `408` and `499` are carved out of the range rather than swept in: neither is
+  caller-caused, so `2` would be dishonest, but neither is "C1 failed" either,
+  so `6` would be too — both fall to the generic `1` instead. `499` is the
+  reachable one: `apigw_v1.HTTPStatusFromCode`, the table that actually serves
+  `/api/v1/*` (traced through the generated `*.pb.apigw.go` ->
+  `ginapi.ErrorResponse`), maps a canceled gRPC call (`codes.Canceled`) to
+  `499`, matching the vendored `grpc-gateway/v2/runtime.HTTPStatusFromCode`'s
+  own `Canceled`->`499`. `408` is defensive: the only table anywhere in the
+  platform that maps `Canceled`->`408` is `pkg/uweb.code2http`, used solely by
+  the OAuth/SSO subsystem `internal/tokensource.Token()` hits, and every
+  failure on that path already arrives wrapped in `*client.AuthError` (exit
+  `3`) before `exitCode`'s `*client.APIError` branch ever sees it — so this
+  case is unreached today and kept only as a guard against a future change to
+  that mapping. `425` has no path in any of these tables and stays in the
+  usage range on that basis, not by omission. Neither `408` nor `499` is
+  reproducible against the live API (the platform never observably cancels a
+  request from the outside), so both are proven by unit test only. Message
+  text is unchanged everywhere; only the exit code.
 
 - **BREAKING — more list rows emit real JSON numbers and `null`, not strings.**
   The same fix as the earlier stringified-values change, applied to the fields
