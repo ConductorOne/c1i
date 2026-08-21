@@ -2,31 +2,38 @@ package cmd
 
 import "testing"
 
-// TestConnectionRowAbsentValuesAreNullNotEmptyString pins that connected_at
-// and authorized_as_email are untyped nil, not "", when the calling user
-// hasn't connected — "" is truthy in jq, so `jq 'select(.connected_at)'`
-// would otherwise match every row regardless of whether it's connected.
+// TestConnectionRowAbsentValuesAreNullNotEmptyString pins that connected_at,
+// authorized_as_email, and authorized_as_name are untyped nil, not "", when
+// the calling user hasn't connected — "" is truthy in jq, so
+// `jq 'select(.connected_at)'` would otherwise match every row regardless
+// of whether it's connected.
 func TestConnectionRowAbsentValuesAreNullNotEmptyString(t *testing.T) {
 	tests := []struct {
 		name              string
 		connectedAt       string
 		authorizedAsEmail string
+		authorizedAsName  string
 		wantConnectedAt   any
 		wantEmail         any
+		wantName          any
 	}{
 		{
 			name:              "not connected",
 			connectedAt:       "",
 			authorizedAsEmail: "",
+			authorizedAsName:  "",
 			wantConnectedAt:   nil,
 			wantEmail:         nil,
+			wantName:          nil,
 		},
 		{
 			name:              "connected",
 			connectedAt:       "2026-01-02T03:04:05Z",
 			authorizedAsEmail: "user@example.com",
+			authorizedAsName:  "Ada Lovelace",
 			wantConnectedAt:   "2026-01-02T03:04:05Z",
 			wantEmail:         "user@example.com",
+			wantName:          "Ada Lovelace",
 		},
 	}
 	for _, tt := range tests {
@@ -35,6 +42,7 @@ func TestConnectionRowAbsentValuesAreNullNotEmptyString(t *testing.T) {
 				ConnectorID:       "c1",
 				ConnectedAt:       tt.connectedAt,
 				AuthorizedAsEmail: tt.authorizedAsEmail,
+				AuthorizedAsName:  tt.authorizedAsName,
 			})
 
 			gotConnectedAt, ok := row["connected_at"]
@@ -59,6 +67,18 @@ func TestConnectionRowAbsentValuesAreNullNotEmptyString(t *testing.T) {
 				}
 			} else if gotEmail != tt.wantEmail {
 				t.Errorf("authorized_as_email = %v, want %v", gotEmail, tt.wantEmail)
+			}
+
+			gotName, ok := row["authorized_as_name"]
+			if !ok {
+				t.Fatal("row has no authorized_as_name key")
+			}
+			if tt.wantName == nil {
+				if gotName != nil {
+					t.Errorf("authorized_as_name = %#v, want untyped nil", gotName)
+				}
+			} else if gotName != tt.wantName {
+				t.Errorf("authorized_as_name = %v, want %v", gotName, tt.wantName)
 			}
 		})
 	}

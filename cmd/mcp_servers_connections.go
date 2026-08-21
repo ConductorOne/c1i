@@ -37,7 +37,7 @@ func connectionRow(v connectionView) map[string]any {
 		"auth_method":         v.AuthMethod,
 		"connected":           v.Connected,
 		"authorized_as_email": nilIfEmpty(v.AuthorizedAsEmail),
-		"authorized_as_name":  v.AuthorizedAsName,
+		"authorized_as_name":  nilIfEmpty(v.AuthorizedAsName),
 		"connected_at":        nilIfEmpty(v.ConnectedAt),
 	}
 }
