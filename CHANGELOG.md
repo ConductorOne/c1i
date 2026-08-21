@@ -42,17 +42,32 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   to the native types — and note that `jq -r` now prints `null` where it
   printed an empty line.
 
+- **`functions source --out-dir` writes files `0600` instead of `0644`**, and
+  the directory `0750` instead of `0755`. Fetched function source is
+  developer-authored code, and code commonly inlines credentials — API keys,
+  webhook secrets, third-party tokens. The CLI cannot tell whether a given
+  function's source does, so it no longer writes it group- or world-readable.
+  Anyone relying on the old modes to share that directory will need to widen
+  them deliberately.
+
 ### Security
 
+- **`gosec` and `gitleaks` now gate CI**, alongside the vulnerability scan.
+  Both cover classes the existing gates do not: `gofmt`, `go vet`, and
+  `golangci-lint` all pass on a committed credential. Findings are triaged with
+  per-line `#nosec` comments carrying a verified reason, never a blanket rule
+  exclusion, and the gate rejects a bare or unjustified annotation so that
+  cannot quietly become the norm.
+
 - **The v0.4.0 and v0.4.1 binaries contain reachable standard-library
-  vulnerabilities; upgrade rather than continuing to run them.** They were built
-  with Go 1.25.7, and a release binary embeds the standard library, so the
-  vulnerability ships inside the artifact. Scanning as that toolchain reports 14
-  reachable on Linux and 13 on macOS and Windows, across `net/url`, `net/http`,
-  `crypto/tls`, `crypto/x509`, `encoding/asn1`, `net/textproto`, `net`, and `os`.
-  This release builds with Go 1.26.7 and upgrades `x/text` and `x/sys`;
-  `govulncheck` now reports none, and CI and the release build both gate on it,
-  scanned per platform because reachability is build-tag dependent.
+  vulnerabilities; upgrade rather than continuing to run them.** They were
+  built with Go 1.25.7, and a release binary embeds the standard library, so
+  the vulnerability ships inside the artifact. Scanning as that toolchain
+  reports 14 reachable on Linux and 13 on macOS and Windows, across `net/url`,
+  `net/http`, `crypto/tls`, `crypto/x509`, `encoding/asn1`, `net/textproto`,
+  `net`, and `os`. This release builds with Go 1.26.7 and upgrades `x/text` and
+  `x/sys`; `govulncheck` now reports none, and CI and the release build both
+  gate on it, scanned per platform because reachability is build-tag dependent.
 
 ## [0.4.1] - 2026-08-20
 
