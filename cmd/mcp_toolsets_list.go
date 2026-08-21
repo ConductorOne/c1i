@@ -22,7 +22,7 @@ var mcpToolsetsListCmd = &cobra.Command{
 			return err
 		}
 
-		c, err := newClient(cmd, baseURL)
+		c, err := newListClient(cmd, baseURL)
 		if err != nil {
 			return fmt.Errorf("authentication failed: %w", err)
 		}

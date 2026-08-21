@@ -16,3 +16,11 @@ func newClient(cmd *cobra.Command, baseURL string) (*client.Client, error) {
 		client.WithDebug(viper.GetBool("debug")),
 	)
 }
+
+// newListClient is the client constructor every auto-paginating list/search
+// command calls, instead of newClient directly. It's a var, not a direct
+// call, so a test can substitute an httptest-backed client across all of
+// them from one seam — mirroring newAPIClient (cmd/api.go), newPoliciesClient
+// (cmd/policies.go), and newGrantClient/newRevokeClient
+// (cmd/requests_create_grant.go, cmd/requests_create_revoke.go).
+var newListClient = newClient
