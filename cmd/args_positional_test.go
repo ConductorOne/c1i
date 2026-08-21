@@ -205,6 +205,10 @@ func TestArgsUseConsistencyAcrossTree(t *testing.T) {
 						t.Errorf("%s: Use %q documents %d required plus %d optional positional(s), but Args rejected %d arg(s)",
 							path, c.Use, spec.required, spec.optional, spec.required+spec.optional)
 					}
+					if spec.optional > 0 && argsAccepts(c, spec.required+spec.optional+1) {
+						t.Errorf("%s: Use %q documents at most %d positional(s), but Args accepted %d - document the extra or bound Args",
+							path, c.Use, spec.required+spec.optional, spec.required+spec.optional+1)
+					}
 				case spec.optional > 0:
 					// A nil Args would vacuously pass both checks below via
 					// cobra's ArbitraryArgs fallback, yet attachSubcommandGuards
@@ -222,6 +226,10 @@ func TestArgsUseConsistencyAcrossTree(t *testing.T) {
 					if !argsAccepts(c, spec.optional) {
 						t.Errorf("%s: Use %q documents an optional positional, but Args rejected %d arg(s)",
 							path, c.Use, spec.optional)
+					}
+					if argsAccepts(c, spec.optional+1) {
+						t.Errorf("%s: Use %q documents at most %d optional positional(s), but Args accepted %d - document the extra or bound Args",
+							path, c.Use, spec.optional, spec.optional+1)
 					}
 				default:
 					if !argsAccepts(c, 0) {
