@@ -385,15 +385,10 @@ func runSearchCmd(t *testing.T) string {
 	return out.String()
 }
 
-// TestMCPServersSearchOmitsToolCountWithoutFilter is the reproduction for a
-// silent-wrong-data bug: SearchWithToolCount (rpc_mcp_server.go, c1's API
-// server) only computes toolCount when the request carries a tool_state
-// filter — it skips CountToolsByState entirely when tool_state is
-// UNSPECIFIED, leaving toolCount at its unset zero value. Live-verified on
-// leet.conductor.one: a filterless search returned toolCount "0" for an Okta
-// server with 47 approved tools, while --tool-state approved returned "47"
-// for the same server. The CLI must not surface that unset zero as a real
-// count.
+// TestMCPServersSearchOmitsToolCountWithoutFilter: the API computes toolCount
+// only when the request carries a tool_state filter, leaving it at the proto
+// zero otherwise. An unset zero is indistinguishable from a server that
+// genuinely has no tools, so it must not be surfaced as a count.
 func TestMCPServersSearchOmitsToolCountWithoutFilter(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
