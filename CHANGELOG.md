@@ -6,6 +6,15 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed
+
+- **`c1i completion <unknown-shell>` printed help and exited `0`** instead of
+  failing. It now exits `2`. Cobra creates the `completion` command lazily while
+  executing, which was after this CLI stamps its unknown-subcommand guards onto
+  the tree — so that one command never got them. `eval "$(c1i completion
+  $SHELL)"` with an unset or misspelled `$SHELL` silently evaluated help text
+  instead of erroring.
+
 ### Added
 
 - **`functions usage` gained `--page-size`, `--page-token`, and `--limit`.**

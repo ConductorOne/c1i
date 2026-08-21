@@ -366,3 +366,30 @@ func TestValidateErrorFormat(t *testing.T) {
 		}
 	}
 }
+
+// TestCompletionUnknownShellIsUsageError: cobra creates "completion" inside
+// ExecuteC, so before Run() created it up front the guards never reached it and
+// an unknown shell printed help at exit 0. The chain that now makes it exit 2
+// runs through cobra's own NoArgs message and errors.go's string match on
+// "unknown command", so pin the exit code rather than the message.
+func TestCompletionUnknownShellIsUsageError(t *testing.T) {
+	root := &cobra.Command{Use: "c1i"}
+	// Cobra only wires up the shell subcommands when the root has a real one of
+	// its own, so the tree has to mirror reality for this to mean anything.
+	root.AddCommand(&cobra.Command{Use: "thing", RunE: func(*cobra.Command, []string) error { return nil }})
+	root.InitDefaultCompletionCmd()
+	attachSubcommandGuards(root)
+	root.SetOut(io.Discard)
+	root.SetErr(io.Discard)
+
+	root.SetArgs([]string{"completion", "bogus-shell"})
+	if got := exitCode(root.Execute()); got != exitUsage {
+		t.Errorf("completion bogus-shell: exit %d, want %d", got, exitUsage)
+	}
+
+	// A real shell must still work, and must not be swept up by the guard.
+	root.SetArgs([]string{"completion", "bash"})
+	if err := root.Execute(); err != nil {
+		t.Errorf("completion bash: unexpected error %v", err)
+	}
+}
