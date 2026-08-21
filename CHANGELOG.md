@@ -61,6 +61,36 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   wrapper, so it fell through to `1`. Message text is unchanged, only the
   exit code.
 
+- **BREAKING — a wide sweep of bad-flags/args conditions now exits `2`
+  (usage) instead of `1` (generic), and every 4xx API status other than
+  401/403/404/408/429 now exits `2` instead of `1`.** Both are the same
+  underlying defect: a bare `fmt.Errorf` (or an unlisted HTTP status)
+  falling through `cmd/errors.go`'s `exitCode()` to the generic code instead
+  of the documented usage one. Affected commands include `auth login`
+  (`--client-id` without `--client-secret`, no URL configured at all),
+  `functions list` (`--published-only`/`--draft-only`), `mcp bindings
+  create|delete|by-tools|history` (empty/conflicting `--tool-id`/
+  `--toolset-id`), `mcp servers update|update-credentials|test-connection`
+  and `mcp toolsets update` (nothing to update, an invalid `--type`/`--auth`,
+  a missing config, mutually exclusive config flags), `mcp tools approve
+  --state removed`, `mcp gateway list-tools|call` (an underivable gateway
+  URL), `docs endpoint` (an unknown path), and the "could not determine the
+  current user/policy step, pass the flag explicitly" guards in `requests
+  create-grant|create-revoke|list`, `tasks list --assigned-to-me`, and `tasks
+  approve`. The 4xx rule is a status-range check (`400 <= code < 500`, minus
+  the four already-classified codes), not a per-status list, so it also
+  covers 409/413/414/422 and any future status the API adds without another
+  code change.
+
+  `408` is carved out of the range rather than swept in: C1's REST layer maps
+  gRPC status codes to HTTP via grpc-gateway's standard table, which maps
+  `codes.Canceled` to `408` — a canceled/deadline-adjacent request, not a bad
+  argument, so it stays with the other "C1-side, worth retrying later"
+  statuses (exit `6`) instead of becoming a usage error an agent would
+  respond to by re-checking its flags. `425` has no such path (no gRPC code
+  maps to it) and is left in the usage range on that basis, not by omission.
+  Message text is unchanged everywhere; only the exit code.
+
 - **BREAKING — more list rows emit real JSON numbers and `null`, not strings.**
   The same fix as the earlier stringified-values change, applied to the fields
   it missed. `apps list`'s `user_count` and `entitlements list`'s `grant_count`
