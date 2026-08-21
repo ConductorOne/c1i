@@ -111,6 +111,20 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   to the native types — and note that `jq -r` now prints `null` where it
   printed an empty line.
 
+- **BREAKING — a list row (or `api --paginate` item) whose `--fields`/
+  `C1I_FIELDS` projection matches nothing is no longer printed.** Each row was
+  projected independently as it streamed, so a bogus field name still wrote
+  one `{}` per row before the whole-result zero-match check (further down the
+  pipeline) turned it into exit `2` — a consumer piping stdout without
+  checking the exit code saw only syntactically valid, semantically empty
+  JSON and no signal anything was wrong; live-verified as 46 lines of `{}`
+  from `apps list --fields <typo>`, still exit `2`. A row that projects to
+  `{}` is now skipped instead of written; the zero-match exit `2` is
+  unchanged (stdout is simply empty when nothing matched anywhere), and a
+  field present on only some rows now prints only the rows where it's
+  actually present. A consumer counting output lines for a sparse `--fields`
+  spec will see fewer lines than before.
+
 - **`functions source --out-dir` writes files `0600` instead of `0644`**, and
   the directory `0700` instead of `0755` — now including a pre-existing
   directory, not just one this command creates. Fetched function source is
