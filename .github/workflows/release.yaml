@@ -17,6 +17,17 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
+      # A tag can be pushed at any commit, and disclosures land independently of
+      # code changes -- so a release must be scanned at build time, not rely on
+      # whenever CI last ran.
+      - name: Check for known vulnerabilities
+        env:
+          GOTOOLCHAIN: auto
+        run: |
+          go install golang.org/x/vuln/cmd/govulncheck@v1.7.0
+          for goos in linux darwin windows; do
+            GOOS=$goos govulncheck ./...
+          done
       - name: Run GoReleaser
         uses: goreleaser/goreleaser-action@v6
         with:

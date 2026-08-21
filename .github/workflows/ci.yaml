@@ -26,11 +26,18 @@ jobs:
           go mod tidy
           git diff --exit-code --stat go.mod go.sum
       # Release binaries embed the stdlib, so an unpatched toolchain ships the
-      # vulnerability inside the artifact.
+      # vulnerability inside the artifact. Scanned per GOOS because reachability
+      # is build-tag dependent -- a vulnerability reachable only on Windows is
+      # invisible to a linux-only scan.
       - name: Check for known vulnerabilities
+        env:
+          GOTOOLCHAIN: auto
         run: |
-          go install golang.org/x/vuln/cmd/govulncheck@latest
-          govulncheck ./...
+          go install golang.org/x/vuln/cmd/govulncheck@v1.7.0
+          for goos in linux darwin windows; do
+            echo "== govulncheck GOOS=$goos"
+            GOOS=$goos govulncheck ./...
+          done
   go-test:
     runs-on: ubuntu-latest
     steps:
