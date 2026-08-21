@@ -160,6 +160,10 @@ Two things are irreversible in ways their `--help` doesn't make obvious:
 - `accounts list --unmapped-only` filters after each page is fetched, not
   server-side. With `--page-token` (which turns off auto-pagination) a page
   can come back empty while unmapped accounts exist further along.
+- `functions usage` filters automations client-side by
+  `callFunction.functionId`, same as `accounts list --unmapped-only` above.
+  With `--page-token` a page can come back with zero rows while a matching
+  automation exists on another page.
 - A task's `outcome` field is omitted while it's unspecified, not while the
   task is open — a task can be `TASK_STATE_OPEN` and already carry a real,
   non-UNSPECIFIED outcome (e.g. a provisioning failure mid-flow). Use

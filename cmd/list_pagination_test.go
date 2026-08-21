@@ -226,6 +226,25 @@ func listPaginationCases() []listPaginationCase {
 			rowIDs:   idRows("id"),
 		},
 		{
+			name:     "functions usage",
+			cmd:      functionsUsageCmd,
+			method:   http.MethodGet,
+			wantPath: "/api/v1/automations",
+			args:     []string{"func1"},
+			// functions_usage filters automations client-side by
+			// callFunction.functionId, so each row must embed a matching step.
+			page: func(ids []string, next string) string {
+				items := make([]string, 0, len(ids))
+				for _, id := range ids {
+					items = append(items, fmt.Sprintf(
+						`{"id":%s,"automationSteps":[{"stepName":"s1","callFunction":{"functionId":"func1"}}]}`,
+						jstr(id)))
+				}
+				return fmt.Sprintf(`{"list":[%s],"nextPageToken":%s}`, strings.Join(items, ","), jstr(next))
+			},
+			rowIDs: idRows("automation_id"),
+		},
+		{
 			name:       "grants list",
 			cmd:        grantsListCmd,
 			method:     http.MethodPost,
