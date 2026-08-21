@@ -136,6 +136,13 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   to actually reach `limit` written rows; `--limit` alone, or `--fields`
   alone, is unaffected.
 
+  The per-page request size stays at the requested `--page-size` throughout
+  such a scan; it no longer collapses toward `--limit` (as small as a
+  handful of rows per request instead of the intended page size) just
+  because matches are sparse — that collapse would have made the "fetch
+  more pages" tradeoff above far more expensive than it needs to be, turning
+  a few full-sized pages into many mostly-wasted small ones.
+
 - **`functions source --out-dir` writes files `0600` instead of `0644`**, and
   the directory `0700` instead of `0755` — now including a pre-existing
   directory, not just one this command creates. Fetched function source is
