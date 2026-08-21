@@ -12,7 +12,9 @@ import (
 	"github.com/ConductorOne/c1i/internal/config"
 	"github.com/ConductorOne/c1i/internal/keychain"
 	"github.com/ConductorOne/c1i/internal/login"
+	"github.com/ConductorOne/c1i/internal/transport"
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 )
 
 var authLoginCmd = &cobra.Command{
@@ -129,7 +131,15 @@ func loginWithBrowser(cmd *cobra.Command, baseURL string) error {
 	ctx := cmd.Context()
 	out := cmd.OutOrStdout()
 
-	code, err := login.StartDeviceFlow(ctx, baseURL)
+	// The same --debug/--max-retries flags every REST command reads, so a
+	// hung or flaky auth host traces and retries like the rest of the CLI
+	// instead of silently hanging or giving up after one try.
+	opts := []transport.Option{
+		transport.WithMaxRetries(viper.GetInt("max_retries")),
+		transport.WithDebug(viper.GetBool("debug")),
+	}
+
+	code, err := login.StartDeviceFlow(ctx, baseURL, opts...)
 	if err != nil {
 		return err
 	}
@@ -142,7 +152,7 @@ func loginWithBrowser(cmd *cobra.Command, baseURL string) error {
 
 	_, _ = fmt.Fprintf(out, "Waiting for approval...\n")
 
-	creds, err := login.PollForToken(ctx, baseURL, code)
+	creds, err := login.PollForToken(ctx, baseURL, code, opts...)
 	if err != nil {
 		return err
 	}

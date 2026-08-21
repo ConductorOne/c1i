@@ -8,7 +8,9 @@ import (
 
 	"github.com/ConductorOne/c1i/internal/client"
 	"github.com/ConductorOne/c1i/internal/mcpgateway"
+	"github.com/ConductorOne/c1i/internal/transport"
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 )
 
 var mcpGatewayCmd = &cobra.Command{
@@ -72,11 +74,21 @@ func newGatewayClient(cmd *cobra.Command) (*mcpgateway.Client, error) {
 			return nil, err
 		}
 	}
-	tok, err := client.Token(cmd.Context(), baseURL)
+	// The same --debug/--max-retries flags every REST command reads, so the
+	// gateway's own bearer mint and its JSON-RPC calls both trace and retry
+	// like the rest of the CLI instead of silently ignoring them.
+	tokenOpts := []client.Option{
+		client.WithMaxRetries(viper.GetInt("max_retries")),
+		client.WithDebug(viper.GetBool("debug")),
+	}
+	tok, err := client.Token(cmd.Context(), baseURL, tokenOpts...)
 	if err != nil {
 		return nil, fmt.Errorf("authentication failed: %w", err)
 	}
-	gc := mcpgateway.New(endpoint, tok.AccessToken, nil)
+	gc := mcpgateway.New(endpoint, tok.AccessToken, nil,
+		transport.WithMaxRetries(viper.GetInt("max_retries")),
+		transport.WithDebug(viper.GetBool("debug")),
+	)
 	// *mcpgateway.HTTPError unwraps to a *client.APIError, so wrapping with %w
 	// here is enough for cmd/errors.go's exitCode to classify a gateway 401/403
 	// as auth, 404 as not-found, 429 as rate-limited, and 5xx as server — the
