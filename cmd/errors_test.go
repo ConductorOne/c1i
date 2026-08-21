@@ -393,3 +393,21 @@ func TestCompletionUnknownShellIsUsageError(t *testing.T) {
 		t.Errorf("completion bash: unexpected error %v", err)
 	}
 }
+
+// TestRunWiresCompletionUnderTheGuards pins the shipped path, not the recipe.
+// The test above proves the two-line sequence works on a tree shaped like
+// rootCmd; only this one fails if Run() stops applying it.
+func TestRunWiresCompletionUnderTheGuards(t *testing.T) {
+	rootCmd.SetOut(io.Discard)
+	rootCmd.SetErr(io.Discard)
+	t.Cleanup(func() {
+		rootCmd.SetOut(nil)
+		rootCmd.SetErr(nil)
+		rootCmd.SetArgs(nil)
+	})
+
+	rootCmd.SetArgs([]string{"completion", "bogus-shell"})
+	if got := Run(); got != exitUsage {
+		t.Errorf("Run() for completion bogus-shell: exit %d, want %d", got, exitUsage)
+	}
+}

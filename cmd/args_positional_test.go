@@ -153,18 +153,12 @@ func parseUsePositionals(use string) (positionalSpec, error) {
 //
 //   - Cobra lazily adds "help" and a "completion" group to rootCmd inside
 //     ExecuteC() - the first time ANY test in this binary calls
-//     Execute/ExecuteContext, never before. Production's Run() calls
-//     attachSubcommandGuards(rootCmd) before rootCmd.ExecuteContext ever
-//     reaches ExecuteC(), so in the shipped binary neither command is ever
-//     touched by this guard's stamp - they keep cobra's own defaults for
-//     real, for better or worse (the "completion" group's own Args: NoArgs
-//     is dead code there - cobra's execute() returns flag.ErrHelp for a
-//     non-runnable command before ValidateArgs ever runs, so an unknown
-//     completion subcommand reads as success today; pre-existing, unrelated
-//     to this migration, and out of scope for this guard). isCobraLazyBuiltin
-//     excludes both, deterministically matching that production ordering
-//     instead of depending on whether some unrelated test already called
-//     Execute.
+//     Execute/ExecuteContext, never before. Run() now creates "completion"
+//     itself before stamping, so that one IS guarded in the shipped binary;
+//     "help" is deliberately left alone, since it is runnable with a nil Args
+//     and the NoArgs stamp would break "c1i help <command>".
+//     isCobraLazyBuiltin still excludes both here, so this walk does not
+//     depend on whether some unrelated test already called Execute.
 //   - attachSubcommandGuards installs a synthetic RunE on every group
 //     command (e.g. "mcp", "accounts") that has none, which flips cobra's
 //     Runnable() to true for it - a real effect: production always has this
