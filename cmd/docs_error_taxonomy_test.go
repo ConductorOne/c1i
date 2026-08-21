@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"testing"
@@ -207,8 +208,12 @@ func readDocFile(t *testing.T, path string) string {
 // TestExitCodeTaxonomyDocumentedEverywhere is Guard 1: every exit* constant
 // declared anywhere in package cmd must appear, by its integer value, in
 // README.md's, cmd/agents.md's, .claude/commands/c1i.md's, and CLAUDE.md's
-// exit-code tables. It does not compare prose — the four tables deliberately
-// phrase each row's meaning differently — only the leading code cell.
+// exit-code tables, AND every code any of those tables names must correspond
+// to a real exit* constant — the source-to-docs direction alone would let a
+// stale or fabricated row (e.g. a leftover "| 99 | ... |" for a code nothing
+// declares anymore) sit in a table forever. It does not compare prose — the
+// four tables deliberately phrase each row's meaning differently — only the
+// leading code cell.
 //
 // cmd/agents.md is read through the same agentsTemplate the "c1i docs
 // agents" command embeds and serves, so this test covers what actually ships
@@ -216,6 +221,10 @@ func readDocFile(t *testing.T, path string) string {
 // what go:embed captured.
 func TestExitCodeTaxonomyDocumentedEverywhere(t *testing.T) {
 	consts := parseExitConstants(t)
+	constValues := map[int]bool{}
+	for _, c := range consts {
+		constValues[c.value] = true
+	}
 
 	readmeTable := extractTableBlock(t, "README.md", readDocFile(t, "../README.md"), regexp.MustCompile(`(?m)^### Errors & exit codes$`))
 	agentsTable := extractTableBlock(t, "cmd/agents.md (embedded)", agentsTemplate, regexp.MustCompile(`(?m)^## Exit codes$`))
@@ -236,6 +245,22 @@ func TestExitCodeTaxonomyDocumentedEverywhere(t *testing.T) {
 		for _, doc := range docs {
 			if !doc.codes[c.value] {
 				t.Errorf("%s: missing exit code %d (%s) — cmd/errors.go declares it but this document's exit-code list doesn't name it", doc.name, c.value, c.name)
+			}
+		}
+	}
+
+	// Reverse direction: a code a table names but no exitXxx constant
+	// declares is stale or fabricated documentation, and would otherwise sit
+	// there undetected indefinitely.
+	for _, doc := range docs {
+		codes := make([]int, 0, len(doc.codes))
+		for code := range doc.codes {
+			codes = append(codes, code)
+		}
+		sort.Ints(codes)
+		for _, code := range codes {
+			if !constValues[code] {
+				t.Errorf("%s: documents exit code %d, but no exitXxx constant in cmd/*.go declares it — stale or fabricated row?", doc.name, code)
 			}
 		}
 	}

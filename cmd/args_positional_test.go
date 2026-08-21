@@ -3,6 +3,7 @@ package cmd
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"regexp"
 	"strings"
 	"testing"
@@ -86,22 +87,42 @@ var (
 	// argument, which it is not: it's documentation for --filter's value.
 	flagValueHintRe = regexp.MustCompile(`\[--[\w-]+(?:\s+<[\w-]+>)?\]`)
 	optionalPosRe   = regexp.MustCompile(`\[<[\w-]+>\]`)
-	requiredPosRe   = regexp.MustCompile(`<[\w-]+>`)
+	// optionalBareRe matches the ordinary Unix "[name]" convention (no inner
+	// "<...>"), e.g. `docs guide`'s "guide [name]" - a real Use string this
+	// package ships that optionalPosRe alone does not match, and previously
+	// fell through to "no positional documented" silently.
+	optionalBareRe = regexp.MustCompile(`\[[\w-]+\]`)
+	requiredPosRe  = regexp.MustCompile(`<[\w-]+>`)
+	// strayBracketRe catches any "[" or "]" left after every recognized
+	// notation above has been stripped: bracket notation this parser doesn't
+	// understand. Without this, an unrecognized shape silently counted as
+	// zero positionals - a near-vacuous bar that reads as coverage while
+	// checking nothing.
+	strayBracketRe = regexp.MustCompile(`[\[\]]`)
 )
 
 // parseUsePositionals derives the positional-argument shape a Use string
-// documents, e.g. "get <connector-id>" -> {required:1}, or
-// "test-connection [<connector-id>]" -> {optional:1}.
-func parseUsePositionals(use string) positionalSpec {
+// documents, e.g. "get <connector-id>" -> {required:1}, "test-connection
+// [<connector-id>]" -> {optional:1}, or "guide [name]" -> {optional:1}. It
+// returns an error, rather than silently treating it as zero positionals, if
+// any bracket notation in use survives every pattern above - that shape must
+// be taught to this parser, not skipped.
+func parseUsePositionals(use string) (positionalSpec, error) {
 	var rest string
 	if i := strings.IndexByte(use, ' '); i >= 0 {
 		rest = use[i+1:]
 	}
 	stripped := flagValueHintRe.ReplaceAllString(rest, "")
 	optional := len(optionalPosRe.FindAllString(stripped, -1))
-	withoutOptional := optionalPosRe.ReplaceAllString(stripped, "")
-	required := len(requiredPosRe.FindAllString(withoutOptional, -1))
-	return positionalSpec{required: required, optional: optional}
+	stripped = optionalPosRe.ReplaceAllString(stripped, "")
+	optional += len(optionalBareRe.FindAllString(stripped, -1))
+	stripped = optionalBareRe.ReplaceAllString(stripped, "")
+	required := len(requiredPosRe.FindAllString(stripped, -1))
+	stripped = requiredPosRe.ReplaceAllString(stripped, "")
+	if strayBracketRe.MatchString(stripped) {
+		return positionalSpec{}, fmt.Errorf("Use %q contains bracket notation this parser doesn't recognize (understood: \"<name>\" required, \"[<name>]\"/\"[name]\" optional, \"[--flag <value>]\" flag-value hint) - leftover %q", use, stripped)
+	}
+	return positionalSpec{required: required, optional: optional}, nil
 }
 
 // TestArgsUseConsistencyAcrossTree walks the ENTIRE real cobra tree rooted at
@@ -125,15 +146,54 @@ func parseUsePositionals(use string) positionalSpec {
 //     tree-wide gap, not something this migration introduced - asserting
 //     rejection here would fail on dozens of unrelated commands. See the
 //     discrepancy note in the task report for detail.
+//
+// Both the set of commands walked and their Args must be pinned to a
+// deterministic point - otherwise "checked", and which commands it covers,
+// varies with unrelated test execution order:
+//
+//   - Cobra lazily adds "help" and a "completion" group to rootCmd inside
+//     ExecuteC() - the first time ANY test in this binary calls
+//     Execute/ExecuteContext, never before. Production's Run() calls
+//     attachSubcommandGuards(rootCmd) before rootCmd.ExecuteContext ever
+//     reaches ExecuteC(), so in the shipped binary neither command is ever
+//     touched by this guard's stamp - they keep cobra's own defaults for
+//     real, for better or worse (the "completion" group's own Args: NoArgs
+//     is dead code there - cobra's execute() returns flag.ErrHelp for a
+//     non-runnable command before ValidateArgs ever runs, so an unknown
+//     completion subcommand reads as success today; pre-existing, unrelated
+//     to this migration, and out of scope for this guard). isCobraLazyBuiltin
+//     excludes both, deterministically matching that production ordering
+//     instead of depending on whether some unrelated test already called
+//     Execute.
+//   - attachSubcommandGuards installs a synthetic RunE on every group
+//     command (e.g. "mcp", "accounts") that has none, which flips cobra's
+//     Runnable() to true for it - a real effect: production always has this
+//     applied (Run() calls it before ExecuteContext) before any command
+//     executes, so a group genuinely is part of the checked surface. Calling
+//     it explicitly here - instead of relying on some other test having
+//     already called it on the shared rootCmd - is what makes that
+//     promotion happen the same way regardless of test order. The call is
+//     documented idempotent and safe to repeat.
+func isCobraLazyBuiltin(parent, c *cobra.Command) bool {
+	return parent == rootCmd && (c.Name() == "help" || c.Name() == "completion")
+}
+
 func TestArgsUseConsistencyAcrossTree(t *testing.T) {
+	attachSubcommandGuards(rootCmd)
 	checked := 0
 	var walk func(cmd *cobra.Command)
 	walk = func(cmd *cobra.Command) {
 		for _, c := range cmd.Commands() {
+			if isCobraLazyBuiltin(cmd, c) {
+				continue
+			}
 			if c.Runnable() {
 				checked++
-				spec := parseUsePositionals(c.Use)
 				path := c.CommandPath()
+				spec, err := parseUsePositionals(c.Use)
+				if err != nil {
+					t.Fatalf("%s: %v", path, err)
+				}
 				switch {
 				case spec.required > 0:
 					if argsAccepts(c, spec.required-1) {
@@ -226,7 +286,10 @@ func TestMigratedSingleResourceCommandsUsePositionalID(t *testing.T) {
 
 			// Use must document exactly one positional (required, or the
 			// documented optional form for test-connection).
-			spec := parseUsePositionals(cmd.Use)
+			spec, err := parseUsePositionals(cmd.Use)
+			if err != nil {
+				t.Fatalf("%s: %v", name, err)
+			}
 			if c.optional {
 				if spec.optional != 1 || spec.required != 0 {
 					t.Errorf("%s: Use %q should document exactly one OPTIONAL positional, got required=%d optional=%d",
@@ -291,7 +354,10 @@ func TestCollectionCommandsKeepFlagIDsAndNoPositional(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			cmd := findCommand(t, rootCmd, c.path...)
 
-			spec := parseUsePositionals(cmd.Use)
+			spec, err := parseUsePositionals(cmd.Use)
+			if err != nil {
+				t.Fatalf("%s: %v", name, err)
+			}
 			if spec.required > 0 || spec.optional > 0 {
 				t.Errorf("%s: Use %q declares a positional argument, but this collection/create/relationship command should keep ids as flags",
 					name, cmd.Use)
