@@ -193,18 +193,41 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `--max-retries` now retries a 429 from the gateway (5xx/transport failures
   still don't retry a JSON-RPC call, since it isn't safe to assume one had no
   side effect); and a hung auth host can no longer hang `auth login` forever.
-  The bearer-minting request both paths depend on (`client.Token`, also used
-  by `auth token`) gets the same fix. All of these, plus every device-flow
-  request `auth login` makes, now also send the CLI's user-agent and are
-  covered by the same empty-path and redirect-trust-scope guards a REST
-  command gets.
+  All of the device-flow requests `auth login` makes now also send the CLI's
+  user-agent and are covered by the same empty-path and redirect-trust-scope
+  guards a REST command gets.
 
-  Internal refactor: the auth-independent parts of the API client (retry/
-  backoff, timeout, user-agent, debug tracing, the path guard, the redirect
-  trust-scope guard) moved into a new `internal/transport` package below
-  `internal/client`, which `internal/login`, `internal/tokensource`, and
-  `internal/mcpgateway` now build on directly instead of each hand-rolling
-  (or, in three of these four cases, simply lacking) their own subset.
+- **Every authenticated command's token mint and refresh now retries a
+  429**, where it previously failed immediately as a not-authenticated
+  error. This is the client_credentials request `newClient` makes on every
+  command's first call and on token expiry, not just `auth login`/`auth
+  token` — the retry lives in the shared transport those share, so the
+  blast radius is every command, not the handful that talk to the token
+  endpoint directly. This closes a real gap against README's own
+  claim that 429 is retried "for every command": before this
+  release that was false for the token mint specifically. Live-verified:
+  `auth token --max-retries 2` against an endpoint that 429s once then
+  succeeds now exits `0` where it previously exited `3` after the first
+  429.
+
+- **A new 10-minute timeout applies to every attempt of every HTTP request
+  this CLI sends** (REST, the MCP gateway, and the device-flow/token-mint
+  requests) — previously there was no timeout at all on any of them,
+  authenticated or not, so a hung connection could block a command
+  indefinitely. It's per attempt, not per command: a retried request gets a
+  fresh 10 minutes, not a shrinking share of one deadline. Fixed, not
+  configurable — the longest observed real call (an MCP `tools/call`
+  tool invocation) is 182 seconds, leaving roughly 3x headroom, so there's
+  no known case that needs a longer one; if you hit the ceiling for real,
+  report it and it can grow a flag then.
+
+- **BREAKING — an MCP gateway response body that can't be read now exits
+  `8`, not `1`.** A 2xx JSON-RPC response whose body read fails (e.g. the
+  connection drops mid-response) used to surface as a bare error; it's now
+  classified as `*mcpgateway.TransportError` like any other failure to
+  complete the exchange, since an unreadable body is a transport failure,
+  not a usage problem. Narrow: it only changes an already-rare I/O-error
+  path, not any status-code classification.
 
 - **The MCP gateway handshake reported a hardcoded `"dev"` client version**,
   so a released binary always misidentified itself to the gateway
@@ -212,6 +235,14 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `c1i version` printed. It now reports the same build-derived version as
   everything else — the same fix category as the retry/debug/timeout gaps
   above: the gateway path missing something the REST client already had.
+
+  Internal refactor behind all five entries above: the auth-independent
+  parts of the API client (retry/backoff, the new per-attempt timeout,
+  user-agent, debug tracing, the path guard, the redirect trust-scope
+  guard) moved into a new `internal/transport` package below
+  `internal/client`, which `internal/login`, `internal/tokensource`, and
+  `internal/mcpgateway` now build on directly instead of each hand-rolling
+  (or, in three of these four cases, simply lacking) their own subset.
 
 ### Security
 
