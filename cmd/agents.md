@@ -85,7 +85,10 @@ campaign ID from a URL is the access review `id` directly.
 
 ## Reading output
 
-- List commands emit NDJSON: one object per line. Pipe to `jq`.
+- List commands emit NDJSON: one object per line — but with `--fields`/
+  `C1I_FIELDS` set, a row whose projection matches nothing is skipped
+  entirely (never printed as `{}`), so the line count can be less than the
+  underlying result count. Pipe to `jq`.
 - Single-object reads emit pretty-printed JSON.
 - Mutation confirmations (create/update/delete) are never field-projected —
   `--fields`/`C1I_FIELDS` can't blank a success message.

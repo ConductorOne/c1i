@@ -396,18 +396,21 @@ c1i functions get <id> --fields id,displayName,publishedCommitId
   lack one of the names. Double-check the spelling of every name you pass —
   the tool only catches getting *all* of them wrong.
   - On list commands and `api --paginate`, "the response" means the **whole
-    result**, not each row: rows are still streamed out as they're fetched
-    (never buffered — these commands can walk unbounded, multi-page results),
-    and a field present on some rows but absent on others is fine as long as
-    it matches at least one row anywhere. Only a spec that matches nothing in
-    **every** row across every page is an error — and because output was
-    already streamed by the time that's known, the error surfaces after all
-    matching rows have been printed, with a message ("...matched no keys in
-    any row of the response") distinguishable from the single-object case
-    above. If you're piping to `jq` (`c1i ... | jq ...`), remember `$?` reads
-    the pipe's last command, not `c1i`'s — the stderr message is the durable
-    signal here, not the exit code you'd read from a naive `$?` after the
-    pipe.
+    result**, not each row: rows are decided and streamed out one at a time as
+    they're fetched (never buffered — these commands can walk unbounded,
+    multi-page results), but a row whose projection is empty is **skipped**
+    rather than printed as `{}` — a field present on some rows but absent on
+    others just means fewer rows are printed, not an error, as long as it
+    matches at least one row anywhere. Only a spec that matches nothing in
+    **every** row across every page is an error, with a message ("...matched
+    no keys in any row of the response") distinguishable from the
+    single-object case above. Because every row's own projection was already
+    empty (and skipped) by the time that whole-result verdict is known,
+    nothing is printed on stdout before the error — never rely on output
+    length to detect success without checking the exit code. If you're piping
+    to `jq` (`c1i ... | jq ...`), remember `$?` reads the pipe's last command,
+    not `c1i`'s — the stderr message is the durable signal here, not the exit
+    code you'd read from a naive `$?` after the pipe.
 - Missing fields are silently omitted, so requesting a superset is safe.
 - Also settable via `C1I_FIELDS`. Applies to read output — list commands, `api`,
   and single-object `get` commands. Mutation confirmations (create/update/delete)
