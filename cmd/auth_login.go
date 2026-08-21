@@ -33,7 +33,7 @@ and C1I_CLIENT_SECRET environment variables (combined with C1I_URL).`,
 
 		if baseURL == "" {
 			if !isTerminal() {
-				return fmt.Errorf("url is required: set --url flag, C1I_URL env var, or url in ~/.c1i.yaml")
+				return &usageError{fmt.Errorf("url is required: set --url flag, C1I_URL env var, or url in ~/.c1i.yaml")}
 			}
 			baseURL, err = promptForURL(cmd, os.Stdin)
 			if err != nil {
@@ -48,7 +48,7 @@ and C1I_CLIENT_SECRET environment variables (combined with C1I_URL).`,
 		if clientID != "" && clientSecret != "" {
 			loginErr = loginWithCredentials(cmd, baseURL, clientID, clientSecret)
 		} else if clientID != "" || clientSecret != "" {
-			return fmt.Errorf("both --client-id and --client-secret are required for credential login")
+			return &usageError{fmt.Errorf("both --client-id and --client-secret are required for credential login")}
 		} else {
 			loginErr = loginWithBrowser(cmd, baseURL)
 		}
@@ -87,12 +87,12 @@ func promptForURL(cmd *cobra.Command, in io.Reader) (string, error) {
 
 	scanner := bufio.NewScanner(in)
 	if !scanner.Scan() {
-		return "", fmt.Errorf("url is required: set --url flag, C1I_URL env var, or url in ~/.c1i.yaml")
+		return "", &usageError{fmt.Errorf("url is required: set --url flag, C1I_URL env var, or url in ~/.c1i.yaml")}
 	}
 
 	raw := strings.TrimSpace(scanner.Text())
 	if raw == "" {
-		return "", fmt.Errorf("url is required: set --url flag, C1I_URL env var, or url in ~/.c1i.yaml")
+		return "", &usageError{fmt.Errorf("url is required: set --url flag, C1I_URL env var, or url in ~/.c1i.yaml")}
 	}
 
 	url, warnings, err := config.ParseURL(raw)

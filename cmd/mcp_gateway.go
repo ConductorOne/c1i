@@ -36,7 +36,7 @@ Subcommands:
 func deriveGatewayURL(baseURL string) (string, error) {
 	u, err := url.Parse(baseURL)
 	if err != nil || u.Host == "" {
-		return "", fmt.Errorf("cannot derive gateway URL from %q", baseURL)
+		return "", &usageError{fmt.Errorf("cannot derive gateway URL from %q", baseURL)}
 	}
 	// Insert -mcp into the hostname (not the port): acme.conductor.one ->
 	// acme-mcp.conductor.one.

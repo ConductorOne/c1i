@@ -3,7 +3,11 @@ package cmd
 import (
 	"bytes"
 	"context"
+	"net/http"
+	"net/http/httptest"
 	"testing"
+
+	"github.com/spf13/viper"
 )
 
 // TestAPIGuardsExitUsage is a table test covering every bad flag/argument
@@ -76,4 +80,84 @@ func TestAPIGuardsExitUsage(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestAPIInvalidJSONBodyExitsUsage covers the three "invalid JSON body"
+// fmt.Errorf sites in cmd/api.go (the --dry-run preview path, the live
+// POST/PUT/PATCH path, and the --allow-delete-body DELETE path) found after
+// the rest of this sweep landed: a malformed --body/--body-file is exactly
+// the caller-fixable class TestAPIGuardsExitUsage already covers, so these
+// three must classify as exitUsage too, not exitError.
+func TestAPIInvalidJSONBodyExitsUsage(t *testing.T) {
+	t.Run("dry-run preview", func(t *testing.T) {
+		resetAPICmdFlags(t)
+		t.Setenv("C1I_URL", "https://example.invalid")
+
+		origDryRun := viper.GetBool("dry_run")
+		viper.Set("dry_run", true)
+		t.Cleanup(func() { viper.Set("dry_run", origDryRun) })
+
+		var out bytes.Buffer
+		apiCmd.SetOut(&out)
+		apiCmd.SetErr(&out)
+		rootCmd.SetArgs([]string{"api", "--path", "/api/v1/apps", "--method", "POST", "--body", "not json"})
+
+		err := rootCmd.ExecuteContext(context.Background())
+		if err == nil {
+			t.Fatal("expected an error, got nil")
+		}
+		if got, want := exitCode(err), exitUsage; got != want {
+			t.Errorf("exitCode(%v) = %d, want %d (exitUsage)", err, got, want)
+		}
+	})
+
+	t.Run("live POST", func(t *testing.T) {
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			t.Errorf("unexpected request: %s %s -- malformed body should never reach the wire", r.Method, r.URL.Path)
+			w.WriteHeader(http.StatusInternalServerError)
+		}))
+		defer srv.Close()
+
+		resetAPICmdFlags(t)
+		t.Setenv("C1I_URL", "https://example.invalid")
+		stubNewAPIClient(t, srv)
+
+		var out bytes.Buffer
+		apiCmd.SetOut(&out)
+		apiCmd.SetErr(&out)
+		rootCmd.SetArgs([]string{"api", "--path", "/api/v1/apps", "--method", "POST", "--body", "not json"})
+
+		err := rootCmd.ExecuteContext(context.Background())
+		if err == nil {
+			t.Fatal("expected an error, got nil")
+		}
+		if got, want := exitCode(err), exitUsage; got != want {
+			t.Errorf("exitCode(%v) = %d, want %d (exitUsage)", err, got, want)
+		}
+	})
+
+	t.Run("live DELETE with --allow-delete-body", func(t *testing.T) {
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			t.Errorf("unexpected request: %s %s -- malformed body should never reach the wire", r.Method, r.URL.Path)
+			w.WriteHeader(http.StatusInternalServerError)
+		}))
+		defer srv.Close()
+
+		resetAPICmdFlags(t)
+		t.Setenv("C1I_URL", "https://example.invalid")
+		stubNewAPIClient(t, srv)
+
+		var out bytes.Buffer
+		apiCmd.SetOut(&out)
+		apiCmd.SetErr(&out)
+		rootCmd.SetArgs([]string{"api", "--path", "/api/v1/apps", "--method", "DELETE", "--allow-delete-body", "--body", "not json"})
+
+		err := rootCmd.ExecuteContext(context.Background())
+		if err == nil {
+			t.Fatal("expected an error, got nil")
+		}
+		if got, want := exitCode(err), exitUsage; got != want {
+			t.Errorf("exitCode(%v) = %d, want %d (exitUsage)", err, got, want)
+		}
+	})
 }

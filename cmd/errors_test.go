@@ -63,12 +63,29 @@ func TestExitCode(t *testing.T) {
 		{"api 429", &client.APIError{StatusCode: 429}, exitRateLimited},
 		{"api 500", &client.APIError{StatusCode: 500}, exitServer},
 		{"api 503", &client.APIError{StatusCode: 503}, exitServer},
-		// A bare HTTP 400 is caller-caused (bad request body/params), so it now
-		// maps to exitUsage -- a deliberate narrowing of the "unlisted status"
-		// default, scoped to exactly 400. 409 is the negative pair proving
-		// nothing else moved off exitError.
+		// 408 and 499 are the two 4xx carved out of the usage range: both mean
+		// the request ended without the caller having done anything wrong, so
+		// neither is exitUsage; neither is evidence C1 itself failed, so
+		// neither is exitServer either -- both fall to the generic exitError.
+		// This API has been observed to produce both, from different error
+		// paths, but neither is forceable live, so both are proven here
+		// rather than against the real API.
+		{"api 408", &client.APIError{StatusCode: 408}, exitError},
+		{"api 499", &client.APIError{StatusCode: 499}, exitError},
+		// Every other 4xx that isn't auth/not-found/rate-limited/408/499 is
+		// caller-caused (bad request body/params/conflict/size/etc.), so it
+		// maps to exitUsage rather than falling to the generic exitError
+		// default.
 		{"api 400", &client.APIError{StatusCode: 400}, exitUsage},
-		{"api 409 (unaffected)", &client.APIError{StatusCode: 409}, exitError},
+		{"api 409", &client.APIError{StatusCode: 409}, exitUsage},
+		{"api 413", &client.APIError{StatusCode: 413}, exitUsage},
+		{"api 414", &client.APIError{StatusCode: 414}, exitUsage},
+		{"api 422", &client.APIError{StatusCode: 422}, exitUsage},
+		// 425 stays in the usage range: nothing traced in the platform maps
+		// any status to it, so there's no evidence this API can ever return
+		// it -- this is the negative pair proving 408/499 alone moved, not
+		// the whole low 4xx range.
+		{"api 425", &client.APIError{StatusCode: 425}, exitUsage},
 		{"auth", &client.AuthError{Err: errors.New("no creds")}, exitAuth},
 		// The keyring-unavailable diagnosis (internal/keychain.Load,
 		// see keychain_test.go) still surfaces through loadCredentials as an

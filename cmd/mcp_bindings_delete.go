@@ -30,7 +30,7 @@ in the request body; HTTP DELETE doesn't reliably support that.`,
 		toolsetID, _ := cmd.Flags().GetString("toolset-id")
 		toolIDs, _ := cmd.Flags().GetStringSlice("tool-id")
 		if len(toolIDs) == 0 {
-			return fmt.Errorf("flag --tool-id requires at least one value")
+			return &usageError{fmt.Errorf("flag --tool-id requires at least one value")}
 		}
 
 		body := map[string]any{

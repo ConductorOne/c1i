@@ -24,22 +24,24 @@ no bindings are still emitted with an empty toolsets array.`,
 			return err
 		}
 
-		c, err := newClient(cmd, baseURL)
-		if err != nil {
-			return fmt.Errorf("authentication failed: %w", err)
-		}
-
 		appID, _ := cmd.Flags().GetString("app-id")
 		connectorID, _ := cmd.Flags().GetString("connector-id")
 		toolIDs, _ := cmd.Flags().GetStringSlice("tool-id")
 		if len(toolIDs) == 0 {
-			return fmt.Errorf("flag --tool-id requires at least one value")
+			return &usageError{fmt.Errorf("flag --tool-id requires at least one value")}
 		}
 
 		body := map[string]any{
 			"appId":       appID,
 			"connectorId": connectorID,
 			"mcpToolIds":  toolIDs,
+		}
+
+		// Validate flags before paying for a client (mirrors create/delete):
+		// no reason to build one just to reject the request afterward.
+		c, err := newClient(cmd, baseURL)
+		if err != nil {
+			return fmt.Errorf("authentication failed: %w", err)
 		}
 
 		path := client.Path("/api/v1/apps/%s/connectors/%s/tool_bindings/by_tools", appID, connectorID)

@@ -184,7 +184,7 @@ func resolvePolicyStepID(ctx context.Context, c *client.Client, taskID, explicit
 		return "", nil // optional (deny): omit rather than block the action
 	}
 	if stepID == "" && required {
-		return "", fmt.Errorf("could not determine the current policy step for task %s; pass --policy-step-id explicitly", taskID)
+		return "", &usageError{fmt.Errorf("could not determine the current policy step for task %s; pass --policy-step-id explicitly", taskID)}
 	}
 	return stepID, nil
 }

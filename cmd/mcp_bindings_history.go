@@ -28,15 +28,15 @@ transaction.`,
 		toolsetID, _ := cmd.Flags().GetString("toolset-id")
 		toolID, _ := cmd.Flags().GetString("tool-id")
 		if (toolsetID == "") == (toolID == "") {
-			return fmt.Errorf("exactly one of --toolset-id or --tool-id is required")
+			return &usageError{fmt.Errorf("exactly one of --toolset-id or --tool-id is required")}
 		}
 		// Read-only command — guard against silent over-fetch from an empty
 		// path segment that would still pattern-validate as "missing".
 		if cmd.Flags().Changed("toolset-id") && toolsetID == "" {
-			return fmt.Errorf("flag --toolset-id requires a non-empty value")
+			return &usageError{fmt.Errorf("flag --toolset-id requires a non-empty value")}
 		}
 		if cmd.Flags().Changed("tool-id") && toolID == "" {
-			return fmt.Errorf("flag --tool-id requires a non-empty value")
+			return &usageError{fmt.Errorf("flag --tool-id requires a non-empty value")}
 		}
 
 		baseURL, err := GetBaseURL()

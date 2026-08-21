@@ -61,6 +61,38 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   wrapper, so it fell through to `1`. Message text is unchanged, only the
   exit code.
 
+- **BREAKING — a wide sweep of bad-flags/args conditions now exits `2`
+  (usage) instead of `1` (generic), and every 4xx API status other than
+  401/403/404/408/429/499 now exits `2` instead of `1`.** Both are the same
+  underlying defect: a bare `fmt.Errorf` (or an unlisted HTTP status)
+  falling through `cmd/errors.go`'s `exitCode()` to the generic code instead
+  of the documented usage one. Affected commands include `auth login`
+  (`--client-id` without `--client-secret`, no URL configured at all),
+  `api` (malformed `--body`/`--body-file` JSON), `functions list`
+  (`--published-only`/`--draft-only`), `mcp bindings
+  create|delete|by-tools|history` (empty/conflicting `--tool-id`/
+  `--toolset-id`), `mcp servers update|update-credentials|test-connection`
+  and `mcp toolsets update` (nothing to update, an invalid `--type`/`--auth`,
+  a missing config, mutually exclusive config flags), `mcp tools approve
+  --state removed`, `mcp gateway list-tools|call` (an underivable gateway
+  URL), `docs endpoint` (an unknown path), and the "could not determine the
+  current user/policy step, pass the flag explicitly" guards in `requests
+  create-grant|create-revoke|list`, `tasks list --assigned-to-me`, and `tasks
+  approve`. The 4xx rule is a status-range check (`400 <= code < 500`, minus
+  the five already-classified codes), not a per-status list, so it also
+  covers 409/413/414/422 and any future status the API adds without another
+  code change.
+
+  `408` and `499` are carved out of the range rather than swept in: both mean
+  the request ended without the caller having done anything wrong, so
+  neither is a usage error (`2`); and neither is evidence that C1 itself
+  failed, so neither is `6` either — both fall to the generic `1` instead.
+  This API has been observed to produce both, from different error paths.
+  `425` has no such observation behind it and stays in the usage range on
+  that basis, not by omission. Neither `408` nor `499` can be forced
+  deterministically against the live API, so both are proven by unit test
+  only. Message text is unchanged everywhere; only the exit code.
+
 - **BREAKING — more list rows emit real JSON numbers and `null`, not strings.**
   The same fix as the earlier stringified-values change, applied to the fields
   it missed. `apps list`'s `user_count` and `entitlements list`'s `grant_count`

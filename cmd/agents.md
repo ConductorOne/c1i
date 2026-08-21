@@ -104,7 +104,7 @@ campaign ID from a URL is the access review `id` directly.
 |---|---|---|
 | 0 | success | — |
 | 1 | generic / unclassified error | inspect the message |
-| 2 | usage error (bad flags/args, an empty id, or API `400`) | fix the invocation, don't retry as-is — but on an API `400`, read the message first: it can also be a state rejection (e.g. `task is closed`) rather than a bad argument |
+| 2 | usage error (bad flags/args, an empty id, or any API `4xx` other than `401`/`403`/`404`/`408`/`429`/`499`) | fix the invocation, don't retry as-is — but read the message first: an API `4xx` can also be a state rejection (e.g. `task is closed`) rather than a bad argument |
 | 3 | not authenticated, or API `401`/`403` | re-authenticate (`c1i auth login`) |
 | 4 | API `404` | stop — the resource/path doesn't exist |
 | 5 | API `429` | back off and retry |

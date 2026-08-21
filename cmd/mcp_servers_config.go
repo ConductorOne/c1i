@@ -70,7 +70,7 @@ func authArmFromFlags(cmd *cobra.Command) (map[string]any, error) {
 		pass, _ := cmd.Flags().GetString("basic-auth-password")
 		return map[string]any{"basicAuth": map[string]any{"username": user, "password": pass}}, nil
 	default:
-		return nil, fmt.Errorf("unsupported --auth %q: use none, bearer-token, custom-header, or basic-auth (OAuth2/AWS/Google go via --hosted-config-file / --external-config-file)", auth)
+		return nil, &usageError{fmt.Errorf("unsupported --auth %q: use none, bearer-token, custom-header, or basic-auth (OAuth2/AWS/Google go via --hosted-config-file / --external-config-file)", auth)}
 	}
 }
 
@@ -143,7 +143,7 @@ func buildHostedConfig(cmd *cobra.Command) (map[string]any, error) {
 		cmd.Flags().Changed("source-app-id") || sharedAuthFlagsChanged(cmd)
 	if file != "" {
 		if usingFlags {
-			return nil, fmt.Errorf("--hosted-config-file is mutually exclusive with --catalog-id/--source-app-id/--config-field and the auth flags (--auth/--bearer-token/--token-sharing/…)")
+			return nil, &usageError{fmt.Errorf("--hosted-config-file is mutually exclusive with --catalog-id/--source-app-id/--config-field and the auth flags (--auth/--bearer-token/--token-sharing/…)")}
 		}
 		return readConfigFile(cmd, file)
 	}
@@ -177,7 +177,7 @@ func buildExternalConfig(cmd *cobra.Command) (map[string]any, error) {
 		sharedAuthFlagsChanged(cmd)
 	if file != "" {
 		if usingFlags {
-			return nil, fmt.Errorf("--external-config-file is mutually exclusive with --url/--transport and the auth flags (--auth/--bearer-token/--token-sharing/…)")
+			return nil, &usageError{fmt.Errorf("--external-config-file is mutually exclusive with --url/--transport and the auth flags (--auth/--bearer-token/--token-sharing/…)")}
 		}
 		return readConfigFile(cmd, file)
 	}
@@ -205,7 +205,7 @@ func parseKeyValues(cmd *cobra.Command, name string) (map[string]string, error) 
 	for _, p := range pairs {
 		k, v, ok := strings.Cut(p, "=")
 		if !ok || k == "" {
-			return nil, fmt.Errorf("invalid --%s %q: expected key=value", name, p)
+			return nil, &usageError{fmt.Errorf("invalid --%s %q: expected key=value", name, p)}
 		}
 		out[k] = v
 	}

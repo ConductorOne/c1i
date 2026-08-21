@@ -28,7 +28,7 @@ func resolveMCPServerCatalogID(ctx context.Context, c *client.Client, appID, con
 		return "", fmt.Errorf("parsing server response: %w", err)
 	}
 	if resp.MCPServer.McpServerCatalogID == "" {
-		return "", fmt.Errorf("server %s has no catalog id; pass --catalog-id explicitly", connectorID)
+		return "", &usageError{fmt.Errorf("server %s has no catalog id; pass --catalog-id explicitly", connectorID)}
 	}
 	return resp.MCPServer.McpServerCatalogID, nil
 }
@@ -79,7 +79,7 @@ proto field paths to override. Note the mask uses the auth oneof case name
 			cfg, err = buildExternalConfig(cmd)
 			wrapperKey = "externalConfig"
 		default:
-			return fmt.Errorf("invalid --type %q: use hosted or external", typ)
+			return &usageError{fmt.Errorf("invalid --type %q: use hosted or external", typ)}
 		}
 		if err != nil {
 			return err
@@ -90,7 +90,7 @@ proto field paths to override. Note the mask uses the auth oneof case name
 		// the backend nothing to apply. Require the caller to supply what to set.
 		// An explicit --update-mask is trusted as intent.
 		if len(cfg) == 0 && mask == "" {
-			return fmt.Errorf("nothing to update: supply the new config via the auth flags (--auth/--bearer-token/…), --config-field, --url, or --%s-config-file", strings.ToLower(typ))
+			return &usageError{fmt.Errorf("nothing to update: supply the new config via the auth flags (--auth/--bearer-token/…), --config-field, --url, or --%s-config-file", strings.ToLower(typ))}
 		}
 		// Derive the mask from the fields the caller set, BEFORE the catalog-id
 		// injection below. The update_mask must name the proto paths inside the
