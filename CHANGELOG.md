@@ -50,6 +50,17 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- **BREAKING — the external MCP server URL flag is now `--server-url`, not
+  `--url`.** On `mcp servers register`, `mcp servers test-connection`, and
+  `mcp servers update-credentials`, the local `--url` flag shadowed the global
+  persistent `--url`, so on exactly those three commands there was no flag that
+  could select the tenant — it had to come from `C1I_URL` or `~/.c1i.yaml`, and
+  a `--url` intended as the tenant was silently sent as the external server's
+  address instead. The three now take `--server-url` for the external server,
+  and the global `--url` selects the tenant there as it does everywhere else.
+  The `externalConfig` JSON field is still `url`, so `--external-config-file`
+  payloads and `--print-config-template` output are unchanged.
+
 - **BREAKING — `mcp servers search` no longer reports `tool_count: 0` when
   `--tool-state` is omitted.** The API only computes a per-server tool count
   when the request carries a `tool_state` filter; a filterless request never

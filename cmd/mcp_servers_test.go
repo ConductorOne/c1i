@@ -137,7 +137,7 @@ func newServerFlagCmd() *cobra.Command {
 	f.String("source-app-id", "", "")
 	f.StringSlice("config-field", nil, "")
 	f.String("hosted-config-file", "", "")
-	f.String("url", "", "")
+	f.String("server-url", "", "")
 	f.String("transport", "", "")
 	f.String("external-config-file", "", "")
 	addAuthFlags(cmd)
@@ -237,7 +237,7 @@ func TestBuildRegisterBodyExternal(t *testing.T) {
 	_ = cmd.Flags().Set("app-id", "app123")
 	_ = cmd.Flags().Set("type", "external")
 	_ = cmd.Flags().Set("display-name", "My MCP")
-	_ = cmd.Flags().Set("url", "https://mcp.example.com/sse")
+	_ = cmd.Flags().Set("server-url", "https://mcp.example.com/sse")
 	_ = cmd.Flags().Set("transport", "sse")
 	_ = cmd.Flags().Set("auth", "none")
 
@@ -264,7 +264,7 @@ func TestBuildRegisterBodyExternalRequiresURL(t *testing.T) {
 	_ = cmd.Flags().Set("type", "external")
 	_ = cmd.Flags().Set("display-name", "X")
 	if _, err := buildRegisterBody(cmd); err == nil {
-		t.Error("expected error when --url missing for external")
+		t.Error("expected error when --server-url missing for external")
 	}
 }
 
