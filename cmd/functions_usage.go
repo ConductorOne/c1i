@@ -32,7 +32,16 @@ last_executed_at, args.`,
 			return fmt.Errorf("authentication failed: %w", err)
 		}
 
-		requestedPageSize := clampPageSize(getIntFlag(cmd, "page-size"))
+		// Page size tracks --page-size alone, unlike the effectivePageSize
+		// shrink other list commands apply toward --limit. That shrink
+		// assumes rows fetched and rows emitted are 1:1; this command
+		// filters automations client-side by callFunction.functionId, so
+		// "emitted" counts matches, not automations scanned. Feeding that
+		// into effectivePageSize would send page_size=1 for every
+		// automation scanned until a match turns up — one HTTP round trip
+		// per automation instead of a handful of batched pages. Any list
+		// command that filters after the fetch inherits this same trap.
+		pageSize := clampPageSize(getIntFlag(cmd, "page-size"))
 		pageToken, _ := cmd.Flags().GetString("page-token")
 		manualPaging := cmd.Flags().Changed("page-token")
 		limit := getIntFlag(cmd, "limit")
@@ -40,7 +49,6 @@ last_executed_at, args.`,
 		enc := newEmitter(cmd)
 		emitted := 0
 		for !limitReached(emitted, limit) {
-			pageSize := effectivePageSize(requestedPageSize, limit, emitted)
 			params := map[string]string{"page_size": strconv.Itoa(pageSize)}
 			if pageToken != "" {
 				params["page_token"] = pageToken
