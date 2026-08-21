@@ -210,24 +210,31 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   succeeds now exits `0` where it previously exited `3` after the first
   429.
 
-- **A new 10-minute timeout applies to every attempt of every HTTP request
-  this CLI sends** (REST, the MCP gateway, and the device-flow/token-mint
-  requests) — previously there was no timeout at all on any of them,
+- **A new per-attempt timeout applies to every HTTP request this CLI
+  sends** — previously there was no timeout at all on any of them,
   authenticated or not, so a hung connection could block a command
-  indefinitely. It's per attempt, not per command: a retried request gets a
-  fresh 10 minutes, not a shrinking share of one deadline. Fixed, not
-  configurable — the longest observed real call (an MCP `tools/call`
-  tool invocation) is 182 seconds, leaving roughly 3x headroom, so there's
-  no known case that needs a longer one; if you hit the ceiling for real,
+  indefinitely. It's 10 minutes for REST and MCP gateway requests (sized
+  for the longest observed real call, an MCP `tools/call` tool invocation
+  at 182 seconds — roughly 3x headroom), and 30 seconds for `auth login`'s
+  device-flow requests and every command's OAuth2 token mint/refresh
+  (deliberately tighter: those are all fast request/response exchanges
+  with no reason to need minutes). Per attempt, not per command: a
+  retried request gets a fresh budget, not a shrinking share of one
+  deadline. Fixed, not configurable — if you hit either ceiling for real,
   report it and it can grow a flag then.
 
-- **BREAKING — an MCP gateway response body that can't be read now exits
-  `8`, not `1`.** A 2xx JSON-RPC response whose body read fails (e.g. the
-  connection drops mid-response) used to surface as a bare error; it's now
-  classified as `*mcpgateway.TransportError` like any other failure to
-  complete the exchange, since an unreadable body is a transport failure,
-  not a usage problem. Narrow: it only changes an already-rare I/O-error
-  path, not any status-code classification.
+- **BREAKING — an MCP gateway response whose body can't be fully read no
+  longer exits a flat `1`.** Body-reading moved inside the shared
+  transport, which now classifies by whether a status arrived at all: a
+  non-2xx status classifies exactly as a complete response with that
+  status would (e.g. exit `4` for a 404, exit `6` for a 500 — verified for
+  both), and a 2xx status (nothing to key off) classifies as
+  `*mcpgateway.TransportError`, exit `8`, since a body that can't be read
+  at all isn't a well-formed response. Before, every case here was a bare,
+  unclassified error (exit `1`) regardless of status. Narrow: an
+  already-rare I/O-error path (the connection drops mid-response), and for
+  the non-2xx branch this is a strict improvement (the real status now
+  drives the exit code instead of collapsing to generic).
 
 - **The MCP gateway handshake reported a hardcoded `"dev"` client version**,
   so a released binary always misidentified itself to the gateway
@@ -237,12 +244,14 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   above: the gateway path missing something the REST client already had.
 
   Internal refactor behind all five entries above: the auth-independent
-  parts of the API client (retry/backoff, the new per-attempt timeout,
-  user-agent, debug tracing, the path guard, the redirect trust-scope
-  guard) moved into a new `internal/transport` package below
-  `internal/client`, which `internal/login`, `internal/tokensource`, and
-  `internal/mcpgateway` now build on directly instead of each hand-rolling
-  (or, in three of these four cases, simply lacking) their own subset.
+  parts of the API client — retry/backoff, user-agent, debug tracing, the
+  path guard, and the redirect trust-scope guard, all of which already
+  existed in `internal/client` — moved into a new `internal/transport`
+  package below it; the per-attempt timeout did not exist anywhere before
+  and is new in that same package. `internal/login`, `internal/tokensource`,
+  and `internal/mcpgateway` now build on `internal/transport` directly
+  instead of each hand-rolling (or, in these three cases, simply lacking)
+  their own subset.
 
 ### Security
 

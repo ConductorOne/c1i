@@ -584,12 +584,15 @@ This covers the token mint too: minting or refreshing the OAuth2 bearer
 c1i authenticates with is itself a request, subject to the same 429 retry
 (never 5xx/network, since it's a POST) and the same `--max-retries` budget.
 
-Every request also gets a fixed 10-minute timeout, per attempt (a retried
-request gets a fresh 10 minutes, not a shrinking share of one deadline).
-It isn't configurable — the longest request this CLI is known to make (an
-MCP `tools/call` invoking a slow tool) has been observed at 182 seconds,
-comfortably inside the ceiling, so there's no known case that needs a
-longer one.
+Every request also gets a fixed timeout, per attempt (a retried request
+gets a fresh budget, not a shrinking share of one deadline): 10 minutes
+for a REST or MCP gateway request, 30 seconds for `auth login`'s
+device-flow requests and the OAuth2 token mint/refresh above — tighter
+because those are fast request/response exchanges, not the kind of call
+that legitimately runs long. Neither is configurable. 10 minutes leaves
+roughly 3x headroom over the longest request this CLI is known to make
+(an MCP `tools/call` invoking a slow tool, observed at 182 seconds), so
+there's no known case that needs a longer one.
 
 ### Dry run
 
