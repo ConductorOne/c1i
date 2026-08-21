@@ -1149,3 +1149,41 @@ func TestInitializeSendsRealClientVersion(t *testing.T) {
 		t.Errorf("clientInfo.version = %q, want %q (transport.Version, not a hardcoded literal)", gotVersion, "1.2.3-test")
 	}
 }
+
+// TestUnreadableBodyClassifiesAsTransportError proves a 2xx response whose
+// body can't be fully read (the connection drops mid-body, so io.ReadAll
+// fails) surfaces as *TransportError, not a bare unwrapped error. This
+// matters for the exit code: cmd/mcp_gateway.go's classifyGatewayError maps
+// *TransportError to exit 8 (a system beyond C1 failed) rather than the
+// generic exit 1 a bare error collapses to — an unreadable body is a
+// transport failure, not a usage problem, the same reasoning as any other
+// failure to complete the exchange.
+func TestUnreadableBodyClassifiesAsTransportError(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hj, ok := w.(http.Hijacker)
+		if !ok {
+			t.Fatal("ResponseWriter does not support hijacking")
+		}
+		conn, buf, err := hj.Hijack()
+		if err != nil {
+			t.Fatalf("hijack: %v", err)
+		}
+		defer func() { _ = conn.Close() }()
+		// Declare more bytes than are actually sent, then close the
+		// connection: the client's body read fails with an unexpected EOF
+		// instead of completing, rather than the request hanging.
+		_, _ = buf.WriteString("HTTP/1.1 200 OK\r\nContent-Length: 1000\r\nContent-Type: application/json\r\n\r\n{\"short\":true}")
+		_ = buf.Flush()
+	}))
+	defer srv.Close()
+
+	c := New(srv.URL, "test-token", srv.Client())
+	err := c.Initialize(context.Background())
+	if err == nil {
+		t.Fatal("expected an error from a 2xx response whose body can't be fully read")
+	}
+	var transportErr *TransportError
+	if !errors.As(err, &transportErr) {
+		t.Fatalf("error = %T (%v), want *TransportError", err, err)
+	}
+}
