@@ -164,7 +164,7 @@ func GetBaseURL() (string, error) {
 		return "", err
 	}
 	if source == URLSourceNone {
-		return "", fmt.Errorf("url is required: set --url flag, C1I_URL env var, or url in ~%s.c1i.yaml", string(filepath.Separator))
+		return "", &usageError{fmt.Errorf("url is required: set --url flag, C1I_URL env var, or url in ~%s.c1i.yaml", string(filepath.Separator))}
 	}
 	return baseURL, nil
 }

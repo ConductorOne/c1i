@@ -36,6 +36,13 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- **BREAKING — no `--url`, `C1I_URL`, or `~/.c1i.yaml` at all now exits `2`
+  (usage), not `1` (generic).** A missing URL is a missing required argument,
+  the same class of problem `requireNonEmpty` already maps to `2` for a
+  missing flag — this path returned a bare error instead of the `usageError`
+  wrapper, so it fell through to `1`. Message text is unchanged, only the
+  exit code.
+
 - **BREAKING — more list rows emit real JSON numbers and `null`, not strings.**
   The same fix as the earlier stringified-values change, applied to the fields
   it missed. `apps list`'s `user_count` and `entitlements list`'s `grant_count`

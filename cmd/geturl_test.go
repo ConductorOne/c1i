@@ -100,6 +100,26 @@ func TestGetBaseURLBareTokenFromConfigNamesConfigFile(t *testing.T) {
 	}
 }
 
+// TestGetBaseURLNoSourceIsUsageError: no --url, no C1I_URL, and nothing in
+// the config source is a missing-argument problem, not a generic failure --
+// GetBaseURL used to return a bare fmt.Errorf here, which cmd/errors.go
+// collapses to exitError (1) instead of exitUsage (2).
+func TestGetBaseURLNoSourceIsUsageError(t *testing.T) {
+	resetRootURLFlag(t)
+	t.Setenv("C1I_URL", "")
+	orig := viper.GetString("url")
+	viper.Set("url", "")
+	t.Cleanup(func() { viper.Set("url", orig) })
+
+	err := runRootWithArgs(t, []string{"users", "get", "someid"})
+	if err == nil {
+		t.Fatal("expected an error when no URL source is configured, got nil")
+	}
+	if got, want := exitCode(err), exitUsage; got != want {
+		t.Errorf("exitCode = %d, want %d (a missing --url is a usage error, not a generic failure)", got, want)
+	}
+}
+
 func TestPromptForURLBareTokenNamesInteractivePrompt(t *testing.T) {
 	cmd := &cobra.Command{Use: "test"}
 	var out bytes.Buffer
