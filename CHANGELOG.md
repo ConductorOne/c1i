@@ -80,12 +80,32 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   printed an empty line.
 
 - **`functions source --out-dir` writes files `0600` instead of `0644`**, and
-  the directory `0750` instead of `0755`. Fetched function source is
+  the directory `0700` instead of `0755` — now including a pre-existing
+  directory, not just one this command creates. Fetched function source is
   developer-authored code, and code commonly inlines credentials — API keys,
   webhook secrets, third-party tokens. The CLI cannot tell whether a given
   function's source does, so it no longer writes it group- or world-readable.
-  Anyone relying on the old modes to share that directory will need to widen
-  them deliberately.
+  `0700` rather than a looser `0750`: the files inside are already `0600`, so
+  group `r-x` on the directory buys nothing against this threat model — a
+  group member could never read file content, only list filenames (which can
+  themselves be informative, e.g. `stripe-webhook-secret.ts`) and stat
+  metadata. `--out-dir` pointed at an existing, more permissive directory
+  (e.g. a script's own prior `mkdir dir && chmod 777 dir`) is tightened,
+  with a warning to stderr naming the old mode — never silently, and never
+  loosened if it was already stricter than `0700`. Any setuid/setgid/sticky
+  bit on the directory is stripped outright rather than preserved, even if
+  the permission bits alone didn't need tightening: at `0700` there is no
+  group or other access left, so none of the three bits have any effect to
+  preserve. Anyone relying on the old modes, or on that directory staying
+  wide open, will need to widen it back deliberately after running this
+  command.
+
+### Fixed
+
+- **`c1i docs agents` rendered a doubled `v` in its header**, e.g.
+  `(vv0.4.1-...)`. The template read `(v{{VERSION}})`, but `Version` (from
+  `debug.ReadBuildInfo()`) already carries its own leading `v`. Cosmetic, but
+  `cmd/agents.md` is `go:embed`-ed, so it shipped inside every binary.
 
 ### Security
 

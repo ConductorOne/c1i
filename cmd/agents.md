@@ -6,7 +6,7 @@ required_bins:
   - c1i
 ---
 
-# c1i for agents (v{{VERSION}})
+# c1i for agents ({{VERSION}})
 
 You are an AI agent using `c1i`, the CLI for the C1 API. Read this once,
 early — it covers what `--help` can't: getting the tenant right, output

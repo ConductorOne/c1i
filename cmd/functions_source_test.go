@@ -1,7 +1,11 @@
 package cmd
 
 import (
+	"bytes"
 	"encoding/json"
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -109,5 +113,230 @@ func TestUnsafeSourceName(t *testing.T) {
 		if !unsafeSourceName(n) {
 			t.Errorf("expected %q to be rejected", n)
 		}
+	}
+}
+
+// TestOutDirFlagHelpDocumentsModes guards against the flag help drifting
+// from what --out-dir actually does: files land at 0600, the directory is
+// held to at most 0700, because fetched source may inline credentials.
+func TestOutDirFlagHelpDocumentsModes(t *testing.T) {
+	usage := functionsSourceCmd.Flags().Lookup("out-dir").Usage
+	for _, want := range []string{"0600", "0700", "credentials"} {
+		if !strings.Contains(usage, want) {
+			t.Errorf("--out-dir help %q does not mention %q", usage, want)
+		}
+	}
+}
+
+// statPerm returns the permission bits of path, failing the test on error.
+func statPerm(t *testing.T, path string) os.FileMode {
+	t.Helper()
+	info, err := os.Stat(path)
+	if err != nil {
+		t.Fatalf("stat %s: %v", path, err)
+	}
+	return info.Mode().Perm()
+}
+
+// statMode returns the full mode of path (permission bits plus any
+// setuid/setgid/sticky), failing the test on error.
+func statMode(t *testing.T, path string) os.FileMode {
+	t.Helper()
+	info, err := os.Stat(path)
+	if err != nil {
+		t.Fatalf("stat %s: %v", path, err)
+	}
+	return info.Mode()
+}
+
+// TestHardenOutDirCreatesFresh proves a directory that does not exist yet is
+// created at 0700, with no warning (there is nothing to tighten).
+func TestHardenOutDirCreatesFresh(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "fresh")
+	var warn bytes.Buffer
+	if err := hardenOutDir(dir, &warn); err != nil {
+		t.Fatalf("hardenOutDir: %v", err)
+	}
+	if got := statPerm(t, dir); got != 0o700 {
+		t.Errorf("fresh dir mode = %o, want 0700", got)
+	}
+	if warn.Len() != 0 {
+		t.Errorf("expected no warning for a freshly created dir, got %q", warn.String())
+	}
+}
+
+// TestHardenOutDirTightensPreExisting proves a pre-existing directory that is
+// more permissive than 0700 (e.g. 0777, mkdir+chmod'd by a script before the
+// first run) is tightened on a later run, not left as-is — this is the bug:
+// MkdirAll's mode argument is a no-op on a path that already exists.
+func TestHardenOutDirTightensPreExisting(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "shared")
+	if err := os.Mkdir(dir, 0o777); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	// os.Mkdir's mode is masked by the process umask at creation time, so a
+	// requested 0777 can land as 0775/0755 — chmod explicitly afterward to
+	// pin the exact starting mode this test asserts against.
+	if err := os.Chmod(dir, 0o777); err != nil {
+		t.Fatalf("chmod: %v", err)
+	}
+	var warn bytes.Buffer
+	if err := hardenOutDir(dir, &warn); err != nil {
+		t.Fatalf("hardenOutDir: %v", err)
+	}
+	if got := statPerm(t, dir); got != 0o700 {
+		t.Errorf("pre-existing 0777 dir mode after harden = %o, want 0700", got)
+	}
+	if warn.Len() == 0 {
+		t.Errorf("expected a warning when tightening a pre-existing dir's permissions")
+	}
+	if !strings.Contains(warn.String(), dir) {
+		t.Errorf("warning %q does not name the tightened directory %q", warn.String(), dir)
+	}
+	if !strings.Contains(warn.String(), "0777") {
+		t.Errorf("warning %q does not report the true old mode 0777", warn.String())
+	}
+}
+
+// TestHardenOutDirNeverWidens proves a pre-existing directory already
+// stricter than 0700 (e.g. 0500, missing even owner-write) is left
+// untouched — hardenOutDir must never loosen permission bits, only tighten
+// them, even though it always chmods to something at or below 0700.
+func TestHardenOutDirNeverWidens(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "strict")
+	if err := os.Mkdir(dir, 0o500); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	var warn bytes.Buffer
+	if err := hardenOutDir(dir, &warn); err != nil {
+		t.Fatalf("hardenOutDir: %v", err)
+	}
+	if got := statPerm(t, dir); got != 0o500 {
+		t.Errorf("strict 0500 dir mode after harden = %o, want unchanged 0500", got)
+	}
+	if warn.Len() != 0 {
+		t.Errorf("expected no warning for a dir already stricter than 0700, got %q", warn.String())
+	}
+}
+
+// TestHardenOutDirLeavesExactModeAlone proves a pre-existing directory
+// already exactly at 0700 with no special bits is left alone with no
+// spurious warning.
+func TestHardenOutDirLeavesExactModeAlone(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "exact")
+	if err := os.Mkdir(dir, 0o700); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	var warn bytes.Buffer
+	if err := hardenOutDir(dir, &warn); err != nil {
+		t.Fatalf("hardenOutDir: %v", err)
+	}
+	if got := statPerm(t, dir); got != 0o700 {
+		t.Errorf("exact 0700 dir mode after harden = %o, want unchanged 0700", got)
+	}
+	if warn.Len() != 0 {
+		t.Errorf("expected no warning for a dir already at 0700, got %q", warn.String())
+	}
+}
+
+// TestHardenOutDirStripsSetgid proves a pre-existing directory at 0700 but
+// carrying setgid (unix mode 02700) has the bit stripped: at 0700 there is
+// no group left to inherit ownership into, so the bit is meaningless here
+// and hardenOutDir strips it outright rather than preserving it just
+// because the permission bits alone didn't need tightening.
+func TestHardenOutDirStripsSetgid(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "setgid")
+	if err := os.Mkdir(dir, 0o700); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	if err := os.Chmod(dir, 0o700|os.ModeSetgid); err != nil {
+		t.Fatalf("chmod setgid: %v", err)
+	}
+	if got := statMode(t, dir); got&os.ModeSetgid == 0 {
+		t.Fatalf("setup failed: setgid bit not observed on %s (mode %v)", dir, got)
+	}
+	var warn bytes.Buffer
+	if err := hardenOutDir(dir, &warn); err != nil {
+		t.Fatalf("hardenOutDir: %v", err)
+	}
+	if got := statMode(t, dir); got&os.ModeSetgid != 0 {
+		t.Errorf("setgid bit still set after hardenOutDir: %v", got)
+	}
+	if got := statPerm(t, dir); got != 0o700 {
+		t.Errorf("dir perm after stripping setgid = %o, want unchanged 0700", got)
+	}
+	if warn.Len() == 0 {
+		t.Errorf("expected a warning when stripping setgid")
+	}
+	if !strings.Contains(warn.String(), "2700") {
+		t.Errorf("warning %q does not report the true old mode (with setgid, 2700)", warn.String())
+	}
+}
+
+// TestHardenOutDirStripsSticky proves a pre-existing directory at 0700 but
+// carrying the sticky bit (unix mode 01700) has it stripped — sticky's
+// shared-directory protection (restricting deletes to the file's owner) is
+// meaningless on a directory only its owner can enter at all.
+func TestHardenOutDirStripsSticky(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "sticky")
+	if err := os.Mkdir(dir, 0o700); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	if err := os.Chmod(dir, 0o700|os.ModeSticky); err != nil {
+		t.Fatalf("chmod sticky: %v", err)
+	}
+	if got := statMode(t, dir); got&os.ModeSticky == 0 {
+		t.Fatalf("setup failed: sticky bit not observed on %s (mode %v)", dir, got)
+	}
+	var warn bytes.Buffer
+	if err := hardenOutDir(dir, &warn); err != nil {
+		t.Fatalf("hardenOutDir: %v", err)
+	}
+	if got := statMode(t, dir); got&os.ModeSticky != 0 {
+		t.Errorf("sticky bit still set after hardenOutDir: %v", got)
+	}
+	if got := statPerm(t, dir); got != 0o700 {
+		t.Errorf("dir perm after stripping sticky = %o, want unchanged 0700", got)
+	}
+	if warn.Len() == 0 {
+		t.Errorf("expected a warning when stripping sticky")
+	}
+	if !strings.Contains(warn.String(), "1700") {
+		t.Errorf("warning %q does not report the true old mode (with sticky, 1700)", warn.String())
+	}
+}
+
+// TestHardenOutDirStripsSetgidEvenWhenAlreadyStrict proves the special-bit
+// strip does not double as a permission widening: a directory already
+// stricter than 0700 (0500, missing owner-write) that also carries setgid
+// (unix mode 02500) has the bit stripped but keeps its stricter 0500 perm —
+// it must not gain the owner-write bit back just because hardenOutDir also
+// had to touch the mode to remove setgid.
+func TestHardenOutDirStripsSetgidEvenWhenAlreadyStrict(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "setgid-strict")
+	if err := os.Mkdir(dir, 0o500); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	if err := os.Chmod(dir, 0o500|os.ModeSetgid); err != nil {
+		t.Fatalf("chmod setgid: %v", err)
+	}
+	if got := statMode(t, dir); got&os.ModeSetgid == 0 {
+		t.Fatalf("setup failed: setgid bit not observed on %s (mode %v)", dir, got)
+	}
+	var warn bytes.Buffer
+	if err := hardenOutDir(dir, &warn); err != nil {
+		t.Fatalf("hardenOutDir: %v", err)
+	}
+	if got := statMode(t, dir); got&os.ModeSetgid != 0 {
+		t.Errorf("setgid bit still set after hardenOutDir: %v", got)
+	}
+	if got := statPerm(t, dir); got != 0o500 {
+		t.Errorf("dir perm after stripping setgid = %o, want unchanged, stricter 0500 (not widened to 0700)", got)
+	}
+	if warn.Len() == 0 {
+		t.Errorf("expected a warning when stripping setgid")
+	}
+	if !strings.Contains(warn.String(), "2500") {
+		t.Errorf("warning %q does not report the true old mode (with setgid, 2500)", warn.String())
 	}
 }

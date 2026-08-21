@@ -47,6 +47,24 @@ func TestDocsAgentsNoVersionPlaceholder(t *testing.T) {
 	}
 }
 
+// TestDocsAgentsHeaderVersionNotDoubled proves the rendered header carries
+// the version exactly once. Version (from debug.ReadBuildInfo) already
+// carries a leading "v" (e.g. "v0.4.1"), so a template of "v{{VERSION}}"
+// renders "vv0.4.1".
+func TestDocsAgentsHeaderVersionNotDoubled(t *testing.T) {
+	orig := Version
+	Version = "v9.9.9"
+	t.Cleanup(func() { Version = orig })
+
+	stdout, _ := runDocsAgents(t, nil)
+	if strings.Contains(stdout, "vv9.9.9") {
+		t.Errorf("rendered header doubles the version prefix:\n%s", stdout)
+	}
+	if !strings.Contains(stdout, "v9.9.9") {
+		t.Errorf("rendered header missing version %q:\n%s", "v9.9.9", stdout)
+	}
+}
+
 // TestDocsAgentsOutputFileMatchesStdout proves "-o FILE" writes byte-identical
 // content to what "docs agents" prints on stdout.
 func TestDocsAgentsOutputFileMatchesStdout(t *testing.T) {
