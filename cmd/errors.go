@@ -156,19 +156,28 @@ func exitCode(err error) int {
 			return exitNotFound
 		case apiErr.StatusCode == 429:
 			return exitRateLimited
-		// 408 is not caller-caused: C1's REST layer maps gRPC status codes to
-		// HTTP through grpc-gateway's standard table, which sends
-		// codes.Canceled to 408 -- a canceled/deadline-adjacent request, not
-		// a bad argument. Group it with the other "C1-side, retry later"
-		// statuses instead of the usage range below, so an agent branching on
-		// exit code retries instead of re-examining flags that were fine.
-		case apiErr.StatusCode == 408:
-			return exitServer
+		// 408 and 499 are not caller-caused, so they don't belong in the
+		// usage range below -- but they're not "C1 failed" either, so they
+		// don't belong in exitServer. Fall to the generic exitError instead:
+		// something ended the request and it wasn't the caller's flags.
+		//
+		// 499 is the reachable case: apigw_v1.HTTPStatusFromCode (the table
+		// that actually serves /api/v1/* -- traced through *.pb.apigw.go ->
+		// ginapi.ErrorResponse) maps codes.Canceled to 499, matching the
+		// vendored grpc-gateway/v2/runtime.HTTPStatusFromCode's own
+		// Canceled->499. 408 is defensive: the only table in the platform
+		// that maps Canceled->408 is pkg/uweb.code2http, used solely by the
+		// OAuth/SSO subsystem internal/tokensource.Token() hits, and every
+		// failure on that path is wrapped in *client.AuthError before
+		// exitCode ever sees it (exitAuth, above) -- so this branch is
+		// unreached today, kept only in case a future endpoint's status
+		// mapping changes.
+		case apiErr.StatusCode == 408 || apiErr.StatusCode == 499:
+			return exitError
 		// Every other 4xx (400, 409, 413, 414, 422, ...) means the caller sent
 		// something the server rejected -- a usage error, not exitError. A
 		// per-status list would drift; this rule covers whatever the API adds
-		// next too. (425 stays in this range: no gRPC code maps to it, so
-		// there's no evidence this API can ever return it.)
+		// next too.
 		case apiErr.StatusCode >= 400 && apiErr.StatusCode < 500:
 			return exitUsage
 		case apiErr.StatusCode >= 500:

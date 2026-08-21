@@ -63,12 +63,19 @@ func TestExitCode(t *testing.T) {
 		{"api 429", &client.APIError{StatusCode: 429}, exitRateLimited},
 		{"api 500", &client.APIError{StatusCode: 500}, exitServer},
 		{"api 503", &client.APIError{StatusCode: 503}, exitServer},
-		// 408 is the one 4xx carved out of the usage range: grpc-gateway's
-		// standard code table sends codes.Canceled to 408, which is C1's side
-		// canceling/timing out, not a bad argument -- it groups with the
-		// other "retry later" statuses instead of exitUsage.
-		{"api 408", &client.APIError{StatusCode: 408}, exitServer},
-		// Every other 4xx that isn't auth/not-found/rate-limited/408 is
+		// 408 and 499 are the two 4xx carved out of the usage range: neither
+		// is caller-caused, so exitUsage would be dishonest, but neither is
+		// "C1 failed" either, so exitServer would be too -- they fall to the
+		// generic exitError. 499 is the reachable one (apigw_v1.
+		// HTTPStatusFromCode, which serves /api/v1/*, maps codes.Canceled to
+		// 499); 408 is defensive (only pkg/uweb.code2http maps Canceled to
+		// 408, and that's the OAuth/SSO path, which surfaces as *AuthError
+		// long before exitCode's *APIError branch runs). Neither is
+		// forceable live, so both are proven here rather than against the
+		// real API.
+		{"api 408", &client.APIError{StatusCode: 408}, exitError},
+		{"api 499", &client.APIError{StatusCode: 499}, exitError},
+		// Every other 4xx that isn't auth/not-found/rate-limited/408/499 is
 		// caller-caused (bad request body/params/conflict/size/etc.), so it
 		// maps to exitUsage rather than falling to the generic exitError
 		// default.
@@ -77,10 +84,10 @@ func TestExitCode(t *testing.T) {
 		{"api 413", &client.APIError{StatusCode: 413}, exitUsage},
 		{"api 414", &client.APIError{StatusCode: 414}, exitUsage},
 		{"api 422", &client.APIError{StatusCode: 422}, exitUsage},
-		// 425 stays in the usage range deliberately: no gRPC code maps to
-		// it, so there's no evidence this API can ever return it -- this is
-		// the negative pair proving 408 alone moved, not the whole low 4xx
-		// range.
+		// 425 stays in the usage range: nothing traced in the platform maps
+		// any status to it, so there's no evidence this API can ever return
+		// it -- this is the negative pair proving 408/499 alone moved, not
+		// the whole low 4xx range.
 		{"api 425", &client.APIError{StatusCode: 425}, exitUsage},
 		{"auth", &client.AuthError{Err: errors.New("no creds")}, exitAuth},
 		// The keyring-unavailable diagnosis (internal/keychain.Load,
