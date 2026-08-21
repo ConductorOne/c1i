@@ -6,14 +6,7 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
-### Fixed
-
-- **`c1i completion <unknown-shell>` printed help and exited `0`** instead of
-  failing. It now exits `2`. Cobra creates the `completion` command lazily while
-  executing, which was after this CLI stamps its unknown-subcommand guards onto
-  the tree — so that one command never got them. `eval "$(c1i completion
-  $SHELL)"` with an unset or misspelled `$SHELL` silently evaluated help text
-  instead of erroring.
+## [0.5.0] - 2026-08-21
 
 ### Added
 
@@ -201,6 +194,14 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   command.
 
 ### Fixed
+
+- **`c1i completion <unknown-shell>` printed help and exited `0`** instead of
+  failing. It now exits `2`. Cobra creates the `completion` command lazily while
+  executing, which was after this CLI stamps its unknown-subcommand guards onto
+  the tree — so that one command never got them. `eval "$(c1i completion
+  $SHELL)"` with an unset or misspelled `$SHELL` silently evaluated help text
+  instead of erroring.
+
 
 - **`c1i docs agents` rendered a doubled `v` in its header**, e.g.
   `(vv0.4.1-...)`. The template read `(v{{VERSION}})`, but `Version` (from
@@ -1076,7 +1077,8 @@ First changelog entry; releases through v0.1.5 predate this file (see the
 
 - CI enforces `gofmt` via golangci-lint; module-wide formatting normalized.
 
-[Unreleased]: https://github.com/ConductorOne/c1i/compare/v0.4.1...HEAD
+[Unreleased]: https://github.com/ConductorOne/c1i/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/ConductorOne/c1i/releases/tag/v0.5.0
 [0.4.1]: https://github.com/ConductorOne/c1i/releases/tag/v0.4.1
 [0.4.0]: https://github.com/ConductorOne/c1i/releases/tag/v0.4.0
 [0.3.0]: https://github.com/ConductorOne/c1i/releases/tag/v0.3.0
