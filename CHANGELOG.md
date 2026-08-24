@@ -6,6 +6,17 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed
+
+- **`apps set-owners` no longer claims new owners appear in `apps get`'s
+  `appOwners` field.** Measured against a live tenant, `appOwners` was empty
+  on every app checked -- all 47, spanning 45 connector-managed apps across
+  three access models plus apps created for the test -- while 46 of those 47
+  had owners in `GET .../ownerids`. That read -- the one that does converge --
+  takes 96-129s (five timed writes), not the previously documented ~60-90s.
+  Updated the command's help text and success message, `cmd/docs_guide.go`,
+  and `cmd/agents.md` to point at `ownerids` and drop the `appOwners` claim.
+
 ## [0.5.0] - 2026-08-21
 
 ### Added
@@ -400,7 +411,8 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - **`apps set-owners <app-id> --user-id …`** — set an app's owner list via
   `PUT /api/v1/apps/{id}/owners` (replaces the full set; `--user-id` repeatable).
   Owner provisioning is asynchronous, so the command notes that new owners take
-  ~60-90s to appear in `apps get`; a success means the request was accepted.
+  ~60-90s to appear in `apps get` (superseded -- see the correction under
+  [Unreleased] above); a success means the request was accepted.
   Honors `--dry-run`.
 - **`apps set-owners --wait` / `--wait-timeout`** — optionally block after the
   `PUT` and poll `GET /api/v1/apps/{id}/ownerids` (every 12s, default timeout

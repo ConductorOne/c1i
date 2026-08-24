@@ -397,8 +397,9 @@ of anything specific to what you're about to model.
 
 "--wait" polls "GET .../ownerids" until the owner appears (or times out) and
 prints "Owners provisioned on app ... after ...". Without "--wait", the PUT
-returns immediately but the owner takes up to ~60-90s to actually show up
-anywhere that reads them back.
+returns immediately but the owner takes a couple of minutes to show up in
+"GET .../ownerids" -- see "Verify" below for why "apps get"'s "appOwners"
+field is not the way to check this.
 
 ### 3. Create a custom entitlement to grant
 
@@ -434,13 +435,14 @@ lagged the way owners are.
 Full object; isManuallyManaged is true.
 
 For owners, don't trust the appOwners field embedded in the app object (from
-"c1i apps get <id>") as the source of truth: in testing it stayed empty for
-several minutes after "apps set-owners --wait" had already reported success.
-Check the raw owner list instead, which is what "--wait" itself polls:
+"c1i apps get <id>") as the source of truth: in testing across every app in
+a tenant, it never populated, even long after "apps set-owners --wait" had
+already reported success. Check the raw owner list instead, which is what
+"--wait" itself polls:
 
     c1i api --path=/api/v1/apps/$APP_ID/ownerids
 
-Expect your "$OWNER_USER_ID" in userIds within the ~60-90s window (already
+Expect your "$OWNER_USER_ID" in userIds within a couple of minutes (already
 satisfied if you used "--wait").
 
 ## Common failures
