@@ -9,12 +9,13 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ### Fixed
 
 - **`apps set-owners` no longer claims new owners appear in `apps get`'s
-  `appOwners` field.** Measured against a live tenant, `appOwners` never
-  populates (0 of 47 apps had a non-empty value), and `GET .../ownerids` --
-  the field that does converge -- takes on the order of a couple of minutes,
-  not the previously documented ~60-90s. Updated the command's help text and
-  success message, `cmd/docs_guide.go`, and `cmd/agents.md` to point at
-  `ownerids` and drop the `appOwners` claim.
+  `appOwners` field.** Measured against a live tenant, `appOwners` was empty
+  on every app checked -- all 47, spanning 45 connector-managed apps across
+  three access models plus apps created for the test -- while 46 of those 47
+  had owners in `GET .../ownerids`. That read -- the one that does converge --
+  takes 96-129s (five timed writes), not the previously documented ~60-90s.
+  Updated the command's help text and success message, `cmd/docs_guide.go`,
+  and `cmd/agents.md` to point at `ownerids` and drop the `appOwners` claim.
 
 ## [0.5.0] - 2026-08-21
 

@@ -13,7 +13,7 @@ import (
 
 // ownerWaitPollInterval is how often --wait re-polls GET .../ownerids. Long
 // enough to avoid hammering the API during a provisioning window observed
-// at 96-129s across three converged writes (a fourth was still pending at
+// at 96-129s across four converged writes (a fifth was still pending at
 // 108s), short enough that --wait-timeout still feels responsive.
 const ownerWaitPollInterval = 12 * time.Second
 
