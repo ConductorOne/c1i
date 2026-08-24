@@ -12,9 +12,14 @@ import (
 )
 
 // ownerWaitPollInterval is how often --wait re-polls GET .../ownerids. Long
-// enough to avoid hammering the API during a ~60-90s (sometimes ~3-4min)
-// provisioning window, short enough that --wait-timeout still feels responsive.
+// enough to avoid hammering the API during a provisioning window observed
+// at 96-129s across three converged writes (a fourth was still pending at
+// 108s), short enough that --wait-timeout still feels responsive.
 const ownerWaitPollInterval = 12 * time.Second
+
+// setOwnersSuccessFmt is the PUT-accepted confirmation. Names ownerids, not
+// "apps get": appOwners was empty on every app checked (see the Long).
+const setOwnersSuccessFmt = "Set %d owner(s) on app %s (provisioning is async; check GET .../ownerids in a couple of minutes).\n"
 
 var appsSetOwnersCmd = &cobra.Command{
 	Use:   "set-owners <app-id>",
@@ -23,9 +28,10 @@ var appsSetOwnersCmd = &cobra.Command{
 any existing owners. Provide one or more --user-id (C1 user IDs, 27 chars each).
 
 Owner changes are provisioned ASYNCHRONOUSLY: this call returns immediately,
-but the new owners take up to ~60-90s (occasionally several minutes) to show
-up in "apps get" (appOwners) and GET .../ownerids. A success here means the
-request was accepted, not that the owner list is already live.
+but the new owners take a couple of minutes to show up in GET .../ownerids.
+A success here means the request was accepted, not that the owner list is
+already live. The "appOwners" field in "apps get" was observed empty on
+every app checked in testing -- don't use it to check ownership.
 
 Pass --wait to block and poll GET .../ownerids until every requested
 --user-id appears (or --wait-timeout elapses). Without --wait, behavior is
@@ -72,9 +78,7 @@ polls).`,
 			return fmt.Errorf("API error: %w", err)
 		}
 
-		_, _ = fmt.Fprintf(cmd.OutOrStdout(),
-			"Set %d owner(s) on app %s (provisioning is async; allow ~60-90s to appear).\n",
-			len(userIDs), appID)
+		_, _ = fmt.Fprintf(cmd.OutOrStdout(), setOwnersSuccessFmt, len(userIDs), appID)
 
 		if !wait {
 			return nil
