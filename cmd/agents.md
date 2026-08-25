@@ -163,9 +163,9 @@ Two things are irreversible in ways their `--help` doesn't make obvious:
 
 - Owner and grant provisioning are asynchronous. A read immediately after a
   write can look like a silent no-op for a couple of minutes (owners:
-  observed 96-129s; grants: up to a couple of minutes). `apps get`'s
-  `appOwners` field was observed empty on every app checked in testing --
-  check `ownerids` instead.
+  observed 96-129s; grants: up to a couple of minutes). Verify owners with
+  `c1i apps owners <app-id>`, not `apps get`'s `appOwners` field -- observed
+  empty on every app checked in testing.
 - `accounts list --unmapped-only` filters after each page is fetched, not
   server-side. With `--page-token` (which turns off auto-pagination) a page
   can come back empty while unmapped accounts exist further along.

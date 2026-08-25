@@ -437,13 +437,13 @@ Full object; isManuallyManaged is true.
 For owners, don't trust the appOwners field embedded in the app object (from
 "c1i apps get <id>") as the source of truth: in testing across every app in
 a tenant, it never populated, even long after "apps set-owners --wait" had
-already reported success. Check the raw owner list instead, which is what
-"--wait" itself polls:
+already reported success. Check the owner list instead:
 
-    c1i api --path=/api/v1/apps/$APP_ID/ownerids
+    c1i apps owners "$APP_ID"
 
-Expect your "$OWNER_USER_ID" in userIds within a couple of minutes (already
-satisfied if you used "--wait").
+Expect a row with id "$OWNER_USER_ID" within a couple of minutes (already
+satisfied if you used "--wait"). NDJSON, auto-paginated -- pipe to jq to
+isolate the one row you're looking for.
 
 ## Common failures
 

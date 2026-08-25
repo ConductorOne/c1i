@@ -6,6 +6,20 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- **`apps owners`, `apps add-owner`, and `apps remove-owner`.** `apps get`'s
+  `appOwners` field reads an empty v2 ownership model; `GET .../owners` reads
+  the populated v1 store that `apps set-owners` already wrote to, but reading
+  it meant hand-rolling `c1i api --path=...`, and adding a single owner meant
+  a read-modify-write through `set-owners` -- which PUTs the full list and can
+  silently drop a concurrent change. `apps owners <app-id>` lists owners
+  (NDJSON, auto-paginated); `apps add-owner <user-id> --app-id <id>` and
+  `apps remove-owner <user-id> --app-id <id>` change one owner at a time via
+  POST/DELETE `.../owners/{user_id}`, so they do not read-modify-write the
+  list the way `set-owners` does. All three honor `--dry-run`; owner
+  writes remain asynchronous (roughly 45-150s to show up in `apps owners`).
+
 ### Fixed
 
 - **`apps set-owners` no longer claims new owners appear in `apps get`'s

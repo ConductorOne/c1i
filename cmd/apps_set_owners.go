@@ -17,9 +17,9 @@ import (
 // 108s), short enough that --wait-timeout still feels responsive.
 const ownerWaitPollInterval = 12 * time.Second
 
-// setOwnersSuccessFmt is the PUT-accepted confirmation. Names ownerids, not
-// "apps get": appOwners was empty on every app checked (see the Long).
-const setOwnersSuccessFmt = "Set %d owner(s) on app %s (provisioning is async; check GET .../ownerids in a couple of minutes).\n"
+// setOwnersSuccessFmt is the PUT-accepted confirmation. Points at "apps
+// owners", not "apps get": appOwners was empty on every app checked.
+const setOwnersSuccessFmt = "Set %d owner(s) on app %s (provisioning is async; check with \"c1i apps owners %s\" in a minute or two).\n"
 
 var appsSetOwnersCmd = &cobra.Command{
 	Use:   "set-owners <app-id>",
@@ -78,7 +78,7 @@ polls).`,
 			return fmt.Errorf("API error: %w", err)
 		}
 
-		_, _ = fmt.Fprintf(cmd.OutOrStdout(), setOwnersSuccessFmt, len(userIDs), appID)
+		_, _ = fmt.Fprintf(cmd.OutOrStdout(), setOwnersSuccessFmt, len(userIDs), appID, appID)
 
 		if !wait {
 			return nil
