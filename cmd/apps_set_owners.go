@@ -140,7 +140,7 @@ func waitForOwners(cmd *cobra.Command, c *client.Client, appID string, wantUserI
 	return fmt.Errorf(
 		"timed out after %s waiting for owners to provision on app %s; "+
 			"this is not necessarily a failure — provisioning can take several minutes, "+
-			"check again later with: c1i api --method GET --path /api/v1/apps/%s/ownerids",
+			"check again later with: c1i apps owners %s",
 		timeout, appID, appID)
 }
 

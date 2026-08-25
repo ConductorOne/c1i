@@ -18,7 +18,9 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `apps remove-owner <user-id> --app-id <id>` change one owner at a time via
   POST/DELETE `.../owners/{user_id}`, so they do not read-modify-write the
   list the way `set-owners` does. All three honor `--dry-run`; owner
-  writes remain asynchronous (roughly 45-150s to show up in `apps owners`).
+  writes remain asynchronous: 45-150s to show up in `apps owners`, measured
+  across `set-owners`, `add-owner`, `remove-owner` and the owner `apps create`
+  assigns (the narrower 96-129s below is `set-owners` alone).
 
 ### Fixed
 

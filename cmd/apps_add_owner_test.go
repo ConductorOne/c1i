@@ -36,8 +36,9 @@ func TestAppsAddOwnerRequiresAppID(t *testing.T) {
 }
 
 // TestAppsAddOwnerDryRunPreviewsRequestWithoutSending proves --dry-run
-// prints the exact POST and path the real call would send -- no request
-// body, since the endpoint takes none -- and never touches the network.
+// prints the exact POST, path and body the real call would send -- `{}`,
+// which the endpoint parses as a protobuf message -- without touching the
+// network. A preview that omitted the body would misrepresent the request.
 func TestAppsAddOwnerDryRunPreviewsRequestWithoutSending(t *testing.T) {
 	resetCmdFlags(t, appsAddOwnerCmd)
 	t.Setenv("C1I_URL", "https://example.invalid")
