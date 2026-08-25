@@ -8,12 +8,24 @@ A command-line interface for the [C1](https://www.conductorone.com) API designed
 Structured output (NDJSON/JSON), built-in API docs, and auto-pagination.
 For a human-friendly CLI, see [cone](https://github.com/ConductorOne/cone).
 
+## Installation
+
+Download signed macOS, Linux, and Windows releases with checksums, provenance, and SBOM attestations from the [official distribution center](https://dist.conductorone.com/ConductorOne/c1i).
+
+```sh
+# Homebrew
+brew install conductorone/baton/c1i
+
+# Go
+go install github.com/ConductorOne/c1i@latest
+
+# Container
+docker pull public.ecr.aws/conductorone/c1i:<version>
+```
+
 ## Quick Start
 
 ```sh
-# Install
-go install github.com/ConductorOne/c1i@latest
-
 # Log in (opens browser)
 c1i auth login --url mycompany.conductor.one
 
