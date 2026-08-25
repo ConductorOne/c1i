@@ -1,62 +1,28 @@
+# This file is managed by baton-admin. DO NOT EDIT!!!
 name: Release
+
 on:
   push:
     tags:
-      - "v*"
-jobs:
-  goreleaser:
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-      - name: Set up Go
-        uses: actions/setup-go@v5
-        with:
-          go-version-file: go.mod
-      # A tag can be pushed at any commit, and disclosures land independently of
-      # code changes -- so a release must be scanned at build time, not rely on
-      # whenever CI last ran.
-      - name: Check for known vulnerabilities
-        env:
-          GOTOOLCHAIN: auto
-        run: |
-          go install golang.org/x/vuln/cmd/govulncheck@v1.7.0
-          for goos in linux darwin windows; do
-            GOOS=$goos govulncheck ./...
-          done
-      # v0.4.0 shipped every binary stamped "v0.4.0+dirty": the version comes from
-      # VCS state at compile time, and goreleaser validates a clean tree BEFORE
-      # running its own hooks, one of which rewrote go.mod. Assert here instead --
-      # a wrong stamp fails the release loudly rather than publishing quietly.
-      - name: Verify the release will stamp a clean version
-        run: |
-          set -euo pipefail
-          go generate ./...
-          go mod tidy
-          # --porcelain, not `git diff`: Go's dirty detection counts untracked
-          # files too, so a hook that only ADDS a file would otherwise be caught
-          # a step later by the version check, with a misleading message.
-          if [ -n "$(git status --porcelain)" ]; then
-            echo "::error::a release hook modified the tree; binaries would be stamped +dirty"
-            git status --porcelain
-            exit 1
-          fi
-          go build -o /tmp/c1i-stamp .
-          got="$(/tmp/c1i-stamp --version)"
-          if [ "$got" != "${GITHUB_REF_NAME}" ]; then
-            echo "::error::version stamp is '${got}', expected '${GITHUB_REF_NAME}'"
-            exit 1
-          fi
-          echo "version stamp verified: ${got}"
+      - "*"
 
-      - name: Run GoReleaser
-        uses: goreleaser/goreleaser-action@v6
-        with:
-          version: "~> v2"
-          args: release --clean
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+jobs:
+  release:
+    uses: ConductorOne/github-workflows/.github/workflows/release.yaml@v4
+    with:
+      tag: ${{ github.ref_name }}
+      lambda: false
+      docker: true
+      go_main_package: ./
+      go_source_hygiene: true
+      go_vulnerability_scan: true
+      verify_module_version: true
+      msi: true
+    secrets:
+      RELENG_GITHUB_TOKEN: ${{ secrets.RELENG_GITHUB_TOKEN }}
+      APPLE_SIGNING_KEY_P12: ${{ secrets.APPLE_SIGNING_KEY_P12 }}
+      APPLE_SIGNING_KEY_P12_PASSWORD: ${{ secrets.APPLE_SIGNING_KEY_P12_PASSWORD }}
+      AC_PASSWORD: ${{ secrets.AC_PASSWORD }}
+      AC_PROVIDER: ${{ secrets.AC_PROVIDER }}
+      DATADOG_API_KEY: ${{ secrets.DATADOG_API_KEY }}
+      GORELEASER_PRO_KEY: ${{ secrets.GORELEASER_PRO_KEY }}
