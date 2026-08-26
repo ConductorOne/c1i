@@ -10,3 +10,8 @@ dist/
 # whose parent directory is excluded, so dev/README.md would vanish too.
 dev/*
 !dev/README.md
+
+# Agent worktrees: `git worktree add` targets land here. Untracked, they stamp
+# every local build "+dirty" and a `git add -A` would commit a whole nested
+# checkout into this public repo.
+.claude/worktrees/

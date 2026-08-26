@@ -37,6 +37,12 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   reads that do work (`apps owners`, added above; `ownerids` in the
   `set-owners` help, which is the read `--wait` polls).
 
+- **`.claude/worktrees/` is gitignored.** Agent worktrees land there, and
+  untracked they stamped every local build `+dirty` -- a string that reaches
+  the wire in the user-agent and the MCP gateway handshake's
+  `clientInfo.version` -- and a `git add -A` would have committed a whole
+  nested checkout into this public repo.
+
 ## [0.5.0] - 2026-08-21
 
 ### Added
