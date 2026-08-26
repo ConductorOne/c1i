@@ -51,11 +51,25 @@ c1i users get <user-id>
 ```sh
 c1i apps list [--page-size N] [--page-token TOKEN] [--limit N]
 c1i apps get <app-id>
+c1i apps create --display-name <name> [--description <text>]
 c1i apps owners <app-id> [--page-size N] [--page-token TOKEN] [--limit N]
 c1i apps add-owner <user-id> --app-id <id>
 c1i apps remove-owner <user-id> --app-id <id>
 c1i apps set-owners <app-id> --user-id <id> [--user-id <id> ...] [--wait] [--wait-timeout 4m]
+c1i apps delete <app-id>
 ```
+
+`apps create` needs only `--display-name`; it makes a plain, unmanaged
+container app — the zero state for "make an app, then register MCP servers
+under it". The caller is auto-assigned as an owner, showing up in `apps owners`
+after the usual provisioning lag. The new app comes back as pretty JSON under
+an `app` key, and `--fields` is never applied to mutation output, so read the
+new id from `.app.id` on the full object, not `.id`.
+
+`apps delete` soft-deletes: `deletedAt` is set and the app drops out of normal
+listings, but the record is retained for audit. Its endpoint is live but not
+published in the OpenAPI spec, so it won't appear in `c1i docs endpoints`. Both
+commands honor `--dry-run`.
 
 `apps set-owners` returns as soon as the `PUT` is accepted. Pass `--wait` to
 block and poll `GET .../ownerids` until every requested `--user-id` appears, or

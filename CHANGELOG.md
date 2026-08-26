@@ -44,6 +44,13 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   Matching is boundary-anchored, so `--wait` is not satisfied by a doc that
   only mentions `--wait-timeout`. The exemption map is empty.
 
+- **`apps create` and `apps delete` are in the README.** Both shipped without
+  ever being listed in the Apps section, so the only way to find them was
+  `--help`. Documented alongside their neighbours, including that `apps create`
+  auto-assigns the caller as an owner and returns the new app under an `app`
+  key, and that `apps delete` is a soft-delete whose endpoint is live but
+  absent from the OpenAPI spec -- so it does not show up in `docs endpoints`.
+
 - **`apps set-owners` no longer claims new owners appear in `apps get`'s
   `appOwners` field.** Measured against a live tenant, `appOwners` was empty
   on every app checked -- all 47, spanning 45 connector-managed apps across
