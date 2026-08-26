@@ -91,7 +91,11 @@ list`, ...) over `c1i api`. A first-class command paginates to completion
 without being asked, and its `--help` spells out any destructive cascade
 before you trigger one. With `c1i api` you build the request yourself — the
 wire conventions below are yours to get right, and pagination is opt-in via
-`--paginate`, so a list endpoint without it returns only the first page.
+`--paginate`, so a list endpoint without it returns a single page. It says so
+when that happens: if the response carries a `nextPageToken` and you did not
+pass `--paginate`, `c1i api` warns on stderr that the result is partial. Do
+not treat exit 0 alone as "I got everything" — check stderr, or pass
+`--paginate`.
 
 Both share the same error classification: `c1i api` surfaces the same typed
 errors and the same exit codes as any other command, so the table below
