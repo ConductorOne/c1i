@@ -28,7 +28,7 @@ var tasksListCmd = &cobra.Command{
 			return &usageError{err}
 		}
 		assignedToMe, _ := cmd.Flags().GetBool("assigned-to-me")
-		requestedPageSize := clampPageSize(getIntFlag(cmd, "page-size"))
+		requestedPageSize := pageSizeFlag(cmd)
 		pageToken, _ := cmd.Flags().GetString("page-token")
 		manualPaging := cmd.Flags().Changed("page-token")
 		limit := getIntFlag(cmd, "limit")
@@ -99,9 +99,7 @@ func init() {
 	tasksListCmd.Flags().String("query", "", "Search task display name or description")
 	tasksListCmd.Flags().String("state", "", "Filter by state: open, closed")
 	tasksListCmd.Flags().Bool("assigned-to-me", false, "Only show tasks assigned to me")
-	tasksListCmd.Flags().Int("page-size", 50, "Results per page (max 100)")
-	tasksListCmd.Flags().String("page-token", "", "Pagination cursor")
-	addLimitFlag(tasksListCmd)
+	addPaginationFlags(tasksListCmd)
 	tasksCmd.AddCommand(tasksListCmd)
 }
 

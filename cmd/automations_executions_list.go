@@ -57,7 +57,7 @@ the server returns. Combine with --limit to bound the work.`,
 
 		stateFilter := mapExecutionState(strings.TrimSpace(cmd.Flag("state").Value.String()))
 		templateID, _ := cmd.Flags().GetString("template-id")
-		requestedPageSize := clampPageSize(getIntFlag(cmd, "page-size"))
+		requestedPageSize := pageSizeFlag(cmd)
 		pageToken, _ := cmd.Flags().GetString("page-token")
 		manualPaging := cmd.Flags().Changed("page-token")
 		limit := getIntFlag(cmd, "limit")
@@ -157,8 +157,6 @@ func mapExecutionState(s string) string {
 func init() {
 	automationsExecutionsListCmd.Flags().String("state", "", "Filter by execution state: done, error, pending, creating, waiting, terminate (or the full AUTOMATION_EXECUTION_STATE_* enum)")
 	automationsExecutionsListCmd.Flags().String("template-id", "", "Filter by automation template (the parent automation's ID)")
-	automationsExecutionsListCmd.Flags().Int("page-size", 50, "Results per page (max 100)")
-	automationsExecutionsListCmd.Flags().String("page-token", "", "Pagination cursor")
-	addLimitFlag(automationsExecutionsListCmd)
+	addPaginationFlags(automationsExecutionsListCmd)
 	automationsExecutionsCmd.AddCommand(automationsExecutionsListCmd)
 }

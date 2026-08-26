@@ -87,7 +87,7 @@ var automationsListCmd = &cobra.Command{
 
 		enabledOnly, _ := cmd.Flags().GetBool("enabled-only")
 		callsFunction, _ := cmd.Flags().GetString("calls-function")
-		requestedPageSize := clampPageSize(getIntFlag(cmd, "page-size"))
+		requestedPageSize := pageSizeFlag(cmd)
 		pageToken, _ := cmd.Flags().GetString("page-token")
 		manualPaging := cmd.Flags().Changed("page-token")
 		limit := getIntFlag(cmd, "limit")
@@ -153,8 +153,6 @@ var automationsListCmd = &cobra.Command{
 func init() {
 	automationsListCmd.Flags().Bool("enabled-only", false, "Only emit automations that are currently enabled")
 	automationsListCmd.Flags().String("calls-function", "", "Only emit automations that invoke the given function ID (across any step)")
-	automationsListCmd.Flags().Int("page-size", 50, "Results per page (max 100)")
-	automationsListCmd.Flags().String("page-token", "", "Pagination cursor")
-	addLimitFlag(automationsListCmd)
+	addPaginationFlags(automationsListCmd)
 	automationsCmd.AddCommand(automationsListCmd)
 }

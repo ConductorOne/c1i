@@ -399,7 +399,7 @@ both print identical output.
 - **`api`** outputs pretty-printed JSON. With `--paginate`, outputs NDJSON (one list item per line). A `200` whose body is not JSON is an error (exit `6`), not a silent pass-through — a `--path` that escapes the API prefix can reach the web app and return HTML, which used to print as though it had succeeded. An empty body still succeeds, since some endpoints answer a write with nothing.
 - **`docs`** commands output NDJSON (`search`, `endpoints`), pretty JSON (`endpoint`, `openapi` is YAML), or plain text (`page`).
 - List commands auto-paginate by default. Pass `--page-token` to fetch a single page manually.
-- `--page-size` controls the per-call batch size (max 100). Use `--limit N` to cap the *total* number of results emitted; auto-pagination stops fetching new pages once the cap is reached.
+- `--page-size` **requests** a per-call batch size (max 100; `mcp tools history` and `mcp bindings history` allow 200). It is not a guarantee: some endpoints return more rows in one page than asked for — one page of `apps list --page-size 10` returned 23 rows, and `--page-size 1` returns 5 on most endpoints — and `--page-size 0` gets the server's default of 25. Use `--limit N` to cap the *total* number of results emitted; it is exact, and auto-pagination stops fetching new pages once the cap is reached.
 
 ### Field selection
 

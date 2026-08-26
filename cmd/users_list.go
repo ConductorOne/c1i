@@ -25,7 +25,7 @@ var usersListCmd = &cobra.Command{
 		query, _ := cmd.Flags().GetString("query")
 		email, _ := cmd.Flags().GetString("email")
 		status, _ := cmd.Flags().GetString("status")
-		requestedPageSize := clampPageSize(getIntFlag(cmd, "page-size"))
+		requestedPageSize := pageSizeFlag(cmd)
 		pageToken, _ := cmd.Flags().GetString("page-token")
 		manualPaging := cmd.Flags().Changed("page-token")
 		limit := getIntFlag(cmd, "limit")
@@ -103,9 +103,7 @@ func init() {
 	usersListCmd.Flags().String("query", "", "Fuzzy search on name or email")
 	usersListCmd.Flags().String("email", "", "Exact email match")
 	usersListCmd.Flags().String("status", "", "Filter by status: enabled, disabled, deleted")
-	usersListCmd.Flags().Int("page-size", 50, "Number of results per page (max 100)")
-	usersListCmd.Flags().String("page-token", "", "Pagination cursor for next page")
-	addLimitFlag(usersListCmd)
+	addPaginationFlags(usersListCmd)
 	usersCmd.AddCommand(usersListCmd)
 }
 

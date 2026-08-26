@@ -54,7 +54,7 @@ var connectorsListCmd = &cobra.Command{
 		}
 
 		appID, _ := cmd.Flags().GetString("app-id")
-		requestedPageSize := clampPageSize(getIntFlag(cmd, "page-size"))
+		requestedPageSize := pageSizeFlag(cmd)
 		pageToken, _ := cmd.Flags().GetString("page-token")
 		manualPaging := cmd.Flags().Changed("page-token")
 		limit := getIntFlag(cmd, "limit")
@@ -105,9 +105,7 @@ var connectorsListCmd = &cobra.Command{
 
 func init() {
 	connectorsListCmd.Flags().String("app-id", "", "Application ID")
-	connectorsListCmd.Flags().Int("page-size", 50, "Results per page (max 100)")
-	connectorsListCmd.Flags().String("page-token", "", "Pagination cursor")
+	addPaginationFlags(connectorsListCmd)
 	markRequired(connectorsListCmd, "app-id")
-	addLimitFlag(connectorsListCmd)
 	connectorsCmd.AddCommand(connectorsListCmd)
 }

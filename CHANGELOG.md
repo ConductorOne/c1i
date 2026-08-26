@@ -36,6 +36,41 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `add-owner`, `remove-owner` and the owner `apps create` assigns (the
   narrower 96-129s below is `set-owners` alone).
 
+### Changed
+
+- **`--page-size` now says it is a request, not a promise, and every list
+  command says it the same way.** Measured against a live tenant, one page of
+  `apps list --page-size 10` returned 23 rows, `--page-size 25` returned 42,
+  and `policies list --page-size 10` returned 12; `--page-size 1` returned 5
+  rows on seven of the nine endpoints whose collection was large enough to
+  show a floor at all (`policies list` floors at 6 instead, and
+  `mcp servers catalog list` has no floor -- it returned 1), and
+  `--page-size 0` made the server substitute its own default page size of 25,
+  the row count then following that endpoint's own overshoot -- on `apps list`
+  the same 42 rows `--page-size 25` returned. Five commands --
+  `users list`, `tasks list`, `entitlements list`, `requests list`,
+  `accounts list` -- returned exactly what was asked at every size tested from
+  the floor of 5 up, whenever the collection held that many rows. So the
+  overshoot is per-endpoint and the flag guarantees nothing either way.
+  `--limit` was exact everywhere. The help text said only
+  `Results per page (max 100)` and gave no warning.
+  All 27 files registered `--page-size` and `--page-token` by hand (`--limit`
+  already had `addLimitFlag`), and the wording had already drifted into five
+  variants. The registrations now go through one registrar in `cmd/flags.go`
+  (`addPaginationFlags`, `addPaginationFlagsWithMax`) and the caveat is stated
+  once. Per-endpoint ceilings are unchanged but no longer restated in two
+  unrelated places: the `mcp tools history` / `mcp bindings history` ceiling of
+  200 is real (`page_size=201` 400s with `value must be inside range [0, 200]`,
+  200 does not), and the help text and the clamp now read it from one value
+  instead of a literal in the flag description and a second literal in a
+  per-command clamp function. `--page-token`'s description also states what it
+  already did: supplying it fetches exactly one page.
+  Five guards in `cmd/pagination_flags_test.go` fail the build if a command
+  registers a pagination flag outside the registrar, if the trio is
+  incomplete, if the caveat text goes missing, if a command's advertised max
+  stops matching the one it enforces, or if either history command's 200
+  ceiling is dropped to the default 100.
+
 ### Fixed
 
 - **Flags that shipped undocumented are now documented, and a guard keeps it

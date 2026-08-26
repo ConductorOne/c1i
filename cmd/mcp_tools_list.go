@@ -29,7 +29,7 @@ var mcpToolsListCmd = &cobra.Command{
 
 		appID, _ := cmd.Flags().GetString("app-id")
 		connectorID, _ := cmd.Flags().GetString("connector-id")
-		requestedPageSize := clampPageSize(getIntFlag(cmd, "page-size"))
+		requestedPageSize := pageSizeFlag(cmd)
 		pageToken, _ := cmd.Flags().GetString("page-token")
 		manualPaging := cmd.Flags().Changed("page-token")
 		limit := getIntFlag(cmd, "limit")
@@ -128,9 +128,7 @@ func firstNonEmpty(values ...string) string {
 func init() {
 	mcpToolsListCmd.Flags().String("app-id", "", "Application ID")
 	mcpToolsListCmd.Flags().String("connector-id", "", "Connector ID")
-	mcpToolsListCmd.Flags().Int("page-size", 50, "Results per page (max 100)")
-	mcpToolsListCmd.Flags().String("page-token", "", "Pagination cursor")
+	addPaginationFlags(mcpToolsListCmd)
 	markRequired(mcpToolsListCmd, "app-id", "connector-id")
-	addLimitFlag(mcpToolsListCmd)
 	mcpToolsCmd.AddCommand(mcpToolsListCmd)
 }

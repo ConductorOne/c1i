@@ -115,7 +115,7 @@ tenant.
 			}
 		}
 
-		requestedPageSize := clampPageSize(getIntFlag(cmd, "page-size"))
+		requestedPageSize := pageSizeFlag(cmd)
 		pageToken, _ := cmd.Flags().GetString("page-token")
 		manualPaging := cmd.Flags().Changed("page-token")
 		limit := getIntFlag(cmd, "limit")
@@ -170,8 +170,6 @@ func init() {
 	requestsListCmd.Flags().String("entitlement-id", "", "Filter to requests for this entitlement")
 	requestsListCmd.Flags().String("state", "", "Filter by state: open, closed")
 	requestsListCmd.Flags().String("type", "", `Filter by request type: "grant" or "revoke" (default: both)`)
-	requestsListCmd.Flags().Int("page-size", 50, "Results per page (max 100)")
-	requestsListCmd.Flags().String("page-token", "", "Pagination cursor")
-	addLimitFlag(requestsListCmd)
+	addPaginationFlags(requestsListCmd)
 	requestsCmd.AddCommand(requestsListCmd)
 }

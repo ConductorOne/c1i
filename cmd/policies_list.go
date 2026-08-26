@@ -28,7 +28,7 @@ policies.`,
 			return fmt.Errorf("authentication failed: %w", err)
 		}
 
-		requestedPageSize := clampPageSize(getIntFlag(cmd, "page-size"))
+		requestedPageSize := pageSizeFlag(cmd)
 		pageToken, _ := cmd.Flags().GetString("page-token")
 		manualPaging := cmd.Flags().Changed("page-token")
 		limit := getIntFlag(cmd, "limit")
@@ -85,12 +85,10 @@ policies.`,
 }
 
 func init() {
-	// This endpoint can return more items in one page than asked for (it
-	// over-fetches to absorb server-side filtering and does not trim back), so
-	// the count is a request, not a guarantee. Cursor-following and --limit are
-	// unaffected. `policies search` is exact — different backend.
-	policiesListCmd.Flags().Int("page-size", 50, "Results per page (max 100); one page may return more than requested, so use --limit for an exact count")
-	policiesListCmd.Flags().String("page-token", "", "Pagination cursor")
-	addLimitFlag(policiesListCmd)
+	// One of the endpoints behind the shared --page-size caveat: it
+	// over-fetches to absorb server-side filtering and does not trim back
+	// (measured live, page_size=10 returned 12 rows). Cursor-following and
+	// --limit are unaffected.
+	addPaginationFlags(policiesListCmd)
 	policiesCmd.AddCommand(policiesListCmd)
 }

@@ -35,7 +35,7 @@ created_at, trace_id, syslog_event_id, annotations).`,
 		appID, _ := cmd.Flags().GetString("app-id")
 		connectorID, _ := cmd.Flags().GetString("connector-id")
 		id := args[0]
-		requestedPageSize := clampHistoryPageSize(getIntFlag(cmd, "page-size"))
+		requestedPageSize := pageSizeFlag(cmd)
 		pageToken, _ := cmd.Flags().GetString("page-token")
 		manualPaging := cmd.Flags().Changed("page-token")
 		limit := getIntFlag(cmd, "limit")
@@ -84,23 +84,10 @@ created_at, trace_id, syslog_event_id, annotations).`,
 	},
 }
 
-// clampHistoryPageSize caps to 200, the history endpoint's higher per-page
-// limit (vs. the default 100 used elsewhere). The shared clampPageSize cap
-// of 100 would silently truncate batches the API would otherwise accept.
-func clampHistoryPageSize(n int) int {
-	const maxHistoryPageSize = 200
-	if n > maxHistoryPageSize {
-		return maxHistoryPageSize
-	}
-	return n
-}
-
 func init() {
 	mcpToolsHistoryCmd.Flags().String("app-id", "", "Application ID")
 	mcpToolsHistoryCmd.Flags().String("connector-id", "", "Connector ID")
-	mcpToolsHistoryCmd.Flags().Int("page-size", 50, "Results per page (max 200)")
-	mcpToolsHistoryCmd.Flags().String("page-token", "", "Pagination cursor")
+	addPaginationFlagsWithMax(mcpToolsHistoryCmd, defaultPageSize, maxHistoryPageSize)
 	markRequired(mcpToolsHistoryCmd, "app-id", "connector-id")
-	addLimitFlag(mcpToolsHistoryCmd)
 	mcpToolsCmd.AddCommand(mcpToolsHistoryCmd)
 }

@@ -111,7 +111,7 @@ var grantsListCmd = &cobra.Command{
 			return fmt.Errorf("authentication failed: %w", err)
 		}
 
-		requestedPageSize := clampPageSize(getIntFlag(cmd, "page-size"))
+		requestedPageSize := pageSizeFlag(cmd)
 		pageToken, _ := cmd.Flags().GetString("page-token")
 		manualPaging := cmd.Flags().Changed("page-token")
 		limit := getIntFlag(cmd, "limit")
@@ -176,8 +176,6 @@ func init() {
 	grantsListCmd.Flags().String("user-id", "", "Filter to grants held by this C1 identity user")
 	grantsListCmd.Flags().String("app-user-id", "", "Filter to grants held by this app account (app user)")
 	grantsListCmd.Flags().String("entitlement-id", "", "Filter to grants of this entitlement (requires --app-id)")
-	grantsListCmd.Flags().Int("page-size", 50, "Results per page (max 100)")
-	grantsListCmd.Flags().String("page-token", "", "Pagination cursor")
-	addLimitFlag(grantsListCmd)
+	addPaginationFlags(grantsListCmd)
 	grantsCmd.AddCommand(grantsListCmd)
 }

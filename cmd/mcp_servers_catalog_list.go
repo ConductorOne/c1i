@@ -33,7 +33,7 @@ scope tiering (see "catalog get" for details and caveats).`,
 		}
 
 		query, _ := cmd.Flags().GetString("query")
-		requestedPageSize := clampPageSize(getIntFlag(cmd, "page-size"))
+		requestedPageSize := pageSizeFlag(cmd)
 		pageToken, _ := cmd.Flags().GetString("page-token")
 		manualPaging := cmd.Flags().Changed("page-token")
 		limit := getIntFlag(cmd, "limit")
@@ -86,8 +86,6 @@ scope tiering (see "catalog get" for details and caveats).`,
 
 func init() {
 	mcpServersCatalogListCmd.Flags().String("query", "", "Filter catalog entries by display name")
-	mcpServersCatalogListCmd.Flags().Int("page-size", 50, "Results per page (max 100)")
-	mcpServersCatalogListCmd.Flags().String("page-token", "", "Pagination cursor")
-	addLimitFlag(mcpServersCatalogListCmd)
+	addPaginationFlags(mcpServersCatalogListCmd)
 	mcpServersCatalogCmd.AddCommand(mcpServersCatalogListCmd)
 }
