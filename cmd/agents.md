@@ -166,7 +166,10 @@ Two things are irreversible in ways their `--help` doesn't make obvious:
   observed at 45-150s across set-owners, add-owner, remove-owner and the
   owner "apps create" assigns; grants: up to a couple of minutes). Verify
   owners with `c1i apps owners <app-id>`, not `apps get`'s `appOwners`
-  field -- observed empty on every app checked in testing.
+  field -- observed empty on every app checked in testing. `apps owners` also
+  returns zero rows at exit 0 for a well-formed but nonexistent app id, so an
+  empty result is either "no owners" or "wrong id"; `apps add-owner` on the
+  same id exits 4.
 - `accounts list --unmapped-only` filters after each page is fetched, not
   server-side. With `--page-token` (which turns off auto-pagination) a page
   can come back empty while unmapped accounts exist further along.

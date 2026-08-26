@@ -15,7 +15,8 @@ Only --display-name is required. This creates a plain, unmanaged container
 app — the zero state for "make an app, then register MCP servers under it".
 The caller is auto-assigned as an owner of the new app, appearing in
 "apps owners" after the usual owner-provisioning lag. Change the list with
-"apps add-owner"/"apps remove-owner"/"apps set-owners".
+"apps add-owner"/"apps remove-owner", or "apps set-owners", which replaces
+the whole list -- including you.
 
 The created app is returned as pretty JSON under an "app" key (--fields is not
 applied to mutation output, so parse the id from the full object).

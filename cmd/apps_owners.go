@@ -55,9 +55,9 @@ or "set-owners": "apps create" auto-assigns its caller as an owner.
 Auto-paginates to completion like every other list command.
 
 A well-formed app id that does not exist returns zero rows and exit 0, not a
-404 -- the endpoint answers 200 with an empty list. "apps add-owner" and
-"apps remove-owner" on the same id do exit 4, so an empty result here means
-either "no owners" or "wrong id", and only those two can tell you which.`,
+404 -- the endpoint answers 200 with an empty list. An empty result here is
+either "no owners" or "wrong id"; "apps add-owner"/"apps remove-owner" on the
+same id exit 4 and can tell you which.`,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		appID := args[0]

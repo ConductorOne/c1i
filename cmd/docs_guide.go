@@ -397,9 +397,10 @@ of anything specific to what you're about to model.
 
 "--wait" polls "GET .../ownerids" until the owner appears (or times out) and
 prints "Owners provisioned on app ... after ...". Without "--wait", the PUT
-returns immediately but the owner takes roughly 96-129s to show up
--- see "Verify" below for why "apps get"'s "appOwners" field is not the way
-to check this.
+returns immediately but the owner takes roughly 96-129s to show up in
+"GET .../ownerids" (four measured writes; a fifth had not landed at 108s) --
+see "Verify" below for why "apps get"'s "appOwners" field is not the way to
+check this.
 
 Note "set-owners" REPLACES the list with exactly the ids you pass, and
 "apps create" auto-assigns its caller as an owner: passing only "$OWNER_USER_ID"
@@ -451,8 +452,8 @@ auto-paginated -- pipe to jq to isolate the one row you're looking for.
 "--wait" polls a different read of the same owner data (".../ownerids"), so it
 confirms that view rather than this one. In testing the two converged in the
 same 10s sample of one write -- both empty through 97s, both populated at
-108s -- but that
-is an observation, not a guarantee, so check here if it matters.
+108s -- but that is an observation, not a guarantee, so check here if it
+matters.
 
 ## Common failures
 
@@ -463,6 +464,9 @@ is an observation, not a guarantee, so check here if it matters.
   well-formed but wrong app id -> the search endpoint doesn't validate the
   app exists -> confirm the id with "c1i apps get <id>" (a real 404 there
   exits 4).
+- "apps owners <id>" returns nothing at exit 0 for a well-formed but wrong
+  app id -> that endpoint answers 200 with an empty list -> confirm with
+  "c1i apps get <id>" or "apps add-owner", both of which exit 4.
 - "c1i apps get <id>" on a deleted or never-existed app -> 404 -> exit 4.
 - Building a SaaS-backed connector (Salesforce, Okta, Google Workspace, ...)
   by hand through "c1i api" instead of following this runbook -> don't:
