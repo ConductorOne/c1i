@@ -19,7 +19,7 @@ brew install conductorone/baton/c1i
 # Go
 go install github.com/ConductorOne/c1i@latest
 
-# Container
+# Container (image tags omit the leading "v" -- e.g. 0.5.2, not v0.5.2)
 docker pull public.ecr.aws/conductorone/c1i:<version>
 ```
 
