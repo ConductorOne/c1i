@@ -9,18 +9,19 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ### Added
 
 - **`apps owners`, `apps add-owner`, and `apps remove-owner`.** `apps get`'s
-  `appOwners` field reads an empty v2 ownership model; `GET .../owners` reads
-  the populated v1 store that `apps set-owners` already wrote to, but reading
+  `appOwners` field was empty on every app checked, while `GET .../owners`
+  returns the owners `apps set-owners` had already written, but reading
   it meant hand-rolling `c1i api --path=...`, and adding a single owner meant
   a read-modify-write through `set-owners` -- which PUTs the full list and can
   silently drop a concurrent change. `apps owners <app-id>` lists owners
   (NDJSON, auto-paginated); `apps add-owner <user-id> --app-id <id>` and
   `apps remove-owner <user-id> --app-id <id>` change one owner at a time via
   POST/DELETE `.../owners/{user_id}`, so they do not read-modify-write the
-  list the way `set-owners` does. All three honor `--dry-run`; owner
-  writes remain asynchronous: 45-150s to show up in `apps owners`, measured
-  across `set-owners`, `add-owner`, `remove-owner` and the owner `apps create`
-  assigns (the narrower 96-129s below is `set-owners` alone).
+  list the way `set-owners` does. Both writes honor `--dry-run`; `apps owners`
+  is a read, so the flag is a no-op there. Owner writes remain asynchronous:
+  45-150s to show up in `apps owners`, measured across `set-owners`,
+  `add-owner`, `remove-owner` and the owner `apps create` assigns (the
+  narrower 96-129s below is `set-owners` alone).
 
 ### Fixed
 

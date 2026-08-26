@@ -397,9 +397,13 @@ of anything specific to what you're about to model.
 
 "--wait" polls "GET .../ownerids" until the owner appears (or times out) and
 prints "Owners provisioned on app ... after ...". Without "--wait", the PUT
-returns immediately but the owner takes a couple of minutes to show up in
-"GET .../ownerids" -- see "Verify" below for why "apps get"'s "appOwners"
-field is not the way to check this.
+returns immediately but the owner takes roughly 96-129s to show up
+-- see "Verify" below for why "apps get"'s "appOwners" field is not the way
+to check this.
+
+Note "set-owners" REPLACES the list with exactly the ids you pass, and
+"apps create" auto-assigns its caller as an owner: passing only "$OWNER_USER_ID"
+here removes yourself. Use "apps add-owner" instead to add without replacing.
 
 ### 3. Create a custom entitlement to grant
 
@@ -444,9 +448,10 @@ already reported success. Check the owner list instead:
 Expect a row with id "$OWNER_USER_ID" within a couple of minutes. NDJSON,
 auto-paginated -- pipe to jq to isolate the one row you're looking for.
 
-"--wait" polls a different read of the same v1 store (".../ownerids"), so it
+"--wait" polls a different read of the same owner data (".../ownerids"), so it
 confirms that view rather than this one. In testing the two converged in the
-same 10s sample -- both empty through 97s, both populated at 108s -- but that
+same 10s sample of one write -- both empty through 97s, both populated at
+108s -- but that
 is an observation, not a guarantee, so check here if it matters.
 
 ## Common failures

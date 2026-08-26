@@ -43,8 +43,8 @@ func appOwnerRow(u appOwner) map[string]any {
 var appsOwnersCmd = &cobra.Command{
 	Use:   "owners <app-id>",
 	Short: "List an app's owners (NDJSON output)",
-	Long: `List the owners of an app via GET .../owners -- the v1 owner store that
-"apps set-owners"/"apps add-owner"/"apps remove-owner" write to. Use this to
+	Long: `List the owners of an app via GET .../owners -- the read that reflects what
+"apps set-owners"/"apps add-owner"/"apps remove-owner" write. Use this to
 verify a write: it lags the write it's confirming by roughly 45-150s
 (owner provisioning is asynchronous), so an owner added moments ago may not
 appear yet.
@@ -52,7 +52,12 @@ appear yet.
 Expect at least one owner on most apps even before you ever run "add-owner"
 or "set-owners": "apps create" auto-assigns its caller as an owner.
 
-Auto-paginates to completion like every other list command.`,
+Auto-paginates to completion like every other list command.
+
+A well-formed app id that does not exist returns zero rows and exit 0, not a
+404 -- the endpoint answers 200 with an empty list. "apps add-owner" and
+"apps remove-owner" on the same id do exit 4, so an empty result here means
+either "no owners" or "wrong id", and only those two can tell you which.`,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		appID := args[0]
