@@ -216,6 +216,21 @@ var apiCmd = &cobra.Command{
 			}
 
 			if !paginate {
+				// A non-empty nextPageToken means more results exist and we
+				// are about to discard the cursor to them. Silent otherwise:
+				// one page, exit 0, indistinguishable from a complete result.
+				// Every first-class list command auto-paginates, so callers
+				// reaching for raw `api` most need telling.
+				//
+				// Deliberately says "partial" rather than "the first page":
+				// --query page_token=X makes this page N. And --paginate is
+				// offered, not promised — on an endpoint whose cursor never
+				// advances it aborts (see the prevToken guard below), which is
+				// still a clear failure rather than this silent one.
+				if tok := nextPageTokenOf(data); tok != "" {
+					_, _ = fmt.Fprintf(cmd.ErrOrStderr(),
+						"Warning: %s returned a partial result — more pages exist and c1i is discarding the cursor to them. Pass --paginate to fetch the rest (which emits NDJSON rows rather than a single JSON object).\n", path)
+				}
 				return writeObject(cmd, data)
 			}
 
@@ -308,6 +323,28 @@ func setQueryParam(rawPath, key, value string) string {
 	return u.String()
 }
 
+// nextPageTokenOf returns the response's nextPageToken, or "" when the body is
+// not a JSON object or carries no cursor. Shared with extractListAndToken so
+// the two pagination paths cannot disagree about what a cursor is.
+func nextPageTokenOf(data []byte) string {
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return ""
+	}
+	return nextPageTokenFromMap(raw)
+}
+
+func nextPageTokenFromMap(raw map[string]json.RawMessage) string {
+	v, ok := raw["nextPageToken"]
+	if !ok {
+		return ""
+	}
+	var tok string
+	// Ignore unmarshal error: a missing/null token is legitimately empty.
+	_ = json.Unmarshal(v, &tok)
+	return tok
+}
+
 // extractListAndToken finds the array-valued field in a paginated response and
 // the nextPageToken. Most C1 list endpoints wrap items under "list", but some
 // use typed keys ("automationExecutions", "automationVersions", etc.) — for
@@ -322,11 +359,7 @@ func extractListAndToken(data []byte, listKey string) ([]json.RawMessage, string
 		return nil, "", err
 	}
 
-	var nextPageToken string
-	if v, ok := raw["nextPageToken"]; ok {
-		// Ignore unmarshal error: a missing/null token is legitimately empty.
-		_ = json.Unmarshal(v, &nextPageToken)
-	}
+	nextPageToken := nextPageTokenFromMap(raw)
 
 	if listKey != "" {
 		v, ok := raw[listKey]

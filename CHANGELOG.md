@@ -8,6 +8,19 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **`c1i api` now warns when it discards a pagination cursor.** A bare `api`
+  call emits one page and exits 0, so a partial result was indistinguishable
+  from a complete one -- unlike every first-class list command, which
+  auto-paginates. When a response carries a non-empty `nextPageToken` and
+  `--paginate` was not passed, `api` now prints a warning to stderr naming
+  `--paginate` and noting that it emits NDJSON rows rather than a single JSON
+  object. stdout is unchanged, so parsers are unaffected. An empty or absent
+  token means a complete result and stays silent. Note the warning reports a
+  partial result, not "the first page": `--query page_token=...` makes it a
+  later one. `--paginate` is offered rather than promised -- on an endpoint
+  whose cursor never advances it aborts with the existing stuck-cursor error,
+  which is still better than the silent truncation it replaces.
+
 - **`apps owners`, `apps add-owner`, and `apps remove-owner`.** `apps get`'s
   `appOwners` field was empty on every app checked, while `GET .../owners`
   returns the owners `apps set-owners` had already written, but reading
