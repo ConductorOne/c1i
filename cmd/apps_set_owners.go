@@ -18,7 +18,8 @@ import (
 const ownerWaitPollInterval = 12 * time.Second
 
 // setOwnersSuccessFmt is the PUT-accepted confirmation. Points at "apps
-// owners", not "apps get": appOwners was empty on every app checked.
+// owners", not "apps get": appOwners was [] on all 46 apps measured, 45 of
+// which did have owners.
 const setOwnersSuccessFmt = "Set %d owner(s) on app %s (provisioning is async; check with \"c1i apps owners %s\" in a minute or two).\n"
 
 var appsSetOwnersCmd = &cobra.Command{
@@ -30,8 +31,9 @@ any existing owners. Provide one or more --user-id (C1 user IDs, 27 chars each).
 Owner changes are provisioned ASYNCHRONOUSLY: this call returns immediately,
 but the new owners take a couple of minutes to show up in GET .../ownerids.
 A success here means the request was accepted, not that the owner list is
-already live. The "appOwners" field in "apps get" was observed empty on
-every app checked in testing -- don't use it to check ownership.
+already live. Don't check ownership via the "appOwners" field in "apps get":
+it was [] on all 46 apps in the test tenant, including the 45 that
+GET .../ownerids reported owners for.
 
 Pass --wait to block and poll GET .../ownerids until every requested
 --user-id appears (or --wait-timeout elapses). Without --wait, behavior is
@@ -52,10 +54,9 @@ polls).`,
 				return &usageError{fmt.Errorf("--user-id values must be non-empty")}
 			}
 		}
-		wait, _ := cmd.Flags().GetBool("wait")
-		waitTimeout, _ := cmd.Flags().GetDuration("wait-timeout")
-		if wait && waitTimeout <= 0 {
-			return &usageError{fmt.Errorf("--wait-timeout must be positive")}
+		wait, waitTimeout, err := waitFlagValues(cmd)
+		if err != nil {
+			return err
 		}
 
 		baseURL, err := GetBaseURL()
@@ -87,61 +88,32 @@ polls).`,
 	},
 }
 
-// waitForOwners polls GET .../ownerids on appID every ownerWaitPollInterval
-// until every id in wantUserIDs is present, timeout elapses, or cmd's context
-// is canceled. It writes progress lines to cmd's stdout as it goes.
+// waitForOwners blocks until every id in wantUserIDs appears in
+// GET .../ownerids on appID, timeout elapses, or cmd's context is canceled.
 func waitForOwners(cmd *cobra.Command, c *client.Client, appID string, wantUserIDs []string, timeout time.Duration) error {
-	out := cmd.OutOrStdout()
+	return runWait(cmd, ownersWaitOp(c, appID, wantUserIDs, timeout))
+}
+
+// ownersWaitOp is waitForOwners' operation, built separately so a test can
+// drive the loop at a poll interval shorter than ownerWaitPollInterval.
+func ownersWaitOp(c *client.Client, appID string, wantUserIDs []string, timeout time.Duration) waitOp[[]string] {
 	ownerIDsPath := client.Path("/api/v1/apps/%s/ownerids", appID)
-
-	ctx, cancel := context.WithTimeout(cmd.Context(), timeout)
-	defer cancel()
-
-	start := time.Now()
-	ticker := time.NewTicker(ownerWaitPollInterval)
-	defer ticker.Stop()
-
-	// firstPoll suppresses the "still waiting" line on the very first check:
-	// that poll happens immediately after the PUT, before any real waiting has
-	// elapsed, so printing it there would misleadingly imply time has already
-	// passed. Starting with the second poll, real time (>= one tick) has
-	// actually elapsed, so the message is accurate.
-	firstPoll := true
-	for {
-		got, err := fetchOwnerIDs(ctx, c, ownerIDsPath)
-		if err != nil {
-			if ctx.Err() != nil {
-				break // fall through to the timeout/cancellation report below
+	return waitOp[[]string]{
+		Poll: func(ctx context.Context) ([]string, error) {
+			got, err := fetchOwnerIDs(ctx, c, ownerIDsPath)
+			if err != nil {
+				return nil, fmt.Errorf("API error: %w", err)
 			}
-			return fmt.Errorf("API error: %w", err)
-		}
-		if allOwnersPresent(wantUserIDs, got) {
-			_, _ = fmt.Fprintf(out, "Owners provisioned on app %s after %s.\n",
-				appID, time.Since(start).Round(time.Second))
-			return nil
-		}
-		if !firstPoll {
-			_, _ = fmt.Fprintf(out, "Still waiting for owners to provision on app %s (%s elapsed)...\n",
-				appID, time.Since(start).Round(time.Second))
-		}
-		firstPoll = false
-
-		select {
-		case <-ctx.Done():
-		case <-ticker.C:
-			continue
-		}
-		break
+			return got, nil
+		},
+		Done:     untilPresent(wantUserIDs),
+		Interval: ownerWaitPollInterval,
+		Timeout:  timeout,
+		Subject:  fmt.Sprintf("owners to provision on app %s", appID),
+		Success:  fmt.Sprintf("Owners provisioned on app %s", appID),
+		Slow:     "provisioning can take several minutes",
+		Recheck:  fmt.Sprintf("c1i apps owners %s", appID),
 	}
-
-	if cmd.Context().Err() != nil {
-		return fmt.Errorf("canceled while waiting for owners to provision on app %s", appID)
-	}
-	return fmt.Errorf(
-		"timed out after %s waiting for owners to provision on app %s; "+
-			"this is not necessarily a failure — provisioning can take several minutes, "+
-			"check again later with: c1i apps owners %s",
-		timeout, appID, appID)
 }
 
 // fetchOwnerIDs GETs .../ownerids and returns the current owner user IDs.
@@ -159,21 +131,10 @@ func fetchOwnerIDs(ctx context.Context, c *client.Client, path string) ([]string
 	return parsed.UserIDs, nil
 }
 
-// allOwnersPresent reports whether every id in want is present in got. Pure
-// (no I/O) so the poll's success condition is unit-testable without a fake
-// server: --wait's loop calls this after each GET .../ownerids.
-func allOwnersPresent(want, got []string) bool {
-	gotSet := make(map[string]struct{}, len(got))
-	for _, id := range got {
-		gotSet[id] = struct{}{}
-	}
-	for _, id := range want {
-		if _, ok := gotSet[id]; !ok {
-			return false
-		}
-	}
-	return true
-}
+// allOwnersPresent reports whether every id in want is present in got: the
+// set-owners --wait success condition (untilPresent's) as a pure function, so
+// it stays unit-testable without a fake server.
+func allOwnersPresent(want, got []string) bool { return untilPresent(want)(got) }
 
 // buildSetOwnersBody assembles the PUT .../owners request body. Pure, so the
 // dry-run preview and a unit test pin the exact wire shape (userIds, not
@@ -185,7 +146,6 @@ func buildSetOwnersBody(userIDs []string) map[string]any {
 func init() {
 	appsSetOwnersCmd.Flags().StringSlice("user-id", nil, "C1 user ID to set as owner (repeatable; replaces the full owner list)")
 	markRequired(appsSetOwnersCmd, "user-id")
-	appsSetOwnersCmd.Flags().Bool("wait", false, "block and poll GET .../ownerids until the requested owners appear, or --wait-timeout elapses")
-	appsSetOwnersCmd.Flags().Duration("wait-timeout", 4*time.Minute, "max time to wait with --wait (e.g. 30s, 5m)")
+	addWaitFlags(appsSetOwnersCmd, "GET .../ownerids until the requested owners appear", 4*time.Minute)
 	appsCmd.AddCommand(appsSetOwnersCmd)
 }

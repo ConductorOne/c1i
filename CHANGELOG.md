@@ -106,6 +106,21 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   above tests it rather than leaving the reader to notice. Verified against a
   live tenant that accepts `baselinePolicyId`.
 
+- **`grants list --wait`.** Grant provisioning is asynchronous, so a read taken
+  right after a grant or revoke can catch the set mid-change. `--wait` re-reads
+  every page until the same grants come back `--wait-stable` times in a row
+  (default 3), then prints that settled set; progress goes to stderr, so stdout
+  stays pure NDJSON. It is rejected with `--page-token` (a pinned cursor is not
+  a stable set) and with `--wait-stable` below 2.
+
+  The default is 3, not 2, deliberately. Two equal reads cannot be told apart
+  from a pause mid-change. The case that motivated it is reported from the
+  field rather than measured here: MCP tool discovery streams (0 -> 40 -> 101
+  with pauses between batches), so a presence check -- "at least one row
+  exists" -- approved 20 of 28 tools and reported success. Three is still a
+  heuristic, not a proof: size `--wait-stable` and the 5s poll interval past
+  the longest pause you have actually seen.
+
 - **`apps owners`, `apps add-owner`, and `apps remove-owner`.** `apps get`'s
   `appOwners` field was empty on every app checked, while `GET .../owners`
   returns the owners `apps set-owners` had already written, but reading
@@ -273,6 +288,27 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   the wire in the user-agent and the MCP gateway handshake's
   `clientInfo.version` -- and a `git add -A` would have committed one as a
   gitlink (mode 160000), an embedded-repo pointer no clone can resolve.
+
+  Re-measured while extracting the shared wait primitive, and the help text now
+  states the discriminating half of the observation rather than just the
+  coverage: `appOwners` was `[]` on all 46 apps then in the tenant --
+  *including the 45 that `GET .../ownerids` reported owners for* -- and on a
+  freshly created app immediately after `set-owners --wait` confirmed two
+  owners had provisioned. (The 47/46 counts above were the earlier pass; the
+  apps it created for the test have since been deleted.)
+
+### Changed
+
+- **The `--wait` poll loop is now one shared primitive (`cmd/wait.go`).** It
+  was written for `apps set-owners` and was the only polling loop in `cmd/`;
+  it is now `runWait(cmd, waitOp{...})` with a pluggable `Done` predicate, plus
+  `addWaitFlags` so `--wait`/`--wait-timeout` are declared identically
+  everywhere. `apps set-owners` behavior, output, and help text are unchanged.
+
+  Two predicates ship: `untilPresent` (what `set-owners` always did -- every
+  requested id has shown up) and `untilStable` (the polled value held steady
+  across N consecutive reads), which presence-waiting cannot express and which
+  `grants list --wait` uses.
 
 ## [0.5.0] - 2026-08-21
 
