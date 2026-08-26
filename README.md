@@ -44,13 +44,12 @@ c1i apps add-owner <user-id> --app-id <id>
 c1i apps remove-owner <user-id> --app-id <id>
 ```
 
-`apps owners` reads the same store `apps add-owner`/`apps remove-owner`/`apps
-set-owners` write, and lags a write by roughly 45-150s (owner
-provisioning is asynchronous). `apps add-owner`/`apps remove-owner` change
-one owner at a time; two `add-owner` calls issued at once were both observed
-to land. `apps set-owners` replaces
-the whole list with exactly the ids you pass, so an owner added between your
-read and your write is silently removed.
+`apps owners` reads the same store that `apps add-owner`, `apps remove-owner`
+and `apps set-owners` write, and lags a write by roughly 45-150s (owner
+provisioning is asynchronous). `apps add-owner` and `apps remove-owner` change
+one owner at a time; two `add-owner` calls issued at once were both observed to
+land. `apps set-owners` replaces the whole list with exactly the ids you pass,
+so an owner added between your read and your write is silently removed.
 
 ### Accounts
 

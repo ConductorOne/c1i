@@ -32,7 +32,9 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   takes 96-129s across four converged writes -- a fifth was still pending at
   108s -- not the previously documented ~60-90s.
   Updated the command's help text and success message, `cmd/docs_guide.go`,
-  and `cmd/agents.md` to point at `ownerids` and drop the `appOwners` claim.
+  and `cmd/agents.md` to drop the `appOwners` claim and point at the owner
+  reads that do work (`apps owners`, added above; `ownerids` in the
+  `set-owners` help, which is the read `--wait` polls).
 
 ## [0.5.0] - 2026-08-21
 

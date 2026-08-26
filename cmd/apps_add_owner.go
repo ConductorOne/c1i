@@ -14,10 +14,9 @@ var appsAddOwnerCmd = &cobra.Command{
 "apps set-owners", which replaces the whole list with exactly the ids you
 pass, this adds one owner without touching the rest of the list. Two
 add-owner calls issued at the same time were both observed to land.
-"set-owners" is the one
-to be careful with: build its list from a read taken moments earlier and any
-owner added in between is silently removed -- including the creator
-"apps create" auto-assigns (see below).
+"set-owners" is the one to be careful with: build its list from a read
+taken moments earlier and any owner added in between is silently removed
+-- including the creator "apps create" auto-assigns (see below).
 
 "apps create" auto-assigns its caller as an owner, so most apps already have
 at least one before you ever run this -- this adds to that set, it doesn't

@@ -23,13 +23,11 @@ type appOwner struct {
 }
 
 // appOwnerRow flattens an appOwner into the NDJSON output row. Mirrors the
-// projection users_list.go uses for a person row (id/display_name/email/
-// job_title/status), swapping in username -- more identifying than the
-// department this endpoint does return, which was empty on every owner seen
-// and deleted_at -- worth surfacing here because an app's owner can itself
-// be a deactivated/deleted C1 user, which "who owns this app" should flag.
-// deleted_at is nil, not "", on a live user -- see CLAUDE.md's row-fidelity
-// convention.
+// person projection in users_list.go, with two changes. username replaces
+// department: the endpoint returns both, but department was empty on every
+// owner observed. deleted_at is added because an app's owner can itself be a
+// deleted C1 user, which "who owns this app" should flag; it is nil, not "",
+// on a live user -- see CLAUDE.md's row-fidelity convention.
 func appOwnerRow(u appOwner) map[string]any {
 	return map[string]any{
 		"id":           u.ID,

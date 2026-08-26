@@ -441,9 +441,13 @@ already reported success. Check the owner list instead:
 
     c1i apps owners "$APP_ID"
 
-Expect a row with id "$OWNER_USER_ID" within a couple of minutes (already
-satisfied if you used "--wait"). NDJSON, auto-paginated -- pipe to jq to
-isolate the one row you're looking for.
+Expect a row with id "$OWNER_USER_ID" within a couple of minutes. NDJSON,
+auto-paginated -- pipe to jq to isolate the one row you're looking for.
+
+"--wait" polls a different read of the same v1 store (".../ownerids"), so it
+confirms that view rather than this one. In testing the two converged in the
+same 10s sample -- both empty through 97s, both populated at 108s -- but that
+is an observation, not a guarantee, so check here if it matters.
 
 ## Common failures
 
