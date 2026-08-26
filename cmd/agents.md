@@ -165,9 +165,8 @@ Two things are irreversible in ways their `--help` doesn't make obvious:
   write can look like a silent no-op for a couple of minutes (owner writes
   observed at 45-150s across set-owners, add-owner, remove-owner and the
   owner "apps create" assigns; grants: up to a couple of minutes). Verify
-  owners with
-  `c1i apps owners <app-id>`, not `apps get`'s `appOwners` field -- observed
-  empty on every app checked in testing.
+  owners with `c1i apps owners <app-id>`, not `apps get`'s `appOwners`
+  field -- observed empty on every app checked in testing.
 - `accounts list --unmapped-only` filters after each page is fetched, not
   server-side. With `--page-token` (which turns off auto-pagination) a page
   can come back empty while unmapped accounts exist further along.

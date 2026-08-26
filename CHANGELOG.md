@@ -29,7 +29,8 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   on every app checked -- all 47, spanning 45 connector-managed apps across
   three access models plus apps created for the test -- while 46 of those 47
   had owners in `GET .../ownerids`. That read -- the one that does converge --
-  takes 96-129s (five timed writes), not the previously documented ~60-90s.
+  takes 96-129s across four converged writes -- a fifth was still pending at
+  108s -- not the previously documented ~60-90s.
   Updated the command's help text and success message, `cmd/docs_guide.go`,
   and `cmd/agents.md` to point at `ownerids` and drop the `appOwners` claim.
 
