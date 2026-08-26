@@ -21,6 +21,22 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   whose cursor never advances it aborts with the existing stuck-cursor error,
   which is still better than the silent truncation it replaces.
 
+- **`auth whoami` now reports the tenant it resolved, machine-readably.**
+  Two client-resolved keys join its JSON summary (and its `--verbose` dump):
+  `tenant`, the base URL this invocation resolved, and `tenantSource`, where
+  that URL came from (`flag`, `env`, or `config`). Before this, the resolved
+  tenant was readable only from `auth status`'s prose or from the stderr
+  warning that fires *only* when `--url` was omitted -- so the signal
+  disappeared exactly when a caller did the right thing and passed `--url`,
+  and toolkits that gate writes on "confirm the tenant first" had to `sed`
+  that warning line. `c1i auth whoami --url <tenant> --fields tenant` is now
+  the check. The keys are emitted only after the credentials are proven
+  against that tenant, so an auth failure still exits 3 with no tenant rather
+  than naming a target the caller cannot reach. `auth status`'s text output
+  is unchanged -- anything parsing it keeps working -- and no `--json` flag
+  was added to it, since a second JSON surface for the same fact is exactly
+  the duplication that drifts.
+
 - **`apps owners`, `apps add-owner`, and `apps remove-owner`.** `apps get`'s
   `appOwners` field was empty on every app checked, while `GET .../owners`
   returns the owners `apps set-owners` had already written, but reading
