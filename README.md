@@ -692,8 +692,12 @@ c1i auth login --client-id <id> --client-secret <secret>
 # Check credential status (also reports the storage backend)
 c1i auth status
 
-# Show the authenticated principal: user ID, display name, email, role/permission/feature counts
+# Show the authenticated principal (user ID, display name, email, role/permission/feature
+# counts) plus the resolved tenant: "tenant" (base URL) and "tenantSource" (flag/env/config)
 c1i auth whoami           # add --verbose for full roles/permissions/features arrays
+
+# Machine-readable "which tenant am I about to write to?" — the pre-write check
+c1i auth whoami --url https://mycompany.conductor.one --fields tenant
 
 # Mint a short-lived bearer token for driving raw API calls yourself
 c1i auth token            # add --json for token type and absolute expiry (RFC3339)

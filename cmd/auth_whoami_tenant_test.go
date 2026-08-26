@@ -14,10 +14,21 @@ import (
 	"github.com/spf13/viper"
 )
 
-// stubWhoamiServer answers introspect (and the follow-up user lookup) with a
-// fixed payload, and points newWhoamiClient at it. status is the code the
+// defaultIntrospectBody is the shape the live endpoint returns: no "tenant"
+// key of its own, but a "tenantId" that must survive untouched.
+const defaultIntrospectBody = `{"userId":"u1","principleId":"p1","tenantId":"t1","roles":["r"],"permissions":[],"features":[]}`
+
+// stubWhoamiServer answers introspect (and the follow-up user lookup) with the
+// default payload, and points newWhoamiClient at it. status is the code the
 // introspect call answers with.
 func stubWhoamiServer(t *testing.T, status int) {
+	t.Helper()
+	stubWhoamiServerBody(t, status, defaultIntrospectBody)
+}
+
+// stubWhoamiServerBody is stubWhoamiServer with the introspect body chosen by
+// the caller, for the degenerate bodies a 200 can still carry.
+func stubWhoamiServerBody(t *testing.T, status int, introspectBody string) {
 	t.Helper()
 	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -30,7 +41,7 @@ func stubWhoamiServer(t *testing.T, status int) {
 			_, _ = w.Write([]byte(`{"message":"denied"}`))
 			return
 		}
-		_, _ = w.Write([]byte(`{"userId":"u1","principleId":"p1","tenantId":"t1","roles":["r"],"permissions":[],"features":[]}`))
+		_, _ = w.Write([]byte(introspectBody))
 	}))
 	t.Cleanup(srv.Close)
 
@@ -195,6 +206,62 @@ func TestWhoamiReportsNoTenantWhenUnauthenticated(t *testing.T) {
 	}
 	if strings.Contains(out, `"tenant"`) {
 		t.Errorf("stdout = %q, an unauthenticated whoami must not report a tenant", out)
+	}
+}
+
+// TestWhoamiNullIntrospectBodyIsC1Failure covers the degenerate body a 200 can
+// still carry: `null` unmarshals into a map[string]any without error, leaving
+// the payload a NIL map. Writing the tenant into it would panic (assignment to
+// entry in nil map), and printing it would be a bare "null" with exit 0 — a
+// guardrail reporting success on a body carrying no identity at all. It is the
+// remote failing its JSON contract, so it belongs in exitServer with the other
+// unusable 200s, in both output modes.
+func TestWhoamiNullIntrospectBodyIsC1Failure(t *testing.T) {
+	for _, args := range [][]string{
+		{"--url", "https://acme.conductor.one"},
+		{"--url", "https://acme.conductor.one", "--verbose"},
+	} {
+		t.Run(strings.Join(args, " "), func(t *testing.T) {
+			t.Setenv("C1I_URL", "")
+			stubWhoamiServerBody(t, http.StatusOK, `null`)
+
+			out, err := runWhoami(t, args)
+			if err == nil {
+				t.Fatalf("expected an error for a null introspect body, got nil (output %q)", out)
+			}
+			if got, want := exitCode(err), exitServer; got != want {
+				t.Errorf("exitCode(%v) = %d, want %d (exitServer)", err, got, want)
+			}
+			if strings.Contains(out, `"tenant"`) || strings.Contains(out, "null") {
+				t.Errorf("stdout = %q, an unusable introspect body must not print a tenant or a bare null", out)
+			}
+		})
+	}
+}
+
+// TestWhoamiVerboseTenantIsClientResolved pins the documented precedence: if
+// the payload ever grows a "tenant" key of its own, the client-resolved base
+// URL still wins, because `--fields tenant` is a pre-write guardrail and must
+// mean the same thing in every mode. The server's value would be a different
+// fact under the same name; tenantId (a real payload key) is unaffected.
+func TestWhoamiVerboseTenantIsClientResolved(t *testing.T) {
+	t.Setenv("C1I_URL", "")
+	stubWhoamiServerBody(t, http.StatusOK,
+		`{"userId":"u1","principleId":"p1","tenantId":"t1","tenant":{"name":"acme"},"roles":[],"permissions":[],"features":[]}`)
+
+	out, err := runWhoami(t, []string{"--url", "https://acme.conductor.one", "--verbose"})
+	if err != nil {
+		t.Fatalf("auth whoami --verbose: %v (output %q)", err, out)
+	}
+	var got map[string]any
+	if uerr := json.Unmarshal([]byte(out), &got); uerr != nil {
+		t.Fatalf("output is not JSON: %v (%q)", uerr, out)
+	}
+	if got["tenant"] != "https://acme.conductor.one" {
+		t.Errorf("tenant = %v, want the client-resolved base URL to win", got["tenant"])
+	}
+	if got["tenantId"] != "t1" {
+		t.Errorf("tenantId = %v, want t1", got["tenantId"])
 	}
 }
 

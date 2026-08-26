@@ -24,7 +24,10 @@ form of the tenant "auth status" prints as text — check it before a write:
 
 Both keys report where a request WOULD go; they are only emitted once the
 credentials are proven against that tenant, so an auth failure exits nonzero
-with no tenant rather than reporting an unusable target.
+with no tenant rather than reporting an unusable target. "tenant" always
+means the client-resolved URL, including under --verbose: if the introspect
+payload ever carries a key of that name, this one wins, so the check reads
+the same in either mode. The payload's own "tenantId" is untouched.
 
 The full introspect payload can include hundreds of roles and over a
 thousand permissions — pass --verbose to dump it all.`,
@@ -46,6 +49,11 @@ thousand permissions — pass --verbose to dump it all.`,
 		var payload map[string]any
 		if err := json.Unmarshal(body, &payload); err != nil {
 			return fmt.Errorf("parsing introspect response: %w", err)
+		}
+		// A `null` body unmarshals into a nil map with no error: a 200 carrying
+		// no identity at all, which must not read as a confirmed tenant.
+		if payload == nil {
+			return &nonJSONResponseError{fmt.Errorf("introspect returned a JSON null body")}
 		}
 
 		// Best-effort: enrich with display_name + email from /api/v1/users/{id}.

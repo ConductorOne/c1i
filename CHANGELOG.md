@@ -26,16 +26,18 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `tenant`, the base URL this invocation resolved, and `tenantSource`, where
   that URL came from (`flag`, `env`, or `config`). Before this, the resolved
   tenant was readable only from `auth status`'s prose or from the stderr
-  warning that fires *only* when `--url` was omitted -- so the signal
-  disappeared exactly when a caller did the right thing and passed `--url`,
-  and toolkits that gate writes on "confirm the tenant first" had to `sed`
-  that warning line. `c1i auth whoami --url <tenant> --fields tenant` is now
-  the check. The keys are emitted only after the credentials are proven
-  against that tenant, so an auth failure still exits 3 with no tenant rather
-  than naming a target the caller cannot reach. `auth status`'s text output
-  is unchanged -- anything parsing it keeps working -- and no `--json` flag
-  was added to it, since a second JSON surface for the same fact is exactly
-  the duplication that drifts.
+  warning that fires *only* when the URL came from `~/.c1i.yaml` -- never for
+  `--url` or `C1I_URL` -- so no machine-readable signal existed on the two
+  explicit paths, and toolkits that gate writes on "confirm the tenant first"
+  had to `sed` that warning line. `c1i auth whoami --url <tenant> --fields
+  tenant` is now the check. The keys are emitted only after the credentials
+  are proven against that tenant, so an auth failure still exits 3 with no
+  tenant rather than naming a target the caller cannot reach; `tenant` is
+  always the client-resolved URL, including under `--verbose`, so the check
+  reads the same in either mode. `auth status`'s text output is unchanged --
+  anything parsing it keeps working -- and no `--json` flag was added to it,
+  since a second JSON surface for the same fact is exactly the duplication
+  that drifts. Docs updated: `cmd/agents.md`, `README.md`, `cmd/docs_guide.go`.
 
 - **`apps owners`, `apps add-owner`, and `apps remove-owner`.** `apps get`'s
   `appOwners` field was empty on every app checked, while `GET .../owners`
@@ -161,6 +163,13 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   erasing it. `apps delete`'s own help text claimed its endpoint was absent
   from the OpenAPI spec; it is published (`DELETE /api/v1/apps/{id}`, operation
   `c1.api.app.v1.Apps.Delete`), so that sentence is gone from the help too.
+
+- **`auth whoami` no longer reports success on an empty introspect body.** A
+  200 whose body is `null` unmarshals into a nil map without error, so the
+  command printed a summary of nulls (`userId: null`) and exited 0 -- a
+  pre-write check reading "confirmed" off a response carrying no identity at
+  all. It is now a `nonJSONResponseError` (exit 6, "C1 failed"), matching the
+  other unusable-200 cases, in both plain and `--verbose` output.
 
 - **`apps set-owners` no longer claims new owners appear in `apps get`'s
   `appOwners` field.** Measured against a live tenant, `appOwners` was empty
