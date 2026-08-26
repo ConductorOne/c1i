@@ -45,6 +45,29 @@ you're pointed at (it prints the base URL) and `c1i auth whoami` to confirm
 which identity you're acting as (userId, principleId, email, displayName —
 no tenant URL in its output) before doing anything else.
 
+## Global flags
+
+These flags work on every command, each with an env-var twin. Set the env var to
+apply it for a whole session; the flag wins for a single invocation.
+
+| Flag | Env | What it does |
+|---|---|---|
+| `--url` | `C1I_URL` | tenant host — see above |
+| `--fields` | `C1I_FIELDS` | comma-separated dot-paths to keep in JSON output — see "Reading output" |
+| `--dry-run` | `C1I_DRY_RUN` | preview a mutating request's method, path, and body without sending it |
+| `--debug` | `C1I_DEBUG` | trace every HTTP request (method, URL, status, timing) to stderr |
+| `--max-retries` | `C1I_MAX_RETRIES` | retries for transient API failures (`429`/`5xx`); `0` disables |
+| `--error-format` | `C1I_ERROR_FORMAT` | `text` (default) or `json` |
+
+`--error-format json` is the one worth setting by default if you parse
+failures: instead of `Error: <prose>` on stderr you get one JSON object,
+`{"error": ...}`, carrying `status`, `method`, `path`, and the response `body`
+when the failure came from the API. Still branch on the exit code — the JSON is
+for the detail, not the classification.
+
+`--debug` and `--max-retries` apply to the REST commands. `mcp gateway` calls
+go through a separate HTTP client that honors neither.
+
 ## Choosing a command
 
 Prefer a first-class command (`users get`, `mcp servers register`, `grants
@@ -84,7 +107,11 @@ take `pageSize`/`pageToken` (camelCase) in the body; response pagination is
 always `nextPageToken`. List/search responses wrap items under `"list"` —
 except the MCP admin endpoints (`mcp_tools`, `mcp_toolsets`,
 `tool_bindings`), which use a resource-named key (`"tools"`, `"profiles"`,
-`"bindings"`) instead. The UI's "campaign" is the API's access review — a
+`"bindings"`) instead. `--paginate` unwraps whichever field it finds, but pass
+`--list-key <field>` to name it yourself rather than hand-rolling the loop when
+auto-detection picks the wrong array. GET and DELETE refuse a body by default;
+the few endpoints that need one on DELETE (e.g. `remove-membership`) want
+`--allow-delete-body`. The UI's "campaign" is the API's access review — a
 campaign ID from a URL is the access review `id` directly.
 
 ## Reading output
@@ -169,7 +196,11 @@ Two things are irreversible in ways their `--help` doesn't make obvious:
   field -- observed empty on every app checked in testing. `apps owners` also
   returns zero rows at exit 0 for a well-formed but nonexistent app id, so an
   empty result is either "no owners" or "wrong id"; `apps add-owner` on the
-  same id exits 4.
+  same id exits 4. Don't write your own poll loop for this: `apps set-owners`
+  takes `--wait` (with `--wait-timeout`, default `4m`) and blocks until every
+  requested owner appears. A `--wait` timeout exits `1` and does not mean the
+  write failed — provisioning may still be in flight, so re-check with
+  `apps owners` instead of re-issuing the write.
 - `accounts list --unmapped-only` filters after each page is fetched, not
   server-side. With `--page-token` (which turns off auto-pagination) a page
   can come back empty while unmapped accounts exist further along.

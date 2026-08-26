@@ -25,6 +25,25 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- **Flags that shipped undocumented are now documented, and a guard keeps it
+  that way.** Five flags were reachable from `--help` but named in neither
+  README.md nor `cmd/agents.md`: `apps set-owners --wait`/`--wait-timeout`,
+  `auth token --json`, and `mcp servers register --token-sharing`/
+  `--source-app-id`. An agent that can't find a flag rebuilds it by hand --
+  a hand-rolled pagination loop where `--paginate` would have done, a
+  hand-rolled MCP registration where `--tool-prefix` would have. All five are
+  now documented. `cmd/agents.md` also gained a "Global flags" section: the
+  agent-facing index named only three of the six persistent flags, leaving
+  `--debug`, `--max-retries`, and `--error-format` discoverable from the
+  README alone. It now also points at `--list-key` and `--allow-delete-body`
+  next to the `c1i api` conventions they apply to.
+
+  `TestEveryFlagIsDocumented` (`cmd/flag_docs_coverage_test.go`) fails CI on
+  any long flag absent from both docs, and
+  `TestGlobalFlagsDocumentedInAgentsDoc` holds the persistent flags to both.
+  Matching is boundary-anchored, so `--wait` is not satisfied by a doc that
+  only mentions `--wait-timeout`. The exemption map is empty.
+
 - **`apps set-owners` no longer claims new owners appear in `apps get`'s
   `appOwners` field.** Measured against a live tenant, `appOwners` was empty
   on every app checked -- all 47, spanning 45 connector-managed apps across

@@ -135,6 +135,14 @@ tracked root file outside its allowlist. Stage explicit paths rather than `-A`.
   accepts 0 and the documented count; a command documenting none must not
   require one. Rejecting a *stray* positional is the guard's job, not the
   test's.
+- **A new flag must be named in a top-level doc (enforced convention):**
+  `TestEveryFlagIsDocumented` (`cmd/flag_docs_coverage_test.go`) walks the tree
+  and fails CI on any long flag absent from **both** README.md and
+  `cmd/agents.md`; `TestGlobalFlagsDocumentedInAgentsDoc` holds rootCmd's
+  persistent flags to both docs, since they apply everywhere. This exists
+  because agents rebuild by hand what a flag already does when no doc names it.
+  Exemptions go in `flagDocExemptions` with a reason — documenting the flag in
+  one line is almost always the better fix.
 - **API client:** build it with `newClient(cmd, baseURL)` (cmd/client.go), not
   `client.New` directly — the helper threads the global flags (retries, etc.).
 - **Paths:** interpolate IDs into request paths with `client.Path("…/%s", id)`,
