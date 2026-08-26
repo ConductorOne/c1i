@@ -397,9 +397,14 @@ of anything specific to what you're about to model.
 
 "--wait" polls "GET .../ownerids" until the owner appears (or times out) and
 prints "Owners provisioned on app ... after ...". Without "--wait", the PUT
-returns immediately but the owner takes a couple of minutes to show up in
-"GET .../ownerids" -- see "Verify" below for why "apps get"'s "appOwners"
-field is not the way to check this.
+returns immediately but the owner takes roughly 96-129s to show up in
+"GET .../ownerids" (four measured writes; a fifth had not landed at 108s) --
+see "Verify" below for why "apps get"'s "appOwners" field is not the way to
+check this.
+
+Note "set-owners" REPLACES the list with exactly the ids you pass, and
+"apps create" auto-assigns its caller as an owner: passing only "$OWNER_USER_ID"
+here removes yourself. Use "apps add-owner" instead to add without replacing.
 
 ### 3. Create a custom entitlement to grant
 
@@ -437,13 +442,18 @@ Full object; isManuallyManaged is true.
 For owners, don't trust the appOwners field embedded in the app object (from
 "c1i apps get <id>") as the source of truth: in testing across every app in
 a tenant, it never populated, even long after "apps set-owners --wait" had
-already reported success. Check the raw owner list instead, which is what
-"--wait" itself polls:
+already reported success. Check the owner list instead:
 
-    c1i api --path=/api/v1/apps/$APP_ID/ownerids
+    c1i apps owners "$APP_ID"
 
-Expect your "$OWNER_USER_ID" in userIds within a couple of minutes (already
-satisfied if you used "--wait").
+Expect a row with id "$OWNER_USER_ID" within a couple of minutes. NDJSON,
+auto-paginated -- pipe to jq to isolate the one row you're looking for.
+
+"--wait" polls a different read of the same owner data (".../ownerids"), so it
+confirms that view rather than this one. In testing the two converged in the
+same 10s sample of one write -- both empty through 97s, both populated at
+108s -- but that is an observation, not a guarantee, so check here if it
+matters.
 
 ## Common failures
 
@@ -454,6 +464,9 @@ satisfied if you used "--wait").
   well-formed but wrong app id -> the search endpoint doesn't validate the
   app exists -> confirm the id with "c1i apps get <id>" (a real 404 there
   exits 4).
+- "apps owners <id>" returns nothing at exit 0 for a well-formed but wrong
+  app id -> that endpoint answers 200 with an empty list -> confirm with
+  "c1i apps get <id>" or "apps add-owner", both of which exit 4.
 - "c1i apps get <id>" on a deleted or never-existed app -> 404 -> exit 4.
 - Building a SaaS-backed connector (Salesforce, Okta, Google Workspace, ...)
   by hand through "c1i api" instead of following this runbook -> don't:

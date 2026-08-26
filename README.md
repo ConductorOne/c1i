@@ -51,7 +51,19 @@ c1i users get <user-id>
 ```sh
 c1i apps list [--page-size N] [--page-token TOKEN] [--limit N]
 c1i apps get <app-id>
+c1i apps owners <app-id> [--page-size N] [--page-token TOKEN] [--limit N]
+c1i apps add-owner <user-id> --app-id <id>
+c1i apps remove-owner <user-id> --app-id <id>
 ```
+
+`apps owners` is the read that reflects what `apps add-owner`,
+`apps remove-owner` and `apps set-owners` write, and lags a write by roughly
+45-150s (owner provisioning is asynchronous). It returns zero rows at exit 0
+for a well-formed but nonexistent app id, so an empty result can also mean
+"wrong id". `apps add-owner` and `apps remove-owner` change one owner at a
+time; two `add-owner` calls issued at once were both observed to land.
+`apps set-owners` replaces the whole list with exactly the ids you pass, so an
+owner added between your read and your write is silently removed.
 
 ### Accounts
 

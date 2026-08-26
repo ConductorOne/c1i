@@ -6,6 +6,23 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- **`apps owners`, `apps add-owner`, and `apps remove-owner`.** `apps get`'s
+  `appOwners` field was empty on every app checked, while `GET .../owners`
+  returns the owners `apps set-owners` had already written, but reading
+  it meant hand-rolling `c1i api --path=...`, and adding a single owner meant
+  a read-modify-write through `set-owners` -- which PUTs the full list and can
+  silently drop a concurrent change. `apps owners <app-id>` lists owners
+  (NDJSON, auto-paginated); `apps add-owner <user-id> --app-id <id>` and
+  `apps remove-owner <user-id> --app-id <id>` change one owner at a time via
+  POST/DELETE `.../owners/{user_id}`, so they do not read-modify-write the
+  list the way `set-owners` does. Both writes honor `--dry-run`; `apps owners`
+  is a read, so the flag is a no-op there. Owner writes remain asynchronous:
+  45-150s to show up in `apps owners`, measured across `set-owners`,
+  `add-owner`, `remove-owner` and the owner `apps create` assigns (the
+  narrower 96-129s below is `set-owners` alone).
+
 ### Fixed
 
 - **`apps set-owners` no longer claims new owners appear in `apps get`'s
@@ -13,9 +30,12 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   on every app checked -- all 47, spanning 45 connector-managed apps across
   three access models plus apps created for the test -- while 46 of those 47
   had owners in `GET .../ownerids`. That read -- the one that does converge --
-  takes 96-129s (five timed writes), not the previously documented ~60-90s.
+  takes 96-129s across four converged writes -- a fifth was still pending at
+  108s -- not the previously documented ~60-90s.
   Updated the command's help text and success message, `cmd/docs_guide.go`,
-  and `cmd/agents.md` to point at `ownerids` and drop the `appOwners` claim.
+  and `cmd/agents.md` to drop the `appOwners` claim and point at the owner
+  reads that do work (`apps owners`, added above; `ownerids` in the
+  `set-owners` help, which is the read `--wait` polls).
 
 ## [0.5.0] - 2026-08-21
 
