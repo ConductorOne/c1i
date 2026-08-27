@@ -113,6 +113,16 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   stays pure NDJSON. It is rejected with `--page-token` (a pinned cursor is not
   a stable set) and with `--wait-stable` below 2.
 
+  `--wait-min` sets a floor on how many grants must be present before the wait
+  can settle (default `0` = today's behavior). It exists because an empty
+  result is perfectly stable: a filter matching nothing settles at the first
+  opportunity, roughly 10s at the defaults, and exits `0` with zero rows. Run
+  right after a grant -- the workflow `--wait` advertises -- that reads as "it
+  did not happen" when the truth is "not yet", since provisioning runs about a
+  minute. The default stays `0` because empty-and-stable is the *correct*
+  answer when waiting for a revoke; `--wait-min 1` is how you say which of the
+  two you meant.
+
   The default is 3, not 2, deliberately. Two equal reads cannot be told apart
   from a pause mid-change. The case that motivated it is reported from the
   field rather than measured here: MCP tool discovery streams (0 -> 40 -> 101
@@ -303,7 +313,8 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   was written for `apps set-owners` and was the only polling loop in `cmd/`;
   it is now `runWait(cmd, waitOp{...})` with a pluggable `Done` predicate, plus
   `addWaitFlags` so `--wait`/`--wait-timeout` are declared identically
-  everywhere. `apps set-owners` behavior, output, and help text are unchanged.
+  everywhere. `apps set-owners` behavior and output are unchanged -- its
+  `appOwners` wording was corrected separately, see Fixed above.
 
   Two predicates ship: `untilPresent` (what `set-owners` always did -- every
   requested id has shown up) and `untilStable` (the polled value held steady

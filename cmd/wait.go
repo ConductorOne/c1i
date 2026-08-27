@@ -155,6 +155,26 @@ func untilStable[T comparable](n int) func(T) bool {
 	}
 }
 
+// stableAndAtLeast gates a stability predicate behind a floor: the value must
+// hold steady AND clear floor before the wait settles. It exists because
+// "stopped changing" alone answers "did my write land?" with a confident,
+// fast "no" -- an empty result is perfectly stable, so a query matching
+// nothing settles at the first opportunity and exits 0 with no rows, which
+// reads as "it did not happen" rather than "it has not happened yet".
+//
+// key extracts the comparable part untilStable settles on; floor is checked
+// against the whole value. The stability predicate is fed on EVERY poll, before
+// the floor is consulted: writing this as "floor(v) && stable(key(v))" would
+// short-circuit past a stateful predicate on any poll below the floor, so a set
+// that dipped below it and came back would look like it never changed.
+func stableAndAtLeast[T any, K comparable](n int, key func(T) K, floor func(T) bool) func(T) bool {
+	stable := untilStable[K](n)
+	return func(v T) bool {
+		settled := stable(key(v))
+		return settled && floor(v)
+	}
+}
+
 // waitTimeoutFlagUsage is --wait-timeout's help text everywhere. Shared
 // because the pair's wording has drifted between commands before;
 // TestWaitFlagsAreRegisteredIdentically fails CI if a command hand-rolls it.

@@ -124,7 +124,7 @@ func grantsWaitServer(t *testing.T, reads [][][2]string) (*httptest.Server, *int
 	return srv, &fullReads
 }
 
-func runGrantsWait(t *testing.T, srv *httptest.Server, stableReads int, timeout time.Duration) ([]grantListItem, string, string, error) {
+func runGrantsWait(t *testing.T, srv *httptest.Server, stableReads, minGrants int, timeout time.Duration) ([]grantListItem, string, string, error) {
 	t.Helper()
 	c := client.NewForTesting(srv.URL, srv.Client())
 	cmd := &cobra.Command{Use: "list"}
@@ -137,7 +137,7 @@ func runGrantsWait(t *testing.T, srv *httptest.Server, stableReads int, timeout 
 	grantsWaitPollInterval = 5 * time.Millisecond
 	t.Cleanup(func() { grantsWaitPollInterval = origInterval })
 
-	items, err := waitForGrants(cmd, c, grantsQuery{appID: "app1"}, 50, stableReads, timeout)
+	items, err := waitForGrants(cmd, c, grantsQuery{appID: "app1"}, 50, stableReads, minGrants, timeout)
 	return items, out.String(), errOut.String(), err
 }
 
@@ -151,7 +151,7 @@ func TestWaitForGrantsSettles(t *testing.T) {
 		{{"e1", "u1"}, {"e2", "u2"}},
 		{{"e1", "u1"}, {"e2", "u2"}},
 	})
-	items, out, errOut, err := runGrantsWait(t, srv, 3, 10*time.Second)
+	items, out, errOut, err := runGrantsWait(t, srv, 3, 0, 10*time.Second)
 	if err != nil {
 		t.Fatalf("waitForGrants returned %v, want nil", err)
 	}
@@ -178,7 +178,7 @@ func TestWaitForGrantsTimesOut(t *testing.T) {
 		reads = append(reads, [][2]string{{"e1", "u1"}, {fmt.Sprintf("e%d", i+2), "u2"}})
 	}
 	srv, _ := grantsWaitServer(t, reads)
-	items, out, _, err := runGrantsWait(t, srv, 3, 40*time.Millisecond)
+	items, out, _, err := runGrantsWait(t, srv, 3, 0, 40*time.Millisecond)
 	if err == nil {
 		t.Fatal("waitForGrants returned nil, want a timeout error")
 	}
@@ -305,6 +305,7 @@ func TestGrantsListWaitUsageErrors(t *testing.T) {
 		{"page-token", map[string]string{"app-id": "app1", "wait": "true", "page-token": "tok"}, "--wait cannot be combined with --page-token"},
 		{"wait-stable below 2", map[string]string{"app-id": "app1", "wait": "true", "wait-stable": "1"}, "--wait-stable must be at least 2"},
 		{"wait-stable can never fit in wait-timeout", map[string]string{"app-id": "app1", "wait": "true", "wait-stable": "4", "wait-timeout": "10s"}, "can never allow"},
+		{"negative wait-min", map[string]string{"app-id": "app1", "wait": "true", "wait-min": "-1"}, "--wait-min cannot be negative"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -322,5 +323,89 @@ func TestGrantsListWaitUsageErrors(t *testing.T) {
 				t.Errorf("err = %q, want it to contain %q", err.Error(), tc.want)
 			}
 		})
+	}
+}
+
+// TestWaitForGrantsSettlesEmptyWithoutAMinimum is the reproduction, kept as a
+// test so the default's behavior is a choice on record and not an accident: an
+// empty result IS stable, so with no floor the wait settles fast and exits 0
+// with zero rows. That is correct for a revoke and wrong for a grant, which is
+// what --wait-min exists to say.
+func TestWaitForGrantsSettlesEmptyWithoutAMinimum(t *testing.T) {
+	srv, fullReads := grantsWaitServer(t, [][][2]string{nil})
+	items, _, errOut, err := runGrantsWait(t, srv, 3, 0, 10*time.Second)
+	if err != nil {
+		t.Fatalf("wait returned %v, want nil (empty-and-stable is a settle)", err)
+	}
+	if len(items) != 0 {
+		t.Errorf("settled on %d grants, want 0", len(items))
+	}
+	if got := atomic.LoadInt32(fullReads); got != 3 {
+		t.Errorf("made %d full reads, want 3 (it settles as soon as the streak fills)", got)
+	}
+	if !strings.Contains(errOut, "Grants settled after ") {
+		t.Errorf("stderr missing the success line:\n%s", errOut)
+	}
+}
+
+// TestWaitForGrantsMinimumOutwaitsAnEmptySet is the fix: with --wait-min the
+// wait must NOT settle on the empty reads that precede the grant landing, and
+// must return the grant once it appears.
+func TestWaitForGrantsMinimumOutwaitsAnEmptySet(t *testing.T) {
+	// Empty for the first four reads, then the grant lands and holds.
+	reads := [][][2]string{nil, nil, nil, nil,
+		{{"e1", "u1"}}, {{"e1", "u1"}}, {{"e1", "u1"}}}
+	srv, _ := grantsWaitServer(t, reads)
+	items, _, _, err := runGrantsWait(t, srv, 3, 1, 10*time.Second)
+	if err != nil {
+		t.Fatalf("wait returned %v, want nil", err)
+	}
+	if len(items) != 1 {
+		t.Fatalf("settled on %d grants, want 1; an empty prefix was accepted", len(items))
+	}
+}
+
+// TestWaitForGrantsMinimumTimesOutRatherThanSettlingEmpty pins the other half:
+// if the grant never lands, --wait-min must produce a timeout, not a confident
+// empty success.
+func TestWaitForGrantsMinimumTimesOutRatherThanSettlingEmpty(t *testing.T) {
+	srv, _ := grantsWaitServer(t, [][][2]string{nil})
+	items, out, _, err := runGrantsWait(t, srv, 3, 1, 40*time.Millisecond)
+	if err == nil {
+		t.Fatal("wait returned nil; an unmet --wait-min must time out, not settle empty")
+	}
+	if items != nil {
+		t.Errorf("returned %d grants, want none", len(items))
+	}
+	if out != "" {
+		t.Errorf("wrote to stdout despite not settling:\n%s", out)
+	}
+	if !strings.Contains(err.Error(), "at least 1 matching grant(s) to appear and stop changing") {
+		t.Errorf("timeout error %q does not say the minimum was the unmet condition", err.Error())
+	}
+}
+
+// TestStableAndAtLeastFeedsStabilityOnEveryPoll pins the ordering rule the
+// combinator exists for. The set dips below the floor and comes back to the
+// SAME value; short-circuiting past the stateful predicate on the low poll
+// would hide that dip and settle on a stale streak.
+func TestStableAndAtLeastFeedsStabilityOnEveryPoll(t *testing.T) {
+	done := stableAndAtLeast(
+		3,
+		func(n int) int { return n },
+		func(n int) bool { return n >= 1 },
+	)
+	// 5,5 builds a streak of 2; the 0 must reset it; the run after must build
+	// a fresh streak of 3, so the first true is the final read.
+	seq := []int{5, 5, 0, 5, 5, 5}
+	firstTrue := -1
+	for i, v := range seq {
+		if done(v) {
+			firstTrue = i
+			break
+		}
+	}
+	if firstTrue != 5 {
+		t.Errorf("first satisfied at index %d over %v, want 5; the dip below the floor was not fed to the stability predicate", firstTrue, seq)
 	}
 }

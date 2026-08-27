@@ -406,19 +406,29 @@ func TestWaitForOwnersAPIErrorOverHTTP(t *testing.T) {
 	}
 }
 
+// wantWaitTimeoutDefaults is every command that declares --wait, with the
+// --wait-timeout default it ships. Routing one value through a shared helper is
+// exactly when a default gets "tidied" uniformly across callers, so each is
+// pinned by name here; a new --wait caller has to add itself.
+var wantWaitTimeoutDefaults = map[string]time.Duration{
+	"c1i apps set-owners": 4 * time.Minute,
+	"c1i grants list":     4 * time.Minute,
+}
+
 // TestWaitFlagsAreRegisteredIdentically walks the whole command tree and
 // fails if any --wait pair was hand-rolled instead of going through
 // addWaitFlags. The pair's help text has drifted between commands before;
-// this is the guard that keeps one wording.
+// this is the guard that keeps one wording -- and, via
+// wantWaitTimeoutDefaults, one set of defaults.
 func TestWaitFlagsAreRegisteredIdentically(t *testing.T) {
 	var walk func(*cobra.Command)
-	seen := 0
+	seen := map[string]bool{}
 	walk = func(c *cobra.Command) {
 		waitFlag := c.Flags().Lookup("wait")
 		timeoutFlag := c.Flags().Lookup("wait-timeout")
 		if waitFlag != nil || timeoutFlag != nil {
-			seen++
 			path := c.CommandPath()
+			seen[path] = true
 			if waitFlag == nil || timeoutFlag == nil {
 				t.Errorf("%s declares only one of --wait/--wait-timeout; use addWaitFlags", path)
 			} else {
@@ -428,8 +438,17 @@ func TestWaitFlagsAreRegisteredIdentically(t *testing.T) {
 				if timeoutFlag.Usage != waitTimeoutFlagUsage {
 					t.Errorf("%s --wait-timeout usage %q drifted from %q", path, timeoutFlag.Usage, waitTimeoutFlagUsage)
 				}
-				if d, err := time.ParseDuration(timeoutFlag.DefValue); err != nil || d <= 0 {
+				d, err := time.ParseDuration(timeoutFlag.DefValue)
+				switch {
+				case err != nil || d <= 0:
 					t.Errorf("%s --wait-timeout default %q must be a positive duration", path, timeoutFlag.DefValue)
+				default:
+					want, pinned := wantWaitTimeoutDefaults[path]
+					if !pinned {
+						t.Errorf("%s declares --wait but is not in wantWaitTimeoutDefaults; add it with the default it ships", path)
+					} else if d != want {
+						t.Errorf("%s --wait-timeout default = %s, want %s", path, d, want)
+					}
 				}
 			}
 		}
@@ -438,8 +457,13 @@ func TestWaitFlagsAreRegisteredIdentically(t *testing.T) {
 		}
 	}
 	walk(rootCmd)
-	if seen == 0 {
+	if len(seen) == 0 {
 		t.Fatal("found no --wait flags in the command tree; this guard is inert")
+	}
+	for path := range wantWaitTimeoutDefaults {
+		if !seen[path] {
+			t.Errorf("wantWaitTimeoutDefaults names %q, which no longer declares --wait", path)
+		}
 	}
 }
 

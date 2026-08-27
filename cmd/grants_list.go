@@ -102,10 +102,18 @@ re-reads every page of the match, and once the same grants come back
 until it settles, unlike the default streaming output; progress goes to stderr,
 so stdout stays pure NDJSON.
 
+AN EMPTY RESULT IS STABLE. A filter matching nothing settles at the first
+opportunity -- roughly 10s at the defaults -- and exits 0 with zero rows. If
+you are waiting for a grant you just made, that reads as "it did not happen"
+when the truth is "not yet": provisioning runs about a minute. Pass
+--wait-min 1 (or the count you expect) to make the wait hold out for that many
+grants and time out instead of settling empty. The default of 0 is deliberate:
+empty-and-stable is the correct answer when you are waiting for a revoke.
+
 --wait settles on the WHOLE matching set, so it fetches every page on every
 poll regardless of --limit; --limit only truncates what is printed at the end.
-Filter narrowly. The poll interval is fixed at 5s -- --wait-stable and
---wait-timeout are the tunable parts.
+Filter narrowly. The poll interval is fixed at 5s -- --wait-stable, --wait-min
+and --wait-timeout are the tunable parts.
 
 --wait-stable defaults to 3 rather than 2 because two equal reads cannot be
 told apart from a pause mid-change. Even 3 is a heuristic, not a proof: on a
@@ -128,7 +136,11 @@ set that keeps changing, --wait times out rather than printing anything.`,
 			return err
 		}
 		stableReads := getIntFlag(cmd, "wait-stable")
+		minGrants := getIntFlag(cmd, "wait-min")
 		if wait {
+			if minGrants < 0 {
+				return &usageError{fmt.Errorf("--wait-min cannot be negative")}
+			}
 			if cmd.Flags().Changed("page-token") {
 				// --page-token pins one page of a cursor the server is free to
 				// re-issue as the set changes; "the same page twice" would not
@@ -166,7 +178,7 @@ set that keeps changing, --wait times out rather than printing anything.`,
 		q := grantsQuery{appID: appID, userID: userID, appUserID: appUserID, entitlementID: entitlementID}
 
 		if wait {
-			settled, err := waitForGrants(cmd, c, q, requestedPageSize, stableReads, waitTimeout)
+			settled, err := waitForGrants(cmd, c, q, requestedPageSize, stableReads, minGrants, waitTimeout)
 			if err != nil {
 				return err
 			}
@@ -307,8 +319,12 @@ func fetchAllGrants(ctx context.Context, c *client.Client, q grantsQuery, pageSi
 
 // waitForGrants blocks until the matching grant set comes back identical
 // stableReads times running, and returns that settled set.
-func waitForGrants(cmd *cobra.Command, c *client.Client, q grantsQuery, pageSize, stableReads int, timeout time.Duration) ([]grantListItem, error) {
-	stable := untilStable[string](stableReads)
+func waitForGrants(cmd *cobra.Command, c *client.Client, q grantsQuery, pageSize, stableReads, minGrants int, timeout time.Duration) ([]grantListItem, error) {
+	done := stableAndAtLeast(
+		stableReads,
+		func(s grantsSnapshot) string { return s.fingerprint },
+		func(s grantsSnapshot) bool { return len(s.items) >= minGrants },
+	)
 	settled, err := runWait(cmd, waitOp[grantsSnapshot]{
 		Poll: func(ctx context.Context) (grantsSnapshot, error) {
 			items, err := fetchAllGrants(ctx, c, q, pageSize)
@@ -317,10 +333,10 @@ func waitForGrants(cmd *cobra.Command, c *client.Client, q grantsQuery, pageSize
 			}
 			return grantsSnapshot{fingerprint: grantSetFingerprint(items), items: items}, nil
 		},
-		Done:     func(s grantsSnapshot) bool { return stable(s.fingerprint) },
+		Done:     done,
 		Interval: grantsWaitPollInterval,
 		Timeout:  timeout,
-		Subject:  "the matching grants to stop changing",
+		Subject:  grantsWaitSubject(minGrants),
 		Success:  "Grants settled",
 		Slow:     "grant provisioning can take several minutes",
 		Recheck:  "c1i grants list " + strings.Join(q.rescanFlags(), " "),
@@ -332,6 +348,15 @@ func waitForGrants(cmd *cobra.Command, c *client.Client, q grantsQuery, pageSize
 		return nil, err
 	}
 	return settled.items, nil
+}
+
+// grantsWaitSubject names what the wait is for, so the progress and timeout
+// lines say which of the two conditions is outstanding.
+func grantsWaitSubject(minGrants int) string {
+	if minGrants > 0 {
+		return fmt.Sprintf("at least %d matching grant(s) to appear and stop changing", minGrants)
+	}
+	return "the matching grants to stop changing"
 }
 
 // rescanFlags reproduces the filters this query was built from, so the
@@ -359,5 +384,6 @@ func init() {
 	addPaginationFlags(grantsListCmd)
 	addWaitFlags(grantsListCmd, "every page until the same grants come back --wait-stable times running", 4*time.Minute)
 	grantsListCmd.Flags().Int("wait-stable", 3, "Consecutive identical reads --wait requires before printing (min 2)")
+	grantsListCmd.Flags().Int("wait-min", 0, "Minimum matching grants --wait requires before it can settle (0 = an empty result may settle)")
 	grantsCmd.AddCommand(grantsListCmd)
 }
