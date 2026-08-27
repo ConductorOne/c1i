@@ -179,6 +179,32 @@ success or a generic error, so a script that branched on them needs a look:
 
 ### Changed
 
+- **BREAKING: every typed `get` now prints the resource itself, not the API's
+  wrapper object.** Before, `apps get <id>` printed
+  `{"app":{"id":"…",…}}` and `users get <id>` printed
+  `{"userView":{"user":{"id":"…",…},…},"expanded":[…]}`, so `jq -r .id`
+  returned `null` at exit 0 on all twelve of them, while every `list` row
+  already exposed a flat `.id`. The resource's own fields are now at the top
+  level: `jq -r .id` works, and `--fields id` yields `{"id":"…"}` instead of
+  rebuilding the wrapper as `{"app":{"id":"…"}}`. **Anyone reading `.app.id`,
+  `.userView.user.id`, `.policy.id`, `.taskView.task.id`,
+  `.appEntitlementView.appEntitlement.id`, `.mcpServer.connectorId`,
+  `.tool.id`, `.profile.id`, `.catalogEntry.id`, `.automation.id`,
+  `.function.id` must now read `.id` (`.connectorId` for `mcp servers get`,
+  whose resource has no `id` field at all).** Affected:
+  `apps|policies|automations|functions|users|requests|entitlements get`,
+  `mcp servers get`, `mcp tools get`, `mcp toolsets get`,
+  `mcp toolsets get-by-entitlement`, `mcp servers catalog get`. Nothing is
+  dropped: everything the envelope carried beside the resource -- `expanded`
+  on the three `*View` responses, plus their `objectPermissions`, `userId`,
+  and `*Path` keys -- is preserved as a top-level sibling, so
+  `.expanded` is now read at the top level too. Naming a wrapper key in
+  `--fields` is correspondingly gone: `users get <id> --fields userView` is now
+  a zero-match usage error (exit 2), because that key is no longer in the
+  output. An unrecognized response shape is passed through unchanged rather
+  than partially unwrapped. Mutation output is unaffected: `apps create` still
+  answers under an `app` key, so `jq -r .app.id` remains correct there.
+
 - **`--page-size` now says it is a request, not a promise, and every list
   command says it the same way.** Measured against a live tenant, one page of
   `apps list --page-size 10` returned 23 rows, `--page-size 25` returned 42,
