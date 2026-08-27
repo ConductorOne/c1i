@@ -664,18 +664,18 @@ from a "c1i tasks list" row, a notification, or the output of
        c1i requests get "$TASK_ID"
 
    In the JSON, check:
-   - taskView.task.policy.policy.displayName / .id — which policy is
+   - .policy.policy.displayName / .id — which policy is
      driving this task. (An entitlement's own grantPolicyId/revokePolicyId
      can be empty — inherited from the app's default (see
      "c1i apps get <app-id>") — so don't infer the governing policy from
      the entitlement alone; the task view always has the resolved one.)
-   - taskView.task.policy.current.id — the step this task is on right now.
+   - .policy.current.id — the step this task is on right now.
      This is exactly the value tasks approve/deny send as policyStepId.
-   - taskView.task.policy.next — steps still to come. Empty means your
+   - .policy.next — steps still to come. Empty means your
      approval, if it's the last one, closes the task; non-empty means
      another step (often another approver) follows.
-   - taskView.task.stepApproverIds — user ids allowed to act on this step.
-   - taskView.task.actions — what YOU specifically can do on this task
+   - .stepApproverIds — user ids allowed to act on this step.
+   - .actions — what YOU specifically can do on this task
      right now. If TASK_ACTION_TYPE_APPROVE (or _DENY) isn't listed, don't
      call approve/deny — it will be rejected even though you can read the
      task, and even if you're the requester.
@@ -705,7 +705,7 @@ from a "c1i tasks list" row, a notification, or the output of
 
     c1i requests get "$TASK_ID"
 
-Check taskView.task.state, not outcome, for whether anything is still
+Check .state, not outcome, for whether anything is still
 pending. outcome is omitted while it sits at *_OUTCOME_UNSPECIFIED; the
 NDJSON views ("tasks list", "requests list") drop the key entirely in that
 case rather than print the sentinel. Its absence there means "no result

@@ -189,13 +189,29 @@ func lookupPath(m map[string]any, path []string) ([]string, any, bool) {
 // a JSON tree always differ in at least one *segment*, even when their
 // dotted-string joins coincide.
 func lookupPathAnyDepth(m map[string]any, path []string) ([]string, any, bool) {
+	matches := matchesPathAnyDepth(m, path)
+	if len(matches) == 0 {
+		return nil, nil, false
+	}
+	return matches[0].path, matches[0].val, true
+}
+
+// pathMatch is one place a depth-insensitive search resolved a path: the full
+// segment path from the searched root, and the value there.
+type pathMatch struct {
+	path []string
+	val  any
+}
+
+// matchesPathAnyDepth is the search lookupPathAnyDepth describes, returning
+// EVERY match at the shallowest depth that has one, sorted by lessPath.
+// lookupPathAnyDepth takes the first; unwrapEnvelope (cmd/unwrap.go) instead
+// refuses a set with more than one, since a same-depth tie there would promote
+// the wrong object to the top level.
+func matchesPathAnyDepth(m map[string]any, path []string) []pathMatch {
 	type node struct {
 		prefix []string
 		obj    map[string]any
-	}
-	type found struct {
-		full []string
-		val  any
 	}
 	prefixed := func(prefix []string, seg string) []string {
 		next := make([]string, len(prefix)+1)
@@ -211,12 +227,12 @@ func lookupPathAnyDepth(m map[string]any, path []string) ([]string, any, bool) {
 		}
 	}
 	for len(level) > 0 {
-		var matches []found
+		var matches []pathMatch
 		var next []node
 		for _, n := range level {
 			if matched, val, ok := lookupPath(n.obj, path); ok {
 				full := append(append([]string{}, n.prefix...), matched...)
-				matches = append(matches, found{full, val})
+				matches = append(matches, pathMatch{full, val})
 			}
 			for k, v := range n.obj {
 				if sub, ok := v.(map[string]any); ok {
@@ -226,13 +242,13 @@ func lookupPathAnyDepth(m map[string]any, path []string) ([]string, any, bool) {
 		}
 		if len(matches) > 0 {
 			sort.Slice(matches, func(i, j int) bool {
-				return lessPath(matches[i].full, matches[j].full)
+				return lessPath(matches[i].path, matches[j].path)
 			})
-			return matches[0].full, matches[0].val, true
+			return matches
 		}
 		level = next
 	}
-	return nil, nil, false
+	return nil
 }
 
 // lessPath reports whether path a sorts before path b, comparing segment
