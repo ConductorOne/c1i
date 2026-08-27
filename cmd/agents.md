@@ -45,6 +45,45 @@ you're pointed at (it prints the base URL) and `c1i auth whoami` to confirm
 which identity you're acting as (userId, principleId, email, displayName —
 no tenant URL in its output) before doing anything else.
 
+## Global flags
+
+Every command accepts these, each with an env-var twin. Set the env var to
+apply it for a whole session; the flag wins for a single invocation.
+
+| Flag | Env | What it does |
+|---|---|---|
+| `--url` | `C1I_URL` | tenant host — see above |
+| `--fields` | `C1I_FIELDS` | comma-separated dot-paths to keep in JSON output — see "Reading output" |
+| `--dry-run` | `C1I_DRY_RUN` | preview a mutating request's method, path, and body without sending it |
+| `--debug` | `C1I_DEBUG` | trace API HTTP requests (method, URL, status, timing) to stderr |
+| `--max-retries` | `C1I_MAX_RETRIES` | retries for transient API failures (`429`/`5xx`); `0` disables |
+| `--error-format` | `C1I_ERROR_FORMAT` | `text` (default) or `json` |
+
+`--error-format json` is the one worth setting by default if you parse
+failures: instead of `Error: <prose>` on stderr you get one JSON object,
+`{"error": ...}`, carrying `status`, `method`, `path`, and the response `body`
+when the failure came from the API. Still branch on the exit code — the JSON is
+for the detail, not the classification.
+
+`--debug` and `--max-retries` cover `mcp gateway` as well as the REST
+commands: the gateway client threads both into its bearer mint and its
+JSON-RPC calls. On a `mcp gateway call` that hangs or fails oddly, `--debug`
+is the fastest way to see which request stopped.
+
+They do **not** reach the `docs` subcommands that fetch — `docs search`,
+`docs page`, `docs openapi`, `docs endpoints`, `docs endpoint`. Those bypass
+the shared transport for Go's default HTTP client, so `--debug` prints nothing
+and `--max-retries` is ignored. Silent `--debug` output there means the flag
+never reached that path, NOT that no request was sent — don't read it as
+evidence either way when a `docs` command comes back empty.
+
+Nor do those five call the same place, which matters for egress rules and for
+why one can fail while another works: `docs openapi`, `docs endpoints` and
+`docs endpoint` fetch `conductorone.com/docs/openapi.yaml` (cached 24h under
+`~/.c1i/cache/`, so a run can return rows without sending a request at all),
+while `docs search` and `docs page` call a third party — `api.mintlify.com` —
+with a public client-side key.
+
 ## Choosing a command
 
 Prefer a first-class command (`users get`, `mcp servers register`, `grants
@@ -84,7 +123,11 @@ take `pageSize`/`pageToken` (camelCase) in the body; response pagination is
 always `nextPageToken`. List/search responses wrap items under `"list"` —
 except the MCP admin endpoints (`mcp_tools`, `mcp_toolsets`,
 `tool_bindings`), which use a resource-named key (`"tools"`, `"profiles"`,
-`"bindings"`) instead. The UI's "campaign" is the API's access review — a
+`"bindings"`) instead. `--paginate` unwraps whichever field it finds, but pass
+`--list-key <field>` to name it yourself rather than hand-rolling the loop when
+auto-detection picks the wrong array. GET and DELETE refuse a body by default;
+the few endpoints that need one on DELETE (e.g. `remove-membership`) want
+`--allow-delete-body`. The UI's "campaign" is the API's access review — a
 campaign ID from a URL is the access review `id` directly.
 
 ## Reading output
@@ -127,8 +170,9 @@ API redirects to the collection, and the REST client refuses a redirect that
 changes the path, so you get exit 2 instead of a full listing that looks like a
 successful read. It also refuses a same-path redirect to an unrelated host, since
 a followed redirect carries your token. It does follow pure host/scheme
-canonicalization. That guard is REST-only — `mcp gateway` calls go through a
-different HTTP client that follows redirects normally.
+canonicalization. `mcp gateway` is guarded the same way: it is built on
+the same shared transport, which applies the empty-path and redirect checks
+unconditionally.
 
 `6` versus `8`: `6` means C1 itself failed, so waiting and retrying is sensible.
 `8` means C1 answered and something past it did not — a connector is down, or
@@ -169,7 +213,11 @@ Two things are irreversible in ways their `--help` doesn't make obvious:
   field -- observed empty on every app checked in testing. `apps owners` also
   returns zero rows at exit 0 for a well-formed but nonexistent app id, so an
   empty result is either "no owners" or "wrong id"; `apps add-owner` on the
-  same id exits 4.
+  same id exits 4. Don't write your own poll loop for this: `apps set-owners`
+  takes `--wait` (with `--wait-timeout`, default `4m`) and blocks until every
+  requested owner appears. A `--wait` timeout exits `1` and does not mean the
+  write failed — provisioning may still be in flight, so re-check with
+  `apps owners` instead of re-issuing the write.
 - `accounts list --unmapped-only` filters after each page is fetched, not
   server-side. With `--page-token` (which turns off auto-pagination) a page
   can come back empty while unmapped accounts exist further along.

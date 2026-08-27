@@ -51,10 +51,31 @@ c1i users get <user-id>
 ```sh
 c1i apps list [--page-size N] [--page-token TOKEN] [--limit N]
 c1i apps get <app-id>
+c1i apps create --display-name <name> [--description <text>]
 c1i apps owners <app-id> [--page-size N] [--page-token TOKEN] [--limit N]
 c1i apps add-owner <user-id> --app-id <id>
 c1i apps remove-owner <user-id> --app-id <id>
+c1i apps set-owners <app-id> --user-id <id> [--user-id <id> ...] [--wait] [--wait-timeout 4m]
+c1i apps delete <app-id>
 ```
+
+`apps create` needs only `--display-name`; it makes a plain, unmanaged
+container app — the zero state for "make an app, then register MCP servers
+under it". The caller is auto-assigned as an owner, showing up in `apps owners`
+after the usual provisioning lag. The new app comes back as pretty JSON under
+an `app` key, and `--fields` is never applied to mutation output, so read the
+new id from `.app.id` on the full object, not `.id`.
+
+`apps delete` is a soft delete: the app is marked with `deletedAt` rather than
+erased, which is why `apps list` rows carry a `deleted_at` field. Both commands
+honor `--dry-run`.
+
+`apps set-owners` returns as soon as the `PUT` is accepted. Pass `--wait` to
+block and poll `GET .../ownerids` until every requested `--user-id` appears, or
+`--wait-timeout` (default `4m`) elapses. A timeout exits `1` even though the
+write itself was accepted — provisioning can simply still be in flight, so
+re-check with `apps owners` rather than re-issuing the write. With `--dry-run`
+the preview still only covers the `PUT`; `--wait` never polls.
 
 `apps owners` is the read that reflects what `apps add-owner`,
 `apps remove-owner` and `apps set-owners` write, and lags a write by roughly
@@ -214,7 +235,7 @@ Drive the MCP admin surface (servers, tools, toolsets, and bindings). Most comma
 c1i mcp servers list               --app-id <id> [--page-size N] [--limit N]
 c1i mcp servers get                <connector-id> --app-id <id>
 c1i mcp servers search             --app-id <id> [--query <text>] [--tool-state approved|pending|disabled|removed] [--include-last-called-at] [--limit N]
-c1i mcp servers register           --app-id <id> --type hosted   --display-name <name> --catalog-id <cid> [--auth ... ] [--config-field k=v ...]
+c1i mcp servers register           --app-id <id> --type hosted   --display-name <name> --catalog-id <cid> [--source-app-id <id>] [--auth ... ] [--config-field k=v ...]
 c1i mcp servers register           --app-id <id> --type external --display-name <name> --server-url <url> [--transport streamable-http|sse] [--auth ...]
 c1i mcp servers update             <connector-id> --app-id <id> [--display-name <name>] [--description <text>] [--data-sensitivity ...] [--tool-prefix <p>] [--require-tool-approval]
 c1i mcp servers update-credentials <connector-id> --app-id <id> --type hosted|external [--auth ...] [--update-mask <paths>]
@@ -255,7 +276,7 @@ c1i mcp gateway list-tools [--full] [--gateway-url <url>]
 c1i mcp gateway call <tool-name> [--args '{"k":"v"}'] [--gateway-url <url>]
 ```
 
-**Auth for `register` / `update-credentials`:** convenience flags cover the simple methods — `--auth none`, `--auth bearer-token --bearer-token TOKEN`, `--auth custom-header --header-name NAME --header-value VALUE`, `--auth basic-auth --basic-auth-username USER --basic-auth-password PASS`. For OAuth2 / AWS SigV4 / Google service-account auth, pass the full config object via `--hosted-config-file` / `--external-config-file` (JSON file, or `-` for stdin) — generate a ready-to-edit skeleton with `--print-config-template --auth <method> [--type hosted]` instead of hand-writing it. Secrets are sealed server-side; reads only ever return `*_configured` booleans, never the values.
+**Auth for `register` / `update-credentials`:** convenience flags cover the simple methods — `--auth none`, `--auth bearer-token --bearer-token TOKEN`, `--auth custom-header --header-name NAME --header-value VALUE`, `--auth basic-auth --basic-auth-username USER --basic-auth-password PASS`. For OAuth2 / AWS SigV4 / Google service-account auth, pass the full config object via `--hosted-config-file` / `--external-config-file` (JSON file, or `-` for stdin) — generate a ready-to-edit skeleton with `--print-config-template --auth <method> [--type hosted]` instead of hand-writing it. Secrets are sealed server-side; reads only ever return `*_configured` booleans, never the values. `--token-sharing shared|per-user` sets the server's token-sharing mode (case-insensitive; `per_user`/`peruser` are also accepted). Per the register help, `per-user` is only valid with `oauth2` in authorization-code or passthrough mode, `bearerToken`, `customHeader`, or `basicAuth`. Note that a read-back can legitimately differ from what you sent: the backend may store a *resolved* OAuth2 grant such as `..._MODE_AUTHORIZATION_CODE` in place of the input mode, so that is a normal round-trip, not a bug. `--source-app-id` names the source app for a connector-backed HOSTED server.
 
 `mcp tools approve` is the standard post-registration step: newly discovered tools (from `register` or `resync-tools`) start in `PENDING_REVIEW`, and an admin approves each one for the gateway to proxy calls. History endpoints return records newest-first.
 
@@ -503,13 +524,17 @@ follow would hand your bearer token to whatever host the redirect named.
 A chain of allowed redirects that doesn't settle within five hops fails as a
 remote error (exit `6`) rather than looping.
 
-This applies everywhere the CLI sends HTTP: the REST client, the MCP gateway, and
-the login handshake all share the same transport, so the path and redirect
-guards, `--debug` tracing, and `--max-retries` all cover the gateway and login
-too, not just REST commands. A bad id is the only cause of a refused `3xx`
-observed so far, which is why it maps to exit `2` — a redirect on an otherwise
-well-formed request would not be the caller's mistake, and would still report
-`2`.
+This applies to every command built on the shared transport: the REST client,
+the MCP gateway, and the login handshake, so the path and redirect guards,
+`--debug` tracing, and `--max-retries` cover the gateway and login too, not just
+REST commands. It does **not** apply to the `docs` subcommands that fetch —
+`docs search`, `docs page`, `docs openapi`, `docs endpoints`, `docs endpoint` —
+which call Go's default HTTP client directly: no path or redirect guard there,
+and `--debug` and `--max-retries` are both inert.
+
+A bad id is the only cause of a refused `3xx` observed so far, which is why it
+maps to exit `2` — a redirect on an otherwise well-formed request would not be
+the caller's mistake, and would still report `2`.
 
 Pass `--error-format json` (or `C1I_ERROR_FORMAT=json`) to get a machine-readable
 error object instead of the default `Error: <msg>` line. For API errors it
@@ -597,7 +622,7 @@ retried depends on the request, to avoid duplicating side effects:
 Control the retry budget (attempts *after* the first try) via, in order of
 precedence:
 
-1. `--max-retries N` flag (applies to any command)
+1. `--max-retries N` flag (any command that reaches the C1 API)
 2. `C1I_MAX_RETRIES` environment variable
 3. Default: `4`
 
@@ -643,10 +668,10 @@ the previewed body is exact.
 
 ### Debug tracing
 
-`--debug` (or `C1I_DEBUG=1`) traces each HTTP request to stderr — method, URL,
-response status, and elapsed time, including every retry attempt. Headers and
-bodies are never logged, so credentials don't leak. Output goes to stderr, so it
-won't corrupt piped JSON on stdout:
+`--debug` (or `C1I_DEBUG=1`) traces each API HTTP request to stderr — method,
+URL, response status, and elapsed time, including every retry attempt. Headers
+and bodies are never logged, so credentials don't leak. Output goes to stderr,
+so it won't corrupt piped JSON on stdout:
 
 ```sh
 $ c1i apps list --debug 2>trace.log
@@ -670,9 +695,16 @@ c1i auth status
 # Show the authenticated principal: user ID, display name, email, role/permission/feature counts
 c1i auth whoami           # add --verbose for full roles/permissions/features arrays
 
+# Mint a short-lived bearer token for driving raw API calls yourself
+c1i auth token            # add --json for token type and absolute expiry (RFC3339)
+
 # Remove stored credentials
 c1i auth logout
 ```
+
+`c1i auth token` prints just the access token, newline-terminated, so it
+composes into `curl -H "Authorization: Bearer $(c1i auth token)" ...`. It is
+never written to disk — a new one is minted per invocation.
 
 ### Credential sources
 
@@ -706,6 +738,9 @@ c1i completion zsh > "${fpath[1]}/_c1i"
 # fish
 c1i completion fish > ~/.config/fish/completions/c1i.fish
 ```
+
+`powershell` is also available. Each generator takes `--no-descriptions` to
+emit a script that completes names only, without the per-command help text.
 
 ## Version
 

@@ -49,6 +49,12 @@ rejected rather than rewritten. A bare `mycompany` is rejected as ambiguous.
 - `--debug` / `C1I_DEBUG` — trace HTTP method/URL/status/timing to stderr
   (never headers or bodies).
 
+`--debug` and `--max-retries` take effect only on the paths built on the shared
+transport (REST, `mcp gateway`, `auth login`). They are inert on the `docs`
+subcommands that fetch — `docs search`, `docs page`, `docs openapi`,
+`docs endpoints`, `docs endpoint` — which issue their own HTTP, so no trace
+there does not mean no request was sent.
+
 ## Errors & exit codes
 
 | Code | Meaning |

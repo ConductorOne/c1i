@@ -77,7 +77,9 @@ tracked root file outside its allowlist. Stage explicit paths rather than `-A`.
   `--max-retries` / `C1I_MAX_RETRIES` (default `client.DefaultMaxRetries`),
   `--error-format` / `C1I_ERROR_FORMAT` (`text`|`json`), `--dry-run` /
   `C1I_DRY_RUN` (preview a mutating request without sending it), `--debug` /
-  `C1I_DEBUG` (trace HTTP requests to stderr). See README for behavior.
+  `C1I_DEBUG` (trace HTTP requests to stderr). `--debug` and `--max-retries`
+  are inert on the fetching `docs` subcommands (`docs search`, `docs page`,
+  `docs openapi`, `docs endpoints`, `docs endpoint`) — see README for behavior.
 
 ### Patterns to follow when adding/changing commands
 
@@ -135,6 +137,15 @@ tracked root file outside its allowlist. Stage explicit paths rather than `-A`.
   accepts 0 and the documented count; a command documenting none must not
   require one. Rejecting a *stray* positional is the guard's job, not the
   test's.
+- **A new flag must be named in a top-level doc (enforced convention):**
+  `TestEveryFlagIsDocumented` (`cmd/flag_docs_coverage_test.go`) walks the tree
+  and fails CI on any long flag absent from **both** README.md and
+  `cmd/agents.md`; `TestGlobalFlagsDocumentedInAgentsDoc` holds rootCmd's
+  persistent flags to both docs, since they apply everywhere. This exists
+  because agents rebuild by hand what a flag already does when no doc names it.
+  Exemptions go in `flagDocExemptions` with a reason (persistent flags use the
+  separate `globalFlagDocExemptions`, which the second test reads) —
+  documenting the flag in one line is almost always the better fix.
 - **API client:** build it with `newClient(cmd, baseURL)` (cmd/client.go), not
   `client.New` directly — the helper threads the global flags (retries, etc.).
 - **Paths:** interpolate IDs into request paths with `client.Path("…/%s", id)`,
@@ -223,19 +234,34 @@ a package, verify each of these against the new code:
   failed" distinct from "C1 failed".
 - **Escape ids in paths** (`client.Path`-style), use the shared output helpers in
   `cmd`, and honor the global flags where applicable.
-- **Reject an empty id before sending, and don't trust a 3xx either.** The
-  shared client refuses a path with an empty segment (`client.PathError` →
-  exit 2) and refuses to follow a redirect whose target path differs from
-  the request's (`client.RedirectError` → exit 2) — a package that issues
-  its own HTTP inherits neither: `cobra.ExactArgs` will hand you `""`
-  happily, and Go's default `http.Client` follows a 3xx transparently. An id
-  of `""`, `"/"`, or `"."` reaching the collection endpoint by either path is
-  the shape that produced the silent "returned the whole list with exit 0"
-  bug.
-- **Honor `--debug` and `--max-retries`.** Both are documented as global, and
-  both are currently silently inert on the packages that issue their own HTTP —
-  so tracing shows nothing and transient failures aren't retried on those paths.
-  Don't add a fourth.
+- **Build on `internal/transport` (or `internal/client`, which wraps it).**
+  Two things come free: `transport.New` applies the empty-path guard
+  (`client.PathError` → exit 2) and the redirect guard (`client.RedirectError`
+  → exit 2) to every client it builds. The global flags do **not** come free —
+  see the next-but-one bullet. Every `internal/` package that issues HTTP is
+  built this way, `internal/mcpgateway` and `internal/login` included.
+- **Reject an empty id before sending, and don't trust a 3xx either.** A
+  package that hand-rolls its own `http.Client` gets neither guard:
+  `cobra.ExactArgs` will hand you `""` happily, and Go's default
+  `http.Client` follows a 3xx transparently. An id of `""`, `"/"`, or `"."`
+  reaching the collection endpoint by either path is the shape that produced
+  the silent "returned the whole list with exit 0" bug.
+- **Thread `--debug` and `--max-retries` yourself — nothing does it for you.**
+  `transport.New` *accepts* both as options but sources neither: it defaults to
+  `DefaultMaxRetries` and debug-off and reads nothing ambient, so
+  `transport.New(base)` with no options ships tracing that shows nothing and a
+  retry count the flag can't change. Every caller passes them by hand —
+  `cmd/client.go:15-16` (the single viper read every REST command inherits via
+  `newClient`), `internal/client` from its own config, and `cmd/mcp_gateway.go`,
+  `cmd/auth_login.go`, `cmd/auth_token.go` from viper. The deliberate
+  exception is `auth login`'s device-flow polling leg, where `PollForToken`
+  forces `WithMaxRetries(0)`: the RFC 8628 poll interval is that call's retry
+  strategy. The accidental one is the fetching `docs` subcommands —
+  `docs search`, `docs page` (`cmd/docs_search.go`) and `docs openapi`,
+  `docs endpoints`, `docs endpoint` (`cmd/docs_openapi.go`) — which call
+  `http.DefaultClient.Do` directly: both flags are inert at those three call
+  sites, no path or redirect guard applies, and they return bare `fmt.Errorf`
+  rather than a classifiable error. Don't add a fourth.
 
 When implementing a wire protocol or stream parser (JSON-RPC, SSE, MCP, …), code
 and test against the **full input space the spec permits**, not just the shape a

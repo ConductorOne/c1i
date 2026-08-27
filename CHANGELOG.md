@@ -25,6 +25,79 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- **Flags that shipped undocumented are now documented, and a guard keeps it
+  that way.** Six flags were reachable from `--help` but named in neither
+  README.md nor `cmd/agents.md`: `apps set-owners --wait`/`--wait-timeout`,
+  `auth token --json`, `mcp servers register --token-sharing`/
+  `--source-app-id`, and `completion --no-descriptions`. An agent that can't
+  find a flag rebuilds it by hand -- a hand-rolled pagination loop where
+  `--paginate` would have done, a hand-rolled MCP registration where
+  `--tool-prefix` would have. All six are now documented.
+  `cmd/agents.md` also gained a "Global flags" section: the
+  agent-facing index named only three of the six persistent flags, leaving
+  `--debug`, `--max-retries`, and `--error-format` discoverable from the
+  README alone. It now also points at `--list-key` and `--allow-delete-body`
+  next to the `c1i api` conventions they apply to.
+
+  `TestEveryFlagIsDocumented` (`cmd/flag_docs_coverage_test.go`) fails CI on
+  any long flag absent from both docs, and
+  `TestGlobalFlagsDocumentedInAgentsDoc` holds the persistent flags to both.
+  Matching is boundary-anchored, so `--wait` is not satisfied by a doc that
+  only mentions `--wait-timeout`. The exemption map is empty.
+
+- **`cmd/agents.md` no longer tells agents that `mcp gateway` ignores
+  `--debug`/`--max-retries` or follows redirects unguarded.** Both were false.
+  `cmd/mcp_gateway.go` threads both flags into the gateway's bearer mint and
+  its JSON-RPC calls, and `mcpgateway` is built on the shared
+  `internal/transport`, which applies the empty-path and redirect guards
+  unconditionally. The cost of the first one was concrete: an agent debugging a
+  hanging `mcp gateway call` would read the doc and never try the one flag that
+  shows where it stopped. `CLAUDE.md`'s "both are currently silently inert on
+  the packages that issue their own HTTP" was the stale source of the claim and
+  is corrected too.
+
+- **`auth token`'s help no longer claims the token is "audience-scoped to the
+  C1 API host".** The CLI neither requests nor observes that: the token request
+  sends only `client_id`, `grant_type`, `client_assertion_type` and
+  `client_assertion` (no `audience`, no `resource`), and nothing decodes the
+  returned token. The only `aud` in the tree is on the client-assertion JWT
+  sent *to* the token endpoint. Dropped from the README too.
+
+- **The `--debug`/`--max-retries` scope exception is documented in all four
+  docs, and guarded.** The fetching `docs` subcommands (`docs search`,
+  `docs page`, `docs openapi`, `docs endpoints`, `docs endpoint`) call
+  `http.DefaultClient` directly instead of `internal/transport`, so both flags
+  are inert there and no path or redirect guard applies. README.md, CLAUDE.md
+  and `.claude/commands/c1i.md` all stated the opposite as an unqualified
+  universal -- README's was the strongest ("everywhere the CLI sends HTTP").
+  An agent debugging an empty `docs search` would run `--debug`, see no trace,
+  and conclude no request was sent. `cmd/agents.md` also now records that these
+  five don't share one host: three fetch `conductorone.com` (cached 24h, so a
+  run can return rows without sending a request at all) while `docs search` and
+  `docs page` call a third party, `api.mintlify.com`.
+
+  `TestFlagScopeExceptionDocumented` fails CI when any of the four documents
+  mentions either flag without carving out the exception;
+  `TestDocumentedFlagScopeExceptionIsStillReal` pins the exception to the code,
+  failing in both directions -- if a file starts sending HTTP outside
+  `internal/transport`, or if these stop and the carve-outs go stale. It parses
+  the AST rather than grepping one spelling, so `http.Get`/`Post`/`Head`/
+  `PostForm` and an `http.Client` constructed any idiomatic way (composite
+  literal, `new()`, a value var or struct field) all count, while a
+  `*http.Client` parameter correctly does not. It walks the whole repo rather
+  than `cmd/` alone -- `internal/` is the likelier home for the next one --
+  skipping `.claude/`, since the worktrees gitignored above would otherwise
+  make it fail locally while passing in CI.
+
+- **`apps create` and `apps delete` are in the README.** Both shipped without
+  ever being listed in the Apps section, so the only way to find them was
+  `--help`. Documented alongside their neighbours, including that `apps create`
+  auto-assigns the caller as an owner and returns the new app under an `app`
+  key, and that `apps delete` marks the app with `deletedAt` rather than
+  erasing it. `apps delete`'s own help text claimed its endpoint was absent
+  from the OpenAPI spec; it is published (`DELETE /api/v1/apps/{id}`, operation
+  `c1.api.app.v1.Apps.Delete`), so that sentence is gone from the help too.
+
 - **`apps set-owners` no longer claims new owners appear in `apps get`'s
   `appOwners` field.** Measured against a live tenant, `appOwners` was empty
   on every app checked -- all 47, spanning 45 connector-managed apps across
@@ -36,6 +109,12 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   and `cmd/agents.md` to drop the `appOwners` claim and point at the owner
   reads that do work (`apps owners`, added above; `ownerids` in the
   `set-owners` help, which is the read `--wait` polls).
+
+- **`.claude/worktrees/` is gitignored.** Agent worktrees land there, and
+  untracked they stamped every local build `+dirty` -- a string that reaches
+  the wire in the user-agent and the MCP gateway handshake's
+  `clientInfo.version` -- and a `git add -A` would have committed one as a
+  gitlink (mode 160000), an embedded-repo pointer no clone can resolve.
 
 ## [0.5.0] - 2026-08-21
 
