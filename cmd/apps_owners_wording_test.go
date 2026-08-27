@@ -7,8 +7,9 @@ import (
 )
 
 // appOwnersPopulateClaimTriggers are phrases that, paired with "appOwners"
-// nearby, assert owners become visible there. Measured against the lab
-// tenant: appOwners never populates (0 of 47 apps had a non-empty value),
+// nearby, assert owners become visible there. Measured against the lab tenant
+// twice: 0 of 47 apps on the first pass, 0 of 46 on the second (the first
+// pass's scratch apps had been deleted by then). appOwners never populates,
 // while GET .../ownerids does converge (on the order of minutes). This
 // wording drifted, wrong, across five files before anything caught it.
 var appOwnersPopulateClaimTriggers = []string{"appear", "show up", "shows up", "populat"}

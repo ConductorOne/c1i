@@ -579,14 +579,35 @@ you'd take it back.
 
 ## Verify
 
-    c1i grants list --app-id "$APP_ID" --entitlement-id "$ENTITLEMENT_ID" --user-id "$USER_ID"
+After an approved GRANT, wait for the row to appear rather than polling by
+hand:
+
+    c1i grants list --app-id "$APP_ID" --entitlement-id "$ENTITLEMENT_ID" --user-id "$USER_ID" --wait --wait-min 1
+
+After an approved REVOKE, re-read until the set is steady, then check it:
+
+    c1i grants list --app-id "$APP_ID" --entitlement-id "$ENTITLEMENT_ID" --user-id "$USER_ID" --wait
 
 Grants are eventually consistent in both directions: after an approved
 grant, expect up to a couple of minutes before the row appears; after an
-approved revoke, the same delay before it disappears. An empty result
-immediately after approval isn't a failure — wait and re-run the same
-command. A revoke task still sitting in TASK_STATE_OPEN past that window
-means it's waiting on an approver, not that the revoke failed.
+approved revoke, the same delay before it disappears.
+
+"--wait-min 1" is what makes the grant case trustworthy. An empty result is
+stable, so a bare "--wait" settles on zero rows in about 10s and exits 0 --
+indistinguishable from "the grant did not happen" when the truth is "not
+yet". With "--wait-min 1", exit 0 means the grant is really there and exit 1
+means it had not arrived within "--wait-timeout" (default 4m), which is a
+timeout, not a denial.
+
+The revoke direction has no such flag, and "--wait" does NOT wait for empty:
+it settles on whatever is steady, and a grant that has not been deprovisioned
+yet is perfectly steady. So exit 0 still listing the row means "not yet, re-run
+in a minute" -- NOT "the revoke failed". Only zero rows is confirmation.
+"--wait-min" is a floor, not a ceiling, so leave it off here; it cannot express
+"wait until this is gone".
+
+A revoke task still sitting in TASK_STATE_OPEN past that window means it's
+waiting on an approver, not that the revoke failed.
 
 ## Common failures
 
@@ -596,7 +617,7 @@ means it's waiting on an approver, not that the revoke failed.
 | 409 duplicate ticket found, with a task id in the error details (exit 1) | An open task for this exact app + entitlement + user already exists | Act on that task id ("tasks list --state open") instead of creating another |
 | required flag(s) "app-id", "entitlement-id" not set (exit 2) | Both are required on "requests create grant"/"revoke" | Fix the invocation |
 | An auth failure resolving the caller's own id when "--user-id" is omitted (exit 3) | Surfaces before the request call itself runs | Re-authenticate rather than retry as-is |
-| "grants list" returns nothing right after approval | Eventual consistency | Wait roughly a minute or two and re-run the same filter |
+| "grants list" returns nothing right after approval | Eventual consistency | Re-run with "--wait --wait-min 1" so it blocks until the grant lands; a bare "--wait" settles on the empty set in ~10s and exits 0, which reads as a denial |
 
 Approve/deny/comment failures, and everything about stepApproverIds, the
 actions gate, and the current policy step, live in

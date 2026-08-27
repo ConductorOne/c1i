@@ -106,6 +106,46 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   above tests it rather than leaving the reader to notice. Verified against a
   live tenant that accepts `baselinePolicyId`.
 
+- **`grants list --wait`, with `--wait-stable`, `--wait-min` and
+  `--wait-timeout`.** Grant provisioning is asynchronous, so a read taken right
+  after a grant or revoke can catch the set mid-change. `--wait` re-reads every
+  page every 5s until the same grants come back `--wait-stable` times in a row
+  (default 3, minimum 2), then prints that settled set; progress goes to
+  stderr, so stdout stays pure NDJSON. `--wait-timeout` (default 4m) bounds the
+  whole wait. The 5s poll interval is fixed and not a flag, so `--wait-stable`
+  and `--wait-timeout` are the tunable parts; a `--wait-stable` that cannot fit
+  inside `--wait-timeout` is rejected up front rather than left to time out.
+  `--wait` is also rejected with `--page-token`, since a pinned cursor is not a
+  stable set.
+
+  `--wait-min` sets a floor on how many grants must be present before the wait
+  can settle (default `0` = today's behavior). It exists because an empty
+  result is perfectly stable: a filter matching nothing settles at the first
+  opportunity, roughly 10s at the defaults, and exits `0` with zero rows. Run
+  right after a grant -- the workflow `--wait` advertises -- that reads as "it
+  did not happen" when the truth is "not yet", since provisioning runs about a
+  minute. The default stays `0` because empty-and-stable is the *correct*
+  answer when waiting for a revoke; `--wait-min 1` is how you say which of the
+  two you meant.
+
+  `--wait-stable` defaults to 3, not 2, deliberately. Two equal reads cannot be
+  told apart from a pause mid-change. The case that motivated it is reported
+  from the field rather than measured here: MCP tool discovery streams
+  (0 -> 40 -> 101 with pauses between batches), so a presence check -- "at
+  least one row exists" -- approved 20 of 28 tools and reported success. Three
+  is still a heuristic, not a proof: raise `--wait-stable` past the longest
+  mid-stream pause you have actually seen, remembering that `n` reads span
+  `(n-1)` five-second intervals.
+
+  Two behaviors worth knowing before scripting against it. `--wait` settles on
+  the WHOLE matching set, so it fetches every page on every poll regardless of
+  `--limit`; `--limit` only truncates what is finally printed. And a server
+  that re-issues one `nextPageToken` forever is now an error ("API returned the
+  same nextPageToken twice in a row..."), exit 1, matching the guard
+  `api --paginate` already carried -- without it each poll would become a
+  request storm bounded only by `--wait-timeout`, then blame provisioning for
+  the timeout.
+
 - **`apps owners`, `apps add-owner`, and `apps remove-owner`.** `apps get`'s
   `appOwners` field was empty on every app checked, while `GET .../owners`
   returns the owners `apps set-owners` had already written, but reading
@@ -155,6 +195,32 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   incomplete, if the caveat text goes missing, if a command's advertised max
   stops matching the one it enforces, or if either history command's 200
   ceiling is dropped to the default 100.
+
+- **The `--wait` poll loop is now one shared primitive (`cmd/wait.go`).** It
+  was written for `apps set-owners` and was the only polling loop in `cmd/`;
+  it is now `runWait(cmd, waitOp{...})` with a pluggable `Done` predicate, plus
+  `addWaitFlags` so `--wait`/`--wait-timeout` are declared identically
+  everywhere. `apps set-owners` behavior and output are unchanged -- its
+  `appOwners` wording was corrected separately, see Fixed below.
+
+  Two predicates ship: `untilPresent` (what `set-owners` always did -- every
+  requested id has shown up) and `untilStable` (the polled value held steady
+  across N consecutive reads), which presence-waiting cannot express and which
+  `grants list --wait` uses.
+
+- **The `request-access` guide's Verify step now waits instead of telling you
+  to.** `c1i docs guide request-access` handed an agent a bare `grants list`
+  plus prose about re-running it in a minute or two -- exactly the poll-by-hand
+  workflow `--wait` replaces, and exactly the case where an empty read is
+  mistaken for a denial. It now shows `--wait --wait-min 1` after a grant and
+  says which exit code means what.
+
+  The revoke direction is documented, not solved. `--wait` settles on whatever
+  is steady, and a grant that has not been deprovisioned yet is perfectly
+  steady, so exit 0 can still list the row -- meaning "not yet, re-run", not
+  "the revoke failed". `--wait-min` is a floor and cannot express a ceiling,
+  and the guide now says so rather than implying a bare `--wait` waits *for*
+  empty.
 
 ### Fixed
 
@@ -273,6 +339,14 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   the wire in the user-agent and the MCP gateway handshake's
   `clientInfo.version` -- and a `git add -A` would have committed one as a
   gitlink (mode 160000), an embedded-repo pointer no clone can resolve.
+
+  Re-measured while extracting the shared wait primitive, and the help text now
+  states the discriminating half of the observation rather than just the
+  coverage: `appOwners` was `[]` on all 46 apps then in the tenant --
+  *including the 45 that `GET .../ownerids` reported owners for* -- and on a
+  freshly created app immediately after `set-owners --wait` confirmed two
+  owners had provisioned. (The 47/46 counts above were the earlier pass; the
+  apps it created for the test have since been deleted.)
 
 ## [0.5.0] - 2026-08-21
 
