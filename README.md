@@ -454,11 +454,13 @@ c1i functions get <id> --fields id,displayName,publishedCommitId
   keeps every other envelope key — `expanded` among them — as a top-level
   sibling. Do **not** write the wrapper into a path: `--fields function.id`
   no longer resolves, because there is no `function` key left.
-- `c1i api` is a raw passthrough and still returns the envelope, as does
-  mutation output (`apps create` returns `{"app": ...}`). There, and for any
-  genuinely nested field, a name that doesn't match at the top level is also
-  searched for deeper: the shallowest match wins, and a tie at the same depth
-  resolves to the alphabetically first full path, deterministically.
+- `c1i api` is a raw passthrough and still returns the envelope. There, and
+  for any genuinely nested field, a name that doesn't match at the top level is
+  also searched for deeper: the shallowest match wins, and a tie at the same
+  depth resolves to the alphabetically first full path, deterministically.
+- Mutation output (`apps create` returns `{"app": ...}`) also keeps the
+  envelope, but is never projected at all — `--fields` cannot blank a success
+  message, so no search happens there.
 - A `--fields` spec that matches **nothing at all** in the response (a typo, or
   a field that truly doesn't exist) is a usage error (exit `2`), not a silent
   `{}`. This is a zero-match check only: `--fields id,dispalyName` (typo) still

@@ -42,6 +42,6 @@ func TestGuideExitCodeClaimsMatchTheTaxonomy(t *testing.T) {
 	}
 	// Floor measured, not guessed: four such pairs exist today.
 	if checked < 4 {
-		t.Fatalf("only %d status/exit pairs found across the guides, want at least 4; the extraction regressed", checked)
+		t.Fatalf("only %d status/exit pairs found across the guides, want at least 4; either the extraction regressed or a guide dropped a pair -- if the latter, lower the floor", checked)
 	}
 }

@@ -106,13 +106,11 @@ func projectDecoded(v any, paths [][]string) any {
 				setPath(out, keys, val)
 				continue
 			}
-			// Single-object reads pass the API response through as-is, which
-			// wraps the resource under the endpoint's own top-level key
-			// (userView.user, function, app, ...). A path that doesn't resolve
-			// from the root falls back to a depth-insensitive search: try the
-			// same path starting from every nested object, so `--fields id`
-			// finds `userView.user.id` without the caller needing to know the
-			// wrapper key. See lookupPathAnyDepth for the ambiguity rule.
+			// A path that doesn't resolve from the root falls back to a
+			// depth-insensitive search: try it from every nested object. Typed
+			// `get` unwraps its envelope first (cmd/unwrap.go), so this now
+			// serves `c1i api` and genuinely nested fields. See
+			// lookupPathAnyDepth for the ambiguity rule.
 			if keys, val, ok := lookupPathAnyDepth(t, p); ok {
 				setPath(out, keys, val)
 			}
@@ -157,10 +155,11 @@ func lookupPath(m map[string]any, path []string) ([]string, any, bool) {
 // lookupPathAnyDepth searches m's descendant objects (not m itself — callers
 // only reach here after a root-anchored lookupPath(m, path) already failed)
 // for the first place path resolves, one nesting level at a time. This is the
-// depth-insensitive half of field matching: a single-object read wraps its
-// payload under the endpoint's own key (userView.user, function, app, ...),
-// so an unqualified `--fields id` (or a dot-path shorter than the real
-// nesting) would otherwise match nothing and silently project to {}.
+// depth-insensitive half of field matching: a raw `c1i api` response wraps its
+// payload under the endpoint's own key (userView.user, function, app, ...), so
+// an unqualified `--fields id` (or a dot-path shorter than the real nesting)
+// would otherwise match nothing and silently project to {}. Typed `get`
+// unwraps before projecting, so it no longer depends on this.
 //
 // Shallower matches win: the search stops at the first level where at least
 // one match exists, without descending further, so `--fields id` prefers an

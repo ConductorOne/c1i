@@ -10,8 +10,6 @@ import (
 // global configuration resolved by cobra/viper (currently the retry budget).
 // All commands go through this helper so cross-cutting client options are
 // wired in one place rather than at every call site.
-// It's a var so a test can substitute an httptest-backed client, the seam
-// newListClient documents below.
 var newClient = func(cmd *cobra.Command, baseURL string) (*client.Client, error) {
 	return client.New(cmd.Context(), baseURL,
 		client.WithMaxRetries(viper.GetInt("max_retries")),

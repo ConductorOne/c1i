@@ -31,10 +31,15 @@ look:
   all-null identity) now exits **6** ("C1 failed") instead of **0**. A body
   that is not a JSON object at all — truncated, empty, an array, a scalar —
   also moves from the generic **1** to **6**.
-- Nothing else changes an exit code. `c1i api`'s new partial-result warning
-  goes to **stderr** only; stdout is byte-for-byte unchanged, so a parser
-  reading stdout is unaffected. A caller folding stderr into stdout with
-  `2>&1` will see the new line.
+- A `--fields` spec naming a wrapper key now **exits 2** rather than
+  returning less. 0.5.x documented `--fields function.id` as supported, and
+  `--fields userView`/`app`/`taskView` resolved; against unwrapped output they
+  match nothing, which is already a usage error. Migrate to the unqualified
+  name (`--fields id`).
+- No other exit code moves. `c1i api`'s new partial-result warning goes to
+  **stderr** only; stdout is byte-for-byte unchanged, so a parser reading
+  stdout is unaffected. A caller folding stderr into stdout with `2>&1` will
+  see the new line.
 
 ### Added
 
@@ -390,19 +395,17 @@ look:
   Both refusals are raw-string literals, so the line a user pastes from their
   terminal greps straight back to the check that emitted it.
 
+  Re-measured while extracting the shared wait primitive: the help text now
+  states the discriminating half of the observation rather than just the
+  coverage -- `appOwners` was `[]` on all 46 apps *including the 45 that
+  `GET .../ownerids` reported owners for*, so an empty `appOwners` is not
+  evidence an app has no owners.
+
 - **`.claude/worktrees/` is gitignored.** Agent worktrees land there, and
   untracked they stamped every local build `+dirty` -- a string that reaches
   the wire in the user-agent and the MCP gateway handshake's
   `clientInfo.version` -- and a `git add -A` would have committed one as a
   gitlink (mode 160000), an embedded-repo pointer no clone can resolve.
-
-  Re-measured while extracting the shared wait primitive, and the help text now
-  states the discriminating half of the observation rather than just the
-  coverage: `appOwners` was `[]` on all 46 apps then in the tenant --
-  *including the 45 that `GET .../ownerids` reported owners for* -- and on a
-  freshly created app immediately after `set-owners --wait` confirmed two
-  owners had provisioned. (The 47/46 counts above were the earlier pass; the
-  apps it created for the test have since been deleted.)
 
 ## [0.5.0] - 2026-08-21
 
