@@ -71,7 +71,7 @@ same id exit 4 and can tell you which.`,
 			return fmt.Errorf("authentication failed: %w", err)
 		}
 
-		requestedPageSize := clampPageSize(getIntFlag(cmd, "page-size"))
+		requestedPageSize := pageSizeFlag(cmd)
 		pageToken, _ := cmd.Flags().GetString("page-token")
 		manualPaging := cmd.Flags().Changed("page-token")
 		limit := getIntFlag(cmd, "limit")
@@ -120,8 +120,6 @@ same id exit 4 and can tell you which.`,
 }
 
 func init() {
-	appsOwnersCmd.Flags().Int("page-size", 50, "Results per page (max 100)")
-	appsOwnersCmd.Flags().String("page-token", "", "Pagination cursor")
-	addLimitFlag(appsOwnersCmd)
+	addPaginationFlags(appsOwnersCmd)
 	appsCmd.AddCommand(appsOwnersCmd)
 }

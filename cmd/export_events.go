@@ -101,7 +101,7 @@ them to an external system.
 			return fmt.Errorf("authentication failed: %w", err)
 		}
 
-		requestedPageSize := clampPageSize(getIntFlag(cmd, "page-size"))
+		requestedPageSize := pageSizeFlag(cmd)
 		pageToken, _ := cmd.Flags().GetString("page-token")
 		manualPaging := cmd.Flags().Changed("page-token")
 		limit := getIntFlag(cmd, "limit")
@@ -157,8 +157,6 @@ func init() {
 	exportEventsCmd.Flags().String("until", "", "Only events before this RFC3339 time")
 	exportEventsCmd.Flags().String("since-event-uid", "", "Resume after this event UID (incremental sync)")
 	exportEventsCmd.Flags().String("sort", "asc", "Chronological order: asc (oldest first) or desc")
-	exportEventsCmd.Flags().Int("page-size", 50, "Results per page (max 100)")
-	exportEventsCmd.Flags().String("page-token", "", "Pagination cursor")
-	addLimitFlag(exportEventsCmd)
+	addPaginationFlags(exportEventsCmd)
 	exportCmd.AddCommand(exportEventsCmd)
 }

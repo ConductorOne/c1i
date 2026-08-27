@@ -22,7 +22,7 @@ var mcpServersConnectionsListCmd = &cobra.Command{
 			return fmt.Errorf("authentication failed: %w", err)
 		}
 
-		requestedPageSize := clampPageSize(getIntFlag(cmd, "page-size"))
+		requestedPageSize := pageSizeFlag(cmd)
 		pageToken, _ := cmd.Flags().GetString("page-token")
 		manualPaging := cmd.Flags().Changed("page-token")
 		limit := getIntFlag(cmd, "limit")
@@ -71,8 +71,6 @@ var mcpServersConnectionsListCmd = &cobra.Command{
 }
 
 func init() {
-	mcpServersConnectionsListCmd.Flags().Int("page-size", 50, "Results per page (max 100)")
-	mcpServersConnectionsListCmd.Flags().String("page-token", "", "Pagination cursor")
-	addLimitFlag(mcpServersConnectionsListCmd)
+	addPaginationFlags(mcpServersConnectionsListCmd)
 	mcpServersConnectionsCmd.AddCommand(mcpServersConnectionsListCmd)
 }

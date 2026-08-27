@@ -28,7 +28,7 @@ var mcpServersListCmd = &cobra.Command{
 		}
 
 		appID, _ := cmd.Flags().GetString("app-id")
-		requestedPageSize := clampPageSize(getIntFlag(cmd, "page-size"))
+		requestedPageSize := pageSizeFlag(cmd)
 		pageToken, _ := cmd.Flags().GetString("page-token")
 		manualPaging := cmd.Flags().Changed("page-token")
 		limit := getIntFlag(cmd, "limit")
@@ -79,9 +79,7 @@ var mcpServersListCmd = &cobra.Command{
 
 func init() {
 	mcpServersListCmd.Flags().String("app-id", "", "Application ID")
-	mcpServersListCmd.Flags().Int("page-size", 50, "Results per page (max 100)")
-	mcpServersListCmd.Flags().String("page-token", "", "Pagination cursor")
+	addPaginationFlags(mcpServersListCmd)
 	markRequired(mcpServersListCmd, "app-id")
-	addLimitFlag(mcpServersListCmd)
 	mcpServersCmd.AddCommand(mcpServersListCmd)
 }

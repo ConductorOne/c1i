@@ -31,7 +31,7 @@ var accountsListCmd = &cobra.Command{
 		appUserType, _ := cmd.Flags().GetString("type")
 		unmappedOnly, _ := cmd.Flags().GetBool("unmapped-only")
 		query, _ := cmd.Flags().GetString("query")
-		requestedPageSize := clampPageSize(getIntFlag(cmd, "page-size"))
+		requestedPageSize := pageSizeFlag(cmd)
 		pageToken, _ := cmd.Flags().GetString("page-token")
 		manualPaging := cmd.Flags().Changed("page-token")
 		limit := getIntFlag(cmd, "limit")
@@ -121,10 +121,8 @@ func init() {
 	accountsListCmd.Flags().String("type", "", "Filter: user, service_account, system_account")
 	accountsListCmd.Flags().Bool("unmapped-only", false, "Only show accounts with no linked identity user")
 	accountsListCmd.Flags().String("query", "", "Fuzzy search on display name")
-	accountsListCmd.Flags().Int("page-size", 50, "Results per page (max 100)")
-	accountsListCmd.Flags().String("page-token", "", "Pagination cursor")
+	addPaginationFlags(accountsListCmd)
 	markRequired(accountsListCmd, "app-id")
-	addLimitFlag(accountsListCmd)
 	accountsCmd.AddCommand(accountsListCmd)
 }
 

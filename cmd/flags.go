@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -105,22 +106,91 @@ func getIntFlag(cmd *cobra.Command, name string) int {
 	return v
 }
 
-// maxPageSize is the upper bound the C1 API enforces on `pageSize` /
-// `page_size`. Sending a higher value gets a raw "must be inside [0, 100]"
-// error from the gateway, which is hostile to first-time agents trying to
-// self-correct.
-const maxPageSize = 100
+const (
+	// defaultPageSize is the --page-size default every list command starts
+	// from unless the endpoint documents its own.
+	defaultPageSize = 50
 
-// clampPageSize silently caps a user-provided --page-size to maxPageSize,
-// matching the API's hard limit. We choose silent-clamp over erroring
-// because a list command with --page-size 500 is unambiguous about
-// intent ("give me a lot") and the auto-paginate behavior will still
-// fetch every result; only the per-page boundary changes.
-func clampPageSize(n int) int {
-	if n > maxPageSize {
-		return maxPageSize
+	// maxPageSize is the upper bound the C1 API enforces on `pageSize` /
+	// `page_size`. Sending a higher value gets a raw "value must be inside
+	// range [0, 100]" 400 from the gateway, which is hostile to first-time
+	// agents trying to self-correct.
+	maxPageSize = 100
+
+	// maxHistoryPageSize is the higher bound the two MCP history endpoints
+	// enforce instead ("value must be inside range [0, 200]"). Verified
+	// live: page_size=200 passes validation there, 201 400s.
+	maxHistoryPageSize = 200
+)
+
+// pageSizeMaxAnnotation records, on the --page-size flag itself, the ceiling
+// its help text printed. pageSizeFlag clamps to that same number, so the
+// documented max and the enforced max can no longer be edited apart: before
+// this, the "max 200" in two commands' help and the 200 in the clamp they
+// called were unrelated literals in unrelated files.
+const pageSizeMaxAnnotation = "c1i_page_size_max"
+
+// pageSizeUsage is the single source of the --page-size caveat. Every claim
+// in it was measured against a live tenant:
+//   - the max is server-enforced (a higher value 400s with
+//     "value must be inside range [0, N]");
+//   - a page really can come back with more rows than asked for — the
+//     collection endpoints overshoot (GET /api/v1/apps returned 23 rows for
+//     page_size=10), most endpoints round small sizes up to 5, and
+//     page_size=0 means "the server's default of 25", not "none";
+//   - --limit is exact on every command checked, overshoot or not.
+func pageSizeUsage(maxSize int) string {
+	return fmt.Sprintf("Rows to request per API page (max %d); the server may return more than asked, so use --limit for an exact count", maxSize)
+}
+
+// pageTokenUsage is the shared --page-token description. Supplying the flag
+// (even empty) switches the command to a single request; see the
+// `manualPaging` check in every list command's RunE.
+const pageTokenUsage = "Pagination cursor; supplying it fetches exactly one page (disables auto-pagination)" // #nosec G101 -- flag help text; G101 fires on the "Token" in the name
+
+// addPaginationFlags registers the --page-size/--page-token/--limit trio on a
+// list-style command. Every list command must go through this (or
+// addPaginationFlagsWithMax) rather than calling Flags().Int/String itself:
+// 27 hand-registrations had already drifted into five different --page-size
+// wordings, none of which mentioned that a page can overrun the requested
+// size. TestPaginationFlagsGoThroughSharedRegistrar enforces it.
+func addPaginationFlags(cmd *cobra.Command) {
+	addPaginationFlagsWithMax(cmd, defaultPageSize, maxPageSize)
+}
+
+// addPaginationFlagsWithMax is addPaginationFlags for an endpoint whose
+// default page size or server-enforced ceiling genuinely differs (the MCP
+// history endpoints allow 200; `policies search` defaults to 25).
+func addPaginationFlagsWithMax(cmd *cobra.Command, def, maxSize int) {
+	cmd.Flags().Int("page-size", def, pageSizeUsage(maxSize))
+	// SetAnnotation only errors on an unregistered flag name, which the line
+	// above rules out.
+	_ = cmd.Flags().SetAnnotation("page-size", pageSizeMaxAnnotation, []string{strconv.Itoa(maxSize)})
+	cmd.Flags().String("page-token", "", pageTokenUsage)
+	addLimitFlag(cmd)
+}
+
+// pageSizeFlag returns --page-size silently capped to the ceiling that was
+// registered for this command. Silent-clamp over erroring: `--page-size 500`
+// is unambiguous about intent ("give me a lot") and auto-pagination still
+// fetches every result — only the per-page boundary changes.
+//
+// A command with no registered ceiling falls back to maxPageSize; that is the
+// conservative direction (every endpoint accepts 100), and the registrar test
+// makes the case unreachable in practice.
+func pageSizeFlag(cmd *cobra.Command) int {
+	maxSize := maxPageSize
+	if f := cmd.Flags().Lookup("page-size"); f != nil {
+		if vals := f.Annotations[pageSizeMaxAnnotation]; len(vals) == 1 {
+			if parsed, err := strconv.Atoi(vals[0]); err == nil {
+				maxSize = parsed
+			}
+		}
 	}
-	return n
+	if n := getIntFlag(cmd, "page-size"); n <= maxSize {
+		return n
+	}
+	return maxSize
 }
 
 // requireNonEmpty errors when any of the named string flags has an empty

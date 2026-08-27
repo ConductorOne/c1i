@@ -7,6 +7,11 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// policiesSearchDefaultPageSize is this endpoint's own default, lower than
+// defaultPageSize: 0 means the server's default of 25, so 25 is what the
+// flag would effectively send anyway.
+const policiesSearchDefaultPageSize = 25
+
 var policiesSearchCmd = &cobra.Command{
 	Use:   "search",
 	Short: "Search policies by display name, description, type, or deletion state (NDJSON output)",
@@ -33,7 +38,7 @@ exclude them.)`,
 		includeDeleted, _ := cmd.Flags().GetBool("include-deleted")
 		policyTypes, _ := cmd.Flags().GetStringSlice("policy-type")
 		excludeIDs, _ := cmd.Flags().GetStringSlice("exclude-policy-id")
-		requestedPageSize := clampPageSize(getIntFlag(cmd, "page-size"))
+		requestedPageSize := pageSizeFlag(cmd)
 		pageToken, _ := cmd.Flags().GetString("page-token")
 		manualPaging := cmd.Flags().Changed("page-token")
 		limit := getIntFlag(cmd, "limit")
@@ -106,10 +111,11 @@ func init() {
 	policiesSearchCmd.Flags().StringSlice("policy-type", nil, "Filter by policy type: grant, revoke, certify, ... (repeatable)")
 	policiesSearchCmd.Flags().Bool("include-deleted", false, "Include soft-deleted policies")
 	policiesSearchCmd.Flags().StringSlice("exclude-policy-id", nil, "Policy ID to exclude from results (repeatable)")
-	// Floor is 5, not the 10 the policy proto's comment claims: the shipped
-	// clamp is 5..100, and 9 passes through unclamped. Verified live.
-	policiesSearchCmd.Flags().Int("page-size", 25, "Results per page (5-100; a value of 5 or less becomes 5; 0 means the server default of 25)")
-	policiesSearchCmd.Flags().String("page-token", "", "Pagination cursor")
-	addLimitFlag(policiesSearchCmd)
+	// Endpoint-specific, and deliberately not in the flag wording (that text
+	// is shared so it cannot drift): the server floors the returned count at
+	// 5 -- --page-size 3 still yields 5 rows -- and treats 0 as its own
+	// default of 25. Floor is 5, not the 10 the policy proto's comment
+	// claims: 9 passes through unclamped. Verified live.
+	addPaginationFlagsWithMax(policiesSearchCmd, policiesSearchDefaultPageSize, maxPageSize)
 	policiesCmd.AddCommand(policiesSearchCmd)
 }

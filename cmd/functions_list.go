@@ -63,7 +63,7 @@ var functionsListCmd = &cobra.Command{
 			return &usageError{fmt.Errorf("--published-only and --draft-only are mutually exclusive")}
 		}
 
-		requestedPageSize := clampPageSize(getIntFlag(cmd, "page-size"))
+		requestedPageSize := pageSizeFlag(cmd)
 		pageToken, _ := cmd.Flags().GetString("page-token")
 		manualPaging := cmd.Flags().Changed("page-token")
 		limit := getIntFlag(cmd, "limit")
@@ -129,8 +129,6 @@ var functionsListCmd = &cobra.Command{
 func init() {
 	functionsListCmd.Flags().Bool("published-only", false, "Only include functions with a published commit (excludes drafts)")
 	functionsListCmd.Flags().Bool("draft-only", false, "Only include functions that are drafts or have never been published")
-	functionsListCmd.Flags().Int("page-size", 50, "Results per page (max 100)")
-	functionsListCmd.Flags().String("page-token", "", "Pagination cursor")
-	addLimitFlag(functionsListCmd)
+	addPaginationFlags(functionsListCmd)
 	functionsCmd.AddCommand(functionsListCmd)
 }

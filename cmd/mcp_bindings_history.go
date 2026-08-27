@@ -51,7 +51,7 @@ transaction.`,
 
 		appID, _ := cmd.Flags().GetString("app-id")
 		connectorID, _ := cmd.Flags().GetString("connector-id")
-		requestedPageSize := clampHistoryPageSize(getIntFlag(cmd, "page-size"))
+		requestedPageSize := pageSizeFlag(cmd)
 		pageToken, _ := cmd.Flags().GetString("page-token")
 		manualPaging := cmd.Flags().Changed("page-token")
 		limit := getIntFlag(cmd, "limit")
@@ -111,9 +111,7 @@ func init() {
 	mcpBindingsHistoryCmd.Flags().String("connector-id", "", "Connector ID")
 	mcpBindingsHistoryCmd.Flags().String("toolset-id", "", "MCP toolset (access profile) ID")
 	mcpBindingsHistoryCmd.Flags().String("tool-id", "", "MCP tool ID")
-	mcpBindingsHistoryCmd.Flags().Int("page-size", 50, "Results per page (max 200)")
-	mcpBindingsHistoryCmd.Flags().String("page-token", "", "Pagination cursor")
+	addPaginationFlagsWithMax(mcpBindingsHistoryCmd, defaultPageSize, maxHistoryPageSize)
 	markRequired(mcpBindingsHistoryCmd, "app-id", "connector-id")
-	addLimitFlag(mcpBindingsHistoryCmd)
 	mcpBindingsCmd.AddCommand(mcpBindingsHistoryCmd)
 }

@@ -42,7 +42,7 @@ last_executed_at, args.`,
 		// up — one HTTP round trip per automation instead of a handful of
 		// batched pages. Any list command that filters after the fetch
 		// inherits this same trap (see emitter.Filtered).
-		pageSize := clampPageSize(getIntFlag(cmd, "page-size"))
+		pageSize := pageSizeFlag(cmd)
 		pageToken, _ := cmd.Flags().GetString("page-token")
 		manualPaging := cmd.Flags().Changed("page-token")
 		limit := getIntFlag(cmd, "limit")
@@ -124,8 +124,6 @@ last_executed_at, args.`,
 }
 
 func init() {
-	functionsUsageCmd.Flags().Int("page-size", 50, "Results per page (max 100)")
-	functionsUsageCmd.Flags().String("page-token", "", "Pagination cursor")
-	addLimitFlag(functionsUsageCmd)
+	addPaginationFlags(functionsUsageCmd)
 	functionsCmd.AddCommand(functionsUsageCmd)
 }

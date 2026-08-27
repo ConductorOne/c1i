@@ -25,7 +25,7 @@ var functionsCommitsCmd = &cobra.Command{
 			return fmt.Errorf("authentication failed: %w", err)
 		}
 
-		requestedPageSize := clampPageSize(getIntFlag(cmd, "page-size"))
+		requestedPageSize := pageSizeFlag(cmd)
 		pageToken, _ := cmd.Flags().GetString("page-token")
 		manualPaging := cmd.Flags().Changed("page-token")
 		limit := getIntFlag(cmd, "limit")
@@ -86,8 +86,6 @@ var functionsCommitsCmd = &cobra.Command{
 }
 
 func init() {
-	functionsCommitsCmd.Flags().Int("page-size", 50, "Results per page (max 100)")
-	functionsCommitsCmd.Flags().String("page-token", "", "Pagination cursor")
-	addLimitFlag(functionsCommitsCmd)
+	addPaginationFlags(functionsCommitsCmd)
 	functionsCmd.AddCommand(functionsCommitsCmd)
 }

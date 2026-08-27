@@ -29,7 +29,7 @@ var mcpToolsetsListCmd = &cobra.Command{
 
 		appID, _ := cmd.Flags().GetString("app-id")
 		connectorID, _ := cmd.Flags().GetString("connector-id")
-		requestedPageSize := clampPageSize(getIntFlag(cmd, "page-size"))
+		requestedPageSize := pageSizeFlag(cmd)
 		pageToken, _ := cmd.Flags().GetString("page-token")
 		manualPaging := cmd.Flags().Changed("page-token")
 		limit := getIntFlag(cmd, "limit")
@@ -105,9 +105,7 @@ func toolsetRow(t toolsetView) map[string]any {
 func init() {
 	mcpToolsetsListCmd.Flags().String("app-id", "", "Application ID")
 	mcpToolsetsListCmd.Flags().String("connector-id", "", "Connector ID")
-	mcpToolsetsListCmd.Flags().Int("page-size", 50, "Results per page (max 100)")
-	mcpToolsetsListCmd.Flags().String("page-token", "", "Pagination cursor")
+	addPaginationFlags(mcpToolsetsListCmd)
 	markRequired(mcpToolsetsListCmd, "app-id", "connector-id")
-	addLimitFlag(mcpToolsetsListCmd)
 	mcpToolsetsCmd.AddCommand(mcpToolsetsListCmd)
 }
