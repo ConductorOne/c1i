@@ -13,12 +13,16 @@ var policiesCreateCmd = &cobra.Command{
 
 The nested policySteps/rules structure is taken from JSON files (or "-" for
 stdin), not modeled as flags — a policy's approval graph is deeply nested
-(steps are a oneof of approval/provision/accept/reject/wait/form — the
-schema also declares "action", which the server rejects as an unsupported
-step type — and an approval step's approver is itself a oneof of ten arms),
-so it would be unusable as a flat flag surface. The simple top-level fields
-(--display-name, --description, --policy-type) stay as flags, mirroring how
-"mcp servers register" takes its auth config via --hosted-config-file.
+(steps are a oneof of seven arms — approval/provision/accept/reject/wait/
+form/action — and an approval step's approver is itself a oneof of ten
+arms), so it would be unusable as a flat flag surface. Two of those seven
+are refused here, client-side at exit 2 before any request is sent, quoted
+verbatim so the refusal greps back to its check:
+  a "provision" step is never allowed in a policy body — it's read-only and server-computed
+  an "action" step is not supported by create/update yet
+The simple top-level fields (--display-name, --description, --policy-type)
+stay as flags, mirroring how "mcp servers register" takes its auth config
+via --hosted-config-file.
 
   --steps-file  a JSON ARRAY: the "steps" content for --policy-type's
                 baseline entry, e.g.:

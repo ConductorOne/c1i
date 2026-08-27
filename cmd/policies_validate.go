@@ -378,10 +378,10 @@ func validateApprovalFallback(policySteps map[string]any, policyType string) err
 				return &usageError{fmt.Errorf("policySteps[%q].steps[%d]: none of its key(s) match a recognized arm (approval, provision, accept, reject, wait, form, action) — if that's a typo or wrong casing, the server's JSON decoder rejects the whole request for the unrecognized field before any handler runs (HTTP 400, not 500)", ptype, i)}
 			}
 			if _, hasAction := step["action"]; hasAction {
-				return &usageError{fmt.Errorf("policySteps[%q].steps[%d]: an \"action\" step is not supported by create/update yet — the platform's API-to-model conversion has no case for it and falls through to a bare \"unsupported workflow step type\" error (HTTP 500, not 400)", ptype, i)}
+				return &usageError{fmt.Errorf(`policySteps[%q].steps[%d]: an "action" step is not supported by create/update yet — the platform's API-to-model conversion has no case for it and falls through to a bare "unsupported workflow step type" error (HTTP 500, not 400)`, ptype, i)}
 			}
 			if _, hasProvision := step["provision"]; hasProvision {
-				return &usageError{fmt.Errorf("policySteps[%q].steps[%d]: a \"provision\" step is never allowed in a policy body — it's read-only and server-computed", ptype, i)}
+				return &usageError{fmt.Errorf(`policySteps[%q].steps[%d]: a "provision" step is never allowed in a policy body — it's read-only and server-computed`, ptype, i)}
 			}
 			approval, ok := step["approval"].(map[string]any)
 			if !ok {

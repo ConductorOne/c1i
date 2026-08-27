@@ -39,6 +39,73 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   since a second JSON surface for the same fact is exactly the duplication
   that drifts. Docs updated: `cmd/agents.md`, `README.md`, `cmd/docs_guide.go`.
 
+- **`step_kinds` on `policies list` / `policies search` rows.** Nothing in a
+  policy row could tell an auto-approval policy from an approval gate: on a
+  live tenant both are `POLICY_TYPE_GRANT`, `system_builtin`, `step_count: 1`,
+  `rule_count: 0`. Callers that needed the tenant's auto-approval grant policy
+  had to match on the English display name -- not portable, since one tenant
+  spells it "Auto-approval" and the next "Auto approval" -- or pay an N+1
+  `policies get` per policy. The discriminator was in the list response all
+  along (`policySteps.grant.steps[0]` is `accept` vs `approval`); the row
+  builder counted the steps and dropped their kinds. Rows now also carry
+  `step_kinds`, naming each step's kind in order -- one of `approval`,
+  `provision`, `accept`, `reject`, `wait`, `form`, `action`, the seven the
+  policy schema declares, with an unrecognized name passed through as itself
+  so a kind added later needs no CLI change. So
+  `c1i policies list | jq -c 'select(.policy_type=="POLICY_TYPE_GRANT" and
+  .system_builtin and .step_kinds==["accept"] and .baseline_policy_id==null)'`
+  identifies it with no extra request.
+
+  The `.baseline_policy_id==null` clause states an intent rather than changing
+  the result. A row with a non-null `baseline_policy_id` has no baseline of
+  its own -- the schema makes the two mutually exclusive -- so its
+  `step_kinds` is `[]` and the `==["accept"]` test already excludes it. The
+  clause is there to say that exclusion is deliberate, and to keep the recipe
+  correct if `step_kinds` ever starts reporting a delegated sequence.
+
+  Delegating policies are not covered by that one-liner, so find them
+  separately and follow the reference:
+
+  ```
+  c1i policies list | jq -c 'select(.baseline_policy_id) |
+    {id, display_name, baseline_policy_id}'
+  ```
+
+  Then re-select the target out of the same listing and apply the baseline
+  test to it, walking until `baseline_policy_id` comes back `null`; the schema
+  bounds these chains at depth 5, so this terminates:
+
+  ```
+  c1i policies list | jq -c 'select(.id=="<baseline-policy-id>")'
+  ```
+
+  Follow the reference through `list`, not `policies get`: `get` is a verbatim
+  passthrough of the API object, so it carries `policySteps` and
+  `baselinePolicyId` and neither of the derived keys the test above reads.
+  Applying that test to a `get` would silently match nothing.
+
+  `step_kinds` describes the **baseline** step sequence -- the one that runs
+  when no conditional rule matches. `policySteps` is not a map of phases: one
+  entry is the baseline, keyed by the lowercased policy type, and any others
+  have opaque UUID keys that the `rules` array routes to conditionally. Only
+  one sequence ever executes, so reporting them together would describe a run
+  that never happens. `step_count` is unchanged -- it still counts every step
+  in every sequence -- so the two legitimately differ on a policy with
+  conditional routing; `rule_count > 0` is the signal that alternative
+  sequences exist. `step_kinds` is always a JSON array (`[]`, never `null`);
+  a step whose kind cannot be read is reported as `"unknown"`, and a policy
+  with no baseline entry reports `[]`, so a selector fails closed either way.
+
+  Rows also gain `baseline_policy_id` (`null` when unset, following
+  `deleted_at`). On a `POLICY_REFERENCES_POLICY` tenant a policy may delegate
+  its baseline to another policy instead of holding one, which the schema
+  makes mutually exclusive with a baseline entry -- so `step_kinds` is `[]`
+  for a perfectly healthy policy, and `rule_count` does not distinguish it
+  (it is 0 unless conditional rules are also configured). Without this key
+  such a row is indistinguishable from a broken one, which is why the recipe
+  above tests it rather than leaving the reader to notice. Verified against a
+  live tenant that accepts `baselinePolicyId`.
+
 - **`apps owners`, `apps add-owner`, and `apps remove-owner`.** `apps get`'s
   `appOwners` field was empty on every app checked, while `GET .../owners`
   returns the owners `apps set-owners` had already written, but reading
@@ -187,6 +254,19 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   and `cmd/agents.md` to drop the `appOwners` claim and point at the owner
   reads that do work (`apps owners`, added above; `ownerids` in the
   `set-owners` help, which is the read `--wait` polls).
+- **`policies --help` no longer lists `provision` among the step types
+  `create`/`update` accept.** Its `Long` said "six usable types (approval,
+  provision, accept, reject, wait, form)", but `validatePolicySteps` refuses a
+  `provision` step outright, at exit 2:
+  `a "provision" step is never allowed in a policy body — it's read-only and server-computed`.
+  Someone reading the old text could have built a policy body around a step
+  type the CLI rejects before the request is even sent. `Long` now gives the
+  schema's seven for the read side and names the two the write path rejects,
+  rather than asserting a count of what it accepts. The other rejection, also
+  re-confirmed live at exit 2, is
+  `an "action" step is not supported by create/update yet`.
+  Both refusals are raw-string literals, so the line a user pastes from their
+  terminal greps straight back to the check that emitted it.
 
 - **`.claude/worktrees/` is gitignored.** Agent worktrees land there, and
   untracked they stamped every local build `+dirty` -- a string that reaches
