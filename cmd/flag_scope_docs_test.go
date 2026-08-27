@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"fmt"
 	"go/ast"
 	"go/parser"
 	"go/token"
@@ -122,14 +123,19 @@ var httpSenderFuncs = map[string]bool{
 	"PostForm":      true,
 }
 
-// transportFreeSenders reports the net/http sending constructs a file uses:
-// a package-level sender above, or an http.Client composite literal (which
-// carries none of internal/transport's guards, options, or user agent).
+// transportFreeSenders reports the net/http constructs a file uses that send a
+// request outside internal/transport: a package-level sender above, or an
+// http.Client CONSTRUCTED in any of the idiomatic ways (composite literal,
+// new(), a value var, a value struct field). Matching construction rather than
+// every mention of the type keeps a `*http.Client` parameter — mcpgateway.New
+// takes one — from reading as a bypass.
 //
-// Limitation, deliberate: this recognizes net/http. A package that builds its
-// own http.RoundTripper and drives it directly, or that reaches for a
-// third-party HTTP library, would slip past — accept that rather than chase
-// every shape, and widen this set when one shows up.
+// What this does NOT catch, stated in full because understating it is the same
+// failure this file guards against: a hand-rolled http.RoundTripper driven
+// directly (http.DefaultTransport.RoundTrip included), a local type alias for
+// http.Client, and any third-party HTTP library. A dot-import of net/http is
+// not missed but not analyzed either — it returns an error rather than a quiet
+// pass, since selectors cannot be resolved through one.
 func transportFreeSenders(path string) ([]string, error) {
 	fset := token.NewFileSet()
 	f, err := parser.ParseFile(fset, path, nil, 0)
@@ -137,6 +143,9 @@ func transportFreeSenders(path string) ([]string, error) {
 		return nil, err
 	}
 
+	// First net/http import wins. Without the break a duplicate import
+	// (`"net/http"` plus `nh "net/http"`) would leave httpName set to the last
+	// spelling and silently miss every use of the first.
 	httpName := ""
 	for _, im := range f.Imports {
 		if im.Path.Value != `"net/http"` {
@@ -146,9 +155,14 @@ func transportFreeSenders(path string) ([]string, error) {
 		if im.Name != nil {
 			httpName = im.Name.Name
 		}
+		break
 	}
 	if httpName == "" {
 		return nil, nil
+	}
+	if httpName == "." {
+		return nil, fmt.Errorf("dot-imports net/http; this guard cannot resolve selectors " +
+			"through a dot-import, so it cannot tell whether the file bypasses internal/transport")
 	}
 
 	seen := map[string]bool{}
@@ -159,6 +173,18 @@ func transportFreeSenders(path string) ([]string, error) {
 			hits = append(hits, s)
 		}
 	}
+	// isHTTPClientType reports whether expr names the http.Client type itself.
+	// A StarExpr (*http.Client) is deliberately not unwrapped: a pointer names
+	// a client, it does not make one.
+	isHTTPClientType := func(expr ast.Expr) bool {
+		se, ok := expr.(*ast.SelectorExpr)
+		if !ok || se.Sel.Name != "Client" {
+			return false
+		}
+		id, ok := se.X.(*ast.Ident)
+		return ok && id.Name == httpName
+	}
+
 	ast.Inspect(f, func(n ast.Node) bool {
 		switch v := n.(type) {
 		case *ast.SelectorExpr:
@@ -166,10 +192,22 @@ func transportFreeSenders(path string) ([]string, error) {
 				add(httpName + "." + v.Sel.Name)
 			}
 		case *ast.CompositeLit:
-			if se, ok := v.Type.(*ast.SelectorExpr); ok {
-				if id, ok2 := se.X.(*ast.Ident); ok2 && id.Name == httpName && se.Sel.Name == "Client" {
-					add(httpName + ".Client{}")
+			if isHTTPClientType(v.Type) {
+				add(httpName + ".Client{}")
+			}
+		case *ast.CallExpr:
+			if id, ok := v.Fun.(*ast.Ident); ok && id.Name == "new" && len(v.Args) == 1 {
+				if isHTTPClientType(v.Args[0]) {
+					add("new(" + httpName + ".Client)")
 				}
+			}
+		case *ast.ValueSpec:
+			if isHTTPClientType(v.Type) {
+				add("var " + httpName + ".Client")
+			}
+		case *ast.Field:
+			if isHTTPClientType(v.Type) {
+				add(httpName + ".Client field")
 			}
 		}
 		return true
@@ -181,12 +219,18 @@ func transportFreeSenders(path string) ([]string, error) {
 // internal/transport, each with what it reaches. Keep it in sync with the
 // carve-outs in the four documents; the test below fails if reality drifts
 // from this set in either direction.
+//
+// Trap for the next reader: entries mean two different things and the loops
+// below treat them identically. The two cmd/ files ARE bypasses, documented as
+// such in the four docs. internal/transport is the opposite — it is the shared
+// transport, so its http.Client is the one every other package is supposed to
+// inherit; it is listed only to keep it from reporting itself. A new sender
+// appended to transport.go would therefore pass silently, which is accepted:
+// that file IS the transport, and changing it is not the drift this guards.
 var httpBypassFiles = map[string]string{
-	"cmd/docs_search.go":  "docs search / docs page -> api.mintlify.com",
-	"cmd/docs_openapi.go": "docs openapi / endpoints / endpoint -> conductorone.com",
-	// internal/transport IS the shared transport; its http.Client is the one
-	// every other package is supposed to get its guards and options from.
-	"internal/transport/transport.go": "the shared transport itself, not a bypass",
+	"cmd/docs_search.go":              "bypass: docs search / docs page -> api.mintlify.com",
+	"cmd/docs_openapi.go":             "bypass: docs openapi / endpoints / endpoint -> conductorone.com",
+	"internal/transport/transport.go": "NOT a bypass: the shared transport itself",
 }
 
 // TestDocumentedFlagScopeExceptionIsStillReal ties the carve-outs to the code
@@ -204,7 +248,13 @@ func TestDocumentedFlagScopeExceptionIsStillReal(t *testing.T) {
 		}
 		if d.IsDir() {
 			switch d.Name() {
-			case ".git", "dev", "vendor":
+			// .claude holds .claude/worktrees/, which this branch's first
+			// commit gitignored precisely because `git worktree add` targets
+			// land there. Walking in finds every nested checkout's copy of
+			// this repo and reports transport.go as a bypass — a local-only
+			// failure (CI clones fresh) landing on the `go test ./...`
+			// CLAUDE.md mandates before pushing.
+			case ".git", ".claude", "dev", "vendor":
 				return fs.SkipDir
 			}
 			return nil

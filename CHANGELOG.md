@@ -82,9 +82,12 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   failing in both directions -- if a file starts sending HTTP outside
   `internal/transport`, or if these stop and the carve-outs go stale. It parses
   the AST rather than grepping one spelling, so `http.Get`/`Post`/`Head`/
-  `PostForm` and an `http.Client` composite literal all count, and it walks the
-  whole repo rather than `cmd/` alone -- `internal/` is the likelier home for
-  the next one.
+  `PostForm` and an `http.Client` constructed any idiomatic way (composite
+  literal, `new()`, a value var or struct field) all count, while a
+  `*http.Client` parameter correctly does not. It walks the whole repo rather
+  than `cmd/` alone -- `internal/` is the likelier home for the next one --
+  skipping `.claude/`, since the worktrees gitignored above would otherwise
+  make it fail locally while passing in CI.
 
 - **`apps create` and `apps delete` are in the README.** Both shipped without
   ever being listed in the Apps section, so the only way to find them was
