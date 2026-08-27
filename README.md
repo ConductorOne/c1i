@@ -108,6 +108,9 @@ c1i grants list --app-id <id> --entitlement-id <id>   # who holds an entitlement
 c1i grants list --user-id <id>                         # what a C1 identity has, across apps
 c1i grants list --app-user-id <id>                     # what an app account holds
 c1i grants list --app-id <id>                          # every grant in an app
+
+# After a grant, wait for the set to stop changing rather than polling by hand
+c1i grants list --app-id <id> --entitlement-id <id> --wait --wait-min 1
 ```
 
 Grants are the bindings between accounts/users and entitlements. At least one
@@ -115,6 +118,31 @@ filter is required. Each NDJSON row includes the entitlement, the account
 (`app_user_*`) and its `identity_user_id`, timestamps (`created_at`,
 `deprovision_at`), and `grant_source_count` — `0` for a direct grant, or the
 number of groups/roles the access is inherited through.
+
+Grant provisioning is asynchronous, so a read taken moments after a grant or
+revoke can catch the set mid-change. `--wait` re-reads every page every 5s and
+prints nothing until the same grants come back `--wait-stable` times running
+(default `3`, minimum `2` -- one read cannot show that anything held steady).
+Progress goes to stderr, so stdout stays pure NDJSON. The 5s interval is fixed
+and is not a flag; `--wait-stable` must fit inside `--wait-timeout` (default
+`4m`), and a combination that cannot fit is rejected as a usage error rather
+than left to time out.
+
+**An empty result is stable.** A filter matching nothing settles at the first
+opportunity -- about 10s at the defaults -- and exits `0` with zero rows.
+Waiting on a grant you just made, that reads as "it did not happen" when the
+truth is "not yet". Pass `--wait-min 1` (or the count you expect) to hold out
+for that many grants and time out instead; exit `1` then means "did not
+converge in time", not "absent". The default of `0` is deliberate:
+empty-and-stable is the correct answer when you are waiting for a revoke --
+and in that direction there is no flag that helps, since `--wait-min` is a
+floor and cannot express a ceiling. `--wait` settles on whatever is steady, so
+exit `0` still listing the row means "not yet, re-run", not "the revoke
+failed".
+
+`--wait` settles on the whole matching set, fetching every page on every poll
+regardless of `--limit`; `--limit` only truncates what is printed. Filter
+narrowly. `--wait` and `--page-token` are mutually exclusive.
 
 A grant outlives the entitlement or account it points at, so rows also carry
 `entitlement_deleted_at` and `app_user_deleted_at`: `jq

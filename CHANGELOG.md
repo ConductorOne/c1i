@@ -106,13 +106,6 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   above tests it rather than leaving the reader to notice. Verified against a
   live tenant that accepts `baselinePolicyId`.
 
-- **`grants list --wait`.** Grant provisioning is asynchronous, so a read taken
-  right after a grant or revoke can catch the set mid-change. `--wait` re-reads
-  every page until the same grants come back `--wait-stable` times in a row
-  (default 3), then prints that settled set; progress goes to stderr, so stdout
-  stays pure NDJSON. It is rejected with `--page-token` (a pinned cursor is not
-  a stable set) and with `--wait-stable` below 2.
-
 - **`grants list --wait`, with `--wait-stable`, `--wait-min` and
   `--wait-timeout`.** Grant provisioning is asynchronous, so a read taken right
   after a grant or revoke can catch the set mid-change. `--wait` re-reads every

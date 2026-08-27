@@ -227,7 +227,10 @@ Two things are irreversible in ways their `--help` doesn't make obvious:
   observed at 45-150s across set-owners, add-owner, remove-owner and the
   owner "apps create" assigns; grants: up to a couple of minutes). Verify
   owners with `c1i apps owners <app-id>`, not `apps get`'s `appOwners`
-  field -- observed empty on every app checked in testing. `apps owners` also
+  field -- it was [] on all 46 apps in the test tenant on the second
+  measurement pass, including the 45 that GET .../ownerids reported owners
+  for, so an empty appOwners is not evidence an app has no owners.
+  `apps owners` also
   returns zero rows at exit 0 for a well-formed but nonexistent app id, so an
   empty result is either "no owners" or "wrong id"; `apps add-owner` on the
   same id exits 4. Don't write your own poll loop for this: `apps set-owners`
@@ -235,6 +238,24 @@ Two things are irreversible in ways their `--help` doesn't make obvious:
   requested owner appears. A `--wait` timeout exits `1` and does not mean the
   write failed — provisioning may still be in flight, so re-check with
   `apps owners` instead of re-issuing the write.
+- `grants list --wait` can report success with zero rows. An empty result is
+  stable, so a filter matching nothing settles in ~10s and exits `0` -- which
+  looks identical to "the grant did not happen" but usually means "not yet".
+  After a write, pass `--wait-min 1`; exit `1` then means "did not converge in
+  time", not "definitely absent". Without a minimum, treat `--wait` plus zero
+  rows as inconclusive, never as a negative answer. The reverse has no flag:
+  `--wait` settles on whatever is steady, and an undeprovisioned grant is
+  steady, so after a revoke exit `0` still listing the row means "not yet,
+  re-run", not "the revoke failed".
+- `grants list --wait` buffers: nothing reaches stdout until the set settles,
+  unlike every other list command. Progress goes to stderr, so stdout stays
+  pure NDJSON, and a timeout exits `1` printing no rows. `--wait` fetches every
+  page on every poll regardless of `--limit`, which only truncates what is
+  printed, and it is mutually exclusive with `--page-token`.
+- `--wait-stable` counts consecutive identical reads (default `3`, minimum
+  `2`). Two is not enough: a pause mid-change is indistinguishable from
+  completion. Three is a heuristic, not a proof -- size it past the longest
+  pause you have actually observed. The 5s poll interval is fixed, not a flag.
 - `accounts list --unmapped-only` filters after each page is fetched, not
   server-side. With `--page-token` (which turns off auto-pagination) a page
   can come back empty while unmapped accounts exist further along.
