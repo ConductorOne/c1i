@@ -16,12 +16,19 @@ var policiesSearchCmd = &cobra.Command{
 	Use:   "search",
 	Short: "Search policies by display name, description, type, or deletion state (NDJSON output)",
 	Long: `Search policies. Unlike "policies list" (pagination only), this filters by
-a fuzzy query (display name + description), an exact display-name match,
-one or more policy types, and can include soft-deleted policies via
+a fuzzy query (display name + description), a case-insensitive display-name
+match, one or more policy types, and can include soft-deleted policies via
 --include-deleted — the only listing that can find one. ("policies get"
 also still returns a deleted policy directly, by id, with deletedAt
 populated; it's "policies list" and the default "policies search" that
-exclude them.)`,
+exclude them.)
+
+Rows are the same shape "policies list" emits, including step_kinds (the kind
+of each step in the policy's baseline sequence) and baseline_policy_id — see
+"policies list --help" for what they mean and the jq recipe that identifies a
+tenant's auto-approval policy portably. --display-name is no substitute:
+it only ignores case, and the names differ by more than that between tenants
+("Auto-approval" in one, "Auto approval" in the next).`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		baseURL, err := GetBaseURL()
 		if err != nil {
