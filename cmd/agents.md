@@ -47,7 +47,7 @@ no tenant URL in its output) before doing anything else.
 
 ## Global flags
 
-These flags work on every command, each with an env-var twin. Set the env var to
+Every command accepts these, each with an env-var twin. Set the env var to
 apply it for a whole session; the flag wins for a single invocation.
 
 | Flag | Env | What it does |
@@ -55,7 +55,7 @@ apply it for a whole session; the flag wins for a single invocation.
 | `--url` | `C1I_URL` | tenant host — see above |
 | `--fields` | `C1I_FIELDS` | comma-separated dot-paths to keep in JSON output — see "Reading output" |
 | `--dry-run` | `C1I_DRY_RUN` | preview a mutating request's method, path, and body without sending it |
-| `--debug` | `C1I_DEBUG` | trace every HTTP request (method, URL, status, timing) to stderr |
+| `--debug` | `C1I_DEBUG` | trace API HTTP requests (method, URL, status, timing) to stderr |
 | `--max-retries` | `C1I_MAX_RETRIES` | retries for transient API failures (`429`/`5xx`); `0` disables |
 | `--error-format` | `C1I_ERROR_FORMAT` | `text` (default) or `json` |
 
@@ -69,6 +69,14 @@ for the detail, not the classification.
 commands: the gateway client threads both into its bearer mint and its
 JSON-RPC calls. On a `mcp gateway call` that hangs or fails oddly, `--debug`
 is the fastest way to see which request stopped.
+
+They do **not** reach the `docs` subcommands that fetch — `docs search`,
+`docs page`, `docs openapi`, `docs endpoints`, `docs endpoint`. Those go
+straight to the public docs site through Go's default HTTP client, so
+`--debug` prints nothing and `--max-retries` is ignored. Silent `--debug`
+output there means the flag doesn't reach that path, NOT that no request was
+sent — don't read it as evidence either way when a `docs` command comes back
+empty.
 
 ## Choosing a command
 
