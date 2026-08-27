@@ -398,7 +398,7 @@ of anything specific to what you're about to model.
 
 "--wait" polls "GET .../ownerids" until the owner appears (or times out) and
 prints "Owners provisioned on app ... after ...". Without "--wait", the PUT
-returns immediately but the owner takes roughly 96-129s to show up in
+returns immediately but the owner takes roughly 45-150s to show up in
 "GET .../ownerids" (four measured writes; a fifth had not landed at 108s) --
 see "Verify" below for why "apps get"'s "appOwners" field is not the way to
 check this.
@@ -723,12 +723,13 @@ checking once immediately.
 
 ## Common failures
 
-- action not permitted on tasks approve/tasks deny (exit 1) — the
+- action not permitted on tasks approve/tasks deny — the exit code
+  follows the API's status for the refusal, which is not recorded here; the
   authenticated identity isn't on the task's current policy step,
   confirmed ahead of time by actions in step 2 omitting
   TASK_ACTION_TYPE_APPROVE/_DENY.
 - could not determine the current policy step for task ...; pass
-  --policy-step-id explicitly, on tasks approve (exit 1) — no current step
+  --policy-step-id explicitly, on tasks approve (exit 2) — no current step
   could be derived (approve requires one). tasks deny never fails this way
   on the same task; it just proceeds without a step. Supply
   --policy-step-id explicitly once you've read it via step 2's response.

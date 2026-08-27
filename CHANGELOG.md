@@ -6,6 +6,22 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-08-27
+
+### Upgrading from 0.5.x
+
+Two exit codes changed. Both are narrower failures that previously reported
+success or a generic error, so a script that branched on them needs a look:
+
+- `auth whoami` on a `200` carrying no usable identity (`null`, `{}`, or an
+  all-null identity) now exits **6** ("C1 failed") instead of **0**. A body
+  that is not a JSON object at all — truncated, empty, an array, a scalar —
+  also moves from the generic **1** to **6**.
+- Nothing else changes an exit code. `c1i api`'s new partial-result warning
+  goes to **stderr** only; stdout is byte-for-byte unchanged, so a parser
+  reading stdout is unaffected. A caller folding stderr into stdout with
+  `2>&1` will see the new line.
+
 ### Added
 
 - **`c1i api` now warns when it discards a pagination cursor.** A bare `api`
@@ -1419,7 +1435,8 @@ First changelog entry; releases through v0.1.5 predate this file (see the
 
 - CI enforces `gofmt` via golangci-lint; module-wide formatting normalized.
 
-[Unreleased]: https://github.com/ConductorOne/c1i/compare/v0.5.0...HEAD
+[Unreleased]: https://github.com/ConductorOne/c1i/compare/v0.6.0...HEAD
+[0.6.0]: https://github.com/ConductorOne/c1i/releases/tag/v0.6.0
 [0.5.0]: https://github.com/ConductorOne/c1i/releases/tag/v0.5.0
 [0.4.1]: https://github.com/ConductorOne/c1i/releases/tag/v0.4.1
 [0.4.0]: https://github.com/ConductorOne/c1i/releases/tag/v0.4.0

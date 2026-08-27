@@ -199,8 +199,9 @@ tracked root file outside its allowlist. Stage explicit paths rather than `-A`.
   client errors with `%w` so `errors.As` can classify them, and wrap a bad
   flag/arg combination in `&usageError{}` so it exits 2 — a bare `fmt.Errorf`
   silently becomes exit 1.
-- Retries (429/5xx + transport, idempotent-aware) live in the client
-  (`internal/client/client.go`); commands get them for free via `newClient`.
+- Retries (429/5xx + transport, idempotent-aware) live in
+  `internal/transport/transport.go`; `internal/client` only forwards the
+  options through. Commands get them for free via `newClient`.
 - **Help text is a claim about the server.** Don't state a default, scope, or
   restriction in a `Long`/flag description you haven't seen the API honor. Quote
   the server's own error string when documenting a restriction so it's greppable
