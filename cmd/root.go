@@ -155,18 +155,25 @@ func initConfig() {
 
 // GetBaseURL returns the configured base URL or exits with an error. Embedded
 // credentials are dropped with a warning to stderr rather than an error; a
-// non-https scheme is an error. Delegates to GetBaseURLWithSource so a ParseURL
+// non-https scheme is an error. Delegates to requireBaseURL so a ParseURL
 // error (e.g. a retired bare short name) is reported with the same
 // source-naming used everywhere else.
 func GetBaseURL() (string, error) {
+	baseURL, _, err := requireBaseURL()
+	return baseURL, err
+}
+
+// requireBaseURL is GetBaseURL plus where the URL came from, for commands that
+// report the tenant they resolved instead of only using it.
+func requireBaseURL() (string, URLSource, error) {
 	baseURL, source, err := GetBaseURLWithSource()
 	if err != nil {
-		return "", err
+		return "", source, err
 	}
 	if source == URLSourceNone {
-		return "", &usageError{fmt.Errorf("url is required: set --url flag, C1I_URL env var, or url in ~%s.c1i.yaml", string(filepath.Separator))}
+		return "", source, &usageError{fmt.Errorf("url is required: set --url flag, C1I_URL env var, or url in ~%s.c1i.yaml", string(filepath.Separator))}
 	}
-	return baseURL, nil
+	return baseURL, source, nil
 }
 
 // warnAboutURL prints any ParseURL warnings to stderr, one per line.
@@ -214,6 +221,21 @@ func urlSourceLabel(source URLSource) string {
 		return "~/.c1i.yaml"
 	default:
 		return "unknown source"
+	}
+}
+
+// urlSourceToken is urlSourceLabel's machine-readable twin: stable identifiers
+// for JSON output (auth whoami's tenantSource), not prose that may be reworded.
+func urlSourceToken(source URLSource) string {
+	switch source {
+	case URLSourceFlag:
+		return "flag"
+	case URLSourceEnv:
+		return "env"
+	case URLSourceConfig:
+		return "config"
+	default:
+		return "unknown"
 	}
 }
 

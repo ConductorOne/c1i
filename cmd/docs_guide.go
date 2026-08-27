@@ -365,10 +365,11 @@ via toolset sync).
 ## Prerequisites
 
 - Pointed at the tenant you intend to change, and authenticated. This guide
-  creates objects, so confirm the target before you start — "auth whoami"
-  reports the identity but not the tenant:
+  creates objects, so confirm the target before you start. "auth whoami"
+  reports both the identity and the resolved tenant, the latter machine-
+  readably ("auth status" prints the same tenant as text):
 
-      c1i auth status
+      c1i auth whoami --fields tenant
       c1i auth whoami
 - At least one candidate owner already exists as a C1 user (owners are
   existing users, never created here — C1 users come from a connected

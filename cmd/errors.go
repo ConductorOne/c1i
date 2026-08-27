@@ -52,12 +52,14 @@ type toolExecutionError struct{ err error }
 func (e *toolExecutionError) Error() string { return e.err.Error() }
 func (e *toolExecutionError) Unwrap() error { return e.err }
 
-// nonJSONResponseError marks an HTTP-success response whose body isn't valid
-// JSON (e.g. a path that escapes the API prefix and lands on a server that
-// answers 200 with an HTML document). Maps to exitServer: the request itself
-// was well-formed, so this isn't a usage error; it's the remote side failing
-// to honor the JSON contract this CLI depends on, the same "remote responded
-// but not usefully" bucket exitServer already covers for 5xx.
+// nonJSONResponseError marks an HTTP-success response the caller cannot use:
+// a body that isn't valid JSON (e.g. a path that escapes the API prefix and
+// lands on a server answering 200 with an HTML document), or one that is valid
+// JSON but carries none of what the endpoint promises (e.g. an introspect 200
+// with no identity in it). Maps to exitServer: the request itself was
+// well-formed, so this isn't a usage error; it's the remote side failing to
+// honor the contract this CLI depends on, the same "remote responded but not
+// usefully" bucket exitServer already covers for 5xx.
 type nonJSONResponseError struct{ err error }
 
 func (e *nonJSONResponseError) Error() string { return e.err.Error() }
