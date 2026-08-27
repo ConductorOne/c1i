@@ -555,13 +555,15 @@ remote error (exit `6`) rather than looping.
 This applies to every command built on the shared transport: the REST client,
 the MCP gateway, and the login handshake, so the path and redirect guards,
 `--debug` tracing, and `--max-retries` cover the gateway and login too, not just
-REST commands. One carve-out inside login: the device-flow token poll sets its
-own retry count to zero, because RFC 8628's polling interval already *is* that
+REST commands. **None of those four** applies to the `docs` subcommands that
+fetch — `docs search`, `docs page`, `docs openapi`, `docs endpoints`,
+`docs endpoint` — which call Go's default HTTP client directly: no path or
+redirect guard there, and `--debug` and `--max-retries` are both inert.
+
+One narrower carve-out inside login: the device-flow token poll forces its own
+retry count to zero, because RFC 8628's polling interval already *is* that
 call's retry strategy and a second layer underneath would double the delays.
-`--max-retries` still governs the rest of the login handshake. It does **not** apply to the `docs` subcommands that fetch —
-`docs search`, `docs page`, `docs openapi`, `docs endpoints`, `docs endpoint` —
-which call Go's default HTTP client directly: no path or redirect guard there,
-and `--debug` and `--max-retries` are both inert.
+`--max-retries` still governs the rest of the handshake.
 
 A bad id is the only cause of a refused `3xx` observed so far, which is why it
 maps to exit `2` — a redirect on an otherwise well-formed request would not be

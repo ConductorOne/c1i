@@ -398,8 +398,11 @@ of anything specific to what you're about to model.
 
 "--wait" polls "GET .../ownerids" until the owner appears (or times out) and
 prints "Owners provisioned on app ... after ...". Without "--wait", the PUT
-returns immediately but the owner takes roughly 45-150s to show up in
-"GET .../ownerids" (four measured writes; a fifth had not landed at 108s) --
+returns immediately but the owner takes roughly 96-129s to show up in
+"GET .../ownerids" -- four measured "set-owners" writes, a fifth still
+pending at 108s. Read through "apps owners" instead, and across
+"set-owners", "add-owner", "remove-owner" and the owner "apps create"
+assigns, the spread is wider: 45-150s --
 see "Verify" below for why "apps get"'s "appOwners" field is not the way to
 check this.
 
@@ -458,7 +461,7 @@ matters.
 
 ## Common failures
 
-- "apps set-owners" exits 1 with a 400 naming a regex pattern
+- "apps set-owners" exits 2 with a 400 naming a regex pattern
   (^[a-zA-Z0-9]{27}$) -> the app id or a "--user-id" isn't a real 27-char
   C1 id -> fix the id; retrying as-is won't help.
 - "entitlements list --app-id <id>" returns nothing at exit 0 for a
@@ -614,7 +617,7 @@ waiting on an approver, not that the revoke failed.
 | Symptom | Cause | Fix |
 |---|---|---|
 | 403 target user is not allowed to request that resource (exit 3) | The entitlement isn't reachable through any request catalog for this user | Configure it in the C1 console (App > Access requests), or target an entitlement that already allows requests |
-| 409 duplicate ticket found, with a task id in the error details (exit 1) | An open task for this exact app + entitlement + user already exists | Act on that task id ("tasks list --state open") instead of creating another |
+| 409 duplicate ticket found, with a task id in the error details (exit 2) | An open task for this exact app + entitlement + user already exists | Act on that task id ("tasks list --state open") instead of creating another |
 | required flag(s) "app-id", "entitlement-id" not set (exit 2) | Both are required on "requests create grant"/"revoke" | Fix the invocation |
 | An auth failure resolving the caller's own id when "--user-id" is omitted (exit 3) | Surfaces before the request call itself runs | Re-authenticate rather than retry as-is |
 | "grants list" returns nothing right after approval | Eventual consistency | Re-run with "--wait --wait-min 1" so it blocks until the grant lands; a bare "--wait" settles on the empty set in ~10s and exits 0, which reads as a denial |
