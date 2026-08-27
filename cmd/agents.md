@@ -41,9 +41,11 @@ Credentials resolve in this order: `C1I_CLIENT_ID` + `C1I_CLIENT_SECRET` env
 vars (read-only — c1i never writes them), the OS keyring, then a `0600` file
 used automatically where no keyring exists (headless Linux, CI, containers).
 `c1i auth login` to authenticate; then `c1i auth whoami` before doing
-anything else — it reports both the identity you're acting as (userId,
-principleId, email, displayName) and the tenant you're pointed at, the
-latter machine-readably: `tenant` is the resolved base URL and
+anything else — it reports both the identity you're acting as (principleId,
+plus userId when the principal has one; email and displayName only when a
+best-effort secondary lookup succeeds, and never under `--verbose`, which is
+a different projection, not a superset) and the tenant you're pointed at,
+the latter machine-readably: `tenant` is the resolved base URL and
 `tenantSource` is where that URL came from (`flag`, `env`, or `config`, the
 last meaning it fell through to `~/.c1i.yaml`). Gate any write on it:
 

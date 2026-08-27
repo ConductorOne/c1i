@@ -209,33 +209,77 @@ func TestWhoamiReportsNoTenantWhenUnauthenticated(t *testing.T) {
 	}
 }
 
-// TestWhoamiNullIntrospectBodyIsC1Failure covers the degenerate body a 200 can
-// still carry: `null` unmarshals into a map[string]any without error, leaving
-// the payload a NIL map. Writing the tenant into it would panic (assignment to
-// entry in nil map), and printing it would be a bare "null" with exit 0 — a
-// guardrail reporting success on a body carrying no identity at all. It is the
-// remote failing its JSON contract, so it belongs in exitServer with the other
-// unusable 200s, in both output modes.
-func TestWhoamiNullIntrospectBodyIsC1Failure(t *testing.T) {
-	for _, args := range [][]string{
-		{"--url", "https://acme.conductor.one"},
-		{"--url", "https://acme.conductor.one", "--verbose"},
-	} {
-		t.Run(strings.Join(args, " "), func(t *testing.T) {
-			t.Setenv("C1I_URL", "")
-			stubWhoamiServerBody(t, http.StatusOK, `null`)
+// TestWhoamiUnusableIntrospectBodyIsC1Failure walks the degenerate bodies a
+// 200 can still carry. The invariant is a usable identity, not a non-nil map:
+// `null` leaves the payload nil (writing the tenant into it panics), `{}`
+// leaves it empty and non-nil, and an all-null identity leaves the keys
+// present but useless — all three produced, or would have produced, a tenant
+// reported next to a null identity with exit 0, which is a guardrail
+// confirming a target off a response that proves nothing. A body that isn't a
+// JSON object at all belongs in the same bucket rather than the generic exit
+// 1 a bare fmt.Errorf gives. All of it is the remote failing its JSON
+// contract: exitServer, in both output modes.
+func TestWhoamiUnusableIntrospectBodyIsC1Failure(t *testing.T) {
+	bodies := map[string]string{
+		"null":            `null`,
+		"empty object":    `{}`,
+		"null identity":   `{"userId":null,"principleId":null,"roles":[]}`,
+		"empty identity":  `{"userId":"","principleId":""}`,
+		"json array":      `[]`,
+		"json scalar":     `0`,
+		"truncated":       `{"userId":"u1"`,
+		"empty body":      ``,
+		"whitespace body": "  \n",
+	}
+	for name, body := range bodies {
+		for _, args := range [][]string{
+			{"--url", "https://acme.conductor.one"},
+			{"--url", "https://acme.conductor.one", "--verbose"},
+		} {
+			t.Run(name+" "+strings.Join(args, " "), func(t *testing.T) {
+				t.Setenv("C1I_URL", "")
+				stubWhoamiServerBody(t, http.StatusOK, body)
 
-			out, err := runWhoami(t, args)
-			if err == nil {
-				t.Fatalf("expected an error for a null introspect body, got nil (output %q)", out)
-			}
-			if got, want := exitCode(err), exitServer; got != want {
-				t.Errorf("exitCode(%v) = %d, want %d (exitServer)", err, got, want)
-			}
-			if strings.Contains(out, `"tenant"`) || strings.Contains(out, "null") {
-				t.Errorf("stdout = %q, an unusable introspect body must not print a tenant or a bare null", out)
-			}
-		})
+				out, err := runWhoami(t, args)
+				if err == nil {
+					t.Fatalf("expected an error for introspect body %q, got nil (output %q)", body, out)
+				}
+				if got, want := exitCode(err), exitServer; got != want {
+					t.Errorf("body %q: exitCode(%v) = %d, want %d (exitServer)", body, err, got, want)
+				}
+				if strings.Contains(out, `"tenant"`) {
+					t.Errorf("stdout = %q, an unusable introspect body must not report a tenant", out)
+				}
+			})
+		}
+	}
+}
+
+// TestWhoamiServicePrincipalWithoutUserIDSucceeds is the other side of that
+// guard, and the more dangerous direction to get wrong: a principal with a
+// principleId but no userId is a legitimate caller (a service principal), and
+// rejecting it would break whoami for callers it works for today — a worse
+// failure than the degenerate body the guard exists to catch. The identity
+// enrichment is skipped without a userId, so displayName/email are absent;
+// the tenant keys must still be reported.
+func TestWhoamiServicePrincipalWithoutUserIDSucceeds(t *testing.T) {
+	t.Setenv("C1I_URL", "")
+	stubWhoamiServerBody(t, http.StatusOK,
+		`{"principleId":"service:svc1","tenantId":"t1","roles":[],"permissions":[],"features":[]}`)
+
+	out, err := runWhoami(t, []string{"--url", "https://acme.conductor.one"})
+	if err != nil {
+		t.Fatalf("auth whoami for a service principal: %v (output %q)", err, out)
+	}
+	var got map[string]any
+	if uerr := json.Unmarshal([]byte(out), &got); uerr != nil {
+		t.Fatalf("output is not JSON: %v (%q)", uerr, out)
+	}
+	if got["principleId"] != "service:svc1" {
+		t.Errorf("principleId = %v, want service:svc1", got["principleId"])
+	}
+	if got["tenant"] != "https://acme.conductor.one" {
+		t.Errorf("tenant = %v, want the resolved base URL", got["tenant"])
 	}
 }
 

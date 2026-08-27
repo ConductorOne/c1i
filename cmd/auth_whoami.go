@@ -12,8 +12,11 @@ var authWhoamiCmd = &cobra.Command{
 	Use:   "whoami",
 	Short: "Show the authenticated principal and the tenant being targeted",
 	Long: `Calls /api/v1/auth/introspect and returns a compact summary of the
-authenticated principal: userId, principleId, and counts of roles,
-permissions, and feature flags.
+authenticated principal: principleId, userId (a service principal may carry
+only the former), and counts of roles, permissions, and feature flags -- plus
+displayName and email when the secondary /api/v1/users/{id} lookup they come
+from succeeds, omitted when it does not. --verbose is not a superset of that
+summary: it replaces it with the raw introspect payload, which has neither.
 
 Two client-resolved keys are added to that summary, and to --verbose:
 "tenant" is the base URL this invocation resolved, and "tenantSource" is
@@ -24,10 +27,10 @@ form of the tenant "auth status" prints as text — check it before a write:
 
 Both keys report where a request WOULD go; they are only emitted once the
 credentials are proven against that tenant, so an auth failure exits nonzero
-with no tenant rather than reporting an unusable target. "tenant" always
-means the client-resolved URL, including under --verbose: if the introspect
-payload ever carries a key of that name, this one wins, so the check reads
-the same in either mode. The payload's own "tenantId" is untouched.
+with no tenant rather than reporting an unusable target. Both keys always
+hold the client-resolved values, including under --verbose: if the introspect
+payload ever carries a key of either name, these win, so the check reads the
+same in either mode. The payload's own "tenantId" is untouched.
 
 The full introspect payload can include hundreds of roles and over a
 thousand permissions — pass --verbose to dump it all.`,
@@ -48,12 +51,15 @@ thousand permissions — pass --verbose to dump it all.`,
 		verbose, _ := cmd.Flags().GetBool("verbose")
 		var payload map[string]any
 		if err := json.Unmarshal(body, &payload); err != nil {
-			return fmt.Errorf("parsing introspect response: %w", err)
+			// A 200 whose body isn't a JSON object is C1 failing its contract,
+			// not a usage error: exitServer, like the guard below.
+			return &nonJSONResponseError{fmt.Errorf("parsing introspect response: %w", err)}
 		}
-		// A `null` body unmarshals into a nil map with no error: a 200 carrying
-		// no identity at all, which must not read as a confirmed tenant.
-		if payload == nil {
-			return &nonJSONResponseError{fmt.Errorf("introspect returned a JSON null body")}
+		// A 200 carrying no identity proves nothing about the tenant, so it must
+		// not read as a confirmed target -- `null` unmarshals into a nil map and
+		// `{}` into an empty one, both without error.
+		if !hasIdentity(payload) {
+			return &nonJSONResponseError{fmt.Errorf("introspect returned no usable identity (neither userId nor principleId)")}
 		}
 
 		// Best-effort: enrich with display_name + email from /api/v1/users/{id}.
@@ -117,6 +123,19 @@ func summarize(p map[string]any, displayName, email string) map[string]any {
 // substitute an httptest-backed client — mirroring newListClient (cmd/client.go)
 // and newAPIClient (cmd/api.go).
 var newWhoamiClient = newClient
+
+// hasIdentity reports whether an introspect payload identifies anyone at all.
+// EITHER id is enough: a service principal can legitimately carry principleId
+// with no userId, so requiring userId would break whoami for it -- a worse
+// failure than the degenerate body this rejects.
+func hasIdentity(p map[string]any) bool {
+	for _, k := range []string{"userId", "principleId"} {
+		if s, ok := p[k].(string); ok && s != "" {
+			return true
+		}
+	}
+	return false
+}
 
 func sliceLen(v any) int {
 	if s, ok := v.([]any); ok {

@@ -692,9 +692,13 @@ c1i auth login --client-id <id> --client-secret <secret>
 # Check credential status (also reports the storage backend)
 c1i auth status
 
-# Show the authenticated principal (user ID, display name, email, role/permission/feature
-# counts) plus the resolved tenant: "tenant" (base URL) and "tenantSource" (flag/env/config)
-c1i auth whoami           # add --verbose for full roles/permissions/features arrays
+# Show the authenticated principal (principle/user ID, role/permission/feature counts, and
+# display name + email when a best-effort secondary lookup succeeds) plus the resolved
+# tenant: "tenant" (base URL) and "tenantSource" (flag/env/config)
+c1i auth whoami
+# --verbose swaps the summary for the raw introspect payload (full roles/permissions/
+# features arrays, but no display name or email) -- a different projection, not a superset
+c1i auth whoami --verbose
 
 # Machine-readable "which tenant am I about to write to?" — the pre-write check
 c1i auth whoami --url https://mycompany.conductor.one --fields tenant

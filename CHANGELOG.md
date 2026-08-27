@@ -164,12 +164,17 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   from the OpenAPI spec; it is published (`DELETE /api/v1/apps/{id}`, operation
   `c1.api.app.v1.Apps.Delete`), so that sentence is gone from the help too.
 
-- **`auth whoami` no longer reports success on an empty introspect body.** A
-  200 whose body is `null` unmarshals into a nil map without error, so the
-  command printed a summary of nulls (`userId: null`) and exited 0 -- a
-  pre-write check reading "confirmed" off a response carrying no identity at
-  all. It is now a `nonJSONResponseError` (exit 6, "C1 failed"), matching the
-  other unusable-200 cases, in both plain and `--verbose` output.
+- **`auth whoami` no longer reports success on a 200 that carries no usable
+  identity.** `null`, `{}`, and `{"userId":null,"principleId":null}` all
+  decode without error, so the command printed a summary of nulls (`userId:
+  null`) -- or, under `--verbose`, nothing but the tenant keys -- and exited
+  0: a pre-write check reading "confirmed" off a response that proves
+  nothing. All three are now a `nonJSONResponseError` (exit 6, "C1 failed"),
+  in both output modes, and so is a body that isn't a JSON object at all (a
+  truncated, empty, array, or scalar body), which previously fell through a
+  bare `fmt.Errorf` to the generic exit 1. The check is deliberately
+  permissive about *which* id is present -- either `userId` or `principleId`
+  is enough, since a service principal can carry `principleId` alone.
 
 - **`apps set-owners` no longer claims new owners appear in `apps get`'s
   `appOwners` field.** Measured against a live tenant, `appOwners` was empty
