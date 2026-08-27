@@ -1,7 +1,11 @@
 package cmd
 
 import (
-	"os"
+	"go/ast"
+	"go/parser"
+	"go/token"
+	"io/fs"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"testing"
@@ -9,18 +13,18 @@ import (
 
 // Flag SCOPE coverage: --debug/--max-retries do not reach every command.
 //
-// The fetching `docs` subcommands call http.DefaultClient.Do directly instead
-// of internal/transport, so both flags are inert there and no path/redirect
-// guard applies. That single fact reached six documents, stated as an
-// unqualified universal in four of them, before anyone checked it against the
-// code — and the cost is a reader who debugs an empty `docs search` with
-// --debug, sees no trace, and concludes no request was sent.
+// The fetching `docs` subcommands send HTTP without internal/transport, so both
+// flags are inert there and no path/redirect guard applies. That single fact
+// reached six documents, stated as an unqualified universal in four of them,
+// before anyone checked it against the code — and the cost is a reader who
+// debugs an empty `docs search` with --debug, sees no trace, and concludes no
+// request was sent.
 //
 // The two tests below pin it from both ends: every doc that documents the flags
 // must name the exception, and the exception must still be real. When the
-// http.DefaultClient sites are fixed, the second test fails and sends whoever
-// fixed them back to delete the carve-outs, so this cannot rot into a warning
-// about a hazard that no longer exists.
+// bypassing call sites are fixed, the second test fails and sends whoever fixed
+// them back to delete the carve-outs, so this cannot rot into a warning about a
+// hazard that no longer exists.
 
 // scopedFlags are the flags whose reach is not universal.
 var scopedFlags = []string{"--debug", "--max-retries"}
@@ -30,14 +34,6 @@ var scopedFlags = []string{"--debug", "--max-retries"}
 // trailing boundary so the longer name can't satisfy a mention of the shorter.
 var fetchingDocsSubcommands = []string{
 	"docs search", "docs page", "docs openapi", "docs endpoints", "docs endpoint",
-}
-
-// httpBypassFiles are the cmd/ files that reach the network without
-// internal/transport. Keep in sync with the carve-outs; the second test below
-// fails if reality drifts from this set in either direction.
-var httpBypassFiles = map[string]string{
-	"docs_search.go":  "docs search / docs page -> api.mintlify.com",
-	"docs_openapi.go": "docs openapi / endpoints / endpoint -> conductorone.com",
 }
 
 // flagScopeDocs are the documents that describe what --debug and
@@ -112,47 +108,147 @@ func TestFlagScopeExceptionDocumented(t *testing.T) {
 	}
 }
 
-// TestDocumentedFlagScopeExceptionIsStillReal ties the carve-outs to the code
-// fact behind them. If the set of cmd/ files bypassing internal/transport
-// changes in either direction, the docs are now wrong.
-func TestDocumentedFlagScopeExceptionIsStillReal(t *testing.T) {
-	entries, err := os.ReadDir(".")
+// httpSenderFuncs are net/http's package-level entry points that send a request
+// on http.DefaultClient. Matching the *set* rather than one spelling matters:
+// http.Get and friends are DefaultClient underneath and are the likelier
+// accidental spelling, and a guard that pinned only "http.DefaultClient" would
+// tell a reader who switched a bypassing file to &http.Client{} that the
+// carve-outs had gone stale when they were still true.
+var httpSenderFuncs = map[string]bool{
+	"DefaultClient": true,
+	"Get":           true,
+	"Post":          true,
+	"Head":          true,
+	"PostForm":      true,
+}
+
+// transportFreeSenders reports the net/http sending constructs a file uses:
+// a package-level sender above, or an http.Client composite literal (which
+// carries none of internal/transport's guards, options, or user agent).
+//
+// Limitation, deliberate: this recognizes net/http. A package that builds its
+// own http.RoundTripper and drives it directly, or that reaches for a
+// third-party HTTP library, would slip past — accept that rather than chase
+// every shape, and widen this set when one shows up.
+func transportFreeSenders(path string) ([]string, error) {
+	fset := token.NewFileSet()
+	f, err := parser.ParseFile(fset, path, nil, 0)
 	if err != nil {
-		t.Fatalf("reading cmd/: %v", err)
+		return nil, err
 	}
-	got := map[string]bool{}
-	var scanned int
-	for _, e := range entries {
-		name := e.Name()
-		if !strings.HasSuffix(name, ".go") || strings.HasSuffix(name, "_test.go") {
+
+	httpName := ""
+	for _, im := range f.Imports {
+		if im.Path.Value != `"net/http"` {
 			continue
 		}
-		scanned++
-		b, err := os.ReadFile(name)
+		httpName = "http"
+		if im.Name != nil {
+			httpName = im.Name.Name
+		}
+	}
+	if httpName == "" {
+		return nil, nil
+	}
+
+	seen := map[string]bool{}
+	var hits []string
+	add := func(s string) {
+		if !seen[s] {
+			seen[s] = true
+			hits = append(hits, s)
+		}
+	}
+	ast.Inspect(f, func(n ast.Node) bool {
+		switch v := n.(type) {
+		case *ast.SelectorExpr:
+			if id, ok := v.X.(*ast.Ident); ok && id.Name == httpName && httpSenderFuncs[v.Sel.Name] {
+				add(httpName + "." + v.Sel.Name)
+			}
+		case *ast.CompositeLit:
+			if se, ok := v.Type.(*ast.SelectorExpr); ok {
+				if id, ok2 := se.X.(*ast.Ident); ok2 && id.Name == httpName && se.Sel.Name == "Client" {
+					add(httpName + ".Client{}")
+				}
+			}
+		}
+		return true
+	})
+	return hits, nil
+}
+
+// httpBypassFiles are the repo-relative files that send HTTP without
+// internal/transport, each with what it reaches. Keep it in sync with the
+// carve-outs in the four documents; the test below fails if reality drifts
+// from this set in either direction.
+var httpBypassFiles = map[string]string{
+	"cmd/docs_search.go":  "docs search / docs page -> api.mintlify.com",
+	"cmd/docs_openapi.go": "docs openapi / endpoints / endpoint -> conductorone.com",
+	// internal/transport IS the shared transport; its http.Client is the one
+	// every other package is supposed to get its guards and options from.
+	"internal/transport/transport.go": "the shared transport itself, not a bypass",
+}
+
+// TestDocumentedFlagScopeExceptionIsStillReal ties the carve-outs to the code
+// fact behind them. The walk covers the whole repo, not just cmd/: CLAUDE.md's
+// "Adding a new client/subsystem package" section is about internal/, which is
+// the likelier home for the next bypass.
+func TestDocumentedFlagScopeExceptionIsStillReal(t *testing.T) {
+	const repoRoot = ".."
+
+	got := map[string][]string{}
+	var scanned int
+	err := filepath.WalkDir(repoRoot, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
-			t.Fatalf("reading %s: %v", name, err)
+			return err
 		}
-		if strings.Contains(string(b), "http.DefaultClient") {
-			got[name] = true
+		if d.IsDir() {
+			switch d.Name() {
+			case ".git", "dev", "vendor":
+				return fs.SkipDir
+			}
+			return nil
+		}
+		if !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") {
+			return nil
+		}
+		scanned++
+		hits, perr := transportFreeSenders(path)
+		if perr != nil {
+			t.Errorf("parsing %s: %v", path, perr)
+			return nil
+		}
+		if len(hits) > 0 {
+			rel, rerr := filepath.Rel(repoRoot, path)
+			if rerr != nil {
+				rel = path
+			}
+			got[filepath.ToSlash(rel)] = hits
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("walking %s: %v", repoRoot, err)
+	}
+	if scanned < 100 {
+		t.Fatalf("only %d non-test .go files scanned; the walk regressed and this guard "+
+			"would pass by reading nothing", scanned)
+	}
+
+	for path, hits := range got {
+		if _, known := httpBypassFiles[path]; !known {
+			t.Errorf("%s sends HTTP outside internal/transport (%v): --debug and --max-retries "+
+				"are inert there and no path/redirect guard applies. Either build it on "+
+				"internal/transport, or add it to httpBypassFiles and widen the carve-out in "+
+				"README.md, cmd/agents.md, CLAUDE.md and .claude/commands/c1i.md", path, hits)
 		}
 	}
-	if scanned < 50 {
-		t.Fatalf("only %d non-test .go files scanned in cmd/; the walk regressed and this "+
-			"guard would pass by reading nothing", scanned)
-	}
-	for name := range got {
-		if _, known := httpBypassFiles[name]; !known {
-			t.Errorf("cmd/%s newly bypasses internal/transport via http.DefaultClient: "+
-				"--debug and --max-retries are inert there and no path/redirect guard applies. "+
-				"Either build it on internal/transport, or widen the carve-out in README.md, "+
-				"cmd/agents.md, CLAUDE.md and .claude/commands/c1i.md", name)
-		}
-	}
-	for name, what := range httpBypassFiles {
-		if !got[name] {
-			t.Errorf("cmd/%s (%s) no longer uses http.DefaultClient — if it now goes through "+
-				"internal/transport, the docs carve-outs naming it are stale: update README.md, "+
-				"cmd/agents.md, CLAUDE.md and .claude/commands/c1i.md", name, what)
+	for path, what := range httpBypassFiles {
+		if _, still := got[path]; !still {
+			t.Errorf("%s (%s) no longer sends HTTP outside internal/transport — if it now goes "+
+				"through the shared transport, drop it from httpBypassFiles and re-check the "+
+				"carve-outs naming it in README.md, cmd/agents.md, CLAUDE.md and "+
+				".claude/commands/c1i.md", path, what)
 		}
 	}
 }

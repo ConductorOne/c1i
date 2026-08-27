@@ -77,7 +77,7 @@ and `--max-retries` is ignored. Silent `--debug` output there means the flag
 never reached that path, NOT that no request was sent — don't read it as
 evidence either way when a `docs` command comes back empty.
 
-Nor do they all call the same place, which matters for egress rules and for
+Nor do those five call the same place, which matters for egress rules and for
 why one can fail while another works: `docs openapi`, `docs endpoints` and
 `docs endpoint` fetch `conductorone.com/docs/openapi.yaml` (cached 24h under
 `~/.c1i/cache/`, so a run can return rows without sending a request at all),

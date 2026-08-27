@@ -251,17 +251,17 @@ a package, verify each of these against the new code:
   `DefaultMaxRetries` and debug-off and reads nothing ambient, so
   `transport.New(base)` with no options ships tracing that shows nothing and a
   retry count the flag can't change. Every caller passes them by hand —
-  `cmd/client.go:15-16` (the viper source every REST command copies),
-  `internal/client` from its own config, and `cmd/mcp_gateway.go`,
+  `cmd/client.go:15-16` (the single viper read every REST command inherits via
+  `newClient`), `internal/client` from its own config, and `cmd/mcp_gateway.go`,
   `cmd/auth_login.go`, `cmd/auth_token.go` from viper. The deliberate
   exception is `auth login`'s device-flow polling leg, where `PollForToken`
   forces `WithMaxRetries(0)`: the RFC 8628 poll interval is that call's retry
   strategy. The accidental one is the fetching `docs` subcommands —
   `docs search`, `docs page` (`cmd/docs_search.go`) and `docs openapi`,
   `docs endpoints`, `docs endpoint` (`cmd/docs_openapi.go`) — which call
-  `http.DefaultClient.Do` directly: both flags are inert on those three sites,
-  no path or redirect guard applies, and they return bare `fmt.Errorf` rather
-  than a classifiable error. Don't add a fourth.
+  `http.DefaultClient.Do` directly: both flags are inert at those three call
+  sites, no path or redirect guard applies, and they return bare `fmt.Errorf`
+  rather than a classifiable error. Don't add a fourth.
 
 When implementing a wire protocol or stream parser (JSON-RPC, SSE, MCP, …), code
 and test against the **full input space the spec permits**, not just the shape a

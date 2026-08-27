@@ -532,10 +532,9 @@ REST commands. It does **not** apply to the `docs` subcommands that fetch —
 which call Go's default HTTP client directly: no path or redirect guard there,
 and `--debug` and `--max-retries` are both inert.
 
-A bad id is the only cause of a refused `3xx`
-observed so far, which is why it maps to exit `2` — a redirect on an otherwise
-well-formed request would not be the caller's mistake, and would still report
-`2`.
+A bad id is the only cause of a refused `3xx` observed so far, which is why it
+maps to exit `2` — a redirect on an otherwise well-formed request would not be
+the caller's mistake, and would still report `2`.
 
 Pass `--error-format json` (or `C1I_ERROR_FORMAT=json`) to get a machine-readable
 error object instead of the default `Error: <msg>` line. For API errors it

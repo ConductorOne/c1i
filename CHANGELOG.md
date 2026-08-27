@@ -79,8 +79,12 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `TestFlagScopeExceptionDocumented` fails CI when any of the four documents
   mentions either flag without carving out the exception;
   `TestDocumentedFlagScopeExceptionIsStillReal` pins the exception to the code,
-  failing in both directions -- if a new `cmd/` file bypasses the shared
-  transport, or if these stop bypassing it and the carve-outs go stale.
+  failing in both directions -- if a file starts sending HTTP outside
+  `internal/transport`, or if these stop and the carve-outs go stale. It parses
+  the AST rather than grepping one spelling, so `http.Get`/`Post`/`Head`/
+  `PostForm` and an `http.Client` composite literal all count, and it walks the
+  whole repo rather than `cmd/` alone -- `internal/` is the likelier home for
+  the next one.
 
 - **`apps create` and `apps delete` are in the README.** Both shipped without
   ever being listed in the Apps section, so the only way to find them was
