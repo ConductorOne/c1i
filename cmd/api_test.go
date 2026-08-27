@@ -724,3 +724,113 @@ func TestAPINormalJSONBodyStillWorks(t *testing.T) {
 		t.Fatalf("output not valid JSON: %v (%s)", jsonErr, out.String())
 	}
 }
+
+// warningMarker is the stable substring of the truncated-page warning. Both
+// tests below assert on it: one that it reaches stderr, one that it never
+// reaches stdout.
+const warningMarker = "discarding the cursor"
+
+// TestAPITruncatedPageWarns covers the no---paginate states of the cursor
+// warning: a non-empty nextPageToken is a silently partial result and must
+// warn, while an empty or absent token is a complete result and must NOT (a
+// warning there would fire on nearly every call and get tuned out).
+//
+// Every case also asserts the warning stays OFF stdout. That is the change's
+// central safety claim -- anything parsing `c1i api` must be unaffected -- and
+// without this assertion the suite stayed green when the warning was made to
+// write to stdout as well.
+func TestAPITruncatedPageWarns(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		body     string
+		wantWarn bool
+	}{
+		{name: "partial result warns", body: `{"list":[{"id":"a"}],"nextPageToken":"abc"}`, wantWarn: true},
+		{name: "non-list object with token warns", body: `{"id":"one","nextPageToken":"abc"}`, wantWarn: true},
+		{name: "last page silent", body: `{"list":[{"id":"a"}],"nextPageToken":""}`},
+		{name: "no token field silent", body: `{"ok":true}`},
+		{name: "null token silent", body: `{"list":[{"id":"a"}],"nextPageToken":null}`},
+		{name: "non-string token silent", body: `{"list":[{"id":"a"}],"nextPageToken":123}`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
+				_, _ = w.Write([]byte(tc.body))
+			}))
+			defer srv.Close()
+
+			resetAPICmdFlags(t)
+			stubNewAPIClient(t, srv)
+			t.Setenv("C1I_URL", srv.URL)
+
+			var out, errOut bytes.Buffer
+			apiCmd.SetOut(&out)
+			apiCmd.SetErr(&errOut)
+			rootCmd.SetArgs([]string{"api", "--path", "/api/v1/catalogs"})
+
+			if err := rootCmd.ExecuteContext(context.Background()); err != nil {
+				t.Fatalf("ExecuteContext: %v", err)
+			}
+
+			if got := strings.Contains(errOut.String(), warningMarker); got != tc.wantWarn {
+				t.Errorf("warning on stderr = %v, want %v; stderr = %q", got, tc.wantWarn, errOut.String())
+			}
+			if strings.Contains(out.String(), warningMarker) {
+				t.Errorf("warning leaked to stdout, which parsers consume; stdout = %q", out.String())
+			}
+			if out.Len() == 0 {
+				t.Error("stdout is empty; the response body should still be written")
+			}
+		})
+	}
+}
+
+// getTwoPageFixtureServer serves a two-page list over GET, advancing on the
+// page_token QUERY parameter. Distinct from twoPageFixtureServer, which reads
+// pageToken from a POST body: driving GET pagination against that one would
+// resend page 1 forever and trip the stuck-cursor guard rather than testing
+// what this test is about.
+func getTwoPageFixtureServer() *httptest.Server {
+	return httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.URL.Query().Get("page_token") == "p2" {
+			_, _ = w.Write([]byte(`{"list":[{"id":"b"}],"nextPageToken":""}`))
+			return
+		}
+		_, _ = w.Write([]byte(`{"list":[{"id":"a"}],"nextPageToken":"p2"}`))
+	}))
+}
+
+// TestAPIPaginateDrainsCursorWithoutWarning is the case a single-body fixture
+// cannot express: --paginate against a genuinely multi-page endpoint must
+// drain every page and stay silent, because it discards no cursor. Asserting
+// this against a one-page fixture proves nothing -- with an empty token the
+// warning branch is unreachable whether or not --paginate is set.
+func TestAPIPaginateDrainsCursorWithoutWarning(t *testing.T) {
+	srv := getTwoPageFixtureServer()
+	defer srv.Close()
+
+	resetAPICmdFlags(t)
+	stubNewAPIClient(t, srv)
+	t.Setenv("C1I_URL", srv.URL)
+
+	var out, errOut bytes.Buffer
+	apiCmd.SetOut(&out)
+	apiCmd.SetErr(&errOut)
+	rootCmd.SetArgs([]string{"api", "--path", "/api/v1/catalogs", "--paginate"})
+
+	if err := rootCmd.ExecuteContext(context.Background()); err != nil {
+		t.Fatalf("ExecuteContext: %v", err)
+	}
+
+	if strings.Contains(errOut.String(), warningMarker) {
+		t.Errorf("--paginate drains the cursor, so it must not warn; stderr = %q", errOut.String())
+	}
+	// Both pages, proving the cursor really was followed rather than the
+	// warning merely being suppressed.
+	for _, want := range []string{`"id":"a"`, `"id":"b"`} {
+		if !strings.Contains(out.String(), want) {
+			t.Errorf("stdout missing %s; got %q", want, out.String())
+		}
+	}
+}

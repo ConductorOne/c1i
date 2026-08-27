@@ -357,7 +357,7 @@ file, or `-` for stdin) — the two are mutually exclusive. GET and DELETE refus
 a body by default (a body on either is more likely a mistake than intent); pass
 `--allow-delete-body` to lift that for DELETE specifically, for the handful of
 C1 endpoints that require one. `--query key=value` and
-`--header key=value` are both repeatable. When `--paginate` is used, each page's first array-valued field is unwrapped and each item is emitted as a single line of NDJSON — the same format used by list commands. This covers both the canonical `list` key and typed keys like `automationExecutions`; use `--list-key <field>` to force a specific field. If the server returns the same `nextPageToken` twice in a row, `c1i` aborts with an error rather than looping forever. Without `--paginate`, the full JSON response is pretty-printed.
+`--header key=value` are both repeatable. When `--paginate` is used, each page's first array-valued field is unwrapped and each item is emitted as a single line of NDJSON — the same format used by list commands. This covers both the canonical `list` key and typed keys like `automationExecutions`; use `--list-key <field>` to force a specific field. If the server returns the same `nextPageToken` twice in a row, `c1i` aborts with an error rather than looping forever. Without `--paginate`, the full JSON response is pretty-printed — and if that response carries a non-empty `nextPageToken`, `c1i` warns on stderr that the result is partial and names `--paginate`, since a truncated page is otherwise indistinguishable from a complete one at exit 0. stdout is unchanged either way.
 
 ### API Discovery & Documentation
 
