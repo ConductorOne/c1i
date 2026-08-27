@@ -265,12 +265,17 @@ func TestGrantsListWaitEndToEnd(t *testing.T) {
 			// third; the correct wait must outlast them and take the grant.
 			// Transposing --wait-stable and --wait-min turns this into a floor
 			// of 3 that one grant can never clear, so it times out instead.
-			name:         "wait-min outlasts an empty prefix",
-			reads:        [][][2]string{nil, nil, nil, oneGrant, oneGrant, oneGrant},
-			flags:        map[string]string{"wait-stable": "3", "wait-min": "1"},
-			wantRows:     1,
-			wantReads:    6,
-			wantPageSize: 50,
+			name:  "wait-min outlasts an empty prefix",
+			reads: [][][2]string{nil, nil, nil, oneGrant, oneGrant, oneGrant},
+			flags: map[string]string{"wait-stable": "3", "wait-min": "1"},
+			// Bounded for the same reason as the case below: under the
+			// transposition mutation this becomes a floor of 3 that one grant
+			// never clears, and the 4m default would grind out ~48k requests
+			// at the test poll interval before failing.
+			parentTimeout: 5 * time.Second,
+			wantRows:      1,
+			wantReads:     6,
+			wantPageSize:  50,
 		},
 		{
 			name:          "wait-min times out rather than settling empty",
@@ -353,7 +358,11 @@ func TestGrantsListWaitEndToEnd(t *testing.T) {
 			if got := fake.reads(); got != tc.wantReads {
 				t.Errorf("made %d full reads, want %d", got, tc.wantReads)
 			}
-			for i, ps := range fake.observedPageSizes() {
+			observed := fake.observedPageSizes()
+			if len(observed) == 0 {
+				t.Fatal("no request carried a pageSize; the assertion below would pass vacuously")
+			}
+			for i, ps := range observed {
 				if ps != tc.wantPageSize {
 					t.Errorf("request %d asked for pageSize %d, want %d", i, ps, tc.wantPageSize)
 				}

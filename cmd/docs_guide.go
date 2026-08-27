@@ -584,7 +584,7 @@ hand:
 
     c1i grants list --app-id "$APP_ID" --entitlement-id "$ENTITLEMENT_ID" --user-id "$USER_ID" --wait --wait-min 1
 
-After an approved REVOKE, wait for the set to settle empty:
+After an approved REVOKE, re-read until the set is steady, then check it:
 
     c1i grants list --app-id "$APP_ID" --entitlement-id "$ENTITLEMENT_ID" --user-id "$USER_ID" --wait
 
@@ -597,8 +597,14 @@ stable, so a bare "--wait" settles on zero rows in about 10s and exits 0 --
 indistinguishable from "the grant did not happen" when the truth is "not
 yet". With "--wait-min 1", exit 0 means the grant is really there and exit 1
 means it had not arrived within "--wait-timeout" (default 4m), which is a
-timeout, not a denial. Leave "--wait-min" off for the revoke: settling empty
-is the answer you want there.
+timeout, not a denial.
+
+The revoke direction has no such flag, and "--wait" does NOT wait for empty:
+it settles on whatever is steady, and a grant that has not been deprovisioned
+yet is perfectly steady. So exit 0 still listing the row means "not yet, re-run
+in a minute" -- NOT "the revoke failed". Only zero rows is confirmation.
+"--wait-min" is a floor, not a ceiling, so leave it off here; it cannot express
+"wait until this is gone".
 
 A revoke task still sitting in TASK_STATE_OPEN past that window means it's
 waiting on an approver, not that the revoke failed.

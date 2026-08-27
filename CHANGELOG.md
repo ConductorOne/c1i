@@ -219,8 +219,15 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   to.** `c1i docs guide request-access` handed an agent a bare `grants list`
   plus prose about re-running it in a minute or two -- exactly the poll-by-hand
   workflow `--wait` replaces, and exactly the case where an empty read is
-  mistaken for a denial. It now shows `--wait --wait-min 1` after a grant and a
-  bare `--wait` after a revoke, and says which exit code means what.
+  mistaken for a denial. It now shows `--wait --wait-min 1` after a grant and
+  says which exit code means what.
+
+  The revoke direction is documented, not solved. `--wait` settles on whatever
+  is steady, and a grant that has not been deprovisioned yet is perfectly
+  steady, so exit 0 can still list the row -- meaning "not yet, re-run", not
+  "the revoke failed". `--wait-min` is a floor and cannot express a ceiling,
+  and the guide now says so rather than implying a bare `--wait` waits *for*
+  empty.
 
 ### Fixed
 
