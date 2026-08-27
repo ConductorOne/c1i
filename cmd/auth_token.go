@@ -24,8 +24,7 @@ composes directly:
 
 Use --json to also see the token type and absolute expiry (RFC3339).
 
-The token is audience-scoped to the C1 API host. It is not written to
-disk; a new one is minted on each invocation.`,
+The token is not written to disk; a new one is minted on each invocation.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		baseURL, err := GetBaseURL()
 		if err != nil {

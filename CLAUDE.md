@@ -232,24 +232,25 @@ a package, verify each of these against the new code:
   failed" distinct from "C1 failed".
 - **Escape ids in paths** (`client.Path`-style), use the shared output helpers in
   `cmd`, and honor the global flags where applicable.
-- **Reject an empty id before sending, and don't trust a 3xx either.** The
-  shared client refuses a path with an empty segment (`client.PathError` →
-  exit 2) and refuses to follow a redirect whose target path differs from
-  the request's (`client.RedirectError` → exit 2) — a package that issues
-  its own HTTP inherits neither: `cobra.ExactArgs` will hand you `""`
-  happily, and Go's default `http.Client` follows a 3xx transparently. An id
-  of `""`, `"/"`, or `"."` reaching the collection endpoint by either path is
-  the shape that produced the silent "returned the whole list with exit 0"
-  bug.
-- **Honor `--debug` and `--max-retries`.** Both are documented as global, and
-  every package that issues its own HTTP now threads them: `cmd/mcp_gateway.go`
-  passes both to the bearer mint and the gateway transport, and `auth login` /
-  `auth token` do the same. Build on `internal/transport` (or `internal/client`,
-  which wraps it) and they come for free — `transport.New` also applies the
-  empty-path and redirect guards unconditionally, so a new package inherits
-  those too. What must not happen again is a package hand-rolling
-  `http.Client`: that is how both flags went inert on three packages at once,
-  and how the doc claiming so then went stale.
+- **Build on `internal/transport` (or `internal/client`, which wraps it).**
+  Doing so is what makes the rest of this list free: `transport.New` applies
+  the empty-path guard (`client.PathError` → exit 2) and the redirect guard
+  (`client.RedirectError` → exit 2) to every client it builds, and threads
+  `--debug` and `--max-retries`. Every package that issues its own HTTP does
+  this today, `internal/mcpgateway` and `internal/login` included.
+- **Reject an empty id before sending, and don't trust a 3xx either.** A
+  package that hand-rolls its own `http.Client` gets neither guard:
+  `cobra.ExactArgs` will hand you `""` happily, and Go's default
+  `http.Client` follows a 3xx transparently. An id of `""`, `"/"`, or `"."`
+  reaching the collection endpoint by either path is the shape that produced
+  the silent "returned the whole list with exit 0" bug.
+- **Honor `--debug` and `--max-retries`.** Both are documented as global, so
+  don't strand them: `cmd/mcp_gateway.go` passes both to the bearer mint and
+  the gateway transport, and `auth token` does the same. The one deliberate
+  exception is `auth login`'s device-flow polling leg, where `PollForToken`
+  forces `WithMaxRetries(0)` — the RFC 8628 poll interval is that call's retry
+  strategy. Hand-rolling `http.Client` is how both flags went inert on three
+  packages at once.
 
 When implementing a wire protocol or stream parser (JSON-RPC, SSE, MCP, …), code
 and test against the **full input space the spec permits**, not just the shape a

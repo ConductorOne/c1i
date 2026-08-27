@@ -21,14 +21,10 @@ import (
 // Both assertions resolve real flags from rootCmd's tree and real doc text.
 // Nothing here calls RunE, so no test touches auth or the network.
 //
-// Scope, decided and settled: coverage is per flag NAME, not per (command,
-// flag) pair — a flag documented on one command counts as documented on every
-// command that registers it. Per-pair coverage was weighed and rejected: it
-// would require a full per-command flag matrix in both docs, a maintenance
-// burden larger than the problem it solves, and it is not the thing that
-// failed in the field. What failed was a flag being findable from no doc at
-// all, which this does catch. Treat the narrower property as the intended
-// design, not as an unfinished one.
+// Coverage is per flag NAME by design, not per (command, flag) pair: a flag
+// documented on one command counts as documented on every command that
+// registers it. Per-pair coverage would need a full per-command flag matrix in
+// both docs, which costs more than it catches.
 
 // flagDocExemptions lists flags deliberately absent from BOTH README.md and
 // cmd/agents.md, each with the reason. Keep it short: an entry here is a

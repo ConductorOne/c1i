@@ -56,6 +56,13 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   the packages that issue their own HTTP" was the stale source of the claim and
   is corrected too.
 
+- **`auth token`'s help no longer claims the token is "audience-scoped to the
+  C1 API host".** The CLI neither requests nor observes that: the token request
+  sends only `client_id`, `grant_type`, `client_assertion_type` and
+  `client_assertion` (no `audience`, no `resource`), and nothing decodes the
+  returned token. The only `aud` in the tree is on the client-assertion JWT
+  sent *to* the token endpoint. Dropped from the README too.
+
 - **`apps create` and `apps delete` are in the README.** Both shipped without
   ever being listed in the Apps section, so the only way to find them was
   `--help`. Documented alongside their neighbours, including that `apps create`
