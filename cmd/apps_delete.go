@@ -10,13 +10,12 @@ import (
 var appsDeleteCmd = &cobra.Command{
 	Use:   "delete <app-id>",
 	Short: "Soft-delete an app",
-	Long: `Soft-delete an app by ID. The app is marked deleted (deletedAt set) and
-drops out of normal listings; the record is retained for audit. Honors
---dry-run.
+	Long: `Soft-delete an app by ID: the app is marked deleted (deletedAt set)
+rather than erased, which is why "apps list" rows carry a deleted_at field.
+Honors --dry-run.
 
 This complements "apps create" so a container app made by mistake (or a test
-app) can be cleaned up without dropping to the raw "api" escape hatch. The
-DELETE endpoint isn't published in the OpenAPI spec but is live on the API.`,
+app) can be cleaned up without dropping to the raw "api" escape hatch.`,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		baseURL, err := GetBaseURL()

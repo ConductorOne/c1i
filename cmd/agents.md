@@ -65,8 +65,10 @@ failures: instead of `Error: <prose>` on stderr you get one JSON object,
 when the failure came from the API. Still branch on the exit code — the JSON is
 for the detail, not the classification.
 
-`--debug` and `--max-retries` apply to the REST commands. `mcp gateway` calls
-go through a separate HTTP client that honors neither.
+`--debug` and `--max-retries` cover `mcp gateway` as well as the REST
+commands: the gateway client threads both into its bearer mint and its
+JSON-RPC calls. On a `mcp gateway call` that hangs or fails oddly, `--debug`
+is the fastest way to see which request stopped.
 
 ## Choosing a command
 
@@ -154,8 +156,9 @@ API redirects to the collection, and the REST client refuses a redirect that
 changes the path, so you get exit 2 instead of a full listing that looks like a
 successful read. It also refuses a same-path redirect to an unrelated host, since
 a followed redirect carries your token. It does follow pure host/scheme
-canonicalization. That guard is REST-only — `mcp gateway` calls go through a
-different HTTP client that follows redirects normally.
+canonicalization. `mcp gateway` is guarded the same way: it is built on
+the same shared transport, which applies the empty-path and redirect checks
+unconditionally.
 
 `6` versus `8`: `6` means C1 itself failed, so waiting and retrying is sensible.
 `8` means C1 answered and something past it did not — a connector is down, or

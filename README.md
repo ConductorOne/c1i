@@ -66,10 +66,9 @@ after the usual provisioning lag. The new app comes back as pretty JSON under
 an `app` key, and `--fields` is never applied to mutation output, so read the
 new id from `.app.id` on the full object, not `.id`.
 
-`apps delete` soft-deletes: `deletedAt` is set and the app drops out of normal
-listings, but the record is retained for audit. Its endpoint is live but not
-published in the OpenAPI spec, so it won't appear in `c1i docs endpoints`. Both
-commands honor `--dry-run`.
+`apps delete` is a soft delete: the app is marked with `deletedAt` rather than
+erased, which is why `apps list` rows carry a `deleted_at` field. Both commands
+honor `--dry-run`.
 
 `apps set-owners` returns as soon as the `PUT` is accepted. Pass `--wait` to
 block and poll `GET .../ownerids` until every requested `--user-id` appears, or
@@ -277,7 +276,7 @@ c1i mcp gateway list-tools [--full] [--gateway-url <url>]
 c1i mcp gateway call <tool-name> [--args '{"k":"v"}'] [--gateway-url <url>]
 ```
 
-**Auth for `register` / `update-credentials`:** convenience flags cover the simple methods — `--auth none`, `--auth bearer-token --bearer-token TOKEN`, `--auth custom-header --header-name NAME --header-value VALUE`, `--auth basic-auth --basic-auth-username USER --basic-auth-password PASS`. For OAuth2 / AWS SigV4 / Google service-account auth, pass the full config object via `--hosted-config-file` / `--external-config-file` (JSON file, or `-` for stdin) — generate a ready-to-edit skeleton with `--print-config-template --auth <method> [--type hosted]` instead of hand-writing it. Secrets are sealed server-side; reads only ever return `*_configured` booleans, never the values. `--token-sharing shared|per-user` sets the server's token-sharing mode (case-insensitive; `per_user`/`peruser` are also accepted) — for OAuth2, `per-user` goes with an `..._MODE_PASSTHROUGH` config, the shape where each user authorizes individually rather than sharing one service credential. `--source-app-id` names the source app for a connector-backed HOSTED server.
+**Auth for `register` / `update-credentials`:** convenience flags cover the simple methods — `--auth none`, `--auth bearer-token --bearer-token TOKEN`, `--auth custom-header --header-name NAME --header-value VALUE`, `--auth basic-auth --basic-auth-username USER --basic-auth-password PASS`. For OAuth2 / AWS SigV4 / Google service-account auth, pass the full config object via `--hosted-config-file` / `--external-config-file` (JSON file, or `-` for stdin) — generate a ready-to-edit skeleton with `--print-config-template --auth <method> [--type hosted]` instead of hand-writing it. Secrets are sealed server-side; reads only ever return `*_configured` booleans, never the values. `--token-sharing shared|per-user` sets the server's token-sharing mode (case-insensitive; `per_user`/`peruser` are also accepted). Per the register help, `per-user` is only valid with `oauth2` in authorization-code or passthrough mode, `bearerToken`, `customHeader`, or `basicAuth`. Note that a read-back can legitimately differ from what you sent: the backend may store a *resolved* OAuth2 grant such as `..._MODE_AUTHORIZATION_CODE` in place of the input mode, so that is a normal round-trip, not a bug. `--source-app-id` names the source app for a connector-backed HOSTED server.
 
 `mcp tools approve` is the standard post-registration step: newly discovered tools (from `register` or `resync-tools`) start in `PENDING_REVIEW`, and an admin approves each one for the gateway to proxy calls. History endpoints return records newest-first.
 
@@ -700,9 +699,8 @@ c1i auth logout
 ```
 
 `c1i auth token` prints just the access token, newline-terminated, so it
-composes into `curl -H "Authorization: Bearer $(c1i auth token)" ...`. The token
-is audience-scoped to the C1 API host and never written to disk — a new one is
-minted per invocation.
+composes into `curl -H "Authorization: Bearer $(c1i auth token)" ...`. It is
+never written to disk — a new one is minted per invocation.
 
 ### Credential sources
 

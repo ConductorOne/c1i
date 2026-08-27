@@ -12,6 +12,6 @@ dev/*
 !dev/README.md
 
 # Agent worktrees: `git worktree add` targets land here. Untracked, they stamp
-# every local build "+dirty" and a `git add -A` would commit a whole nested
-# checkout into this public repo.
+# every local build "+dirty", and a `git add -A` records one as a gitlink
+# (mode 160000) -- an embedded-repo pointer no clone of this repo can resolve.
 .claude/worktrees/

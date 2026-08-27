@@ -141,8 +141,9 @@ tracked root file outside its allowlist. Stage explicit paths rather than `-A`.
   `cmd/agents.md`; `TestGlobalFlagsDocumentedInAgentsDoc` holds rootCmd's
   persistent flags to both docs, since they apply everywhere. This exists
   because agents rebuild by hand what a flag already does when no doc names it.
-  Exemptions go in `flagDocExemptions` with a reason — documenting the flag in
-  one line is almost always the better fix.
+  Exemptions go in `flagDocExemptions` with a reason (persistent flags use the
+  separate `globalFlagDocExemptions`, which the second test reads) —
+  documenting the flag in one line is almost always the better fix.
 - **API client:** build it with `newClient(cmd, baseURL)` (cmd/client.go), not
   `client.New` directly — the helper threads the global flags (retries, etc.).
 - **Paths:** interpolate IDs into request paths with `client.Path("…/%s", id)`,
@@ -241,9 +242,14 @@ a package, verify each of these against the new code:
   the shape that produced the silent "returned the whole list with exit 0"
   bug.
 - **Honor `--debug` and `--max-retries`.** Both are documented as global, and
-  both are currently silently inert on the packages that issue their own HTTP —
-  so tracing shows nothing and transient failures aren't retried on those paths.
-  Don't add a fourth.
+  every package that issues its own HTTP now threads them: `cmd/mcp_gateway.go`
+  passes both to the bearer mint and the gateway transport, and `auth login` /
+  `auth token` do the same. Build on `internal/transport` (or `internal/client`,
+  which wraps it) and they come for free — `transport.New` also applies the
+  empty-path and redirect guards unconditionally, so a new package inherits
+  those too. What must not happen again is a package hand-rolling
+  `http.Client`: that is how both flags went inert on three packages at once,
+  and how the doc claiming so then went stale.
 
 When implementing a wire protocol or stream parser (JSON-RPC, SSE, MCP, …), code
 and test against the **full input space the spec permits**, not just the shape a
