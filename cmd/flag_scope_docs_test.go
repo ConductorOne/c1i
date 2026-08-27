@@ -132,10 +132,12 @@ var httpSenderFuncs = map[string]bool{
 //
 // What this does NOT catch, stated in full because understating it is the same
 // failure this file guards against: a hand-rolled http.RoundTripper driven
-// directly (http.DefaultTransport.RoundTrip included), a local type alias for
-// http.Client, and any third-party HTTP library. A dot-import of net/http is
-// not missed but not analyzed either — it returns an error rather than a quiet
-// pass, since selectors cannot be resolved through one.
+// directly (http.DefaultTransport.RoundTrip included), httputil.ReverseProxy,
+// a local alias OR defined type for http.Client (`type c = http.Client`,
+// `type c http.Client`), and any HTTP library other than net/http, stdlib or
+// third-party. A dot-import of net/http is not missed but not analyzed either
+// — it returns an error rather than a quiet pass, since selectors cannot be
+// resolved through one.
 func transportFreeSenders(path string) ([]string, error) {
 	fset := token.NewFileSet()
 	f, err := parser.ParseFile(fset, path, nil, 0)
@@ -143,26 +145,27 @@ func transportFreeSenders(path string) ([]string, error) {
 		return nil, err
 	}
 
-	// First net/http import wins. Without the break a duplicate import
-	// (`"net/http"` plus `nh "net/http"`) would leave httpName set to the last
-	// spelling and silently miss every use of the first.
-	httpName := ""
+	// Collect EVERY local name net/http is bound to, not one of them. Picking
+	// a single name (first or last) does not resolve a duplicate import
+	// (`"net/http"` plus `nh "net/http"`) — it only chooses which of the two
+	// spellings goes invisible, and which one that is flips with import order.
+	httpNames := map[string]bool{}
 	for _, im := range f.Imports {
 		if im.Path.Value != `"net/http"` {
 			continue
 		}
-		httpName = "http"
+		name := "http"
 		if im.Name != nil {
-			httpName = im.Name.Name
+			name = im.Name.Name
 		}
-		break
+		if name == "." {
+			return nil, fmt.Errorf("dot-imports net/http; this guard cannot resolve selectors " +
+				"through a dot-import, so it cannot tell whether the file bypasses internal/transport")
+		}
+		httpNames[name] = true
 	}
-	if httpName == "" {
+	if len(httpNames) == 0 {
 		return nil, nil
-	}
-	if httpName == "." {
-		return nil, fmt.Errorf("dot-imports net/http; this guard cannot resolve selectors " +
-			"through a dot-import, so it cannot tell whether the file bypasses internal/transport")
 	}
 
 	seen := map[string]bool{}
@@ -176,38 +179,41 @@ func transportFreeSenders(path string) ([]string, error) {
 	// isHTTPClientType reports whether expr names the http.Client type itself.
 	// A StarExpr (*http.Client) is deliberately not unwrapped: a pointer names
 	// a client, it does not make one.
-	isHTTPClientType := func(expr ast.Expr) bool {
+	isHTTPClientType := func(expr ast.Expr) (string, bool) {
 		se, ok := expr.(*ast.SelectorExpr)
 		if !ok || se.Sel.Name != "Client" {
-			return false
+			return "", false
 		}
 		id, ok := se.X.(*ast.Ident)
-		return ok && id.Name == httpName
+		if !ok || !httpNames[id.Name] {
+			return "", false
+		}
+		return id.Name, true
 	}
 
 	ast.Inspect(f, func(n ast.Node) bool {
 		switch v := n.(type) {
 		case *ast.SelectorExpr:
-			if id, ok := v.X.(*ast.Ident); ok && id.Name == httpName && httpSenderFuncs[v.Sel.Name] {
-				add(httpName + "." + v.Sel.Name)
+			if id, ok := v.X.(*ast.Ident); ok && httpNames[id.Name] && httpSenderFuncs[v.Sel.Name] {
+				add(id.Name + "." + v.Sel.Name)
 			}
 		case *ast.CompositeLit:
-			if isHTTPClientType(v.Type) {
-				add(httpName + ".Client{}")
+			if n, ok := isHTTPClientType(v.Type); ok {
+				add(n + ".Client{}")
 			}
 		case *ast.CallExpr:
 			if id, ok := v.Fun.(*ast.Ident); ok && id.Name == "new" && len(v.Args) == 1 {
-				if isHTTPClientType(v.Args[0]) {
-					add("new(" + httpName + ".Client)")
+				if n, ok2 := isHTTPClientType(v.Args[0]); ok2 {
+					add("new(" + n + ".Client)")
 				}
 			}
 		case *ast.ValueSpec:
-			if isHTTPClientType(v.Type) {
-				add("var " + httpName + ".Client")
+			if n, ok := isHTTPClientType(v.Type); ok {
+				add("var " + n + ".Client")
 			}
 		case *ast.Field:
-			if isHTTPClientType(v.Type) {
-				add(httpName + ".Client field")
+			if n, ok := isHTTPClientType(v.Type); ok {
+				add(n + ".Client field")
 			}
 		}
 		return true
