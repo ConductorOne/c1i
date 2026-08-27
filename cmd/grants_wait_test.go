@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -72,12 +73,32 @@ func TestGrantsQuerySearchBody(t *testing.T) {
 	}
 }
 
+// grantsFake is the fake grants-search server plus what it observed. Recording
+// the page sizes it was sent is what ties the --page-size flag to the request
+// the wait actually issues; without it, pinning that argument at the call site
+// is invisible to every test.
+type grantsFake struct {
+	srv       *httptest.Server
+	fullReads int32
+
+	mu        sync.Mutex
+	pageSizes []int
+}
+
+func (f *grantsFake) reads() int { return int(atomic.LoadInt32(&f.fullReads)) }
+
+func (f *grantsFake) observedPageSizes() []int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return append([]int(nil), f.pageSizes...)
+}
+
 // grantsWaitServer serves POST /api/v1/search/grants. pages[i] is the list of
 // (entitlement,account) id pairs returned by the i-th *full read*, split into
 // two pages so each poll exercises pagination; the last entry repeats.
-func grantsWaitServer(t *testing.T, reads [][][2]string) (*httptest.Server, *int32) {
+func grantsWaitServer(t *testing.T, reads [][][2]string) *grantsFake {
 	t.Helper()
-	var fullReads int32
+	f := &grantsFake{}
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/api/v1/search/grants" {
 			t.Errorf("path = %q", r.URL.Path)
@@ -89,8 +110,13 @@ func grantsWaitServer(t *testing.T, reads [][][2]string) (*httptest.Server, *int
 			t.Errorf("decoding body: %v", err)
 		}
 		tok, _ := body["pageToken"].(string)
+		if ps, ok := body["pageSize"].(float64); ok {
+			f.mu.Lock()
+			f.pageSizes = append(f.pageSizes, int(ps))
+			f.mu.Unlock()
+		}
 
-		idx := int(atomic.LoadInt32(&fullReads))
+		idx := int(atomic.LoadInt32(&f.fullReads))
 		if idx >= len(reads) {
 			idx = len(reads) - 1
 		}
@@ -108,7 +134,7 @@ func grantsWaitServer(t *testing.T, reads [][][2]string) (*httptest.Server, *int
 			page = pairs[1:]
 		}
 		if next == "" {
-			atomic.AddInt32(&fullReads, 1)
+			atomic.AddInt32(&f.fullReads, 1)
 		}
 
 		items := make([]string, 0, len(page))
@@ -121,7 +147,8 @@ func grantsWaitServer(t *testing.T, reads [][][2]string) (*httptest.Server, *int
 		_, _ = fmt.Fprintf(w, `{"list":[%s],"nextPageToken":%q}`, strings.Join(items, ","), next)
 	}))
 	t.Cleanup(srv.Close)
-	return srv, &fullReads
+	f.srv = srv
+	return f
 }
 
 func runGrantsWait(t *testing.T, srv *httptest.Server, stableReads, minGrants int, timeout time.Duration) ([]grantListItem, string, string, error) {
@@ -145,20 +172,20 @@ func runGrantsWait(t *testing.T, srv *httptest.Server, stableReads, minGrants in
 // through a change, paginate each poll to completion, and return the set that
 // held steady -- not the first one it saw.
 func TestWaitForGrantsSettles(t *testing.T) {
-	srv, fullReads := grantsWaitServer(t, [][][2]string{
+	fake := grantsWaitServer(t, [][][2]string{
 		{{"e1", "u1"}},
 		{{"e1", "u1"}, {"e2", "u2"}},
 		{{"e1", "u1"}, {"e2", "u2"}},
 		{{"e1", "u1"}, {"e2", "u2"}},
 	})
-	items, out, errOut, err := runGrantsWait(t, srv, 3, 0, 10*time.Second)
+	items, out, errOut, err := runGrantsWait(t, fake.srv, 3, 0, 10*time.Second)
 	if err != nil {
 		t.Fatalf("waitForGrants returned %v, want nil", err)
 	}
 	if len(items) != 2 {
 		t.Errorf("settled on %d grants, want 2 (both pages of the settled read)", len(items))
 	}
-	if got := atomic.LoadInt32(fullReads); got != 4 {
+	if got := fake.reads(); got != 4 {
 		t.Errorf("made %d full reads, want 4 (one changing + three identical)", got)
 	}
 	if out != "" {
@@ -177,8 +204,8 @@ func TestWaitForGrantsTimesOut(t *testing.T) {
 	for i := range 50 {
 		reads = append(reads, [][2]string{{"e1", "u1"}, {fmt.Sprintf("e%d", i+2), "u2"}})
 	}
-	srv, _ := grantsWaitServer(t, reads)
-	items, out, _, err := runGrantsWait(t, srv, 3, 0, 40*time.Millisecond)
+	fake := grantsWaitServer(t, reads)
+	items, out, _, err := runGrantsWait(t, fake.srv, 3, 0, 40*time.Millisecond)
 	if err == nil {
 		t.Fatal("waitForGrants returned nil, want a timeout error")
 	}
@@ -194,28 +221,78 @@ func TestWaitForGrantsTimesOut(t *testing.T) {
 	}
 }
 
-// TestGrantsListWaitEndToEnd drives the user-visible path: grantsListCmd.RunE
-// with --wait must print the settled set as NDJSON on stdout and nothing else,
-// and --limit must truncate what is printed without changing what it settles
-// on.
+// TestGrantsListWaitEndToEnd drives the user-visible path -- grantsListCmd.RunE
+// with --wait -- rather than waitForGrants directly, so every flag is tied to
+// the outcome it is supposed to produce. Calling the helper directly leaves the
+// plumbing untested: replacing an argument at the call site with a literal, or
+// transposing two adjacent ints, both compile and change behavior.
 func TestGrantsListWaitEndToEnd(t *testing.T) {
+	threeGrants := [][2]string{{"e1", "u1"}, {"e2", "u2"}, {"e3", "u3"}}
+	oneGrant := [][2]string{{"e1", "u1"}}
+
 	for _, tc := range []struct {
-		name     string
-		limit    string
-		wantRows int
+		name  string
+		reads [][][2]string
+		flags map[string]string
+		// parentTimeout bounds the command's own context. A case that expects
+		// a --wait-timeout to fire sets this well above it, so pinning
+		// waitTimeout to its 4m default fails promptly with a cancellation
+		// instead of hanging the suite.
+		parentTimeout time.Duration
+		wantErr       string
+		wantRows      int
+		wantReads     int
+		wantPageSize  int
 	}{
-		{"no limit", "", 3},
-		{"limit truncates the settled set", "2", 2},
+		{
+			name:         "settles and prints the whole set",
+			reads:        [][][2]string{oneGrant, threeGrants, threeGrants},
+			flags:        map[string]string{"wait-stable": "2"},
+			wantRows:     3,
+			wantReads:    3,
+			wantPageSize: 50,
+		},
+		{
+			name:         "limit truncates what is printed, not what it settles on",
+			reads:        [][][2]string{oneGrant, threeGrants, threeGrants},
+			flags:        map[string]string{"wait-stable": "2", "limit": "2"},
+			wantRows:     2,
+			wantReads:    3,
+			wantPageSize: 50,
+		},
+		{
+			// Three empty reads, so --wait-min=0 would settle on them at the
+			// third; the correct wait must outlast them and take the grant.
+			// Transposing --wait-stable and --wait-min turns this into a floor
+			// of 3 that one grant can never clear, so it times out instead.
+			name:         "wait-min outlasts an empty prefix",
+			reads:        [][][2]string{nil, nil, nil, oneGrant, oneGrant, oneGrant},
+			flags:        map[string]string{"wait-stable": "3", "wait-min": "1"},
+			wantRows:     1,
+			wantReads:    6,
+			wantPageSize: 50,
+		},
+		{
+			name:          "wait-min times out rather than settling empty",
+			reads:         [][][2]string{nil},
+			flags:         map[string]string{"wait-stable": "2", "wait-min": "1", "wait-timeout": "60ms"},
+			parentTimeout: 3 * time.Second,
+			wantErr:       "timed out after 60ms waiting for at least 1 matching grant(s) to appear and stop changing; this is not necessarily a failure \u2014 grant provisioning can take several minutes, check again later with: c1i grants list --app-id=app1",
+		},
+		{
+			name:         "page-size reaches the request the wait issues",
+			reads:        [][][2]string{threeGrants, threeGrants},
+			flags:        map[string]string{"wait-stable": "2", "page-size": "37"},
+			wantRows:     3,
+			wantReads:    2,
+			wantPageSize: 37,
+		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			srv, fullReads := grantsWaitServer(t, [][][2]string{
-				{{"e1", "u1"}},
-				{{"e1", "u1"}, {"e2", "u2"}, {"e3", "u3"}},
-				{{"e1", "u1"}, {"e2", "u2"}, {"e3", "u3"}},
-			})
+			fake := grantsWaitServer(t, tc.reads)
 			orig := newListClient
 			newListClient = func(*cobra.Command, string) (*client.Client, error) {
-				return client.NewForTesting(srv.URL, srv.Client()), nil
+				return client.NewForTesting(fake.srv.URL, fake.srv.Client()), nil
 			}
 			t.Cleanup(func() { newListClient = orig })
 			t.Setenv("C1I_URL", "https://example.invalid")
@@ -227,16 +304,36 @@ func TestGrantsListWaitEndToEnd(t *testing.T) {
 			resetCmdFlags(t, grantsListCmd)
 			mustSet(t, grantsListCmd.Flags(), "app-id", "app1")
 			mustSet(t, grantsListCmd.Flags(), "wait", "true")
-			mustSet(t, grantsListCmd.Flags(), "wait-stable", "2")
-			if tc.limit != "" {
-				mustSet(t, grantsListCmd.Flags(), "limit", tc.limit)
+			for name, val := range tc.flags {
+				mustSet(t, grantsListCmd.Flags(), name, val)
+			}
+
+			ctx := context.Background()
+			if tc.parentTimeout > 0 {
+				var cancel context.CancelFunc
+				ctx, cancel = context.WithTimeout(ctx, tc.parentTimeout)
+				defer cancel()
 			}
 
 			var out, errOut bytes.Buffer
 			grantsListCmd.SetOut(&out)
 			grantsListCmd.SetErr(&errOut)
-			grantsListCmd.SetContext(context.Background())
-			if err := grantsListCmd.RunE(grantsListCmd, nil); err != nil {
+			grantsListCmd.SetContext(ctx)
+			err := grantsListCmd.RunE(grantsListCmd, nil)
+
+			if tc.wantErr != "" {
+				if err == nil {
+					t.Fatalf("RunE returned nil, want %q", tc.wantErr)
+				}
+				if err.Error() != tc.wantErr {
+					t.Fatalf("RunE error =\n%q\nwant\n%q", err.Error(), tc.wantErr)
+				}
+				if out.String() != "" {
+					t.Errorf("wrote rows to stdout despite not settling:\n%s", out.String())
+				}
+				return
+			}
+			if err != nil {
 				t.Fatalf("RunE returned %v, want nil", err)
 			}
 
@@ -253,9 +350,13 @@ func TestGrantsListWaitEndToEnd(t *testing.T) {
 					t.Errorf("row %d is missing its ids: %v", i, row)
 				}
 			}
-			// It must settle on the full 3-grant read even when --limit is 2.
-			if got := atomic.LoadInt32(fullReads); got != 3 {
-				t.Errorf("made %d full reads, want 3 (one changing + two identical)", got)
+			if got := fake.reads(); got != tc.wantReads {
+				t.Errorf("made %d full reads, want %d", got, tc.wantReads)
+			}
+			for i, ps := range fake.observedPageSizes() {
+				if ps != tc.wantPageSize {
+					t.Errorf("request %d asked for pageSize %d, want %d", i, ps, tc.wantPageSize)
+				}
 			}
 			if !strings.Contains(errOut.String(), "Grants settled after ") {
 				t.Errorf("stderr missing the success line:\n%s", errOut.String())
@@ -332,15 +433,15 @@ func TestGrantsListWaitUsageErrors(t *testing.T) {
 // with zero rows. That is correct for a revoke and wrong for a grant, which is
 // what --wait-min exists to say.
 func TestWaitForGrantsSettlesEmptyWithoutAMinimum(t *testing.T) {
-	srv, fullReads := grantsWaitServer(t, [][][2]string{nil})
-	items, _, errOut, err := runGrantsWait(t, srv, 3, 0, 10*time.Second)
+	fake := grantsWaitServer(t, [][][2]string{nil})
+	items, _, errOut, err := runGrantsWait(t, fake.srv, 3, 0, 10*time.Second)
 	if err != nil {
 		t.Fatalf("wait returned %v, want nil (empty-and-stable is a settle)", err)
 	}
 	if len(items) != 0 {
 		t.Errorf("settled on %d grants, want 0", len(items))
 	}
-	if got := atomic.LoadInt32(fullReads); got != 3 {
+	if got := fake.reads(); got != 3 {
 		t.Errorf("made %d full reads, want 3 (it settles as soon as the streak fills)", got)
 	}
 	if !strings.Contains(errOut, "Grants settled after ") {
@@ -355,8 +456,8 @@ func TestWaitForGrantsMinimumOutwaitsAnEmptySet(t *testing.T) {
 	// Empty for the first four reads, then the grant lands and holds.
 	reads := [][][2]string{nil, nil, nil, nil,
 		{{"e1", "u1"}}, {{"e1", "u1"}}, {{"e1", "u1"}}}
-	srv, _ := grantsWaitServer(t, reads)
-	items, _, _, err := runGrantsWait(t, srv, 3, 1, 10*time.Second)
+	fake := grantsWaitServer(t, reads)
+	items, _, _, err := runGrantsWait(t, fake.srv, 3, 1, 10*time.Second)
 	if err != nil {
 		t.Fatalf("wait returned %v, want nil", err)
 	}
@@ -369,8 +470,8 @@ func TestWaitForGrantsMinimumOutwaitsAnEmptySet(t *testing.T) {
 // if the grant never lands, --wait-min must produce a timeout, not a confident
 // empty success.
 func TestWaitForGrantsMinimumTimesOutRatherThanSettlingEmpty(t *testing.T) {
-	srv, _ := grantsWaitServer(t, [][][2]string{nil})
-	items, out, _, err := runGrantsWait(t, srv, 3, 1, 40*time.Millisecond)
+	fake := grantsWaitServer(t, [][][2]string{nil})
+	items, out, _, err := runGrantsWait(t, fake.srv, 3, 1, 40*time.Millisecond)
 	if err == nil {
 		t.Fatal("wait returned nil; an unmet --wait-min must time out, not settle empty")
 	}

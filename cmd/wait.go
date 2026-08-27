@@ -167,6 +167,12 @@ func untilStable[T comparable](n int) func(T) bool {
 // the floor is consulted: writing this as "floor(v) && stable(key(v))" would
 // short-circuit past a stateful predicate on any poll below the floor, so a set
 // that dipped below it and came back would look like it never changed.
+//
+// PRECONDITION: key must determine floor -- two values with equal keys must
+// agree on floor. Otherwise "the key held steady" and "this value clears the
+// floor" can be true of different reads, and the wait settles on a value it
+// never actually saw hold. grantSetFingerprint satisfies this by prefixing the
+// count, so an equal fingerprint implies an equal grant count.
 func stableAndAtLeast[T any, K comparable](n int, key func(T) K, floor func(T) bool) func(T) bool {
 	stable := untilStable[K](n)
 	return func(v T) bool {
