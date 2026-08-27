@@ -158,7 +158,7 @@ campaign ID from a URL is the access review `id` directly.
   `--fields`/`C1I_FIELDS` can't blank a success message.
 - Casing differs by mode: list rows are snake_case (`app_id`,
   `display_name`); single-object reads carry the API's own camelCase
-  (`userView`, `displayName`). `--fields` matches either casing at any
+  (`displayName`, `createdAt`). `--fields` matches either casing at any
   depth — `jq` doesn't, so check a row's actual keys before writing a filter.
 - Values keep their real JSON types: booleans and numbers are never
   stringified, so `jq 'select(.enabled)'` and numeric comparisons behave.

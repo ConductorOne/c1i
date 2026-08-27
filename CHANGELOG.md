@@ -10,8 +10,22 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Upgrading from 0.5.x
 
-Two exit codes changed. Both are narrower failures that previously reported
-success or a generic error, so a script that branched on them needs a look:
+**Typed `get` commands now print the resource, not the API's envelope.** This
+is the breaking change in this release. `apps get <id>` emitted
+`{"app":{"id":…}}` and now emits `{"id":…}`, so `jq -r .id` returns the id
+where it previously returned `null` — the reason for the change. Anything
+reading *through* the wrapper must drop that hop: `.app.id` becomes `.id`,
+`.userView.user.id` becomes `.id`, and `--fields function.id` becomes
+`--fields id`. Nothing is lost — every key the envelope carried beside the
+resource, `expanded` included, is now a top-level sibling. Two things
+deliberately did **not** change: mutation output (`apps create` still returns
+`{"app":…}`, so `.app.id` is still right there) and `c1i api`, which is a raw
+passthrough. One asymmetry to know: `mcp servers get` has no `id` field at all
+— its identity is `connectorId` — so read `.connectorId` there.
+
+Two exit codes also changed. Both are narrower failures that previously
+reported success or a generic error, so a script that branched on them needs a
+look:
 
 - `auth whoami` on a `200` carrying no usable identity (`null`, `{}`, or an
   all-null identity) now exits **6** ("C1 failed") instead of **0**. A body

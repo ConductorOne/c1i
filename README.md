@@ -448,15 +448,17 @@ c1i functions get <id> --fields id,displayName,publishedCommitId
   to a **case- and separator-insensitive** match. So `--fields displayName`
   resolves whether the output uses `displayName` (single-object reads) or
   `display_name` (list rows); the output keeps the source key's own spelling.
-- Single-object `get` commands pass through the API response as-is, which
-  wraps the resource under the endpoint's own top-level key (`function`,
-  `app`, `automation`, `userView.user`, ...). You don't need to know that key:
-  a name that doesn't match at the top level is also searched for inside the
-  wrapper, so `--fields id,displayName` on `functions get` finds
-  `function.id`/`function.displayName` automatically. The full path
-  (`--fields function.id`) still works too and is tried first. If the same
-  name exists at more than one depth, the shallowest match wins; a tie at the
-  same depth resolves to the alphabetically first full path, deterministically.
+- Single-object `get` commands print the resource itself, so `--fields id`
+  yields `{"id": ...}` and `jq -r .id` works. The API wraps the resource under
+  its own key (`app`, `function`, `userView.user`, ...); `get` unwraps that and
+  keeps every other envelope key — `expanded` among them — as a top-level
+  sibling. Do **not** write the wrapper into a path: `--fields function.id`
+  no longer resolves, because there is no `function` key left.
+- `c1i api` is a raw passthrough and still returns the envelope, as does
+  mutation output (`apps create` returns `{"app": ...}`). There, and for any
+  genuinely nested field, a name that doesn't match at the top level is also
+  searched for deeper: the shallowest match wins, and a tie at the same depth
+  resolves to the alphabetically first full path, deterministically.
 - A `--fields` spec that matches **nothing at all** in the response (a typo, or
   a field that truly doesn't exist) is a usage error (exit `2`), not a silent
   `{}`. This is a zero-match check only: `--fields id,dispalyName` (typo) still
