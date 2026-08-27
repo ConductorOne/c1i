@@ -96,14 +96,20 @@ var grantsListCmd = &cobra.Command{
   c1i grants list --app-id APP
 
 Grant provisioning is asynchronous, so a read taken right after a grant or
-revoke can catch the set mid-change. Pass --wait to poll instead: it re-reads
-the full result set until the same grants come back --wait-stable times in a
-row, then prints that settled set. Nothing is printed until it settles, unlike
-the default streaming output; the progress lines go to stderr, so stdout stays
-pure NDJSON.
+revoke can catch the set mid-change. Pass --wait to poll instead: every 5s it
+re-reads every page of the match, and once the same grants come back
+--wait-stable times in a row it prints that settled set. Nothing reaches stdout
+until it settles, unlike the default streaming output; progress goes to stderr,
+so stdout stays pure NDJSON.
+
+--wait settles on the WHOLE matching set, so it fetches every page on every
+poll regardless of --limit; --limit only truncates what is printed at the end.
+Filter narrowly. The poll interval is fixed at 5s -- --wait-stable and
+--wait-timeout are the tunable parts.
 
 --wait-stable defaults to 3 rather than 2 because two equal reads cannot be
-told apart from a pause mid-change. Even 3 is a heuristic, not a proof.`,
+told apart from a pause mid-change. Even 3 is a heuristic, not a proof: on a
+set that keeps changing, --wait times out rather than printing anything.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		appID, _ := cmd.Flags().GetString("app-id")
 		userID, _ := cmd.Flags().GetString("user-id")
@@ -131,6 +137,14 @@ told apart from a pause mid-change. Even 3 is a heuristic, not a proof.`,
 			}
 			if stableReads < 2 {
 				return &usageError{fmt.Errorf("--wait-stable must be at least 2 (one read cannot show that anything held steady)")}
+			}
+			// The first read is immediate, so n reads need (n-1) intervals.
+			// Past that the wait cannot succeed, and the timeout would blame
+			// slow provisioning for what is really bad arithmetic.
+			if need := time.Duration(stableReads-1) * grantsWaitPollInterval; need >= waitTimeout {
+				return &usageError{fmt.Errorf(
+					"--wait-stable=%d needs %s at the fixed %s poll interval, which --wait-timeout=%s can never allow; raise --wait-timeout or lower --wait-stable",
+					stableReads, need, grantsWaitPollInterval, waitTimeout)}
 			}
 		}
 
@@ -263,7 +277,7 @@ func grantSetFingerprint(items []grantListItem) string {
 // settled while later pages were still moving.
 func fetchAllGrants(ctx context.Context, c *client.Client, q grantsQuery, pageSize int) ([]grantListItem, error) {
 	var all []grantListItem
-	pageToken := ""
+	pageToken, prevToken := "", ""
 	for {
 		data, err := c.Post(ctx, "/api/v1/search/grants", q.searchBody(pageSize, pageToken))
 		if err != nil {
@@ -280,6 +294,13 @@ func fetchAllGrants(ctx context.Context, c *client.Client, q grantsQuery, pageSi
 		if resp.NextPageToken == "" {
 			return all, nil
 		}
+		// Same guard as "api --paginate" (cmd/api.go): a server that re-issues
+		// one token forever would otherwise turn each poll into a request storm
+		// bounded only by --wait-timeout, then blame provisioning for it.
+		if resp.NextPageToken == prevToken {
+			return nil, fmt.Errorf("API returned the same nextPageToken twice in a row while --wait was re-reading grants; the cursor is not advancing")
+		}
+		prevToken = resp.NextPageToken
 		pageToken = resp.NextPageToken
 	}
 }
@@ -287,15 +308,13 @@ func fetchAllGrants(ctx context.Context, c *client.Client, q grantsQuery, pageSi
 // waitForGrants blocks until the matching grant set comes back identical
 // stableReads times running, and returns that settled set.
 func waitForGrants(cmd *cobra.Command, c *client.Client, q grantsQuery, pageSize, stableReads int, timeout time.Duration) ([]grantListItem, error) {
-	var settled []grantListItem
 	stable := untilStable[string](stableReads)
-	err := runWait(cmd, waitOp[grantsSnapshot]{
+	settled, err := runWait(cmd, waitOp[grantsSnapshot]{
 		Poll: func(ctx context.Context) (grantsSnapshot, error) {
 			items, err := fetchAllGrants(ctx, c, q, pageSize)
 			if err != nil {
 				return grantsSnapshot{}, err
 			}
-			settled = items
 			return grantsSnapshot{fingerprint: grantSetFingerprint(items), items: items}, nil
 		},
 		Done:     func(s grantsSnapshot) bool { return stable(s.fingerprint) },
@@ -312,7 +331,7 @@ func waitForGrants(cmd *cobra.Command, c *client.Client, q grantsQuery, pageSize
 	if err != nil {
 		return nil, err
 	}
-	return settled, nil
+	return settled.items, nil
 }
 
 // rescanFlags reproduces the filters this query was built from, so the

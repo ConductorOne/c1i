@@ -45,11 +45,17 @@ type waitOp[T any] struct {
 }
 
 // runWait polls op until op.Done is satisfied, op.Timeout elapses, or cmd's
-// context is canceled, writing progress lines to op.Out.
+// context is canceled, writing progress lines to op.Out. It returns the
+// satisfying poll's value, so a caller that needs to print what it settled on
+// does not have to smuggle it out of the Poll closure.
 //
 // A timeout is an error (so scripts can branch on it) but deliberately not
-// phrased as a failure: the write it is waiting on was already accepted.
-func runWait[T any](cmd *cobra.Command, op waitOp[T]) error {
+// phrased as a failure: the write it is waiting on was already accepted. It is
+// a bare error, so it exits 1 -- the same code set-owners' --wait has always
+// returned. Giving it a code of its own would change that, and belongs with
+// the README/agents.md exit-code table, not here.
+func runWait[T any](cmd *cobra.Command, op waitOp[T]) (T, error) {
+	var zero T
 	out := op.Out
 	if out == nil {
 		out = cmd.OutOrStdout()
@@ -74,11 +80,11 @@ func runWait[T any](cmd *cobra.Command, op waitOp[T]) error {
 			if ctx.Err() != nil {
 				break // fall through to the timeout/cancellation report below
 			}
-			return err
+			return zero, err
 		}
 		if op.Done(got) {
 			_, _ = fmt.Fprintf(out, "%s after %s.\n", op.Success, time.Since(start).Round(time.Second))
-			return nil
+			return got, nil
 		}
 		if !firstPoll {
 			_, _ = fmt.Fprintf(out, "Still waiting for %s (%s elapsed)...\n",
@@ -95,9 +101,9 @@ func runWait[T any](cmd *cobra.Command, op waitOp[T]) error {
 	}
 
 	if cmd.Context().Err() != nil {
-		return fmt.Errorf("canceled while waiting for %s", op.Subject)
+		return zero, fmt.Errorf("canceled while waiting for %s", op.Subject)
 	}
-	return fmt.Errorf(
+	return zero, fmt.Errorf(
 		"timed out after %s waiting for %s; "+
 			"this is not necessarily a failure — %s, "+
 			"check again later with: %s",
@@ -132,9 +138,9 @@ func untilPresent(want []string) func([]string) bool {
 // from the field: 0 -> 40 -> 101, with pauses mid-stream), so "at least one
 // tool exists" reports success on a partial result. Two equal reads is not
 // enough either: a pause between batches is indistinguishable from completion,
-// which is also this predicate's limit -- it is a heuristic, not a proof. Size
-// n and the poll interval so n*interval exceeds the longest mid-stream pause
-// actually observed.
+// which is also this predicate's limit -- it is a heuristic, not a proof. Pick
+// n so that (n-1) poll intervals exceed the longest mid-stream pause actually
+// observed for that endpoint.
 func untilStable[T comparable](n int) func(T) bool {
 	var last T
 	streak := 0

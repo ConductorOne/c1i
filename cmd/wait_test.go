@@ -107,7 +107,7 @@ func TestUntilPresentIsStateless(t *testing.T) {
 func TestRunWaitSucceedsAfterSeveralPolls(t *testing.T) {
 	cmd, out := newWaitTestCmd(context.Background())
 	var polls int
-	err := runWait(cmd, waitOp[int]{
+	_, err := runWait(cmd, waitOp[int]{
 		Poll:     func(context.Context) (int, error) { polls++; return polls, nil },
 		Done:     func(v int) bool { return v >= 3 },
 		Interval: time.Millisecond,
@@ -135,11 +135,39 @@ func TestRunWaitSucceedsAfterSeveralPolls(t *testing.T) {
 	}
 }
 
+// TestRunWaitReturnsTheSatisfyingValue pins that runWait hands back the poll
+// that satisfied Done, so a caller printing what it settled on does not have to
+// smuggle it out of the Poll closure.
+func TestRunWaitReturnsTheSatisfyingValue(t *testing.T) {
+	cmd, _ := newWaitTestCmd(context.Background())
+	var polls int
+	got, err := runWait(cmd, waitOp[string]{
+		Poll:     func(context.Context) (string, error) { polls++; return fmt.Sprintf("read-%d", polls), nil },
+		Done:     func(v string) bool { return v == "read-3" },
+		Interval: time.Millisecond,
+		Timeout:  10 * time.Second,
+		Subject:  "s",
+		Success:  "Done",
+		Slow:     "slow",
+		Recheck:  "c1i check",
+	})
+	if err != nil {
+		t.Fatalf("runWait returned %v, want nil", err)
+	}
+	if got != "read-3" {
+		t.Errorf("runWait returned %q, want the satisfying poll %q", got, "read-3")
+	}
+}
+
+// (A "timeout returns the zero value" test lives at the caller instead --
+// TestWaitForGrantsTimesOut. runWait cannot fabricate a non-zero T, so such a
+// test here would be true by construction and could never fail.)
+
 // TestRunWaitSuppressesProgressOnImmediateSuccess pins that a wait satisfied
 // by its very first poll prints only the success line.
 func TestRunWaitSuppressesProgressOnImmediateSuccess(t *testing.T) {
 	cmd, out := newWaitTestCmd(context.Background())
-	if err := runWait(cmd, waitOp[int]{
+	if _, err := runWait(cmd, waitOp[int]{
 		Poll:     func(context.Context) (int, error) { return 1, nil },
 		Done:     func(int) bool { return true },
 		Interval: time.Millisecond,
@@ -163,7 +191,7 @@ func TestRunWaitHonorsOutWriter(t *testing.T) {
 	cmd, stdout := newWaitTestCmd(context.Background())
 	var elsewhere bytes.Buffer
 	var polls int
-	if err := runWait(cmd, waitOp[int]{
+	if _, err := runWait(cmd, waitOp[int]{
 		Poll:     func(context.Context) (int, error) { polls++; return polls, nil },
 		Done:     func(v int) bool { return v >= 3 },
 		Interval: time.Millisecond,
@@ -189,7 +217,7 @@ func TestRunWaitHonorsOutWriter(t *testing.T) {
 // is not necessarily a failure, and hand back a recheck command.
 func TestRunWaitTimeout(t *testing.T) {
 	cmd, _ := newWaitTestCmd(context.Background())
-	err := runWait(cmd, waitOp[int]{
+	_, err := runWait(cmd, waitOp[int]{
 		Poll:     func(context.Context) (int, error) { return 0, nil },
 		Done:     func(int) bool { return false },
 		Interval: time.Millisecond,
@@ -216,7 +244,7 @@ func TestRunWaitTimeout(t *testing.T) {
 func TestRunWaitPollErrorIsReturnedUnwrapped(t *testing.T) {
 	sentinel := errors.New("boom")
 	cmd, _ := newWaitTestCmd(context.Background())
-	err := runWait(cmd, waitOp[int]{
+	_, err := runWait(cmd, waitOp[int]{
 		Poll:     func(context.Context) (int, error) { return 0, fmt.Errorf("API error: %w", sentinel) },
 		Done:     func(int) bool { return true },
 		Interval: time.Millisecond,
@@ -245,7 +273,7 @@ func TestRunWaitCanceled(t *testing.T) {
 	}()
 	defer cancel()
 
-	err := runWait(cmd, waitOp[int]{
+	_, err := runWait(cmd, waitOp[int]{
 		Poll:     func(context.Context) (int, error) { return 0, nil },
 		Done:     func(int) bool { return false },
 		Interval: 5 * time.Millisecond,
@@ -267,7 +295,7 @@ func TestRunWaitCanceled(t *testing.T) {
 func TestRunWaitCallsDoneOncePerPoll(t *testing.T) {
 	cmd, _ := newWaitTestCmd(context.Background())
 	var polls, dones int
-	_ = runWait(cmd, waitOp[int]{
+	_, _ = runWait(cmd, waitOp[int]{
 		Poll:     func(context.Context) (int, error) { polls++; return polls, nil },
 		Done:     func(int) bool { dones++; return polls >= 4 },
 		Interval: time.Millisecond,
@@ -312,7 +340,7 @@ func runOwnersWait(t *testing.T, srv *httptest.Server, appID string, want []stri
 	op := ownersWaitOp(c, appID, want, timeout)
 	op.Interval = 5 * time.Millisecond
 	cmd, out := newWaitTestCmd(context.Background())
-	err := runWait(cmd, op)
+	_, err := runWait(cmd, op)
 	return out.String(), err
 }
 

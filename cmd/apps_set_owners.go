@@ -91,7 +91,8 @@ polls).`,
 // waitForOwners blocks until every id in wantUserIDs appears in
 // GET .../ownerids on appID, timeout elapses, or cmd's context is canceled.
 func waitForOwners(cmd *cobra.Command, c *client.Client, appID string, wantUserIDs []string, timeout time.Duration) error {
-	return runWait(cmd, ownersWaitOp(c, appID, wantUserIDs, timeout))
+	_, err := runWait(cmd, ownersWaitOp(c, appID, wantUserIDs, timeout))
+	return err
 }
 
 // ownersWaitOp is waitForOwners' operation, built separately so a test can

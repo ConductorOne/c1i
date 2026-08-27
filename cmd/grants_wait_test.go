@@ -194,8 +194,108 @@ func TestWaitForGrantsTimesOut(t *testing.T) {
 	}
 }
 
-// TestGrantsListWaitUsageErrors pins the two combinations --wait rejects, both
-// as exit-2 usage errors.
+// TestGrantsListWaitEndToEnd drives the user-visible path: grantsListCmd.RunE
+// with --wait must print the settled set as NDJSON on stdout and nothing else,
+// and --limit must truncate what is printed without changing what it settles
+// on.
+func TestGrantsListWaitEndToEnd(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		limit    string
+		wantRows int
+	}{
+		{"no limit", "", 3},
+		{"limit truncates the settled set", "2", 2},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			srv, fullReads := grantsWaitServer(t, [][][2]string{
+				{{"e1", "u1"}},
+				{{"e1", "u1"}, {"e2", "u2"}, {"e3", "u3"}},
+				{{"e1", "u1"}, {"e2", "u2"}, {"e3", "u3"}},
+			})
+			orig := newListClient
+			newListClient = func(*cobra.Command, string) (*client.Client, error) {
+				return client.NewForTesting(srv.URL, srv.Client()), nil
+			}
+			t.Cleanup(func() { newListClient = orig })
+			t.Setenv("C1I_URL", "https://example.invalid")
+
+			origInterval := grantsWaitPollInterval
+			grantsWaitPollInterval = 5 * time.Millisecond
+			t.Cleanup(func() { grantsWaitPollInterval = origInterval })
+
+			resetCmdFlags(t, grantsListCmd)
+			mustSet(t, grantsListCmd.Flags(), "app-id", "app1")
+			mustSet(t, grantsListCmd.Flags(), "wait", "true")
+			mustSet(t, grantsListCmd.Flags(), "wait-stable", "2")
+			if tc.limit != "" {
+				mustSet(t, grantsListCmd.Flags(), "limit", tc.limit)
+			}
+
+			var out, errOut bytes.Buffer
+			grantsListCmd.SetOut(&out)
+			grantsListCmd.SetErr(&errOut)
+			grantsListCmd.SetContext(context.Background())
+			if err := grantsListCmd.RunE(grantsListCmd, nil); err != nil {
+				t.Fatalf("RunE returned %v, want nil", err)
+			}
+
+			lines := strings.Split(strings.TrimRight(out.String(), "\n"), "\n")
+			if len(lines) != tc.wantRows {
+				t.Fatalf("printed %d rows, want %d:\n%s", len(lines), tc.wantRows, out.String())
+			}
+			for i, line := range lines {
+				var row map[string]any
+				if err := json.Unmarshal([]byte(line), &row); err != nil {
+					t.Fatalf("stdout line %d is not JSON (%v): %q", i, err, line)
+				}
+				if row["entitlement_id"] == "" || row["app_user_id"] == "" {
+					t.Errorf("row %d is missing its ids: %v", i, row)
+				}
+			}
+			// It must settle on the full 3-grant read even when --limit is 2.
+			if got := atomic.LoadInt32(fullReads); got != 3 {
+				t.Errorf("made %d full reads, want 3 (one changing + two identical)", got)
+			}
+			if !strings.Contains(errOut.String(), "Grants settled after ") {
+				t.Errorf("stderr missing the success line:\n%s", errOut.String())
+			}
+		})
+	}
+}
+
+// TestFetchAllGrantsRejectsAStuckCursor pins the same-token guard: without it a
+// server re-issuing one cursor turns every poll into a request storm bounded
+// only by --wait-timeout.
+func TestFetchAllGrantsRejectsAStuckCursor(t *testing.T) {
+	var requests int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		atomic.AddInt32(&requests, 1)
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"list":[],"nextPageToken":"stuck"}`))
+	}))
+	t.Cleanup(srv.Close)
+
+	// Bounded, so removing the guard fails this test promptly instead of
+	// hanging it until go test's own panic timeout.
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
+	c := client.NewForTesting(srv.URL, srv.Client())
+	_, err := fetchAllGrants(ctx, c, grantsQuery{appID: "app1"}, 50)
+	if err == nil {
+		t.Fatal("fetchAllGrants returned nil; a stuck cursor must be an error, not a loop")
+	}
+	if !strings.Contains(err.Error(), "same nextPageToken twice in a row") {
+		t.Errorf("err = %q, want it to name the stuck cursor", err.Error())
+	}
+	if got := atomic.LoadInt32(&requests); got != 2 {
+		t.Errorf("made %d requests before giving up, want 2", got)
+	}
+}
+
+// TestGrantsListWaitUsageErrors pins the combinations --wait rejects, all as
+// exit-2 usage errors.
 func TestGrantsListWaitUsageErrors(t *testing.T) {
 	cases := []struct {
 		name  string
@@ -204,6 +304,7 @@ func TestGrantsListWaitUsageErrors(t *testing.T) {
 	}{
 		{"page-token", map[string]string{"app-id": "app1", "wait": "true", "page-token": "tok"}, "--wait cannot be combined with --page-token"},
 		{"wait-stable below 2", map[string]string{"app-id": "app1", "wait": "true", "wait-stable": "1"}, "--wait-stable must be at least 2"},
+		{"wait-stable can never fit in wait-timeout", map[string]string{"app-id": "app1", "wait": "true", "wait-stable": "4", "wait-timeout": "10s"}, "can never allow"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
