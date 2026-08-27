@@ -63,6 +63,25 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   returned token. The only `aud` in the tree is on the client-assertion JWT
   sent *to* the token endpoint. Dropped from the README too.
 
+- **The `--debug`/`--max-retries` scope exception is documented in all four
+  docs, and guarded.** The fetching `docs` subcommands (`docs search`,
+  `docs page`, `docs openapi`, `docs endpoints`, `docs endpoint`) call
+  `http.DefaultClient` directly instead of `internal/transport`, so both flags
+  are inert there and no path or redirect guard applies. README.md, CLAUDE.md
+  and `.claude/commands/c1i.md` all stated the opposite as an unqualified
+  universal -- README's was the strongest ("everywhere the CLI sends HTTP").
+  An agent debugging an empty `docs search` would run `--debug`, see no trace,
+  and conclude no request was sent. `cmd/agents.md` also now records that these
+  five don't share one host: three fetch `conductorone.com` (cached 24h, so a
+  run can return rows without sending a request at all) while `docs search` and
+  `docs page` call a third party, `api.mintlify.com`.
+
+  `TestFlagScopeExceptionDocumented` fails CI when any of the four documents
+  mentions either flag without carving out the exception;
+  `TestDocumentedFlagScopeExceptionIsStillReal` pins the exception to the code,
+  failing in both directions -- if a new `cmd/` file bypasses the shared
+  transport, or if these stop bypassing it and the carve-outs go stale.
+
 - **`apps create` and `apps delete` are in the README.** Both shipped without
   ever being listed in the Apps section, so the only way to find them was
   `--help`. Documented alongside their neighbours, including that `apps create`

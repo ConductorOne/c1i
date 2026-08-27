@@ -524,10 +524,15 @@ follow would hand your bearer token to whatever host the redirect named.
 A chain of allowed redirects that doesn't settle within five hops fails as a
 remote error (exit `6`) rather than looping.
 
-This applies everywhere the CLI sends HTTP: the REST client, the MCP gateway, and
-the login handshake all share the same transport, so the path and redirect
-guards, `--debug` tracing, and `--max-retries` all cover the gateway and login
-too, not just REST commands. A bad id is the only cause of a refused `3xx`
+This applies to every command built on the shared transport: the REST client,
+the MCP gateway, and the login handshake, so the path and redirect guards,
+`--debug` tracing, and `--max-retries` cover the gateway and login too, not just
+REST commands. It does **not** apply to the `docs` subcommands that fetch —
+`docs search`, `docs page`, `docs openapi`, `docs endpoints`, `docs endpoint` —
+which call Go's default HTTP client directly: no path or redirect guard there,
+and `--debug` and `--max-retries` are both inert.
+
+A bad id is the only cause of a refused `3xx`
 observed so far, which is why it maps to exit `2` — a redirect on an otherwise
 well-formed request would not be the caller's mistake, and would still report
 `2`.
@@ -618,7 +623,7 @@ retried depends on the request, to avoid duplicating side effects:
 Control the retry budget (attempts *after* the first try) via, in order of
 precedence:
 
-1. `--max-retries N` flag (applies to any command)
+1. `--max-retries N` flag (any command that reaches the C1 API)
 2. `C1I_MAX_RETRIES` environment variable
 3. Default: `4`
 
@@ -664,10 +669,10 @@ the previewed body is exact.
 
 ### Debug tracing
 
-`--debug` (or `C1I_DEBUG=1`) traces each HTTP request to stderr — method, URL,
-response status, and elapsed time, including every retry attempt. Headers and
-bodies are never logged, so credentials don't leak. Output goes to stderr, so it
-won't corrupt piped JSON on stdout:
+`--debug` (or `C1I_DEBUG=1`) traces each API HTTP request to stderr — method,
+URL, response status, and elapsed time, including every retry attempt. Headers
+and bodies are never logged, so credentials don't leak. Output goes to stderr,
+so it won't corrupt piped JSON on stdout:
 
 ```sh
 $ c1i apps list --debug 2>trace.log

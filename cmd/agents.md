@@ -71,12 +71,18 @@ JSON-RPC calls. On a `mcp gateway call` that hangs or fails oddly, `--debug`
 is the fastest way to see which request stopped.
 
 They do **not** reach the `docs` subcommands that fetch — `docs search`,
-`docs page`, `docs openapi`, `docs endpoints`, `docs endpoint`. Those go
-straight to the public docs site through Go's default HTTP client, so
-`--debug` prints nothing and `--max-retries` is ignored. Silent `--debug`
-output there means the flag doesn't reach that path, NOT that no request was
-sent — don't read it as evidence either way when a `docs` command comes back
-empty.
+`docs page`, `docs openapi`, `docs endpoints`, `docs endpoint`. Those bypass
+the shared transport for Go's default HTTP client, so `--debug` prints nothing
+and `--max-retries` is ignored. Silent `--debug` output there means the flag
+never reached that path, NOT that no request was sent — don't read it as
+evidence either way when a `docs` command comes back empty.
+
+Nor do they all call the same place, which matters for egress rules and for
+why one can fail while another works: `docs openapi`, `docs endpoints` and
+`docs endpoint` fetch `conductorone.com/docs/openapi.yaml` (cached 24h under
+`~/.c1i/cache/`, so a run can return rows without sending a request at all),
+while `docs search` and `docs page` call a third party — `api.mintlify.com` —
+with a public client-side key.
 
 ## Choosing a command
 

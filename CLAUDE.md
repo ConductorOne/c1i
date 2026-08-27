@@ -77,7 +77,9 @@ tracked root file outside its allowlist. Stage explicit paths rather than `-A`.
   `--max-retries` / `C1I_MAX_RETRIES` (default `client.DefaultMaxRetries`),
   `--error-format` / `C1I_ERROR_FORMAT` (`text`|`json`), `--dry-run` /
   `C1I_DRY_RUN` (preview a mutating request without sending it), `--debug` /
-  `C1I_DEBUG` (trace HTTP requests to stderr). See README for behavior.
+  `C1I_DEBUG` (trace HTTP requests to stderr). `--debug` and `--max-retries`
+  are inert on the fetching `docs` subcommands (`docs search`, `docs page`,
+  `docs openapi`, `docs endpoints`, `docs endpoint`) — see README for behavior.
 
 ### Patterns to follow when adding/changing commands
 
@@ -249,15 +251,17 @@ a package, verify each of these against the new code:
   `DefaultMaxRetries` and debug-off and reads nothing ambient, so
   `transport.New(base)` with no options ships tracing that shows nothing and a
   retry count the flag can't change. Every caller passes them by hand —
-  `internal/client` from its own config, `cmd/mcp_gateway.go`,
-  `cmd/auth_login.go` and `cmd/auth_token.go` from viper. The deliberate
+  `cmd/client.go:15-16` (the viper source every REST command copies),
+  `internal/client` from its own config, and `cmd/mcp_gateway.go`,
+  `cmd/auth_login.go`, `cmd/auth_token.go` from viper. The deliberate
   exception is `auth login`'s device-flow polling leg, where `PollForToken`
   forces `WithMaxRetries(0)`: the RFC 8628 poll interval is that call's retry
-  strategy. The accidental one is the fetching `docs` subcommands
-  (`cmd/docs_search.go`, `cmd/docs_openapi.go`), which call
-  `http.DefaultClient.Do` directly — both flags are inert on those three
-  sites, and they return bare `fmt.Errorf` rather than a classifiable error.
-  Don't add a fourth.
+  strategy. The accidental one is the fetching `docs` subcommands —
+  `docs search`, `docs page` (`cmd/docs_search.go`) and `docs openapi`,
+  `docs endpoints`, `docs endpoint` (`cmd/docs_openapi.go`) — which call
+  `http.DefaultClient.Do` directly: both flags are inert on those three sites,
+  no path or redirect guard applies, and they return bare `fmt.Errorf` rather
+  than a classifiable error. Don't add a fourth.
 
 When implementing a wire protocol or stream parser (JSON-RPC, SSE, MCP, …), code
 and test against the **full input space the spec permits**, not just the shape a
