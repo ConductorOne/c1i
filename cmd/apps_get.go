@@ -27,7 +27,7 @@ var appsGetCmd = &cobra.Command{
 			return fmt.Errorf("API error: %w", err)
 		}
 
-		return writeObject(cmd, data)
+		return writeResource(cmd, data, "id")
 	},
 }
 

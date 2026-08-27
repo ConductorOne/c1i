@@ -10,7 +10,7 @@ import (
 // global configuration resolved by cobra/viper (currently the retry budget).
 // All commands go through this helper so cross-cutting client options are
 // wired in one place rather than at every call site.
-func newClient(cmd *cobra.Command, baseURL string) (*client.Client, error) {
+var newClient = func(cmd *cobra.Command, baseURL string) (*client.Client, error) {
 	return client.New(cmd.Context(), baseURL,
 		client.WithMaxRetries(viper.GetInt("max_retries")),
 		client.WithDebug(viper.GetBool("debug")),

@@ -10,7 +10,13 @@ import (
 var mcpServersGetCmd = &cobra.Command{
 	Use:   "get <connector-id>",
 	Short: "Get a single MCP server (pretty JSON)",
-	Args:  cobra.ExactArgs(1),
+	Long: `Get a single MCP server by its connector ID.
+
+Output is the server object itself, not the API's "mcpServer" wrapper. An MCP
+server has no "id" field at all -- its identity is "connectorId", the same
+value this command takes as its argument and the one "mcp servers list" rows
+emit as connector_id. So read "jq -r .connectorId" here, not ".id".`,
+	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		if err := requireNonEmpty(cmd, "app-id"); err != nil {
 			return err
@@ -35,7 +41,7 @@ var mcpServersGetCmd = &cobra.Command{
 			return fmt.Errorf("API error: %w", err)
 		}
 
-		return writeObject(cmd, data)
+		return writeResource(cmd, data, "connectorId")
 	},
 }
 

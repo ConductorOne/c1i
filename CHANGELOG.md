@@ -6,6 +6,41 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-08-27
+
+### Upgrading from 0.5.x
+
+**Typed `get` commands now print the resource, not the API's envelope.** This
+is the breaking change in this release. `apps get <id>` emitted
+`{"app":{"id":…}}` and now emits `{"id":…}`, so `jq -r .id` returns the id
+where it previously returned `null` — the reason for the change. Anything
+reading *through* the wrapper must drop that hop: `.app.id` becomes `.id`,
+`.userView.user.id` becomes `.id`, and `--fields function.id` becomes
+`--fields id`. Nothing is lost — every key the envelope carried beside the
+resource, `expanded` included, is now a top-level sibling. Two things
+deliberately did **not** change: mutation output (`apps create` still returns
+`{"app":…}`, so `.app.id` is still right there) and `c1i api`, which is a raw
+passthrough. One asymmetry to know: `mcp servers get` has no `id` field at all
+— its identity is `connectorId` — so read `.connectorId` there.
+
+Two exit codes also changed. Both are narrower failures that previously
+reported success or a generic error, so a script that branched on them needs a
+look:
+
+- `auth whoami` on a `200` carrying no usable identity (`null`, `{}`, or an
+  all-null identity) now exits **6** ("C1 failed") instead of **0**. A body
+  that is not a JSON object at all — truncated, empty, an array, a scalar —
+  also moves from the generic **1** to **6**.
+- A `--fields` spec naming a wrapper key now **exits 2** rather than
+  returning less. 0.5.x documented `--fields function.id` as supported, and
+  `--fields userView`/`app`/`taskView` resolved; against unwrapped output they
+  match nothing, which is already a usage error. Migrate to the unqualified
+  name (`--fields id`).
+- No other exit code moves. `c1i api`'s new partial-result warning goes to
+  **stderr** only; stdout is byte-for-byte unchanged, so a parser reading
+  stdout is unaffected. A caller folding stderr into stdout with `2>&1` will
+  see the new line.
+
 ### Added
 
 - **`c1i api` now warns when it discards a pagination cursor.** A bare `api`
@@ -162,6 +197,32 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   narrower 96-129s below is `set-owners` alone).
 
 ### Changed
+
+- **BREAKING: every typed `get` now prints the resource itself, not the API's
+  wrapper object.** Before, `apps get <id>` printed
+  `{"app":{"id":"…",…}}` and `users get <id>` printed
+  `{"userView":{"user":{"id":"…",…},…},"expanded":[…]}`, so `jq -r .id`
+  returned `null` at exit 0 on all twelve of them, while every `list` row
+  already exposed a flat `.id`. The resource's own fields are now at the top
+  level: `jq -r .id` works, and `--fields id` yields `{"id":"…"}` instead of
+  rebuilding the wrapper as `{"app":{"id":"…"}}`. **Anyone reading `.app.id`,
+  `.userView.user.id`, `.policy.id`, `.taskView.task.id`,
+  `.appEntitlementView.appEntitlement.id`, `.mcpServer.connectorId`,
+  `.tool.id`, `.profile.id`, `.catalogEntry.id`, `.automation.id`,
+  `.function.id` must now read `.id` (`.connectorId` for `mcp servers get`,
+  whose resource has no `id` field at all).** Affected:
+  `apps|policies|automations|functions|users|requests|entitlements get`,
+  `mcp servers get`, `mcp tools get`, `mcp toolsets get`,
+  `mcp toolsets get-by-entitlement`, `mcp servers catalog get`. Nothing is
+  dropped: everything the envelope carried beside the resource -- `expanded`
+  on the three `*View` responses, plus their `objectPermissions`, `userId`,
+  and `*Path` keys -- is preserved as a top-level sibling, so
+  `.expanded` is now read at the top level too. Naming a wrapper key in
+  `--fields` is correspondingly gone: `users get <id> --fields userView` is now
+  a zero-match usage error (exit 2), because that key is no longer in the
+  output. An unrecognized response shape is passed through unchanged rather
+  than partially unwrapped. Mutation output is unaffected: `apps create` still
+  answers under an `app` key, so `jq -r .app.id` remains correct there.
 
 - **`--page-size` now says it is a request, not a promise, and every list
   command says it the same way.** Measured against a live tenant, one page of
@@ -334,19 +395,17 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   Both refusals are raw-string literals, so the line a user pastes from their
   terminal greps straight back to the check that emitted it.
 
+  Re-measured while extracting the shared wait primitive: the help text now
+  states the discriminating half of the observation rather than just the
+  coverage -- `appOwners` was `[]` on all 46 apps *including the 45 that
+  `GET .../ownerids` reported owners for*, so an empty `appOwners` is not
+  evidence an app has no owners.
+
 - **`.claude/worktrees/` is gitignored.** Agent worktrees land there, and
   untracked they stamped every local build `+dirty` -- a string that reaches
   the wire in the user-agent and the MCP gateway handshake's
   `clientInfo.version` -- and a `git add -A` would have committed one as a
   gitlink (mode 160000), an embedded-repo pointer no clone can resolve.
-
-  Re-measured while extracting the shared wait primitive, and the help text now
-  states the discriminating half of the observation rather than just the
-  coverage: `appOwners` was `[]` on all 46 apps then in the tenant --
-  *including the 45 that `GET .../ownerids` reported owners for* -- and on a
-  freshly created app immediately after `set-owners --wait` confirmed two
-  owners had provisioned. (The 47/46 counts above were the earlier pass; the
-  apps it created for the test have since been deleted.)
 
 ## [0.5.0] - 2026-08-21
 
@@ -1419,7 +1478,8 @@ First changelog entry; releases through v0.1.5 predate this file (see the
 
 - CI enforces `gofmt` via golangci-lint; module-wide formatting normalized.
 
-[Unreleased]: https://github.com/ConductorOne/c1i/compare/v0.5.0...HEAD
+[Unreleased]: https://github.com/ConductorOne/c1i/compare/v0.6.0...HEAD
+[0.6.0]: https://github.com/ConductorOne/c1i/releases/tag/v0.6.0
 [0.5.0]: https://github.com/ConductorOne/c1i/releases/tag/v0.5.0
 [0.4.1]: https://github.com/ConductorOne/c1i/releases/tag/v0.4.1
 [0.4.0]: https://github.com/ConductorOne/c1i/releases/tag/v0.4.0

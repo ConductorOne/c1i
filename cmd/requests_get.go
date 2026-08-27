@@ -32,7 +32,7 @@ task view, including its current policy step and outcome.`,
 			return fmt.Errorf("API error: %w", err)
 		}
 
-		return writeObject(cmd, data)
+		return writeResource(cmd, data, "id")
 	},
 }
 

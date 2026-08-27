@@ -399,7 +399,10 @@ of anything specific to what you're about to model.
 "--wait" polls "GET .../ownerids" until the owner appears (or times out) and
 prints "Owners provisioned on app ... after ...". Without "--wait", the PUT
 returns immediately but the owner takes roughly 96-129s to show up in
-"GET .../ownerids" (four measured writes; a fifth had not landed at 108s) --
+"GET .../ownerids" -- four measured "set-owners" writes, a fifth still
+pending at 108s. Read through "apps owners" instead, and across
+"set-owners", "add-owner", "remove-owner" and the owner "apps create"
+assigns, the spread is wider: 45-150s --
 see "Verify" below for why "apps get"'s "appOwners" field is not the way to
 check this.
 
@@ -458,7 +461,7 @@ matters.
 
 ## Common failures
 
-- "apps set-owners" exits 1 with a 400 naming a regex pattern
+- "apps set-owners" exits 2 with a 400 naming a regex pattern
   (^[a-zA-Z0-9]{27}$) -> the app id or a "--user-id" isn't a real 27-char
   C1 id -> fix the id; retrying as-is won't help.
 - "entitlements list --app-id <id>" returns nothing at exit 0 for a
@@ -614,7 +617,7 @@ waiting on an approver, not that the revoke failed.
 | Symptom | Cause | Fix |
 |---|---|---|
 | 403 target user is not allowed to request that resource (exit 3) | The entitlement isn't reachable through any request catalog for this user | Configure it in the C1 console (App > Access requests), or target an entitlement that already allows requests |
-| 409 duplicate ticket found, with a task id in the error details (exit 1) | An open task for this exact app + entitlement + user already exists | Act on that task id ("tasks list --state open") instead of creating another |
+| 409 duplicate ticket found, with a task id in the error details (exit 2) | An open task for this exact app + entitlement + user already exists | Act on that task id ("tasks list --state open") instead of creating another |
 | required flag(s) "app-id", "entitlement-id" not set (exit 2) | Both are required on "requests create grant"/"revoke" | Fix the invocation |
 | An auth failure resolving the caller's own id when "--user-id" is omitted (exit 3) | Surfaces before the request call itself runs | Re-authenticate rather than retry as-is |
 | "grants list" returns nothing right after approval | Eventual consistency | Re-run with "--wait --wait-min 1" so it blocks until the grant lands; a bare "--wait" settles on the empty set in ~10s and exits 0, which reads as a denial |
@@ -664,18 +667,18 @@ from a "c1i tasks list" row, a notification, or the output of
        c1i requests get "$TASK_ID"
 
    In the JSON, check:
-   - taskView.task.policy.policy.displayName / .id — which policy is
+   - .policy.policy.displayName / .id — which policy is
      driving this task. (An entitlement's own grantPolicyId/revokePolicyId
      can be empty — inherited from the app's default (see
      "c1i apps get <app-id>") — so don't infer the governing policy from
      the entitlement alone; the task view always has the resolved one.)
-   - taskView.task.policy.current.id — the step this task is on right now.
+   - .policy.current.id — the step this task is on right now.
      This is exactly the value tasks approve/deny send as policyStepId.
-   - taskView.task.policy.next — steps still to come. Empty means your
+   - .policy.next — steps still to come. Empty means your
      approval, if it's the last one, closes the task; non-empty means
      another step (often another approver) follows.
-   - taskView.task.stepApproverIds — user ids allowed to act on this step.
-   - taskView.task.actions — what YOU specifically can do on this task
+   - .stepApproverIds — user ids allowed to act on this step.
+   - .actions — what YOU specifically can do on this task
      right now. If TASK_ACTION_TYPE_APPROVE (or _DENY) isn't listed, don't
      call approve/deny — it will be rejected even though you can read the
      task, and even if you're the requester.
@@ -705,7 +708,7 @@ from a "c1i tasks list" row, a notification, or the output of
 
     c1i requests get "$TASK_ID"
 
-Check taskView.task.state, not outcome, for whether anything is still
+Check .state, not outcome, for whether anything is still
 pending. outcome is omitted while it sits at *_OUTCOME_UNSPECIFIED; the
 NDJSON views ("tasks list", "requests list") drop the key entirely in that
 case rather than print the sentinel. Its absence there means "no result
@@ -723,12 +726,13 @@ checking once immediately.
 
 ## Common failures
 
-- action not permitted on tasks approve/tasks deny (exit 1) — the
+- action not permitted on tasks approve/tasks deny — the exit code
+  follows the API's status for the refusal, which is not recorded here; the
   authenticated identity isn't on the task's current policy step,
   confirmed ahead of time by actions in step 2 omitting
   TASK_ACTION_TYPE_APPROVE/_DENY.
 - could not determine the current policy step for task ...; pass
-  --policy-step-id explicitly, on tasks approve (exit 1) — no current step
+  --policy-step-id explicitly, on tasks approve (exit 2) — no current step
   could be derived (approve requires one). tasks deny never fails this way
   on the same task; it just proceeds without a step. Supply
   --policy-step-id explicitly once you've read it via step 2's response.

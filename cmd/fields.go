@@ -106,13 +106,11 @@ func projectDecoded(v any, paths [][]string) any {
 				setPath(out, keys, val)
 				continue
 			}
-			// Single-object reads pass the API response through as-is, which
-			// wraps the resource under the endpoint's own top-level key
-			// (userView.user, function, app, ...). A path that doesn't resolve
-			// from the root falls back to a depth-insensitive search: try the
-			// same path starting from every nested object, so `--fields id`
-			// finds `userView.user.id` without the caller needing to know the
-			// wrapper key. See lookupPathAnyDepth for the ambiguity rule.
+			// A path that doesn't resolve from the root falls back to a
+			// depth-insensitive search: try it from every nested object. Typed
+			// `get` unwraps its envelope first (cmd/unwrap.go), so this now
+			// serves `c1i api` and genuinely nested fields. See
+			// lookupPathAnyDepth for the ambiguity rule.
 			if keys, val, ok := lookupPathAnyDepth(t, p); ok {
 				setPath(out, keys, val)
 			}
@@ -157,10 +155,11 @@ func lookupPath(m map[string]any, path []string) ([]string, any, bool) {
 // lookupPathAnyDepth searches m's descendant objects (not m itself — callers
 // only reach here after a root-anchored lookupPath(m, path) already failed)
 // for the first place path resolves, one nesting level at a time. This is the
-// depth-insensitive half of field matching: a single-object read wraps its
-// payload under the endpoint's own key (userView.user, function, app, ...),
-// so an unqualified `--fields id` (or a dot-path shorter than the real
-// nesting) would otherwise match nothing and silently project to {}.
+// depth-insensitive half of field matching: a raw `c1i api` response wraps its
+// payload under the endpoint's own key (userView.user, function, app, ...), so
+// an unqualified `--fields id` (or a dot-path shorter than the real nesting)
+// would otherwise match nothing and silently project to {}. Typed `get`
+// unwraps before projecting, so it no longer depends on this.
 //
 // Shallower matches win: the search stops at the first level where at least
 // one match exists, without descending further, so `--fields id` prefers an
@@ -189,13 +188,29 @@ func lookupPath(m map[string]any, path []string) ([]string, any, bool) {
 // a JSON tree always differ in at least one *segment*, even when their
 // dotted-string joins coincide.
 func lookupPathAnyDepth(m map[string]any, path []string) ([]string, any, bool) {
+	matches := matchesPathAnyDepth(m, path)
+	if len(matches) == 0 {
+		return nil, nil, false
+	}
+	return matches[0].path, matches[0].val, true
+}
+
+// pathMatch is one place a depth-insensitive search resolved a path: the full
+// segment path from the searched root, and the value there.
+type pathMatch struct {
+	path []string
+	val  any
+}
+
+// matchesPathAnyDepth is the search lookupPathAnyDepth describes, returning
+// EVERY match at the shallowest depth that has one, sorted by lessPath.
+// lookupPathAnyDepth takes the first; unwrapEnvelope (cmd/unwrap.go) instead
+// refuses a set with more than one, since a same-depth tie there would promote
+// the wrong object to the top level.
+func matchesPathAnyDepth(m map[string]any, path []string) []pathMatch {
 	type node struct {
 		prefix []string
 		obj    map[string]any
-	}
-	type found struct {
-		full []string
-		val  any
 	}
 	prefixed := func(prefix []string, seg string) []string {
 		next := make([]string, len(prefix)+1)
@@ -211,12 +226,12 @@ func lookupPathAnyDepth(m map[string]any, path []string) ([]string, any, bool) {
 		}
 	}
 	for len(level) > 0 {
-		var matches []found
+		var matches []pathMatch
 		var next []node
 		for _, n := range level {
 			if matched, val, ok := lookupPath(n.obj, path); ok {
 				full := append(append([]string{}, n.prefix...), matched...)
-				matches = append(matches, found{full, val})
+				matches = append(matches, pathMatch{full, val})
 			}
 			for k, v := range n.obj {
 				if sub, ok := v.(map[string]any); ok {
@@ -226,13 +241,13 @@ func lookupPathAnyDepth(m map[string]any, path []string) ([]string, any, bool) {
 		}
 		if len(matches) > 0 {
 			sort.Slice(matches, func(i, j int) bool {
-				return lessPath(matches[i].full, matches[j].full)
+				return lessPath(matches[i].path, matches[j].path)
 			})
-			return matches[0].full, matches[0].val, true
+			return matches
 		}
 		level = next
 	}
-	return nil, nil, false
+	return nil
 }
 
 // lessPath reports whether path a sorts before path b, comparing segment

@@ -448,15 +448,19 @@ c1i functions get <id> --fields id,displayName,publishedCommitId
   to a **case- and separator-insensitive** match. So `--fields displayName`
   resolves whether the output uses `displayName` (single-object reads) or
   `display_name` (list rows); the output keeps the source key's own spelling.
-- Single-object `get` commands pass through the API response as-is, which
-  wraps the resource under the endpoint's own top-level key (`function`,
-  `app`, `automation`, `userView.user`, ...). You don't need to know that key:
-  a name that doesn't match at the top level is also searched for inside the
-  wrapper, so `--fields id,displayName` on `functions get` finds
-  `function.id`/`function.displayName` automatically. The full path
-  (`--fields function.id`) still works too and is tried first. If the same
-  name exists at more than one depth, the shallowest match wins; a tie at the
-  same depth resolves to the alphabetically first full path, deterministically.
+- Single-object `get` commands print the resource itself, so `--fields id`
+  yields `{"id": ...}` and `jq -r .id` works. The API wraps the resource under
+  its own key (`app`, `function`, `userView.user`, ...); `get` unwraps that and
+  keeps every other envelope key — `expanded` among them — as a top-level
+  sibling. Do **not** write the wrapper into a path: `--fields function.id`
+  no longer resolves, because there is no `function` key left.
+- `c1i api` is a raw passthrough and still returns the envelope. There, and
+  for any genuinely nested field, a name that doesn't match at the top level is
+  also searched for deeper: the shallowest match wins, and a tie at the same
+  depth resolves to the alphabetically first full path, deterministically.
+- Mutation output (`apps create` returns `{"app": ...}`) also keeps the
+  envelope, but is never projected at all — `--fields` cannot blank a success
+  message, so no search happens there.
 - A `--fields` spec that matches **nothing at all** in the response (a typo, or
   a field that truly doesn't exist) is a usage error (exit `2`), not a silent
   `{}`. This is a zero-match check only: `--fields id,dispalyName` (typo) still
@@ -555,10 +559,15 @@ remote error (exit `6`) rather than looping.
 This applies to every command built on the shared transport: the REST client,
 the MCP gateway, and the login handshake, so the path and redirect guards,
 `--debug` tracing, and `--max-retries` cover the gateway and login too, not just
-REST commands. It does **not** apply to the `docs` subcommands that fetch —
-`docs search`, `docs page`, `docs openapi`, `docs endpoints`, `docs endpoint` —
-which call Go's default HTTP client directly: no path or redirect guard there,
-and `--debug` and `--max-retries` are both inert.
+REST commands. **None of those four** applies to the `docs` subcommands that
+fetch — `docs search`, `docs page`, `docs openapi`, `docs endpoints`,
+`docs endpoint` — which call Go's default HTTP client directly: no path or
+redirect guard there, and `--debug` and `--max-retries` are both inert.
+
+One narrower carve-out inside login: the device-flow token poll forces its own
+retry count to zero, because RFC 8628's polling interval already *is* that
+call's retry strategy and a second layer underneath would double the delays.
+`--max-retries` still governs the rest of the handshake.
 
 A bad id is the only cause of a refused `3xx` observed so far, which is why it
 maps to exit `2` — a redirect on an otherwise well-formed request would not be
