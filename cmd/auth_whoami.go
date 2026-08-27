@@ -15,7 +15,8 @@ var authWhoamiCmd = &cobra.Command{
 authenticated principal: principleId, userId (a service principal may carry
 only the former), and counts of roles, permissions, and feature flags -- plus
 displayName and email when the secondary /api/v1/users/{id} lookup they come
-from succeeds, omitted when it does not. --verbose is not a superset of that
+from succeeds with values, omitted when it fails, returns them empty, or is
+skipped for want of a userId to look up. --verbose is not a superset of that
 summary: it replaces it with the raw introspect payload, which has neither.
 
 Two client-resolved keys are added to that summary, and to --verbose:

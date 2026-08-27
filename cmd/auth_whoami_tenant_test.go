@@ -247,8 +247,13 @@ func TestWhoamiUnusableIntrospectBodyIsC1Failure(t *testing.T) {
 				if got, want := exitCode(err), exitServer; got != want {
 					t.Errorf("body %q: exitCode(%v) = %d, want %d (exitServer)", body, err, got, want)
 				}
-				if strings.Contains(out, `"tenant"`) {
-					t.Errorf("stdout = %q, an unusable introspect body must not report a tenant", out)
+				// The "null" half is not redundant with the tenant check: a
+				// refactor that printed the summary before returning the guard
+				// error would, under a session-wide C1I_FIELDS projecting the
+				// tenant keys away, leave a summary of nulls carrying no
+				// "tenant" substring at all.
+				if strings.Contains(out, `"tenant"`) || strings.Contains(out, "null") {
+					t.Errorf("stdout = %q, an unusable introspect body must print nothing: no tenant, and no summary of nulls", out)
 				}
 			})
 		}

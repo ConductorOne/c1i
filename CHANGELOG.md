@@ -166,11 +166,11 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 - **`auth whoami` no longer reports success on a 200 that carries no usable
   identity.** `null`, `{}`, and `{"userId":null,"principleId":null}` all
-  decode without error, so the command printed a summary of nulls (`userId:
-  null`) -- or, under `--verbose`, nothing but the tenant keys -- and exited
-  0: a pre-write check reading "confirmed" off a response that proves
-  nothing. All three are now a `nonJSONResponseError` (exit 6, "C1 failed"),
-  in both output modes, and so is a body that isn't a JSON object at all (a
+  decode without error, so each was accepted as a valid response: the summary
+  printed with its identity fields null (`userId: null`) and exited 0 -- a
+  pre-write check reading "confirmed" off a response that proves nothing.
+  All three are now a `nonJSONResponseError` (exit 6, "C1 failed") in both
+  output modes, and so is a body that isn't a JSON object at all (a
   truncated, empty, array, or scalar body), which previously fell through a
   bare `fmt.Errorf` to the generic exit 1. The check is deliberately
   permissive about *which* id is present -- either `userId` or `principleId`
