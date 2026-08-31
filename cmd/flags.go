@@ -38,9 +38,9 @@ func annotateRequired(cmd *cobra.Command, names ...string) {
 }
 
 // limitReached reports whether `emitted` rows have hit the requested
-// `limit`. A limit of 0 (or negative) means "no cap". Centralizing this
-// check pins the semantics across every list command and gives the
-// table tests one place to assert behavior.
+// `limit`. A limit of 0 means "no cap"; validateCountFlags rejects a negative
+// one before any command runs. Centralizing this check pins the semantics
+// across every list command and gives the table tests one place to assert it.
 func limitReached(emitted, limit int) bool {
 	return limit > 0 && emitted >= limit
 }
@@ -130,15 +130,13 @@ const (
 // called were unrelated literals in unrelated files.
 const pageSizeMaxAnnotation = "c1i_page_size_max"
 
-// pageSizeUsage is the single source of the --page-size caveat. Every claim
-// in it was measured against a live tenant:
-//   - the max is server-enforced (a higher value 400s with
-//     "value must be inside range [0, N]");
-//   - a page really can come back with more rows than asked for — the
-//     collection endpoints overshoot (GET /api/v1/apps returned 23 rows for
-//     page_size=10), most endpoints round small sizes up to 5, and
-//     page_size=0 means "the server's default of 25", not "none";
-//   - --limit is exact on every command checked, overshoot or not.
+// pageSizeUsage is the single source of the --page-size caveat, and the caveat
+// is load-bearing: --page-size 10 returned 23 rows from `apps list`, 12 from
+// `policies list` and exactly 10 from `users list`. The overshoot is server-side
+// and varies by endpoint and size; --limit is exact regardless. pageSizeFlag
+// clamps the upper bound and validateCountFlags rejects a negative, so a
+// command only reaches the server's range check ("value must be inside range
+// [0, N]") if an endpoint's real bound is below the one we advertise.
 func pageSizeUsage(maxSize int) string {
 	return fmt.Sprintf("Rows to request per API page (max %d); the server may return more than asked, so use --limit for an exact count", maxSize)
 }
@@ -147,6 +145,30 @@ func pageSizeUsage(maxSize int) string {
 // (even empty) switches the command to a single request; see the
 // `manualPaging` check in every list command's RunE.
 const pageTokenUsage = "Pagination cursor; supplying it fetches exactly one page (disables auto-pagination)" // #nosec G101 -- flag help text; G101 fires on the "Token" in the name
+
+// countFlags is a slice, not a map: with both flags negative, map iteration
+// order would pick which one the error names at random.
+var countFlags = []struct{ name, zeroMeans string }{
+	{"limit", "unlimited"},
+	{"page-size", "the server's default"},
+}
+
+// validateCountFlags rejects a negative --limit or --page-size before any
+// request. The asymmetry is why it lives here: --limit never reaches the API,
+// so nothing but c1i could catch it. Reads pflag, so binding either flag to
+// viper later would need this revisited.
+func validateCountFlags(cmd *cobra.Command) error {
+	for _, cf := range countFlags {
+		f := cmd.Flags().Lookup(cf.name)
+		if f == nil || !f.Changed {
+			continue
+		}
+		if n := getIntFlag(cmd, cf.name); n < 0 {
+			return &usageError{fmt.Errorf("--%s cannot be negative (got %d); 0 means %s", cf.name, n, cf.zeroMeans)}
+		}
+	}
+	return nil
+}
 
 // addPaginationFlags registers the --page-size/--page-token/--limit trio on a
 // list-style command. Every list command must go through this (or

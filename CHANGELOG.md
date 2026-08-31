@@ -6,6 +6,40 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed
+
+- **BREAKING — a negative `--limit` or `--page-size` is now a usage error
+  (exit 2)** instead of being accepted or sent. `--limit` never reaches the
+  API, so `--limit -1` had silently behaved exactly like the documented
+  `--limit 0`: every row, exit 0, with nothing able to catch it. A negative
+  `--page-size` had cost a round trip to be refused by the server. Both are
+  now rejected before any request, naming what `0` does instead. `0` and
+  positive values are unaffected, and a raw `api --query page_size=-1` still
+  goes to the server, since `--query` is not this flag.
+- **Corrected the `--page-size` documentation.** Its wording invited
+  over-generalising one tenant's measurements, one behavior was undocumented
+  outright, and `cmd/agents.md` covered none of it:
+  - The ~5-row floor is not universal: `policies list` floors at 6 and
+    `mcp servers catalog list` has no floor.
+  - A value over the max is not rejected. c1i clamps it and sends the max, so
+    an oversized batch silently shrinks.
+  - `--page-size 0` means the server's default of 25, and those rows may then
+    overshoot like any other size. Verified on six endpoints: `--page-size 0`
+    returns exactly what `--page-size 25` returns on each.
+
+  How far a page overshoots varies per endpoint and per size, so no figure in
+  these docs should be read as a limit. `--limit N` remains exact — it is
+  enforced client-side per row, even when a page overshoots.
+
+  `c1i docs agents` documented none of this and now covers it, with a test
+  pinning that section.
+
+### Fixed
+
+- **`c1i docs agents` no longer implies `apps get`'s empty `appOwners` will
+  fill if you wait.** Use `c1i apps owners <app-id>`. The same guidance in
+  `apps set-owners --help` is unchanged.
+
 ## [0.6.0] - 2026-08-27
 
 ### Upgrading from 0.5.x

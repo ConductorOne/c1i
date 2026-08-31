@@ -39,7 +39,8 @@ For raw API exploration, also with no authentication required:
 	// RunE at all -- this runs for every command (see
 	// TestNoSubcommandDefinesOwnPersistentPreRunE), so both an id from
 	// args[0] and a parent-scope id passed as a flag (--app-id,
-	// --connector-id, ...) are covered without a per-command check.
+	// --connector-id, ...) are covered without a per-command check. Same for
+	// validateCountFlags, which needs to see every list command's --limit.
 	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
 		if err := validateErrorFormat(viper.GetString("error_format")); err != nil {
 			return err
@@ -48,6 +49,9 @@ For raw API exploration, also with no authentication required:
 			return err
 		}
 		if err := validateFlagsUTF8(cmd); err != nil {
+			return err
+		}
+		if err := validateCountFlags(cmd); err != nil {
 			return err
 		}
 		cmd.SetContext(withFieldsMatchState(cmd.Context()))

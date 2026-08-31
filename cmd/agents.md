@@ -206,6 +206,27 @@ List commands auto-paginate to completion by default — one invocation gets
 every page. Pass `--page-token` to opt out and fetch a single page manually.
 Don't write your own pagination loop.
 
+`--page-size` is a request, not a promise: a page may come back with more
+rows than you asked for. That is server behavior, not a c1i bug. How much
+more varies per endpoint and per size, so treat any figure you measure as
+true of that endpoint, at that size, today.
+
+Three more traps in the same flag:
+
+- Most endpoints won't return fewer than 5 rows however small a positive
+  value you pass, but that is not universal: `policies list` floors at 6,
+  and `mcp servers catalog list` has no floor.
+- `--page-size 0` does not mean "no paging". The server substitutes its own
+  default of 25, and the rows returned may then overshoot that.
+- A value above the max is not an error: c1i clamps it and sends the max. A
+  negative `--page-size` or `--limit` is a usage error — c1i rejects it
+  before sending, at exit 2.
+
+So never size a batch, count a result set, or infer "there are only N of
+these" from `--page-size`. `--limit N` is the exact control: c1i enforces
+it client-side, so it holds whatever the server returns, and it stops
+auto-pagination once reached.
+
 ## Before you mutate
 
 `--dry-run` (or `C1I_DRY_RUN`) previews a mutating command's method, path,
@@ -227,9 +248,9 @@ Two things are irreversible in ways their `--help` doesn't make obvious:
   observed at 45-150s across set-owners, add-owner, remove-owner and the
   owner "apps create" assigns; grants: up to a couple of minutes). Verify
   owners with `c1i apps owners <app-id>`, not `apps get`'s `appOwners`
-  field -- it was [] on all 46 apps in the test tenant on the second
-  measurement pass, including the 45 that GET .../ownerids reported owners
-  for, so an empty appOwners is not evidence an app has no owners.
+  field, and don't wait for that field to fill — it read [] on every app
+  checked in the test tenant, including all those `apps owners` reported
+  owners for. An empty `appOwners` is not evidence an app has no owners.
   `apps owners` also
   returns zero rows at exit 0 for a well-formed but nonexistent app id, so an
   empty result is either "no owners" or "wrong id"; `apps add-owner` on the

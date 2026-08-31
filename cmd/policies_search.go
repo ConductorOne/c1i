@@ -118,11 +118,10 @@ func init() {
 	policiesSearchCmd.Flags().StringSlice("policy-type", nil, "Filter by policy type: grant, revoke, certify, ... (repeatable)")
 	policiesSearchCmd.Flags().Bool("include-deleted", false, "Include soft-deleted policies")
 	policiesSearchCmd.Flags().StringSlice("exclude-policy-id", nil, "Policy ID to exclude from results (repeatable)")
-	// Endpoint-specific, and deliberately not in the flag wording (that text
-	// is shared so it cannot drift): the server floors the returned count at
-	// 5 -- --page-size 3 still yields 5 rows -- and treats 0 as its own
-	// default of 25. Floor is 5, not the 10 the policy proto's comment
-	// claims: 9 passes through unclamped. Verified live.
+	// The lower default is this endpoint's own; the rest is context the shared
+	// flag wording can't carry without drifting. The floor here is 5, not the
+	// 10 the policy proto's comment claims (9 passes through unclamped) -- and
+	// 5 is this endpoint's number, not a universal one. Verified live.
 	addPaginationFlagsWithMax(policiesSearchCmd, policiesSearchDefaultPageSize, maxPageSize)
 	policiesCmd.AddCommand(policiesSearchCmd)
 }
