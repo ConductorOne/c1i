@@ -12,7 +12,8 @@ import (
 // pass's scratch apps had been deleted by then). appOwners never populates,
 // while GET .../ownerids does converge (on the order of minutes). This
 // wording drifted, wrong, across five files before anything caught it.
-var appOwnersPopulateClaimTriggers = []string{"appear", "show up", "shows up", "populat"}
+// "fills"/" fill " cover the verb agents.md uses ("wait for that field to fill").
+var appOwnersPopulateClaimTriggers = []string{"appear", "show up", "shows up", "populat", "fills", " fill "}
 
 // appOwnersNegations are the words that turn a trigger phrase into the
 // correct claim ("appOwners does NOT populate") instead of the false one.

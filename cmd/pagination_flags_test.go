@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"errors"
 	"go/ast"
 	"go/parser"
 	"go/token"
@@ -16,9 +17,8 @@ import (
 // The pagination trio (--page-size/--page-token/--limit) used to be
 // hand-registered in 27 files. The help text had already drifted into five
 // different --page-size wordings, and not one of them warned that a page can
-// come back with MORE rows than asked for (measured live: GET /api/v1/apps
-// returned 23 rows for page_size=10, and most endpoints floor the returned
-// count at 5).
+// come back with MORE rows than asked for. See pageSizeUsage's doc comment
+// for the measured behavior.
 //
 // The guards below make that class of drift a build failure rather than
 // something each new list command has to remember:
@@ -32,6 +32,9 @@ import (
 //	                      pageSizeFlag ENFORCES.
 //	Guard 5 (values)      the endpoints measured to allow 200 still ask for
 //	                      200 — Guard 4 cannot see this, see its own note.
+//	Guard 6 (agents.md)   the agent-facing doc still carries the caveat, with
+//	                      no row count in it that reads as a limit.
+//	Guard 7 (behavior)    a negative --limit or --page-size exits 2.
 
 // paginationFlagNames are the flags only the shared registrar may create.
 var paginationFlagNames = map[string]bool{"page-size": true, "page-token": true, "limit": true}
@@ -363,4 +366,212 @@ func TestAddPaginationFlagsRegistersTheWholeTrio(t *testing.T) {
 	if got := pageSizeFlag(h); got != maxHistoryPageSize {
 		t.Errorf("pageSizeFlag clamped 500 to %d, want %d", got, maxHistoryPageSize)
 	}
+}
+
+// TestAgentsDocStatesThePageSizeCaveat guards agents.md's copy of the
+// --page-size contract -- the one an agent reads before choosing a batch size.
+// README's copy is unguarded.
+func TestAgentsDocStatesThePageSizeCaveat(t *testing.T) {
+	pagination := sectionOf(t, "agents.md", agentsTemplate, "## Pagination")
+	// The doc is hard-wrapped, so a phrase can straddle a newline.
+	flowed := strings.Join(strings.Fields(pagination), " ")
+
+	claimCount := 0
+	for _, claim := range []struct {
+		what  string
+		anyOf []string
+	}{
+		{"--page-size is not a promise", []string{"not a promise", "not a guarantee"}},
+		{"a page can exceed the requested size", []string{"may come back with more", "can come back with more"}},
+		{"small values are raised to a floor", []string{"won't return fewer than", "will not return fewer than"}},
+		{"the floor is not universal", []string{"has no floor", "not universal"}},
+		{"page-size 0 means the server default of 25", []string{"substitutes its own default of 25", "server's default of 25"}},
+		{"over-max is accepted, not rejected", []string{"not an error", "not rejected"}},
+		{"a negative count is rejected before sending", []string{"rejects it before sending"}},
+		{"--limit is the exact control", []string{"is the exact control", "is exact"}},
+		{"--limit is enforced by c1i, not the server", []string{"enforces it client-side", "enforced client-side"}},
+	} {
+		claimCount++
+		// Alternatives carry the claim's polarity so an inverted doc fails; a bare
+		// topic word cannot ("clamp" is in "does not clamp"). It pins polarity,
+		// not subject.
+		if len(claim.anyOf) == 0 {
+			t.Fatalf("claim %q has no alternatives; Contains(x, \"\") is always true, so it would pass vacuously", claim.what)
+		}
+		found := false
+		for _, alt := range claim.anyOf {
+			if alt == "" {
+				t.Fatalf("claim %q has an empty alternative, which matches anything", claim.what)
+			}
+			if strings.Contains(flowed, alt) {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Errorf("agents.md ## Pagination no longer states %q (looked for any of %q); an agent reading it would size batches on --page-size:\n%s",
+				claim.what, claim.anyOf, pagination)
+		}
+	}
+
+	// Removing a whole entry above is otherwise silent.
+	if claimCount != 9 {
+		t.Errorf("pinned %d claims, want 9; a claim was added or removed without updating this count", claimCount)
+	}
+
+	// A row count here reads as a limit an agent can plan against. Shape check
+	// only: it cannot tell whether an allowlisted figure is still correct, and a
+	// magnitude in words is invisible to it.
+	allowedFigures := map[string]bool{
+		"0": true, "5": true, "6": true, // page-size 0, and the two floors named
+		"25": true, // the server's default page size
+		"2":  true, // exit 2, what a negative count now returns
+	}
+	// Strip the one identifier with a digit in it; skipping letter-adjacent
+	// digits generally would wave through "2x" and "100k".
+	for _, n := range regexp.MustCompile(`\d+`).FindAllString(strings.ReplaceAll(flowed, "c1i", ""), -1) {
+		if !allowedFigures[n] {
+			t.Errorf("agents.md ## Pagination cites the figure %q; page-size counts are per-endpoint measurements and read as limits:\n%s", n, pagination)
+		}
+	}
+}
+
+// TestNegativeCountFlagsAreUsageErrors is Guard 7: a negative --limit or
+// --page-size exits 2 rather than being accepted or sent.
+//
+// --limit is never put on the wire (no list command sends it), so before this
+// a negative silently behaved exactly like the documented --limit 0: every row,
+// exit 0. Nothing else could catch it.
+func TestNegativeCountFlagsAreUsageErrors(t *testing.T) {
+	for _, tc := range []struct {
+		flag, wantZeroMeans string
+	}{
+		{"limit", "unlimited"},
+		{"page-size", "the server's default"},
+	} {
+		cmd := &cobra.Command{Use: "probe", RunE: func(*cobra.Command, []string) error { return nil }}
+		addPaginationFlags(cmd)
+		if err := cmd.Flags().Set(tc.flag, "-1"); err != nil {
+			t.Fatalf("setting --%s: %v", tc.flag, err)
+		}
+
+		err := validateCountFlags(cmd)
+		if err == nil {
+			t.Errorf("--%s -1 was accepted; it must be a usage error", tc.flag)
+			continue
+		}
+		var ue *usageError
+		if !errors.As(err, &ue) {
+			t.Errorf("--%s -1 returned %T, want *usageError so it exits 2", tc.flag, err)
+		}
+		if got := exitCode(err); got != 2 {
+			t.Errorf("--%s -1 exits %d, want 2", tc.flag, got)
+		}
+		// The message must name what 0 does, since 0 is what the caller wanted.
+		if !strings.Contains(err.Error(), tc.wantZeroMeans) {
+			t.Errorf("--%s -1 error %q does not say 0 means %q", tc.flag, err.Error(), tc.wantZeroMeans)
+		}
+	}
+}
+
+// TestNegativeCountFlagsAreRejectedThroughTheRealTree pins that the check is
+// actually installed. The helper tests below call validateCountFlags directly,
+// so they all pass with the rootCmd call deleted and the feature inert; this
+// one drives the real command tree.
+func TestNegativeCountFlagsAreRejectedThroughTheRealTree(t *testing.T) {
+	t.Setenv("C1I_URL", "https://example.conductor.one")
+	for _, tc := range []struct{ flag, arg, want string }{
+		{"limit", "--limit=-1", "--limit cannot be negative"},
+		{"page-size", "--page-size=-1", "--page-size cannot be negative"},
+	} {
+		// rootCmd and its subcommands are package globals; restore what this
+		// leaves behind so a later test does not inherit it.
+		f := appsListCmd.Flags().Lookup(tc.flag)
+		if f == nil {
+			t.Fatalf("apps list has no --%s flag", tc.flag)
+		}
+		orig, origChanged := f.Value.String(), f.Changed
+		err := runRootWithArgs(t, []string{"apps", "list", tc.arg})
+		_ = f.Value.Set(orig)
+		f.Changed = origChanged
+		rootCmd.SetArgs(nil)
+
+		if err == nil || !strings.Contains(err.Error(), tc.want) {
+			t.Errorf("apps list %s: err = %v, want it to contain %q", tc.arg, err, tc.want)
+			continue
+		}
+		if got := exitCode(err); got != exitUsage {
+			t.Errorf("apps list %s: exit %d, want %d", tc.arg, got, exitUsage)
+		}
+	}
+}
+
+// TestBothCountFlagsNegativeNamesLimitFirst pins the order countFlags is
+// declared in. As a map it was iteration-order dependent, so the error named
+// either flag at random and no test noticed.
+func TestBothCountFlagsNegativeNamesLimitFirst(t *testing.T) {
+	for i := 0; i < 20; i++ {
+		cmd := &cobra.Command{Use: "probe", RunE: func(*cobra.Command, []string) error { return nil }}
+		addPaginationFlags(cmd)
+		for _, f := range []string{"limit", "page-size"} {
+			if err := cmd.Flags().Set(f, "-1"); err != nil {
+				t.Fatalf("setting --%s: %v", f, err)
+			}
+		}
+		err := validateCountFlags(cmd)
+		if err == nil {
+			t.Fatal("both flags negative was accepted")
+		}
+		if !strings.Contains(err.Error(), "--limit cannot be negative") {
+			t.Fatalf("error names %q, want it to name --limit first every time", err.Error())
+		}
+	}
+}
+
+// TestZeroAndPositiveCountFlagsPass pins that Guard 7 rejects only negatives:
+// 0 is the documented "unlimited"/"server default" and must still pass.
+func TestZeroAndPositiveCountFlagsPass(t *testing.T) {
+	for _, flag := range []string{"limit", "page-size"} {
+		for _, v := range []string{"0", "1", "50"} {
+			cmd := &cobra.Command{Use: "probe", RunE: func(*cobra.Command, []string) error { return nil }}
+			addPaginationFlags(cmd)
+			if err := cmd.Flags().Set(flag, v); err != nil {
+				t.Fatalf("setting --%s=%s: %v", flag, v, err)
+			}
+			if err := validateCountFlags(cmd); err != nil {
+				t.Errorf("--%s %s rejected: %v", flag, v, err)
+			}
+		}
+	}
+}
+
+// TestUnsetCountFlagsAreNotValidated pins that the check is scoped to flags the
+// caller actually set: a command whose --limit defaults to 0 must not trip it,
+// and a command with no such flag at all must be skipped rather than panicking.
+func TestUnsetCountFlagsAreNotValidated(t *testing.T) {
+	withFlags := &cobra.Command{Use: "probe"}
+	addPaginationFlags(withFlags)
+	if err := validateCountFlags(withFlags); err != nil {
+		t.Errorf("unset flags rejected: %v", err)
+	}
+	if err := validateCountFlags(&cobra.Command{Use: "bare"}); err != nil {
+		t.Errorf("command without count flags rejected: %v", err)
+	}
+}
+
+// sectionOf returns a markdown section's body, heading exclusive, ending at the
+// next heading of the same level or shallower. Both boundaries match whole lines
+// only; a "# " line inside a fenced code block would end the section early.
+func sectionOf(t *testing.T, name, doc, heading string) string {
+	t.Helper()
+	loc := regexp.MustCompile(`(?m)^` + regexp.QuoteMeta(heading) + `[ \t]*$`).FindStringIndex(doc)
+	if loc == nil {
+		t.Fatalf("%s has no %q section", name, heading)
+	}
+	body := doc[loc[1]:]
+	level := len(strings.SplitN(heading, " ", 2)[0])
+	if end := regexp.MustCompile(`(?m)^#{1,` + strconv.Itoa(level) + `} `).FindStringIndex(body); end != nil {
+		body = body[:end[0]]
+	}
+	return body
 }
