@@ -156,12 +156,28 @@ c1i tasks list [--state open|closed] [--query <text>] [--assigned-to-me] [--page
 c1i tasks approve <task-id> [--policy-step-id <id>] [--comment <text>]
 c1i tasks deny <task-id> [--policy-step-id <id>] [--comment <text>]
 c1i tasks comment <task-id> --comment <text>
+c1i tasks close <task-id> [--comment <text>]
+c1i tasks reassign <task-id> --to-user-id <id> [--to-user-id <id> ...] [--policy-step-id <id>] [--comment <text>]
 ```
 
-`approve`/`deny` target a specific policy step. If `--policy-step-id` is
-omitted, the task's currently executing step is fetched and used automatically
-for both — but `approve` requires a resolvable step and errors if it can't
-find one, while `deny` proceeds without a step if none can be derived.
+`approve`/`deny`/`reassign` target a specific policy step. If `--policy-step-id`
+is omitted, the task's currently executing step is fetched and used
+automatically for all three — but `approve` and `reassign` require a resolvable
+step and error if they can't find one, while `deny` proceeds without a step if
+none can be derived.
+
+`close` cancels a task without recording an approval decision, and takes no
+step. Closing an already-closed task is rejected by the API with `task is
+closed` (exit 2).
+
+`reassign` sets the step's approvers to the users named by
+`--to-user-id`; repeat the flag to assign several.
+
+`close` and `reassign` never print a task state: `close` reports `task_id`,
+and `reassign` also reports the `policy_step_id` it acted on. The task action
+endpoints return the task as it was *before* the action, so closing an open
+task answers `TASK_STATE_OPEN` — echoing that would report the opposite of what
+happened. Read the task back if you need the post-action state.
 
 ### Connectors
 
@@ -695,11 +711,12 @@ $ c1i requests create grant --app-id A1 --entitlement-id E1 --user-id U1 --dry-r
 }
 ```
 
-It applies to every write command (`requests create`, `tasks approve/deny/comment`,
-`accounts set-owner`, the `mcp` mutations) and to non-GET `api` calls, and never
+It applies to every write command (`requests create`,
+`tasks approve/deny/comment/close/reassign`, `accounts set-owner`, the `mcp`
+mutations) and to non-GET `api` calls, and never
 sends the mutation itself. Most previews run fully offline — no credentials
-required. The exceptions are `tasks approve`/`deny` (authenticate and read the
-task to resolve its current policy step) and `requests create grant`/`revoke`
+required. The exceptions are `tasks approve`/`deny`/`reassign` (authenticate and
+read the task to resolve its current policy step) and `requests create grant`/`revoke`
 when `--user-id` is omitted (authenticate to resolve it to the caller) — both so
 the previewed body is exact.
 

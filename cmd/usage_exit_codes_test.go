@@ -141,6 +141,21 @@ func TestValidationGuardsExitUsage(t *testing.T) {
 			cmds: []*cobra.Command{mcpServersUpdateCredentialsCmd},
 		},
 		{
+			// --to-user-id is cobra-required, so omitting it is cobra's job.
+			// An explicit "" satisfies "required" but comma-splits to an
+			// empty slice, reaching the len==0 guard.
+			name: "tasks reassign: --to-user-id empty",
+			args: []string{"tasks", "reassign", "task-1", "--to-user-id", ""},
+			cmds: []*cobra.Command{tasksReassignCmd},
+		},
+		{
+			// A blank element inside a comma-separated value would post an
+			// empty approver id.
+			name: "tasks reassign: --to-user-id with a blank element",
+			args: []string{"tasks", "reassign", "task-1", "--to-user-id", "user-a,,user-b"},
+			cmds: []*cobra.Command{tasksReassignCmd},
+		},
+		{
 			name: "auth login: --client-id without --client-secret",
 			args: []string{"auth", "login", "--client-id", "foo"},
 			cmds: []*cobra.Command{authLoginCmd},

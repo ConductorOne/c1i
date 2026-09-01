@@ -297,6 +297,13 @@ Two things are irreversible in ways their `--help` doesn't make obvious:
   non-UNSPECIFIED outcome (e.g. a provisioning failure mid-flow). Use
   `state`, not the presence of `outcome`, to tell whether a task is still
   pending.
+- The `/api/v1/tasks/{id}/action/*` endpoints echo the task as it was *before*
+  the action. Live: closing an open task returned `TASK_STATE_OPEN`, and
+  restarting a closed one returned `TASK_STATE_CLOSED`. `tasks
+  close`/`reassign` therefore never print a state (`close` reports `task_id`,
+  `reassign` also the `policy_step_id`); if you call these actions
+  through `api`, read the task back rather than trusting the response's
+  `state`.
 - Entitlement ids are unique only within an app — some system-builtin
   entitlements reuse the same id across every app that has one. Always key
   on `(app_id, id)` together, never `id` alone.
