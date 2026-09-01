@@ -272,7 +272,7 @@ func TestRepeatableStringFlagRejectsEmptyOccurrences(t *testing.T) {
 
 // TestRepeatableStringFlagErrorHasOneWording pins that both rejected shapes
 // produce the SAME message. The point of the shared accessor is that the rule
-// has exactly one implementation and one wording across all nine commands.
+// has exactly one implementation and one wording across every caller.
 func TestRepeatableStringFlagErrorHasOneWording(t *testing.T) {
 	msg := func(values ...string) string {
 		c := &cobra.Command{Use: "probe"}

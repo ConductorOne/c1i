@@ -262,7 +262,7 @@ func addRepeatableStringFlag(cmd *cobra.Command, name, usage string) {
 }
 
 // repeatableStringFlagError is the one wording for a repeatable flag given an
-// empty value, defined once so the eight commands using it cannot drift apart.
+// empty value, defined once so its callers cannot drift apart.
 func repeatableStringFlagError(name string) error {
 	return &usageError{fmt.Errorf("flag --%s requires a non-empty value for every occurrence", name)}
 }
