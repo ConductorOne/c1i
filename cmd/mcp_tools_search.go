@@ -29,8 +29,14 @@ var mcpToolsSearchCmd = &cobra.Command{
 		appID, _ := cmd.Flags().GetString("app-id")
 		connectorID, _ := cmd.Flags().GetString("connector-id")
 		query, _ := cmd.Flags().GetString("query")
-		states, _ := cmd.Flags().GetStringSlice("state")
-		classes, _ := cmd.Flags().GetStringSlice("classification")
+		states, err := repeatableStringFlag(cmd, "state")
+		if err != nil {
+			return err
+		}
+		classes, err := repeatableStringFlag(cmd, "classification")
+		if err != nil {
+			return err
+		}
 		requestedPageSize := pageSizeFlag(cmd)
 		pageToken, _ := cmd.Flags().GetString("page-token")
 		manualPaging := cmd.Flags().Changed("page-token")
@@ -111,8 +117,8 @@ func init() {
 	mcpToolsSearchCmd.Flags().String("app-id", "", "Application ID")
 	mcpToolsSearchCmd.Flags().String("connector-id", "", "Connector ID")
 	mcpToolsSearchCmd.Flags().String("query", "", "Fuzzy search on tool_name or display_name")
-	mcpToolsSearchCmd.Flags().StringSlice("state", nil, "Filter by state (repeatable): pending, approved, disabled, removed")
-	mcpToolsSearchCmd.Flags().StringSlice("classification", nil, "Filter by classification (repeatable): read, write, destructive, sensitive, dangerous")
+	addRepeatableStringFlag(mcpToolsSearchCmd, "state", "Filter by state (repeatable): pending, approved, disabled, removed")
+	addRepeatableStringFlag(mcpToolsSearchCmd, "classification", "Filter by classification (repeatable): read, write, destructive, sensitive, dangerous")
 	addPaginationFlags(mcpToolsSearchCmd)
 	markRequired(mcpToolsSearchCmd, "app-id", "connector-id")
 	mcpToolsCmd.AddCommand(mcpToolsSearchCmd)

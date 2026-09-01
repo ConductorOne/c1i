@@ -244,3 +244,54 @@ func requireNonEmpty(cmd *cobra.Command, names ...string) error {
 		return &usageError{fmt.Errorf("flags %s require non-empty values", strings.Join(missing, ", "))}
 	}
 }
+
+// addRepeatableStringFlag registers a repeatable string flag. It always uses
+// StringArray, never StringSlice: StringSlice CSV-splits every occurrence, so
+// `--user-id "" --user-id REAL` reaches the command as ["REAL"] — the empty
+// occurrence is destroyed during parsing, before any command-level check can
+// see it. On `apps set-owners`, which REPLACES the owner list, that set one
+// owner and exited 0 while the caller had asked for two.
+//
+// The deliberate trade: `--flag a,b` is now ONE value, not two. No repeatable
+// flag ever documented comma-splitting; see CHANGELOG.
+//
+// TestRepeatableStringFlagsGoThroughSharedRegistrar keeps this the only place
+// such a flag is created.
+func addRepeatableStringFlag(cmd *cobra.Command, name, usage string) {
+	cmd.Flags().StringArray(name, nil, usage)
+}
+
+// repeatableStringFlagError is the one wording for a repeatable flag given an
+// empty value, defined once so the eight commands using it cannot drift apart.
+func repeatableStringFlagError(name string) error {
+	return &usageError{fmt.Errorf("flag --%s requires a non-empty value for every occurrence", name)}
+}
+
+// repeatableStringFlag reads a flag registered by addRepeatableStringFlag and
+// rejects an empty or whitespace-only occurrence with a *usageError (exit 2).
+//
+// The two rejected shapes need separate checks. A blank inside a repetition
+// survives as an element (`--x "" --x REAL` -> ["", "REAL"]), but a lone
+// `--x ""` reads back as an EMPTY slice: GetStringArray round-trips the value
+// through a CSV string, and a single empty element serializes to "" which
+// parses back as no elements at all. Only Changed distinguishes that from
+// "flag never passed". Both shapes measured against pflag v1.0.10.
+//
+// Not passing the flag at all is not an error here: whether the flag is
+// required is the command's business, and several callers treat it as optional.
+func repeatableStringFlag(cmd *cobra.Command, name string) ([]string, error) {
+	values, _ := cmd.Flags().GetStringArray(name)
+	f := cmd.Flags().Lookup(name)
+	if f == nil || !f.Changed {
+		return values, nil
+	}
+	if len(values) == 0 {
+		return nil, repeatableStringFlagError(name)
+	}
+	for _, v := range values {
+		if strings.TrimSpace(v) == "" {
+			return nil, repeatableStringFlagError(name)
+		}
+	}
+	return values, nil
+}

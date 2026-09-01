@@ -142,18 +142,39 @@ func TestValidationGuardsExitUsage(t *testing.T) {
 		},
 		{
 			// --to-user-id is cobra-required, so omitting it is cobra's job.
-			// An explicit "" satisfies "required" but comma-splits to an
-			// empty slice, reaching the len==0 guard.
+			// A lone "" satisfies "required" but pflag collapses it to an
+			// empty slice, so only the Changed check sees it.
 			name: "tasks reassign: --to-user-id empty",
 			args: []string{"tasks", "reassign", "task-1", "--to-user-id", ""},
 			cmds: []*cobra.Command{tasksReassignCmd},
 		},
 		{
-			// A blank element inside a comma-separated value would post an
-			// empty approver id.
-			name: "tasks reassign: --to-user-id with a blank element",
-			args: []string{"tasks", "reassign", "task-1", "--to-user-id", "user-a,,user-b"},
+			// The shape that shipped broken: under StringSlice the empty
+			// occurrence was discarded during parsing and the command posted
+			// the surviving id as if that were what was asked for.
+			name: "tasks reassign: --to-user-id empty alongside a real one",
+			args: []string{"tasks", "reassign", "task-1", "--to-user-id", "", "--to-user-id", "user-b"},
 			cmds: []*cobra.Command{tasksReassignCmd},
+		},
+		{
+			name: "apps set-owners: --user-id empty alongside a real one",
+			args: []string{"apps", "set-owners", "app-1", "--user-id", "", "--user-id", "user-b"},
+			cmds: []*cobra.Command{appsSetOwnersCmd},
+		},
+		{
+			name: "mcp bindings create: --tool-id empty alongside a real one",
+			args: []string{"mcp", "bindings", "create", "--app-id", "a", "--connector-id", "c", "--toolset-id", "t", "--tool-id", "", "--tool-id", "tool-b"},
+			cmds: []*cobra.Command{mcpBindingsCreateCmd},
+		},
+		{
+			name: "mcp bindings delete: --tool-id empty alongside a real one",
+			args: []string{"mcp", "bindings", "delete", "--app-id", "a", "--connector-id", "c", "--toolset-id", "t", "--tool-id", "", "--tool-id", "tool-b"},
+			cmds: []*cobra.Command{mcpBindingsDeleteCmd},
+		},
+		{
+			name: "mcp bindings by-tools: --tool-id whitespace alongside a real one",
+			args: []string{"mcp", "bindings", "by-tools", "--app-id", "a", "--connector-id", "c", "--tool-id", "   ", "--tool-id", "tool-b"},
+			cmds: []*cobra.Command{mcpBindingsByToolsCmd},
 		},
 		{
 			name: "auth login: --client-id without --client-secret",

@@ -23,7 +23,10 @@ var mcpBindingsCreateCmd = &cobra.Command{
 		appID, _ := cmd.Flags().GetString("app-id")
 		connectorID, _ := cmd.Flags().GetString("connector-id")
 		toolsetID, _ := cmd.Flags().GetString("toolset-id")
-		toolIDs, _ := cmd.Flags().GetStringSlice("tool-id")
+		toolIDs, err := repeatableStringFlag(cmd, "tool-id")
+		if err != nil {
+			return err
+		}
 		if len(toolIDs) == 0 {
 			return &usageError{fmt.Errorf("flag --tool-id requires at least one value")}
 		}
@@ -57,7 +60,7 @@ func init() {
 	mcpBindingsCreateCmd.Flags().String("app-id", "", "Application ID")
 	mcpBindingsCreateCmd.Flags().String("connector-id", "", "Connector ID")
 	mcpBindingsCreateCmd.Flags().String("toolset-id", "", "MCP toolset (access profile) ID")
-	mcpBindingsCreateCmd.Flags().StringSlice("tool-id", nil, "MCP tool ID to bind (repeatable; max 100)")
+	addRepeatableStringFlag(mcpBindingsCreateCmd, "tool-id", "MCP tool ID to bind (repeatable; max 100)")
 	markRequired(mcpBindingsCreateCmd, "app-id", "connector-id", "toolset-id", "tool-id")
 	mcpBindingsCmd.AddCommand(mcpBindingsCreateCmd)
 }
