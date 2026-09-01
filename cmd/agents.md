@@ -147,7 +147,7 @@ auto-detection picks the wrong array. GET and DELETE refuse a body by default;
 the few endpoints that need one on DELETE (e.g. `remove-membership`) want
 `--allow-delete-body`. The UI's "campaign" is the API's access review — a
 campaign ID from a URL is the access review `id` directly, and the UI's "access
-profile" is the API's catalog: `c1i catalogs list`, `/api/v1/catalogs`, whose
+profile" is the API's catalog: `c1i access-profiles list`, `/api/v1/catalogs`, whose
 `RequestCatalog` schema is tagged `x-speakeasy-entity: Access_Profile` in the
 spec. Search for both names.
 
@@ -310,10 +310,10 @@ Two things are irreversible in ways their `--help` doesn't make obvious:
   `--tool-state`; the API doesn't compute a count without a state filter, so
   a filterless search omits the key rather than showing a 0 that would look
   identical to a server with no tools.
-- `catalogs list` rows carry no member count on purpose. The list endpoint
-  reports `memberCount` as `0` for every catalog while `catalogs get` on the
+- `access-profiles list` rows carry no member count on purpose. The list endpoint
+  reports `memberCount` as `0` for every catalog while `access-profiles get` on the
   same id reports a non-zero count, so the key is dropped rather than emitted
-  as a zero that reads like "no members". Use `c1i catalogs get <catalog-id>`
+  as a zero that reads like "no members". Use `c1i access-profiles get <access-profile-id>`
   for the count, and for the catalog's `accessEntitlements` when it has any,
   which list rows also omit.
 - A catalog's visibility bindings can only be added after it is published:
@@ -322,10 +322,10 @@ Two things are irreversible in ways their `--help` doesn't make obvious:
   created with `--visible-to-everyone` it is a `400`,
   `catalog is visible to everyone, cannot add access entitlements`. A
   catalog created with `--published` accepts them immediately.
-- There is no `catalogs delete` yet; delete via `c1i api --path
+- There is no `access-profiles delete` yet; delete via `c1i api --path
   /api/v1/catalogs/<id> --method DELETE`. It is a soft delete: the catalog
-  leaves `catalogs list`, while `catalogs get` still returns it at exit `0`
-  with `deletedAt` set. So a `deleted_at` in a `catalogs list` row is null in
+  leaves `access-profiles list`, while `access-profiles get` still returns it at exit `0`
+  with `deletedAt` set. So a `deleted_at` in a `access-profiles list` row is null in
   practice — don't read the null as "not deleted", check with a get.
 
 ## Carry forward

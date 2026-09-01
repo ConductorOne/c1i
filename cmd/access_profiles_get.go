@@ -7,17 +7,17 @@ import (
 	"github.com/spf13/cobra"
 )
 
-var catalogsGetCmd = &cobra.Command{
-	Use:   "get <catalog-id>",
-	Short: "Get a single request catalog / access profile by ID (pretty JSON)",
-	Long: `Get a single request catalog by ID.
+var accessProfilesGetCmd = &cobra.Command{
+	Use:   "get <access-profile-id>",
+	Short: "Get a single access profile by ID (pretty JSON)",
+	Long: `Get a single access profile by ID.
 
 The API wraps the catalog in requestCatalogView.requestCatalog; the envelope is
 unwrapped before printing, so the catalog's own keys (id, displayName,
 published, …) are at the top level and the view's siblings (memberCount,
 accessEntitlementsPath, createdByUserPath, expanded) sit beside them.
 
-A get carries two things "catalogs list" rows leave out: the catalog's
+A get carries two things "access-profiles list" rows leave out: the catalog's
 accessEntitlements when it has any — the visibility bindings that decide who
 can see it — and a memberCount, which the list endpoint reports as 0 for every
 catalog.`,
@@ -43,5 +43,5 @@ catalog.`,
 }
 
 func init() {
-	catalogsCmd.AddCommand(catalogsGetCmd)
+	accessProfilesCmd.AddCommand(accessProfilesGetCmd)
 }

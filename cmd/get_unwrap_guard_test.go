@@ -151,8 +151,8 @@ func getUnwrapCases() []getUnwrapCase {
 			// it on the view, so a hoist that took only requestCatalogView
 			// would strip the id and one that took only requestCatalog would
 			// drop the count.
-			name:        "catalogs get",
-			cmd:         catalogsGetCmd,
+			name:        "access-profiles get",
+			cmd:         accessProfilesGetCmd,
 			args:        []string{"cat-1"},
 			idKey:       "id",
 			body:        `{"requestCatalogView":{"requestCatalog":{"id":"cat-1","displayName":"Engineering","published":true},"memberCount":"7","createdByUserPath":"","accessEntitlementsPath":""},"expanded":[{"id":"ent-1"}]}`,

@@ -8,19 +8,20 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
-- **`c1i catalogs` — list, get and create request catalogs, which the C1 UI
-  calls "access profiles".** `catalogs list` emits NDJSON and auto-paginates;
-  `catalogs get <catalog-id>` unwraps the API's
+- **`c1i access-profiles` — list, get and create access profiles**, which the
+  API calls request catalogs and routes under `/api/v1/catalogs`.
+  `access-profiles list` emits NDJSON and auto-paginates;
+  `access-profiles get <access-profile-id>` unwraps the API's
   `requestCatalogView.requestCatalog` envelope so the catalog's own keys are at
-  the top level; `catalogs create --display-name <name>` sends only the flags
+  the top level; `access-profiles create --display-name <name>` sends only the flags
   you pass, so the server's defaults apply to the rest. `--published` and
   `--visible-to-everyone` take effect at create time, so a catalog can be
   created already published.
 
   Three server behaviors the commands account for, each verified live.
-  `catalogs list` rows carry no member count: the list endpoint reports
+  `access-profiles list` rows carry no member count: the list endpoint reports
   `memberCount` as `0` for every catalog while
-  `catalogs get` on the same id answers a real count, and the
+  `access-profiles get` on the same id answers a real count, and the
   endpoint takes no parameter (only `page_size`/`page_token`) that could
   populate it — so the key is omitted rather than emitted as a zero that reads
   like "no members". A catalog's visibility bindings can only be added once it
@@ -30,11 +31,11 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   entitlement`, visible-to-everyone says `catalog is visible to everyone, cannot
   add access entitlements`, and the identical call on a published catalog that is
   not visible to everyone returns `200`. And
-  delete is a soft delete — the catalog leaves `catalogs list` while
-  `catalogs get` still returns it at exit `0` with `deletedAt` set.
+  delete is a soft delete — the catalog leaves `access-profiles list` while
+  `access-profiles get` still returns it at exit `0` with `deletedAt` set.
 
   The sub-resource routes (requestable entitlements, visibility bindings,
-  bundle automation) and `catalogs delete`/`update` are not yet wrapped; reach
+  bundle automation) and `access-profiles delete`/`update` are not yet wrapped; reach
   them through `c1i api`.
 
 - **`c1i api` now warns when it discards a pagination cursor.** A bare `api`

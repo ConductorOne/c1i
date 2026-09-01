@@ -6,7 +6,7 @@ import (
 	"testing"
 )
 
-// catalogViewJSON renders one `catalogs list` row as the API sends it: the
+// catalogViewJSON renders one `access-profiles list` row as the API sends it: the
 // catalog nested under "requestCatalog", memberCount a sibling encoded as a
 // string.
 func catalogViewJSON(published, visibleToEveryone, requestBundle bool) string {

@@ -9,12 +9,12 @@ import (
 )
 
 // catalogListItem is the subset of the RequestCatalogView surfaced in
-// `catalogs list` rows. The catalog itself is nested one level down, under
+// `access-profiles list` rows. The catalog itself is nested one level down, under
 // "requestCatalog".
 //
 // The view's memberCount sibling is deliberately not read: this endpoint
 // reports it as "0" for every catalog, and takes no parameter that would
-// populate it. `catalogs get` reports a non-zero count on the ones checked.
+// populate it. `access-profiles get` reports a non-zero count on the ones checked.
 type catalogListItem struct {
 	RequestCatalog struct {
 		ID                string `json:"id"`
@@ -43,9 +43,9 @@ func catalogRow(c catalogListItem) map[string]any {
 	}
 }
 
-var catalogsListCmd = &cobra.Command{
+var accessProfilesListCmd = &cobra.Command{
 	Use:   "list",
-	Short: "List request catalogs / access profiles (NDJSON output)",
+	Short: "List access profiles (NDJSON output)",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		baseURL, err := GetBaseURL()
 		if err != nil {
@@ -106,6 +106,6 @@ var catalogsListCmd = &cobra.Command{
 }
 
 func init() {
-	addPaginationFlags(catalogsListCmd)
-	catalogsCmd.AddCommand(catalogsListCmd)
+	addPaginationFlags(accessProfilesListCmd)
+	accessProfilesCmd.AddCommand(accessProfilesListCmd)
 }

@@ -328,21 +328,27 @@ to scope to another user or `--all` for every request in the tenant. `requests
 get` fetches a single request (the `task_id` returned by `requests create`) as
 pretty JSON, including its current policy step and outcome.
 
-### Catalogs (access profiles)
+### Access profiles
 
-**The C1 UI calls these "access profiles". The API calls them catalogs**, and
-every path is `/api/v1/catalogs`. The OpenAPI spec carries both names — its
-`RequestCatalog` schema is tagged `x-speakeasy-entity: Access_Profile` — so
-search for either. A catalog groups entitlements a set of users may request and
-decides who can see them.
+An access profile controls which entitlements are requestable and who can
+request them — admins use them to grant birthright access or to open access up
+to a chosen audience.
+
+**The API calls this object a request catalog**, and every path is
+`/api/v1/catalogs`, so its JSON keys and ids say "catalog". The spec carries
+both names — its `RequestCatalog` schema is tagged
+`x-speakeasy-entity: Access_Profile` — so search for either.
+
+Not to be confused with an app catalog, which is the per-user list of what one
+user can request, derived from the access profiles they belong to.
 
 ```sh
-c1i catalogs list [--page-size N] [--page-token TOKEN] [--limit N]
-c1i catalogs get <catalog-id>
-c1i catalogs create --display-name <name> [--description <text>] [--published] [--visible-to-everyone] [--request-bundle]
+c1i access-profiles list [--page-size N] [--page-token TOKEN] [--limit N]
+c1i access-profiles get <access-profile-id>
+c1i access-profiles create --display-name <name> [--description <text>] [--published] [--visible-to-everyone] [--request-bundle]
 ```
 
-`catalogs create` needs only `--display-name`. Every other flag is omitted from
+`access-profiles create` needs only `--display-name`. Every other flag is omitted from
 the request body unless you pass it, so the server's own defaults apply; passing
 `--published=false` explicitly still sends `false`. `--published` and
 `--visible-to-everyone` both take effect at create time, so a catalog can be
@@ -351,8 +357,8 @@ created already published. The new catalog comes back as pretty JSON under
 the new id from `.requestCatalogView.requestCatalog.id`:
 
 ```sh
-CAT_ID=$(c1i catalogs create --display-name Engineering --published | jq -r .requestCatalogView.requestCatalog.id)
-c1i catalogs get "$CAT_ID"
+CAT_ID=$(c1i access-profiles create --display-name Engineering --published | jq -r .requestCatalogView.requestCatalog.id)
+c1i access-profiles get "$CAT_ID"
 ```
 
 Ordering matters once you gate a catalog that is *not* visible to everyone.
@@ -364,15 +370,15 @@ publishing it and repeating the same call succeeds. A catalog created with both
 published but not visible-to-everyone if you intend to gate it;
 the same call on a published catalog succeeds. Publish first, then bind.
 
-`catalogs list` rows do **not** carry a member count: the list endpoint reports
-`memberCount` as `0` for every catalog while `catalogs get` on the same id
-reports a non-zero count, so the key is omitted from list rows. `catalogs get`
+`access-profiles list` rows do **not** carry a member count: the list endpoint reports
+`memberCount` as `0` for every catalog while `access-profiles get` on the same id
+reports a non-zero count, so the key is omitted from list rows. `access-profiles get`
 also carries the catalog's `accessEntitlements` (its visibility bindings) when it
 has any, which list rows omit.
 
-There is no `catalogs delete` command yet; use `c1i api --path
+There is no `access-profiles delete` command yet; use `c1i api --path
 /api/v1/catalogs/<id> --method DELETE`. It is a soft delete, verified end to end:
-the catalog leaves `catalogs list`, while `catalogs get` still returns it at exit
+the catalog leaves `access-profiles list`, while `access-profiles get` still returns it at exit
 `0` with `deletedAt` set. Because deleted catalogs drop out of the list, a
 `deleted_at` in a list row is null in practice; the field is kept to match
 the sibling list rows that carry it, not as a signal to filter on.

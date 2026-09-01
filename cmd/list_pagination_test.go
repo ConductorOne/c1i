@@ -193,8 +193,8 @@ func listPaginationCases() []listPaginationCase {
 			rowIDs:   idRows("id"),
 		},
 		{
-			name:     "catalogs list",
-			cmd:      catalogsListCmd,
+			name:     "access-profiles list",
+			cmd:      accessProfilesListCmd,
 			method:   http.MethodGet,
 			wantPath: "/api/v1/catalogs",
 			page:     nestedPage("list", "requestCatalog", "id"),
