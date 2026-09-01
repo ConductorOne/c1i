@@ -20,7 +20,7 @@ is not applied to mutation output), so read the id from
 
 --published and --visible-to-everyone both take effect at create time: a
 profile can be created already published. Ordering matters for the visibility
-bindings that gate a profile that is NOT visible to everyone — adding an access
+bindings on a profile published but not visible to everyone — adding an access
 entitlement to an unpublished profile is refused with a 400, "catalog must be
 published to add an access entitlement", so publish first.
 

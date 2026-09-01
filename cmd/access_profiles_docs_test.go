@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"regexp"
 	"strings"
 	"testing"
 
@@ -8,109 +9,85 @@ import (
 	"github.com/spf13/pflag"
 )
 
-// flatten collapses whitespace so a quoted error string still matches when a
-// source wraps it across lines.
+// flatten collapses whitespace so a phrase still matches when a source wraps it.
 func flatten(s string) string { return strings.Join(strings.Fields(s), " ") }
 
 // orderingQuote is the 400 whose unqualified restatement ("publish and it
-// works") is the drift this guard exists to catch, so it is the one held to
-// the qualifier. The other quote is the counter-example; a flag's own help
-// scopes it already.
+// works") is the drift this guard catches.
 const orderingQuote = "catalog must be published to add an access entitlement"
 
-// serverQuotes are the two 400s the docs promise, both claims about the server.
-var serverQuotes = []string{
-	orderingQuote,
-	"catalog is visible to everyone, cannot add access entitlements",
-}
+// visibleQuote is the second 400, and the counter-example to that restatement.
+const visibleQuote = "catalog is visible to everyone, cannot add access entitlements"
+
+// qualifier is required verbatim wherever orderingQuote appears. One wording
+// across every source is the point: earlier rounds tried to recognise any
+// English phrasing that meant the same thing, and each version was defeated by
+// a rewording — "whether or not visible to everyone" contains "not visible to
+// everyone", so a sentence asserting the opposite satisfied the check. A fixed
+// clause has no such hole, and rewording simply fails the test.
+const qualifier = "published but not visible to everyone"
 
 // visibilityBindingSources are the docs stating when a visibility binding is
-// accepted. The unqualified form keeps coming back, because it reads as true
-// until you remember --visible-to-everyone is also a create-time flag.
+// accepted. Publishing is necessary but not sufficient.
 var visibilityBindingSources = []string{
 	"../README.md",
 	"../CHANGELOG.md",
 	"agents.md",
 }
 
-// qualifierWindow is how far from the quote the qualifier must sit. Matching
-// anywhere in the file would let an append-only CHANGELOG satisfy a new
-// release's unqualified entry with an older entry's wording.
-const qualifierWindow = 600
+// blockSplit breaks a doc into blank-line-separated blocks, so a claim must
+// carry its own qualifier rather than borrowing one from a neighbouring
+// release entry. A byte window could not distinguish the two.
+var blockSplit = regexp.MustCompile(`\n\s*\n`)
 
-// negations satisfy a substring check for the qualifier while asserting its
-// opposite.
-var negations = []string{
-	"whether or not visible to everyone",
-	"whether or not it is visible to everyone",
-	"regardless of visible-to-everyone",
-}
-
-// TestVisibilityBindingClaimStaysQualified holds each source, and the create
-// help, to the qualified form. Publishing is necessary but not sufficient: a
-// profile created --published AND --visible-to-everyone is still refused.
 func TestVisibilityBindingClaimStaysQualified(t *testing.T) {
-	if len(visibilityBindingSources) == 0 || len(serverQuotes) == 0 {
-		t.Fatal("no sources or no quotes to check — this guard would prove nothing")
+	if len(visibilityBindingSources) == 0 {
+		t.Fatal("no sources to check — this guard would prove nothing")
 	}
 
 	for _, path := range visibilityBindingSources {
-		checkQualified(t, path, flatten(readDocFile(t, path)))
+		checkQualified(t, path, readDocFile(t, path))
 	}
 	checkQualified(t, "access-profiles create help",
-		flatten(accessProfilesCreateCmd.Long+" "+flagUsages(accessProfilesCreateCmd)))
+		accessProfilesCreateCmd.Long+"\n\n"+flagUsages(accessProfilesCreateCmd))
 }
 
-// checkQualified requires both server quotes to be present, the ordering one to
-// carry the qualifier nearby, and no phrasing that negates it.
-func checkQualified(t *testing.T, path, body string) {
+// checkQualified requires both quotes somewhere in the source, and the
+// qualifier in EVERY block that states the ordering — not just the first.
+func checkQualified(t *testing.T, path, raw string) {
 	t.Helper()
-	lower := strings.ToLower(body)
 
-	for _, n := range negations {
-		if strings.Contains(lower, n) {
-			t.Errorf("%s says %q, which asserts the opposite: a profile created --published "+
-				"AND --visible-to-everyone is refused", path, n)
+	whole := flatten(raw)
+	for _, quote := range []string{orderingQuote, visibleQuote} {
+		if !strings.Contains(whole, quote) {
+			t.Errorf("%s no longer quotes %q", path, quote)
 		}
 	}
-	for _, quote := range serverQuotes {
-		i := strings.Index(body, quote)
-		if i < 0 {
-			t.Errorf("%s no longer quotes %q", path, quote)
+
+	stating := 0
+	for _, block := range blockSplit.Split(raw, -1) {
+		flat := flatten(block)
+		if !strings.Contains(flat, orderingQuote) {
 			continue
 		}
-		if quote == orderingQuote && !qualifiedNear(lower, i, len(quote)) {
-			t.Errorf("%s quotes %q with no published-but-not-visible-to-everyone qualifier "+
-				"within %d characters", path, quote, qualifierWindow)
+		stating++
+		if !strings.Contains(strings.ToLower(flat), qualifier) {
+			t.Errorf("%s states the ordering without the exact clause %q in the same block; "+
+				"publishing alone is not sufficient", path, qualifier)
 		}
+	}
+	if stating == 0 {
+		t.Errorf("%s: no block states the ordering, so nothing was checked", path)
 	}
 }
 
-// qualifiedNear reports whether the qualifier sits within qualifierWindow
-// characters either side of the quote at index i.
-func qualifiedNear(lower string, i, quoteLen int) bool {
-	start := max(0, i-qualifierWindow)
-	end := min(len(lower), i+quoteLen+qualifierWindow)
-	near := lower[start:end]
-	for _, phrase := range []string{
-		"not visible to everyone",
-		"not visible-to-everyone",
-		"not `--visible-to-everyone`",
-	} {
-		if strings.Contains(near, phrase) {
-			return true
-		}
-	}
-	return false
-}
-
-// flagUsages concatenates a command's flag descriptions. One server string this
-// guard checks is quoted in a flag's help, not in Long.
+// flagUsages concatenates a command's flag descriptions. One quote this guard
+// checks is in a flag's help, not in Long.
 func flagUsages(cmd *cobra.Command) string {
 	var b strings.Builder
 	cmd.Flags().VisitAll(func(f *pflag.Flag) {
 		b.WriteString(f.Usage)
-		b.WriteString(" ")
+		b.WriteString("\n\n")
 	})
 	return b.String()
 }

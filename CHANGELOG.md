@@ -29,8 +29,8 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   unpublished catalog is a `400`, and so is one on a `--visible-to-everyone`
   catalog; unpublished says `catalog must be published to add an access
   entitlement`, visible-to-everyone says `catalog is visible to everyone, cannot
-  add access entitlements`, and the identical call on a published catalog that is
-  not visible to everyone returns `200`. And
+  add access entitlements`, and the identical call on a catalog published but not
+  visible to everyone returns `200`. And
   delete is a soft delete — the catalog leaves `access-profiles list` while
   `access-profiles get` still returns it at exit `0` with `deletedAt` set.
 
