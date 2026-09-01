@@ -249,7 +249,7 @@ Two things are irreversible in ways their `--help` doesn't make obvious:
   owner "apps create" assigns; grants: up to a couple of minutes). Verify
   owners with `c1i apps owners <app-id>`, not `apps get`'s `appOwners`
   field, and don't wait for that field to fill — it read [] on every app
-  checked in the test tenant, including all those `apps owners` reported
+  checked, including all those `apps owners` reported
   owners for. An empty `appOwners` is not evidence an app has no owners.
   `apps owners` also
   returns zero rows at exit 0 for a well-formed but nonexistent app id, so an

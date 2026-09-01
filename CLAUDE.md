@@ -27,6 +27,8 @@ golangci-lint run --timeout=3m ./...   # includes gofmt formatting; CI gates on 
 go mod tidy && git diff --exit-code go.mod go.sum   # CI gates on this
 gosec -quiet ./...                     # CI gates on this
 govulncheck ./...                      # CI gates on this, per GOOS
+gitleaks detect --source . --no-banner # CI gates on this; scans history,
+                                       # so a fingerprint pins to the commit
 ```
 
 Never weaken, loosen, or delete a test to make a change pass. For a new test,

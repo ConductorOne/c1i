@@ -14,7 +14,7 @@ import (
 // ("Slack API" vs "Slack") is easy to conflate.
 func TestCatalogEntryRowDisambiguation(t *testing.T) {
 	restWrapper := `{
-		"id": "3Aaj3lKAbL5Dft3DAOVyN0ltRAp",
+		"id": "cat-11111111111111111111111",
 		"displayName": "Slack API",
 		"description": "Slack API for managing channels, messages, users, user groups, and files across your Slack workspace.",
 		"serviceName": "slack",
@@ -31,7 +31,7 @@ func TestCatalogEntryRowDisambiguation(t *testing.T) {
 		}]
 	}`
 	hostedMCP := `{
-		"id": "3GBynv4ntUVsVWoWFZxGFt2xC5s",
+		"id": "cat-22222222222222222222222",
 		"displayName": "Slack",
 		"description": "Slack MCP for searching, reading, and managing messages, channels, canvases, and reactions across your Slack workspace.",
 		"serviceName": "slack-mcp",
@@ -66,7 +66,7 @@ func TestCatalogEntryRowDisambiguation(t *testing.T) {
 	hostedRow := catalogEntryRow(hosted)
 
 	wantRest := map[string]string{
-		"id":                  "3Aaj3lKAbL5Dft3DAOVyN0ltRAp",
+		"id":                  "cat-11111111111111111111111",
 		"display_name":        "Slack API",
 		"service_name":        "slack",
 		"base_url":            "https://slack.com/api",
@@ -92,7 +92,7 @@ func TestCatalogEntryRowDisambiguation(t *testing.T) {
 	}
 
 	wantHosted := map[string]string{
-		"id":                  "3GBynv4ntUVsVWoWFZxGFt2xC5s",
+		"id":                  "cat-22222222222222222222222",
 		"display_name":        "Slack",
 		"service_name":        "slack-mcp",
 		"base_url":            "https://mcp.slack.com/mcp",
