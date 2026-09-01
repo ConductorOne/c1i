@@ -14,12 +14,13 @@ var accessProfilesGetCmd = &cobra.Command{
 
 The API wraps the catalog in requestCatalogView.requestCatalog; the envelope is
 unwrapped before printing, so the catalog's own keys (id, displayName,
-published, …) are at the top level and the view's siblings (memberCount,
-accessEntitlementsPath, createdByUserPath, expanded) sit beside them.
+published, …) are at the top level, beside the view's own siblings
+(memberCount, accessEntitlementsPath, createdByUserPath) and the response's
+top-level expanded.
 
 A get carries two things "access-profiles list" rows leave out: the catalog's
-accessEntitlements, empty when it has none — the visibility bindings that decide who
-can see it — and a memberCount, which the list endpoint reports as 0 for every
+accessEntitlements — the visibility bindings that decide who can see it, empty
+when there are none — and a memberCount, which the list endpoint reports as 0 for every
 catalog.`,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
