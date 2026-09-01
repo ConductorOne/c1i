@@ -18,7 +18,7 @@ published, …) are at the top level and the view's siblings (memberCount,
 accessEntitlementsPath, createdByUserPath, expanded) sit beside them.
 
 A get carries two things "access-profiles list" rows leave out: the catalog's
-accessEntitlements when it has any — the visibility bindings that decide who
+accessEntitlements, empty when it has none — the visibility bindings that decide who
 can see it — and a memberCount, which the list endpoint reports as 0 for every
 catalog.`,
 	Args: cobra.ExactArgs(1),

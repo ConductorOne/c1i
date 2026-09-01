@@ -314,7 +314,8 @@ Two things are irreversible in ways their `--help` doesn't make obvious:
   reports `memberCount` as `0` for every catalog while `access-profiles get` on the
   same id reports a non-zero count, so the key is dropped rather than emitted
   as a zero that reads like "no members". Use `c1i access-profiles get <access-profile-id>`
-  for the count, and for the catalog's `accessEntitlements` when it has any,
+  for the count, and for the catalog's `accessEntitlements` (always present,
+  empty when there are none),
   which list rows also omit.
 - A catalog's visibility bindings can only be added after it is published:
   `POST /api/v1/catalogs/{id}/visibility_bindings` on an unpublished catalog

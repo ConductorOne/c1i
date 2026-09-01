@@ -38,6 +38,84 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   bundle automation) and `access-profiles delete`/`update` are not yet wrapped; reach
   them through `c1i api`.
 
+- **`c1i tasks close` and `c1i tasks reassign`.** An identity can open a task
+  it cannot resolve -- `approve` and `deny` fail with `action not permitted`
+  when the caller is not on the current policy step, while these two succeed.
+  Neither prints a task state: the action endpoints echo the task's state from
+  *before* the action. For `close` that state is the opposite of what happened;
+  for `reassign`, which leaves the state alone, it is merely uninformative.
+
+### Changed
+
+- **BREAKING — a negative `--limit` or `--page-size` is now a usage error
+  (exit 2)** instead of being accepted or sent. `--limit` never reaches the
+  API, so `--limit -1` had silently behaved exactly like the documented
+  `--limit 0`: every row, exit 0, with nothing able to catch it. A negative
+  `--page-size` had cost a round trip to be refused by the server. Both are
+  now rejected before any request, naming what `0` does instead. `0` and
+  positive values are unaffected, and a raw `api --query page_size=-1` still
+  goes to the server, since `--query` is not this flag.
+- **Corrected the `--page-size` documentation.** Its wording invited
+  over-generalising one tenant's measurements, one behavior was undocumented
+  outright, and `cmd/agents.md` covered none of it:
+  - The ~5-row floor is not universal: `policies list` floors at 6 and
+    `mcp servers catalog list` has no floor.
+  - A value over the max is not rejected. c1i clamps it and sends the max, so
+    an oversized batch silently shrinks.
+  - `--page-size 0` means the server's default of 25, and those rows may then
+    overshoot like any other size. Verified on six endpoints: `--page-size 0`
+    returns exactly what `--page-size 25` returns on each.
+
+  How far a page overshoots varies per endpoint and per size, so no figure in
+  these docs should be read as a limit. `--limit N` remains exact — it is
+  enforced client-side per row, even when a page overshoots.
+
+  `c1i docs agents` documented none of this and now covers it, with a test
+  pinning that section.
+
+### Fixed
+
+- **`c1i docs agents` no longer implies `apps get`'s empty `appOwners` will
+  fill if you wait.** Use `c1i apps owners <app-id>`. The same guidance in
+  `apps set-owners --help` is unchanged.
+
+## [0.6.0] - 2026-08-27
+
+### Upgrading from 0.5.x
+
+**Typed `get` commands now print the resource, not the API's envelope.** This
+is the breaking change in this release. `apps get <id>` emitted
+`{"app":{"id":…}}` and now emits `{"id":…}`, so `jq -r .id` returns the id
+where it previously returned `null` — the reason for the change. Anything
+reading *through* the wrapper must drop that hop: `.app.id` becomes `.id`,
+`.userView.user.id` becomes `.id`, and `--fields function.id` becomes
+`--fields id`. Nothing is lost — every key the envelope carried beside the
+resource, `expanded` included, is now a top-level sibling. Two things
+deliberately did **not** change: mutation output (`apps create` still returns
+`{"app":…}`, so `.app.id` is still right there) and `c1i api`, which is a raw
+passthrough. One asymmetry to know: `mcp servers get` has no `id` field at all
+— its identity is `connectorId` — so read `.connectorId` there.
+
+Two exit codes also changed. Both are narrower failures that previously
+reported success or a generic error, so a script that branched on them needs a
+look:
+
+- `auth whoami` on a `200` carrying no usable identity (`null`, `{}`, or an
+  all-null identity) now exits **6** ("C1 failed") instead of **0**. A body
+  that is not a JSON object at all — truncated, empty, an array, a scalar —
+  also moves from the generic **1** to **6**.
+- A `--fields` spec naming a wrapper key now **exits 2** rather than
+  returning less. 0.5.x documented `--fields function.id` as supported, and
+  `--fields userView`/`app`/`taskView` resolved; against unwrapped output they
+  match nothing, which is already a usage error. Migrate to the unqualified
+  name (`--fields id`).
+- No other exit code moves. `c1i api`'s new partial-result warning goes to
+  **stderr** only; stdout is byte-for-byte unchanged, so a parser reading
+  stdout is unaffected. A caller folding stderr into stdout with `2>&1` will
+  see the new line.
+
+### Added
+
 - **`c1i api` now warns when it discards a pagination cursor.** A bare `api`
   call emits one page and exits 0, so a partial result was indistinguishable
   from a complete one -- unlike every first-class list command, which
@@ -190,76 +268,6 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   45-150s to show up in `apps owners`, measured across `set-owners`,
   `add-owner`, `remove-owner` and the owner `apps create` assigns (the
   narrower 96-129s below is `set-owners` alone).
-
-
-### Changed
-
-- **BREAKING — a negative `--limit` or `--page-size` is now a usage error
-  (exit 2)** instead of being accepted or sent. `--limit` never reaches the
-  API, so `--limit -1` had silently behaved exactly like the documented
-  `--limit 0`: every row, exit 0, with nothing able to catch it. A negative
-  `--page-size` had cost a round trip to be refused by the server. Both are
-  now rejected before any request, naming what `0` does instead. `0` and
-  positive values are unaffected, and a raw `api --query page_size=-1` still
-  goes to the server, since `--query` is not this flag.
-- **Corrected the `--page-size` documentation.** Its wording invited
-  over-generalising one tenant's measurements, one behavior was undocumented
-  outright, and `cmd/agents.md` covered none of it:
-  - The ~5-row floor is not universal: `policies list` floors at 6 and
-    `mcp servers catalog list` has no floor.
-  - A value over the max is not rejected. c1i clamps it and sends the max, so
-    an oversized batch silently shrinks.
-  - `--page-size 0` means the server's default of 25, and those rows may then
-    overshoot like any other size. Verified on six endpoints: `--page-size 0`
-    returns exactly what `--page-size 25` returns on each.
-
-  How far a page overshoots varies per endpoint and per size, so no figure in
-  these docs should be read as a limit. `--limit N` remains exact — it is
-  enforced client-side per row, even when a page overshoots.
-
-  `c1i docs agents` documented none of this and now covers it, with a test
-  pinning that section.
-
-### Fixed
-
-- **`c1i docs agents` no longer implies `apps get`'s empty `appOwners` will
-  fill if you wait.** Use `c1i apps owners <app-id>`. The same guidance in
-  `apps set-owners --help` is unchanged.
-
-## [0.6.0] - 2026-08-27
-
-### Upgrading from 0.5.x
-
-**Typed `get` commands now print the resource, not the API's envelope.** This
-is the breaking change in this release. `apps get <id>` emitted
-`{"app":{"id":…}}` and now emits `{"id":…}`, so `jq -r .id` returns the id
-where it previously returned `null` — the reason for the change. Anything
-reading *through* the wrapper must drop that hop: `.app.id` becomes `.id`,
-`.userView.user.id` becomes `.id`, and `--fields function.id` becomes
-`--fields id`. Nothing is lost — every key the envelope carried beside the
-resource, `expanded` included, is now a top-level sibling. Two things
-deliberately did **not** change: mutation output (`apps create` still returns
-`{"app":…}`, so `.app.id` is still right there) and `c1i api`, which is a raw
-passthrough. One asymmetry to know: `mcp servers get` has no `id` field at all
-— its identity is `connectorId` — so read `.connectorId` there.
-
-Two exit codes also changed. Both are narrower failures that previously
-reported success or a generic error, so a script that branched on them needs a
-look:
-
-- `auth whoami` on a `200` carrying no usable identity (`null`, `{}`, or an
-  all-null identity) now exits **6** ("C1 failed") instead of **0**. A body
-  that is not a JSON object at all — truncated, empty, an array, a scalar —
-  also moves from the generic **1** to **6**.
-- A `--fields` spec naming a wrapper key now **exits 2** rather than
-  returning less. 0.5.x documented `--fields function.id` as supported, and
-  `--fields userView`/`app`/`taskView` resolved; against unwrapped output they
-  match nothing, which is already a usage error. Migrate to the unqualified
-  name (`--fields id`).
-- No other exit code moves. `c1i api`'s new partial-result warning goes to
-  **stderr** only; stdout is byte-for-byte unchanged, so a parser reading
-  stdout is unaffected. A caller folding stderr into stdout with `2>&1` will
-  see the new line.
 
 ### Changed
 

@@ -372,8 +372,8 @@ published but not visible-to-everyone if you intend to gate it.
 `access-profiles list` rows do **not** carry a member count: the list endpoint reports
 `memberCount` as `0` for every catalog while `access-profiles get` on the same id
 reports a non-zero count, so the key is omitted from list rows. `access-profiles get`
-also carries the catalog's `accessEntitlements` (its visibility bindings) when it
-has any, which list rows omit.
+also carries the catalog's `accessEntitlements` (its visibility bindings),
+empty when there are none, which list rows omit.
 
 There is no `access-profiles delete` command yet; use `c1i api --path
 /api/v1/catalogs/<id> --method DELETE`. It is a soft delete, verified end to end:
