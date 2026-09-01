@@ -34,17 +34,18 @@ const sharedAccessEntitlementID = "287oY0rG4UirjDNFEYguMBvxyim"
 const objectIDLen = 27
 
 var (
-	// A copied id is data wherever it sits inside a string literal -- a JSON
-	// value, a request path, a fenced example -- not only when the quotes hug
-	// it. So scan whole quoted/backticked spans and pick out the alphanumeric
-	// tokens of id length within them. Placeholders here carry a hyphen
-	// (user-1111..., cat-2222...), which breaks the token and cannot match.
+	// A copied id is data wherever it sits -- a JSON value, a request path, a
+	// comment, an unquoted YAML value -- so the whole body is scanned.
+	// Placeholders carry a hyphen (user-1111..., cat-2222...), which breaks the
+	// token and cannot match.
 	idToken = regexp.MustCompile(`[a-zA-Z0-9]+`)
 	// Naming the tenant an observation came from adds nothing a reader can use.
 	tenantPhrase = regexp.MustCompile(`(?i)\b(lab|test|demo) tenant\b`)
-	// The tenant name, anywhere: bare, in a hostname, or inside a handle that
-	// embeds it. All three put it in a public repo.
-	tenantHost = regexp.MustCompile(`(?i)\bleet\b`)
+	// The tenant name, bare or in a hostname. The maintainer's `leet-c1` handle
+	// is exempt: it is in every commit's author metadata already, so rejecting it
+	// in file text buys nothing.
+	tenantHost   = regexp.MustCompile(`(?i)\bleet\b`)
+	tenantHandle = regexp.MustCompile(`(?i)\bleet-c1\b`)
 )
 
 func TestFixturesAndDocsUsePlaceholders(t *testing.T) {
@@ -79,8 +80,9 @@ func TestFixturesAndDocsUsePlaceholders(t *testing.T) {
 		if loc := tenantPhrase.FindString(body); loc != "" {
 			t.Errorf("%s: refers to a specific tenant (%q). State the behavior, not where it was seen.", path, loc)
 		}
-		if loc := tenantHost.FindString(body); loc != "" {
-			t.Errorf("%s: contains a tenant hostname (%q). Use example.conductor.one.", path, loc)
+		// Blank the exempt handle first so its "leet" does not trip the check.
+		if loc := tenantHost.FindString(tenantHandle.ReplaceAllString(body, "")); loc != "" {
+			t.Errorf("%s: names the tenant (%q). Use example.conductor.one, or a placeholder.", path, loc)
 		}
 	}
 
@@ -116,11 +118,11 @@ func trackedFiles(t *testing.T) []string {
 }
 
 // looksLikeObjectID separates C1 ids from 27-character Go identifiers and
-// English words, which the length check alone cannot tell apart. Go test names
-// are excluded by prefix: TestAPIEmpty200BodySucceeds is 27 chars and satisfies
+// English words, which the length check alone cannot tell apart. Names of test
+// functions are excluded: TestAPIEmpty200BodySucceeds is 27 chars and satisfies
 // the character mix, and this repo backticks test names in docs.
 func looksLikeObjectID(s string) bool {
-	if strings.HasPrefix(s, "Test") && len(s) > 4 && s[4] >= 'A' && s[4] <= 'Z' {
+	if isTestFuncName(s) {
 		return false
 	}
 	var digits, upper, lower int
@@ -138,4 +140,19 @@ func looksLikeObjectID(s string) bool {
 	// Measured: ~5% of real ids miss the digit floor, and lowering it starts
 	// catching ordinary words -- a false negative here is cheaper.
 	return digits >= 2 && upper >= 2 && lower >= 2
+}
+
+// isTestFuncName reports whether s looks like a Go testing entry point. Go
+// requires only that the character after the prefix is not a lowercase letter,
+// so match that rather than an uppercase letter specifically.
+func isTestFuncName(s string) bool {
+	for _, p := range []string{"Test", "Benchmark", "Example", "Fuzz"} {
+		if !strings.HasPrefix(s, p) || len(s) == len(p) {
+			continue
+		}
+		if c := s[len(p)]; c < 'a' || c > 'z' {
+			return true
+		}
+	}
+	return false
 }
