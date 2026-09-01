@@ -325,7 +325,7 @@ Two things are irreversible in ways their `--help` doesn't make obvious:
 - There is no `access-profiles delete` yet; delete via `c1i api --path
   /api/v1/catalogs/<id> --method DELETE`. It is a soft delete: the catalog
   leaves `access-profiles list`, while `access-profiles get` still returns it at exit `0`
-  with `deletedAt` set. So a `deleted_at` in a `access-profiles list` row is null in
+  with `deletedAt` set. So a `deleted_at` in an `access-profiles list` row is null in
   practice — don't read the null as "not deleted", check with a get.
 
 ## Carry forward

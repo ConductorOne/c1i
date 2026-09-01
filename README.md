@@ -367,8 +367,7 @@ refused with a `400`, `catalog must be published to add an access entitlement`;
 publishing it and repeating the same call succeeds. A catalog created with both
 `--published` and `--visible-to-everyone` refuses them for a second reason —
 `catalog is visible to everyone, cannot add access entitlements` — so create it
-published but not visible-to-everyone if you intend to gate it;
-the same call on a published catalog succeeds. Publish first, then bind.
+published but not visible-to-everyone if you intend to gate it.
 
 `access-profiles list` rows do **not** carry a member count: the list endpoint reports
 `memberCount` as `0` for every catalog while `access-profiles get` on the same id

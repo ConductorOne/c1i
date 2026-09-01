@@ -71,7 +71,8 @@ var catalogCreateBoolFlags = []struct{ flag, key string }{
 func buildAccessProfileCreateBody(cmd *cobra.Command) map[string]any {
 	displayName, _ := cmd.Flags().GetString("display-name")
 	body := map[string]any{"displayName": displayName}
-	if v, _ := cmd.Flags().GetString("description"); v != "" {
+	if cmd.Flags().Changed("description") {
+		v, _ := cmd.Flags().GetString("description")
 		body["description"] = v
 	}
 	for _, bf := range catalogCreateBoolFlags {

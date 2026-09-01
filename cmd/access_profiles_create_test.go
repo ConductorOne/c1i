@@ -79,3 +79,19 @@ func TestBuildCatalogCreateBodySendsExplicitFalse(t *testing.T) {
 		t.Errorf("body = %v, want %v", got, want)
 	}
 }
+
+// TestBuildCatalogCreateBodyExplicitEmptyDescription pins that an explicitly
+// passed --description "" reaches the body. The help promises every flag you
+// pass is sent; an emptiness test here dropped it, and the same shape copied
+// into an update command would silently fail to clear a description.
+func TestBuildCatalogCreateBodyExplicitEmptyDescription(t *testing.T) {
+	cmd := newCatalogCreateFlagCmd()
+	_ = cmd.Flags().Set("display-name", "Engineering")
+	_ = cmd.Flags().Set("description", "")
+
+	got := buildAccessProfileCreateBody(cmd)
+	want := map[string]any{"displayName": "Engineering", "description": ""}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("body = %v, want %v", got, want)
+	}
+}
