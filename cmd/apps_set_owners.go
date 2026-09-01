@@ -18,8 +18,8 @@ import (
 const ownerWaitPollInterval = 12 * time.Second
 
 // setOwnersSuccessFmt is the PUT-accepted confirmation. Points at "apps
-// owners", not "apps get": appOwners was [] on all 46 apps measured, 45 of
-// which did have owners.
+// owners", not "apps get": appOwners reads [] even for apps that do have
+// owners.
 const setOwnersSuccessFmt = "Set %d owner(s) on app %s (provisioning is async; check with \"c1i apps owners %s\" in a minute or two).\n"
 
 var appsSetOwnersCmd = &cobra.Command{

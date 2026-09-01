@@ -8,11 +8,13 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
-- **Fixtures and documentation now use placeholder identifiers throughout**,
-  and a test keeps them that way. Placeholders are stable and self-describing;
-  a copied identifier addresses nothing the reader owns. Documentation states
-  what the API does, with the supporting measurements kept in working notes
-  rather than inline.
+- **Fixtures and command documentation now use placeholder identifiers**, and
+  a test keeps them that way: it rejects tenant-copied object ids, tenant
+  hostnames, and prose naming the tenant an observation came from.
+  Placeholders are stable and self-describing; a copied identifier addresses
+  nothing the reader owns. Help text states what the API does and leaves the
+  supporting measurement in the working notes. Entries already in this
+  changelog keep the figures they were written with.
 
 ### Added
 
@@ -1180,7 +1182,8 @@ look:
   command for. The command's `--help` now states both explicitly and points
   at the new `docs guide delegate-entitlement-provisioning` runbook.
 - **`entitlements --help` now documents that some system-builtin
-  entitlements share a canonical ID across apps.** Verified live: the base "Access" entitlement carries the identical id
+  entitlements share a canonical ID across apps.** Verified live: the base
+  "Access" entitlement carries the identical id
   (`287oY0rG4UirjDNFEYguMBvxyim`) on GitHub, Salesforce, Bitbucket Cloud,
   Snowflake, and Google Workspace apps alike (the same pattern observed for
   MCP's "All approved tools"/"Read tools" system toolsets). A
