@@ -2,10 +2,13 @@ package cmd
 
 import (
 	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
 	"strings"
 	"testing"
+
+	"github.com/ConductorOne/c1i/internal/login"
 )
 
 // This repo is public, so fixtures and documentation use placeholders rather
@@ -17,19 +20,27 @@ import (
 // the claim belongs here and the measurement belongs in the working notes.
 
 // c1i's own OAuth client id, needed by the device flow. A product constant, not
-// tenant data.
-const productClientID = "juQSPDsPrdMDpPpR6fGdeLLSs8g"
+// tenant data. Referenced rather than retyped so rotating it can't make the
+// guard reject the product's own value.
+const productClientID = login.C1iClientID
 
-// A platform constant present on every tenant: the builtin
-// "Access" entitlement's shared id, documented because its repetition across
-// apps is expected rather than a data error.
+// The builtin "Access" entitlement's id: a constant compiled into the C1
+// backend and stamped onto every app at creation, so it is the same value on
+// every tenant rather than tenant data. Allowlisted because its repetition
+// across apps is expected, not a data error.
 const sharedAccessEntitlementID = "287oY0rG4UirjDNFEYguMBvxyim"
 
+// objectIDLen is the length of a C1 object id.
+const objectIDLen = 27
+
 var (
-	// Object ids are 27 chars of [a-zA-Z0-9], and only count as data when they
-	// appear as a literal -- a bare token that shape is a Go identifier.
-	// Placeholders here carry a hyphen (user-1111..., cat-2222...) and cannot match.
-	realObjectID = regexp.MustCompile("[\"`']([a-zA-Z0-9]{27})[\"`']")
+	// A copied id is data wherever it sits inside a string literal -- a JSON
+	// value, a request path, a fenced example -- not only when the quotes hug
+	// it. So scan whole quoted/backticked spans and pick out the alphanumeric
+	// tokens of id length within them. Placeholders here carry a hyphen
+	// (user-1111..., cat-2222...), which breaks the token and cannot match.
+	quotedSpan = regexp.MustCompile("\"[^\"\n]*\"|'[^'\n]*'|`[^`]*`")
+	idToken    = regexp.MustCompile(`[a-zA-Z0-9]+`)
 	// Naming the tenant an observation came from adds nothing a reader can use.
 	tenantPhrase = regexp.MustCompile(`(?i)\b(lab|test|demo) tenant\b`)
 	// Hostnames of real tenants.
@@ -39,38 +50,33 @@ var (
 func TestFixturesAndDocsUsePlaceholders(t *testing.T) {
 	allowedID := map[string]bool{productClientID: true, sharedAccessEntitlementID: true}
 
-	err := filepath.Walk("..", func(path string, info os.FileInfo, err error) error {
-		if err != nil {
-			return nil
-		}
-		name := info.Name()
-		if info.IsDir() {
-			// dev/ is gitignored scratch; the rest are not ours to police.
-			if name == ".git" || name == "dev" || name == "node_modules" || name == ".claude" {
-				return filepath.SkipDir
-			}
-			return nil
-		}
-		switch filepath.Ext(name) {
+	scanned := 0
+	for _, path := range trackedFiles(t) {
+		switch filepath.Ext(path) {
 		case ".go", ".md", ".yaml", ".yml", ".json":
 		default:
-			return nil
+			continue
 		}
-		if name == "placeholder_identifiers_test.go" {
-			return nil // this file names the allowlisted constants
+		if filepath.Base(path) == "placeholder_identifiers_test.go" {
+			continue // this file names the allowlisted constants
 		}
-		b, err := os.ReadFile(path) // #nosec G304 -- walking the repo's own tree
+		b, err := os.ReadFile(path) // #nosec G304 -- reading the repo's own tracked files
 		if err != nil {
-			return nil
+			if !os.IsNotExist(err) { // a staged deletion is not a finding
+				t.Errorf("reading %s: %v", path, err)
+			}
+			continue
 		}
+		scanned++
 		body := string(b)
 
-		for _, m := range realObjectID.FindAllStringSubmatch(body, -1) {
-			id := m[1]
-			if allowedID[id] || !looksLikeObjectID(id) {
-				continue
+		for _, span := range quotedSpan.FindAllString(body, -1) {
+			for _, id := range idToken.FindAllString(span, -1) {
+				if len(id) != objectIDLen || allowedID[id] || !looksLikeObjectID(id) {
+					continue
+				}
+				t.Errorf("%s: identifier %q looks copied from a live tenant. Use a placeholder, e.g. user-1111111111111111111111.", path, id)
 			}
-			t.Errorf("%s: identifier %q looks copied from a live tenant. Use a placeholder, e.g. user-1111111111111111111111.", path, id)
 		}
 		if loc := tenantPhrase.FindString(body); loc != "" {
 			t.Errorf("%s: refers to a specific tenant (%q). State the behavior, not where it was seen.", path, loc)
@@ -78,11 +84,37 @@ func TestFixturesAndDocsUsePlaceholders(t *testing.T) {
 		if loc := tenantHost.FindString(body); loc != "" {
 			t.Errorf("%s: contains a tenant hostname (%q). Use example.conductor.one.", path, loc)
 		}
-		return nil
-	})
-	if err != nil {
-		t.Fatalf("walking the repo: %v", err)
 	}
+
+	// Passing over an empty set reads as coverage but proves nothing.
+	if scanned == 0 {
+		t.Fatal("scanned no files; the guard inspected nothing")
+	}
+	t.Logf("scanned %d tracked files", scanned)
+}
+
+// trackedFiles lists the repo's tracked files, relative to this package. Only
+// tracked files publish, and only they are worth policing: dev/ and .claude/
+// hold local scratch but each also tracks a file that ships, so skipping those
+// directories wholesale left published text unscanned.
+func trackedFiles(t *testing.T) []string {
+	t.Helper()
+	// Distinguish "no checkout to inspect" from "git is broken": skipping on any
+	// git failure would silently downgrade this guard to a passing no-op.
+	if _, err := os.Stat(filepath.Join("..", ".git")); err != nil {
+		t.Skipf("not a git checkout (%v), so there is nothing to inspect", err)
+	}
+	out, err := exec.Command("git", "-C", "..", "ls-files", "-z").Output()
+	if err != nil {
+		t.Fatalf("git ls-files failed inside a git checkout: %v", err)
+	}
+	var paths []string
+	for _, p := range strings.Split(string(out), "\x00") {
+		if p != "" {
+			paths = append(paths, filepath.Join("..", p))
+		}
+	}
+	return paths
 }
 
 // looksLikeObjectID separates C1 ids from 27-character Go identifiers and
@@ -103,5 +135,7 @@ func looksLikeObjectID(s string) bool {
 		}
 	}
 	// A C1 id mixes all three densely; a CamelCase identifier has no digits.
+	// Measured: ~5% of real ids miss the digit floor, and lowering it starts
+	// catching ordinary words -- a false negative here is cheaper.
 	return digits >= 2 && upper >= 2 && lower >= 2
 }
