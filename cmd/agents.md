@@ -321,7 +321,8 @@ Two things are irreversible in ways their `--help` doesn't make obvious:
   is a `400`, `catalog must be published to add an access entitlement`; on one
   created with `--visible-to-everyone` it is a `400`,
   `catalog is visible to everyone, cannot add access entitlements`. A
-  catalog created with `--published` accepts them immediately.
+  catalog created with `--published` but not `--visible-to-everyone` accepts
+  them immediately.
 - There is no `access-profiles delete` yet; delete via `c1i api --path
   /api/v1/catalogs/<id> --method DELETE`. It is a soft delete: the catalog
   leaves `access-profiles list`, while `access-profiles get` still returns it at exit `0`
