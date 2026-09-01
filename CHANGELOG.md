@@ -6,6 +6,15 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- **`c1i tasks close` and `c1i tasks reassign`.** An identity can open a task
+  it cannot resolve -- `approve` and `deny` fail with `action not permitted`
+  when the caller is not on the current policy step, while these two succeed.
+  Neither prints a task state: the action endpoints echo the task's state from
+  *before* the action. For `close` that state is the opposite of what happened;
+  for `reassign`, which leaves the state alone, it is merely uninformative.
+
 ### Changed
 
 - **BREAKING — a negative `--limit` or `--page-size` is now a usage error
