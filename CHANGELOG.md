@@ -6,6 +6,14 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed
+
+- **Fixtures and documentation now use placeholder identifiers throughout**,
+  and a test keeps them that way. Placeholders are stable and self-describing;
+  a copied identifier addresses nothing the reader owns. Documentation states
+  what the API does, with the supporting measurements kept in working notes
+  rather than inline.
+
 ### Added
 
 - **`c1i tasks close` and `c1i tasks reassign`.** An identity can open a task
@@ -1172,8 +1180,7 @@ look:
   command for. The command's `--help` now states both explicitly and points
   at the new `docs guide delegate-entitlement-provisioning` runbook.
 - **`entitlements --help` now documents that some system-builtin
-  entitlements share a canonical ID across apps.** Verified live against a
-  test tenant: the base "Access" entitlement carries the identical id
+  entitlements share a canonical ID across apps.** Verified live: the base "Access" entitlement carries the identical id
   (`287oY0rG4UirjDNFEYguMBvxyim`) on GitHub, Salesforce, Bitbucket Cloud,
   Snowflake, and Google Workspace apps alike (the same pattern observed for
   MCP's "All approved tools"/"Read tools" system toolsets). A

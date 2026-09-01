@@ -32,8 +32,8 @@ Owner changes are provisioned ASYNCHRONOUSLY: this call returns immediately,
 but the new owners take a couple of minutes to show up in GET .../ownerids.
 A success here means the request was accepted, not that the owner list is
 already live. Don't check ownership via the "appOwners" field in "apps get":
-it was [] on all 46 apps in the test tenant on the second measurement pass,
-including the 45 that GET .../ownerids reported owners for.
+it read [] on every app checked, including those GET .../ownerids reported
+owners for.
 
 Pass --wait to block and poll GET .../ownerids until every requested
 --user-id appears (or --wait-timeout elapses). Without --wait, behavior is

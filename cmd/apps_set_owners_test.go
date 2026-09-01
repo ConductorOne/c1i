@@ -13,7 +13,7 @@ func TestBuildSetOwnersBody(t *testing.T) {
 		in   []string
 		want string
 	}{
-		{"single", []string{"3CPjiTqq4nDUa3cE8A8VdNu3rqL"}, `{"userIds":["3CPjiTqq4nDUa3cE8A8VdNu3rqL"]}`},
+		{"single", []string{"user-1111111111111111111111"}, `{"userIds":["user-1111111111111111111111"]}`},
 		{"multiple", []string{"a", "b"}, `{"userIds":["a","b"]}`},
 	}
 	for _, tc := range cases {
