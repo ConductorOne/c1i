@@ -346,11 +346,10 @@ provisionerPolicy.delegated update is the actual provisioning trigger.
 `
 
 // guideConfigureNewApp walks through creating a manually-managed app
-// container, setting its owners, and creating a custom entitlement for it
-// via the 3-call resource-type/resource/entitlement sequence (no first-class
-// "entitlements create" exists). Derived from cmd/apps_create.go,
-// cmd/apps_set_owners.go, cmd/entitlements_get.go, cmd/entitlements_list.go,
-// and cmd/api.go.
+// container, setting its owners, and creating a custom entitlement for it.
+// Derived from cmd/apps_create.go, cmd/apps_set_owners.go,
+// cmd/entitlements_create.go, cmd/entitlements_get.go,
+// cmd/entitlements_list.go, and cmd/api.go.
 const guideConfigureNewApp = `# Configure a new app
 
 Stand up an app container, assign the C1 users who administer it, and give it
@@ -412,32 +411,55 @@ here removes yourself. Use "apps add-owner" instead to add without replacing.
 
 ### 3. Create a custom entitlement to grant
 
-There is no "entitlements create" — only "entitlements get"/"list". Creating
-one for a manually-managed app is a 3-call sequence instead: a resource
-type, a resource under it, then the entitlement pointing at both. No
-first-class command covers this, so each call goes through "c1i api":
+An entitlement points at an app resource, which lives under an app resource
+type, so creating one is three POSTs. "entitlements create" sends all three:
 
-    c1i api --path=/api/v1/apps/$APP_ID/resource_types --body='{"displayName":"Payroll role","resourceType":"CUSTOM"}'
-    RT_ID=<appResourceType.id from the response>
-
-    c1i api --path=/api/v1/apps/$APP_ID/resource_types/$RT_ID/resources --body='{"displayName":"Payroll admin"}'
-    RES_ID=<appResource.id from the response>
-
-    c1i api --path=/api/v1/apps/$APP_ID/entitlements --body='{"displayName":"Payroll admin","slug":"member","alias":"payroll_admin","appResourceTypeId":"'$RT_ID'","appResourceId":"'$RES_ID'"}'
+    c1i entitlements create --app-id "$APP_ID" \
+      --display-name "Payroll admin" --resource-type-display-name "Payroll role" \
+      --slug member --alias payroll_admin --owner-id "$OWNER_USER_ID"
     ENT_ID=<appEntitlementView.appEntitlement.id from the response>
 
-resourceType is one of ROLE|GROUP|LICENSE|PROJECT|CATALOG|CUSTOM|VAULT|PROFILE_TYPE.
-Omitting a duration defaults the entitlement to standing access
-(durationUnset); pass a durationGrant field (e.g. 3600s) instead for
-time-boxed access.
+The response echoes the ids of the other two objects in that same payload:
+
+    RT_ID=<appEntitlementView.appEntitlement.appResourceTypeId from the response>
+    RES_ID=<appEntitlementView.appEntitlement.appResourceId from the response>
+
+Reuse them for the next entitlement rather than minting a duplicate resource
+type per entitlement:
+
+    c1i entitlements create --app-id "$APP_ID" --display-name "Payroll viewer" \
+      --resource-type-id "$RT_ID"                       # new resource under an existing type
+    c1i entitlements create --app-id "$APP_ID" --display-name "Payroll viewer (RO)" \
+      --resource-type-id "$RT_ID" --resource-id "$RES_ID"   # entitlement only
+
+--resource-type (the kind of resource type to create, default CUSTOM) is one
+of ROLE, GROUP, LICENSE, PROJECT, CATALOG, CUSTOM, VAULT, PROFILE_TYPE.
+
+--owner-id is repeatable and rides along in the create request, so entitlement
+owners need no follow-up call -- but the read lags the write the same way app
+owners do (one measured create took 116s to show up on
+"GET .../entitlements/$ENT_ID/ownerids"), so don't read that as a failure.
+
+The three writes are not atomic and nothing is rolled back: if a later one
+fails, the objects the earlier ones created still exist, and the error names
+them and the flags that reuse them, e.g. "(already created: re-run with
+--resource-type-id <id> to reuse instead of duplicating)". "--dry-run"
+previews all three requests.
+
+Omitting --duration-grant defaults the entitlement to standing access
+(durationUnset). For time-boxed access pass a protobuf duration -- seconds
+with an "s" suffix, e.g. "--duration-grant 3600s"; a Go-style "1h" is refused
+by the server with "invalid google.protobuf.Duration value".
 
 ## Verify
 
     c1i entitlements list --app-id "$APP_ID"
 
 Auto-paginates to completion; expect the builtin "Access" row plus your new
-entitlement, both present immediately — the entitlement search index is not
-lagged the way owners are.
+entitlement. The entitlement search index is not lagged the way owners are --
+three measured creates were listed within a second -- but it isn't
+transactional either: a fourth was missing from a list issued immediately
+after it. Re-run before concluding the create failed.
 
     c1i entitlements get "$ENT_ID" --app-id "$APP_ID"
 
@@ -519,8 +541,9 @@ you'd take it back.
 
       c1i auth whoami
 
-- An app and an entitlement that already exist to request against. There is
-  no "entitlements create" — find real ones:
+- An app and an entitlement that already exist to request against. Find real
+  ones — "entitlements create" only makes manually-managed ones, which is not
+  what this workflow is for (see "c1i docs guide configure-new-app"):
 
       c1i apps list
       APP_ID=<id of the target app>

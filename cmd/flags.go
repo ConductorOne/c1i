@@ -244,3 +244,25 @@ func requireNonEmpty(cmd *cobra.Command, names ...string) error {
 		return &usageError{fmt.Errorf("flags %s require non-empty values", strings.Join(missing, ", "))}
 	}
 }
+
+// requireNonEmptyIfSet errors when a flag was passed with an empty value, while
+// leaving an unset flag alone. Distinct from requireNonEmpty, which is for
+// flags that must always be present: use this for an *optional* flag whose
+// empty value would change behavior rather than fail — an id flag selecting an
+// existing object (`--resource-type-id "$RT_ID"` with RT_ID unset would
+// silently create a second one), or one that scopes a read.
+func requireNonEmptyIfSet(cmd *cobra.Command, name string) (string, error) {
+	v, _ := cmd.Flags().GetString(name)
+	if v == "" && cmd.Flags().Changed(name) {
+		return "", &usageError{fmt.Errorf("flag --%s requires a non-empty value", name)}
+	}
+	return v, nil
+}
+
+// flagOrDefault returns a string flag's value, falling back to def when unset.
+func flagOrDefault(cmd *cobra.Command, name, def string) string {
+	if v, _ := cmd.Flags().GetString(name); v != "" {
+		return v
+	}
+	return def
+}

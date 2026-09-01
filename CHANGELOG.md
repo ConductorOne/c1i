@@ -6,6 +6,20 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- **`c1i entitlements create`.** Modelling a manually-managed app took three
+  raw `api` calls -- resource type, resource, then entitlement -- with the ids
+  hand-carried between them. One command now does it, and reuses objects you
+  already have: pass `--resource-type-id` to skip the first call, and
+  `--resource-id` as well to skip the second. `--owner-id` is set
+  inline rather than needing a follow-up call, and `--duration-grant` is a flag
+  rather than a hand-written body field.
+
+  On a partial failure nothing is rolled back; the error names what that run
+  created and the flags to re-run with, so a retry reuses those objects
+  instead of duplicating them. `--dry-run` previews all three requests.
+
 ### Changed
 
 - **BREAKING — a negative `--limit` or `--page-size` is now a usage error
