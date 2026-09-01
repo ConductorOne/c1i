@@ -125,8 +125,12 @@ required, so `--resource-id` without `--resource-type-id` is rejected at exit
 `CUSTOM`, `VAULT` or `PROFILE_TYPE` (case-insensitive here, uppercase on the
 wire) and describes the resource type this command creates, so passing it
 together with `--resource-type-id` is a usage error rather than a silently
-ignored flag. `--owner-id` is repeatable and goes inline in the create request,
-so no follow-up call is needed. `--duration-grant` takes a protobuf duration —
+ignored flag. Only `CUSTOM` can repeat on one app: a second resource type of
+any other kind fails with a 500 (exit `6`, though retrying never helps) saying
+`app resource type already exists`, so reuse the existing one with
+`--resource-type-id`. `--owner-id` is repeatable and goes inline in the create
+request, so no follow-up call is needed; an empty one is a usage error rather
+than an owner quietly dropped. `--duration-grant` takes a protobuf duration —
 seconds with an `s` suffix, e.g. `3600s`; a Go-style `1h` is refused by the
 server. Omit it for standing access.
 
@@ -134,8 +138,9 @@ server. Omit it for standing access.
 `NEW_APP_RESOURCE_TYPE_ID`/`NEW_APP_RESOURCE_ID` where an id only exists after
 a real preceding step. There is no rollback: if a later step fails, the objects
 the earlier ones created still exist, and the error names them along with the
-flags that reuse them. The created entitlement comes back as pretty JSON under
-`appEntitlementView` (`--fields` is never applied to mutation output); it echoes
+flags that reuse them and the create-only flags the retry has to drop. The
+created entitlement comes back as pretty JSON under `appEntitlementView`
+(`--fields` is never applied to mutation output); it echoes
 `appResourceTypeId`/`appResourceId` and expands both objects, so every id the
 command touched is in that one payload.
 

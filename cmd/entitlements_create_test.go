@@ -176,6 +176,36 @@ func TestEntitlementCreatePlanUsageErrors(t *testing.T) {
 			[]string{"--app-id", "app1", "--display-name", "e", "--resource-type-id", "rt1", "--resource-id", ""},
 			"flag --resource-id requires a non-empty value",
 		},
+		{
+			// Both display-name overrides would otherwise fall back to
+			// --display-name and mis-name the object.
+			"empty resource type display name",
+			[]string{"--app-id", "app1", "--display-name", "e", "--resource-type-display-name", ""},
+			"flag --resource-type-display-name requires a non-empty value",
+		},
+		{
+			"empty resource display name",
+			[]string{"--app-id", "app1", "--display-name", "e", "--resource-display-name", ""},
+			"flag --resource-display-name requires a non-empty value",
+		},
+		{
+			// An unset shell variable: the entitlement would otherwise be
+			// created ownerless at exit 0, and an async owner read cannot tell
+			// that apart from "not provisioned yet".
+			"empty owner id",
+			[]string{"--app-id", "app1", "--display-name", "e", "--owner-id", ""},
+			"--owner-id values must be non-empty",
+		},
+		{
+			"empty owner id alongside a real one",
+			[]string{"--app-id", "app1", "--display-name", "e", "--owner-id", "", "--owner-id", "u1"},
+			"--owner-id values must be non-empty",
+		},
+		{
+			"whitespace-only owner id",
+			[]string{"--app-id", "app1", "--display-name", "e", "--owner-id", "  "},
+			"--owner-id values must be non-empty",
+		},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -498,6 +528,83 @@ func TestNormalizeResourceType(t *testing.T) {
 	for in, want := range cases {
 		if got := normalizeResourceType(in); got != want {
 			t.Errorf("normalizeResourceType(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
+
+// TestEntitlementCreateRetryRemediationIsAccepted pins that the retry the
+// failure message hands back is a command that works: the ids it names make
+// the create-only flags of the original invocation a usage error, so the
+// message has to name those for dropping too.
+func TestEntitlementCreateRetryRemediationIsAccepted(t *testing.T) {
+	s := newEntitlementCreateServer(t, true)
+	args := []string{
+		"--app-id", "app1", "--display-name", "e",
+		"--resource-type", "ROLE",
+		"--resource-type-display-name", "rt name",
+		"--resource-display-name", "res name",
+	}
+
+	cmd := &cobra.Command{}
+	cmd.SetOut(new(bytes.Buffer))
+	cmd.SetContext(context.Background())
+	runErr := mustPlan(t, args...).run(cmd, client.NewForTesting(s.srv.URL, s.srv.Client()))
+	if runErr == nil {
+		t.Fatal("expected the entitlement create to fail")
+	}
+
+	add, drop := parseRemediation(t, runErr.Error())
+	retry := append(withoutFlags(args, drop), add...)
+	if _, err := buildEntitlementCreatePlan(newEntitlementCreateCmd(t, retry...)); err != nil {
+		t.Fatalf("the remediation %q produces %v, so the retry it advises exits 2", runErr, err)
+	}
+}
+
+// parseRemediation pulls the flags to add and the flags to drop out of the
+// "(already created: ...)" tail.
+func parseRemediation(t *testing.T, msg string) (add, drop []string) {
+	t.Helper()
+	_, rest, ok := strings.Cut(msg, "re-run with ")
+	if !ok {
+		t.Fatalf("error %q names no retry", msg)
+	}
+	rest, _, ok = strings.Cut(rest, " to reuse instead of duplicating)")
+	if !ok {
+		t.Fatalf("error %q has no remediation tail", msg)
+	}
+	addPart, dropPart, hasDrop := strings.Cut(rest, ", dropping ")
+	if hasDrop {
+		drop = strings.Fields(strings.TrimSuffix(dropPart, ","))
+	}
+	return strings.Fields(addPart), drop
+}
+
+// withoutFlags removes each named flag and its value from an argument list of
+// "--flag value" pairs.
+func withoutFlags(args, remove []string) []string {
+	var kept []string
+	for i := 0; i+1 < len(args); i += 2 {
+		if !slices.Contains(remove, args[i]) {
+			kept = append(kept, args[i], args[i+1])
+		}
+	}
+	return kept
+}
+
+// TestResourceTypeSingletonIsDocumented holds the server's own error string in
+// every doc that promises the restriction, so it stays greppable from both
+// directions. Reproduced live: a second ROLE, GROUP or VAULT resource type on
+// one app 500s, while a second CUSTOM one succeeds.
+func TestResourceTypeSingletonIsDocumented(t *testing.T) {
+	const serverError = "app resource type already exists"
+	docs := map[string]string{
+		"entitlements create --help": entitlementsCreateCmd.Long,
+		"README.md":                  readDocFile(t, "../README.md"),
+		"cmd/agents.md (embedded)":   agentsTemplate,
+	}
+	for name, doc := range docs {
+		if !strings.Contains(doc, serverError) {
+			t.Errorf("%s does not quote the server's %q error", name, serverError)
 		}
 	}
 }

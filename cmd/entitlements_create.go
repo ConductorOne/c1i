@@ -27,7 +27,10 @@ const (
 var entitlementsCreateCmd = &cobra.Command{
 	Use:   "create",
 	Short: "Create an app entitlement, with its resource type and resource (pretty JSON)",
-	Long: `Create an app entitlement on a manually-managed app.
+	Long: `Create an app entitlement, plus the app resource type and resource it
+points at. The app itself need not be manually managed -- the entitlement this
+creates is (isManuallyManaged is true on it, false on the app it was created
+on).
 
 An entitlement points at an app resource, which lives under an app resource
 type, so this is up to three POSTs in order:
@@ -56,6 +59,10 @@ it together with --resource-type-id is a usage error rather than a silently
 ignored flag. Case-insensitive here; the API itself takes only the uppercase
 form. One of:
   ` + strings.Join(resourceTypeKinds, ", ") + `
+Only CUSTOM can repeat on one app: a second resource type of any other kind
+fails with a 500 (exit 6, though retrying never helps):
+  app resource type already exists
+Reuse the one that exists with --resource-type-id instead.
 
 Omitting --duration-grant leaves the entitlement at standing access
 (durationUnset in the response). It takes a protobuf duration, not a Go one --
@@ -63,7 +70,8 @@ seconds with an "s" suffix, e.g. 3600s. "1h" is refused by the server with:
   invalid google.protobuf.Duration value "1h"
 
 Assign owners inline with --owner-id: the create request carries
-appEntitlementOwnerIds, so no follow-up call is needed. Owner provisioning is
+appEntitlementOwnerIds, so no follow-up call is needed. An empty --owner-id is
+a usage error, not an owner quietly dropped. Owner provisioning is
 asynchronous — one measured create took 116s to read back on
 "GET /api/v1/apps/{app-id}/entitlements/{id}/ownerids".
 
@@ -72,9 +80,10 @@ after a real step 1 or 2 print as ` + newResourceTypeIDPlaceholder + `/` +
 		newResourceIDPlaceholder + `.
 
 There is no rollback. The three creates are independent, so if step 2 or 3
-fails the objects earlier steps created still exist; the error names them and
-the flags that reuse them, verbatim:
-  (already created: re-run with --resource-type-id <id> to reuse instead of duplicating)
+fails the objects earlier steps created still exist; the error names them, the
+flags that reuse them, and the create-only flags a retry has to drop (a reused
+id makes those a usage error), verbatim:
+  (already created: re-run with --resource-type-id <id>, dropping --resource-type-display-name, to reuse instead of duplicating)
 
 Prints the created entitlement as pretty JSON under "appEntitlementView"
 (--fields is not applied to mutation output). The response echoes
@@ -126,6 +135,12 @@ type entitlementCreatePlan struct {
 	resourceID   string
 	resourceBody map[string]any
 
+	// Create-only flags this invocation passed, per object. A retry that
+	// reuses the object has to drop them; rejectFlagsForReusedObject refuses
+	// them alongside the id createdSoFar hands back.
+	typeOnlyFlags     []string
+	resourceOnlyFlags []string
+
 	// entitlementBody carries everything except appResourceTypeId and
 	// appResourceId, which are only known once the steps above have run.
 	entitlementBody map[string]any
@@ -167,6 +182,14 @@ func buildEntitlementCreatePlan(cmd *cobra.Command) (*entitlementCreatePlan, err
 		return nil, err
 	}
 
+	// Same for the display-name overrides: an explicit "" would fall back to
+	// --display-name and mis-name the object rather than fail.
+	for _, n := range []string{"resource-type-display-name", "resource-display-name"} {
+		if _, err := requireNonEmptyIfSet(cmd, n); err != nil {
+			return nil, err
+		}
+	}
+
 	p := &entitlementCreatePlan{
 		appID:           appID,
 		resourceTypeID:  resourceTypeID,
@@ -179,11 +202,13 @@ func buildEntitlementCreatePlan(cmd *cobra.Command) (*entitlementCreatePlan, err
 			"displayName":  flagOrDefault(cmd, "resource-type-display-name", displayName),
 			"resourceType": normalizeResourceType(resourceType),
 		}
+		p.typeOnlyFlags = changedFlags(cmd, "resource-type", "resource-type-display-name")
 	}
 	if resourceID == "" {
 		p.resourceBody = map[string]any{
 			"displayName": flagOrDefault(cmd, "resource-display-name", displayName),
 		}
+		p.resourceOnlyFlags = changedFlags(cmd, "resource-display-name")
 	}
 
 	// Flag name -> request field, equal except where the wire key is camelCase.
@@ -197,7 +222,20 @@ func buildEntitlementCreatePlan(cmd *cobra.Command) (*entitlementCreatePlan, err
 			p.entitlementBody[key] = v
 		}
 	}
-	if owners, _ := cmd.Flags().GetStringSlice("owner-id"); len(owners) > 0 {
+	// An owner id from an unset shell variable would otherwise create the
+	// entitlement with fewer owners than asked for, and owner reads are async,
+	// so nothing downstream can tell that apart from "not provisioned yet".
+	// pflag's CSV round-trip drops a lone `--owner-id ""` entirely, so an empty
+	// owner arrives either as a missing value or an empty one.
+	owners, _ := cmd.Flags().GetStringArray("owner-id")
+	empty := cmd.Flags().Changed("owner-id") && len(owners) == 0
+	for _, id := range owners {
+		empty = empty || strings.TrimSpace(id) == ""
+	}
+	if empty {
+		return nil, &usageError{fmt.Errorf("--owner-id values must be non-empty")}
+	}
+	if len(owners) > 0 {
 		p.entitlementBody["appEntitlementOwnerIds"] = owners
 	}
 
@@ -211,12 +249,21 @@ func rejectFlagsForReusedObject(cmd *cobra.Command, reusedID, reusedFlag string,
 	if reusedID == "" {
 		return nil
 	}
-	for _, n := range names {
-		if cmd.Flags().Changed(n) {
-			return &usageError{fmt.Errorf("--%s only applies when this command creates that object; drop it or drop %s", n, reusedFlag)}
-		}
+	if passed := changedFlags(cmd, names...); len(passed) > 0 {
+		return &usageError{fmt.Errorf("%s only applies when this command creates that object; drop it or drop %s", passed[0], reusedFlag)}
 	}
 	return nil
+}
+
+// changedFlags returns the named flags the caller actually passed, "--"-prefixed.
+func changedFlags(cmd *cobra.Command, names ...string) []string {
+	var passed []string
+	for _, n := range names {
+		if cmd.Flags().Changed(n) {
+			passed = append(passed, "--"+n)
+		}
+	}
+	return passed
 }
 
 // normalizeResourceType upper-cases the enum name so "custom" and
@@ -285,21 +332,30 @@ func (p *entitlementCreatePlan) run(cmd *cobra.Command, c *client.Client) error 
 	return writeRawObject(cmd, data)
 }
 
-// createdSoFar names the objects THIS invocation created before failing, and
-// the flags that reuse them. Nothing is rolled back: a compensating delete can
-// fail too, which would leave a worse state described by a less honest message.
+// createdSoFar names the objects THIS invocation created before failing, the
+// flags that reuse them, and the create-only flags the retry must drop.
+// Nothing is rolled back: a compensating delete can fail too, which would
+// leave a worse state described by a less honest message.
 func (p *entitlementCreatePlan) createdSoFar(resourceTypeID, resourceID string) string {
-	var parts []string
+	var parts, drop []string
 	if p.resourceTypeBody != nil && resourceTypeID != "" {
 		parts = append(parts, "--resource-type-id "+resourceTypeID)
+		drop = append(drop, p.typeOnlyFlags...)
 	}
 	if p.resourceBody != nil && resourceID != "" {
 		parts = append(parts, "--resource-id "+resourceID)
+		drop = append(drop, p.resourceOnlyFlags...)
 	}
 	if len(parts) == 0 {
 		return ""
 	}
-	return " (already created: re-run with " + strings.Join(parts, " ") + " to reuse instead of duplicating)"
+	msg := " (already created: re-run with " + strings.Join(parts, " ")
+	if len(drop) > 0 {
+		// Named, not merely implied: the reused id makes these a usage error,
+		// so a retry that kept them would exit 2.
+		msg += ", dropping " + strings.Join(drop, " ") + ","
+	}
+	return msg + " to reuse instead of duplicating)"
 }
 
 // previewRequests previews every request in the sequence, not just the first —
@@ -373,7 +429,10 @@ func addEntitlementCreateFlags(cmd *cobra.Command) {
 	f.String("slug", "", "Slug for the new entitlement (e.g. member)")
 	f.String("alias", "", "Alias for the new entitlement; exact-match queryable")
 	f.String("duration-grant", "", "Maximum grant duration as a protobuf duration, e.g. 3600s; omit for standing access")
-	f.StringSlice("owner-id", nil, "C1 user ID to own the new entitlement (repeatable)")
+	// StringArray, not StringSlice: the slice parser drops an empty value
+	// outright, so `--owner-id "" --owner-id U` would lose the empty one
+	// before this command could reject it.
+	f.StringArray("owner-id", nil, "C1 user ID to own the new entitlement (repeatable)")
 	f.String("resource-type", "CUSTOM", "Kind of resource type to create: "+strings.Join(resourceTypeKinds, ", "))
 	f.String("resource-type-id", "", "Existing app resource type to reuse instead of creating one")
 	f.String("resource-type-display-name", "", "Display name for the resource type this command creates (default: --display-name)")

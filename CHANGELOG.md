@@ -17,8 +17,17 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   rather than a hand-written body field.
 
   On a partial failure nothing is rolled back; the error names what that run
-  created and the flags to re-run with, so a retry reuses those objects
-  instead of duplicating them. `--dry-run` previews all three requests.
+  created, the flags to re-run with, and the create-only flags that retry has
+  to drop, so the command it prints is one that works. `--dry-run` previews
+  all three requests.
+
+  Empty values are usage errors (exit 2) before anything is sent, rather than
+  silent fallbacks: `--owner-id ""` from an unset shell variable would have
+  created an ownerless entitlement at exit 0, and an empty
+  `--resource-type-display-name`/`--resource-display-name` would have quietly
+  reused `--display-name`. Only a `CUSTOM` resource type can repeat on one
+  app; the help now says so, quoting the server's own
+  `app resource type already exists`.
 
 ### Changed
 

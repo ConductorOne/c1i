@@ -245,8 +245,12 @@ One command sends more than one write: `entitlements create` POSTs a resource
 type, a resource, then the entitlement, skipping the steps whose id you supply
 via `--resource-type-id`/`--resource-id`. Its `--dry-run` previews all three.
 There is no rollback, so a failure part-way through leaves the earlier objects
-behind; the error names them and the flags that reuse them, and re-running
-without those flags creates duplicates.
+behind; the error names them, the flags that reuse them, and the create-only
+flags the retry has to drop, and re-running without those flags creates
+duplicates. Only a `CUSTOM` resource type can repeat on one app: a second
+`--resource-type` of any other kind fails with a 500 (exit `6`, though
+retrying never helps) saying `app resource type already exists` -- reuse the
+existing type with `--resource-type-id`.
 
 ## Things that will surprise you
 
