@@ -41,11 +41,8 @@ var (
 	idToken = regexp.MustCompile(`[a-zA-Z0-9]+`)
 	// Naming the tenant an observation came from adds nothing a reader can use.
 	tenantPhrase = regexp.MustCompile(`(?i)\b(lab|test|demo) tenant\b`)
-	// The tenant name, bare or in a hostname. The maintainer's `leet-c1` handle
-	// is exempt: it is in every commit's author metadata already, so rejecting it
-	// in file text buys nothing.
-	tenantHost   = regexp.MustCompile(`(?i)\bleet\b`)
-	tenantHandle = regexp.MustCompile(`(?i)\bleet-c1\b`)
+	// The tenant name, bare or in a hostname.
+	tenantHost = regexp.MustCompile(`(?i)\bleet\b`)
 )
 
 func TestFixturesAndDocsUsePlaceholders(t *testing.T) {
@@ -80,8 +77,7 @@ func TestFixturesAndDocsUsePlaceholders(t *testing.T) {
 		if loc := tenantPhrase.FindString(body); loc != "" {
 			t.Errorf("%s: refers to a specific tenant (%q). State the behavior, not where it was seen.", path, loc)
 		}
-		// Blank the exempt handle first so its "leet" does not trip the check.
-		if loc := tenantHost.FindString(tenantHandle.ReplaceAllString(body, "")); loc != "" {
+		if loc := tenantHost.FindString(body); loc != "" {
 			t.Errorf("%s: names the tenant (%q). Use example.conductor.one, or a placeholder.", path, loc)
 		}
 	}
