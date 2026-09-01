@@ -39,12 +39,12 @@ var (
 	// it. So scan whole quoted/backticked spans and pick out the alphanumeric
 	// tokens of id length within them. Placeholders here carry a hyphen
 	// (user-1111..., cat-2222...), which breaks the token and cannot match.
-	quotedSpan = regexp.MustCompile("\"[^\"\n]*\"|'[^'\n]*'|`[^`]*`")
-	idToken    = regexp.MustCompile(`[a-zA-Z0-9]+`)
+	idToken = regexp.MustCompile(`[a-zA-Z0-9]+`)
 	// Naming the tenant an observation came from adds nothing a reader can use.
 	tenantPhrase = regexp.MustCompile(`(?i)\b(lab|test|demo) tenant\b`)
-	// Hostnames of real tenants.
-	tenantHost = regexp.MustCompile(`(?i)\bleet\b|\bleet\.conductor\.one\b`)
+	// The tenant name, anywhere: bare, in a hostname, or inside a handle that
+	// embeds it. All three put it in a public repo.
+	tenantHost = regexp.MustCompile(`(?i)\bleet\b`)
 )
 
 func TestFixturesAndDocsUsePlaceholders(t *testing.T) {
@@ -70,13 +70,11 @@ func TestFixturesAndDocsUsePlaceholders(t *testing.T) {
 		scanned++
 		body := string(b)
 
-		for _, span := range quotedSpan.FindAllString(body, -1) {
-			for _, id := range idToken.FindAllString(span, -1) {
-				if len(id) != objectIDLen || allowedID[id] || !looksLikeObjectID(id) {
-					continue
-				}
-				t.Errorf("%s: identifier %q looks copied from a live tenant. Use a placeholder, e.g. user-1111111111111111111111.", path, id)
+		for _, id := range idToken.FindAllString(body, -1) {
+			if len(id) != objectIDLen || allowedID[id] || !looksLikeObjectID(id) {
+				continue
 			}
+			t.Errorf("%s: identifier %q looks copied from a live tenant. Use a placeholder, e.g. user-1111111111111111111111.", path, id)
 		}
 		if loc := tenantPhrase.FindString(body); loc != "" {
 			t.Errorf("%s: refers to a specific tenant (%q). State the behavior, not where it was seen.", path, loc)
@@ -118,9 +116,11 @@ func trackedFiles(t *testing.T) []string {
 }
 
 // looksLikeObjectID separates C1 ids from 27-character Go identifiers and
-// English words, which the length check alone cannot tell apart.
+// English words, which the length check alone cannot tell apart. Go test names
+// are excluded by prefix: TestAPIEmpty200BodySucceeds is 27 chars and satisfies
+// the character mix, and this repo backticks test names in docs.
 func looksLikeObjectID(s string) bool {
-	if strings.Contains(s, "_") {
+	if strings.HasPrefix(s, "Test") && len(s) > 4 && s[4] >= 'A' && s[4] <= 'Z' {
 		return false
 	}
 	var digits, upper, lower int
