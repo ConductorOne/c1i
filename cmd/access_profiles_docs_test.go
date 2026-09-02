@@ -35,10 +35,16 @@ var visibilityBindingSources = []string{
 	"agents.md",
 }
 
-// blockSplit breaks a doc into blank-line-separated blocks, so a claim must
-// carry its own qualifier rather than borrowing one from a neighbouring
-// release entry. A byte window could not distinguish the two.
-var blockSplit = regexp.MustCompile(`\n\s*\n`)
+// blockSplit breaks a doc where a claim can start: a blank line, or a list
+// item. Blank lines alone are not enough — a markdown list has none between
+// its items, so agents.md's gotcha list was one 5.5KB block and a new bullet
+// could borrow a clause 4,900 characters away.
+var blockSplit = regexp.MustCompile(`\n\s*\n|\n(?:\s*(?:[-*]|\d+\.)\s)`)
+
+// fencedBlock matches a fenced code block. A transcript of the server's error
+// is an example, not a claim, and cannot carry explanatory prose, so requiring
+// the clause inside one would fail on correct docs.
+var fencedBlock = regexp.MustCompile("(?s)```.*?```")
 
 func TestVisibilityBindingClaimStaysQualified(t *testing.T) {
 	if len(visibilityBindingSources) == 0 {
@@ -57,6 +63,7 @@ func TestVisibilityBindingClaimStaysQualified(t *testing.T) {
 func checkQualified(t *testing.T, path, raw string) {
 	t.Helper()
 
+	// Quotes may appear anywhere, transcripts included; claims may not.
 	whole := flatten(raw)
 	for _, quote := range []string{orderingQuote, visibleQuote} {
 		if !strings.Contains(whole, quote) {
@@ -65,7 +72,7 @@ func checkQualified(t *testing.T, path, raw string) {
 	}
 
 	stating := 0
-	for _, block := range blockSplit.Split(raw, -1) {
+	for _, block := range blockSplit.Split(fencedBlock.ReplaceAllString(raw, ""), -1) {
 		flat := flatten(block)
 		if !strings.Contains(flat, orderingQuote) {
 			continue
@@ -73,7 +80,7 @@ func checkQualified(t *testing.T, path, raw string) {
 		stating++
 		if !strings.Contains(strings.ToLower(flat), qualifier) {
 			t.Errorf("%s states the ordering without the exact clause %q in the same block; "+
-				"publishing alone is not sufficient", path, qualifier)
+				"publishing alone is not sufficient. Block begins: %q", path, qualifier, excerpt(flat))
 		}
 	}
 	if stating == 0 {
@@ -90,4 +97,12 @@ func flagUsages(cmd *cobra.Command) string {
 		b.WriteString("\n\n")
 	})
 	return b.String()
+}
+
+// excerpt trims a block to something short enough to name it in a failure.
+func excerpt(flat string) string {
+	if len(flat) > 90 {
+		return flat[:90] + "…"
+	}
+	return flat
 }

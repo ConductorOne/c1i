@@ -21,8 +21,7 @@ top-level expanded.
 A get carries two things "access-profiles list" rows leave out: the catalog's
 accessEntitlements — the visibility bindings that decide who can see it, empty
 when there are none — and a memberCount, which the list endpoint reports as 0
-for every
-catalog.`,
+for every catalog.`,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		baseURL, err := GetBaseURL()
