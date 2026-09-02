@@ -18,8 +18,8 @@ import (
 const ownerWaitPollInterval = 12 * time.Second
 
 // setOwnersSuccessFmt is the PUT-accepted confirmation. Points at "apps
-// owners", not "apps get": appOwners was [] on all 46 apps measured, 45 of
-// which did have owners.
+// owners", not "apps get": appOwners reads [] even for apps that do have
+// owners.
 const setOwnersSuccessFmt = "Set %d owner(s) on app %s (provisioning is async; check with \"c1i apps owners %s\" in a minute or two).\n"
 
 var appsSetOwnersCmd = &cobra.Command{
@@ -32,8 +32,8 @@ Owner changes are provisioned ASYNCHRONOUSLY: this call returns immediately,
 but the new owners take a couple of minutes to show up in GET .../ownerids.
 A success here means the request was accepted, not that the owner list is
 already live. Don't check ownership via the "appOwners" field in "apps get":
-it was [] on all 46 apps in the test tenant on the second measurement pass,
-including the 45 that GET .../ownerids reported owners for.
+it read [] on every app checked, including those GET .../ownerids reported
+owners for.
 
 Pass --wait to block and poll GET .../ownerids until every requested
 --user-id appears (or --wait-timeout elapses). Without --wait, behavior is
