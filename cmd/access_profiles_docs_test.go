@@ -35,16 +35,17 @@ var visibilityBindingSources = []string{
 	"agents.md",
 }
 
-// blockSplit breaks a doc where a claim can start: a blank line, or a list
-// item. Blank lines alone are not enough — a markdown list has none between
-// its items, so agents.md's gotcha list was one 5.5KB block and a new bullet
-// could borrow a clause 4,900 characters away.
-var blockSplit = regexp.MustCompile(`\n\s*\n|\n(?:\s*(?:[-*]|\d+\.)\s)`)
+// blockSplit breaks a doc where a claim can start: a blank line, a list item
+// in any of CommonMark's marker forms, or a table row. Blank lines alone are
+// not enough — a list has none between its items, and neither does a table, so
+// either would be one block a new claim could borrow a distant clause from.
+var blockSplit = regexp.MustCompile(`\n\s*\n|\n\s*(?:[-*+]|\d+[.)])\s|\n\s*\|`)
 
-// fencedBlock matches a fenced code block. A transcript of the server's error
-// is an example, not a claim, and cannot carry explanatory prose, so requiring
-// the clause inside one would fail on correct docs.
-var fencedBlock = regexp.MustCompile("(?s)```.*?```")
+// fencedBlock matches a fenced code block in either marker form. A transcript
+// of the server's error is an example, not a claim, and cannot carry
+// explanatory prose, so requiring the clause inside one would fail on correct
+// docs. Indented code blocks are not exempt; this repo fences.
+var fencedBlock = regexp.MustCompile("(?s)```.*?```|(?s)~~~.*?~~~")
 
 func TestVisibilityBindingClaimStaysQualified(t *testing.T) {
 	if len(visibilityBindingSources) == 0 {
