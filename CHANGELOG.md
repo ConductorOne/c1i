@@ -6,6 +6,16 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed
+
+- **Fixtures and command documentation now use placeholder identifiers**, and
+  a test keeps them that way: it rejects tenant-copied object ids, tenant
+  hostnames, and prose naming the tenant an observation came from.
+  Placeholders are stable and self-describing; a copied identifier addresses
+  nothing the reader owns. Help text states what the API does and leaves the
+  supporting measurement in the working notes. Entries already in this
+  changelog keep the figures they were written with.
+
 ### Added
 
 - **`c1i access-profiles` — list, get and create access profiles**, which the
@@ -37,25 +47,6 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   The sub-resource routes (requestable entitlements, visibility bindings,
   bundle automation) and `access-profiles delete`/`update` are not yet wrapped; reach
   them through `c1i api`.
-
-- **`c1i tasks close` and `c1i tasks reassign`.** An identity can open a task
-  it cannot resolve -- `approve` and `deny` fail with `action not permitted`
-  when the caller is not on the current policy step, while these two succeed.
-  Neither prints a task state: the action endpoints echo the task's state from
-  *before* the action. For `close` that state is the opposite of what happened;
-  for `reassign`, which leaves the state alone, it is merely uninformative.
-
-### Changed
-
-- **Fixtures and command documentation now use placeholder identifiers**, and
-  a test keeps them that way: it rejects tenant-copied object ids, tenant
-  hostnames, and prose naming the tenant an observation came from.
-  Placeholders are stable and self-describing; a copied identifier addresses
-  nothing the reader owns. Help text states what the API does and leaves the
-  supporting measurement in the working notes. Entries already in this
-  changelog keep the figures they were written with.
-
-### Added
 
 - **`c1i tasks close` and `c1i tasks reassign`.** An identity can open a task
   it cannot resolve -- `approve` and `deny` fail with `action not permitted`
