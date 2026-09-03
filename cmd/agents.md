@@ -114,10 +114,11 @@ Both share the same error classification: `c1i api` surfaces the same typed
 errors and the same exit codes as any other command, so the table below
 applies either way.
 
-`c1i api` is the right tool when no first-class command exists yet. Two
-known gaps: access reviews (`/api/v1/access_review*`) and the entitlement
-*proxy binding* path (a different object from `mcp bindings` — see `c1i docs
-guide delegate-entitlement-provisioning`). Otherwise, discover.
+`c1i api` is the right tool when no first-class command exists yet. Known
+gaps: access reviews (`/api/v1/access_review*`), the entitlement *proxy
+binding* path (a different object from `mcp bindings` — see `c1i docs guide
+delegate-entitlement-provisioning`), and the catalog sub-resources
+(`/api/v1/catalogs/{id}/…`) plus catalog delete/update. Otherwise, discover.
 
 The cobra tree never drifts from what's implemented. Step down it with
 `--help` at each level:
@@ -145,7 +146,10 @@ except the MCP admin endpoints (`mcp_tools`, `mcp_toolsets`,
 auto-detection picks the wrong array. GET and DELETE refuse a body by default;
 the few endpoints that need one on DELETE (e.g. `remove-membership`) want
 `--allow-delete-body`. The UI's "campaign" is the API's access review — a
-campaign ID from a URL is the access review `id` directly.
+campaign ID from a URL is the access review `id` directly, and the UI's "access
+profile" is the API's catalog: `c1i access-profiles list`, `/api/v1/catalogs`, whose
+`RequestCatalog` schema is tagged `x-speakeasy-entity: Access_Profile` in the
+spec. Search for both names.
 
 ## Reading output
 
@@ -313,6 +317,23 @@ Two things are irreversible in ways their `--help` doesn't make obvious:
   `--tool-state`; the API doesn't compute a count without a state filter, so
   a filterless search omits the key rather than showing a 0 that would look
   identical to a server with no tools.
+- `access-profiles list` rows carry no member count on purpose. The list endpoint
+  reports `memberCount` as `0` for every catalog while `access-profiles get` on the
+  same id reports a non-zero count, so the key is dropped rather than emitted
+  as a zero that reads like "no members". Use `c1i access-profiles get <access-profile-id>`
+  for the count, and for the catalog's `accessEntitlements` (always present,
+  empty when there are none), which list rows also omit.
+- A catalog's visibility bindings can only be added after it is published:
+  `POST /api/v1/catalogs/{id}/visibility_bindings` on an unpublished catalog
+  is a `400`, `catalog must be published to add an access entitlement`; on one
+  created with `--visible-to-everyone` it is a `400`,
+  `catalog is visible to everyone, cannot add access entitlements`. A
+  catalog published but not visible to everyone accepts them immediately.
+- There is no `access-profiles delete` yet; delete via `c1i api --path
+  /api/v1/catalogs/<id> --method DELETE`. It is a soft delete: the catalog
+  leaves `access-profiles list`, while `access-profiles get` still returns it at exit `0`
+  with `deletedAt` set. So a `deleted_at` in an `access-profiles list` row is null in
+  practice — don't read the null as "not deleted", check with a get.
 
 ## Carry forward
 
