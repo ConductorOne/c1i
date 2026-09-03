@@ -600,15 +600,24 @@ func withoutFlags(args, remove []string) []string {
 // TestResourceTypeSingletonIsDocumented holds the server's own error string in
 // every doc that promises the restriction, so it stays greppable from both
 // directions. Reproduced live: a second ROLE, GROUP or VAULT resource type on
-// one app 500s, while a second CUSTOM one succeeds.
-func TestResourceTypeSingletonIsDocumented(t *testing.T) {
-	const serverError = "app resource type already exists"
-	docs := map[string]string{
+// entitlementCreateDocs are the four sources that carry this command's
+// behavioural claims. The other guards in this file deliberately use narrower
+// sets -- the kinds list also checks the flag's own usage string, and the
+// remediation quote lives in only two docs -- so those keep their own.
+func entitlementCreateDocs(t *testing.T) map[string]string {
+	t.Helper()
+	return map[string]string{
 		"entitlements create --help":   entitlementsCreateCmd.Long,
 		"README.md":                    readDocFile(t, "../README.md"),
 		"cmd/agents.md (embedded)":     agentsTemplate,
 		"docs guide configure-new-app": guideConfigureNewApp,
 	}
+}
+
+// one app 500s, while a second CUSTOM one succeeds.
+func TestResourceTypeSingletonIsDocumented(t *testing.T) {
+	const serverError = "app resource type already exists"
+	docs := entitlementCreateDocs(t)
 	for name, doc := range docs {
 		if !strings.Contains(doc, serverError) {
 			t.Errorf("%s does not quote the server's %q error", name, serverError)
@@ -637,15 +646,11 @@ func TestRemediationStringIsDocumentedVerbatim(t *testing.T) {
 	for name, doc := range docs {
 		// Verbatim, not a keyword: renaming the flag must break the docs that
 		// quote it, which a check for the word "dropping" alone would not.
-		if !strings.Contains(flattenDoc(doc), msg) {
+		if !strings.Contains(flatten(doc), msg) {
 			t.Errorf("%s does not quote the partial-failure message verbatim.\nwant: %s", name, msg)
 		}
 	}
 }
-
-// flattenDoc collapses whitespace so a quoted message still matches when a doc
-// wraps it across lines.
-func flattenDoc(s string) string { return strings.Join(strings.Fields(s), " ") }
 
 // TestRemediationOnResourceFailureKeepsResourceName covers the step-2 failure:
 // the resource type exists, the resource does not. The retry must drop the
@@ -722,16 +727,11 @@ func TestReuseAdviceIsDocumented(t *testing.T) {
 		}
 	}
 
-	docs := map[string]string{
-		"entitlements create --help":   entitlementsCreateCmd.Long,
-		"README.md":                    readDocFile(t, "../README.md"),
-		"cmd/agents.md (embedded)":     agentsTemplate,
-		"docs guide configure-new-app": guideConfigureNewApp,
-	}
+	docs := entitlementCreateDocs(t)
 	for name, doc := range docs {
 		// Backticks stripped so a doc can format flags as code, which is these
 		// files' own convention; requiring the bare form banned correct markdown.
-		flat := strings.ReplaceAll(flattenDoc(doc), "`", "")
+		flat := strings.ReplaceAll(flatten(doc), "`", "")
 		for idFlag, clause := range reuseDropClauses {
 			if !docMentionsFlag(flat, strings.TrimPrefix(idFlag, "--")) {
 				t.Errorf("%s never names %s, so its reuse advice cannot be found", name, idFlag)
