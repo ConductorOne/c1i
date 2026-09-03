@@ -13,7 +13,6 @@ import (
 	"testing"
 
 	"github.com/spf13/cobra"
-	"github.com/spf13/pflag"
 	"github.com/spf13/viper"
 )
 
@@ -161,36 +160,14 @@ func TestExtractListAndTokenMultiArrayDeterministic(t *testing.T) {
 // that performs a genuine HTTP round trip against an httptest.Server,
 // bypassing newClient's real OAuth mint, so the wire assertions are real.
 
-// resetAPICmdFlags restores apiCmd's own flags to their zero values before a
-// test drives it, and again afterward, so tests sharing the package-level
-// apiCmd singleton can't leak flag state into each other or into other test
-// files.
+// resetAPICmdFlags restores apiCmd's flags -- including the persistent ones
+// cobra merges in -- to their defaults before and after a test, so tests
+// sharing the package-level singleton cannot leak flag state.
 func resetAPICmdFlags(t *testing.T) {
 	t.Helper()
-	reset := func() {
-		_ = apiCmd.Flags().Set("path", "")
-		_ = apiCmd.Flags().Set("method", "")
-		_ = apiCmd.Flags().Set("body", "")
-		_ = apiCmd.Flags().Set("body-file", "")
-		_ = apiCmd.Flags().Set("allow-delete-body", "false")
-		_ = apiCmd.Flags().Set("paginate", "false")
-		_ = apiCmd.Flags().Set("list-key", "")
-		_ = apiCmd.Flags().Set("limit", "0")
-		// StringArray flags append on Set once pflag's internal "changed" bit
-		// is true (which it is, forever, once any test has passed --query or
-		// --header), so plain Set("query", "") wouldn't clear prior values —
-		// it would append an empty string. Replace on the SliceValue
-		// interface actually empties the backing slice.
-		for _, name := range []string{"query", "header"} {
-			if f := apiCmd.Flags().Lookup(name); f != nil {
-				if sv, ok := f.Value.(pflag.SliceValue); ok {
-					_ = sv.Replace([]string{})
-				}
-			}
-		}
-	}
-	reset()
-	t.Cleanup(reset)
+	// Shared so the two traps are handled in one place: Set appends on a
+	// StringArray, and a cleared-but-Changed flag reads as "set to nothing".
+	resetCmdFlags(t, apiCmd)
 }
 
 // fakeWireRequester implements apiRequester by making a real HTTP request to

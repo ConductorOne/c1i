@@ -74,3 +74,9 @@ jobs:
         uses: guyarb/golang-test-annotations@v0.6.0
         with:
           test-results: test.json
+      # Order-dependence between tests sharing a package-level command is
+      # invisible in the default order. `on` rather than a fixed seed: the
+      # permutation is derived from the test list, so any added or renamed test
+      # rerolls a fixed seed anyway. A failure prints its seed to replay with.
+      - name: Run tests in a shuffled order
+        run: go test -count=1 -shuffle=on ./...
