@@ -16,23 +16,21 @@ const (
 	stepRequired                       // the server rejects the call without it
 )
 
-// taskAction describes one POST /api/v1/tasks/{id}/action/{verb} command. The
-// action commands differ only in these fields, so they share one RunE: five
-// near-identical copies existed before this.
+// taskAction describes one POST /api/v1/tasks/{id}/action/{verb} command.
+// These fields are all the commands differ by, so they share one RunE.
 type taskAction struct {
 	verb string // the path segment, e.g. "restart"
 	step policyStepMode
-	// extraBody adds fields beyond comment/policyStepId. It runs before the
-	// request is built, so it may also reject bad flag combinations.
+	// extraBody adds fields beyond comment/policyStepId, and may reject bad
+	// flag combinations. Runs before any client is built, so it exits 2.
 	extraBody func(cmd *cobra.Command, body map[string]any) error
-	// confirm formats the success line. State is passed but most actions must
-	// not print it — see runTaskAction.
+	// confirm formats the success line. State is passed but is the task's
+	// PRE-action state, so most actions must not print it.
 	confirm func(id, state, stepID string) string
 }
 
-// runTaskAction is the shared RunE. Ordering matters and matches the rest of
-// the repo: flags are validated before a client is built, so a usage error
-// exits 2 rather than failing on credentials first.
+// runTaskAction is the shared RunE. Flags are validated before a client is
+// built, so a usage error exits 2 rather than failing on credentials.
 func (a taskAction) runTaskAction(cmd *cobra.Command, args []string) error {
 	var comment string
 	if cmd.Flags().Lookup("comment") != nil {
@@ -52,18 +50,15 @@ func (a taskAction) runTaskAction(cmd *cobra.Command, args []string) error {
 		body["comment"] = comment
 	}
 
-	// The URL is resolved even for a preview: --dry-run answers "am I about to
-	// do this to the right tenant", so it must still reject a bad --url and
-	// still warn when the target came from config rather than the flag.
+	// Resolved even for a preview, so --dry-run still rejects a bad --url and
+	// still names the tenant it would hit.
 	baseURL, err := GetBaseURL()
 	if err != nil {
 		return err
 	}
 
-	// Credentials, though, are only needed to send. An action that takes no
-	// policy step can preview without them; resolving a step needs a GET, so
-	// those must authenticate first — which is what each command did before
-	// sharing this runner.
+	// Credentials are only needed to send, or to fetch a step. Matches what
+	// each command did before sharing this runner.
 	if a.step == stepUnused && dryRunActive() {
 		return printDryRun(cmd, "POST", path, body)
 	}

@@ -22,7 +22,8 @@ var tasksSkipStepCmd = &cobra.Command{
 The step id is required by the server, which rejects a missing one with:
   invalid TaskActionsServiceSkipStepRequest.PolicyStepId: value does not match regex pattern "^[a-zA-Z0-9]{27}$"
 It defaults to the task's currently executing step, so pass --policy-step-id
-only to target a different one. A step id captured before another action is
+only to target a different one. Because that step is fetched, --dry-run
+authenticates and issues a read against the tenant before previewing. A step id captured before another action is
 stale, and the server answers "this action is no longer available".
 
 The confirmation reports the task id and the step skipped, never a state: the

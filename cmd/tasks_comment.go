@@ -9,9 +9,8 @@ import (
 var tasksCommentAction = taskAction{
 	verb: "comment",
 	step: stepUnused,
-	// Sent unconditionally, unlike every other action: the comment IS the
-	// payload here, so an explicit --comment "" must reach the server rather
-	// than being omitted as an absent optional field.
+	// Sent unconditionally: the comment is the payload, so --comment "" must
+	// reach the server rather than be omitted as an absent option.
 	extraBody: func(cmd *cobra.Command, body map[string]any) error {
 		comment, _ := cmd.Flags().GetString("comment")
 		body["comment"] = comment

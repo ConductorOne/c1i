@@ -211,12 +211,10 @@ c1i tasks process <task-id>
 c1i tasks update-grant-duration <task-id> --duration <duration>
 ```
 
-`restart`, `reset` and `skip-step` each rotate the task's current policy step
-(measured), so a `--policy-step-id` captured before one of them goes stale —
-the server answers `this action is no longer available: the request has
-advanced to a new approval step`. Only `restart` and `skip-step` accept
-`--policy-step-id`; omit it to act on whatever step is current. `reset`,
-`process` and `update-grant-duration` take no step argument.
+`restart`, `reset` and `skip-step` each rotate the task's current policy step,
+so a `--policy-step-id` captured before one of them goes stale — the server
+answers `this action is no longer available: the request has advanced to a new
+approval step`. Omit the flag to act on whatever step is current.
 
 Which actions a task accepts depends on its state; the server refuses the rest
 with `action not permitted`. Read the task's own list with

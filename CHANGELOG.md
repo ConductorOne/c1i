@@ -20,7 +20,7 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   history entry, `reset` four, because it restarts the policy rather than the
   step. Neither `restart` nor `reset` reopens a closed task — the state stays
   `TASK_STATE_CLOSED`. `process` changes nothing observable on a healthy task;
-  it is intended for one that has stalled, which was not reproduced here. `update-grant-duration` lands as
+  the stalled case was not reproduced. `update-grant-duration` lands as
   `grantDuration` on the task, takes a protobuf duration (`3600s`, not `1h`),
   and is refused once the task reaches provisioning with `cannot update grant
   duration for a ticket in a provision step`.

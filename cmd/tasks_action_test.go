@@ -11,6 +11,9 @@ import (
 	"bytes"
 	"context"
 
+	"errors"
+
+	"github.com/ConductorOne/c1i/internal/client"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
@@ -51,10 +54,9 @@ func newTaskActionRecorder(t *testing.T, state, currentStepID string) *taskActio
 	return r
 }
 
-// taskActionExpectations pins, per action command, the path it must POST and
-// whether its body carries policyStepId. Seeded against tasksCmd.Commands()
-// by TestEveryTaskActionIsPinned, so adding a command without adding a row
-// here fails rather than going silently untested.
+// taskActionExpectations pins each action's path and step mode.
+// TestEveryTaskActionIsPinned requires a row per command, so a new command
+// cannot go untested.
 var taskActionExpectations = map[string]struct {
 	verb string
 	step policyStepMode
@@ -76,8 +78,7 @@ var taskActionExpectations = map[string]struct {
 // nonActionTaskSubcommands are the tasks subcommands that are not action POSTs.
 var nonActionTaskSubcommands = map[string]bool{"list": true}
 
-// TestEveryTaskActionIsPinned is the guard on the guard: every action command
-// in the tree must have a row above.
+// TestEveryTaskActionIsPinned requires a row for every action in the tree.
 func TestEveryTaskActionIsPinned(t *testing.T) {
 	seen := 0
 	for _, c := range tasksCmd.Commands() {
@@ -100,9 +101,8 @@ func TestEveryTaskActionIsPinned(t *testing.T) {
 	}
 }
 
-// TestEveryTaskActionPostsItsOwnVerbAndStep drives every pinned command and
-// checks both the path and whether policyStepId is on the wire. A copied verb
-// would perform a different action on the task while printing success.
+// TestEveryTaskActionPostsItsOwnVerbAndStep checks path and policyStepId on
+// the wire. A copied verb performs a different action while printing success.
 func TestEveryTaskActionPostsItsOwnVerbAndStep(t *testing.T) {
 	const step = "zz-step-1111111111111111111"
 	for name, want := range taskActionExpectations {
@@ -136,9 +136,8 @@ func TestEveryTaskActionPostsItsOwnVerbAndStep(t *testing.T) {
 	}
 }
 
-// TestTasksCommentAlwaysSendsTheCommentKey pins the one action whose empty
-// value must still reach the wire: the comment IS the payload, so an omitted
-// key records nothing while the command still prints success.
+// TestTasksCommentAlwaysSendsTheCommentKey: an omitted key records nothing
+// while the command still prints success.
 func TestTasksCommentAlwaysSendsTheCommentKey(t *testing.T) {
 	cmd := findTasksSubcommand(t, "comment")
 	resetCmds(t, cmd)
@@ -153,9 +152,8 @@ func TestTasksCommentAlwaysSendsTheCommentKey(t *testing.T) {
 	}
 }
 
-// TestTasksDenyOmitsAnUnresolvableStep pins deny's stepOptional mode on the
-// wire: when the current step cannot be derived the field must be absent, not
-// empty, and the denial must still go through.
+// TestTasksDenyOmitsAnUnresolvableStep: the field must be absent, not empty,
+// and the denial must still go through.
 func TestTasksDenyOmitsAnUnresolvableStep(t *testing.T) {
 	cmd := findTasksSubcommand(t, "deny")
 	resetCmds(t, cmd)
@@ -259,10 +257,9 @@ func findTasksSubcommand(t *testing.T, name string) *cobra.Command {
 	return nil
 }
 
-// TestEveryTaskActionModeBehavesOnAnUnresolvableStep is what separates
-// stepRequired from stepOptional, which a "does it send the field" check
-// cannot see: with no derivable step, required must error before sending and
-// optional must send without the field.
+// TestEveryTaskActionModeBehavesOnAnUnresolvableStep separates stepRequired
+// from stepOptional: with no derivable step, required errors before sending,
+// optional sends without the field.
 func TestEveryTaskActionModeBehavesOnAnUnresolvableStep(t *testing.T) {
 	for name, want := range taskActionExpectations {
 		if want.step == stepUnused {
@@ -299,9 +296,7 @@ func TestEveryTaskActionModeBehavesOnAnUnresolvableStep(t *testing.T) {
 	}
 }
 
-// TestTaskActionsDryRunNeverSends is the guard on this branch's own regression:
-// --dry-run previewed before the URL was resolved, so a typo'd tenant previewed
-// happily. It must also never reach the wire, for every action.
+// TestTaskActionsDryRunNeverSends: --dry-run must never reach the wire.
 func TestTaskActionsDryRunNeverSends(t *testing.T) {
 	for name, want := range taskActionExpectations {
 		t.Run(name, func(t *testing.T) {
@@ -325,11 +320,13 @@ func TestTaskActionsDryRunNeverSends(t *testing.T) {
 
 			stubNewClient(t, srv)
 			t.Setenv("C1I_URL", "https://example.invalid")
-			viper.Set("dry_run", true)
-			t.Cleanup(func() { viper.Set("dry_run", false) })
+			withDryRun(t)
 
 			var out bytes.Buffer
 			cmd.SetOut(&out)
+			// Package-level singleton: a left-attached buffer swallows this
+			// command's output in every later test.
+			t.Cleanup(func() { cmd.SetOut(nil) })
 			cmd.SetContext(context.Background())
 			if err := cmd.RunE(cmd, []string{actionTestTaskID}); err != nil {
 				t.Fatalf("%s --dry-run: %v", name, err)
@@ -347,9 +344,8 @@ func TestTaskActionsDryRunNeverSends(t *testing.T) {
 	}
 }
 
-// TestTasksUpdateGrantDurationSendsDurationKey pins the one payload key this
-// command exists to send. "grantDuration" is the plausible wrong name — that
-// is what the RESPONSE carries, and what the docs quote.
+// TestTasksUpdateGrantDurationSendsDurationKey. "grantDuration" is the
+// plausible wrong name: it is what the response carries.
 func TestTasksUpdateGrantDurationSendsDurationKey(t *testing.T) {
 	cmd := findTasksSubcommand(t, "update-grant-duration")
 	resetCmds(t, cmd)
@@ -366,19 +362,16 @@ func TestTasksUpdateGrantDurationSendsDurationKey(t *testing.T) {
 	}
 }
 
-// TestTaskActionsDryRunStillResolvesTheURL is the guard on the ordering this
-// branch had to fix twice. --dry-run answers "am I about to do this to the
-// right tenant", so it must still reject a bad --url. Previewing before
-// resolving the URL made a typo'd tenant preview happily at exit 0, and no
-// other test could see it: the rest stub the client and pass a valid URL.
+// TestTaskActionsDryRunStillResolvesTheURL: a bad --url must fail even under
+// --dry-run. The other dry-run tests pass a valid URL, so only this sees it.
 func TestTaskActionsDryRunStillResolvesTheURL(t *testing.T) {
-	// Both modes, since the runner resolves the URL once for each path.
+	// Both modes: the runner resolves the URL once, before either path.
 	for _, name := range []string{"close", "restart"} {
 		t.Run(name, func(t *testing.T) {
 			resetRootURLFlag(t)
+			resetRootDryRunFlag(t)
 			t.Setenv("C1I_URL", "")
-			viper.Set("dry_run", true)
-			t.Cleanup(func() { viper.Set("dry_run", false) })
+			withDryRun(t)
 
 			var out bytes.Buffer
 			rootCmd.SetOut(&out)
@@ -397,3 +390,76 @@ func TestTaskActionsDryRunStillResolvesTheURL(t *testing.T) {
 		})
 	}
 }
+
+// withDryRun turns dry-run on and restores the previous value, matching
+// withRealDryRun. Hardcoding false would outrank a leaked pflag.
+func withDryRun(t *testing.T) {
+	t.Helper()
+	orig := viper.GetBool("dry_run")
+	viper.Set("dry_run", true)
+	t.Cleanup(func() { viper.Set("dry_run", orig) })
+}
+
+// resetRootDryRunFlag clears the persistent flag and its Changed bit, so a
+// test passing it through rootCmd cannot leak it.
+func resetRootDryRunFlag(t *testing.T) {
+	t.Helper()
+	f := rootCmd.PersistentFlags().Lookup("dry-run")
+	if f == nil {
+		t.Fatal("rootCmd has no --dry-run flag; this reset is not doing what it thinks")
+	}
+	orig, changed := f.Value.String(), f.Changed
+	t.Cleanup(func() {
+		_ = f.Value.Set(orig)
+		f.Changed = changed
+	})
+	_ = f.Value.Set("false")
+	f.Changed = false
+}
+
+// TestStepUnusedActionsPreviewWithoutCredentials: an action needing no step
+// previews without authenticating; one needing a step must authenticate.
+func TestStepUnusedActionsPreviewWithoutCredentials(t *testing.T) {
+	for name, want := range taskActionExpectations {
+		t.Run(name, func(t *testing.T) {
+			cmd := findTasksSubcommand(t, name)
+			resetCmds(t, cmd)
+			if want.setup != nil {
+				want.setup(cmd)
+			}
+			// A client that always fails, standing in for absent credentials.
+			orig := newClient
+			newClient = func(_ *cobra.Command, _ string) (*client.Client, error) {
+				return nil, errNoCredentialsForTest
+			}
+			t.Cleanup(func() { newClient = orig })
+
+			t.Setenv("C1I_URL", "https://example.invalid")
+			withDryRun(t)
+
+			var out bytes.Buffer
+			cmd.SetOut(&out)
+			t.Cleanup(func() { cmd.SetOut(nil) })
+			cmd.SetContext(context.Background())
+			err := cmd.RunE(cmd, []string{actionTestTaskID})
+
+			if want.step == stepUnused {
+				if err != nil {
+					t.Fatalf("%s --dry-run needs credentials it should not: %v", name, err)
+				}
+				if !strings.Contains(out.String(), "[dry-run]") {
+					t.Errorf("%s printed no preview: %q", name, out.String())
+				}
+				return
+			}
+			// Step-using actions must fetch the step, so they authenticate
+			// first even for a preview — as they did before sharing a runner.
+			if err == nil {
+				t.Fatalf("%s --dry-run should have failed without credentials; it resolves a policy step", name)
+			}
+		})
+	}
+}
+
+// errNoCredentialsForTest stands in for a credential-loading failure.
+var errNoCredentialsForTest = errors.New("authentication failed: no credentials found")

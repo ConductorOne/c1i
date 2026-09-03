@@ -10,7 +10,7 @@ var tasksRestartAction = taskAction{
 	verb: "restart",
 	step: stepOptional,
 	confirm: func(id, _, stepID string) string {
-		// A closed task has no current step, so the field would print empty.
+		// A closed task has no current step.
 		if stepID == "" {
 			return fmt.Sprintf("Restarted task: task_id=%s\n", id)
 		}
@@ -35,8 +35,10 @@ with "action not permitted" otherwise. Check the task's own action list:
 restart, reset and skip-step each rotate the current policy step, so a
 --policy-step-id captured before one of them goes stale and the server answers:
   this action is no longer available: the request has advanced to a new approval step
-Omit the flag to act on whatever step is current. (reset takes no step
-argument; it restarts the whole policy.)
+Omit the flag to act on whatever step is current.
+
+Because the step is fetched, --dry-run authenticates and issues a read against
+the tenant before printing its preview.
 
 The confirmation reports the task id and the step acted on, never a state: the
 action endpoints echo the task's state from before the action.`,
