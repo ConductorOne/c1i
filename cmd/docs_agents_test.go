@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"gopkg.in/yaml.v3"
 )
 
 // runDocsAgents drives docsAgentsCmd.RunE directly (no auth, no network)
@@ -183,17 +185,25 @@ func runThroughRoot(t *testing.T, args ...string) string {
 // Nothing else in the tree checks this, and the whole suite stayed green when
 // it happened.
 func TestAgentsDocOpensWithFrontMatter(t *testing.T) {
-	if !strings.HasPrefix(agentsTemplate, "---\n") {
-		first, _, _ := strings.Cut(agentsTemplate, "\n")
+	rendered := strings.ReplaceAll(agentsTemplate, "{{VERSION}}", Version)
+	if !strings.HasPrefix(rendered, "---\n") {
+		first, _, _ := strings.Cut(rendered, "\n")
 		t.Fatalf("agents.md must open with the YAML front-matter delimiter; it starts with %q", first)
 	}
-	rest := strings.TrimPrefix(agentsTemplate, "---\n")
+	rest := strings.TrimPrefix(rendered, "---\n")
 	end := strings.Index(rest, "\n---\n")
 	if end < 0 {
 		t.Fatal("agents.md opens a front-matter block that is never closed")
 	}
-	for _, key := range []string{"name:", "description:", "version:", "required_bins:"} {
-		if !strings.Contains(rest[:end], key) {
+	// Parse it rather than trusting the delimiter search: if the real closing
+	// --- were dropped, that search would run on to any later --- in the body
+	// and report twenty lines of prose as valid front matter.
+	var front map[string]any
+	if err := yaml.Unmarshal([]byte(rest[:end]), &front); err != nil {
+		t.Fatalf("agents.md's front matter is not valid YAML, so a harness parsing it gets nothing: %v", err)
+	}
+	for _, key := range []string{"name", "description", "version", "required_bins"} {
+		if _, ok := front[key]; !ok {
 			t.Errorf("front matter is missing %q, which docs agents' help says harnesses parse", key)
 		}
 	}

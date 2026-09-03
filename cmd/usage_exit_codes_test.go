@@ -133,9 +133,10 @@ func TestValidationGuardsExitUsage(t *testing.T) {
 			cmds:    []*cobra.Command{mcpBindingsByToolsCmd},
 		},
 		{
-			name: "mcp bindings history: neither --toolset-id nor --tool-id",
-			args: []string{"mcp", "bindings", "history", "--app-id", "a", "--connector-id", "c"},
-			cmds: []*cobra.Command{mcpBindingsHistoryCmd},
+			name:    "mcp bindings history: neither --toolset-id nor --tool-id",
+			args:    []string{"mcp", "bindings", "history", "--app-id", "a", "--connector-id", "c"},
+			wantMsg: "exactly one of --toolset-id or --tool-id is required",
+			cmds:    []*cobra.Command{mcpBindingsHistoryCmd},
 		},
 		{
 			name: "mcp bindings history: --toolset-id and --tool-id both set",
@@ -173,9 +174,10 @@ func TestValidationGuardsExitUsage(t *testing.T) {
 			cmds: []*cobra.Command{mcpServersTestConnectionCmd},
 		},
 		{
-			name: "mcp servers test-connection: invalid --auth",
-			args: []string{"mcp", "servers", "test-connection", "--auth", "bogus"},
-			cmds: []*cobra.Command{mcpServersTestConnectionCmd},
+			name:    "mcp servers test-connection: invalid --auth",
+			args:    []string{"mcp", "servers", "test-connection", "--auth", "bogus"},
+			wantMsg: "unsupported --auth",
+			cmds:    []*cobra.Command{mcpServersTestConnectionCmd},
 		},
 		{
 			name: "mcp servers test-connection: --server-url and --external-config-file mutually exclusive",
@@ -197,9 +199,10 @@ func TestValidationGuardsExitUsage(t *testing.T) {
 			cmds: []*cobra.Command{mcpServersUpdateCredentialsCmd},
 		},
 		{
-			name: "mcp servers update-credentials: invalid --config-field pair",
-			args: []string{"mcp", "servers", "update-credentials", "conn-1", "--app-id", "a", "--type", "hosted", "--config-field", "badpair"},
-			cmds: []*cobra.Command{mcpServersUpdateCredentialsCmd},
+			name:    "mcp servers update-credentials: invalid --config-field pair",
+			args:    []string{"mcp", "servers", "update-credentials", "conn-1", "--app-id", "a", "--type", "hosted", "--config-field", "badpair"},
+			wantMsg: "expected key=value",
+			cmds:    []*cobra.Command{mcpServersUpdateCredentialsCmd},
 		},
 		{
 			name: "mcp servers update-credentials: --hosted-config-file mutually exclusive with --catalog-id",
