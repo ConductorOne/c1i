@@ -231,6 +231,7 @@ type entitlementCreateServer struct {
 	paths   []string
 	bodies  []map[string]any
 	failEnt bool
+	failRes bool
 }
 
 func newEntitlementCreateServer(t *testing.T, failEnt bool) *entitlementCreateServer {
@@ -248,6 +249,11 @@ func newEntitlementCreateServer(t *testing.T, failEnt bool) *entitlementCreateSe
 		case strings.HasSuffix(r.URL.Path, "/resource_types"):
 			_, _ = w.Write([]byte(`{"appResourceType":{"id":"rt-new"},"expanded":[]}`))
 		case strings.HasSuffix(r.URL.Path, "/resources"):
+			if s.failRes {
+				w.WriteHeader(http.StatusBadRequest)
+				_, _ = w.Write([]byte(`{"code":3,"message":"nope"}`))
+				return
+			}
 			_, _ = w.Write([]byte(`{"appResource":{"id":"res-new"}}`))
 		case strings.HasSuffix(r.URL.Path, "/entitlements"):
 			if s.failEnt {
@@ -598,13 +604,87 @@ func withoutFlags(args, remove []string) []string {
 func TestResourceTypeSingletonIsDocumented(t *testing.T) {
 	const serverError = "app resource type already exists"
 	docs := map[string]string{
-		"entitlements create --help": entitlementsCreateCmd.Long,
-		"README.md":                  readDocFile(t, "../README.md"),
-		"cmd/agents.md (embedded)":   agentsTemplate,
+		"entitlements create --help":   entitlementsCreateCmd.Long,
+		"README.md":                    readDocFile(t, "../README.md"),
+		"cmd/agents.md (embedded)":     agentsTemplate,
+		"docs guide configure-new-app": guideConfigureNewApp,
 	}
 	for name, doc := range docs {
 		if !strings.Contains(doc, serverError) {
 			t.Errorf("%s does not quote the server's %q error", name, serverError)
 		}
+	}
+}
+
+// TestRemediationStringIsDocumentedVerbatim pins the docs that quote the
+// partial-failure message to what createdSoFar actually emits. The message
+// changed to name the flags a retry must drop, and the guide kept quoting the
+// old form in the same commit — a retry copied from it would be refused.
+func TestRemediationStringIsDocumentedVerbatim(t *testing.T) {
+	plan := &entitlementCreatePlan{
+		resourceTypeBody: map[string]any{},
+		typeOnlyFlags:    []string{"--resource-type-display-name"},
+	}
+	msg := plan.createdSoFar("<id>", "")
+	for _, frag := range []string{"dropping", "to reuse instead of duplicating"} {
+		if !strings.Contains(msg, frag) {
+			t.Fatalf("createdSoFar no longer contains %q; this guard is checking the wrong thing", frag)
+		}
+	}
+	docs := map[string]string{
+		"entitlements create --help":   entitlementsCreateCmd.Long,
+		"docs guide configure-new-app": guideConfigureNewApp,
+	}
+	for name, doc := range docs {
+		if !strings.Contains(flattenDoc(doc), "dropping") {
+			t.Errorf("%s quotes the partial-failure retry without the flags-to-drop clause; "+
+				"a reader following it verbatim gets exit 2", name)
+		}
+	}
+}
+
+// flattenDoc collapses whitespace so a quoted message still matches when a doc
+// wraps it across lines.
+func flattenDoc(s string) string { return strings.Join(strings.Fields(s), " ") }
+
+// TestRemediationOnResourceFailureKeepsResourceName covers the step-2 failure:
+// the resource type exists, the resource does not. The retry must drop the
+// type-only flags but KEEP --resource-display-name, since the object it names
+// was never created. Getting that wrong is silent — the resource would be
+// created under --display-name instead — where the step-3 case fails loudly.
+func TestRemediationOnResourceFailureKeepsResourceName(t *testing.T) {
+	s := newEntitlementCreateServer(t, false)
+	s.failRes = true
+
+	args := []string{
+		"--app-id", "app1", "--display-name", "e",
+		"--resource-type", "ROLE",
+		"--resource-type-display-name", "rt name",
+		"--resource-display-name", "res name",
+	}
+	cmd := &cobra.Command{}
+	cmd.SetOut(new(bytes.Buffer))
+	cmd.SetContext(context.Background())
+	runErr := mustPlan(t, args...).run(cmd, client.NewForTesting(s.srv.URL, s.srv.Client()))
+	if runErr == nil {
+		t.Fatal("expected the resource create to fail")
+	}
+	msg := runErr.Error()
+
+	// The advised retry must also be accepted, same as the step-3 case.
+	add, drop := parseRemediation(t, msg)
+	retry := append(withoutFlags(args, drop), add...)
+	if _, err := buildEntitlementCreatePlan(newEntitlementCreateCmd(t, retry...)); err != nil {
+		t.Fatalf("the step-2 remediation %q produces %v, so the retry it advises exits 2", msg, err)
+	}
+	if !strings.Contains(msg, "--resource-type-id") {
+		t.Errorf("message does not name the created resource type: %q", msg)
+	}
+	if strings.Contains(msg, "--resource-id") {
+		t.Errorf("message names a resource id, but the resource was never created: %q", msg)
+	}
+	if strings.Contains(msg, "--resource-display-name") {
+		t.Errorf("message tells the caller to drop --resource-display-name, but the resource "+
+			"it names does not exist yet; the retry would create it under --display-name: %q", msg)
 	}
 }

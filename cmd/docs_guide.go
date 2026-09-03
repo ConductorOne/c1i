@@ -433,7 +433,12 @@ type per entitlement:
       --resource-type-id "$RT_ID" --resource-id "$RES_ID"   # entitlement only
 
 --resource-type (the kind of resource type to create, default CUSTOM) is one
-of ROLE, GROUP, LICENSE, PROJECT, CATALOG, CUSTOM, VAULT, PROFILE_TYPE.
+of ROLE, GROUP, LICENSE, PROJECT, CATALOG, CUSTOM, VAULT, PROFILE_TYPE. Only
+CUSTOM can repeat on one app: a second resource type of any other kind fails
+with a 500,
+  app resource type already exists
+which maps to exit 6 even though retrying never helps. Reuse the one that
+exists with --resource-type-id instead.
 
 --owner-id is repeatable and rides along in the create request, so entitlement
 owners need no follow-up call -- but the read lags the write the same way app
@@ -442,9 +447,12 @@ owners do (one measured create took 116s to show up on
 
 The three writes are not atomic and nothing is rolled back: if a later one
 fails, the objects the earlier ones created still exist, and the error names
-them and the flags that reuse them, e.g. "(already created: re-run with
---resource-type-id <id> to reuse instead of duplicating)". "--dry-run"
-previews all three requests.
+them, the flags that reuse them, and the flags to drop, e.g. "(already
+created: re-run with --resource-type-id <id>, dropping
+--resource-type-display-name, to reuse instead of duplicating)". Following it
+verbatim is what makes the retry succeed: keeping a flag that describes an
+object which now already exists is refused. "--dry-run" previews all three
+requests.
 
 Omitting --duration-grant defaults the entitlement to standing access
 (durationUnset). For time-boxed access pass a protobuf duration -- seconds
