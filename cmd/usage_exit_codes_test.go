@@ -183,9 +183,13 @@ func TestValidationGuardsExitUsage(t *testing.T) {
 			cmds: []*cobra.Command{mcpServersTestConnectionCmd},
 		},
 		{
-			name: "mcp servers update-credentials: invalid --type",
-			args: []string{"mcp", "servers", "update-credentials", "conn-1", "--app-id", "a", "--type", "bogus"},
-			cmds: []*cobra.Command{mcpServersUpdateCredentialsCmd},
+			// Without wantMsg this passed even with the invalid-type guard
+			// deleted: --type bogus falls through the switch and trips a later
+			// check that names a flag the user never passed.
+			name:    "mcp servers update-credentials: invalid --type",
+			args:    []string{"mcp", "servers", "update-credentials", "conn-1", "--app-id", "a", "--type", "bogus"},
+			wantMsg: "invalid --type",
+			cmds:    []*cobra.Command{mcpServersUpdateCredentialsCmd},
 		},
 		{
 			name: "mcp servers update-credentials: nothing to update",
