@@ -15,12 +15,12 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `close` and `reassign` each hand-rolled the same request-and-confirm
   sequence, and their help text and dry-run output are unchanged.
 
-  Verified by effect rather than exit code. `restart` and `skip-step` rotate
-  the task's current policy step and add one history entry; `reset` adds four,
-  because it restarts the policy rather than the step. Neither `restart` nor
-  `reset` reopens a closed task — the state stays `TASK_STATE_CLOSED`.
-  `process` changes nothing observable on a healthy task, so expect a result
-  only where processing had stalled. `update-grant-duration` lands as
+  Verified by effect rather than exit code. `restart`, `reset` and `skip-step`
+  all rotate the task's current policy step; `restart` and `skip-step` add one
+  history entry, `reset` four, because it restarts the policy rather than the
+  step. Neither `restart` nor `reset` reopens a closed task — the state stays
+  `TASK_STATE_CLOSED`. `process` changes nothing observable on a healthy task;
+  it is intended for one that has stalled, which was not reproduced here. `update-grant-duration` lands as
   `grantDuration` on the task, takes a protobuf duration (`3600s`, not `1h`),
   and is refused once the task reaches provisioning with `cannot update grant
   duration for a ticket in a provision step`.

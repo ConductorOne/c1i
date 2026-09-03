@@ -162,10 +162,10 @@ func parseCurrentPolicyStepID(data []byte) (string, error) {
 // executing step, fetched with a GET.
 //
 // required distinguishes the two modes callers need. Actions the server
-// rejects without a step (approve, skip-step) and those we refuse to send
-// ambiguously (reassign, restart) pass true and get an error. deny passes
-// false: when the step cannot be derived the field is omitted rather than
-// blocking the denial.
+// rejects without a step (approve, skip-step) and reassign, which we refuse to
+// send ambiguously, pass true and get an error. deny and restart pass false:
+// when the step cannot be derived the field is omitted rather than blocking
+// the action, which is what lets restart act on a closed task.
 func resolvePolicyStepID(ctx context.Context, c *client.Client, taskID, explicit string, required bool) (string, error) {
 	if explicit != "" {
 		return explicit, nil

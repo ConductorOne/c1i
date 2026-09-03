@@ -91,6 +91,15 @@ func TestValidationGuardsExitUsage(t *testing.T) {
 			cmds:    []*cobra.Command{mcpToolsSearchCmd},
 		},
 		{
+			// markRequired is the only thing stopping {"duration": ""} on the
+			// wire; runTaskActionCmd calls RunE directly and never sees cobra's
+			// required check, so this row is what pins it.
+			name:    "tasks update-grant-duration: --duration missing",
+			args:    []string{"tasks", "update-grant-duration", "zz-task-1"},
+			wantMsg: `required flag(s) "duration" not set`,
+			cmds:    []*cobra.Command{tasksUpdateGrantDurationCmd},
+		},
+		{
 			// The only repeatable flag whose READ was unpinned end to end: the
 			// existing --config-field row passes a non-empty bad pair, which
 			// parseKeyValues rejects on its own.

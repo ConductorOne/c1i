@@ -48,7 +48,7 @@ func init() {
 	// No --comment: the UpdateGrantDuration request body carries only duration
 	// and expandMask.
 	tasksUpdateGrantDurationCmd.Flags().String("duration", "",
-		`Grant duration as a protobuf duration, e.g. 3600s (required; "1h" is refused)`)
+		`Grant duration as a protobuf duration, e.g. 3600s; "1h" is refused`)
 	markRequired(tasksUpdateGrantDurationCmd, "duration")
 	tasksCmd.AddCommand(tasksUpdateGrantDurationCmd)
 }

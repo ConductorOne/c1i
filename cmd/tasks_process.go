@@ -19,13 +19,13 @@ var tasksProcessCmd = &cobra.Command{
 	Short: "Process a task now rather than waiting for the next cycle",
 	Long: `Ask C1 to process a task immediately instead of on its normal schedule.
 
-Useful when a task looks stuck: it re-runs the policy evaluation without
-changing the task's approval state. The request body is empty — this action
+Intended for a task that looks stuck: it asks C1 to re-run the policy
+evaluation without changing the task's approval state. The request body is empty — this action
 takes neither a comment nor a policy step.
 
 On a healthy task nothing observable changes: state, current policy step and
-history are all identical afterwards. Expect a result only where processing had
-genuinely stalled.
+history are all identical afterwards. The stalled case was not reproduced, so
+treat any effect there as unverified.
 
 The confirmation reports only the task id: the action endpoints echo the task's
 state from before the action, and processing is asynchronous, so re-read the

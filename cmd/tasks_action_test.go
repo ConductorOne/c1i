@@ -8,7 +8,11 @@ import (
 	"strings"
 	"testing"
 
+	"bytes"
+	"context"
+
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 )
 
 const actionTestTaskID = "zz-c1i-test-task-2"
@@ -52,21 +56,21 @@ func newTaskActionRecorder(t *testing.T, state, currentStepID string) *taskActio
 // by TestEveryTaskActionIsPinned, so adding a command without adding a row
 // here fails rather than going silently untested.
 var taskActionExpectations = map[string]struct {
-	verb     string
-	wantStep bool
+	verb string
+	step policyStepMode
 	// setup supplies flags the command requires before it will run.
 	setup func(cmd *cobra.Command)
 }{
-	"approve":               {verb: "approve", wantStep: true},
-	"deny":                  {verb: "deny", wantStep: true},
-	"close":                 {verb: "close", wantStep: false},
-	"restart":               {verb: "restart", wantStep: true},
-	"reset":                 {verb: "reset", wantStep: false},
-	"skip-step":             {verb: "skip-step", wantStep: true},
-	"process":               {verb: "process", wantStep: false},
-	"comment":               {verb: "comment", wantStep: false, setup: func(c *cobra.Command) { _ = c.Flags().Set("comment", "zz") }},
-	"update-grant-duration": {verb: "update-grant-duration", wantStep: false, setup: func(c *cobra.Command) { _ = c.Flags().Set("duration", "3600s") }},
-	"reassign":              {verb: "reassign", wantStep: true, setup: func(c *cobra.Command) { _ = c.Flags().Set("to-user-id", "zz-user") }},
+	"approve":               {verb: "approve", step: stepRequired},
+	"deny":                  {verb: "deny", step: stepOptional},
+	"close":                 {verb: "close", step: stepUnused},
+	"restart":               {verb: "restart", step: stepOptional},
+	"reset":                 {verb: "reset", step: stepUnused},
+	"skip-step":             {verb: "skip-step", step: stepRequired},
+	"process":               {verb: "process", step: stepUnused},
+	"comment":               {verb: "comment", step: stepUnused, setup: func(c *cobra.Command) { _ = c.Flags().Set("comment", "zz") }},
+	"update-grant-duration": {verb: "update-grant-duration", step: stepUnused, setup: func(c *cobra.Command) { _ = c.Flags().Set("duration", "3600s") }},
+	"reassign":              {verb: "reassign", step: stepRequired, setup: func(c *cobra.Command) { _ = c.Flags().Set("to-user-id", "zz-user") }},
 }
 
 // nonActionTaskSubcommands are the tasks subcommands that are not action POSTs.
@@ -119,7 +123,7 @@ func TestEveryTaskActionPostsItsOwnVerbAndStep(t *testing.T) {
 				t.Errorf("%s posted %q, want %q", name, got, wantPath)
 			}
 			got, ok := r.bodies[0]["policyStepId"]
-			if want.wantStep {
+			if want.step != stepUnused {
 				if !ok || got != step {
 					t.Errorf("%s body policyStepId = %v (present=%v), want %q", name, got, ok, step)
 				}
@@ -253,4 +257,111 @@ func findTasksSubcommand(t *testing.T, name string) *cobra.Command {
 	}
 	t.Fatalf("tasks has no %q subcommand", name)
 	return nil
+}
+
+// TestEveryTaskActionModeBehavesOnAnUnresolvableStep is what separates
+// stepRequired from stepOptional, which a "does it send the field" check
+// cannot see: with no derivable step, required must error before sending and
+// optional must send without the field.
+func TestEveryTaskActionModeBehavesOnAnUnresolvableStep(t *testing.T) {
+	for name, want := range taskActionExpectations {
+		if want.step == stepUnused {
+			continue
+		}
+		t.Run(name, func(t *testing.T) {
+			cmd := findTasksSubcommand(t, name)
+			resetCmds(t, cmd)
+			if want.setup != nil {
+				want.setup(cmd)
+			}
+			r := newTaskActionRecorder(t, "TASK_STATE_OPEN", "") // no current step
+			_, err := runTaskActionCmd(t, cmd, r.srv, actionTestTaskID)
+			if want.step == stepRequired {
+				if err == nil {
+					t.Fatalf("%s is stepRequired but succeeded with no derivable step", name)
+				}
+				if got := exitCode(err); got != exitUsage {
+					t.Errorf("%s exitCode = %d, want %d (exitUsage); err = %v", name, got, exitUsage, err)
+				}
+				if len(r.paths) != 0 {
+					t.Errorf("%s sent a request despite requiring a step: %v", name, r.paths)
+				}
+				return
+			}
+			// stepOptional: proceed, with the field omitted.
+			if err != nil {
+				t.Fatalf("%s is stepOptional but failed with no derivable step: %v", name, err)
+			}
+			if _, ok := r.bodies[0]["policyStepId"]; ok {
+				t.Errorf("%s sent policyStepId when none could be resolved", name)
+			}
+		})
+	}
+}
+
+// TestTaskActionsDryRunNeverSends is the guard on this branch's own regression:
+// --dry-run previewed before the URL was resolved, so a typo'd tenant previewed
+// happily. It must also never reach the wire, for every action.
+func TestTaskActionsDryRunNeverSends(t *testing.T) {
+	for name, want := range taskActionExpectations {
+		t.Run(name, func(t *testing.T) {
+			cmd := findTasksSubcommand(t, name)
+			resetCmds(t, cmd)
+			if want.setup != nil {
+				want.setup(cmd)
+			}
+			var posted []string
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
+				if req.Method == http.MethodPost {
+					posted = append(posted, req.URL.Path)
+					t.Errorf("--dry-run sent a real POST to %s", req.URL.Path)
+				}
+				// The GET is the policy-step lookup, which a preview may make.
+				_, _ = w.Write([]byte(`{"taskView":{"task":{"id":"` + actionTestTaskID +
+					`","state":"TASK_STATE_OPEN","policy":{"current":{"id":"zz-step-1111111111111111111"}}}}}`))
+			}))
+			t.Cleanup(srv.Close)
+
+			stubNewClient(t, srv)
+			t.Setenv("C1I_URL", "https://example.invalid")
+			viper.Set("dry_run", true)
+			t.Cleanup(func() { viper.Set("dry_run", false) })
+
+			var out bytes.Buffer
+			cmd.SetOut(&out)
+			cmd.SetContext(context.Background())
+			if err := cmd.RunE(cmd, []string{actionTestTaskID}); err != nil {
+				t.Fatalf("%s --dry-run: %v", name, err)
+			}
+			if len(posted) != 0 {
+				t.Errorf("%s posted during a dry run: %v", name, posted)
+			}
+			if !strings.Contains(out.String(), "[dry-run]") {
+				t.Errorf("%s printed no preview: %q", name, out.String())
+			}
+			if !strings.Contains(out.String(), "/action/"+want.verb) {
+				t.Errorf("%s previewed the wrong path: %q", name, out.String())
+			}
+		})
+	}
+}
+
+// TestTasksUpdateGrantDurationSendsDurationKey pins the one payload key this
+// command exists to send. "grantDuration" is the plausible wrong name — that
+// is what the RESPONSE carries, and what the docs quote.
+func TestTasksUpdateGrantDurationSendsDurationKey(t *testing.T) {
+	cmd := findTasksSubcommand(t, "update-grant-duration")
+	resetCmds(t, cmd)
+	_ = cmd.Flags().Set("duration", "3600s")
+	r := newTaskActionRecorder(t, "TASK_STATE_OPEN", "zz-step-1111111111111111111")
+	if _, err := runTaskActionCmd(t, cmd, r.srv, actionTestTaskID); err != nil {
+		t.Fatalf("update-grant-duration: %v", err)
+	}
+	if got, ok := r.bodies[0]["duration"]; !ok || got != "3600s" {
+		t.Errorf(`body["duration"] = %v (present=%v), want "3600s"`, got, ok)
+	}
+	if _, ok := r.bodies[0]["grantDuration"]; ok {
+		t.Error(`body carries "grantDuration"; that is the response field, not the request's`)
+	}
 }

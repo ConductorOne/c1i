@@ -334,8 +334,9 @@ resource with `--resource-id` likewise means you drop
   `skip-step` each rotate the current policy step (measured), so a
   `--policy-step-id` captured before one of them is stale and answers `this
   action is no longer available: the request has advanced to a new approval
-  step` -- omit the flag to act on whatever step is current. `process` and
-  `update-grant-duration` take no step.
+  step`. Only `restart` and `skip-step` accept `--policy-step-id`; omit it to
+  act on whatever step is current. `reset`, `process` and
+  `update-grant-duration` take no step argument.
 - `restart` re-runs the current approval step (one new history entry); `reset`
   restarts the whole policy (four, measured). Neither reopens a closed task --
   the state stays `TASK_STATE_CLOSED`. `process` changes nothing observable on
