@@ -28,7 +28,10 @@ in the request body; HTTP DELETE doesn't reliably support that.`,
 		appID, _ := cmd.Flags().GetString("app-id")
 		connectorID, _ := cmd.Flags().GetString("connector-id")
 		toolsetID, _ := cmd.Flags().GetString("toolset-id")
-		toolIDs, _ := cmd.Flags().GetStringSlice("tool-id")
+		toolIDs, err := repeatableStringFlag(cmd, "tool-id")
+		if err != nil {
+			return err
+		}
 		if len(toolIDs) == 0 {
 			return &usageError{fmt.Errorf("flag --tool-id requires at least one value")}
 		}
@@ -67,7 +70,7 @@ func init() {
 	mcpBindingsDeleteCmd.Flags().String("app-id", "", "Application ID")
 	mcpBindingsDeleteCmd.Flags().String("connector-id", "", "Connector ID")
 	mcpBindingsDeleteCmd.Flags().String("toolset-id", "", "MCP toolset (access profile) ID")
-	mcpBindingsDeleteCmd.Flags().StringSlice("tool-id", nil, "MCP tool ID to unbind (repeatable; max 100)")
+	addRepeatableStringFlag(mcpBindingsDeleteCmd, "tool-id", "MCP tool ID to unbind (repeatable; max 100)")
 	markRequired(mcpBindingsDeleteCmd, "app-id", "connector-id", "toolset-id", "tool-id")
 	mcpBindingsCmd.AddCommand(mcpBindingsDeleteCmd)
 }

@@ -26,7 +26,10 @@ no bindings are still emitted with an empty toolsets array.`,
 
 		appID, _ := cmd.Flags().GetString("app-id")
 		connectorID, _ := cmd.Flags().GetString("connector-id")
-		toolIDs, _ := cmd.Flags().GetStringSlice("tool-id")
+		toolIDs, err := repeatableStringFlag(cmd, "tool-id")
+		if err != nil {
+			return err
+		}
 		if len(toolIDs) == 0 {
 			return &usageError{fmt.Errorf("flag --tool-id requires at least one value")}
 		}
@@ -78,7 +81,7 @@ no bindings are still emitted with an empty toolsets array.`,
 func init() {
 	mcpBindingsByToolsCmd.Flags().String("app-id", "", "Application ID")
 	mcpBindingsByToolsCmd.Flags().String("connector-id", "", "Connector ID")
-	mcpBindingsByToolsCmd.Flags().StringSlice("tool-id", nil, "MCP tool ID to look up (repeatable; max 32)")
+	addRepeatableStringFlag(mcpBindingsByToolsCmd, "tool-id", "MCP tool ID to look up (repeatable; max 32)")
 	markRequired(mcpBindingsByToolsCmd, "app-id", "connector-id", "tool-id")
 	mcpBindingsCmd.AddCommand(mcpBindingsByToolsCmd)
 }

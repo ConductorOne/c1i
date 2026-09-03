@@ -247,6 +247,11 @@ Two things are irreversible in ways their `--help` doesn't make obvious:
 
 ## Things that will surprise you
 
+- A **repeatable** flag takes one value per occurrence; a comma is literal, not
+  a separator. `--tool-id a,b` is one id, not two. `--config-field
+  "region=us1,env=prod"` sets `region` to `us1,env=prod`, which the server may
+  accept. An empty occurrence is exit 2 before any request, so an unset shell
+  variable cannot silently shorten a list. `--fields` IS comma-separated.
 - Owner and grant provisioning are asynchronous. A read immediately after a
   write can look like a silent no-op for a couple of minutes (owner writes
   observed at 45-150s across set-owners, add-owner, remove-owner and the

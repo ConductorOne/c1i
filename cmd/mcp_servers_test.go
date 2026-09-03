@@ -104,7 +104,12 @@ func TestFlexInt64(t *testing.T) {
 
 func TestParseKeyValues(t *testing.T) {
 	cmd := &cobra.Command{}
-	cmd.Flags().StringSlice("config-field", []string{"region=us1", "env=prod"}, "")
+	addRepeatableStringFlag(cmd, "config-field", "")
+	for _, pair := range []string{"region=us1", "env=prod"} {
+		if err := cmd.Flags().Set("config-field", pair); err != nil {
+			t.Fatalf("setting --config-field: %v", err)
+		}
+	}
 	got, err := parseKeyValues(cmd, "config-field")
 	if err != nil {
 		t.Fatalf("parseKeyValues: %v", err)
@@ -115,7 +120,10 @@ func TestParseKeyValues(t *testing.T) {
 	}
 
 	bad := &cobra.Command{}
-	bad.Flags().StringSlice("config-field", []string{"noequals"}, "")
+	addRepeatableStringFlag(bad, "config-field", "")
+	if err := bad.Flags().Set("config-field", "noequals"); err != nil {
+		t.Fatalf("setting --config-field: %v", err)
+	}
 	if _, err := parseKeyValues(bad, "config-field"); err == nil {
 		t.Error("expected error for missing '='")
 	}
@@ -132,10 +140,10 @@ func newServerFlagCmd() *cobra.Command {
 	f.String("description", "", "")
 	f.String("data-sensitivity", "", "")
 	f.String("tool-prefix", "", "")
-	f.StringSlice("user-id", nil, "")
+	addRepeatableStringFlag(cmd, "user-id", "")
 	f.String("catalog-id", "", "")
 	f.String("source-app-id", "", "")
-	f.StringSlice("config-field", nil, "")
+	addRepeatableStringFlag(cmd, "config-field", "")
 	f.String("hosted-config-file", "", "")
 	f.String("server-url", "", "")
 	f.String("transport", "", "")

@@ -57,8 +57,14 @@ var apiCmd = &cobra.Command{
 		bodyFile, _ := cmd.Flags().GetString("body-file")
 		paginate, _ := cmd.Flags().GetBool("paginate")
 		listKey, _ := cmd.Flags().GetString("list-key")
-		queryPairs, _ := cmd.Flags().GetStringArray("query")
-		headerPairs, _ := cmd.Flags().GetStringArray("header")
+		queryPairs, err := repeatableStringFlag(cmd, "query")
+		if err != nil {
+			return err
+		}
+		headerPairs, err := repeatableStringFlag(cmd, "header")
+		if err != nil {
+			return err
+		}
 		allowDeleteBody, _ := cmd.Flags().GetBool("allow-delete-body")
 		limit := getIntFlag(cmd, "limit")
 
@@ -291,8 +297,8 @@ func init() {
 	apiCmd.Flags().String("body", "", "JSON request body (implies POST)")
 	apiCmd.Flags().String("body-file", "", "Read the JSON request body from a file (\"-\" for stdin); mutually exclusive with --body")
 	apiCmd.Flags().Bool("allow-delete-body", false, "Allow --body/--body-file with --method DELETE (some C1 endpoints, e.g. remove-membership, require a body on DELETE; without this flag such a request is refused)")
-	apiCmd.Flags().StringArray("query", nil, "Query parameter as key=value (repeatable)")
-	apiCmd.Flags().StringArray("header", nil, "Extra request header as key=value (repeatable)")
+	addRepeatableStringFlag(apiCmd, "query", "Query parameter as key=value (repeatable)")
+	addRepeatableStringFlag(apiCmd, "header", "Extra request header as key=value (repeatable)")
 	apiCmd.Flags().Bool("paginate", false, "Automatically follow pagination to fetch all pages")
 	apiCmd.Flags().String("list-key", "", "Force the response field name to drain as the list (default: auto-detect the first array-valued field, e.g. 'list', 'automationExecutions', 'automations')")
 	markRequired(apiCmd, "path")

@@ -30,6 +30,14 @@ tenant's auto-approval policy portably. --display-name is no substitute:
 it only ignores case, and the names differ by more than that between tenants
 ("Auto-approval" in one, "Auto approval" in the next).`,
 	RunE: func(cmd *cobra.Command, args []string) error {
+		policyTypes, err := repeatableStringFlag(cmd, "policy-type")
+		if err != nil {
+			return err
+		}
+		excludeIDs, err := repeatableStringFlag(cmd, "exclude-policy-id")
+		if err != nil {
+			return err
+		}
 		baseURL, err := GetBaseURL()
 		if err != nil {
 			return err
@@ -43,8 +51,6 @@ it only ignores case, and the names differ by more than that between tenants
 		query, _ := cmd.Flags().GetString("query")
 		displayName, _ := cmd.Flags().GetString("display-name")
 		includeDeleted, _ := cmd.Flags().GetBool("include-deleted")
-		policyTypes, _ := cmd.Flags().GetStringSlice("policy-type")
-		excludeIDs, _ := cmd.Flags().GetStringSlice("exclude-policy-id")
 		requestedPageSize := pageSizeFlag(cmd)
 		pageToken, _ := cmd.Flags().GetString("page-token")
 		manualPaging := cmd.Flags().Changed("page-token")
@@ -115,9 +121,9 @@ it only ignores case, and the names differ by more than that between tenants
 func init() {
 	policiesSearchCmd.Flags().String("query", "", "Fuzzy search on display name and description")
 	policiesSearchCmd.Flags().String("display-name", "", "Exact-ish (case-insensitive) display name match")
-	policiesSearchCmd.Flags().StringSlice("policy-type", nil, "Filter by policy type: grant, revoke, certify, ... (repeatable)")
+	addRepeatableStringFlag(policiesSearchCmd, "policy-type", "Filter by policy type: grant, revoke, certify, ... (repeatable)")
 	policiesSearchCmd.Flags().Bool("include-deleted", false, "Include soft-deleted policies")
-	policiesSearchCmd.Flags().StringSlice("exclude-policy-id", nil, "Policy ID to exclude from results (repeatable)")
+	addRepeatableStringFlag(policiesSearchCmd, "exclude-policy-id", "Policy ID to exclude from results (repeatable)")
 	// The lower default is this endpoint's own; the rest is context the shared
 	// flag wording can't carry without drifting. The floor here is 5, not the
 	// 10 the policy proto's comment claims (9 passes through unclamped) -- and

@@ -195,9 +195,12 @@ func buildExternalConfig(cmd *cobra.Command) (map[string]any, error) {
 	return cfg, nil
 }
 
-// parseKeyValues reads a repeatable "key=value" string-slice flag into a map.
+// parseKeyValues reads a repeatable "key=value" flag into a map.
 func parseKeyValues(cmd *cobra.Command, name string) (map[string]string, error) {
-	pairs, _ := cmd.Flags().GetStringSlice(name)
+	pairs, err := repeatableStringFlag(cmd, name)
+	if err != nil {
+		return nil, err
+	}
 	if len(pairs) == 0 {
 		return nil, nil
 	}
