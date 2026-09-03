@@ -8,6 +8,32 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **`c1i tasks restart`, `reset`, `skip-step`, `process` and
+  `update-grant-duration`.** The task action family was five commands wrapping
+  thirteen server routes; these add the five whose behaviour could be
+  demonstrated. All ten now share one runner — `approve`, `deny`, `comment`,
+  `close` and `reassign` each hand-rolled the same request-and-confirm
+  sequence, and their help text and dry-run output are unchanged.
+
+  Verified by effect rather than exit code. `restart` and `skip-step` rotate
+  the task's current policy step and add one history entry; `reset` adds four,
+  because it restarts the policy rather than the step. Neither `restart` nor
+  `reset` reopens a closed task — the state stays `TASK_STATE_CLOSED`.
+  `process` changes nothing observable on a healthy task, so expect a result
+  only where processing had stalled. `update-grant-duration` lands as
+  `grantDuration` on the task, takes a protobuf duration (`3600s`, not `1h`),
+  and is refused once the task reaches provisioning with `cannot update grant
+  duration for a ticket in a provision step`.
+
+  Which actions a task accepts depends on its state; the rest are refused with
+  `action not permitted`. Read the task's own list with
+  `c1i api --path /api/v1/tasks/<task-id> --fields actions`.
+
+  Not wrapped: `escalate` could not be demonstrated even with emergency grants
+  enabled on the entitlement, `update-request-data` takes a free-form object
+  that wants a body-file flag, and `approve-with-step-up` needs a step-up
+  transaction id the CLI cannot obtain.
+
 - **`c1i entitlements create`.** Modelling a manually-managed app took three
   raw `api` calls -- resource type, resource, then entitlement -- with the ids
   hand-carried between them. One command now does it, and reuses objects you

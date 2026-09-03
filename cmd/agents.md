@@ -326,7 +326,22 @@ resource with `--resource-id` likewise means you drop
   close`/`reassign` therefore never print a state (`close` reports `task_id`,
   `reassign` also the `policy_step_id`); if you call these actions
   through `api`, read the task back rather than trusting the response's
-  `state`.
+  `state`. The same holds for `restart`, `reset`, `skip-step`, `process` and
+  `update-grant-duration`.
+- Which actions a task accepts depends on its state, and the server refuses the
+  rest with `action not permitted`. Read the task's own list first:
+  `c1i api --path /api/v1/tasks/<task-id> --fields actions`. Every action also
+  rotates the current policy step, so a `--policy-step-id` captured before
+  another call is stale and answers `this action is no longer available: the
+  request has advanced to a new approval step` -- omit the flag to act on
+  whatever step is current.
+- `restart` re-runs the current approval step (one new history entry); `reset`
+  restarts the whole policy (four, measured). Neither reopens a closed task --
+  the state stays `TASK_STATE_CLOSED`. `process` changes nothing observable on
+  a healthy task. `update-grant-duration` needs a protobuf duration (`3600s`,
+  not `1h`) and only works before provisioning, after which the server says
+  `cannot update grant duration for a ticket in a provision step`; the value
+  lands as `grantDuration`.
 - Entitlement ids are unique only within an app — some system-builtin
   entitlements reuse the same id across every app that has one. Always key
   on `(app_id, id)` together, never `id` alone.
