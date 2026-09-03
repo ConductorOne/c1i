@@ -194,17 +194,17 @@ func TestEntitlementCreatePlanUsageErrors(t *testing.T) {
 			// that apart from "not provisioned yet".
 			"empty owner id",
 			[]string{"--app-id", "app1", "--display-name", "e", "--owner-id", ""},
-			"--owner-id values must be non-empty",
+			"--owner-id requires a non-empty value for every occurrence",
 		},
 		{
 			"empty owner id alongside a real one",
 			[]string{"--app-id", "app1", "--display-name", "e", "--owner-id", "", "--owner-id", "u1"},
-			"--owner-id values must be non-empty",
+			"--owner-id requires a non-empty value for every occurrence",
 		},
 		{
 			"whitespace-only owner id",
 			[]string{"--app-id", "app1", "--display-name", "e", "--owner-id", "  "},
-			"--owner-id values must be non-empty",
+			"--owner-id requires a non-empty value for every occurrence",
 		},
 	}
 	for _, tc := range cases {

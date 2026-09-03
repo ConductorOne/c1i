@@ -80,6 +80,19 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- **BREAKING — repeatable flags no longer split on commas, and an empty
+  occurrence is a usage error (exit 2).** Every repeatable string flag
+  (`--user-id`, `--to-user-id`, `--tool-id`, `--config-field`, `--state`,
+  `--classification`, `--policy-type`, `--exclude-policy-id`, `--query`,
+  `--header`) was a pflag `StringSlice`, which CSV-splits each occurrence and
+  so destroys an empty one during parsing: `--user-id "" --user-id REAL`
+  arrived as `["REAL"]`, too late for any command-level check to see. On
+  `apps set-owners`, which replaces the full owner list, an unset shell
+  variable silently set one owner and exited 0. They are now `StringArray`,
+  registered and read through one shared pair of helpers that reject an empty
+  or whitespace-only occurrence before anything is sent. The break: `--flag
+  a,b` is now one value, not two — repeat the flag instead (`--flag a --flag
+  b`), the form every help string and documented example already used.
 - **BREAKING — a negative `--limit` or `--page-size` is now a usage error
   (exit 2)** instead of being accepted or sent. `--limit` never reaches the
   API, so `--limit -1` had silently behaved exactly like the documented

@@ -23,17 +23,14 @@ The confirmation reports the task id and the policy step acted on, never a
 state: the action endpoints echo the task's state from before the action.`,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		toUserIDs, _ := cmd.Flags().GetStringSlice("to-user-id")
-		// Cobra's required check only proves the flag was set. `--to-user-id ""`
-		// parses to an empty slice; `a,,b` yields a blank element. Either would
-		// otherwise post an empty approver id.
+		// Cobra's required check only proves the flag was set; the accessor is
+		// what rejects an empty occurrence that would post a blank approver id.
+		toUserIDs, err := repeatableStringFlag(cmd, "to-user-id")
+		if err != nil {
+			return err
+		}
 		if len(toUserIDs) == 0 {
 			return &usageError{fmt.Errorf("flag --to-user-id requires at least one value")}
-		}
-		for _, id := range toUserIDs {
-			if id == "" {
-				return &usageError{fmt.Errorf("flag --to-user-id requires a non-empty value")}
-			}
 		}
 
 		baseURL, err := GetBaseURL()
@@ -86,7 +83,7 @@ state: the action endpoints echo the task's state from before the action.`,
 }
 
 func init() {
-	tasksReassignCmd.Flags().StringSlice("to-user-id", nil, "User ID to reassign the step to (repeatable)")
+	addRepeatableStringFlag(tasksReassignCmd, "to-user-id", "User ID to reassign the step to (repeatable)")
 	tasksReassignCmd.Flags().String("policy-step-id", "", "Policy step to reassign (defaults to the task's current step)")
 	tasksReassignCmd.Flags().String("comment", "", "Optional comment")
 	markRequired(tasksReassignCmd, "to-user-id")

@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/ConductorOne/c1i/internal/client"
@@ -43,16 +42,12 @@ Honors --dry-run (with --wait, dry-run still only previews the PUT; it never
 polls).`,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		userIDs, _ := cmd.Flags().GetStringSlice("user-id")
+		userIDs, err := repeatableStringFlag(cmd, "user-id")
+		if err != nil {
+			return err
+		}
 		if len(userIDs) == 0 {
 			return &usageError{fmt.Errorf("at least one --user-id is required")}
-		}
-		for _, id := range userIDs {
-			if strings.TrimSpace(id) == "" {
-				// An empty id would send userIds:[""] and earn a confusing 4xx
-				// (the API requires a 27-char user id); reject it up front.
-				return &usageError{fmt.Errorf("--user-id values must be non-empty")}
-			}
 		}
 		wait, waitTimeout, err := waitFlagValues(cmd)
 		if err != nil {
@@ -145,7 +140,7 @@ func buildSetOwnersBody(userIDs []string) map[string]any {
 }
 
 func init() {
-	appsSetOwnersCmd.Flags().StringSlice("user-id", nil, "C1 user ID to set as owner (repeatable; replaces the full owner list)")
+	addRepeatableStringFlag(appsSetOwnersCmd, "user-id", "C1 user ID to set as owner (repeatable; replaces the full owner list)")
 	markRequired(appsSetOwnersCmd, "user-id")
 	addWaitFlags(appsSetOwnersCmd, "GET .../ownerids until the requested owners appear", 4*time.Minute)
 	appsCmd.AddCommand(appsSetOwnersCmd)

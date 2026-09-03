@@ -150,7 +150,7 @@ func init() {
 	// HOSTED config
 	mcpServersUpdateCredentialsCmd.Flags().String("catalog-id", "", "Catalog entry ID (HOSTED)")
 	mcpServersUpdateCredentialsCmd.Flags().String("source-app-id", "", "Source app ID (HOSTED)")
-	mcpServersUpdateCredentialsCmd.Flags().StringSlice("config-field", nil, "Extra config field key=value (HOSTED, repeatable)")
+	addRepeatableStringFlag(mcpServersUpdateCredentialsCmd, "config-field", "Extra config field key=value (HOSTED, repeatable)")
 	mcpServersUpdateCredentialsCmd.Flags().String("hosted-config-file", "", "Full hostedConfig JSON (file or \"-\" for stdin)")
 	// EXTERNAL config
 	mcpServersUpdateCredentialsCmd.Flags().String("server-url", "", "External MCP server URL (EXTERNAL)")

@@ -237,15 +237,9 @@ func buildEntitlementCreatePlan(cmd *cobra.Command) (*entitlementCreatePlan, err
 	// An owner id from an unset shell variable would otherwise create the
 	// entitlement with fewer owners than asked for, and owner reads are async,
 	// so nothing downstream can tell that apart from "not provisioned yet".
-	// pflag's CSV round-trip drops a lone `--owner-id ""` entirely, so an empty
-	// owner arrives either as a missing value or an empty one.
-	owners, _ := cmd.Flags().GetStringArray("owner-id")
-	empty := cmd.Flags().Changed("owner-id") && len(owners) == 0
-	for _, id := range owners {
-		empty = empty || strings.TrimSpace(id) == ""
-	}
-	if empty {
-		return nil, &usageError{fmt.Errorf("--owner-id values must be non-empty")}
+	owners, err := repeatableStringFlag(cmd, "owner-id")
+	if err != nil {
+		return nil, err
 	}
 	if len(owners) > 0 {
 		p.entitlementBody["appEntitlementOwnerIds"] = owners
@@ -444,7 +438,7 @@ func addEntitlementCreateFlags(cmd *cobra.Command) {
 	// StringArray, not StringSlice: the slice parser drops an empty value
 	// outright, so `--owner-id "" --owner-id U` would lose the empty one
 	// before this command could reject it.
-	f.StringArray("owner-id", nil, "C1 user ID to own the new entitlement (repeatable)")
+	addRepeatableStringFlag(cmd, "owner-id", "C1 user ID to own the new entitlement (repeatable)")
 	f.String("resource-type", "CUSTOM", "Kind of resource type to create: "+strings.Join(resourceTypeKinds, ", "))
 	f.String("resource-type-id", "", "Existing app resource type to reuse instead of creating one")
 	f.String("resource-type-display-name", "", "Display name for the resource type this command creates (default: --display-name)")

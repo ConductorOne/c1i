@@ -119,7 +119,11 @@ func buildRegisterBody(cmd *cobra.Command) (map[string]any, error) {
 	if v, _ := cmd.Flags().GetString("tool-prefix"); v != "" {
 		body["toolPrefix"] = v
 	}
-	if ids, _ := cmd.Flags().GetStringSlice("user-id"); len(ids) > 0 {
+	ids, err := repeatableStringFlag(cmd, "user-id")
+	if err != nil {
+		return nil, err
+	}
+	if len(ids) > 0 {
 		body["userIds"] = ids
 	}
 
@@ -160,11 +164,11 @@ func init() {
 	mcpServersRegisterCmd.Flags().String("description", "", "Description")
 	mcpServersRegisterCmd.Flags().String("data-sensitivity", "", "Data sensitivity: public, internal, confidential, restricted")
 	mcpServersRegisterCmd.Flags().String("tool-prefix", "", "Prefix for exposed tool names")
-	mcpServersRegisterCmd.Flags().StringSlice("user-id", nil, "Integration owner user ID (repeatable)")
+	addRepeatableStringFlag(mcpServersRegisterCmd, "user-id", "Integration owner user ID (repeatable)")
 	// HOSTED config
 	mcpServersRegisterCmd.Flags().String("catalog-id", "", "Catalog entry ID (HOSTED)")
 	mcpServersRegisterCmd.Flags().String("source-app-id", "", "Source app ID for connector-backed HOSTED servers")
-	mcpServersRegisterCmd.Flags().StringSlice("config-field", nil, "Extra config field key=value (HOSTED, repeatable)")
+	addRepeatableStringFlag(mcpServersRegisterCmd, "config-field", "Extra config field key=value (HOSTED, repeatable)")
 	mcpServersRegisterCmd.Flags().String("hosted-config-file", "", "Full hostedConfig JSON (file or \"-\" for stdin)")
 	// EXTERNAL config
 	mcpServersRegisterCmd.Flags().String("server-url", "", "External MCP server URL (EXTERNAL)")
