@@ -280,7 +280,12 @@ func repeatableStringFlagError(name string) error {
 // Not passing the flag at all is not an error here: whether the flag is
 // required is the command's business, and several callers treat it as optional.
 func repeatableStringFlag(cmd *cobra.Command, name string) ([]string, error) {
-	values, _ := cmd.Flags().GetStringArray(name)
+	values, err := cmd.Flags().GetStringArray(name)
+	if err != nil {
+		// Wrong flag type, not user input: reporting it as an empty value would
+		// send the reader to fix their command line instead of the code.
+		return nil, fmt.Errorf("--%s is not a repeatable string flag: %w", name, err)
+	}
 	f := cmd.Flags().Lookup(name)
 	if f == nil || !f.Changed {
 		return values, nil

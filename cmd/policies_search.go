@@ -30,6 +30,14 @@ tenant's auto-approval policy portably. --display-name is no substitute:
 it only ignores case, and the names differ by more than that between tenants
 ("Auto-approval" in one, "Auto approval" in the next).`,
 	RunE: func(cmd *cobra.Command, args []string) error {
+		policyTypes, err := repeatableStringFlag(cmd, "policy-type")
+		if err != nil {
+			return err
+		}
+		excludeIDs, err := repeatableStringFlag(cmd, "exclude-policy-id")
+		if err != nil {
+			return err
+		}
 		baseURL, err := GetBaseURL()
 		if err != nil {
 			return err
@@ -43,14 +51,6 @@ it only ignores case, and the names differ by more than that between tenants
 		query, _ := cmd.Flags().GetString("query")
 		displayName, _ := cmd.Flags().GetString("display-name")
 		includeDeleted, _ := cmd.Flags().GetBool("include-deleted")
-		policyTypes, err := repeatableStringFlag(cmd, "policy-type")
-		if err != nil {
-			return err
-		}
-		excludeIDs, err := repeatableStringFlag(cmd, "exclude-policy-id")
-		if err != nil {
-			return err
-		}
 		requestedPageSize := pageSizeFlag(cmd)
 		pageToken, _ := cmd.Flags().GetString("page-token")
 		manualPaging := cmd.Flags().Changed("page-token")

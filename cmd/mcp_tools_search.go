@@ -16,6 +16,14 @@ var mcpToolsSearchCmd = &cobra.Command{
 			return err
 		}
 
+		states, err := repeatableStringFlag(cmd, "state")
+		if err != nil {
+			return err
+		}
+		classes, err := repeatableStringFlag(cmd, "classification")
+		if err != nil {
+			return err
+		}
 		baseURL, err := GetBaseURL()
 		if err != nil {
 			return err
@@ -29,14 +37,6 @@ var mcpToolsSearchCmd = &cobra.Command{
 		appID, _ := cmd.Flags().GetString("app-id")
 		connectorID, _ := cmd.Flags().GetString("connector-id")
 		query, _ := cmd.Flags().GetString("query")
-		states, err := repeatableStringFlag(cmd, "state")
-		if err != nil {
-			return err
-		}
-		classes, err := repeatableStringFlag(cmd, "classification")
-		if err != nil {
-			return err
-		}
 		requestedPageSize := pageSizeFlag(cmd)
 		pageToken, _ := cmd.Flags().GetString("page-token")
 		manualPaging := cmd.Flags().Changed("page-token")

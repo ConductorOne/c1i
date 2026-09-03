@@ -46,6 +46,44 @@ func TestValidationGuardsExitUsage(t *testing.T) {
 		args []string
 		cmds []*cobra.Command // commands whose flags need resetting between cases
 	}{
+		// The registrar guard pins how these flags are REGISTERED; nothing pins
+		// how they are READ. Reading one with GetStringArray directly reverts the
+		// fix for that flag silently, and only a row here notices.
+		{
+			name: "api: --query empty",
+			args: []string{"api", "--path", "/x", "--query", ""},
+			cmds: []*cobra.Command{apiCmd},
+		},
+		{
+			name: "api: --header empty",
+			args: []string{"api", "--path", "/x", "--header", ""},
+			cmds: []*cobra.Command{apiCmd},
+		},
+		{
+			name: "policies search: --policy-type empty",
+			args: []string{"policies", "search", "--policy-type", ""},
+			cmds: []*cobra.Command{policiesSearchCmd},
+		},
+		{
+			name: "policies search: --exclude-policy-id empty",
+			args: []string{"policies", "search", "--exclude-policy-id", ""},
+			cmds: []*cobra.Command{policiesSearchCmd},
+		},
+		{
+			name: "mcp tools search: --state empty",
+			args: []string{"mcp", "tools", "search", "--state", ""},
+			cmds: []*cobra.Command{mcpToolsSearchCmd},
+		},
+		{
+			name: "mcp tools search: --classification empty",
+			args: []string{"mcp", "tools", "search", "--classification", ""},
+			cmds: []*cobra.Command{mcpToolsSearchCmd},
+		},
+		{
+			name: "mcp servers register: --user-id empty",
+			args: []string{"mcp", "servers", "register", "--app-id", "a", "--type", "hosted", "--display-name", "d", "--user-id", ""},
+			cmds: []*cobra.Command{mcpServersRegisterCmd},
+		},
 		{
 			// --tool-id is a cobra-required flag; omitting it entirely is
 			// intercepted by cobra itself (already exitUsage via

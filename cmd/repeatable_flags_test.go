@@ -15,7 +15,7 @@ import (
 )
 
 // Repeatable string flags (--user-id, --tool-id, --config-field, …) were
-// hand-registered as pflag StringSlice in nine files. StringSlice CSV-splits
+// hand-registered as pflag StringSlice. StringSlice CSV-splits
 // every occurrence, which DESTROYS an empty one during parsing:
 // `--user-id "" --user-id REAL` arrives as ["REAL"]. `apps set-owners`
 // replaces the full owner list, so an unset shell variable silently dropped an
@@ -297,14 +297,19 @@ func TestRepeatableStringFlagErrorHasOneWording(t *testing.T) {
 	}
 }
 
-// TestRepeatableStringFlagOnAnUnregisteredFlag pins the missing-flag path:
-// the accessor must not panic on a name no command registered.
+// TestRepeatableStringFlagOnAnUnregisteredFlag pins the missing-flag path. A
+// name no command registered is a wiring bug, and it used to return no values
+// and no error — the silent-empty shape this file exists to eliminate. It must
+// surface, and must not be mistaken for the user passing an empty value.
 func TestRepeatableStringFlagOnAnUnregisteredFlag(t *testing.T) {
 	got, err := repeatableStringFlag(&cobra.Command{Use: "bare"}, "nope")
-	if err != nil {
-		t.Errorf("unregistered flag returned an error: %v", err)
+	if err == nil {
+		t.Fatal("unregistered flag returned no error; a wiring bug reads as success")
 	}
 	if len(got) != 0 {
 		t.Errorf("unregistered flag returned %q, want no values", got)
+	}
+	if err.Error() == repeatableStringFlagError("nope").Error() {
+		t.Error("a wiring bug reports the user's empty-value message, sending the reader to fix their command line")
 	}
 }
