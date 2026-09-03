@@ -621,24 +621,24 @@ func TestResourceTypeSingletonIsDocumented(t *testing.T) {
 // changed to name the flags a retry must drop, and the guide kept quoting the
 // old form in the same commit — a retry copied from it would be refused.
 func TestRemediationStringIsDocumentedVerbatim(t *testing.T) {
-	plan := &entitlementCreatePlan{
-		resourceTypeBody: map[string]any{},
-		typeOnlyFlags:    []string{"--resource-type-display-name"},
-	}
-	msg := plan.createdSoFar("<id>", "")
-	for _, frag := range []string{"dropping", "to reuse instead of duplicating"} {
-		if !strings.Contains(msg, frag) {
-			t.Fatalf("createdSoFar no longer contains %q; this guard is checking the wrong thing", frag)
-		}
+	// Built by the real planner, so a regression that stopped populating
+	// typeOnlyFlags fails here instead of leaving a hand-made plan green.
+	plan := mustPlan(t, "--app-id", "a", "--display-name", "e",
+		"--resource-type-display-name", "rt")
+	msg := strings.TrimSpace(plan.createdSoFar("<id>", ""))
+	if !strings.Contains(msg, "dropping --resource-type-display-name") {
+		t.Fatalf("createdSoFar produced %q, which names no flag to drop; "+
+			"this guard would then pass on any doc", msg)
 	}
 	docs := map[string]string{
 		"entitlements create --help":   entitlementsCreateCmd.Long,
 		"docs guide configure-new-app": guideConfigureNewApp,
 	}
 	for name, doc := range docs {
-		if !strings.Contains(flattenDoc(doc), "dropping") {
-			t.Errorf("%s quotes the partial-failure retry without the flags-to-drop clause; "+
-				"a reader following it verbatim gets exit 2", name)
+		// Verbatim, not a keyword: renaming the flag must break the docs that
+		// quote it, which a check for the word "dropping" alone would not.
+		if !strings.Contains(flattenDoc(doc), msg) {
+			t.Errorf("%s does not quote the partial-failure message verbatim.\nwant: %s", name, msg)
 		}
 	}
 }
