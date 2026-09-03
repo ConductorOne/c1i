@@ -688,3 +688,32 @@ func TestRemediationOnResourceFailureKeepsResourceName(t *testing.T) {
 			"it names does not exist yet; the retry would create it under --display-name: %q", msg)
 	}
 }
+
+// TestReusedTypeFlagsAreDocumented holds every doc that tells a reader to reuse
+// an existing resource type to the full list the code refuses. The advice named
+// only --resource-type while the code rejects --resource-type-display-name too,
+// so following it verbatim exited 2 — and a keyword check could not see that.
+func TestReusedTypeFlagsAreDocumented(t *testing.T) {
+	if len(typeCreateOnlyFlags) == 0 {
+		t.Fatal("no create-only type flags, so this guard would prove nothing")
+	}
+	docs := map[string]string{
+		"entitlements create --help":   entitlementsCreateCmd.Long,
+		"README.md":                    readDocFile(t, "../README.md"),
+		"cmd/agents.md (embedded)":     agentsTemplate,
+		"docs guide configure-new-app": guideConfigureNewApp,
+	}
+	for name, doc := range docs {
+		flat := flattenDoc(doc)
+		if !strings.Contains(flat, "--resource-type-id") {
+			t.Errorf("%s never mentions --resource-type-id", name)
+			continue
+		}
+		for _, f := range typeCreateOnlyFlags {
+			if !strings.Contains(flat, "--"+f) {
+				t.Errorf("%s tells the reader to reuse a type but never says to drop --%s, "+
+					"which the code refuses alongside --resource-type-id", name, f)
+			}
+		}
+	}
+}

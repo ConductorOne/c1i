@@ -62,7 +62,9 @@ form. One of:
 Only CUSTOM can repeat on one app: a second resource type of any other kind
 fails with a 500 (exit 6, though retrying never helps):
   app resource type already exists
-Reuse the one that exists with --resource-type-id instead.
+Reuse the one that exists with --resource-type-id, dropping both
+--resource-type and --resource-type-display-name; either alongside the id is a
+usage error.
 
 Omitting --duration-grant leaves the entitlement at standing access
 (durationUnset in the response). It takes a protobuf duration, not a Go one --
@@ -150,6 +152,11 @@ type entitlementCreatePlan struct {
 // network / auth) so --dry-run and unit tests exercise the same bodies the live
 // requests send. Optional fields are omitted when empty rather than sent as
 // empty strings/arrays.
+// typeCreateOnlyFlags describe a resource type this command would create, so
+// each is refused alongside --resource-type-id. Named once: the docs that tell
+// a reader what to drop are held to this list.
+var typeCreateOnlyFlags = []string{"resource-type", "resource-type-display-name"}
+
 func buildEntitlementCreatePlan(cmd *cobra.Command) (*entitlementCreatePlan, error) {
 	appID, _ := cmd.Flags().GetString("app-id")
 	displayName, _ := cmd.Flags().GetString("display-name")
@@ -167,7 +174,7 @@ func buildEntitlementCreatePlan(cmd *cobra.Command) (*entitlementCreatePlan, err
 			`invalid CreateAppEntitlementRequest.AppResourceTypeId: value does not match regex pattern "^[a-zA-Z0-9]{27}$"`)}
 	}
 
-	if err := rejectFlagsForReusedObject(cmd, resourceTypeID, "--resource-type-id", "resource-type", "resource-type-display-name"); err != nil {
+	if err := rejectFlagsForReusedObject(cmd, resourceTypeID, "--resource-type-id", typeCreateOnlyFlags...); err != nil {
 		return nil, err
 	}
 	if err := rejectFlagsForReusedObject(cmd, resourceID, "--resource-id", "resource-display-name"); err != nil {
