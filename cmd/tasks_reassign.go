@@ -3,9 +3,32 @@ package cmd
 import (
 	"fmt"
 
-	"github.com/ConductorOne/c1i/internal/client"
 	"github.com/spf13/cobra"
 )
+
+var tasksReassignAction = taskAction{
+	verb: "reassign",
+	// The API does not require policyStepId here (approve does). We require a
+	// resolvable step anyway: a reassign with no step is ambiguous, and failing
+	// loudly beats sending it.
+	step: stepRequired,
+	extraBody: func(cmd *cobra.Command, body map[string]any) error {
+		// Cobra's required check only proves the flag was set; the accessor is
+		// what rejects an empty occurrence that would post a blank approver id.
+		toUserIDs, err := repeatableStringFlag(cmd, "to-user-id")
+		if err != nil {
+			return err
+		}
+		if len(toUserIDs) == 0 {
+			return &usageError{fmt.Errorf("flag --to-user-id requires at least one value")}
+		}
+		body["newStepUserIds"] = toUserIDs
+		return nil
+	},
+	confirm: func(id, _, stepID string) string {
+		return fmt.Sprintf("Reassigned task: task_id=%s policy_step_id=%s\n", id, stepID)
+	},
+}
 
 var tasksReassignCmd = &cobra.Command{
 	Use:   "reassign <task-id>",
@@ -22,64 +45,7 @@ the command errors and asks you to pass --policy-step-id explicitly.
 The confirmation reports the task id and the policy step acted on, never a
 state: the action endpoints echo the task's state from before the action.`,
 	Args: cobra.ExactArgs(1),
-	RunE: func(cmd *cobra.Command, args []string) error {
-		// Cobra's required check only proves the flag was set; the accessor is
-		// what rejects an empty occurrence that would post a blank approver id.
-		toUserIDs, err := repeatableStringFlag(cmd, "to-user-id")
-		if err != nil {
-			return err
-		}
-		if len(toUserIDs) == 0 {
-			return &usageError{fmt.Errorf("flag --to-user-id requires at least one value")}
-		}
-
-		baseURL, err := GetBaseURL()
-		if err != nil {
-			return err
-		}
-
-		c, err := newClient(cmd, baseURL)
-		if err != nil {
-			return fmt.Errorf("authentication failed: %w", err)
-		}
-
-		taskID := args[0]
-		comment, _ := cmd.Flags().GetString("comment")
-		policyStepID, _ := cmd.Flags().GetString("policy-step-id")
-
-		// The API does not require policyStepId here (approve does). We require a
-		// resolvable step anyway: a reassign with no step is ambiguous, and failing
-		// loudly beats sending it.
-		stepID, err := resolvePolicyStepID(cmd.Context(), c, taskID, policyStepID, true)
-		if err != nil {
-			return err
-		}
-
-		body := map[string]any{
-			"newStepUserIds": toUserIDs,
-			"policyStepId":   stepID,
-		}
-		if comment != "" {
-			body["comment"] = comment
-		}
-
-		path := client.Path("/api/v1/tasks/%s/action/reassign", taskID)
-		if dryRunActive() {
-			return printDryRun(cmd, "POST", path, body)
-		}
-		data, err := c.Post(cmd.Context(), path, body)
-		if err != nil {
-			return fmt.Errorf("API error: %w", err)
-		}
-
-		id, _, err := parseTaskActionResponse(data)
-		if err != nil {
-			return fmt.Errorf("failed to parse response: %w", err)
-		}
-
-		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Reassigned task: task_id=%s policy_step_id=%s\n", id, stepID)
-		return nil
-	},
+	RunE: tasksReassignAction.runTaskAction,
 }
 
 func init() {
