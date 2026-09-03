@@ -6,7 +6,47 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed
+
+- **Fixtures and command documentation now use placeholder identifiers**, and
+  a test keeps them that way: it rejects tenant-copied object ids, tenant
+  hostnames, and prose naming the tenant an observation came from.
+  Placeholders are stable and self-describing; a copied identifier addresses
+  nothing the reader owns. Help text states what the API does and leaves the
+  supporting measurement in the working notes. Entries already in this
+  changelog keep the figures they were written with.
+
 ### Added
+
+- **`c1i access-profiles` — list, get and create access profiles**, which the
+  API calls request catalogs and routes under `/api/v1/catalogs`.
+  `access-profiles list` emits NDJSON and auto-paginates;
+  `access-profiles get <access-profile-id>` unwraps the API's
+  `requestCatalogView.requestCatalog` envelope so the catalog's own keys are at
+  the top level; `access-profiles create --display-name <name>` sends only the flags
+  you pass, so the server's defaults apply to the rest. `--published` and
+  `--visible-to-everyone` take effect at create time, so a catalog can be
+  created already published.
+
+  Three server behaviors the commands account for, each verified live.
+  `access-profiles list` rows carry no member count: the list endpoint reports
+  `memberCount` as `0` for every catalog while
+  `access-profiles get` on the same id answers a real count, and the
+  endpoint takes no parameter (only `page_size`/`page_token`) that could
+  populate it — so the key is omitted rather than emitted as a zero that reads
+  like "no members". A catalog's visibility bindings can only be added once it
+  is published: `POST /api/v1/catalogs/{id}/visibility_bindings` on an
+  unpublished catalog is a `400`, and so is one on a `--visible-to-everyone`
+  catalog; unpublished says `catalog must be published to add an access
+  entitlement`, visible-to-everyone says `catalog is visible to everyone, cannot
+  add access entitlements`, and the identical call on a catalog published but not
+  visible to everyone returns `200`. And
+  delete is a soft delete — the catalog leaves `access-profiles list` while
+  `access-profiles get` still returns it at exit `0` with `deletedAt` set.
+
+  The sub-resource routes (requestable entitlements, visibility bindings,
+  bundle automation) and `access-profiles delete`/`update` are not yet wrapped; reach
+  them through `c1i api`.
 
 - **`c1i tasks close` and `c1i tasks reassign`.** An identity can open a task
   it cannot resolve -- `approve` and `deny` fail with `action not permitted`
@@ -1185,8 +1225,8 @@ look:
   command for. The command's `--help` now states both explicitly and points
   at the new `docs guide delegate-entitlement-provisioning` runbook.
 - **`entitlements --help` now documents that some system-builtin
-  entitlements share a canonical ID across apps.** Verified live against a
-  test tenant: the base "Access" entitlement carries the identical id
+  entitlements share a canonical ID across apps.** Verified live: the base
+  "Access" entitlement carries the identical id
   (`287oY0rG4UirjDNFEYguMBvxyim`) on GitHub, Salesforce, Bitbucket Cloud,
   Snowflake, and Google Workspace apps alike (the same pattern observed for
   MCP's "All approved tools"/"Read tools" system toolsets). A

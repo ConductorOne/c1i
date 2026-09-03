@@ -1,3 +1,7 @@
 # cmd/docs_search.go mintlifyKey: public client-side search-attribution key,
 # not an auth credential.
 ddb4c718fa52d24debffe6415a827357210322bc:cmd/docs_search.go:generic-api-key:17
+
+# cmd/placeholder_identifiers_test.go sharedAccessEntitlementID: a platform
+# object id compiled into the API, not a credential. High entropy by shape.
+4a0e3eaf904b05937f0e998a9910d003bb17eb70:cmd/placeholder_identifiers_test.go:generic-api-key:26
