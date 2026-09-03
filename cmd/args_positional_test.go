@@ -270,7 +270,9 @@ func TestMigratedSingleResourceCommandsUsePositionalID(t *testing.T) {
 		{path: []string{"mcp", "servers", "catalog", "get"}, retiredFlag: "catalog-id"},
 
 		{path: []string{"mcp", "tools", "get"}, retiredFlag: "id", mustKeepFlag: []string{"app-id", "connector-id"}},
-		{path: []string{"mcp", "tools", "approve"}, retiredFlag: "id", mustKeepFlag: []string{"app-id", "connector-id"}},
+		// "approve" is deliberately NOT here: it takes one OR more ids (batch
+		// approval), so it accepts a 2nd positional. Its contract is pinned by
+		// TestMcpToolsApproveIsMultiIDPositional instead.
 		{path: []string{"mcp", "tools", "delete"}, retiredFlag: "id", mustKeepFlag: []string{"app-id", "connector-id"}},
 		{path: []string{"mcp", "tools", "history"}, retiredFlag: "id", mustKeepFlag: []string{"app-id", "connector-id"}},
 
@@ -333,6 +335,37 @@ func TestMigratedSingleResourceCommandsUsePositionalID(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// TestMcpToolsApproveIsMultiIDPositional pins C146: approve is the one
+// migrated action that takes MORE than one id (batch approval), so unlike its
+// single-resource siblings it accepts a 2nd positional. The rest of the
+// migration contract still holds: the id stays positional (no --id flag) and
+// the scope ids stay flags.
+func TestMcpToolsApproveIsMultiIDPositional(t *testing.T) {
+	cmd := findCommand(t, rootCmd, "mcp", "tools", "approve")
+
+	spec, err := parseUsePositionals(cmd.Use)
+	if err != nil {
+		t.Fatalf("%v", err)
+	}
+	if spec.required != 1 || spec.optional != 0 {
+		t.Errorf("Use %q should document a required positional, got required=%d optional=%d", cmd.Use, spec.required, spec.optional)
+	}
+	if argsAccepts(cmd, 0) {
+		t.Error("approve accepted 0 args; at least one tool id is required")
+	}
+	if !argsAccepts(cmd, 1) || !argsAccepts(cmd, 2) {
+		t.Error("approve must accept one OR more tool ids (batch approval)")
+	}
+	if hasFlag(cmd, "id") {
+		t.Error("the tool id must be positional-only, not an --id flag")
+	}
+	for _, f := range []string{"app-id", "connector-id"} {
+		if !hasFlag(cmd, f) {
+			t.Errorf("scope flag --%s must remain registered", f)
+		}
 	}
 }
 

@@ -366,7 +366,7 @@ c1i mcp servers connections list   [--page-size N] [--limit N]
 c1i mcp tools list    --app-id <id> --connector-id <id> [--page-size N] [--page-token TOKEN] [--limit N]
 c1i mcp tools get     <tool-id> --app-id <id> --connector-id <id>
 c1i mcp tools search  --app-id <id> --connector-id <id> [--query <text>] [--state ...] [--classification ...] [--page-size N] [--limit N]
-c1i mcp tools approve <tool-id> --app-id <id> --connector-id <id> [--state approved|disabled|pending]
+c1i mcp tools approve <tool-id>... --app-id <id> --connector-id <id> [--state approved|disabled|pending]
 c1i mcp tools delete  <tool-id> --app-id <id> --connector-id <id>
 c1i mcp tools history <tool-id> --app-id <id> --connector-id <id> [--page-size N] [--limit N]
 
@@ -393,7 +393,7 @@ c1i mcp gateway call <tool-name> [--args '{"k":"v"}'] [--gateway-url <url>]
 
 **Auth for `register` / `update-credentials`:** convenience flags cover the simple methods — `--auth none`, `--auth bearer-token --bearer-token TOKEN`, `--auth custom-header --header-name NAME --header-value VALUE`, `--auth basic-auth --basic-auth-username USER --basic-auth-password PASS`. For OAuth2 / AWS SigV4 / Google service-account auth, pass the full config object via `--hosted-config-file` / `--external-config-file` (JSON file, or `-` for stdin) — generate a ready-to-edit skeleton with `--print-config-template --auth <method> [--type hosted]` instead of hand-writing it. Secrets are sealed server-side; reads only ever return `*_configured` booleans, never the values. `--token-sharing shared|per-user` sets the server's token-sharing mode (case-insensitive; `per_user`/`peruser` are also accepted). Per the register help, `per-user` is only valid with `oauth2` in authorization-code or passthrough mode, `bearerToken`, `customHeader`, or `basicAuth`. Note that a read-back can legitimately differ from what you sent: the backend may store a *resolved* OAuth2 grant such as `..._MODE_AUTHORIZATION_CODE` in place of the input mode, so that is a normal round-trip, not a bug. `--source-app-id` names the source app for a connector-backed HOSTED server.
 
-`mcp tools approve` is the standard post-registration step: newly discovered tools (from `register` or `resync-tools`) start in `PENDING_REVIEW`, and an admin approves each one for the gateway to proxy calls. History endpoints return records newest-first.
+`mcp tools approve` is the standard post-registration step: newly discovered tools (from `register` or `resync-tools`) start in `PENDING_REVIEW`, and an admin approves them for the gateway to proxy calls. It takes one or more tool ids — the API has no batch approve, so each id is a separate request, but one invocation covers a whole toolset (pipe `mcp tools search --app-id <id> --connector-id <id> --state pending --fields id | jq -r .id`). History endpoints return records newest-first.
 
 **`mcp gateway`** closes the configure-then-verify loop: after registering a server and approving its tools, `list-tools` runs the MCP handshake against the live gateway and shows what's actually callable, and `call` invokes a tool and prints its result. The gateway URL defaults to the `-mcp` host derived from `--url` (e.g. `acme.conductor.one` → `acme-mcp.conductor.one/v1`); override with `--gateway-url`. Your standard C1 token is accepted by the gateway, so no extra auth is needed. `call` always prints the full result, but exits `7` (not `0`) when the result itself reports `isError: true` — the call succeeded, the tool didn't.
 
