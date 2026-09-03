@@ -2,8 +2,6 @@
 
 **C1 Interface** — and it looks like `cli`. Get it?
 
-> **Beta** — stabilizing toward 1.0. The core commands, flags, and output formats are stable; smaller changes may still land before 1.0.
-
 A command-line interface for the [C1](https://www.conductorone.com) API designed for AI agents.
 Structured output (NDJSON/JSON), built-in API docs, and auto-pagination.
 For a human-friendly CLI, see [cone](https://github.com/ConductorOne/cone).

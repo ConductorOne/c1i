@@ -6,6 +6,31 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-09-03
+
+### Upgrading from 0.6.x
+
+Two breaking changes in this release, both narrowing inputs that used to be
+silently accepted. A script that relied on either behaviour needs a look.
+
+**Repeatable flags no longer split on commas, and an empty occurrence is a
+usage error (exit 2).** Flags like `--user-id`, `--tool-id`, `--config-field`,
+`--state`, `--query` and `--header` were comma-split, so `--tool-id a,b` meant
+two ids; it now means one id literally named `a,b`. Pass each value as its own
+occurrence — `--tool-id a --tool-id b` — the form every help string and
+documented example already used. Separately, an empty occurrence (`--user-id
+""` from an unset shell variable) is now rejected before the request rather
+than dropped: on `apps set-owners`, which replaces the full owner list, that
+empty had silently set one owner and exited 0.
+
+**A negative `--limit` or `--page-size` is a usage error (exit 2).** `--limit
+-1` had behaved exactly like the documented `--limit 0` — every row, exit 0 —
+with nothing able to catch the typo, and a negative `--page-size` cost a round
+trip to be refused by the server. Both are now rejected before any request,
+naming what `0` does. `0` and positive values are unaffected, and a raw `api
+--query page_size=-1` still reaches the server, since `--query` is not this
+flag.
+
 ### Added
 
 - **`c1i tasks restart`, `reset`, `skip-step`, `process` and
@@ -1654,7 +1679,8 @@ First changelog entry; releases through v0.1.5 predate this file (see the
 
 - CI enforces `gofmt` via golangci-lint; module-wide formatting normalized.
 
-[Unreleased]: https://github.com/ConductorOne/c1i/compare/v0.6.0...HEAD
+[Unreleased]: https://github.com/ConductorOne/c1i/compare/v0.7.0...HEAD
+[0.7.0]: https://github.com/ConductorOne/c1i/releases/tag/v0.7.0
 [0.6.0]: https://github.com/ConductorOne/c1i/releases/tag/v0.6.0
 [0.5.0]: https://github.com/ConductorOne/c1i/releases/tag/v0.5.0
 [0.4.1]: https://github.com/ConductorOne/c1i/releases/tag/v0.4.1
