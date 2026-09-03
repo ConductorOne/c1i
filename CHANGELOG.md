@@ -119,6 +119,13 @@ flag.
 
 ### Changed
 
+- **`c1i docs agents` now includes a "Finding things in the docs" workflow.** A
+  decision tree pointing agents at the right `docs` command for what they need:
+  a product concept via `docs search` then `docs page` for the full page (search
+  returns only a truncated snippet plus a `url` to the public docs), an
+  endpoint's existence or shape via `docs endpoints --filter` then `docs
+  endpoint`, a runbook via `docs guide`, and the raw spec via `docs openapi`.
+
 - **`c1i mcp tools approve` now takes one or more tool ids.** Approving a
   toolset meant one invocation — a fresh process, token and TLS handshake —
   per tool; `approve id1 id2 id3` now does them in a single process. The API

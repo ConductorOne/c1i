@@ -131,11 +131,9 @@ The cobra tree never drifts from what's implemented. Step down it with
     c1i mcp --help
     c1i mcp servers get --help
 
-For task-oriented walkthroughs and the API surface:
-
-    c1i docs guide
-    c1i docs endpoints --filter TEXT
-    c1i docs endpoint <path>
+Where to look in the docs — a product concept, an endpoint's shape, or a
+runbook — is its own section, "Finding things in the docs" below. To drive a
+discovered endpoint directly:
 
     c1i api --path /api/v1/access_reviews --paginate
 
@@ -154,6 +152,32 @@ campaign ID from a URL is the access review `id` directly, and the UI's "access
 profile" is the API's catalog: `c1i access-profiles list`, `/api/v1/catalogs`, whose
 `RequestCatalog` schema is tagged `x-speakeasy-entity: Access_Profile` in the
 spec. Search for both names.
+
+## Finding things in the docs
+
+`docs` commands need no credentials, so reach for them before — or without —
+authenticating. Which one depends on what you are after:
+
+- **A product concept, or how the product does something** ("access reviews",
+  "just-in-time access"): `docs search "<terms>"`. It returns up to 10 hits as
+  NDJSON — each a `title`, a `path`, a `content` preview, and a `url` (the
+  public docs page a human can open). The `content` is a snippet of the page —
+  usually short, though an API-reference hit can run to tens of thousands of
+  characters — so read the authoritative full page with `docs page <path>` on
+  the best hit. `docs search` is semantic with
+  no true no-match (see "Global flags" above), so judge each hit by its snippet
+  rather than trusting that a result exists.
+- **Whether an API endpoint exists, or its request/response shape**: `docs
+  endpoints --filter <text>` lists matching routes and has a real no-match — an
+  empty result means nothing matched, not "the search gave up" — then `docs
+  endpoint <path>` prints that route's full request/response schema.
+- **A step-by-step runbook** (register an MCP server, configure a new app,
+  request access): `docs guide` lists the embedded guides and `docs guide
+  <name>` prints one. These are static content, no network call.
+- **The raw OpenAPI spec**: `docs openapi` (cached 24h locally).
+
+Rule of thumb: a product concept starts at `docs search` → `docs page`; a raw
+`c1i api` call starts at `docs endpoints --filter` → `docs endpoint`.
 
 ## Reading output
 
