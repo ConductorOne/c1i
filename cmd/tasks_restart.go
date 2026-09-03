@@ -32,8 +32,8 @@ Whether restart is available at all depends on the task; the server refuses
 with "action not permitted" otherwise. Check the task's own action list:
   c1i api --path /api/v1/tasks/<task-id> --fields actions
 
-Every action rotates the current policy step, so a --policy-step-id captured
-earlier goes stale and the server answers:
+restart, reset and skip-step each rotate the current policy step, so a
+--policy-step-id captured before one of them goes stale and the server answers:
   this action is no longer available: the request has advanced to a new approval step
 Omit the flag to act on whatever step is current.
 
@@ -44,7 +44,7 @@ action endpoints echo the task's state from before the action.`,
 }
 
 func init() {
-	addTaskActionFlags(tasksRestartCmd, tasksRestartAction.step,
-		"Policy step to restart (defaults to the task's current step)")
+	tasksRestartCmd.Flags().String("comment", "", "Optional comment")
+	tasksRestartCmd.Flags().String("policy-step-id", "", "Policy step to restart (defaults to the task's current step)")
 	tasksCmd.AddCommand(tasksRestartCmd)
 }

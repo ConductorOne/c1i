@@ -47,76 +47,135 @@ func newTaskActionRecorder(t *testing.T, state, currentStepID string) *taskActio
 	return r
 }
 
-// TestTaskActionsPostTheirOwnVerb pins that each command hits its own action
-// path. Sharing one RunE makes a copied verb the plausible mistake, and the
-// wrong verb would silently perform a different action on the task.
-func TestTaskActionsPostTheirOwnVerb(t *testing.T) {
-	cases := []struct {
-		cmdName  string
-		wantPath string
-	}{
-		{"restart", "/api/v1/tasks/" + actionTestTaskID + "/action/restart"},
-		{"reset", "/api/v1/tasks/" + actionTestTaskID + "/action/reset"},
-		{"skip-step", "/api/v1/tasks/" + actionTestTaskID + "/action/skip-step"},
-		{"process", "/api/v1/tasks/" + actionTestTaskID + "/action/process"},
-		{"close", "/api/v1/tasks/" + actionTestTaskID + "/action/close"},
-		{"approve", "/api/v1/tasks/" + actionTestTaskID + "/action/approve"},
-		{"deny", "/api/v1/tasks/" + actionTestTaskID + "/action/deny"},
+// taskActionExpectations pins, per action command, the path it must POST and
+// whether its body carries policyStepId. Seeded against tasksCmd.Commands()
+// by TestEveryTaskActionIsPinned, so adding a command without adding a row
+// here fails rather than going silently untested.
+var taskActionExpectations = map[string]struct {
+	verb     string
+	wantStep bool
+	// setup supplies flags the command requires before it will run.
+	setup func(cmd *cobra.Command)
+}{
+	"approve":               {verb: "approve", wantStep: true},
+	"deny":                  {verb: "deny", wantStep: true},
+	"close":                 {verb: "close", wantStep: false},
+	"restart":               {verb: "restart", wantStep: true},
+	"reset":                 {verb: "reset", wantStep: false},
+	"skip-step":             {verb: "skip-step", wantStep: true},
+	"process":               {verb: "process", wantStep: false},
+	"comment":               {verb: "comment", wantStep: false, setup: func(c *cobra.Command) { _ = c.Flags().Set("comment", "zz") }},
+	"update-grant-duration": {verb: "update-grant-duration", wantStep: false, setup: func(c *cobra.Command) { _ = c.Flags().Set("duration", "3600s") }},
+	"reassign":              {verb: "reassign", wantStep: true, setup: func(c *cobra.Command) { _ = c.Flags().Set("to-user-id", "zz-user") }},
+}
+
+// nonActionTaskSubcommands are the tasks subcommands that are not action POSTs.
+var nonActionTaskSubcommands = map[string]bool{"list": true}
+
+// TestEveryTaskActionIsPinned is the guard on the guard: every action command
+// in the tree must have a row above.
+func TestEveryTaskActionIsPinned(t *testing.T) {
+	seen := 0
+	for _, c := range tasksCmd.Commands() {
+		name := c.Name()
+		if nonActionTaskSubcommands[name] {
+			continue
+		}
+		seen++
+		if _, ok := taskActionExpectations[name]; !ok {
+			t.Errorf("tasks %s has no row in taskActionExpectations, so nothing pins its action path or policy-step behaviour", name)
+		}
 	}
-	for _, tc := range cases {
-		t.Run(tc.cmdName, func(t *testing.T) {
-			cmd := findTasksSubcommand(t, tc.cmdName)
+	if seen == 0 {
+		t.Fatal("found no task action commands — this guard is not looking at what it thinks it is")
+	}
+	for name := range taskActionExpectations {
+		if findTasksSubcommandOrNil(name) == nil {
+			t.Errorf("taskActionExpectations lists %q, which is no longer a tasks subcommand", name)
+		}
+	}
+}
+
+// TestEveryTaskActionPostsItsOwnVerbAndStep drives every pinned command and
+// checks both the path and whether policyStepId is on the wire. A copied verb
+// would perform a different action on the task while printing success.
+func TestEveryTaskActionPostsItsOwnVerbAndStep(t *testing.T) {
+	const step = "zz-step-1111111111111111111"
+	for name, want := range taskActionExpectations {
+		t.Run(name, func(t *testing.T) {
+			cmd := findTasksSubcommand(t, name)
 			resetCmds(t, cmd)
-			r := newTaskActionRecorder(t, "TASK_STATE_OPEN", "zz-step-1111111111111111111")
+			if want.setup != nil {
+				want.setup(cmd)
+			}
+			r := newTaskActionRecorder(t, "TASK_STATE_OPEN", step)
 			if _, err := runTaskActionCmd(t, cmd, r.srv, actionTestTaskID); err != nil {
-				t.Fatalf("%s: %v", tc.cmdName, err)
+				t.Fatalf("%s: %v", name, err)
 			}
 			if len(r.paths) != 1 {
-				t.Fatalf("%s posted %d times, want 1: %v", tc.cmdName, len(r.paths), r.paths)
+				t.Fatalf("%s posted %d times, want 1: %v", name, len(r.paths), r.paths)
 			}
-			if r.paths[0] != tc.wantPath {
-				t.Errorf("%s posted %q, want %q", tc.cmdName, r.paths[0], tc.wantPath)
+			if got, wantPath := r.paths[0], "/api/v1/tasks/"+actionTestTaskID+"/action/"+want.verb; got != wantPath {
+				t.Errorf("%s posted %q, want %q", name, got, wantPath)
+			}
+			got, ok := r.bodies[0]["policyStepId"]
+			if want.wantStep {
+				if !ok || got != step {
+					t.Errorf("%s body policyStepId = %v (present=%v), want %q", name, got, ok, step)
+				}
+				return
+			}
+			if ok {
+				t.Errorf("%s sent policyStepId=%v to an endpoint that takes none", name, got)
 			}
 		})
 	}
 }
 
-// TestTaskActionsSendPolicyStepOnlyWhenTheyUseOne pins the three step modes.
-// Sending policyStepId to an endpoint that takes none, or omitting it where the
-// server requires it, are both silent-wrong-request failures.
-func TestTaskActionsSendPolicyStepOnlyWhenTheyUseOne(t *testing.T) {
-	const step = "zz-step-1111111111111111111"
-	cases := []struct {
-		cmdName  string
-		wantStep bool
-	}{
-		{"restart", true},
-		{"skip-step", true},
-		{"approve", true},
-		{"reset", false},
-		{"process", false},
-		{"close", false},
+// TestTasksCommentAlwaysSendsTheCommentKey pins the one action whose empty
+// value must still reach the wire: the comment IS the payload, so an omitted
+// key records nothing while the command still prints success.
+func TestTasksCommentAlwaysSendsTheCommentKey(t *testing.T) {
+	cmd := findTasksSubcommand(t, "comment")
+	resetCmds(t, cmd)
+	_ = cmd.Flags().Set("comment", "")
+	r := newTaskActionRecorder(t, "TASK_STATE_OPEN", "zz-step-1111111111111111111")
+	if _, err := runTaskActionCmd(t, cmd, r.srv, actionTestTaskID); err != nil {
+		t.Fatalf("comment: %v", err)
 	}
-	for _, tc := range cases {
-		t.Run(tc.cmdName, func(t *testing.T) {
-			cmd := findTasksSubcommand(t, tc.cmdName)
-			resetCmds(t, cmd)
-			r := newTaskActionRecorder(t, "TASK_STATE_OPEN", step)
-			if _, err := runTaskActionCmd(t, cmd, r.srv, actionTestTaskID); err != nil {
-				t.Fatalf("%s: %v", tc.cmdName, err)
-			}
-			got, ok := r.bodies[0]["policyStepId"]
-			if tc.wantStep {
-				if !ok || got != step {
-					t.Errorf("%s body policyStepId = %v (present=%v), want %q", tc.cmdName, got, ok, step)
-				}
-				return
-			}
-			if ok {
-				t.Errorf("%s sent policyStepId=%v to an endpoint that takes none", tc.cmdName, got)
-			}
-		})
+	got, ok := r.bodies[0]["comment"]
+	if !ok || got != "" {
+		t.Errorf("comment body = %v (present=%v), want an empty string present", got, ok)
 	}
+}
+
+// TestTasksDenyOmitsAnUnresolvableStep pins deny's stepOptional mode on the
+// wire: when the current step cannot be derived the field must be absent, not
+// empty, and the denial must still go through.
+func TestTasksDenyOmitsAnUnresolvableStep(t *testing.T) {
+	cmd := findTasksSubcommand(t, "deny")
+	resetCmds(t, cmd)
+	r := newTaskActionRecorder(t, "TASK_STATE_OPEN", "") // no current step
+	if _, err := runTaskActionCmd(t, cmd, r.srv, actionTestTaskID); err != nil {
+		t.Fatalf("deny: %v", err)
+	}
+	if got, ok := r.bodies[0]["policyStepId"]; ok {
+		t.Errorf("deny sent policyStepId=%v when no step could be resolved; the field must be omitted", got)
+	}
+	if len(r.paths) != 1 {
+		t.Errorf("deny posted %d times, want 1", len(r.paths))
+	}
+}
+
+// findTasksSubcommandOrNil is findTasksSubcommand without the fatal, for the
+// reverse direction of the pinning check.
+func findTasksSubcommandOrNil(name string) *cobra.Command {
+	for _, c := range tasksCmd.Commands() {
+		if c.Name() == name {
+			return c
+		}
+	}
+	return nil
 }
 
 // TestTaskActionsNeverEchoResponseState extends the guarantee close already

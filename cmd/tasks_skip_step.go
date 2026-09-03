@@ -32,7 +32,7 @@ action endpoints echo the task's state from before the action.`,
 }
 
 func init() {
-	addTaskActionFlags(tasksSkipStepCmd, tasksSkipStepAction.step,
-		"Policy step to skip (defaults to the task's current step)")
+	tasksSkipStepCmd.Flags().String("comment", "", "Optional comment")
+	tasksSkipStepCmd.Flags().String("policy-step-id", "", "Policy step to skip (defaults to the task's current step)")
 	tasksCmd.AddCommand(tasksSkipStepCmd)
 }

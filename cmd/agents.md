@@ -330,11 +330,12 @@ resource with `--resource-id` likewise means you drop
   `update-grant-duration`.
 - Which actions a task accepts depends on its state, and the server refuses the
   rest with `action not permitted`. Read the task's own list first:
-  `c1i api --path /api/v1/tasks/<task-id> --fields actions`. Every action also
-  rotates the current policy step, so a `--policy-step-id` captured before
-  another call is stale and answers `this action is no longer available: the
-  request has advanced to a new approval step` -- omit the flag to act on
-  whatever step is current.
+  `c1i api --path /api/v1/tasks/<task-id> --fields actions`. `restart`, `reset` and
+  `skip-step` each rotate the current policy step (measured), so a
+  `--policy-step-id` captured before one of them is stale and answers `this
+  action is no longer available: the request has advanced to a new approval
+  step` -- omit the flag to act on whatever step is current. `process` and
+  `update-grant-duration` take no step.
 - `restart` re-runs the current approval step (one new history entry); `reset`
   restarts the whole policy (four, measured). Neither reopens a closed task --
   the state stays `TASK_STATE_CLOSED`. `process` changes nothing observable on

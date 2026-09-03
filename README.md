@@ -211,25 +211,26 @@ c1i tasks process <task-id>
 c1i tasks update-grant-duration <task-id> --duration <duration>
 ```
 
-Every action rotates the task's current policy step, so a `--policy-step-id`
-captured earlier goes stale — the server answers `this action is no longer
-available: the request has advanced to a new approval step`. Omit the flag to
-act on whatever step is current.
+`restart`, `reset` and `skip-step` each rotate the task's current policy step
+(measured), so a `--policy-step-id` captured before one of them goes stale —
+the server answers `this action is no longer available: the request has
+advanced to a new approval step`. Omit the flag to act on whatever step is
+current. `process` and `update-grant-duration` take no step.
 
 Which actions a task accepts depends on its state; the server refuses the rest
 with `action not permitted`. Read the task's own list with
 `c1i api --path /api/v1/tasks/<task-id> --fields actions`.
 
 `restart` re-runs the current approval step; `reset` restarts the whole policy.
-Neither reopens a closed task. `process` re-evaluates a stalled task and
-changes nothing observable on a healthy one. `update-grant-duration` takes a
+Neither reopens a closed task. `process` changes nothing observable on a
+healthy task — it is intended for one that has stalled, which was not
+reproduced here. `update-grant-duration` takes a
 protobuf duration (`3600s`, not `1h`) and only applies before the task reaches
 provisioning, after which the server answers `cannot update grant duration for
 a ticket in a provision step`; the value lands as `grantDuration`.
 
 `escalate`, `update-request-data` and `approve-with-step-up` are not wrapped;
 reach them through `c1i api`.
-
 
 `approve`/`deny`/`reassign` target a specific policy step. If `--policy-step-id`
 is omitted, the task's currently executing step is fetched and used

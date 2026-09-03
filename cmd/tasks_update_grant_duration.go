@@ -14,10 +14,6 @@ var tasksUpdateGrantDurationAction = taskAction{
 		if err != nil {
 			return err
 		}
-		if duration == "" {
-			return &usageError{fmt.Errorf("flag --duration is required; the server rejects a missing one with " +
-				`invalid TaskActionsServiceUpdateGrantDurationRequest.Duration: value is required`)}
-		}
 		body["duration"] = duration
 		return nil
 	},

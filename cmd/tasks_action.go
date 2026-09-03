@@ -17,8 +17,8 @@ const (
 )
 
 // taskAction describes one POST /api/v1/tasks/{id}/action/{verb} command. The
-// eleven action commands differ only in these fields, so they share one RunE:
-// hand-rolling each was already six near-identical copies before this.
+// action commands differ only in these fields, so they share one RunE: five
+// near-identical copies existed before this.
 type taskAction struct {
 	verb string // the path segment, e.g. "restart"
 	step policyStepMode
@@ -52,19 +52,20 @@ func (a taskAction) runTaskAction(cmd *cobra.Command, args []string) error {
 		body["comment"] = comment
 	}
 
-	// An action that needs no policy step needs no client to preview, so
-	// --dry-run works without credentials. Resolving a step requires a GET, so
-	// those actions must authenticate first even for a preview — which is what
-	// each command did before sharing this runner.
-	if a.step == stepUnused {
-		if dryRunActive() {
-			return printDryRun(cmd, "POST", path, body)
-		}
-	}
-
+	// The URL is resolved even for a preview: --dry-run answers "am I about to
+	// do this to the right tenant", so it must still reject a bad --url and
+	// still warn when the target came from config rather than the flag.
 	baseURL, err := GetBaseURL()
 	if err != nil {
 		return err
+	}
+
+	// Credentials, though, are only needed to send. An action that takes no
+	// policy step can preview without them; resolving a step needs a GET, so
+	// those must authenticate first — which is what each command did before
+	// sharing this runner.
+	if a.step == stepUnused && dryRunActive() {
+		return printDryRun(cmd, "POST", path, body)
 	}
 	c, err := newClient(cmd, baseURL)
 	if err != nil {
@@ -97,13 +98,4 @@ func (a taskAction) runTaskAction(cmd *cobra.Command, args []string) error {
 
 	_, _ = fmt.Fprintf(cmd.OutOrStdout(), "%s", a.confirm(id, state, stepID))
 	return nil
-}
-
-// addTaskActionFlags registers the flags the shared RunE reads. Only --comment
-// is universal; --policy-step-id is registered when the action uses one.
-func addTaskActionFlags(cmd *cobra.Command, step policyStepMode, stepUsage string) {
-	cmd.Flags().String("comment", "", "Optional comment")
-	if step != stepUnused {
-		cmd.Flags().String("policy-step-id", "", stepUsage)
-	}
 }

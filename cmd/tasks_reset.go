@@ -30,6 +30,6 @@ state from before the action.`,
 }
 
 func init() {
-	addTaskActionFlags(tasksResetCmd, tasksResetAction.step, "")
+	tasksResetCmd.Flags().String("comment", "", "Optional comment")
 	tasksCmd.AddCommand(tasksResetCmd)
 }
