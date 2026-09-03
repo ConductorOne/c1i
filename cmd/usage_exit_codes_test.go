@@ -91,6 +91,15 @@ func TestValidationGuardsExitUsage(t *testing.T) {
 			cmds:    []*cobra.Command{mcpToolsSearchCmd},
 		},
 		{
+			// The only repeatable flag whose READ was unpinned end to end: the
+			// existing --config-field row passes a non-empty bad pair, which
+			// parseKeyValues rejects on its own.
+			name:    "mcp servers register: --config-field empty",
+			args:    []string{"mcp", "servers", "register", "--app-id", "a", "--type", "hosted", "--display-name", "d", "--catalog-id", "cat1", "--config-field", ""},
+			wantMsg: "--config-field requires a non-empty value",
+			cmds:    []*cobra.Command{mcpServersRegisterCmd},
+		},
+		{
 			name:    "mcp servers register: --user-id empty",
 			args:    []string{"mcp", "servers", "register", "--app-id", "a", "--type", "hosted", "--display-name", "d", "--catalog-id", "cat1", "--user-id", ""},
 			wantMsg: "--user-id requires a non-empty value",
@@ -102,23 +111,26 @@ func TestValidationGuardsExitUsage(t *testing.T) {
 			// isCobraUsageError) before RunE ever runs. Passing it as an
 			// explicit empty string satisfies "required" (Changed=true) and
 			// actually reaches the len(toolIDs)==0 guard this test targets.
-			name: "mcp bindings create: --tool-id empty",
-			args: []string{"mcp", "bindings", "create", "--app-id", "a", "--connector-id", "c", "--toolset-id", "t", "--tool-id", ""},
-			cmds: []*cobra.Command{mcpBindingsCreateCmd},
+			name:    "mcp bindings create: --tool-id empty",
+			args:    []string{"mcp", "bindings", "create", "--app-id", "a", "--connector-id", "c", "--toolset-id", "t", "--tool-id", ""},
+			wantMsg: "--tool-id requires a non-empty value",
+			cmds:    []*cobra.Command{mcpBindingsCreateCmd},
 		},
 		{
-			name: "mcp bindings delete: --tool-id empty",
-			args: []string{"mcp", "bindings", "delete", "--app-id", "a", "--connector-id", "c", "--toolset-id", "t", "--tool-id", ""},
-			cmds: []*cobra.Command{mcpBindingsDeleteCmd},
+			name:    "mcp bindings delete: --tool-id empty",
+			args:    []string{"mcp", "bindings", "delete", "--app-id", "a", "--connector-id", "c", "--toolset-id", "t", "--tool-id", ""},
+			wantMsg: "--tool-id requires a non-empty value",
+			cmds:    []*cobra.Command{mcpBindingsDeleteCmd},
 		},
 		{
 			// Also pins the ordering fix: mcp_bindings_by_tools.go used to
 			// construct its client before this check, unlike create/delete
 			// above, so this case would previously have needed real
 			// credentials to reach the guard at all.
-			name: "mcp bindings by-tools: --tool-id empty",
-			args: []string{"mcp", "bindings", "by-tools", "--app-id", "a", "--connector-id", "c", "--tool-id", ""},
-			cmds: []*cobra.Command{mcpBindingsByToolsCmd},
+			name:    "mcp bindings by-tools: --tool-id empty",
+			args:    []string{"mcp", "bindings", "by-tools", "--app-id", "a", "--connector-id", "c", "--tool-id", ""},
+			wantMsg: "--tool-id requires a non-empty value",
+			cmds:    []*cobra.Command{mcpBindingsByToolsCmd},
 		},
 		{
 			name: "mcp bindings history: neither --toolset-id nor --tool-id",
@@ -194,9 +206,10 @@ func TestValidationGuardsExitUsage(t *testing.T) {
 			// --to-user-id is cobra-required, so omitting it is cobra's job.
 			// A lone "" satisfies "required" but pflag collapses it to an
 			// empty slice, so only the Changed check sees it.
-			name: "tasks reassign: --to-user-id empty",
-			args: []string{"tasks", "reassign", "task-1", "--to-user-id", ""},
-			cmds: []*cobra.Command{tasksReassignCmd},
+			name:    "tasks reassign: --to-user-id empty",
+			args:    []string{"tasks", "reassign", "task-1", "--to-user-id", ""},
+			wantMsg: "--to-user-id requires a non-empty value",
+			cmds:    []*cobra.Command{tasksReassignCmd},
 		},
 		{
 			// The shape that shipped broken: under StringSlice the empty

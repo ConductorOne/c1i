@@ -187,10 +187,16 @@ func TestAgentsDocOpensWithFrontMatter(t *testing.T) {
 		first, _, _ := strings.Cut(agentsTemplate, "\n")
 		t.Fatalf("agents.md must open with the YAML front-matter delimiter; it starts with %q", first)
 	}
+	// The block must close before the body starts. Scanning for the next "---"
+	// anywhere would latch onto a thematic break if the real delimiter were
+	// dropped, and report a body-sized block as valid front matter.
 	rest := strings.TrimPrefix(agentsTemplate, "---\n")
 	end := strings.Index(rest, "\n---\n")
 	if end < 0 {
 		t.Fatal("agents.md opens a front-matter block that is never closed")
+	}
+	if strings.Contains(rest[:end], "\n\n") {
+		t.Fatal("agents.md's front-matter block is not closed before the body begins")
 	}
 	for _, key := range []string{"name:", "description:", "version:", "required_bins:"} {
 		if !strings.Contains(rest[:end], key) {
