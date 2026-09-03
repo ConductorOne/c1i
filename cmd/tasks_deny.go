@@ -3,9 +3,18 @@ package cmd
 import (
 	"fmt"
 
-	"github.com/ConductorOne/c1i/internal/client"
 	"github.com/spf13/cobra"
 )
+
+var tasksDenyAction = taskAction{
+	verb: "deny",
+	// Optional, not required: when the current step cannot be determined the
+	// field is omitted rather than blocking the denial.
+	step: stepOptional,
+	confirm: func(id, state, _ string) string {
+		return fmt.Sprintf("Denied task: task_id=%s state=%s\n", id, state)
+	},
+}
 
 var tasksDenyCmd = &cobra.Command{
 	Use:   "deny <task-id>",
@@ -16,53 +25,7 @@ var tasksDenyCmd = &cobra.Command{
 currently executing step is used when it can be derived, and simply left off
 otherwise — deny does not require a step, so it proceeds either way.`,
 	Args: cobra.ExactArgs(1),
-	RunE: func(cmd *cobra.Command, args []string) error {
-		baseURL, err := GetBaseURL()
-		if err != nil {
-			return err
-		}
-
-		c, err := newClient(cmd, baseURL)
-		if err != nil {
-			return fmt.Errorf("authentication failed: %w", err)
-		}
-
-		taskID := args[0]
-		comment, _ := cmd.Flags().GetString("comment")
-		policyStepID, _ := cmd.Flags().GetString("policy-step-id")
-
-		// policyStepId is optional for deny; include it when we can target a
-		// specific step (needed on multi-step policies) but don't require one.
-		stepID, err := resolvePolicyStepID(cmd.Context(), c, taskID, policyStepID, false)
-		if err != nil {
-			return err
-		}
-
-		body := map[string]any{}
-		if stepID != "" {
-			body["policyStepId"] = stepID
-		}
-		if comment != "" {
-			body["comment"] = comment
-		}
-
-		path := client.Path("/api/v1/tasks/%s/action/deny", taskID)
-		if dryRunActive() {
-			return printDryRun(cmd, "POST", path, body)
-		}
-		data, err := c.Post(cmd.Context(), path, body)
-		if err != nil {
-			return fmt.Errorf("API error: %w", err)
-		}
-
-		id, state, err := parseTaskActionResponse(data)
-		if err != nil {
-			return fmt.Errorf("failed to parse response: %w", err)
-		}
-
-		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Denied task: task_id=%s state=%s\n", id, state)
-		return nil
-	},
+	RunE: tasksDenyAction.runTaskAction,
 }
 
 func init() {

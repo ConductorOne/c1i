@@ -157,14 +157,15 @@ func parseCurrentPolicyStepID(data []byte) (string, error) {
 	return resp.TaskView.Task.Policy.Current.ID, nil
 }
 
-// resolvePolicyStepID returns the policy step ID to use for an approve/deny
-// action. If the user supplied one explicitly it is used as-is; otherwise the
-// task is fetched and its currently executing step ID is used.
+// resolvePolicyStepID returns the policy step id an action should target:
+// the explicit --policy-step-id when given, otherwise the task's currently
+// executing step, fetched with a GET.
 //
-// approve requires policyStepId, so callers pass required=true to turn an
-// underivable step into an error. deny treats it as optional (the API does
-// not require it), so it passes required=false and simply omits the field
-// when no current step can be derived.
+// required distinguishes the two modes callers need. Actions the server
+// rejects without a step (approve, skip-step) and reassign, which we refuse to
+// send ambiguously, pass true and get an error. deny and restart pass false:
+// when the step cannot be derived the field is omitted rather than blocking
+// the action, which is what lets restart act on a closed task.
 func resolvePolicyStepID(ctx context.Context, c *client.Client, taskID, explicit string, required bool) (string, error) {
 	if explicit != "" {
 		return explicit, nil
