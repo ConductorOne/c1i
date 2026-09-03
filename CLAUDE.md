@@ -29,6 +29,8 @@ gosec -quiet ./...                     # CI gates on this
 govulncheck ./...                      # CI gates on this, per GOOS
 gitleaks detect --source . --no-banner # CI gates on this; scans history,
                                        # so a fingerprint pins to the commit
+go test -count=1 -shuffle=on ./...     # CI gates on this; catches tests that
+                                       # leak package-level command state
 ```
 
 Never weaken, loosen, or delete a test to make a change pass. For a new test,
