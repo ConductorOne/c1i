@@ -15,6 +15,7 @@ import (
 	"github.com/ConductorOne/c1i/internal/transport"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
+	"golang.org/x/term"
 )
 
 var authLoginCmd = &cobra.Command{
@@ -26,7 +27,12 @@ Alternatively, pass --client-id and --client-secret to store credentials directl
 Credentials are stored in the OS keyring when available, otherwise as a 0600
 file under your config directory. For non-interactive / CI use, you can skip
 storage entirely and pass credentials each invocation via the C1I_CLIENT_ID
-and C1I_CLIENT_SECRET environment variables (combined with C1I_URL).`,
+and C1I_CLIENT_SECRET environment variables (combined with C1I_URL).
+
+If a previous login used a mixed-case URL and commands now report "not
+authenticated", re-run this command: the keychain key is derived from a
+lower-cased host, so a credential stored under the old mixed-case key is no
+longer found.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		baseURL, source, err := GetBaseURLWithSource()
 		if err != nil {
@@ -73,12 +79,12 @@ func init() {
 	authCmd.AddCommand(authLoginCmd)
 }
 
+// isTerminal reports whether stdin is an interactive terminal. It gates the
+// URL prompt and the save-URL offer, so it must be false under a redirect:
+// os.ModeCharDevice alone is not enough, as /dev/null is also a character
+// device -- term.IsTerminal issues the TTY ioctl that tells them apart.
 func isTerminal() bool {
-	fi, err := os.Stdin.Stat()
-	if err != nil {
-		return false
-	}
-	return fi.Mode()&os.ModeCharDevice != 0
+	return term.IsTerminal(int(os.Stdin.Fd()))
 }
 
 // promptForURL reads a URL interactively from in (os.Stdin in production;

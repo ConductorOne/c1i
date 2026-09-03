@@ -151,6 +151,25 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   fill if you wait.** Use `c1i apps owners <app-id>`. The same guidance in
   `apps set-owners --help` is unchanged.
 
+- **`c1i --url` rejects a malformed host instead of building a nonsense base
+  URL.** Inputs like `https://`, `//`, `://host`, or a host with an embedded
+  space or control character were accepted and turned into a base URL such as
+  `https://https://` that only failed later, far from the input. They now fail
+  at parse time with a usage error (exit 2): a host must be non-empty and free
+  of spaces, control characters, and `/`.
+
+- **`c1i auth login` under a redirect no longer treats `/dev/null` as a
+  terminal.** Terminal detection now uses the TTY ioctl rather than the
+  character-device bit (which `/dev/null` also sets), so a non-interactive
+  `auth login` with no URL configured returns the "url is required" usage
+  error instead of trying to prompt.
+
+- **`c1i auth login --help` now surfaces the mixed-case-`--url` re-login
+  remedy.** A credential stored by a pre-v0.4.0 build under a mixed-case
+  keychain key is no longer found (the key is lower-cased since v0.4.0);
+  re-running `auth login` re-stores it. The behavior and remedy shipped in
+  v0.4.0 — this only adds the pointer at the point of use.
+
 ## [0.6.0] - 2026-08-27
 
 ### Upgrading from 0.5.x

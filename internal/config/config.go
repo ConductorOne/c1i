@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/url"
 	"strings"
+	"unicode"
 )
 
 // ParseURL normalizes input to "https://{host}" (no trailing slash), lower-casing
@@ -21,10 +22,10 @@ import (
 // used as typed, which is how an internal-resolver name is reached. It is only
 // a bare token (no "://" and no ".", e.g. "acme" or "localhost") that is
 // rejected: with more than one valid tenant domain family, expanding it to
-// one of them by default is a silent wrong-tenant risk. err is non-nil only
-// for this case, and the caller should name where input came from (--url
-// flag, C1I_URL, config file, interactive prompt) in how it surfaces err --
-// see GetBaseURLWithSource.
+// one of them by default is a silent wrong-tenant risk. A malformed host on
+// the degenerate fallback path (below) is rejected the same way. On any error
+// the caller should name where input came from (--url flag, C1I_URL, config
+// file, interactive prompt) in how it surfaces err -- see GetBaseURLWithSource.
 //
 // A scheme other than https (e.g. "http://", "ftp://") is rejected outright
 // -- c1i requires https, full stop, no silent upgrade and no exception for
@@ -75,10 +76,18 @@ func ParseURL(input string) (result string, warnings []string, err error) {
 		// on this degenerate path. There is no parsed URL to name the user
 		// from, but the drop must still not be silent.
 		stripped := withoutUserinfo(input)
+		host := strings.ToLower(stripped)
+		if !isHostShaped(host) {
+			// Reject rather than build a nonsense base URL ("https://",
+			// "//", "://host") that only fails later, far from the input.
+			return "", nil, fmt.Errorf(
+				"url %q is not a valid host: pass a full host such as acme.conductor.one or acme.c1eu.ai",
+				withoutUserinfo(input))
+		}
 		if stripped != input {
 			warnings = append(warnings, "--url embedded credentials were dropped; "+credentialsNotInURL)
 		}
-		return "https://" + strings.ToLower(stripped), warnings, nil
+		return "https://" + host, warnings, nil
 	}
 	// Bare token, e.g. "acme" or "localhost": retired. It used to expand to
 	// "<input>.conductor.one", but with a second tenant domain family
@@ -103,6 +112,22 @@ func withoutUserinfo(s string) string {
 		return s[i+1:]
 	}
 	return s
+}
+
+// isHostShaped reports whether s is usable as a URL host: non-empty and free
+// of spaces, control characters, and "/". It gates only the degenerate
+// fallback path, where url.Parse gave up -- the main path's host is already
+// vetted by url.Parse. Shape only; it never inspects the tenant domain family.
+func isHostShaped(s string) bool {
+	if s == "" {
+		return false
+	}
+	for _, r := range s {
+		if r == '/' || unicode.IsSpace(r) || unicode.IsControl(r) {
+			return false
+		}
+	}
+	return true
 }
 
 // KeychainService returns the keychain service name for a given base URL.

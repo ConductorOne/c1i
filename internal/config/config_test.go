@@ -309,11 +309,14 @@ func TestParseURLSingleLabelHostWithSchemeAccepted(t *testing.T) {
 }
 
 // TestParseURLDegeneratePathWarnsWhenDroppingCredentials: when url.Parse fails
-// or finds no host, ParseURL falls back to the literal input and strips
-// userinfo. The strip was silent, which contradicted both this function's
-// contract and the changelog: a dropped credential must always be reported.
+// but the remainder is still host-shaped, ParseURL falls back to the literal
+// input and strips userinfo. The strip must not be silent: a dropped
+// credential is always reported. Inputs whose remainder is NOT host-shaped are
+// rejected instead -- see TestParseURLRejectsMalformedFallbackHost.
 func TestParseURLDegeneratePathWarnsWhenDroppingCredentials(t *testing.T) {
-	for _, input := range []string{"https://user:hunter2@", "https://user:hunter2@ac\x00me"} {
+	// %zz makes url.Parse fail, but "ho%zzst.example" is host-shaped, so this
+	// reaches the fallback rather than the reject path.
+	for _, input := range []string{"https://user:hunter2@ho%zzst.example"} {
 		got, warnings, err := ParseURL(input)
 		if err != nil {
 			t.Fatalf("ParseURL(%q) error = %v, want nil", input, err)
@@ -328,6 +331,38 @@ func TestParseURLDegeneratePathWarnsWhenDroppingCredentials(t *testing.T) {
 		}
 		if strings.Contains(got, "hunter2") {
 			t.Errorf("ParseURL(%q) = %q, still carries the password", input, got)
+		}
+	}
+}
+
+// TestParseURLRejectsMalformedFallbackHost: the degenerate fallback used to
+// accept anything and prepend "https://", yielding nonsense base URLs like
+// "https://https://" or "https:////" that only failed later. A fallback host
+// must be non-empty and free of spaces, control characters, and "/". The
+// rejection must still never echo an embedded password.
+func TestParseURLRejectsMalformedFallbackHost(t *testing.T) {
+	for _, input := range []string{
+		"https://",
+		"://host",
+		"//",
+		"https://ho st",
+		"ac me.conductor.one",
+		"acme.conductor.one\x00",
+		"https://user:hunter2@",
+		"https://user:hunter2@ac\x00me",
+	} {
+		got, warnings, err := ParseURL(input)
+		if err == nil {
+			t.Errorf("ParseURL(%q) error = nil, want a malformed-host error", input)
+		}
+		if got != "" {
+			t.Errorf("ParseURL(%q) result = %q, want empty on error", input, got)
+		}
+		if len(warnings) != 0 {
+			t.Errorf("ParseURL(%q) warnings = %v, want none on error", input, warnings)
+		}
+		if err != nil && strings.Contains(err.Error(), "hunter2") {
+			t.Errorf("ParseURL(%q) error echoes the password: %v", input, err)
 		}
 	}
 }
