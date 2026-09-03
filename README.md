@@ -128,9 +128,10 @@ together with `--resource-type-id` is a usage error rather than a silently
 ignored flag. Only `CUSTOM` can repeat on one app: a second resource type of
 any other kind fails with a 500 (exit `6`, though retrying never helps) saying
 `app resource type already exists`, so reuse the existing one with
-`--resource-type-id` and drop both --resource-type and --resource-type-display-name — either one alongside
-the id is a usage error. Reusing a resource with `--resource-id` likewise means
-you drop --resource-display-name. `--owner-id` is repeatable and goes inline in the create
+`--resource-type-id` and drop both `--resource-type` and
+`--resource-type-display-name` — either one alongside the id is a usage error.
+Reusing a resource with `--resource-id` likewise means you drop
+`--resource-display-name`. `--owner-id` is repeatable and goes inline in the create
 request, so no follow-up call is needed; an empty one is a usage error rather
 than an owner quietly dropped. `--duration-grant` takes a protobuf duration —
 seconds with an `s` suffix, e.g. `3600s`; a Go-style `1h` is refused by the

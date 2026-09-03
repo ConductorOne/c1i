@@ -62,9 +62,10 @@ form. One of:
 Only CUSTOM can repeat on one app: a second resource type of any other kind
 fails with a 500 (exit 6, though retrying never helps):
   app resource type already exists
-Reuse the one that exists with --resource-type-id and drop both --resource-type and --resource-type-display-name;
-either alongside the id is a usage error. Likewise, pass --resource-id to reuse
-a resource and drop --resource-display-name.
+Reuse the one that exists with --resource-type-id and drop both
+--resource-type and --resource-type-display-name; either alongside the id is a
+usage error. Likewise, pass --resource-id to reuse a resource and drop
+--resource-display-name.
 
 Omitting --duration-grant leaves the entitlement at standing access
 (durationUnset in the response). It takes a protobuf duration, not a Go one --

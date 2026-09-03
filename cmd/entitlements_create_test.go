@@ -689,33 +689,34 @@ func TestRemediationOnResourceFailureKeepsResourceName(t *testing.T) {
 	}
 }
 
-// reuseDropClauses are the canonical instructions, required verbatim in every
-// doc that advises reusing an object. Fixed clauses, not pattern-matched prose:
-// three heuristic versions of this guard were each satisfiable by the wrong
-// text — "--resource-type" is a prefix of "--resource-type-id", unrelated
-// mentions elsewhere in a file counted, and anchoring on the instruction let a
-// doc that dropped the instruction be skipped rather than failed.
+// reuseDropClauses are the canonical instructions, required in every doc that
+// advises reusing an object. Fixed clauses, not pattern-matched prose: earlier
+// heuristic versions were each satisfiable by the wrong text.
 var reuseDropClauses = map[string]string{
 	"--resource-type-id": "drop both --resource-type and --resource-type-display-name",
 	"--resource-id":      "drop --resource-display-name",
 }
 
-// TestReusedTypeFlagsAreDocumented holds every doc that advises reusing an
-// existing object to the full list of flags the code refuses alongside its id.
-// Following advice that named only one of two refused flags exited 2.
-func TestReusedTypeFlagsAreDocumented(t *testing.T) {
-	// The clauses must name every flag the code actually refuses, or the docs
-	// can be complete against a stale contract.
-	for idFlag, flags := range map[string][]string{
-		"--resource-type-id": typeCreateOnlyFlags,
-		"--resource-id":      resourceCreateOnlyFlags,
-	} {
+// reusePairs ties each id flag to the list the code actually refuses beside it.
+var reusePairs = map[string][]string{
+	"--resource-type-id": typeCreateOnlyFlags,
+	"--resource-id":      resourceCreateOnlyFlags,
+}
+
+// TestReuseAdviceIsDocumented holds every doc that advises reusing an existing
+// object to the full list of flags the code refuses alongside its id. Advice
+// naming only one of two refused flags exited 2, which is what this prevents.
+func TestReuseAdviceIsDocumented(t *testing.T) {
+	for idFlag, flags := range reusePairs {
 		clause, ok := reuseDropClauses[idFlag]
 		if !ok {
 			t.Fatalf("%s refuses flags but has no documented clause", idFlag)
 		}
 		for _, f := range flags {
-			if !strings.Contains(clause, "--"+f) {
+			// docMentionsFlag, not Contains: --resource-type is a prefix of
+			// --resource-type-display-name, so a substring check here is
+			// satisfied by the other flag in the very same clause.
+			if !docMentionsFlag(clause, f) {
 				t.Fatalf("the clause for %s omits --%s, which the code refuses", idFlag, f)
 			}
 		}
@@ -728,10 +729,23 @@ func TestReusedTypeFlagsAreDocumented(t *testing.T) {
 		"docs guide configure-new-app": guideConfigureNewApp,
 	}
 	for name, doc := range docs {
-		flat := flattenDoc(doc)
+		// Backticks stripped so a doc can format flags as code, which is these
+		// files' own convention; requiring the bare form banned correct markdown.
+		flat := strings.ReplaceAll(flattenDoc(doc), "`", "")
 		for idFlag, clause := range reuseDropClauses {
-			if !strings.Contains(flat, clause) {
+			if !docMentionsFlag(flat, strings.TrimPrefix(idFlag, "--")) {
+				t.Errorf("%s never names %s, so its reuse advice cannot be found", name, idFlag)
+				continue
+			}
+			at := strings.Index(flat, clause)
+			if at < 0 {
 				t.Errorf("%s does not carry the reuse clause for %s.\nwant: %s", name, idFlag, clause)
+				continue
+			}
+			// A nearby negation inverts the instruction while satisfying it.
+			lead := strings.ToLower(flat[max(0, at-24):at])
+			if strings.Contains(lead, "not ") || strings.Contains(lead, "never ") {
+				t.Errorf("%s negates the reuse clause for %s: %q", name, idFlag, flat[max(0, at-24):at+len(clause)])
 			}
 		}
 	}
