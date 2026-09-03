@@ -365,3 +365,35 @@ func TestTasksUpdateGrantDurationSendsDurationKey(t *testing.T) {
 		t.Error(`body carries "grantDuration"; that is the response field, not the request's`)
 	}
 }
+
+// TestTaskActionsDryRunStillResolvesTheURL is the guard on the ordering this
+// branch had to fix twice. --dry-run answers "am I about to do this to the
+// right tenant", so it must still reject a bad --url. Previewing before
+// resolving the URL made a typo'd tenant preview happily at exit 0, and no
+// other test could see it: the rest stub the client and pass a valid URL.
+func TestTaskActionsDryRunStillResolvesTheURL(t *testing.T) {
+	// Both modes, since the runner resolves the URL once for each path.
+	for _, name := range []string{"close", "restart"} {
+		t.Run(name, func(t *testing.T) {
+			resetRootURLFlag(t)
+			t.Setenv("C1I_URL", "")
+			viper.Set("dry_run", true)
+			t.Cleanup(func() { viper.Set("dry_run", false) })
+
+			var out bytes.Buffer
+			rootCmd.SetOut(&out)
+			rootCmd.SetErr(&out)
+			rootCmd.SetArgs([]string{"tasks", name, actionTestTaskID, "--dry-run", "--url", "not a url"})
+			err := rootCmd.ExecuteContext(t.Context())
+			if err == nil {
+				t.Fatalf("tasks %s --dry-run accepted a malformed --url; a typo'd tenant previews as though it were real", name)
+			}
+			if got := exitCode(err); got != exitUsage {
+				t.Errorf("exitCode = %d, want %d (exitUsage); err = %v", got, exitUsage, err)
+			}
+			if strings.Contains(out.String(), "[dry-run]") {
+				t.Errorf("tasks %s printed a preview for an unresolvable URL: %q", name, out.String())
+			}
+		})
+	}
+}
