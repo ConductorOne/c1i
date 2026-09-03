@@ -99,7 +99,53 @@ c1i accounts set-owner <app-user-id> --app-id <id> --user-id <id>
 ```sh
 c1i entitlements list [--app-id <id>] [--query <text>] [--page-size N] [--page-token TOKEN] [--limit N]
 c1i entitlements get <entitlement-id> --app-id <id>
+
+# Create one on a manually-managed app, with its resource type and resource
+c1i entitlements create --app-id <id> --display-name "Payroll admin" \
+  [--description <text>] [--slug member] [--alias payroll_admin] [--owner-id <user-id>] \
+  [--duration-grant 3600s] [--resource-type CUSTOM] \
+  [--resource-type-display-name "Payroll role"] [--resource-display-name "Payroll admins"]
+
+# Reuse an existing resource type (or an existing resource) instead of creating one
+c1i entitlements create --app-id <id> --display-name "Payroll viewer" --resource-type-id <id>
+c1i entitlements create --app-id <id> --display-name "Payroll viewer (RO)" \
+  --resource-type-id <id> --resource-id <id>
 ```
+
+An entitlement points at an app resource, which lives under an app resource
+type, so `entitlements create` is up to three `POST`s: the resource type, the
+resource, then the entitlement. `--resource-type-id` and `--resource-id` skip
+whichever of the first two steps you already have — one resource type can carry
+many resources, and one resource many entitlements. The server requires both
+ids on the entitlement even though the OpenAPI schema marks only `displayName`
+required, so `--resource-id` without `--resource-type-id` is rejected at exit
+`2` before anything is sent.
+
+`--resource-type` is `ROLE`, `GROUP`, `LICENSE`, `PROJECT`, `CATALOG`,
+`CUSTOM`, `VAULT` or `PROFILE_TYPE` (case-insensitive here, uppercase on the
+wire) and describes the resource type this command creates, so passing it
+together with `--resource-type-id` is a usage error rather than a silently
+ignored flag. Only `CUSTOM` can repeat on one app: a second resource type of
+any other kind fails with a 500 (exit `6`, though retrying never helps) saying
+`app resource type already exists`, so reuse the existing one with
+`--resource-type-id` and drop both `--resource-type` and
+`--resource-type-display-name` — either one alongside the id is a usage error.
+Reusing a resource with `--resource-id` likewise means you drop
+`--resource-display-name`. `--owner-id` is repeatable and goes inline in the create
+request, so no follow-up call is needed; an empty one is a usage error rather
+than an owner quietly dropped. `--duration-grant` takes a protobuf duration —
+seconds with an `s` suffix, e.g. `3600s`; a Go-style `1h` is refused by the
+server. Omit it for standing access.
+
+`--dry-run` previews all three requests, printing
+`NEW_APP_RESOURCE_TYPE_ID`/`NEW_APP_RESOURCE_ID` where an id only exists after
+a real preceding step. There is no rollback: if a later step fails, the objects
+the earlier ones created still exist, and the error names them along with the
+flags that reuse them and the create-only flags the retry has to drop. The
+created entitlement comes back as pretty JSON under `appEntitlementView`
+(`--fields` is never applied to mutation output); it echoes
+`appResourceTypeId`/`appResourceId` and expands both objects, so every id the
+command touched is in that one payload.
 
 ### Grants ("who has access")
 

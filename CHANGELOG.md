@@ -6,6 +6,29 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- **`c1i entitlements create`.** Modelling a manually-managed app took three
+  raw `api` calls -- resource type, resource, then entitlement -- with the ids
+  hand-carried between them. One command now does it, and reuses objects you
+  already have: pass `--resource-type-id` to skip the first call, and
+  `--resource-id` as well to skip the second. `--owner-id` is set
+  inline rather than needing a follow-up call, and `--duration-grant` is a flag
+  rather than a hand-written body field.
+
+  On a partial failure nothing is rolled back; the error names what that run
+  created, the flags to re-run with, and the create-only flags that retry has
+  to drop, so the command it prints is one that works. `--dry-run` previews
+  all three requests.
+
+  Empty values are usage errors (exit 2) before anything is sent, rather than
+  silent fallbacks: `--owner-id ""` from an unset shell variable would have
+  created an ownerless entitlement at exit 0, and an empty
+  `--resource-type-display-name`/`--resource-display-name` would have quietly
+  reused `--display-name`. Only a `CUSTOM` resource type can repeat on one
+  app; the help now says so, quoting the server's own
+  `app resource type already exists`.
+
 ### Changed
 
 - **Fixtures and command documentation now use placeholder identifiers**, and

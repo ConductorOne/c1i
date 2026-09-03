@@ -245,6 +245,20 @@ Two things are irreversible in ways their `--help` doesn't make obvious:
   each toolset's app entitlement, is soft-deleted with it. Anyone whose
   access came through one of those entitlements is affected.
 
+One command sends more than one write: `entitlements create` POSTs a resource
+type, a resource, then the entitlement, skipping the steps whose id you supply
+via `--resource-type-id`/`--resource-id`. Its `--dry-run` previews all three.
+There is no rollback, so a failure part-way through leaves the earlier objects
+behind; the error names them, the flags that reuse them, and the create-only
+flags the retry has to drop, and re-running without those flags creates
+duplicates. Only a `CUSTOM` resource type can repeat on one app: a second
+`--resource-type` of any other kind fails with a 500 (exit `6`, though
+retrying never helps) saying `app resource type already exists` -- reuse the
+existing type with `--resource-type-id` and drop both `--resource-type` and
+`--resource-type-display-name`; either alongside the id is exit 2. Reusing a
+resource with `--resource-id` likewise means you drop
+`--resource-display-name`.
+
 ## Things that will surprise you
 
 - A **repeatable** flag takes one value per occurrence; a comma is literal, not
@@ -316,6 +330,10 @@ Two things are irreversible in ways their `--help` doesn't make obvious:
 - Entitlement ids are unique only within an app — some system-builtin
   entitlements reuse the same id across every app that has one. Always key
   on `(app_id, id)` together, never `id` alone.
+- `POST /api/v1/apps/{app_id}/entitlements` requires `appResourceTypeId` and
+  `appResourceId` even though its OpenAPI schema lists only `displayName` as
+  required; omitting them 400s on the id regex. `entitlements create` handles
+  this for you.
 - `mcp servers test-connection` returns `toolCount` as a JSON string, not a
   number. The `tool_count` in NDJSON list rows is a real number.
 - `mcp servers search` only includes `tool_count` when you pass
