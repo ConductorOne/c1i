@@ -123,7 +123,7 @@ required, so `--resource-id` without `--resource-type-id` is rejected at exit
 
 `--resource-type` is `ROLE`, `GROUP`, `LICENSE`, `PROJECT`, `CATALOG`,
 `CUSTOM`, `VAULT` or `PROFILE_TYPE` (case-insensitive here, uppercase on the
-wire) and describes the resource type this command creates, so passing it
+wire; defaults to `CUSTOM`) and describes the resource type this command creates, so passing it
 together with `--resource-type-id` is a usage error rather than a silently
 ignored flag. Only `CUSTOM` can repeat on one app: a second resource type of
 any other kind fails with a 500 (exit `6`, though retrying never helps) saying
@@ -341,6 +341,19 @@ populated) but disappears from `list` and the default `search`; only
 is `null` on a live policy, so `jq 'select(.deleted_at)'` selects only the
 deleted ones.
 
+`list`/`search` rows also carry `step_kinds` (the policy's baseline sequence in
+run order, e.g. `["accept"]`) and `baseline_policy_id` — the portable way to
+identify a tenant's auto-approval grant policy, since display names vary
+(`"Auto-approval"` vs `"Auto approval"`). Match on the shape, not the name —
+pipe `c1i policies list` into
+`jq -c 'select(.policy_type=="POLICY_TYPE_GRANT" and .system_builtin and .step_kinds==["accept"] and .baseline_policy_id==null)'`.
+A tenant can hold more than one such policy, so check what comes back rather
+than taking the first row (`rule_count > 0` means conditional rules route to
+alternative sequences). A non-null `baseline_policy_id` means the policy defers
+its baseline to another — `step_kinds` is then `[]` for a healthy policy.
+`policies get` is a verbatim API passthrough and exposes neither derived key;
+use `list`/`search` for them.
+
 ### MCP
 
 Drive the MCP admin surface (servers, tools, toolsets, and bindings). Most commands take `--app-id`; `mcp servers` commands take the server's `<connector-id>` positionally, while tool/toolset/binding commands scope to a server with `--connector-id`.
@@ -350,8 +363,8 @@ Drive the MCP admin surface (servers, tools, toolsets, and bindings). Most comma
 c1i mcp servers list               --app-id <id> [--page-size N] [--limit N]
 c1i mcp servers get                <connector-id> --app-id <id>
 c1i mcp servers search             --app-id <id> [--query <text>] [--tool-state approved|pending|disabled|removed] [--include-last-called-at] [--limit N]
-c1i mcp servers register           --app-id <id> --type hosted   --display-name <name> --catalog-id <cid> [--source-app-id <id>] [--auth ... ] [--config-field k=v ...]
-c1i mcp servers register           --app-id <id> --type external --display-name <name> --server-url <url> [--transport streamable-http|sse] [--auth ...]
+c1i mcp servers register           --app-id <id> --type hosted   --display-name <name> --catalog-id <cid> [--source-app-id <id>] [--auth ... ] [--config-field k=v ...] [--user-id <id> ...]
+c1i mcp servers register           --app-id <id> --type external --display-name <name> --server-url <url> [--transport streamable-http|sse] [--auth ...] [--user-id <id> ...]
 c1i mcp servers update             <connector-id> --app-id <id> [--display-name <name>] [--description <text>] [--data-sensitivity ...] [--tool-prefix <p>] [--require-tool-approval]
 c1i mcp servers update-credentials <connector-id> --app-id <id> --type hosted|external [--auth ...] [--update-mask <paths>]
 c1i mcp servers delete             <connector-id> --app-id <id>
@@ -377,13 +390,13 @@ c1i mcp toolsets create                 --app-id <id> --connector-id <id> --disp
 c1i mcp toolsets update                 <toolset-id> --app-id <id> --connector-id <id> [--display-name <name>] [--description <text>]
 c1i mcp toolsets delete                 <toolset-id> --app-id <id> --connector-id <id>
 c1i mcp toolsets get-by-entitlement     <app-entitlement-id> --app-id <id>
-c1i mcp toolsets requestable-connectors <user-id>
+c1i mcp toolsets requestable-connectors <user-id>   # not paginated; returns the full set in one response
 
 # Bindings (which tools belong to which toolset)
 c1i mcp bindings list     --app-id <id> --connector-id <id> --toolset-id <tid> [--page-size N] [--limit N]
-c1i mcp bindings create   --app-id <id> --connector-id <id> --toolset-id <tid> --tool-id <id> [--tool-id <id> ...]
-c1i mcp bindings delete   --app-id <id> --connector-id <id> --toolset-id <tid> --tool-id <id> [--tool-id <id> ...]
-c1i mcp bindings by-tools --app-id <id> --connector-id <id> --tool-id <id> [--tool-id <id> ...]
+c1i mcp bindings create   --app-id <id> --connector-id <id> --toolset-id <tid> --tool-id <id> [--tool-id <id> ...]   # --tool-id max 100
+c1i mcp bindings delete   --app-id <id> --connector-id <id> --toolset-id <tid> --tool-id <id> [--tool-id <id> ...]   # --tool-id max 100
+c1i mcp bindings by-tools --app-id <id> --connector-id <id> --tool-id <id> [--tool-id <id> ...]   # --tool-id max 32
 c1i mcp bindings history  --app-id <id> --connector-id <id> (--toolset-id <tid> | --tool-id <id>) [--page-size N] [--limit N]
 
 # Gateway (verify end to end: list and invoke tools over the live MCP gateway)
@@ -391,7 +404,7 @@ c1i mcp gateway list-tools [--full] [--gateway-url <url>]
 c1i mcp gateway call <tool-name> [--args '{"k":"v"}'] [--gateway-url <url>]
 ```
 
-**Auth for `register` / `update-credentials`:** convenience flags cover the simple methods — `--auth none`, `--auth bearer-token --bearer-token TOKEN`, `--auth custom-header --header-name NAME --header-value VALUE`, `--auth basic-auth --basic-auth-username USER --basic-auth-password PASS`. For OAuth2 / AWS SigV4 / Google service-account auth, pass the full config object via `--hosted-config-file` / `--external-config-file` (JSON file, or `-` for stdin) — generate a ready-to-edit skeleton with `--print-config-template --auth <method> [--type hosted]` instead of hand-writing it. Secrets are sealed server-side; reads only ever return `*_configured` booleans, never the values. `--token-sharing shared|per-user` sets the server's token-sharing mode (case-insensitive; `per_user`/`peruser` are also accepted). Per the register help, `per-user` is only valid with `oauth2` in authorization-code or passthrough mode, `bearerToken`, `customHeader`, or `basicAuth`. Note that a read-back can legitimately differ from what you sent: the backend may store a *resolved* OAuth2 grant such as `..._MODE_AUTHORIZATION_CODE` in place of the input mode, so that is a normal round-trip, not a bug. `--source-app-id` names the source app for a connector-backed HOSTED server.
+**Auth for `register` / `update-credentials`:** convenience flags cover the simple methods — `--auth none`, `--auth bearer-token --bearer-token TOKEN`, `--auth custom-header --header-name NAME --header-value VALUE`, `--auth basic-auth --basic-auth-username USER --basic-auth-password PASS`. For OAuth2 / AWS SigV4 / Google service-account auth, pass the full config object via `--hosted-config-file` / `--external-config-file` (JSON file, or `-` for stdin) — generate a ready-to-edit skeleton with `--print-config-template --auth <method> [--type hosted]` instead of hand-writing it. Secrets are sealed server-side; reads only ever return `*_configured` booleans, never the values. `--token-sharing shared|per-user` sets the server's token-sharing mode (case-insensitive; `per_user`/`peruser` are also accepted). Per the register help, `per-user` is only valid with `oauth2` in authorization-code or passthrough mode, `bearerToken`, `customHeader`, or `basicAuth`. Note that a read-back can legitimately differ from what you sent: the backend may store a *resolved* OAuth2 grant such as `..._MODE_AUTHORIZATION_CODE` in place of the input mode, so that is a normal round-trip, not a bug. `--source-app-id` names the source app for a connector-backed HOSTED server. `--data-sensitivity`, `--tool-prefix`, `--require-tool-approval` and `--user-id` (repeatable — sets the connector's integration owners) can all be set at `register` time, not only via `update`.
 
 `mcp tools approve` is the standard post-registration step: newly discovered tools (from `register` or `resync-tools`) start in `PENDING_REVIEW`, and an admin approves them for the gateway to proxy calls. It takes one or more tool ids — the API has no batch approve, so each id is a separate request, but one invocation covers a whole toolset (pipe `mcp tools search --app-id <id> --connector-id <id> --state pending --fields id | jq -r .id`). History endpoints return records newest-first.
 
@@ -407,6 +420,9 @@ c1i requests get <request-id>
 ```
 
 On `create`, `--user-id` defaults to the authenticated user when omitted.
+`requests create grant --duration` is a Go-style duration (`24h`, `7d`) — unlike
+`entitlements create --duration-grant` and `tasks update-grant-duration --duration`,
+which take a protobuf duration (`3600s`, not `1h`).
 
 `requests list` is the requester lens on access requests (the grant/revoke tasks
 you file): by default it shows requests you opened or are the subject of —
@@ -556,6 +572,8 @@ c1i docs openapi
 c1i docs guide
 c1i docs guide register-mcp-server
 ```
+
+`docs search` is a semantic search with no relevance threshold: every query returns up to 10 nearest matches, so even a nonsense query comes back with plausible-looking hits. A returned hit is not proof a concept exists, and an unexpected hit is not proof the thing you searched for is absent — read the snippet, or fetch the page with `docs page`, to judge. To check whether an API endpoint exists, use `docs endpoints --filter`, which has a real no-match.
 
 `docs guide` is embedded static content (no network call), unlike `docs search` / `docs page` which hit the C1 documentation site. Guides ship in two families: registering and operating MCP servers (`register-mcp-server`, `assign-toolset-everyone`, `test-mcp-gateway`, `delegate-entitlement-provisioning`) and everyday app/access-request workflows (`configure-new-app`, `request-access`, `inspect-and-approve-task`). Run `c1i docs guide` with no argument for the full, current list.
 

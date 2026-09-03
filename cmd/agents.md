@@ -21,8 +21,9 @@ exit 0.
 `--url` (or `C1I_URL`) selects the tenant. With neither set, c1i falls back
 to whatever `url:` names in `~/.c1i.yaml`. It must be a full host —
 `mycompany.conductor.one` or `mycompany.c1eu.ai` (EU) — and `https` is required:
-a bare `mycompany` and a non-https scheme are both usage errors (exit `2`)
-before any request is sent.
+a bare `mycompany`, a non-https scheme, and a malformed host (an embedded space
+or control character, or a stray scheme like `://host`) are all usage errors
+(exit `2`) before any request is sent.
 Every command prints a `Warning: no --url flag given; targeting <url> (from
 ~/.c1i.yaml)` line to stderr when the URL came from the config file —
 `--url` and `C1I_URL` print nothing, since both are an explicit choice for
@@ -161,6 +162,12 @@ spec. Search for both names.
   entirely (never printed as `{}`), so the line count can be less than the
   underlying result count. Pipe to `jq`.
 - Single-object reads emit pretty-printed JSON.
+- Typed `get` commands unwrap the API envelope (since v0.6.0): they print the
+  resource itself, so read `.id` — not `.app.id`, `.userView.user.id`, or any
+  other wrapper key. Naming a wrapper key in `--fields` matches nothing and
+  exits 2. The exception is `mcp servers get`, which has no `id` of its own —
+  key on `.connectorId`. `c1i api` and mutation confirmations still return the
+  API's envelope.
 - Mutation confirmations (create/update/delete) are never field-projected —
   `--fields`/`C1I_FIELDS` can't blank a success message.
 - Casing differs by mode: list rows are snake_case (`app_id`,
@@ -269,6 +276,11 @@ resource with `--resource-id` likewise means you drop
   "region=us1,env=prod"` sets `region` to `us1,env=prod`, which the server may
   accept. An empty occurrence is exit 2 before any request, so an unset shell
   variable cannot silently shorten a list. `--fields` IS comma-separated.
+- `mcp tools approve` takes one or more tool ids in a single invocation:
+  `approve id1 id2 id3 --app-id A --connector-id C` approves a whole toolset in
+  one process (one token, one TLS handshake). The API has no batch approve, so
+  each id is still its own request, but don't loop the CLI per id — pass them
+  all at once (pipe `mcp tools search --state pending --fields id | jq -r .id`).
 - Owner and grant provisioning are asynchronous. A read immediately after a
   write can look like a silent no-op for a couple of minutes (owner writes
   observed at 45-150s across set-owners, add-owner, remove-owner and the

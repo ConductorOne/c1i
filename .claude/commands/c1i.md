@@ -11,7 +11,11 @@ that and can't drift the way a static doc can. This doc used to carry a
 second copy of the per-command reference and the two drifted (stale flags,
 missing subcommands, a missing exit code) until that was cut. Don't re-add a
 per-command copy here; if a flag/behavior claim ever looks off, verify
-against `go run . <cmd> --help` rather than any doc.
+against `go run . <cmd> --help` rather than any doc. The command groups are
+`access-profiles`, `accounts`, `api`, `apps`, `auth`, `automations`,
+`connectors`, `docs`, `entitlements`, `export`, `functions`, `grants`, `mcp`,
+`policies`, `requests`, `tasks` and `users`; run `go run . <group> --help`
+for each before reaching for raw `api`.
 
 ## Auth
 
@@ -20,6 +24,7 @@ go run . auth login                                          # OAuth device flow
 go run . auth login --client-id=ID --client-secret=SECRET    # direct credential login
 go run . auth status                                          # verify stored credentials + backend in use
 go run . auth whoami                                          # show the authenticated principal
+go run . auth token                                           # mint a short-lived OAuth2 bearer for raw api/curl calls
 go run . auth logout                                          # remove stored credentials
 ```
 
@@ -33,7 +38,13 @@ A C1 URL is required for all API commands, resolved in order: `--url` flag →
 `C1I_URL` env var → `~/.c1i.yaml` (`url: https://mycompany.conductor.one`).
 `--url` takes a full host — `mycompany.conductor.one` or `mycompany.c1eu.ai`,
 with or without the scheme; `https` is required, and any other scheme is
-rejected rather than rewritten. A bare `mycompany` is rejected as ambiguous.
+rejected rather than rewritten. A bare `mycompany` is rejected as ambiguous. A malformed host (embedded space
+or control character, or a stray scheme like `://host`) is also a usage error
+(exit 2) before any request. When the URL resolves from `~/.c1i.yaml` (not
+`--url`/`C1I_URL`), c1i prints `Warning: no --url flag given; targeting <url>
+(from ~/.c1i.yaml)` to stderr — treat it as a signal you may be on the wrong
+tenant, since an agent that loses an exported `C1I_URL` mid-session silently
+falls through to whatever the config file names.
 
 ## Global flags (persistent, on every command)
 
@@ -86,3 +97,8 @@ go run . docs openapi                       # dump raw OpenAPI spec
 go run . docs agents                        # print the embedded agent bootstrap doc (cmd/agents.md)
 go run . docs guide                         # list embedded task-oriented runbooks
 ```
+
+`docs search` is semantic with no relevance threshold: it always returns up to
+10 plausible hits, even for a nonsense query, so a hit is not proof a concept
+exists (nor an unexpected result proof it is absent). Use `docs endpoints
+--filter` (a real no-match) to check whether an endpoint exists.

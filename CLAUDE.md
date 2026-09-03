@@ -65,6 +65,10 @@ tracked root file outside its allowlist. Stage explicit paths rather than `-A`.
 - Output: NDJSON for list/search commands, pretty JSON for single-object
   commands, plain text for auth.
 - All list commands auto-paginate. `--page-token` disables auto-pagination.
+  A negative `--limit` or `--page-size` is a usage error (exit 2), rejected
+  before any request; `--page-size` over the server max is clamped, not
+  rejected, so treat it as a request, not a promise, and use `--limit` for an
+  exact count.
 - `docs` subcommands require no authentication.
 - **Keep comments concise.** Whenever you write or change a comment, say the
   non-obvious thing and stop — a why, a constraint, or a gotcha the code can't
@@ -159,6 +163,16 @@ tracked root file outside its allowlist. Stage explicit paths rather than `-A`.
 - **Paths:** interpolate IDs into request paths with `client.Path("…/%s", id)`,
   never `fmt.Sprintf` — `Path` URL-escapes each segment (a raw ID with `/`, `?`,
   `#`, or a space would otherwise mis-address the resource).
+- **Repeatable string flags:** register with `addRepeatableStringFlag` and read
+  with `repeatableStringFlag` (cmd/flags.go), never a raw
+  `cmd.Flags().StringSlice`/`StringArray`. `StringSlice` CSV-splits each
+  occurrence and destroys an empty one before any check can see it (an unset
+  `--user-id ""` silently shortened a list and exited 0 on `apps set-owners`);
+  the shared pair uses `StringArray` and rejects an empty/whitespace-only
+  occurrence as a usage error (exit 2) before the request is sent, and the
+  break is that `--flag a,b` is one value, not two. `TestNoCommandUsesStringSlice`
+  and `TestRepeatableStringFlagsGoThroughSharedRegistrar` fail on a
+  hand-registration.
 - **Output:** list rows go through the `newEmitter(...)`/`.Encode` emitter;
   single-object reads through `writeObject`; **mutation confirmations**
   (create/update/delete) through `writeRawObject` (never projected, so a

@@ -55,26 +55,6 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   app; the help now says so, quoting the server's own
   `app resource type already exists`.
 
-### Changed
-
-- **`c1i mcp tools approve` now takes one or more tool ids.** Approving a
-  toolset meant one invocation — a fresh process, token and TLS handshake —
-  per tool; `approve id1 id2 id3` now does them in a single process. The API
-  has no batch approve, so each id is still its own request (one confirmation
-  line each, failures don't stop the rest, non-zero exit if any fail), but the
-  round-trip and startup cost drops sharply. Backward compatible: a single id
-  behaves exactly as before.
-
-- **Fixtures and command documentation now use placeholder identifiers**, and
-  a test keeps them that way: it rejects tenant-copied object ids, tenant
-  hostnames, and prose naming the tenant an observation came from.
-  Placeholders are stable and self-describing; a copied identifier addresses
-  nothing the reader owns. Help text states what the API does and leaves the
-  supporting measurement in the working notes. Entries already in this
-  changelog keep the figures they were written with.
-
-### Added
-
 - **`c1i access-profiles` — list, get and create access profiles**, which the
   API calls request catalogs and routes under `/api/v1/catalogs`.
   `access-profiles list` emits NDJSON and auto-paginates;
@@ -113,6 +93,22 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   for `reassign`, which leaves the state alone, it is merely uninformative.
 
 ### Changed
+
+- **`c1i mcp tools approve` now takes one or more tool ids.** Approving a
+  toolset meant one invocation — a fresh process, token and TLS handshake —
+  per tool; `approve id1 id2 id3` now does them in a single process. The API
+  has no batch approve, so each id is still its own request (one confirmation
+  line each, failures don't stop the rest, non-zero exit if any fail), but the
+  round-trip and startup cost drops sharply. Backward compatible: a single id
+  behaves exactly as before.
+
+- **Fixtures and command documentation now use placeholder identifiers**, and
+  a test keeps them that way: it rejects tenant-copied object ids, tenant
+  hostnames, and prose naming the tenant an observation came from.
+  Placeholders are stable and self-describing; a copied identifier addresses
+  nothing the reader owns. Help text states what the API does and leaves the
+  supporting measurement in the working notes. Entries already in this
+  changelog keep the figures they were written with.
 
 - **BREAKING — repeatable flags no longer split on commas, and an empty
   occurrence is a usage error (exit 2).** Every repeatable string flag
