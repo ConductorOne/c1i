@@ -7,10 +7,9 @@ import (
 )
 
 // appOwnersPopulateClaimTriggers are phrases that, paired with "appOwners"
-// nearby, assert owners become visible there. Measured against the lab tenant
-// twice: 0 of 47 apps on the first pass, 0 of 46 on the second (the first
-// pass's scratch apps had been deleted by then). appOwners never populates,
-// while GET .../ownerids does converge (on the order of minutes). This
+// nearby, assert owners become visible there. Measured twice: appOwners was
+// empty on every app both times, while GET .../ownerids does converge (on the
+// order of minutes). This
 // wording drifted, wrong, across five files before anything caught it.
 // "fills"/" fill " cover the verb agents.md uses ("wait for that field to fill").
 var appOwnersPopulateClaimTriggers = []string{"appear", "show up", "shows up", "populat", "fills", " fill "}
