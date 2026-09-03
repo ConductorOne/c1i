@@ -250,8 +250,9 @@ flags the retry has to drop, and re-running without those flags creates
 duplicates. Only a `CUSTOM` resource type can repeat on one app: a second
 `--resource-type` of any other kind fails with a 500 (exit `6`, though
 retrying never helps) saying `app resource type already exists` -- reuse the
-existing type with `--resource-type-id`, dropping both `--resource-type` and
-`--resource-type-display-name`; either alongside the id is exit 2.
+existing type with `--resource-type-id` and drop both --resource-type and --resource-type-display-name;
+either alongside the id is exit 2. Reusing a resource with `--resource-id`
+likewise means you drop --resource-display-name.
 
 ## Things that will surprise you
 

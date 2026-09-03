@@ -689,14 +689,38 @@ func TestRemediationOnResourceFailureKeepsResourceName(t *testing.T) {
 	}
 }
 
-// TestReusedTypeFlagsAreDocumented holds every doc that tells a reader to reuse
-// an existing resource type to the full list the code refuses. The advice named
-// only --resource-type while the code rejects --resource-type-display-name too,
-// so following it verbatim exited 2 — and a keyword check could not see that.
+// reuseDropClauses are the canonical instructions, required verbatim in every
+// doc that advises reusing an object. Fixed clauses, not pattern-matched prose:
+// three heuristic versions of this guard were each satisfiable by the wrong
+// text — "--resource-type" is a prefix of "--resource-type-id", unrelated
+// mentions elsewhere in a file counted, and anchoring on the instruction let a
+// doc that dropped the instruction be skipped rather than failed.
+var reuseDropClauses = map[string]string{
+	"--resource-type-id": "drop both --resource-type and --resource-type-display-name",
+	"--resource-id":      "drop --resource-display-name",
+}
+
+// TestReusedTypeFlagsAreDocumented holds every doc that advises reusing an
+// existing object to the full list of flags the code refuses alongside its id.
+// Following advice that named only one of two refused flags exited 2.
 func TestReusedTypeFlagsAreDocumented(t *testing.T) {
-	if len(typeCreateOnlyFlags) == 0 {
-		t.Fatal("no create-only type flags, so this guard would prove nothing")
+	// The clauses must name every flag the code actually refuses, or the docs
+	// can be complete against a stale contract.
+	for idFlag, flags := range map[string][]string{
+		"--resource-type-id": typeCreateOnlyFlags,
+		"--resource-id":      resourceCreateOnlyFlags,
+	} {
+		clause, ok := reuseDropClauses[idFlag]
+		if !ok {
+			t.Fatalf("%s refuses flags but has no documented clause", idFlag)
+		}
+		for _, f := range flags {
+			if !strings.Contains(clause, "--"+f) {
+				t.Fatalf("the clause for %s omits --%s, which the code refuses", idFlag, f)
+			}
+		}
 	}
+
 	docs := map[string]string{
 		"entitlements create --help":   entitlementsCreateCmd.Long,
 		"README.md":                    readDocFile(t, "../README.md"),
@@ -705,14 +729,9 @@ func TestReusedTypeFlagsAreDocumented(t *testing.T) {
 	}
 	for name, doc := range docs {
 		flat := flattenDoc(doc)
-		if !strings.Contains(flat, "--resource-type-id") {
-			t.Errorf("%s never mentions --resource-type-id", name)
-			continue
-		}
-		for _, f := range typeCreateOnlyFlags {
-			if !strings.Contains(flat, "--"+f) {
-				t.Errorf("%s tells the reader to reuse a type but never says to drop --%s, "+
-					"which the code refuses alongside --resource-type-id", name, f)
+		for idFlag, clause := range reuseDropClauses {
+			if !strings.Contains(flat, clause) {
+				t.Errorf("%s does not carry the reuse clause for %s.\nwant: %s", name, idFlag, clause)
 			}
 		}
 	}

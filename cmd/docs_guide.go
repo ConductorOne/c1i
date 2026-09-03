@@ -438,9 +438,9 @@ CUSTOM can repeat on one app: a second resource type of any other kind fails
 with a 500,
   app resource type already exists
 which maps to exit 6 even though retrying never helps. Reuse the one that
-exists by passing --resource-type-id and dropping BOTH --resource-type and
---resource-type-display-name: each describes a type this command would create,
-so either one alongside the id is refused at exit 2.
+exists by passing --resource-type-id and drop both --resource-type and --resource-type-display-name: each describes a
+type this command would create, so either alongside the id is refused at exit
+2. Reusing a resource with --resource-id likewise means you drop --resource-display-name.
 
 --owner-id is repeatable and rides along in the create request, so entitlement
 owners need no follow-up call -- but the read lags the write the same way app
