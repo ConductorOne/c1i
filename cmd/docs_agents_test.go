@@ -175,3 +175,26 @@ func runThroughRoot(t *testing.T, args ...string) string {
 	}
 	return out.String()
 }
+
+// TestAgentsDocOpensWithFrontMatter pins that agents.md starts with its YAML
+// block. `docs agents`'s own help promises the output opens with front matter
+// that harnesses parse, and front matter is only front matter on line 1 — a
+// bullet prepended above it silently demotes name/description/version to prose.
+// Nothing else in the tree checks this, and the whole suite stayed green when
+// it happened.
+func TestAgentsDocOpensWithFrontMatter(t *testing.T) {
+	if !strings.HasPrefix(agentsTemplate, "---\n") {
+		first, _, _ := strings.Cut(agentsTemplate, "\n")
+		t.Fatalf("agents.md must open with the YAML front-matter delimiter; it starts with %q", first)
+	}
+	rest := strings.TrimPrefix(agentsTemplate, "---\n")
+	end := strings.Index(rest, "\n---\n")
+	if end < 0 {
+		t.Fatal("agents.md opens a front-matter block that is never closed")
+	}
+	for _, key := range []string{"name:", "description:", "version:", "required_bins:"} {
+		if !strings.Contains(rest[:end], key) {
+			t.Errorf("front matter is missing %q, which docs agents' help says harnesses parse", key)
+		}
+	}
+}

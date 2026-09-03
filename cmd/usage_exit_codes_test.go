@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/ConductorOne/c1i/internal/client"
@@ -45,44 +46,55 @@ func TestValidationGuardsExitUsage(t *testing.T) {
 		name string
 		args []string
 		cmds []*cobra.Command // commands whose flags need resetting between cases
+		// wantMsg pins WHICH usage error fired. Cobra's own required-flag error
+		// is also exit 2, so a row missing a required flag passes while never
+		// reaching the guard it was written for.
+		wantMsg string
 	}{
 		// The registrar guard pins how these flags are REGISTERED; nothing pins
 		// how they are READ. Reading one with GetStringArray directly reverts the
 		// fix for that flag silently, and only a row here notices.
 		{
-			name: "api: --query empty",
-			args: []string{"api", "--path", "/x", "--query", ""},
-			cmds: []*cobra.Command{apiCmd},
+			name:    "api: --query empty",
+			args:    []string{"api", "--path", "/x", "--query", ""},
+			wantMsg: "--query requires a non-empty value",
+			cmds:    []*cobra.Command{apiCmd},
 		},
 		{
-			name: "api: --header empty",
-			args: []string{"api", "--path", "/x", "--header", ""},
-			cmds: []*cobra.Command{apiCmd},
+			name:    "api: --header empty",
+			args:    []string{"api", "--path", "/x", "--header", ""},
+			wantMsg: "--header requires a non-empty value",
+			cmds:    []*cobra.Command{apiCmd},
 		},
 		{
-			name: "policies search: --policy-type empty",
-			args: []string{"policies", "search", "--policy-type", ""},
-			cmds: []*cobra.Command{policiesSearchCmd},
+			name:    "policies search: --policy-type empty",
+			args:    []string{"policies", "search", "--policy-type", ""},
+			wantMsg: "--policy-type requires a non-empty value",
+			cmds:    []*cobra.Command{policiesSearchCmd},
 		},
 		{
-			name: "policies search: --exclude-policy-id empty",
-			args: []string{"policies", "search", "--exclude-policy-id", ""},
-			cmds: []*cobra.Command{policiesSearchCmd},
+			name:    "policies search: --exclude-policy-id empty",
+			args:    []string{"policies", "search", "--exclude-policy-id", ""},
+			wantMsg: "--exclude-policy-id requires a non-empty value",
+			cmds:    []*cobra.Command{policiesSearchCmd},
 		},
 		{
-			name: "mcp tools search: --state empty",
-			args: []string{"mcp", "tools", "search", "--state", ""},
-			cmds: []*cobra.Command{mcpToolsSearchCmd},
+			name:    "mcp tools search: --state empty",
+			args:    []string{"mcp", "tools", "search", "--app-id", "a", "--connector-id", "c", "--state", ""},
+			wantMsg: "--state requires a non-empty value",
+			cmds:    []*cobra.Command{mcpToolsSearchCmd},
 		},
 		{
-			name: "mcp tools search: --classification empty",
-			args: []string{"mcp", "tools", "search", "--classification", ""},
-			cmds: []*cobra.Command{mcpToolsSearchCmd},
+			name:    "mcp tools search: --classification empty",
+			args:    []string{"mcp", "tools", "search", "--app-id", "a", "--connector-id", "c", "--classification", ""},
+			wantMsg: "--classification requires a non-empty value",
+			cmds:    []*cobra.Command{mcpToolsSearchCmd},
 		},
 		{
-			name: "mcp servers register: --user-id empty",
-			args: []string{"mcp", "servers", "register", "--app-id", "a", "--type", "hosted", "--display-name", "d", "--user-id", ""},
-			cmds: []*cobra.Command{mcpServersRegisterCmd},
+			name:    "mcp servers register: --user-id empty",
+			args:    []string{"mcp", "servers", "register", "--app-id", "a", "--type", "hosted", "--display-name", "d", "--catalog-id", "cat1", "--user-id", ""},
+			wantMsg: "--user-id requires a non-empty value",
+			cmds:    []*cobra.Command{mcpServersRegisterCmd},
 		},
 		{
 			// --tool-id is a cobra-required flag; omitting it entirely is
@@ -233,6 +245,10 @@ func TestValidationGuardsExitUsage(t *testing.T) {
 			}
 			if got, want := exitCode(err), exitUsage; got != want {
 				t.Errorf("exitCode(%v) = %d, want %d (exitUsage); err type %T", err, got, want, err)
+			}
+			if tc.wantMsg != "" && !strings.Contains(err.Error(), tc.wantMsg) {
+				t.Errorf("error was %q, want it to contain %q — this row is exiting 2 "+
+					"for a different reason than the guard it targets", err, tc.wantMsg)
 			}
 		})
 	}

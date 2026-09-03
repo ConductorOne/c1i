@@ -1,8 +1,3 @@
-- A **repeatable** flag takes one value per occurrence; a comma is literal, not
-  a separator. `--tool-id a,b` is one id, not two. `--config-field
-  "region=us1,env=prod"` sets `region` to `us1,env=prod`, which the server may
-  accept. An empty occurrence is exit 2 before any request, so an unset shell
-  variable cannot silently shorten a list. `--fields` IS comma-separated.
 ---
 name: c1i
 description: CLI for the C1 (formerly ConductorOne) identity security platform — manage users, apps, entitlements, tasks, access reviews, and more.
@@ -247,6 +242,12 @@ Two things are irreversible in ways their `--help` doesn't make obvious:
   access came through one of those entitlements is affected.
 
 ## Things that will surprise you
+
+- A **repeatable** flag takes one value per occurrence; a comma is literal, not
+  a separator. `--tool-id a,b` is one id, not two. `--config-field
+  "region=us1,env=prod"` sets `region` to `us1,env=prod`, which the server may
+  accept. An empty occurrence is exit 2 before any request, so an unset shell
+  variable cannot silently shorten a list. `--fields` IS comma-separated.
 
 - Owner and grant provisioning are asynchronous. A read immediately after a
   write can look like a silent no-op for a couple of minutes (owner writes
