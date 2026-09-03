@@ -95,7 +95,11 @@ tracked root file outside its allowlist. Stage explicit paths rather than `-A`.
     `deny`, `comment`, `set-owner`, `resync-tools`, `source`, `usage`, …):
     the resource's own id is positional (`Use: "get <thing-id>"`,
     `cobra.ExactArgs(1)`, read via `args[0]`); parent ids stay flags
-    (`--app-id`, `--connector-id` when it is a *parent*). Don't validate the
+    (`--app-id`, `--connector-id` when it is a *parent*). An action that
+    applies the *same* mutation to several instances pluralizes that
+    positional rather than moving to a flag (`mcp tools approve <tool-id>...`,
+    `cobra.MinimumNArgs(1)`, loop over `args`) — the id stays positional,
+    scope ids stay flags. Don't validate the
     positional id with `requireNonEmpty` — `cobra.ExactArgs` enforces presence;
     match the flat commands (`users get <user-id>`). **Presence is not
     non-emptiness:** `ExactArgs(1)` accepts `""`, `"/"`, or `"."`, and each

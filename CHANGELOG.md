@@ -57,6 +57,14 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- **`c1i mcp tools approve` now takes one or more tool ids.** Approving a
+  toolset meant one invocation — a fresh process, token and TLS handshake —
+  per tool; `approve id1 id2 id3` now does them in a single process. The API
+  has no batch approve, so each id is still its own request (one confirmation
+  line each, failures don't stop the rest, non-zero exit if any fail), but the
+  round-trip and startup cost drops sharply. Backward compatible: a single id
+  behaves exactly as before.
+
 - **Fixtures and command documentation now use placeholder identifiers**, and
   a test keeps them that way: it rejects tenant-copied object ids, tenant
   hostnames, and prose naming the tenant an observation came from.
