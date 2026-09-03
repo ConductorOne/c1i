@@ -155,6 +155,14 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- **`c1i docs search` help now states it has no true no-match.** The search is
+  semantic (Mintlify nearest-neighbour) with no relevance threshold, so every
+  query returns up to 10 plausible-looking hits — a nonsense query included.
+  The upstream returns no score to surface, so the help and `docs agents` now
+  say plainly that a returned hit is not proof a concept exists (and an
+  unexpected result is not proof it is absent); use `docs endpoints --filter`,
+  which has a real no-match, to check whether an endpoint exists.
+
 - **`c1i docs agents` no longer implies `apps get`'s empty `appOwners` will
   fill if you wait.** Use `c1i apps owners <app-id>`. The same guidance in
   `apps set-owners --help` is unchanged.

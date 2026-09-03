@@ -24,6 +24,13 @@ var docsSearchCmd = &cobra.Command{
 	Long: `Search C1 documentation by keyword. Returns NDJSON, one match per
 line, with the doc page path, title, snippet, and URL.
 
+Results are semantic nearest-matches with NO relevance threshold: every query
+returns up to 10 hits, so a nonsense query still returns plausible-looking
+ones. A returned hit is not proof a concept exists, and an unexpected hit is
+not proof the thing you searched for is absent -- read the snippet, or fetch
+the page with 'docs page', to judge. To check whether an API endpoint exists,
+use 'docs endpoints --filter', which has a real no-match.
+
 Examples:
   c1i docs search "access reviews"
   c1i docs search campaigns
