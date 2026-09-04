@@ -102,3 +102,11 @@ go run . docs guide                         # list embedded task-oriented runboo
 10 plausible hits, even for a nonsense query, so a hit is not proof a concept
 exists (nor an unexpected result proof it is absent). Use `docs endpoints
 --filter` (a real no-match) to check whether an endpoint exists.
+
+Where to look: a product concept or how-to → `docs search "<terms>"`, then
+`docs page <path>` on the best hit for the full page (search returns a
+`content` preview — usually short, but large for API-reference hits — plus a
+`url` to the public docs). An API endpoint's
+existence or shape → `docs endpoints --filter <text>`, then `docs endpoint
+<path>`. A task runbook → `docs guide [<name>]`. The raw spec → `docs openapi`.
+`docs agents` prints the full agent contract (`cmd/agents.md`).
