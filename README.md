@@ -970,6 +970,44 @@ emit a script that completes names only, without the per-command help text.
 c1i version       # or: c1i --version
 ```
 
+## Upgrading
+
+```sh
+c1i upgrade                       # upgrade to the latest stable release (prompts first)
+c1i upgrade --check               # report whether a newer release is available; change nothing
+c1i upgrade --channel latest -y   # take the newest release without prompting
+```
+
+`upgrade` reads the release channels published by the C1 distribution center
+(`dist.conductorone.com`) — `stable` by default, or `latest`/`preview` via
+`--channel` — and, for a standalone downloaded binary, replaces the running
+binary in place. `--yes`/`-y` skips the confirmation prompt (and is required when
+stdin is not a terminal).
+
+Before anything is installed, `upgrade` verifies the release's authenticity in
+two layers. First it checks the release manifest's **Sigstore signature**
+(keyless / Fulcio) against the pinned ConductorOne release-workflow identity —
+the reusable `release.yaml` workflow issued by GitHub Actions' OIDC — so only a
+manifest signed by that workflow is trusted. The signing certificate's embedded
+SCT proves it was logged to Certificate Transparency (the detached manifest
+signature carries no Rekor entry, so Rekor inclusion is not separately
+enforced). Then the manifest's per-artifact **SHA-256** authenticates the
+downloaded binary. A failure at either layer aborts the upgrade without touching
+the installed binary.
+
+Only the per-release manifests are signed; the channel catalog (`index.json`)
+that names which version each channel points at, and its `yanked` flags, are
+not. So a compromised distribution origin could steer you to a *different but
+authentic, ConductorOne-signed* release — an older one (down to your current
+version, no further) or one marked yanked — but never to an unsigned or
+third-party binary. Treat the channel and yank status as best-effort, not a hard
+security boundary.
+
+If c1i was installed with **Homebrew**, **`go install`**, or is running as a
+**container image**, `upgrade` does not self-replace — it prints the right
+command for that install method (`brew upgrade c1i`,
+`go install github.com/ConductorOne/c1i@latest`, or re-pulling the image).
+
 ## License
 
 Apache 2.0

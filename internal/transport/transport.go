@@ -140,6 +140,7 @@ type Client struct {
 	httpClient   *http.Client
 	maxRetries   int
 	nonRetryable func(error) bool
+	maxRespBytes int64
 }
 
 type buildConfig struct {
@@ -147,6 +148,7 @@ type buildConfig struct {
 	debug        bool
 	timeout      time.Duration
 	nonRetryable func(error) bool
+	maxRespBytes int64
 }
 
 // Option configures a Client at construction time.
@@ -173,6 +175,18 @@ func WithDebug(enabled bool) Option {
 // WithTimeout overrides DefaultTimeout for a single attempt.
 func WithTimeout(d time.Duration) Option {
 	return func(c *buildConfig) { c.timeout = d }
+}
+
+// WithMaxResponseBytes caps how many bytes Do reads from a response body. A
+// body larger than n makes Do fail rather than buffer it, so a hostile or
+// misconfigured endpoint can't OOM the process before the caller inspects the
+// content. n <= 0 (the default when unset) leaves the read unbounded, so
+// existing callers are unchanged.
+func WithMaxResponseBytes(n int64) Option {
+	if n < 0 {
+		n = 0
+	}
+	return func(c *buildConfig) { c.maxRespBytes = n }
 }
 
 // WithNonRetryable marks a transport-level error (one Do would otherwise
@@ -215,6 +229,7 @@ func New(base http.RoundTripper, opts ...Option) *Client {
 		httpClient:   &http.Client{Transport: tripper, Timeout: cfg.timeout},
 		maxRetries:   cfg.maxRetries,
 		nonRetryable: cfg.nonRetryable,
+		maxRespBytes: cfg.maxRespBytes,
 	}
 }
 
@@ -279,7 +294,7 @@ func (c *Client) sendWithRetry(req *http.Request) (*Response, error) {
 			return nil, err
 		}
 
-		body, readErr := io.ReadAll(resp.Body)
+		body, readErr := c.readBody(resp.Body)
 		_ = resp.Body.Close()
 
 		if isRetryableStatus(req.Method, resp.StatusCode) && attempt < c.maxRetries {
@@ -300,6 +315,23 @@ func (c *Client) sendWithRetry(req *http.Request) (*Response, error) {
 		}
 		return &Response{StatusCode: resp.StatusCode, Header: resp.Header, Body: body}, nil
 	}
+}
+
+// readBody reads a response body, enforcing maxRespBytes when it is set. It
+// reads one byte past the cap via io.LimitReader so an exactly-at-cap body is
+// accepted while a larger one is refused before the whole thing is buffered.
+func (c *Client) readBody(r io.Reader) ([]byte, error) {
+	if c.maxRespBytes <= 0 {
+		return io.ReadAll(r)
+	}
+	body, err := io.ReadAll(io.LimitReader(r, c.maxRespBytes+1))
+	if err != nil {
+		return body, err
+	}
+	if int64(len(body)) > c.maxRespBytes {
+		return nil, fmt.Errorf("response body exceeds %d bytes", c.maxRespBytes)
+	}
+	return body, nil
 }
 
 // isIdempotent reports whether re-sending method after an ambiguous failure is
