@@ -995,6 +995,14 @@ enforced). Then the manifest's per-artifact **SHA-256** authenticates the
 downloaded binary. A failure at either layer aborts the upgrade without touching
 the installed binary.
 
+Only the per-release manifests are signed; the channel catalog (`index.json`)
+that names which version each channel points at, and its `yanked` flags, are
+not. So a compromised distribution origin could steer you to a *different but
+authentic, ConductorOne-signed* release — an older one (down to your current
+version, no further) or one marked yanked — but never to an unsigned or
+third-party binary. Treat the channel and yank status as best-effort, not a hard
+security boundary.
+
 If c1i was installed with **Homebrew**, **`go install`**, or is running as a
 **container image**, `upgrade` does not self-replace — it prints the right
 command for that install method (`brew upgrade c1i`,
