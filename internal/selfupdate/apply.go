@@ -10,15 +10,11 @@ import (
 	"encoding/hex"
 	"fmt"
 	"io"
-	"net/http"
 	"os"
 	"path"
 	"path/filepath"
 	"strings"
 )
-
-// maxArtifactBytes caps a downloaded release artifact (tarballs run ~5MB).
-const maxArtifactBytes = 200 << 20 // 200 MiB
 
 // Apply downloads asset, verifies its sha256, extracts the c1i binary, and
 // atomically replaces the running executable at execPath. It never overwrites
@@ -40,21 +36,19 @@ func (c *Client) Apply(ctx context.Context, asset Asset, execPath string) error 
 }
 
 func (c *Client) download(ctx context.Context, url string) ([]byte, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err := c.validateURL(url); err != nil {
+		return nil, err
+	}
+	body, err := c.get(ctx, c.downloadDoer(), url)
 	if err != nil {
 		return nil, err
 	}
-	resp, err := c.HTTP.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("downloading %s: %w", url, err)
+	// Belt-and-suspenders: the backing transport is bounded to MaxArtifactBytes,
+	// but a test Doer or an unbounded transport is not, so re-check here.
+	if len(body) > MaxArtifactBytes {
+		return nil, fmt.Errorf("downloading %s: artifact exceeds %d bytes", url, MaxArtifactBytes)
 	}
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("downloading %s: HTTP %d", url, resp.StatusCode)
-	}
-	if len(resp.Body) > maxArtifactBytes {
-		return nil, fmt.Errorf("downloading %s: artifact exceeds %d bytes", url, maxArtifactBytes)
-	}
-	return resp.Body, nil
+	return body, nil
 }
 
 func verifySHA256(data []byte, want string) error {
@@ -99,7 +93,7 @@ func fromTarGz(archive []byte) ([]byte, error) {
 			return nil, fmt.Errorf("reading tar: %w", err)
 		}
 		if isC1iEntry(hdr.Name) && hdr.Typeflag == tar.TypeReg {
-			return io.ReadAll(io.LimitReader(tr, maxArtifactBytes))
+			return io.ReadAll(io.LimitReader(tr, MaxArtifactBytes))
 		}
 	}
 	return nil, fmt.Errorf("no c1i binary found in archive")
@@ -111,13 +105,16 @@ func fromZip(archive []byte) ([]byte, error) {
 		return nil, fmt.Errorf("reading zip: %w", err)
 	}
 	for _, f := range zr.File {
-		if isC1iEntry(f.Name) && !f.FileInfo().IsDir() {
+		// IsRegular() skips symlink/dir/device entries (mirrors fromTarGz's
+		// tar.TypeReg check), so a crafted archive can't smuggle a symlink
+		// named c1i in place of the real binary.
+		if isC1iEntry(f.Name) && f.Mode().IsRegular() {
 			rc, err := f.Open()
 			if err != nil {
 				return nil, fmt.Errorf("opening %s in zip: %w", f.Name, err)
 			}
 			defer func() { _ = rc.Close() }()
-			return io.ReadAll(io.LimitReader(rc, maxArtifactBytes))
+			return io.ReadAll(io.LimitReader(rc, MaxArtifactBytes))
 		}
 	}
 	return nil, fmt.Errorf("no c1i binary found in archive")
@@ -148,6 +145,13 @@ func replaceExecutable(execPath string, newBinary []byte) error {
 		cleanup()
 		return fmt.Errorf("writing staged binary: %w", err)
 	}
+	// Flush the staged bytes to disk before the rename so a crash can't leave a
+	// renamed-but-empty file that shadows the working binary.
+	if err := tmp.Sync(); err != nil {
+		_ = tmp.Close()
+		cleanup()
+		return fmt.Errorf("syncing staged binary: %w", err)
+	}
 	if err := tmp.Close(); err != nil {
 		cleanup()
 		return fmt.Errorf("closing staged binary: %w", err)
@@ -166,5 +170,21 @@ func replaceExecutable(execPath string, newBinary []byte) error {
 		cleanup()
 		return fmt.Errorf("replacing %s: %w", execPath, err)
 	}
+	// Best-effort: fsync the containing directory so the rename itself is
+	// durable. A failure here doesn't undo a successful rename, so don't fail
+	// the upgrade over it.
+	syncDir(dir)
 	return nil
+}
+
+// syncDir flushes a directory's own metadata (the rename entry) to disk. Errors
+// are ignored: some platforms/filesystems don't permit opening a directory for
+// sync, and the rename has already succeeded.
+func syncDir(dir string) {
+	d, err := os.Open(dir) // #nosec G304 -- dir is filepath.Dir(execPath), the install directory, not attacker input
+	if err != nil {
+		return
+	}
+	_ = d.Sync()
+	_ = d.Close()
 }

@@ -54,6 +54,12 @@ func TestCompareVersions(t *testing.T) {
 		{"v0.10.0", "v0.9.0", 1, true},
 		{"v1.0.0", "v1.0.0-rc.1", 1, true}, // release outranks its prerelease
 		{"v1.0.0-rc.1", "v1.0.0-rc.2", -1, true},
+		{"v1.0.0-rc.10", "v1.0.0-rc.2", 1, true},  // numeric identifiers compare numerically, not lexically
+		{"v1.0.0-rc.2", "v1.0.0-rc.10", -1, true}, // symmetric
+		{"v1.0.0-rc.10", "v1.0.0-rc.10", 0, true},
+		{"v1.0.0-alpha", "v1.0.0-alpha.1", -1, true}, // shorter prefix outranked by longer
+		{"v1.0.0-alpha.1", "v1.0.0-beta", -1, true},  // non-numeric lexical
+		{"v1.0.0-rc.1", "v1.0.0-rc.alpha", -1, true}, // numeric ranks below non-numeric
 		{"dev", "v0.7.0", 0, false},
 		{"v0.7", "v0.7.0", 0, false}, // not three components
 		{"", "v0.7.0", 0, false},
@@ -192,9 +198,11 @@ func TestApplyEndToEndAndChecksumGuard(t *testing.T) {
 	newBin := []byte("#!c1i-v0.7.0")
 	tgz := makeTarGz(t, "c1i", newBin)
 	sum := sha256.Sum256(tgz)
+	// Href must share the client's base host (URL pinning), so set BaseURL to
+	// match rather than relying on the production default.
 	href := "https://dist.example/c1i.tar.gz"
 
-	client := &Client{HTTP: &fakeDoer{resp: map[string]*transport.Response{
+	client := &Client{BaseURL: "https://dist.example", HTTP: &fakeDoer{resp: map[string]*transport.Response{
 		href: {StatusCode: 200, Body: tgz},
 	}}}
 
@@ -215,6 +223,106 @@ func TestApplyEndToEndAndChecksumGuard(t *testing.T) {
 	}
 	if got, _ := os.ReadFile(execPath); string(got) != "KEEP" {
 		t.Errorf("binary changed despite checksum mismatch: %q", got)
+	}
+}
+
+func TestValidateURLRejectsOffHostAndNonHTTPS(t *testing.T) {
+	base := "https://dist.example/releases/ConductorOne/c1i"
+	c := &Client{BaseURL: base}
+	cases := []struct {
+		url     string
+		wantErr bool
+	}{
+		{"https://dist.example/releases/ConductorOne/c1i/v1/manifest.json", false},
+		{"https://evil.example/manifest.json", true},          // off-host
+		{"http://dist.example/manifest.json", true},           // non-https
+		{"https://dist.example.evil.com/manifest.json", true}, // suffix trick, different host
+		{"ftp://dist.example/manifest.json", true},            // wrong scheme
+	}
+	for _, tc := range cases {
+		err := c.validateURL(tc.url)
+		if tc.wantErr && err == nil {
+			t.Errorf("validateURL(%q) = nil, want error", tc.url)
+		}
+		if !tc.wantErr && err != nil {
+			t.Errorf("validateURL(%q) = %v, want nil", tc.url, err)
+		}
+	}
+}
+
+func TestApplyRejectsOffHostHref(t *testing.T) {
+	// An asset href on a host other than the client's base is refused before
+	// any download.
+	c := &Client{BaseURL: "https://dist.example", HTTP: &fakeDoer{}}
+	asset := Asset{Filename: "c1i.tar.gz", SHA256: "abc", Href: "https://evil.example/c1i.tar.gz"}
+	if err := c.Apply(context.Background(), asset, filepath.Join(t.TempDir(), "c1i")); err == nil {
+		t.Fatal("Apply followed an off-host href; expected a refusal")
+	}
+}
+
+func TestFromZipSkipsSymlinkEntry(t *testing.T) {
+	// A zip whose "c1i" entry is a symlink must not be treated as the binary;
+	// only a regular-file c1i counts (mirrors fromTarGz's tar.TypeReg check).
+	var buf bytes.Buffer
+	zw := zip.NewWriter(&buf)
+	// Symlink entry named c1i.
+	symHdr := &zip.FileHeader{Name: "c1i"}
+	symHdr.SetMode(os.ModeSymlink | 0o777)
+	w, err := zw.CreateHeader(symHdr)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := w.Write([]byte("/etc/passwd")); err != nil {
+		t.Fatal(err)
+	}
+	_ = zw.Close()
+
+	if _, err := fromZip(buf.Bytes()); err == nil {
+		t.Fatal("fromZip returned a binary for a symlink-only c1i entry; expected 'no c1i binary found'")
+	}
+
+	// Now add a real regular-file c1i alongside the symlink: it must be found.
+	buf.Reset()
+	zw = zip.NewWriter(&buf)
+	w, _ = zw.CreateHeader(symHdr)
+	_, _ = w.Write([]byte("/etc/passwd"))
+	want := []byte("#!real-c1i")
+	rw, err := zw.Create("dir/c1i")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := rw.Write(want); err != nil {
+		t.Fatal(err)
+	}
+	_ = zw.Close()
+	got, err := fromZip(buf.Bytes())
+	if err != nil || !bytes.Equal(got, want) {
+		t.Fatalf("fromZip with a real c1i = (%q, %v), want (%q, nil)", got, err, want)
+	}
+}
+
+func TestInContainerDetectsPodmanMarker(t *testing.T) {
+	// Point the marker list at a temp file (no /run/.containerenv on the host)
+	// to prove the Podman marker path is honored.
+	dir := t.TempDir()
+	marker := filepath.Join(dir, ".containerenv")
+	if err := os.WriteFile(marker, nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	origMarkers, origCgroup := containerMarkerFiles, containerCgroupFile
+	t.Cleanup(func() { containerMarkerFiles, containerCgroupFile = origMarkers, origCgroup })
+
+	// No markers present, cgroup file absent: not a container.
+	containerMarkerFiles = []string{filepath.Join(dir, "absent")}
+	containerCgroupFile = filepath.Join(dir, "absent-cgroup")
+	if inContainer() {
+		t.Error("inContainer() = true with no markers present")
+	}
+
+	// Podman marker present: container.
+	containerMarkerFiles = []string{filepath.Join(dir, "absent"), marker}
+	if !inContainer() {
+		t.Error("inContainer() = false despite the Podman marker file")
 	}
 }
 

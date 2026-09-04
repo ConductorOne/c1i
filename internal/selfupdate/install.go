@@ -46,15 +46,26 @@ func Detect(execPath, goos string) (Method, string) {
 	return Standalone, ""
 }
 
+// containerMarkerFiles are the runtime-dropped marker files whose presence
+// signals a container. Overridable so a test can point them at a temp file.
+// /.dockerenv is Docker's; /run/.containerenv is Podman's.
+var containerMarkerFiles = []string{"/.dockerenv", "/run/.containerenv"}
+
+// containerCgroupFile is the cgroup path inspected for runtime markers.
+// Overridable for the same reason.
+var containerCgroupFile = "/proc/1/cgroup"
+
 // inContainer reports whether we are running inside a container image, where an
 // in-place replace is pointless (the layer is ephemeral). Best-effort and
 // Linux-shaped; false on macOS.
 func inContainer() bool {
-	if _, err := os.Stat("/.dockerenv"); err == nil {
-		return true
+	for _, marker := range containerMarkerFiles {
+		if _, err := os.Stat(marker); err == nil {
+			return true
+		}
 	}
 	// cgroup v1 names the controller path; container runtimes leave a marker.
-	if b, err := os.ReadFile("/proc/1/cgroup"); err == nil {
+	if b, err := os.ReadFile(containerCgroupFile); err == nil {
 		s := string(b)
 		for _, marker := range []string{"docker", "containerd", "kubepods", "/lxc/"} {
 			if strings.Contains(s, marker) {
