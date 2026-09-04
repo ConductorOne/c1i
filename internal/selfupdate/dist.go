@@ -13,6 +13,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/url"
 	"runtime"
 	"strconv"
 	"strings"
@@ -23,6 +24,16 @@ import (
 // DefaultBaseURL is the dist release path for c1i. Assets, index.json and
 // per-version manifest.json all live under it.
 const DefaultBaseURL = "https://dist.conductorone.com/releases/ConductorOne/c1i"
+
+// MaxMetadataBytes bounds a JSON metadata fetch (index.json, manifest.json) and
+// the small detached .sig/.cert, so a hostile endpoint can't stream an
+// unbounded body into memory before it is parsed. MaxArtifactBytes bounds the
+// release archive download. Callers wire these into the transport that backs
+// the Doer(s) below.
+const (
+	MaxMetadataBytes = 8 << 20   // 8 MiB
+	MaxArtifactBytes = 200 << 20 // 200 MiB
+)
 
 // Doer sends a request through the shared transport, so upgrade inherits the
 // same retries, --max-retries, --debug tracing and user-agent as every other
@@ -45,6 +56,11 @@ type SemverEntry struct {
 	Yanked   bool   `json:"yanked"`
 	Hidden   bool   `json:"hidden"`
 	Manifest string `json:"manifest"` // absolute URL of this version's manifest.json
+	// Signature and Certificate are absolute URLs of the manifest's detached
+	// Sigstore signature (.sig) and signing certificate (.cert), each
+	// base64-encoded on the wire. They authenticate manifest.json.
+	Signature   string `json:"signature"`
+	Certificate string `json:"certificate"`
 }
 
 // Manifest is the subset of a dist <version>/manifest.json the updater reads.
@@ -62,8 +78,43 @@ type Asset struct {
 
 // Client fetches the dist index and manifests.
 type Client struct {
-	HTTP    Doer
-	BaseURL string
+	// HTTP fetches metadata (index.json, manifest.json, .sig, .cert). Its
+	// backing transport should be bounded to MaxMetadataBytes.
+	HTTP Doer
+	// Download fetches the (larger) release archive; its transport should be
+	// bounded to MaxArtifactBytes. When nil, HTTP is used.
+	Download Doer
+	BaseURL  string
+}
+
+func (c *Client) downloadDoer() Doer {
+	if c.Download != nil {
+		return c.Download
+	}
+	return c.HTTP
+}
+
+// validateURL rejects any URL that is not https or whose host differs from the
+// configured dist base host, before it is fetched. In production baseURL() is
+// DefaultBaseURL, so this pins every fetched URL (manifest, .sig, .cert, asset
+// href) to dist.conductorone.com over TLS; a test that points BaseURL at its
+// own host pins to that host instead.
+func (c *Client) validateURL(raw string) error {
+	u, err := url.Parse(raw)
+	if err != nil {
+		return fmt.Errorf("invalid URL %q: %w", raw, err)
+	}
+	if !strings.EqualFold(u.Scheme, "https") {
+		return fmt.Errorf("refusing to fetch non-https URL %q", raw)
+	}
+	base, err := url.Parse(c.baseURL())
+	if err != nil {
+		return fmt.Errorf("invalid base URL %q: %w", c.baseURL(), err)
+	}
+	if !strings.EqualFold(u.Host, base.Host) {
+		return fmt.Errorf("refusing to fetch off-host URL %q (expected host %q)", raw, base.Host)
+	}
+	return nil
 }
 
 // PlatformKey is the manifest asset key for the running binary, e.g.
@@ -89,35 +140,85 @@ func (c *Client) Index(ctx context.Context) (*Index, error) {
 // Manifest fetches and decodes a version's manifest.json from the URL the
 // index entry names.
 func (c *Client) Manifest(ctx context.Context, url string) (*Manifest, error) {
+	m, _, err := c.ManifestRaw(ctx, url)
+	return m, err
+}
+
+// ManifestRaw fetches a version's manifest.json and returns both the decoded
+// Manifest and the exact bytes it was decoded from. The Sigstore signature is
+// over those raw bytes, so the caller must verify the same bytes it parsed.
+func (c *Client) ManifestRaw(ctx context.Context, url string) (*Manifest, []byte, error) {
+	raw, err := c.getJSONBytes(ctx, url)
+	if err != nil {
+		return nil, nil, err
+	}
 	var m Manifest
-	if err := c.getJSON(ctx, url, &m); err != nil {
+	if err := json.Unmarshal(raw, &m); err != nil {
+		return nil, nil, fmt.Errorf("parsing %s: %w", url, err)
+	}
+	return &m, raw, nil
+}
+
+// GetBytes fetches url and returns the response body for a 200, with no
+// JSON/content-type check. Used for the detached .sig/.cert, which are
+// base64 text rather than JSON.
+func (c *Client) GetBytes(ctx context.Context, url string) ([]byte, error) {
+	if err := c.validateURL(url); err != nil {
 		return nil, err
 	}
-	return &m, nil
+	return c.get(ctx, c.HTTP, url)
 }
 
 func (c *Client) getJSON(ctx context.Context, url string, out any) error {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	raw, err := c.getJSONBytes(ctx, url)
 	if err != nil {
 		return err
 	}
+	if err := json.Unmarshal(raw, out); err != nil {
+		return fmt.Errorf("parsing %s: %w", url, err)
+	}
+	return nil
+}
+
+func (c *Client) getJSONBytes(ctx context.Context, url string) ([]byte, error) {
+	if err := c.validateURL(url); err != nil {
+		return nil, err
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return nil, err
+	}
 	resp, err := c.HTTP.Do(req)
 	if err != nil {
-		return fmt.Errorf("fetching %s: %w", url, err)
+		return nil, fmt.Errorf("fetching %s: %w", url, err)
 	}
 	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("fetching %s: HTTP %d", url, resp.StatusCode)
+		return nil, fmt.Errorf("fetching %s: HTTP %d", url, resp.StatusCode)
 	}
 	// dist serves the SPA HTML shell (text/html) with 200 for a path that has
 	// no object; a real API response is application/json. Guard against
 	// decoding the shell as an empty struct.
 	if ct := resp.Header.Get("Content-Type"); ct != "" && !strings.Contains(ct, "json") {
-		return fmt.Errorf("fetching %s: expected JSON, got Content-Type %q (no such release object?)", url, ct)
+		return nil, fmt.Errorf("fetching %s: expected JSON, got Content-Type %q (no such release object?)", url, ct)
 	}
-	if err := json.Unmarshal(resp.Body, out); err != nil {
-		return fmt.Errorf("parsing %s: %w", url, err)
+	return resp.Body, nil
+}
+
+// get issues a GET through the given Doer and returns the body for a 200. The
+// URL must already have been validated by the caller.
+func (c *Client) get(ctx context.Context, doer Doer, url string) ([]byte, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return nil, err
 	}
-	return nil
+	resp, err := doer.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("fetching %s: %w", url, err)
+	}
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("fetching %s: HTTP %d", url, resp.StatusCode)
+	}
+	return resp.Body, nil
 }
 
 // CompareVersions orders two "vMAJOR.MINOR.PATCH[-prerelease]" tags: it returns
@@ -139,7 +240,7 @@ func CompareVersions(a, b string) (cmp int, ok bool) {
 		}
 	}
 	// Equal core: absent prerelease outranks a present one; otherwise compare
-	// prerelease text (enough for this project's -rc.N tags).
+	// the prerelease per semver §11.
 	switch {
 	case ap == "" && bp == "":
 		return 0, true
@@ -147,12 +248,61 @@ func CompareVersions(a, b string) (cmp int, ok bool) {
 		return 1, true
 	case bp == "":
 		return -1, true
-	case ap < bp:
-		return -1, true
-	case ap > bp:
-		return 1, true
 	default:
-		return 0, true
+		return comparePrerelease(ap, bp), true
+	}
+}
+
+// comparePrerelease orders two prerelease strings per semver §11.4: compare
+// dot-separated identifiers left to right; two numeric identifiers compare
+// numerically (so rc.10 > rc.2), a numeric identifier ranks below a
+// non-numeric one, non-numeric identifiers compare lexically (ASCII), and a
+// longer identifier list outranks a shorter prefix of it.
+func comparePrerelease(a, b string) int {
+	as := strings.Split(a, ".")
+	bs := strings.Split(b, ".")
+	for i := 0; i < len(as) && i < len(bs); i++ {
+		if c := compareIdentifier(as[i], bs[i]); c != 0 {
+			return c
+		}
+	}
+	switch {
+	case len(as) < len(bs):
+		return -1
+	case len(as) > len(bs):
+		return 1
+	default:
+		return 0
+	}
+}
+
+// compareIdentifier orders one prerelease identifier against another per the
+// numeric/alphanumeric rules of semver §11.4.
+func compareIdentifier(a, b string) int {
+	an, aErr := strconv.Atoi(a)
+	bn, bErr := strconv.Atoi(b)
+	aNum := aErr == nil
+	bNum := bErr == nil
+	switch {
+	case aNum && bNum:
+		switch {
+		case an < bn:
+			return -1
+		case an > bn:
+			return 1
+		default:
+			return 0
+		}
+	case aNum: // numeric identifiers have lower precedence than non-numeric
+		return -1
+	case bNum:
+		return 1
+	case a < b:
+		return -1
+	case a > b:
+		return 1
+	default:
+		return 0
 	}
 }
 

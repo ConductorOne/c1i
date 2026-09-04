@@ -980,10 +980,20 @@ c1i upgrade --channel latest -y   # take the newest release without prompting
 
 `upgrade` reads the release channels published by the C1 distribution center
 (`dist.conductorone.com`) — `stable` by default, or `latest`/`preview` via
-`--channel` — and, for a standalone downloaded binary, verifies the new artifact
-against the release manifest's SHA-256 and replaces the running binary in place.
-`--yes`/`-y` skips the confirmation prompt (and is required when stdin is not a
-terminal).
+`--channel` — and, for a standalone downloaded binary, replaces the running
+binary in place. `--yes`/`-y` skips the confirmation prompt (and is required when
+stdin is not a terminal).
+
+Before anything is installed, `upgrade` verifies the release's authenticity in
+two layers. First it checks the release manifest's **Sigstore signature**
+(keyless / Fulcio) against the pinned ConductorOne release-workflow identity —
+the reusable `release.yaml` workflow issued by GitHub Actions' OIDC — so only a
+manifest signed by that workflow is trusted. The signing certificate's embedded
+SCT proves it was logged to Certificate Transparency (the detached manifest
+signature carries no Rekor entry, so Rekor inclusion is not separately
+enforced). Then the manifest's per-artifact **SHA-256** authenticates the
+downloaded binary. A failure at either layer aborts the upgrade without touching
+the installed binary.
 
 If c1i was installed with **Homebrew**, **`go install`**, or is running as a
 **container image**, `upgrade` does not self-replace — it prints the right
