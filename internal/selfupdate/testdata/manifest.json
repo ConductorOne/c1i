@@ -1,0 +1,181 @@
+{
+  "version": "2",
+  "name": "c1i",
+  "org": "ConductorOne",
+  "semver": "v0.7.0",
+  "releasedAt": "2026-09-04T16:57:04Z",
+  "assets": {
+    "checksums": {
+      "filename": "c1i_0.7.0_checksums.txt",
+      "mediaType": "text/plain",
+      "sizeBytes": 570,
+      "sha256": "f4de219194d88b8c9783f99d0d6333961ca864bc6b83672e8a5f9bd877fd8f1f",
+      "href": "https://dist.conductorone.com/releases/ConductorOne/c1i/v0.7.0/c1i_0.7.0_checksums.txt",
+      "signatureHref": "https://dist.conductorone.com/releases/ConductorOne/c1i/v0.7.0/c1i_0.7.0_checksums.txt.sig",
+      "certificateHref": "https://dist.conductorone.com/releases/ConductorOne/c1i/v0.7.0/c1i_0.7.0_checksums.txt.cert",
+      "sbomHref": null,
+      "attestations": [],
+      "updaterSignature": null
+    },
+    "darwin-amd64": {
+      "filename": "c1i-v0.7.0-darwin-amd64.zip",
+      "mediaType": "application/zip",
+      "sizeBytes": "4837607",
+      "sha256": "78d3c3e2f2d3bbcd81bd2ea6c5f7dd10c31351a327a370b24e42373dfef84fdf",
+      "href": "https://dist.conductorone.com/releases/ConductorOne/c1i/v0.7.0/c1i-v0.7.0-darwin-amd64.zip",
+      "signatureHref": "https://dist.conductorone.com/releases/ConductorOne/c1i/v0.7.0/c1i-v0.7.0-darwin-amd64.zip.sig",
+      "certificateHref": "https://dist.conductorone.com/releases/ConductorOne/c1i/v0.7.0/c1i-v0.7.0-darwin-amd64.zip.cert",
+      "sbomHref": null,
+      "attestations": [
+        {
+          "attestationType": "https://in-toto.io/Statement/v1",
+          "predicateType": "https://slsa.dev/provenance/v1",
+          "bundleHref": "https://dist.conductorone.com/releases/ConductorOne/c1i/v0.7.0/c1i-v0.7.0-darwin-amd64.zip.provenance.sigstore.json"
+        },
+        {
+          "attestationType": "https://in-toto.io/Statement/v1",
+          "predicateType": "https://spdx.dev/Document",
+          "bundleHref": "https://dist.conductorone.com/releases/ConductorOne/c1i/v0.7.0/c1i-v0.7.0-darwin-amd64.zip.sbom.sigstore.json"
+        }
+      ],
+      "updaterSignature": null
+    },
+    "darwin-arm64": {
+      "filename": "c1i-v0.7.0-darwin-arm64.zip",
+      "mediaType": "application/zip",
+      "sizeBytes": "4322292",
+      "sha256": "ff6a98348975ae062ec87b4f05418f23da94175b59dba9edc206d51b864861ba",
+      "href": "https://dist.conductorone.com/releases/ConductorOne/c1i/v0.7.0/c1i-v0.7.0-darwin-arm64.zip",
+      "signatureHref": "https://dist.conductorone.com/releases/ConductorOne/c1i/v0.7.0/c1i-v0.7.0-darwin-arm64.zip.sig",
+      "certificateHref": "https://dist.conductorone.com/releases/ConductorOne/c1i/v0.7.0/c1i-v0.7.0-darwin-arm64.zip.cert",
+      "sbomHref": null,
+      "attestations": [
+        {
+          "attestationType": "https://in-toto.io/Statement/v1",
+          "predicateType": "https://slsa.dev/provenance/v1",
+          "bundleHref": "https://dist.conductorone.com/releases/ConductorOne/c1i/v0.7.0/c1i-v0.7.0-darwin-arm64.zip.provenance.sigstore.json"
+        },
+        {
+          "attestationType": "https://in-toto.io/Statement/v1",
+          "predicateType": "https://spdx.dev/Document",
+          "bundleHref": "https://dist.conductorone.com/releases/ConductorOne/c1i/v0.7.0/c1i-v0.7.0-darwin-arm64.zip.sbom.sigstore.json"
+        }
+      ],
+      "updaterSignature": null
+    },
+    "linux-amd64": {
+      "filename": "c1i-v0.7.0-linux-amd64.tar.gz",
+      "mediaType": "application/gzip",
+      "sizeBytes": "4834233",
+      "sha256": "b423c938e43ae600d1999eb8b66b9112c1b17a7deb6b8f384388b00b7c48409d",
+      "href": "https://dist.conductorone.com/releases/ConductorOne/c1i/v0.7.0/c1i-v0.7.0-linux-amd64.tar.gz",
+      "signatureHref": "https://dist.conductorone.com/releases/ConductorOne/c1i/v0.7.0/c1i-v0.7.0-linux-amd64.tar.gz.sig",
+      "certificateHref": "https://dist.conductorone.com/releases/ConductorOne/c1i/v0.7.0/c1i-v0.7.0-linux-amd64.tar.gz.cert",
+      "sbomHref": null,
+      "attestations": [
+        {
+          "attestationType": "https://in-toto.io/Statement/v1",
+          "predicateType": "https://slsa.dev/provenance/v1",
+          "bundleHref": "https://dist.conductorone.com/releases/ConductorOne/c1i/v0.7.0/c1i-v0.7.0-linux-amd64.tar.gz.provenance.sigstore.json"
+        },
+        {
+          "attestationType": "https://in-toto.io/Statement/v1",
+          "predicateType": "https://spdx.dev/Document",
+          "bundleHref": "https://dist.conductorone.com/releases/ConductorOne/c1i/v0.7.0/c1i-v0.7.0-linux-amd64.tar.gz.sbom.sigstore.json"
+        }
+      ],
+      "updaterSignature": null
+    },
+    "linux-arm64": {
+      "filename": "c1i-v0.7.0-linux-arm64.tar.gz",
+      "mediaType": "application/gzip",
+      "sizeBytes": "4362752",
+      "sha256": "6fd8bcb60b0693eae30169cc6c3a9846cb678c79a08e7ddbf6fb111c5f0be0db",
+      "href": "https://dist.conductorone.com/releases/ConductorOne/c1i/v0.7.0/c1i-v0.7.0-linux-arm64.tar.gz",
+      "signatureHref": "https://dist.conductorone.com/releases/ConductorOne/c1i/v0.7.0/c1i-v0.7.0-linux-arm64.tar.gz.sig",
+      "certificateHref": "https://dist.conductorone.com/releases/ConductorOne/c1i/v0.7.0/c1i-v0.7.0-linux-arm64.tar.gz.cert",
+      "sbomHref": null,
+      "attestations": [
+        {
+          "attestationType": "https://in-toto.io/Statement/v1",
+          "predicateType": "https://slsa.dev/provenance/v1",
+          "bundleHref": "https://dist.conductorone.com/releases/ConductorOne/c1i/v0.7.0/c1i-v0.7.0-linux-arm64.tar.gz.provenance.sigstore.json"
+        },
+        {
+          "attestationType": "https://in-toto.io/Statement/v1",
+          "predicateType": "https://spdx.dev/Document",
+          "bundleHref": "https://dist.conductorone.com/releases/ConductorOne/c1i/v0.7.0/c1i-v0.7.0-linux-arm64.tar.gz.sbom.sigstore.json"
+        }
+      ],
+      "updaterSignature": null
+    },
+    "windows-amd64": {
+      "filename": "c1i-v0.7.0-windows-amd64.zip",
+      "mediaType": "application/zip",
+      "sizeBytes": "4766919",
+      "sha256": "f01184b4b6baa994b95229cf727d0ca0e4be712901f3d3b81f2044a274c7bfad",
+      "href": "https://dist.conductorone.com/releases/ConductorOne/c1i/v0.7.0/c1i-v0.7.0-windows-amd64.zip",
+      "signatureHref": "https://dist.conductorone.com/releases/ConductorOne/c1i/v0.7.0/c1i-v0.7.0-windows-amd64.zip.sig",
+      "certificateHref": "https://dist.conductorone.com/releases/ConductorOne/c1i/v0.7.0/c1i-v0.7.0-windows-amd64.zip.cert",
+      "sbomHref": null,
+      "attestations": [
+        {
+          "attestationType": "https://in-toto.io/Statement/v1",
+          "predicateType": "https://slsa.dev/provenance/v1",
+          "bundleHref": "https://dist.conductorone.com/releases/ConductorOne/c1i/v0.7.0/c1i-v0.7.0-windows-amd64.zip.provenance.sigstore.json"
+        },
+        {
+          "attestationType": "https://in-toto.io/Statement/v1",
+          "predicateType": "https://spdx.dev/Document",
+          "bundleHref": "https://dist.conductorone.com/releases/ConductorOne/c1i/v0.7.0/c1i-v0.7.0-windows-amd64.zip.sbom.sigstore.json"
+        }
+      ],
+      "updaterSignature": null
+    },
+    "windows-amd64-msi": {
+      "filename": "c1i_v0.7.0_windows_amd64.msi",
+      "mediaType": "application/x-msi",
+      "sizeBytes": "4706304",
+      "sha256": "4a26d68f1e2ad05d7714b2ef37af04c962065610b942167db46d72cf2a78fdcb",
+      "href": "https://dist.conductorone.com/releases/ConductorOne/c1i/v0.7.0/c1i_v0.7.0_windows_amd64.msi",
+      "signatureHref": "https://dist.conductorone.com/releases/ConductorOne/c1i/v0.7.0/c1i_v0.7.0_windows_amd64.msi.sig",
+      "certificateHref": "https://dist.conductorone.com/releases/ConductorOne/c1i/v0.7.0/c1i_v0.7.0_windows_amd64.msi.cert",
+      "sbomHref": null,
+      "attestations": [
+        {
+          "attestationType": "https://in-toto.io/Statement/v1",
+          "predicateType": "https://slsa.dev/provenance/v1",
+          "bundleHref": "https://dist.conductorone.com/releases/ConductorOne/c1i/v0.7.0/c1i_v0.7.0_windows_amd64.msi.provenance.sigstore.json"
+        },
+        {
+          "attestationType": "https://in-toto.io/Statement/v1",
+          "predicateType": "https://spdx.dev/Document",
+          "bundleHref": "https://dist.conductorone.com/releases/ConductorOne/c1i/v0.7.0/c1i_v0.7.0_windows_amd64.msi.sbom.sigstore.json"
+        }
+      ],
+      "updaterSignature": null
+    }
+  },
+  "images": {
+    "ecrPublic": {
+      "ref": "public.ecr.aws/conductorone/c1i:0.7.0",
+      "digest": "sha256:c546208d7357a59b8e0d8b324faae4d4ba8296fec1d60f5bc12e8f4a675fff13",
+      "tag": "0.7.0",
+      "uri": "public.ecr.aws/conductorone/c1i@sha256:c546208d7357a59b8e0d8b324faae4d4ba8296fec1d60f5bc12e8f4a675fff13",
+      "isIndex": true
+    }
+  },
+  "signatureHref": "https://dist.conductorone.com/releases/ConductorOne/c1i/v0.7.0/manifest.json.sig",
+  "certificateHref": "https://dist.conductorone.com/releases/ConductorOne/c1i/v0.7.0/manifest.json.cert",
+  "imageAttestation": {
+    "attestationType": "https://in-toto.io/Statement/v1",
+    "predicateType": "https://slsa.dev/provenance/v1",
+    "bundleHref": null
+  },
+  "assetAttestation": {
+    "attestationType": "https://in-toto.io/Statement/v1",
+    "predicateType": "https://slsa.dev/provenance/v1",
+    "bundleHref": null
+  },
+  "signatureBundleHref": "https://dist.conductorone.com/releases/ConductorOne/c1i/v0.7.0/manifest.json.sigstore.json"
+}

@@ -42,7 +42,7 @@ the right command for that install method instead of self-replacing.
 		assumeYes, _ := cmd.Flags().GetBool("yes")
 		out := cmd.OutOrStdout()
 
-		client := &selfupdate.Client{HTTP: newUpgradeDoer()}
+		client := &selfupdate.Client{HTTP: newUpgradeDoer(), Download: newUpgradeDownloadDoer()}
 
 		idx, err := client.Index(cmd.Context())
 		if err != nil {
@@ -98,23 +98,48 @@ the right command for that install method instead of self-replacing.
 		if !ok || entry.Manifest == "" {
 			return &upstreamError{fmt.Errorf("no manifest listed for %s", target)}
 		}
-		manifest, err := client.Manifest(cmd.Context(), entry.Manifest)
+		manifest, manifestBytes, err := client.ManifestRaw(cmd.Context(), entry.Manifest)
 		if err != nil {
 			return &upstreamError{fmt.Errorf("reading the %s manifest: %w", target, err)}
 		}
+		// The manifest must describe the version the channel points at; a
+		// mismatch means the index and manifest disagree about what this is.
+		if manifest.Semver != target {
+			return &upstreamError{fmt.Errorf("manifest for %s reports version %q; refusing the mismatch", target, manifest.Semver)}
+		}
+
+		// Authenticate the manifest itself before trusting anything in it: the
+		// signature (pinned release-workflow identity, keyless/Fulcio) covers
+		// the exact manifest bytes; the per-asset sha256 inside then covers the
+		// downloaded artifact.
+		if entry.Signature == "" || entry.Certificate == "" {
+			return &upstreamError{fmt.Errorf("release %s carries no manifest signature to verify", target)}
+		}
+		sig, err := client.GetBytes(cmd.Context(), entry.Signature)
+		if err != nil {
+			return &upstreamError{fmt.Errorf("fetching the %s manifest signature: %w", target, err)}
+		}
+		cert, err := client.GetBytes(cmd.Context(), entry.Certificate)
+		if err != nil {
+			return &upstreamError{fmt.Errorf("fetching the %s manifest certificate: %w", target, err)}
+		}
+		if err := selfupdate.VerifyManifest(cmd.Context(), manifestBytes, sig, cert); err != nil {
+			return &upstreamError{fmt.Errorf("verifying the %s release signature: %w", target, err)}
+		}
+
 		asset, ok := manifest.Assets[selfupdate.PlatformKey()]
 		if !ok {
 			return &upstreamError{fmt.Errorf("%s has no build for %s", target, selfupdate.PlatformKey())}
 		}
 
 		if dryRunActive() {
-			_, _ = fmt.Fprintf(out, "[dry-run] would download %s\n", asset.Href)
+			_, _ = fmt.Fprintf(out, "[dry-run] manifest signature verified; would download %s\n", asset.Href)
 			_, _ = fmt.Fprintf(out, "[dry-run] would verify sha256 %s and replace %s\n", asset.SHA256, execPath)
 			return nil
 		}
 
 		if !assumeYes {
-			ok, err := confirm(cmd, fmt.Sprintf("Upgrade c1i %s -> %s?", current, target))
+			ok, err := confirm(cmd, fmt.Sprintf("Upgrade c1i %s -> %s, replacing %s?", current, target, execPath))
 			if err != nil {
 				return err
 			}
@@ -133,13 +158,26 @@ the right command for that install method instead of self-replacing.
 	},
 }
 
-// newUpgradeDoer builds the transport the self-updater fetches through. A var
-// so a test can inject a fake dist server; production threads --max-retries and
-// --debug like every other network path.
+// newUpgradeDoer builds the transport the self-updater fetches metadata
+// (index.json, manifest.json, .sig, .cert) through, bounded to
+// MaxMetadataBytes. A var so a test can inject a fake dist server; production
+// threads --max-retries and --debug like every other network path.
 var newUpgradeDoer = func() selfupdate.Doer {
 	return transport.New(nil,
 		transport.WithMaxRetries(viper.GetInt("max_retries")),
 		transport.WithDebug(viper.GetBool("debug")),
+		transport.WithMaxResponseBytes(selfupdate.MaxMetadataBytes),
+	)
+}
+
+// newUpgradeDownloadDoer builds the transport for the (larger) release archive,
+// bounded to MaxArtifactBytes. Separate from newUpgradeDoer so the two fetch
+// paths carry different size ceilings.
+var newUpgradeDownloadDoer = func() selfupdate.Doer {
+	return transport.New(nil,
+		transport.WithMaxRetries(viper.GetInt("max_retries")),
+		transport.WithDebug(viper.GetBool("debug")),
+		transport.WithMaxResponseBytes(selfupdate.MaxArtifactBytes),
 	)
 }
 
