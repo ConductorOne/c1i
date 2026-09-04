@@ -52,6 +52,12 @@ the right command for that install method instead of self-replacing.
 		if target == "" {
 			return &upstreamError{fmt.Errorf("the distribution center lists no %q channel", channel)}
 		}
+		// index.json (channel + yank status) is NOT signed — only the per-release
+		// manifest is. So this yank check, and channel resolution, are best-effort
+		// against a compromised distribution origin: it could re-point a channel
+		// to a different but authentic ConductorOne-signed release, or un-yank one.
+		// The signature + monotonicity below bound that to authentic, not-older
+		// binaries; closing it fully needs a signed index (a dist-side change).
 		if e, ok := idx.Semvers[target]; ok && e.Yanked {
 			return &upstreamError{fmt.Errorf("the %q channel points at %s, which has been yanked; try again later", channel, target)}
 		}
@@ -104,7 +110,8 @@ the right command for that install method instead of self-replacing.
 		}
 		// The manifest must describe the version the channel points at; a
 		// mismatch means the index and manifest disagree about what this is.
-		if manifest.Semver != target {
+		// Compare as semver so a formatting skew (v-prefix) isn't a false reject.
+		if cmp, ok := selfupdate.CompareVersions(manifest.Semver, target); !ok || cmp != 0 {
 			return &upstreamError{fmt.Errorf("manifest for %s reports version %q; refusing the mismatch", target, manifest.Semver)}
 		}
 
