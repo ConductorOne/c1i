@@ -6,6 +6,16 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- **`c1i upgrade`** (alias `update`) — check for and install a newer release
+  from the C1 distribution center. Reads the `stable` channel by default
+  (`--channel latest|preview` to opt into newer builds), verifies the download
+  against the release manifest's SHA-256, and replaces a standalone binary in
+  place. For a Homebrew, `go install`, or container-image install it prints the
+  matching upgrade command instead of self-replacing. `--check` reports whether
+  a newer release exists without changing anything.
+
 ## [0.7.0] - 2026-09-03
 
 ### Upgrading from 0.6.x
