@@ -27,7 +27,7 @@ type getUnwrapCase struct {
 	args []string
 	// flags are the parent-scope ids the command requires (--app-id, ...).
 	flags map[string]string
-	// idKey is the identifying field: "id" except for MCP servers.
+	// idKey is the unique resource identity field, normally "id".
 	idKey string
 	body  string
 	// wantKeys is the EXACT top-level key set the output must have: the
@@ -105,6 +105,20 @@ func getUnwrapCases() []getUnwrapCase {
 			body:        `{"appEntitlementView":{"appEntitlement":{"id":"ent-1","displayName":"Admin"},"appPath":"","objectPermissions":{"read":true}},"expanded":[{"id":"app-1"}]}`,
 			wantKeys:    []string{"id", "displayName", "appPath", "objectPermissions", "expanded"},
 			payloadPath: []string{"appEntitlementView", "appEntitlement"},
+		},
+		{
+			name: "entitlements proxy-bindings get",
+			cmd:  entitlementsProxyBindingsGetCmd,
+			flags: map[string]string{
+				"source-app-id":              "src-app",
+				"source-entitlement-id":      "src-ent",
+				"destination-app-id":         "dst-app",
+				"destination-entitlement-id": "dst-ent",
+			},
+			idKey:       "srcAppId",
+			body:        `{"appProxyEntitlementView":{"appProxyEntitlement":{"srcAppId":"src-app","srcAppEntitlementId":"src-ent","dstAppId":"dst-app","dstAppEntitlementId":"dst-ent"},"srcAppPath":"src-path","dstAppPath":"dst-path"},"expanded":[{"id":"exp"}]}`,
+			payloadPath: []string{"appProxyEntitlementView", "appProxyEntitlement"},
+			wantKeys:    []string{"srcAppId", "srcAppEntitlementId", "dstAppId", "dstAppEntitlementId", "srcAppPath", "dstAppPath", "expanded"},
 		},
 		{
 			name:        "mcp servers get",

@@ -98,6 +98,17 @@ c1i accounts set-owner <app-user-id> --app-id <id> --user-id <id>
 c1i entitlements list [--app-id <id>] [--query <text>] [--page-size N] [--page-token TOKEN] [--limit N]
 c1i entitlements get <entitlement-id> --app-id <id>
 
+# Directional entitlement-to-entitlement proxy binding
+c1i entitlements proxy-bindings get \
+  --source-app-id <id> --source-entitlement-id <id> \
+  --destination-app-id <id> --destination-entitlement-id <id>
+c1i entitlements proxy-bindings create \
+  --source-app-id <id> --source-entitlement-id <id> \
+  --destination-app-id <id> --destination-entitlement-id <id>
+c1i entitlements proxy-bindings delete \
+  --source-app-id <id> --source-entitlement-id <id> \
+  --destination-app-id <id> --destination-entitlement-id <id>
+
 # Create one on a manually-managed app, with its resource type and resource
 c1i entitlements create --app-id <id> --display-name "Payroll admin" \
   [--description <text>] [--slug member] [--alias payroll_admin] [--owner-id <user-id>] \
@@ -144,6 +155,16 @@ created entitlement comes back as pretty JSON under `appEntitlementView`
 (`--fields` is never applied to mutation output); it echoes
 `appResourceTypeId`/`appResourceId` and expands both objects, so every id the
 command touched is in that one payload.
+
+`entitlements proxy-bindings` manages directional entitlement-to-entitlement
+visibility and tracking links. Source and destination are each identified by
+their app and entitlement IDs; entitlement IDs are app-scoped. Creating a
+binding does not grant access or configure delegated provisioning. Use
+`c1i docs guide delegate-entitlement-provisioning` for the separate ordered
+workflow that configures delegation on the destination entitlement. The public
+REST API has no proxy-binding list endpoint; the C1 Console's binding browser
+uses an internal gRPC-web search service that is outside the public API
+contract.
 
 ### Grants ("who has access")
 

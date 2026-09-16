@@ -119,13 +119,12 @@ Both share the same error classification: `c1i api` surfaces the same typed
 errors and the same exit codes as any other command, so the table below
 applies either way.
 
-`c1i api` is the right tool when no first-class command exists yet. The known
-gap is the entitlement *proxy binding* path (a different object from `mcp
-bindings` — see `c1i docs guide delegate-entitlement-provisioning`).
+`c1i api` is the right tool when no first-class command exists yet.
 Access-profile lifecycle, requestable and visibility entitlements, and bundle
 automation are first-class under `access-profiles`; use its nested `--help` to
-choose a command. Use `access-reviews` for campaign lists, lifecycle calls, and
-reports.
+choose a command. Use `entitlements proxy-bindings` for directional
+entitlement-to-entitlement links, and `access-reviews` for campaign lists,
+lifecycle calls, and reports.
 
 The cobra tree never drifts from what's implemented. Step down it with
 `--help` at each level:
@@ -192,9 +191,11 @@ Rule of thumb: a product concept starts at `docs search` → `docs page`; a raw
 - Typed `get` commands unwrap the API envelope (since v0.6.0): they print the
   resource itself, so read `.id` — not `.app.id`, `.userView.user.id`, or any
   other wrapper key. Naming a wrapper key in `--fields` matches nothing and
-  exits 2. The exception is `mcp servers get`, which has no `id` of its own —
-  key on `.connectorId`. `c1i api` and mutation confirmations still return the
-  API's envelope.
+  exits 2. Exceptions: `mcp servers get` identifies itself with `.connectorId`;
+  `entitlements proxy-bindings get` has a directional composite identity:
+  `.srcAppId`, `.srcAppEntitlementId`, `.dstAppId`, and
+  `.dstAppEntitlementId`. `c1i api` and mutation confirmations still return
+  the API's envelope.
 - Mutation confirmations (create/update/delete) are never field-projected —
   `--fields`/`C1I_FIELDS` can't blank a success message.
 - Casing differs by mode: list rows are snake_case (`app_id`,
