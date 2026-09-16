@@ -455,7 +455,8 @@ Report generation is asynchronous: `generate` creates a report record but does
 not return a ready download. Use `reports list` to find its state and
 time-limited `downloadUrl`. Public API callers default to JSON when `--format`
 is omitted; use `csv` or `xlsx` when needed. `--body-file` is for the full
-generation request, including XLSX report-column configuration.
+generation request, including XLSX report-column configuration; it is mutually
+exclusive with `--format`.
 
 ### Access profiles
 
@@ -533,6 +534,11 @@ c1i service-principals delete <sp-id>
 the new principal comes back as pretty JSON under `servicePrincipal`, unwrapped
 so its id is at the top level (read it from `.id`).
 
+**Delete is destructive:** `service-principals delete` removes the principal
+and every credential issued for it. Before deleting, inspect the principal with
+`service-principals get <sp-id>`. Use `--dry-run` to preview the DELETE request
+and target path; it does not verify that the target exists.
+
 **Credentials** are how a service principal authenticates. The secret is returned
 **once**, at creation, and cannot be retrieved again — capture it then.
 
@@ -544,13 +550,16 @@ c1i service-principals credentials update <credential-id> --service-principal-id
 c1i service-principals credentials revoke <credential-id> --service-principal-id <sp-id>
 ```
 
-`--expires` takes a Go duration (e.g. `720h`). The server accepts the range
-`(0s, 4320h]` — up to 180 days — rejecting more with `value must be inside range
-(0s, 4320h0m0s]`.
+`--expires` takes a positive Go duration (e.g. `720h`). The server accepts the
+range `(0s, 4320h]` — up to 180 days — rejecting more with `value must be inside
+range (0s, 4320h0m0s]`. Fractional seconds are truncated toward zero before
+sending (for example, `1.5s` becomes `1s`); use a whole-second duration.
+
 `--scoped-role` and `--allow-cidr` are repeatable and restrict the credential to
-those role ids / source CIDRs. `--require-dpop` requires DPoP proof-of-possession
-at token exchange. Only `--display-name` can be changed after a credential is
-created.
+those role ids / source CIDRs. Repeat either flag for multiple values. Do not
+pass an empty value: verify a shell variable is set before including its flag.
+`--require-dpop` requires DPoP proof-of-possession at token exchange. Only
+`--display-name` can be changed after a credential is created.
 
 **Bindings** (a draft API) name a subject that authenticates as the principal.
 Exactly one subject is required; the SSO, AuthZEN, and edge subjects are
@@ -685,10 +694,10 @@ c1i mcp bindings create --app-id A --connector-id C --toolset-id T \
 easy to miss on `--config-field`, where `--config-field "region=us1,env=prod"`
 sets `region` to `us1,env=prod` and the server may accept it.
 
-An empty occurrence is a usage error (exit 2), rejected before any request, so
-an unset shell variable cannot silently shorten the list — which for a
-list-replacing flag like `apps set-owners --user-id` would drop an owner.
-Contrast `--fields`, which *is* comma-separated.
+For list-replacing flags such as `apps set-owners --user-id`, an empty
+occurrence is a usage error (exit 2), rejected before any request so an unset
+shell variable cannot drop an owner. Validate shell variables before supplying
+any repeatable flag. Contrast `--fields`, which *is* comma-separated.
 
 ### Field selection
 

@@ -24,8 +24,9 @@ to whatever `url:` names in `~/.c1i.yaml`. It must be a full host —
 a bare `mycompany`, a non-https scheme, and a malformed host (an embedded space
 or control character, or a stray scheme like `://host`) are all usage errors
 (exit `2`) before any request is sent.
-Every command prints a `Warning: no --url flag given; targeting <url> (from
-~/.c1i.yaml)` line to stderr when the URL came from the config file —
+Every command that resolves a C1 tenant URL prints a `Warning: no --url flag
+given; targeting <url> (from ~/.c1i.yaml)` line to stderr when the URL came from
+the config file —
 `--url` and `C1I_URL` print nothing, since both are an explicit choice for
 that invocation. Don't rely on catching it: pass `--url` explicitly on every
 invocation instead of an exported `C1I_URL`. A fresh shell per call is
@@ -298,8 +299,9 @@ resource with `--resource-id` likewise means you drop
 - A **repeatable** flag takes one value per occurrence; a comma is literal, not
   a separator. `--tool-id a,b` is one id, not two. `--config-field
   "region=us1,env=prod"` sets `region` to `us1,env=prod`, which the server may
-  accept. An empty occurrence is exit 2 before any request, so an unset shell
-  variable cannot silently shorten a list. `--fields` IS comma-separated.
+  accept. Validate shell variables before supplying any repeatable flag:
+  a comma is not a substitute for multiple values, and an empty value can
+  silently remove a restriction. `--fields` IS comma-separated.
 - `mcp tools approve` takes one or more tool ids in a single invocation:
   `approve id1 id2 id3 --app-id A --connector-id C` approves a whole toolset in
   one process (one token, one TLS handshake). The API has no batch approve, so
