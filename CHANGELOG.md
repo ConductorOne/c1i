@@ -6,6 +6,16 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- `c1i service-principals` (alias `sp`): manage service principals (tenant-owned
+  non-human identities). Full CRUD on the principal (`list`, `get`, `create`,
+  `update`, `delete`), its client credentials (`credentials list/get/create/
+  update/revoke` — the secret is shown once at creation), and its subject
+  bindings (`bindings add/list/delete` for function, SSO application, AuthZEN
+  server, and edge subjects; a draft API). This surface is not in the public
+  OpenAPI spec, so these first-class commands are the way to reach it.
+
 ## [0.7.0] - 2026-09-03
 
 ### Upgrading from 0.6.x
