@@ -117,6 +117,14 @@ func TestBuildSPCredentialCreateBody(t *testing.T) {
 			want: map[string]any{"displayName": "ci", "expires": "2592000s"},
 		},
 		{
+			name: "fractional expires preserves nanoseconds",
+			flags: map[string][]string{
+				"display-name": {"ci"},
+				"expires":      {"1.5s"},
+			},
+			want: map[string]any{"displayName": "ci", "expires": "1.500000000s"},
+		},
+		{
 			name: "roles, cidrs and dpop",
 			flags: map[string][]string{
 				"display-name": {"ci"},
@@ -130,6 +138,16 @@ func TestBuildSPCredentialCreateBody(t *testing.T) {
 				"allowSourceCidrs": []string{"10.0.0.0/24"},
 				"requireDpop":      true,
 			},
+		},
+		{
+			name:    "empty scoped role is a usage error",
+			flags:   map[string][]string{"display-name": {"ci"}, "scoped-role": {""}},
+			wantErr: true,
+		},
+		{
+			name:    "empty allow CIDR is a usage error",
+			flags:   map[string][]string{"display-name": {"ci"}, "allow-cidr": {""}},
+			wantErr: true,
 		},
 		{
 			name:    "invalid duration is a usage error",
