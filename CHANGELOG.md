@@ -8,6 +8,11 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **`c1i access-reviews`: manage access-review campaigns and reports.**
+  List and inspect campaigns, create and update a campaign from validated JSON
+  input, list generated reports, and request JSON, CSV, or XLSX report
+  generation.
+
 - `c1i service-principals` (alias `sp`): manage service principals (tenant-owned
   non-human identities). Full CRUD on the principal (`list`, `get`, `create`,
   `update`, `delete`), its client credentials (`credentials list/get/create/

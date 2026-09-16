@@ -119,10 +119,10 @@ errors and the same exit codes as any other command, so the table below
 applies either way.
 
 `c1i api` is the right tool when no first-class command exists yet. Known
-gaps: access reviews (`/api/v1/access_review*`), the entitlement *proxy
-binding* path (a different object from `mcp bindings` — see `c1i docs guide
-delegate-entitlement-provisioning`), and the catalog sub-resources
-(`/api/v1/catalogs/{id}/…`) plus catalog delete/update. Otherwise, discover.
+gaps: the entitlement *proxy binding* path (a different object from `mcp
+bindings` — see `c1i docs guide delegate-entitlement-provisioning`), and the
+catalog sub-resources (`/api/v1/catalogs/{id}/…`) plus catalog delete/update.
+Use `access-reviews` for campaign lists, lifecycle calls, and reports.
 
 The cobra tree never drifts from what's implemented. Step down it with
 `--help` at each level:

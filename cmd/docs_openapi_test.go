@@ -60,11 +60,9 @@ func runDocsEndpoints(t *testing.T, filter string) (stdout, stderr string) {
 }
 
 // TestDocsEndpointsMissNamesHiddenFamilies pins that a filter miss names the
-// two endpoint families we've confirmed are real, working live, and
-// intentionally absent from the public OpenAPI spec (mcp_servers/mcp_tools/
-// mcp_toolsets and access_review/access_reviews), each with a concrete next
-// step, rather than only pointing at 'docs search'. See docs_openapi.go for
-// how each was verified.
+// two endpoint families confirmed real but omitted from the public OpenAPI spec
+// (mcp_servers/mcp_tools/mcp_toolsets and access_review/access_reviews), with
+// the first-class command for each rather than only `docs search`.
 func TestDocsEndpointsMissNamesHiddenFamilies(t *testing.T) {
 	_, stderr := runDocsEndpoints(t, "does-not-exist-anywhere")
 
@@ -73,7 +71,7 @@ func TestDocsEndpointsMissNamesHiddenFamilies(t *testing.T) {
 		"mcp_servers",
 		"c1i mcp",
 		"access_review",
-		"c1i api --path=/api/v1/access_review",
+		"c1i access-reviews",
 		`c1i docs search "does-not-exist-anywhere"`,
 	}
 	for _, want := range wantSubstrings {

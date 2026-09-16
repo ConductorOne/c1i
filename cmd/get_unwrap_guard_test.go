@@ -160,6 +160,15 @@ func getUnwrapCases() []getUnwrapCase {
 			wantKeys:    []string{"id", "displayName", "published", "memberCount", "createdByUserPath", "accessEntitlementsPath", "expanded"},
 		},
 		{
+			name:        "access-reviews get",
+			cmd:         accessReviewsGetCmd,
+			args:        []string{"review-1"},
+			idKey:       "id",
+			body:        `{"accessReview":{"accessReview":{"id":"review-1","displayName":"Q4 certification"},"policyPath":"","objectPermissions":{"read":true}},"expanded":[{"id":"policy-1"}]}`,
+			payloadPath: []string{"accessReview", "accessReview"},
+			wantKeys:    []string{"id", "displayName", "policyPath", "objectPermissions", "expanded"},
+		},
+		{
 			name:        "mcp servers catalog get",
 			cmd:         mcpServersCatalogGetCmd,
 			args:        []string{"cat-1"},
