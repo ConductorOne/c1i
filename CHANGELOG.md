@@ -12,6 +12,13 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   List and inspect campaigns, create and update a campaign from validated JSON
   input, list generated reports, and request JSON, CSV, or XLSX report
   generation.
+- **`c1i access-profiles` now manages the full request-catalog lifecycle.**
+  Update or soft-delete a profile; add, remove, list, or replace its
+  requestable entitlements; add, remove, or list its visibility entitlements;
+  and get, create, set, delete, resume, or run bundle automation. Add and
+  remove mutations use an application-scoped `--app-id` plus repeatable
+  `--entitlement-id`; replacement and bundle configuration use validated JSON
+  files.
 
 - `c1i service-principals` (alias `sp`): manage service principals (tenant-owned
   non-human identities). Full CRUD on the principal (`list`, `get`, `create`,

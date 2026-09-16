@@ -187,6 +187,15 @@ func getUnwrapCases() []getUnwrapCase {
 			wantKeys:    []string{"id", "displayName"},
 		},
 		{
+			name:        "access-profiles bundle-automation get",
+			cmd:         accessProfilesBundleAutomationGetCmd,
+			args:        []string{"cat-1"},
+			idKey:       "requestCatalogId",
+			body:        `{"requestCatalogId":"cat-1","enabled":true}`,
+			payloadPath: nil,
+			wantKeys:    []string{"requestCatalogId", "enabled"},
+		},
+		{
 			name:        "service-principals credentials get",
 			cmd:         spCredentialsGetCmd,
 			args:        []string{"foo-bar-12345"},
