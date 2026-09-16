@@ -119,11 +119,13 @@ Both share the same error classification: `c1i api` surfaces the same typed
 errors and the same exit codes as any other command, so the table below
 applies either way.
 
-`c1i api` is the right tool when no first-class command exists yet. Known
-gaps: the entitlement *proxy binding* path (a different object from `mcp
-bindings` — see `c1i docs guide delegate-entitlement-provisioning`), and the
-catalog sub-resources (`/api/v1/catalogs/{id}/…`) plus catalog delete/update.
-Use `access-reviews` for campaign lists, lifecycle calls, and reports.
+`c1i api` is the right tool when no first-class command exists yet. The known
+gap is the entitlement *proxy binding* path (a different object from `mcp
+bindings` — see `c1i docs guide delegate-entitlement-provisioning`).
+Access-profile lifecycle, requestable and visibility entitlements, and bundle
+automation are first-class under `access-profiles`; use its nested `--help` to
+choose a command. Use `access-reviews` for campaign lists, lifecycle calls, and
+reports.
 
 The cobra tree never drifts from what's implemented. Step down it with
 `--help` at each level:
@@ -408,11 +410,11 @@ resource with `--resource-id` likewise means you drop
   created with `--visible-to-everyone` it is a `400`,
   `catalog is visible to everyone, cannot add access entitlements`. A
   catalog published but not visible to everyone accepts them immediately.
-- There is no `access-profiles delete` yet; delete via `c1i api --path
-  /api/v1/catalogs/<id> --method DELETE`. It is a soft delete: the catalog
-  leaves `access-profiles list`, while `access-profiles get` still returns it at exit `0`
-  with `deletedAt` set. So a `deleted_at` in an `access-profiles list` row is null in
-  practice — don't read the null as "not deleted", check with a get.
+- `access-profiles delete <access-profile-id>` is a soft delete: the catalog
+  leaves `access-profiles list`, while `access-profiles get` still returns it at
+  exit `0` with `deletedAt` set. So a `deleted_at` in an `access-profiles list`
+  row is null in practice — don't read the null as "not deleted", check with a
+  get.
 
 ## Carry forward
 

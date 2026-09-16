@@ -475,42 +475,63 @@ user can request, derived from the access profiles they belong to.
 ```sh
 c1i access-profiles list [--page-size N] [--page-token TOKEN] [--limit N]
 c1i access-profiles get <access-profile-id>
-c1i access-profiles create --display-name <name> [--description <text>] [--published] [--visible-to-everyone] [--request-bundle]
+c1i access-profiles create --display-name <name> [--description <text>] [--published] [--visible-to-everyone] [--request-bundle] [--enrollment-behavior bypass|enforce] [--unenrollment-behavior leave-access-as-is|revoke-all|revoke-unjustified] [--unenrollment-entitlement-behavior bypass|enforce]
+c1i access-profiles update <access-profile-id> [--display-name <name>] [--description <text>] [--published] [--visible-to-everyone] [--request-bundle] [--enrollment-behavior bypass|enforce] [--unenrollment-behavior leave-access-as-is|revoke-all|revoke-unjustified] [--unenrollment-entitlement-behavior bypass|enforce]
+c1i access-profiles delete <access-profile-id>
+
+c1i access-profiles requestable-entitlements list <access-profile-id> [--page-size N] [--page-token TOKEN] [--limit N]
+c1i access-profiles requestable-entitlements list-ids <access-profile-id>
+c1i access-profiles requestable-entitlements add <access-profile-id> --app-id <id> --entitlement-id <id> [--entitlement-id <id> ...] [--create-requests]
+c1i access-profiles requestable-entitlements remove <access-profile-id> --app-id <id> --entitlement-id <id> [--entitlement-id <id> ...]
+c1i access-profiles requestable-entitlements set <access-profile-id> --refs-file <path>
+
+c1i access-profiles visibility-entitlements list <access-profile-id> [--page-size N] [--page-token TOKEN] [--limit N]
+c1i access-profiles visibility-entitlements add <access-profile-id> --app-id <id> --entitlement-id <id> [--entitlement-id <id> ...]
+c1i access-profiles visibility-entitlements remove <access-profile-id> --app-id <id> --entitlement-id <id> [--entitlement-id <id> ...]
+
+c1i access-profiles bundle-automation get <access-profile-id>
+c1i access-profiles bundle-automation create <access-profile-id> --body-file <path>
+c1i access-profiles bundle-automation set <access-profile-id> --body-file <path>
+c1i access-profiles bundle-automation delete <access-profile-id>
+c1i access-profiles bundle-automation resume <access-profile-id>
+c1i access-profiles bundle-automation run <access-profile-id> [--refs-file <path>]
 ```
 
-`access-profiles create` needs only `--display-name`. Every other flag is omitted from
-the request body unless you pass it, so the server's own defaults apply; passing
-`--published=false` explicitly still sends `false`. `--published` and
-`--visible-to-everyone` both take effect at create time, so a catalog can be
-created already published. The new catalog comes back as pretty JSON under
-`requestCatalogView`, and `--fields` is never applied to mutation output, so read
-the new id from `.requestCatalogView.requestCatalog.id`:
+`access-profiles create` needs only `--display-name`. Every other field is
+omitted unless explicitly passed; explicit `false` still reaches the API.
+`update` derives its field mask from the flags supplied, so an explicit
+`--description ""` clears it while omitted fields remain untouched. Behavior
+flags accept short values shown above or the full `REQUEST_CATALOG_*` API enum.
 
-```sh
-CAT_ID=$(c1i access-profiles create --display-name Engineering --published | jq -r .requestCatalogView.requestCatalog.id)
-c1i access-profiles get "$CAT_ID"
-```
+`delete` is a soft delete: the catalog leaves `access-profiles list`, while
+`access-profiles get` still returns it with `deletedAt` populated.
 
-Ordering matters once you gate a catalog that is *not* visible to everyone.
-Adding a visibility binding (an access entitlement) to an unpublished catalog is
-refused with a `400`, `catalog must be published to add an access entitlement`;
-publishing it and repeating the same call succeeds. A catalog created with both
-`--published` and `--visible-to-everyone` refuses them for a second reason —
-`catalog is visible to everyone, cannot add access entitlements` — so create it
-published but not visible to everyone if you intend to gate it.
+`requestable-entitlements` manages what the profile grants. `add` and `remove`
+scope each entitlement to one `--app-id`; repeat `--entitlement-id` for that
+application. `set` takes a JSON array of `{"appId":"…","id":"…"}` via
+`--refs-file` (or `-` for stdin) and replaces the profile's entire requestable
+set; use `[]` to clear it. `list-ids` returns the API's compact `{appId,id}`
+reference list. `--create-requests` asks the server to create requests for
+profile members when adding entries.
+
+`visibility-entitlements` controls who can see the profile. Visibility additions
+require a catalog that is published but not visible to everyone. The API returns
+`catalog must be published to add an access entitlement` for an unpublished
+catalog and `catalog is visible to everyone, cannot add access entitlements`
+when `--visible-to-everyone` is set.
+
+`bundle-automation` drives automatic bundled-entitlement grants. `create` and
+`set` take a JSON object via `--body-file` (or `-` for stdin). The CLI validates
+and sends `createTasks`, `disableCircuitBreaker`, `enabled`, and `entitlements`,
+which contains an `entitlementRefs` array of `{"appId":"…","id":"…"}` objects.
+`run --refs-file` takes that entitlement reference array and limits a run to
+those references.
 
 `access-profiles list` rows do **not** carry a member count: the list endpoint reports
 `memberCount` as `0` for every catalog while `access-profiles get` on the same id
 reports a non-zero count, so the key is omitted from list rows. `access-profiles get`
 also carries the catalog's `accessEntitlements` (its visibility bindings),
 empty when there are none, which list rows omit.
-
-There is no `access-profiles delete` command yet; use `c1i api --path
-/api/v1/catalogs/<id> --method DELETE`. It is a soft delete, verified end to end:
-the catalog leaves `access-profiles list`, while `access-profiles get` still returns it at exit
-`0` with `deletedAt` set. Because deleted catalogs drop out of the list, a
-`deleted_at` in a list row is null in practice; the field is kept to match
-the sibling list rows that carry it, not as a signal to filter on.
 
 ### Service principals
 
