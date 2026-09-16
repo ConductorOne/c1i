@@ -168,6 +168,25 @@ func getUnwrapCases() []getUnwrapCase {
 			payloadPath: []string{"catalogEntry"},
 			wantKeys:    []string{"id", "serviceName"},
 		},
+		{
+			name:        "service-principals get",
+			cmd:         servicePrincipalsGetCmd,
+			args:        []string{"sp-1"},
+			idKey:       "id",
+			body:        `{"servicePrincipal":{"id":"sp-1","displayName":"payments-reconciler"}}`,
+			payloadPath: []string{"servicePrincipal"},
+			wantKeys:    []string{"id", "displayName"},
+		},
+		{
+			name:        "service-principals credentials get",
+			cmd:         spCredentialsGetCmd,
+			args:        []string{"foo-bar-12345"},
+			flags:       map[string]string{"service-principal-id": "sp-1"},
+			idKey:       "id",
+			body:        `{"credential":{"id":"foo-bar-12345","displayName":"ci","clientId":"foo@acme.c1/spc"}}`,
+			payloadPath: []string{"credential"},
+			wantKeys:    []string{"id", "displayName", "clientId"},
+		},
 	}
 }
 
@@ -178,9 +197,9 @@ func stubGetClient(t *testing.T, srv *httptest.Server) {
 	stub := func(_ *cobra.Command, _ string) (*client.Client, error) {
 		return client.NewForTesting(srv.URL, srv.Client()), nil
 	}
-	orig, origPolicies := newClient, newPoliciesClient
-	newClient, newPoliciesClient = stub, stub
-	t.Cleanup(func() { newClient, newPoliciesClient = orig, origPolicies })
+	orig, origPolicies, origSP := newClient, newPoliciesClient, newServicePrincipalsClient
+	newClient, newPoliciesClient, newServicePrincipalsClient = stub, stub, stub
+	t.Cleanup(func() { newClient, newPoliciesClient, newServicePrincipalsClient = orig, origPolicies, origSP })
 }
 
 // runGetCase drives one case's RunE against a stub API answering with its

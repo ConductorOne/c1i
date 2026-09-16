@@ -483,6 +483,63 @@ the catalog leaves `access-profiles list`, while `access-profiles get` still ret
 `deleted_at` in a list row is null in practice; the field is kept to match
 the sibling list rows that carry it, not as a signal to filter on.
 
+### Service principals
+
+A service principal (SPC) is a tenant-owned non-human identity. The principal is
+just an identity; a **client credential** on it is what a caller authenticates
+with (a `client_id`/secret pair), and a **binding** lets another subject — a
+function, SSO application, AuthZEN server, or edge — act as the principal.
+
+This API is not in the public OpenAPI spec, so these first-class commands are the
+way to reach it (the raw `c1i api` escape hatch works too).
+
+```sh
+c1i service-principals list [--page-size <n>] [--page-token <token>] [--limit <n>]
+c1i service-principals get <sp-id>
+c1i service-principals create --display-name <name>
+c1i service-principals update <sp-id> --display-name <name>
+c1i service-principals delete <sp-id>
+```
+
+`service-principals` is aliased to `sp`. `create` needs only `--display-name`;
+the new principal comes back as pretty JSON under `servicePrincipal`, unwrapped
+so its id is at the top level (read it from `.id`).
+
+**Credentials** are how a service principal authenticates. The secret is returned
+**once**, at creation, and cannot be retrieved again — capture it then.
+
+```sh
+c1i service-principals credentials list <sp-id>
+c1i service-principals credentials get <credential-id> --service-principal-id <sp-id>
+c1i service-principals credentials create <sp-id> --display-name <name> [--expires <duration>] [--scoped-role <role-id>] [--allow-cidr <cidr>] [--require-dpop]
+c1i service-principals credentials update <credential-id> --service-principal-id <sp-id> --display-name <name>
+c1i service-principals credentials revoke <credential-id> --service-principal-id <sp-id>
+```
+
+`--expires` takes a Go duration (e.g. `720h`). The server accepts the range
+`(0s, 4320h]` — up to 180 days — rejecting more with `value must be inside range
+(0s, 4320h0m0s]`.
+`--scoped-role` and `--allow-cidr` are repeatable and restrict the credential to
+those role ids / source CIDRs. `--require-dpop` requires DPoP proof-of-possession
+at token exchange. Only `--display-name` can be changed after a credential is
+created.
+
+**Bindings** (a draft API) name a subject that authenticates as the principal.
+Exactly one subject is required; the SSO, AuthZEN, and edge subjects are
+app-scoped, so they take both an id and an app id.
+
+```sh
+c1i service-principals bindings add --service-principal-id <sp-id> --function-id <fn-id>
+c1i service-principals bindings add --service-principal-id <sp-id> --sso-application-id <id> --sso-app-id <app-id>
+c1i service-principals bindings add --service-principal-id <sp-id> --authzen-server-id <id> --authzen-app-id <app-id>
+c1i service-principals bindings add --service-principal-id <sp-id> --edge-id <id> --edge-app-id <app-id>
+c1i service-principals bindings list --function-id <fn-id>
+c1i service-principals bindings delete --service-principal-id <sp-id> --function-id <fn-id>
+```
+
+`bindings list` is by subject — it returns the principals a subject is bound to.
+`add` and `delete` are idempotent.
+
 ### Export
 
 ```sh
