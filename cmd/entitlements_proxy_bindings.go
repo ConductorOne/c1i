@@ -15,7 +15,9 @@ var entitlementsProxyBindingsCmd = &cobra.Command{
 A proxy binding is a visibility and tracking link from a source entitlement to a
 destination entitlement. It does not grant access or configure delegated
 provisioning; use "c1i docs guide delegate-entitlement-provisioning" for that
-separate, ordered workflow. There is no list endpoint.`,
+separate, ordered workflow. The public REST API has no list endpoint. The C1
+Console discovers bindings through its internal gRPC-web search service, which
+is not part of the public API contract.`,
 }
 
 var entitlementsProxyBindingsGetCmd = &cobra.Command{

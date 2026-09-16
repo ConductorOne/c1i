@@ -161,8 +161,10 @@ visibility and tracking links. Source and destination are each identified by
 their app and entitlement IDs; entitlement IDs are app-scoped. Creating a
 binding does not grant access or configure delegated provisioning. Use
 `c1i docs guide delegate-entitlement-provisioning` for the separate ordered
-workflow that configures delegation on the destination entitlement. There is no
-proxy-binding list endpoint.
+workflow that configures delegation on the destination entitlement. The public
+REST API has no proxy-binding list endpoint; the C1 Console's binding browser
+uses an internal gRPC-web search service that is outside the public API
+contract.
 
 ### Grants ("who has access")
 
