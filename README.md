@@ -429,6 +429,34 @@ to scope to another user or `--all` for every request in the tenant. `requests
 get` fetches a single request (the `task_id` returned by `requests create`) as
 pretty JSON, including its current policy step and outcome.
 
+### Access-review campaigns
+
+Campaigns certify whether existing access should continue. The API calls the
+resource an `access_review`, but c1i uses the UI's `access-reviews` name.
+
+```sh
+c1i access-reviews list [--page-size N] [--page-token TOKEN] [--limit N]
+c1i access-reviews get <campaign-id>
+c1i access-reviews create --body-file <file|->
+c1i access-reviews update <campaign-id> --body-file <file|-> --update-mask <paths>
+c1i access-reviews reports list <campaign-id> [--page-size N] [--page-token TOKEN] [--limit N]
+c1i access-reviews reports generate <campaign-id> [--format json|csv|xlsx]
+c1i access-reviews reports generate <campaign-id> --body-file <file|->
+```
+
+`create` takes the complete API request object. Its `scopeV2` is a deeply
+nested oneof, so the CLI intentionally accepts it through `--body-file` rather
+than a lossy flag surface; at least one `ownerIds` entry is required. `update`
+takes a partial `AccessReview` object, inserts the id, and wraps it with the
+required explicit `--update-mask`. Prepared campaigns cannot change their
+scope or policy.
+
+Report generation is asynchronous: `generate` creates a report record but does
+not return a ready download. Use `reports list` to find its state and
+time-limited `downloadUrl`. Public API callers default to JSON when `--format`
+is omitted; use `csv` or `xlsx` when needed. `--body-file` is for the full
+generation request, including XLSX report-column configuration.
+
 ### Access profiles
 
 An access profile controls which entitlements are requestable and who can

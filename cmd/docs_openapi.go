@@ -99,17 +99,12 @@ var docsEndpointsCmd = &cobra.Command{
 			_ = enc.Encode(e)
 		}
 
-		// When a filter returns nothing, name the endpoint families we've
-		// confirmed are real but intentionally left out of the public
-		// OpenAPI spec, plus the concrete next step for each — otherwise an
-		// agent concludes the endpoint doesn't exist. Verified absent from
-		// the spec and working live: the MCP admin surface (mcp_servers,
-		// mcp_tools, mcp_toolsets — covered by 'c1i mcp') and access reviews
-		// (access_review, access_reviews — no wrapped command yet, reachable
-		// via 'c1i api --path=/api/v1/access_review...').
+		// When a filter returns nothing, name endpoint families confirmed real
+		// but omitted from the public OpenAPI spec, and direct callers to their
+		// first-class commands rather than losing pagination or body guards.
 		if len(endpoints) == 0 && filter != "" {
 			_, _ = fmt.Fprintf(cmd.ErrOrStderr(),
-				"No endpoints matched %q. Some C1 endpoints aren't in the public OpenAPI spec: the MCP admin surface (mcp_servers/mcp_tools/mcp_toolsets — use 'c1i mcp') and access reviews (access_review* — use 'c1i api --path=/api/v1/access_review...'). For anything else, try 'c1i docs search %q'.\n",
+				"No endpoints matched %q. Some C1 endpoints aren't in the public OpenAPI spec: the MCP admin surface (mcp_servers/mcp_tools/mcp_toolsets — use 'c1i mcp') and access reviews (access_review* — use 'c1i access-reviews'; use 'c1i api' only for an unsupported operation). For anything else, try 'c1i docs search %q'.\n",
 				filter, filter)
 		}
 
