@@ -12,10 +12,10 @@ second copy of the per-command reference and the two drifted (stale flags,
 missing subcommands, a missing exit code) until that was cut. Don't re-add a
 per-command copy here; if a flag/behavior claim ever looks off, verify
 against `go run . <cmd> --help` rather than any doc. The command groups are
-`access-profiles`, `accounts`, `api`, `apps`, `auth`, `automations`,
-`connectors`, `docs`, `entitlements`, `export`, `functions`, `grants`, `mcp`,
-`policies`, `requests`, `tasks` and `users`; run `go run . <group> --help`
-for each before reaching for raw `api`.
+`access-profiles`, `access-reviews`, `accounts`, `api`, `apps`, `auth`,
+`automations`, `connectors`, `docs`, `entitlements`, `export`, `functions`,
+`grants`, `mcp`, `policies`, `requests`, `service-principals`, `tasks` and
+`users`; run `go run . <group> --help` for each before reaching for raw `api`.
 
 ## Auth
 

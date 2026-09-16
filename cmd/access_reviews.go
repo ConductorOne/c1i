@@ -52,7 +52,11 @@ var accessReviewsGetCmd = &cobra.Command{
 var accessReviewsCreateCmd = &cobra.Command{
 	Use:   "create",
 	Short: "Create an access-review campaign (pretty JSON)",
-	Args:  cobra.NoArgs,
+	Long: `Create an access-review campaign from a complete JSON request object.
+
+The request must contain at least one owner id in ownerIds. Provide the JSON
+with --body-file; use "-" to read it from standard input.`,
+	Args: cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, _ []string) error {
 		body, err := readRequiredJSONObject(cmd, "body-file")
 		if err != nil {
@@ -68,7 +72,11 @@ var accessReviewsCreateCmd = &cobra.Command{
 var accessReviewsUpdateCmd = &cobra.Command{
 	Use:   "update <campaign-id>",
 	Short: "Update an access-review campaign (pretty JSON)",
-	Args:  cobra.ExactArgs(1),
+	Long: `Update an access-review campaign from a partial AccessReview JSON object.
+
+Provide the JSON with --body-file and name its fields with --update-mask; both
+are required. The command inserts the campaign id and wraps the request.`,
+	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		campaign, err := readRequiredJSONObject(cmd, "body-file")
 		if err != nil {
@@ -91,7 +99,13 @@ var accessReviewReportsListCmd = newAccessReviewListCmd("list <campaign-id>", "L
 var accessReviewReportsGenerateCmd = &cobra.Command{
 	Use:   "generate <campaign-id>",
 	Short: "Generate an access-review report (pretty JSON)",
-	Args:  cobra.ExactArgs(1),
+	Long: `Request asynchronous generation of an access-review report.
+
+The response confirms that generation was requested, not that a report is ready.
+Use "access-reviews reports list <campaign-id>" to find the report state and
+its time-limited downloadUrl. Use --format for JSON, CSV, or XLSX, or
+--body-file for the full request; they are mutually exclusive.`,
+	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		bodyFile, _ := cmd.Flags().GetString("body-file")
 		format, _ := cmd.Flags().GetString("format")
@@ -243,11 +257,11 @@ func mapAccessReviewReportFormat(format string) (string, error) {
 }
 
 func init() {
-	accessReviewsCreateCmd.Flags().String("body-file", "", "Full CreateAccessReview request JSON object (file, or \"-\" for stdin)")
-	accessReviewsUpdateCmd.Flags().String("body-file", "", "Partial AccessReview JSON object (file, or \"-\" for stdin)")
+	accessReviewsCreateCmd.Flags().String("body-file", "", "Full CreateAccessReview request JSON object (required; file or \"-\" for stdin)")
+	accessReviewsUpdateCmd.Flags().String("body-file", "", "Partial AccessReview JSON object (required; file or \"-\" for stdin)")
 	accessReviewsUpdateCmd.Flags().String("update-mask", "", "Comma-separated campaign fields to update (required)")
-	accessReviewReportsGenerateCmd.Flags().String("format", "", "Report format: json, csv, or xlsx")
-	accessReviewReportsGenerateCmd.Flags().String("body-file", "", "Full GenerateAccessReviewReport request JSON object (file, or \"-\" for stdin)")
+	accessReviewReportsGenerateCmd.Flags().String("format", "", "Report format: json, csv, or xlsx (mutually exclusive with --body-file)")
+	accessReviewReportsGenerateCmd.Flags().String("body-file", "", "Full GenerateAccessReviewReport request JSON object (file or \"-\" for stdin; mutually exclusive with --format)")
 
 	accessReviewReportsCmd.AddCommand(accessReviewReportsListCmd, accessReviewReportsGenerateCmd)
 	accessReviewsCmd.AddCommand(accessReviewsListCmd, accessReviewsGetCmd, accessReviewsCreateCmd, accessReviewsUpdateCmd, accessReviewReportsCmd)
