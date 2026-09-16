@@ -20,6 +20,11 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `--entitlement-id`; replacement and bundle configuration use validated JSON
   files.
 
+- **`c1i entitlements proxy-bindings`: manage directional entitlement proxy
+  bindings.** Get, create, and delete the visibility/tracking link between
+  app-scoped source and destination entitlements; delegated provisioning
+  remains an explicit separate step.
+
 - `c1i service-principals` (alias `sp`): manage service principals (tenant-owned
   non-human identities). Full CRUD on the principal (`list`, `get`, `create`,
   `update`, `delete`), its client credentials (`credentials list/get/create/

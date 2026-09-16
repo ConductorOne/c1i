@@ -291,9 +291,9 @@ end — not just that the pieces are theoretically wired up.
 // c1.api.app.v1.AppEntitlementsProxy and c1.api.policy.v1.DelegatedProvision
 // ("MUST be configured as a proxy binding leading into this entitlement").
 // This is a distinct object from the tool<->toolset bindings under "mcp
-// bindings" (cmd/mcp_bindings*.go) — c1i has no dedicated command for
-// entitlement proxy bindings, so every step here goes through "c1i api".
-// Derived from cmd/api.go and cmd/entitlements_get.go.
+// bindings" (cmd/mcp_bindings*.go). The proxy binding uses the first-class
+// "entitlements proxy-bindings" commands; configuring delegated provisioning
+// remains a separate raw API update.
 const guideDelegateEntitlementProvisioning = `# Delegate provisioning through a proxy binding
 
 An entitlement proxy binding (entitlement -> entitlement) is a different
@@ -302,9 +302,6 @@ covers. A proxy binding is a visibility and tracking link only — creating
 one does not, by itself, trigger any provisioning. Real delegated
 provisioning is a separate second step, below.
 
-There is no dedicated command for entitlement proxy bindings, so both steps
-below go through "c1i api".
-
 ## 1. Create the proxy binding
 
 The binding is directional, and which entitlement goes in which path
@@ -312,14 +309,17 @@ position matters — get it backwards and the binding points the wrong way.
 Use step 2 below to tell them apart: the destination is the entitlement you
 will set provisionerPolicy.delegated ON in step 2; the source is the
 entitlement named INSIDE that delegated object — the one whose own connector
-actually performs the provisioning. Both ends are identified entirely by the
-path; the body is empty:
+actually performs the provisioning.
 
-    c1i api --path=/api/v1/apps/<SRC_APP_ID>/<SRC_ENTITLEMENT_ID>/bindings/<DST_APP_ID>/<DST_ENTITLEMENT_ID> --body='{}'
+    c1i entitlements proxy-bindings create \
+      --source-app-id <SRC_APP_ID> --source-entitlement-id <SRC_ENTITLEMENT_ID> \
+      --destination-app-id <DST_APP_ID> --destination-entitlement-id <DST_ENTITLEMENT_ID>
 
 Confirm it was created:
 
-    c1i api --path=/api/v1/apps/<SRC_APP_ID>/<SRC_ENTITLEMENT_ID>/bindings/<DST_APP_ID>/<DST_ENTITLEMENT_ID> --method=GET
+    c1i entitlements proxy-bindings get \
+      --source-app-id <SRC_APP_ID> --source-entitlement-id <SRC_ENTITLEMENT_ID> \
+      --destination-app-id <DST_APP_ID> --destination-entitlement-id <DST_ENTITLEMENT_ID>
 
 ## 2. Turn on delegated provisioning on the destination entitlement
 
