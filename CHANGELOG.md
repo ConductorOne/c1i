@@ -28,6 +28,13 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   server, and edge subjects; a draft API). This surface is not in the public
   OpenAPI spec, so these first-class commands are the way to reach it.
 
+### Fixed
+
+- **Credential restrictions and expiry precision.** `service-principals
+  credentials create` now rejects an empty `--scoped-role` or `--allow-cidr`
+  before it can create an unrestricted credential, and preserves fractional
+  seconds in `--expires`.
+
 ## [0.7.0] - 2026-09-03
 
 ### Upgrading from 0.6.x

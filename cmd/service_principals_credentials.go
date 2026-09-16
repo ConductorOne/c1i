@@ -174,10 +174,18 @@ func buildSPCredentialCreateBody(cmd *cobra.Command) (map[string]any, error) {
 	displayName, _ := cmd.Flags().GetString("display-name")
 	body := map[string]any{"displayName": displayName}
 
-	if roles, _ := cmd.Flags().GetStringArray("scoped-role"); len(roles) > 0 {
+	roles, err := repeatableStringFlag(cmd, "scoped-role")
+	if err != nil {
+		return nil, err
+	}
+	if len(roles) > 0 {
 		body["scopedRoles"] = roles
 	}
-	if cidrs, _ := cmd.Flags().GetStringArray("allow-cidr"); len(cidrs) > 0 {
+	cidrs, err := repeatableStringFlag(cmd, "allow-cidr")
+	if err != nil {
+		return nil, err
+	}
+	if len(cidrs) > 0 {
 		body["allowSourceCidrs"] = cidrs
 	}
 	if expires, _ := cmd.Flags().GetString("expires"); expires != "" {
@@ -188,13 +196,22 @@ func buildSPCredentialCreateBody(cmd *cobra.Command) (map[string]any, error) {
 		if d <= 0 {
 			return nil, &usageError{fmt.Errorf("--expires must be positive, got %q", expires)}
 		}
-		// proto3-JSON duration is a decimal-seconds string with an "s" suffix.
-		body["expires"] = fmt.Sprintf("%ds", int64(d.Seconds()))
+		// ProtoJSON allows nanosecond precision; fixed-width decimals preserve it.
+		body["expires"] = formatProtoJSONDuration(d)
 	}
 	if requireDPoP, _ := cmd.Flags().GetBool("require-dpop"); requireDPoP {
 		body["requireDpop"] = true
 	}
 	return body, nil
+}
+
+func formatProtoJSONDuration(d time.Duration) string {
+	seconds := d / time.Second
+	nanoseconds := d % time.Second
+	if nanoseconds == 0 {
+		return fmt.Sprintf("%ds", seconds)
+	}
+	return fmt.Sprintf("%d.%09ds", seconds, nanoseconds)
 }
 
 var spCredentialsUpdateCmd = &cobra.Command{

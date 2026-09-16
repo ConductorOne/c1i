@@ -573,14 +573,13 @@ c1i service-principals credentials revoke <credential-id> --service-principal-id
 
 `--expires` takes a positive Go duration (e.g. `720h`). The server accepts the
 range `(0s, 4320h]` — up to 180 days — rejecting more with `value must be inside
-range (0s, 4320h0m0s]`. Fractional seconds are truncated toward zero before
-sending (for example, `1.5s` becomes `1s`); use a whole-second duration.
+range (0s, 4320h0m0s]`. Fractional seconds are preserved.
 
 `--scoped-role` and `--allow-cidr` are repeatable and restrict the credential to
-those role ids / source CIDRs. Repeat either flag for multiple values. Do not
-pass an empty value: verify a shell variable is set before including its flag.
-`--require-dpop` requires DPoP proof-of-possession at token exchange. Only
-`--display-name` can be changed after a credential is created.
+those role ids / source CIDRs. Repeat either flag for multiple values. An empty
+occurrence is a usage error before any request is sent. `--require-dpop` requires
+DPoP proof-of-possession at token exchange. Only `--display-name` can be changed
+after a credential is created.
 
 **Bindings** (a draft API) name a subject that authenticates as the principal.
 Exactly one subject is required; the SSO, AuthZEN, and edge subjects are
@@ -715,10 +714,9 @@ c1i mcp bindings create --app-id A --connector-id C --toolset-id T \
 easy to miss on `--config-field`, where `--config-field "region=us1,env=prod"`
 sets `region` to `us1,env=prod` and the server may accept it.
 
-For list-replacing flags such as `apps set-owners --user-id`, an empty
-occurrence is a usage error (exit 2), rejected before any request so an unset
-shell variable cannot drop an owner. Validate shell variables before supplying
-any repeatable flag. Contrast `--fields`, which *is* comma-separated.
+An empty occurrence is a usage error (exit 2), rejected before any request, so
+an unset shell variable cannot silently shorten a list or remove a credential
+restriction. Contrast `--fields`, which *is* comma-separated.
 
 ### Field selection
 
