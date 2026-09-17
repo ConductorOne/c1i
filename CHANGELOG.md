@@ -35,6 +35,13 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   search audit events or shadow-MCP occurrences. JSON body files preserve
   nested oneof actions and rule documents unchanged.
 
+- **`c1i role-mining`: manage role mining from analysis to access profile.**
+  Queue organization or personal analyses; search, inspect, and state-change
+  suggestions; inspect or replace configuration; inspect runs and analysis
+  results; evaluate entitlement selections and cohort users; and create an
+  access profile from a cohort. JSON files preserve profile filters and
+  entitlement selections unchanged.
+
 - **`c1i entitlements proxy-bindings`: manage public REST entitlement proxy
   bindings.** Get, create, and delete the visibility/tracking link between
   app-scoped source and destination entitlements; the Console's internal

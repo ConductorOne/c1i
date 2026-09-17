@@ -115,10 +115,10 @@ var findingsBulkCreateTasksCmd = &cobra.Command{
 	},
 }
 
-func newFindingRulesCmd(name, short, path, key string, row findingsRowFn) *cobra.Command {
+func newFindingRulesCmd(name, short, path, key string, row listRowFn) *cobra.Command {
 	group := &cobra.Command{Use: name, Short: short}
 	list := &cobra.Command{Use: "list", Short: "List rules (NDJSON output)", RunE: func(cmd *cobra.Command, _ []string) error {
-		return getFindingsList(cmd, path, row)
+		return getFixedList(cmd, path, row)
 	}}
 	addLimitFlag(list)
 	get := &cobra.Command{Use: "get <rule-id>", Short: "Get a rule (pretty JSON)", Args: cobra.ExactArgs(1), RunE: func(cmd *cobra.Command, args []string) error {
@@ -182,10 +182,10 @@ var findingsShadowMCPOccurrencesSearchCmd = &cobra.Command{Use: "search", Short:
 	return postFindingsList(cmd, "/api/v1/search/shadow_mcp_occurrences", body, shadowMCPOccurrenceRow)
 }}
 
-type findingsRowFn func(map[string]any) map[string]any
+type listRowFn func(map[string]any) map[string]any
 
-func postFindingsList(cmd *cobra.Command, path string, request map[string]any, row findingsRowFn) error {
-	return findingsListPages(cmd, row, func(c *client.Client, size int, token string) ([]byte, error) {
+func postFindingsList(cmd *cobra.Command, path string, request map[string]any, row listRowFn) error {
+	return listJSONPages(cmd, row, func(c *client.Client, size int, token string) ([]byte, error) {
 		body := cloneJSONObject(request)
 		body["pageSize"] = size
 		if token != "" {
@@ -195,7 +195,7 @@ func postFindingsList(cmd *cobra.Command, path string, request map[string]any, r
 	})
 }
 
-func getFindingsList(cmd *cobra.Command, path string, row findingsRowFn) error {
+func getFixedList(cmd *cobra.Command, path string, row listRowFn) error {
 	baseURL, err := GetBaseURL()
 	if err != nil {
 		return err
@@ -231,7 +231,7 @@ func getFindingsList(cmd *cobra.Command, path string, row findingsRowFn) error {
 	return nil
 }
 
-func findingsListPages(cmd *cobra.Command, row findingsRowFn, fetch func(*client.Client, int, string) ([]byte, error)) error {
+func listJSONPages(cmd *cobra.Command, row listRowFn, fetch func(*client.Client, int, string) ([]byte, error)) error {
 	baseURL, err := GetBaseURL()
 	if err != nil {
 		return err
@@ -366,12 +366,12 @@ func cloneJSONObject(input map[string]any) map[string]any {
 
 func findingRow(item map[string]any) map[string]any {
 	return map[string]any{
-		"id": findingString(item, "id"), "app_id": findingString(item, "appId"), "severity": findingString(item, "severity"), "state": findingString(item, "state"), "task_id": findingString(item, "taskId"), "assignee_identity_user_id": findingString(item, "assigneeIdentityUserId"), "finding_type": findingType(item), "updated_at": item["updatedAt"],
+		"id": jsonString(item, "id"), "app_id": jsonString(item, "appId"), "severity": jsonString(item, "severity"), "state": jsonString(item, "state"), "task_id": jsonString(item, "taskId"), "assignee_identity_user_id": jsonString(item, "assigneeIdentityUserId"), "finding_type": findingType(item), "updated_at": item["updatedAt"],
 	}
 }
 func findingRuleRow(item map[string]any) map[string]any {
 	return map[string]any{
-		"id": findingString(item, "id"), "app_id": findingString(item, "appId"), "display_name": findingString(item, "displayName"), "description": findingString(item, "description"), "priority": item["priority"], "enabled": findingBool(item, "enabled"), "finding_type": findingString(item, "findingType"),
+		"id": jsonString(item, "id"), "app_id": jsonString(item, "appId"), "display_name": jsonString(item, "displayName"), "description": jsonString(item, "description"), "priority": item["priority"], "enabled": findingBool(item, "enabled"), "finding_type": jsonString(item, "findingType"),
 	}
 }
 func findingTransformationRuleRow(item map[string]any) map[string]any {
@@ -381,12 +381,12 @@ func findingTransformationRuleRow(item map[string]any) map[string]any {
 	return row
 }
 func findingAuditRow(item map[string]any) map[string]any {
-	return map[string]any{"event_id": findingString(item, "eventId"), "finding_id": findingString(item, "findingId"), "event_type": findingString(item, "eventType"), "created_at": item["createdAt"], "actor_principal_id": findingString(item, "actorPrincipalId"), "app_id": findingString(item, "appId"), "ticket_id": findingString(item, "ticketId")}
+	return map[string]any{"event_id": jsonString(item, "eventId"), "finding_id": jsonString(item, "findingId"), "event_type": jsonString(item, "eventType"), "created_at": item["createdAt"], "actor_principal_id": jsonString(item, "actorPrincipalId"), "app_id": jsonString(item, "appId"), "ticket_id": jsonString(item, "ticketId")}
 }
 func shadowMCPOccurrenceRow(item map[string]any) map[string]any {
-	return map[string]any{"harness_kind": findingString(item, "harnessKind"), "device_id": findingString(item, "deviceId"), "user_id": findingString(item, "userId"), "first_seen_at": item["firstSeenAt"], "last_seen_at": item["lastSeenAt"]}
+	return map[string]any{"harness_kind": jsonString(item, "harnessKind"), "device_id": jsonString(item, "deviceId"), "user_id": jsonString(item, "userId"), "first_seen_at": item["firstSeenAt"], "last_seen_at": item["lastSeenAt"]}
 }
-func findingString(item map[string]any, key string) string {
+func jsonString(item map[string]any, key string) string {
 	value, _ := item[key].(string)
 	return value
 }
