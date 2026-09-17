@@ -27,9 +27,11 @@ type getUnwrapCase struct {
 	args []string
 	// flags are the parent-scope ids the command requires (--app-id, ...).
 	flags map[string]string
-	// idKey is the unique resource identity field, normally "id".
-	idKey string
-	body  string
+	// idKey is the unique resource identity field, normally "id". A singleton
+	// configuration has no id, so its stable field can opt out of string checks.
+	idKey             string
+	allowNonStringKey bool
+	body              string
 	// wantKeys is the EXACT top-level key set the output must have: the
 	// payload's own keys plus every envelope key beside it. Asserting the whole
 	// set, not just that the id survived, is what catches a hoist that also
@@ -246,6 +248,49 @@ func getUnwrapCases() []getUnwrapCase {
 			payloadPath: []string{"transformationRule"},
 			wantKeys:    []string{"id", "displayName"},
 		},
+		{
+			name:              "role mining config show",
+			cmd:               roleMiningConfigShowCmd,
+			idKey:             "minCohortSize",
+			allowNonStringKey: true,
+			body:              `{"config":{"minCohortSize":10,"maxSuggestions":25}}`,
+			payloadPath:       []string{"config"},
+			wantKeys:          []string{"minCohortSize", "maxSuggestions"},
+		},
+		{
+			name:        "role mining runs latest",
+			cmd:         roleMiningRunsLatestCmd,
+			idKey:       "id",
+			body:        `{"run":{"id":"run-1","status":"RUN_STATUS_COMPLETED"}}`,
+			payloadPath: []string{"run"},
+			wantKeys:    []string{"id", "status"},
+		},
+		{
+			name:        "role mining suggestion get",
+			cmd:         roleMiningSuggestionsGetCmd,
+			args:        []string{"suggestion-1"},
+			idKey:       "id",
+			body:        `{"suggestion":{"id":"suggestion-1","suggestedName":"Finance"}}`,
+			payloadPath: []string{"suggestion"},
+			wantKeys:    []string{"id", "suggestedName"},
+		},
+		{
+			name:        "role mining custom analysis get",
+			cmd:         roleMiningCustomAnalysisGetCmd,
+			args:        []string{"analysis-1"},
+			idKey:       "id",
+			body:        `{"id":"analysis-1","status":"COMPLETED"}`,
+			payloadPath: nil,
+			wantKeys:    []string{"id", "status"},
+		},
+		{
+			name:        "role mining custom analysis latest",
+			cmd:         roleMiningCustomAnalysisLatestCmd,
+			idKey:       "id",
+			body:        `{"result":{"id":"analysis-1","status":"COMPLETED"}}`,
+			payloadPath: []string{"result"},
+			wantKeys:    []string{"id", "status"},
+		},
 	}
 }
 
@@ -314,8 +359,10 @@ func TestTypedGetExposesTopLevelID(t *testing.T) {
 			if !ok {
 				t.Fatalf("output has no top-level %q (keys: %v)\noutput: %s", c.idKey, sortedKeys(got), raw)
 			}
-			if s, isStr := id.(string); !isStr || s == "" {
-				t.Errorf("top-level %q = %v, want a non-empty string", c.idKey, id)
+			if !c.allowNonStringKey {
+				if s, isStr := id.(string); !isStr || s == "" {
+					t.Errorf("top-level %q = %v, want a non-empty string", c.idKey, id)
+				}
 			}
 			want := append([]string{}, c.wantKeys...)
 			sort.Strings(want)

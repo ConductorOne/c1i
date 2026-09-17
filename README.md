@@ -495,6 +495,46 @@ The public API intentionally excludes its internal summary, app-NHI, and
 shadow-MCP notification RPCs. `FindingSearchService.GetSearchTerms` is also not
 routed through public REST; it is tracked in [#130](https://github.com/ConductorOne/c1i/issues/130).
 
+### Role mining
+
+`role-mining` manages the public role-mining analysis workflow, its suggested
+access profiles, and tenant configuration.
+
+```sh
+c1i role-mining trigger
+c1i role-mining suggestions list [--limit N]
+c1i role-mining suggestions search --body-file <file|-> [--page-size N] [--page-token TOKEN] [--limit N]
+c1i role-mining suggestions get <suggestion-id>
+c1i role-mining suggestions state <suggestion-id> --body-file <file|->
+c1i role-mining suggestions users <suggestion-id> --body-file <file|-> [--page-size N] [--page-token TOKEN] [--limit N]
+c1i role-mining config show
+c1i role-mining config update --body-file <file|->
+c1i role-mining runs list [--limit N]
+c1i role-mining runs latest
+c1i role-mining custom-analysis list [--limit N]
+c1i role-mining custom-analysis latest
+c1i role-mining custom-analysis get <analysis-id>
+c1i role-mining custom-analysis trigger --body-file <file|->
+c1i role-mining custom-analysis evaluate <analysis-id> --body-file <file|->
+c1i role-mining access-profiles create --body-file <file|->
+```
+
+`trigger` queues an organization analysis and returns an enqueue acknowledgement;
+inspect `runs latest` for its eventual result. `custom-analysis trigger` returns
+an analysis ID that `custom-analysis get` can poll. The latest custom-analysis
+pointer is scoped to the authenticated user; custom-analysis list and get are
+tenant-scoped. `config update` replaces the entire configuration, so begin with
+`config show`. Access-profile creation persists the profile, entitlement bindings,
+and optional automation as separate service operations; validate its JSON before
+submitting it.
+
+The suggestions, runs, and custom-analysis list routes do not accept paging or
+state filters through public REST, despite returning a continuation token.
+`--limit` only caps local output; the upstream mapping gap is tracked in
+[#133](https://github.com/ConductorOne/c1i/issues/133). Organization overview,
+legacy cohort analysis, coverage streaming, and the core MCP role-mining
+service are not public REST routes.
+
 ### Access-review campaigns
 
 Campaigns certify whether existing access should continue. The API calls the
