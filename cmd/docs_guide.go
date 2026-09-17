@@ -776,17 +776,165 @@ checking once immediately.
   what's actually governing a given task.
 `
 
+// guideConfigureAccessProfileRequestability configures an access profile with
+// requestable entitlements and a restricted audience.
+const guideConfigureAccessProfileRequestability = `# Configure an access profile
+
+Make an access profile requestable to the intended audience. The product calls
+this an access profile; the API calls it a catalog.
+
+## 1. Resolve references and review policy
+
+Entitlement IDs are only unique within their app:
+
+    c1i apps list --limit 20
+    c1i entitlements list --app-id "$OFFERING_APP_ID" --limit 20
+    c1i entitlements list --app-id "$AUDIENCE_APP_ID" --limit 20
+    c1i apps get "$OFFERING_APP_ID"
+    c1i entitlements get "$OFFERING_ENTITLEMENT_ID" --app-id "$OFFERING_APP_ID"
+
+The entitlement can inherit its request policy from its app. Check the intended
+policy here; prove requestability with a test request before rollout.
+
+## 2. Create a published, restricted profile
+
+    PROFILE_ID=$(c1i access-profiles create --display-name "Engineering" --published | jq -r .requestCatalogView.requestCatalog.id)
+
+Do not pass --visible-to-everyone: profiles using it cannot have restricted
+visibility bindings.
+
+## 3. Add the requestable entitlements
+
+    c1i access-profiles requestable-entitlements add "$PROFILE_ID" \
+      --app-id "$OFFERING_APP_ID" --entitlement-id "$OFFERING_ENTITLEMENT_ID"
+
+Repeat --entitlement-id for more entitlements from the same app. Omit
+--create-requests unless deliberately creating requests for current members.
+
+## 4. Restrict visibility
+
+    c1i access-profiles visibility-entitlements add "$PROFILE_ID" \
+      --app-id "$AUDIENCE_APP_ID" --entitlement-id "$AUDIENCE_ENTITLEMENT_ID"
+
+## 5. Verify the effective profile
+
+    c1i access-profiles get "$PROFILE_ID"
+    c1i access-profiles requestable-entitlements list "$PROFILE_ID"
+    c1i access-profiles visibility-entitlements list "$PROFILE_ID"
+
+Before rollout, test requestability with a disposable user in the visibility
+audience. Complete the revoke flow and confirm the grant is gone:
+
+    c1i docs guide request-access
+
+The profile must be published before step 4. The requestable-entitlements set
+command replaces the entire set; use add for an incremental change.`
+
+// guideRemediateFindingWithTask turns one selected finding into a governed
+// remediation task, then reuses the task-approval runbook.
+const guideRemediateFindingWithTask = `# Remediate a finding with a task
+
+Turn one reviewed finding into a governed remediation task. Do not use bulk
+commands for this workflow.
+
+## 1. Search narrowly and inspect the chosen finding
+
+    c1i findings search --body-file findings-query.json --limit 20
+    FINDING_ID=<id from the selected row>
+    c1i findings get "$FINDING_ID"
+
+Write findings-query.json with the smallest applicable public filter set.
+Confirm the finding's state, severity, type, and existing taskId before
+creating a task.
+
+## 2. Create one remediation task
+
+    c1i findings create-task "$FINDING_ID"
+
+Use an explicit policy only when it is intentionally different from the
+finding's normal policy:
+
+    c1i findings create-task "$FINDING_ID" --policy-id "$POLICY_ID"
+
+## 3. Inspect and advance the task
+
+    c1i findings get "$FINDING_ID"
+    TASK_ID=<taskId from the finding>
+    c1i docs guide inspect-and-approve-task
+
+Follow that guide using TASK_ID. It verifies whether the current identity can
+act; do not assume the task creator is an approver.
+
+## 4. Verify
+
+    c1i findings get "$FINDING_ID"
+    c1i requests get "$TASK_ID"
+
+The bulk-state and bulk-create-tasks commands are asynchronous and can affect a
+wider set than the selected finding. Keep them out of a one-finding remediation.`
+
+// guideMineCohortToAccessProfile runs a bounded custom analysis and persists a
+// reviewed cohort as an access profile.
+const guideMineCohortToAccessProfile = `# Mine a cohort into an access profile
+
+Analyze one explicit cohort, review its result, then create an access profile.
+This requires an Editor identity and the agentic role-mining feature. Do not use
+"latest": its custom-analysis pointer is scoped to the authenticated user, not
+the tenant.
+
+## 1. Define and queue the cohort
+
+Start with a narrow filter in cohort.json:
+
+    {"profileFilters":[{"attribute":"department","values":["Engineering"]}]}
+
+    c1i role-mining custom-analysis trigger --body-file cohort.json
+    ANALYSIS_ID=<id from the response>
+
+## 2. Poll the returned analysis ID
+
+    c1i role-mining custom-analysis get "$ANALYSIS_ID"
+
+Repeat this command until status is terminal. Stop on failure; otherwise retain
+this ID through the workflow and do not substitute custom-analysis latest.
+
+## 3. Evaluate the proposed cohort
+
+Use a reviewed selection document. For example, evaluation.json can set its
+minimum coverage threshold:
+
+    {"minimumCoverageBasisPoints":8000}
+
+    c1i role-mining custom-analysis evaluate "$ANALYSIS_ID" --body-file evaluation.json
+
+## 4. Create and verify the access profile
+
+Copy the accepted entitlements from the analysis result into profile.json. Its
+minimum useful shape includes an accepted entitlement:
+
+    {"displayName":"Engineering","profileFilters":[{"attribute":"department","values":["Engineering"]}],"entitlements":[{"appId":"$APP_ID","entitlementId":"$ENTITLEMENT_ID"}]}
+
+    c1i role-mining access-profiles create --body-file profile.json
+    PROFILE_ID=<accessProfileId from the response>
+    c1i access-profiles get "$PROFILE_ID"
+
+The profile request body is sent unchanged. Preserve the exact accepted
+entitlement objects from the analysis result; do not invent added fields.`
+
 // docsGuides maps a guide name to its embedded content. Keep names stable —
 // they're part of the CLI's public surface (an agent may hardcode
 // "c1i docs guide register-mcp-server" in its own tooling).
 var docsGuides = map[string]string{
-	"register-mcp-server":               guideRegisterMCPServer,
-	"assign-toolset-everyone":           guideAssignToolsetEveryone,
-	"test-mcp-gateway":                  guideTestMCPGateway,
-	"delegate-entitlement-provisioning": guideDelegateEntitlementProvisioning,
-	"configure-new-app":                 guideConfigureNewApp,
-	"request-access":                    guideRequestAccess,
-	"inspect-and-approve-task":          guideInspectAndApproveTask,
+	"register-mcp-server":                     guideRegisterMCPServer,
+	"assign-toolset-everyone":                 guideAssignToolsetEveryone,
+	"test-mcp-gateway":                        guideTestMCPGateway,
+	"delegate-entitlement-provisioning":       guideDelegateEntitlementProvisioning,
+	"configure-new-app":                       guideConfigureNewApp,
+	"request-access":                          guideRequestAccess,
+	"inspect-and-approve-task":                guideInspectAndApproveTask,
+	"configure-access-profile-requestability": guideConfigureAccessProfileRequestability,
+	"remediate-finding-with-task":             guideRemediateFindingWithTask,
+	"mine-cohort-to-access-profile":           guideMineCohortToAccessProfile,
 }
 
 // guideNames returns the available guide names, sorted for stable output.

@@ -173,9 +173,10 @@ authenticating. Which one depends on what you are after:
   endpoints --filter <text>` lists matching routes and has a real no-match — an
   empty result means nothing matched, not "the search gave up" — then `docs
   endpoint <path>` prints that route's full request/response schema.
-- **A step-by-step runbook** (register an MCP server, configure a new app,
-  request access): `docs guide` lists the embedded guides and `docs guide
-  <name>` prints one. These are static content, no network call.
+- **A step-by-step runbook** (configure an access profile, remediate a finding,
+  mine a cohort, register an MCP server, request access): `docs guide` lists
+  the embedded guides and `docs guide <name>` prints one. These are static
+  content, no network call.
 - **The raw OpenAPI spec**: `docs openapi` (cached 24h locally).
 
 Rule of thumb: a product concept starts at `docs search` → `docs page`; a raw

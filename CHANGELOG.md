@@ -8,6 +8,10 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **Focused agent runbooks in `c1i docs guide`.** Configure a restricted,
+  requestable access profile; turn one security finding into a governed
+  remediation task; and mine a reviewed cohort into an access profile. Each
+  guide carries its operational prerequisites and rollback or scope guardrails.
 - **`c1i access-reviews`: manage access-review campaigns and reports.**
   List and inspect campaigns, create and update a campaign from validated JSON
   input, list generated reports, and request JSON, CSV, or XLSX report
