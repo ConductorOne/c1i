@@ -20,6 +20,13 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `--entitlement-id`; replacement and bundle configuration use validated JSON
   files.
 
+- **`c1i findings`: manage public security findings and their governance
+  rules.** Search and inspect findings; create a custom finding; change state
+  or assignee; create remediation tasks; run bulk state or task actions; manage
+  routing and transformation rules; inspect or update detector settings; and
+  search audit events or shadow-MCP occurrences. JSON body files preserve
+  nested oneof actions and rule documents unchanged.
+
 - **`c1i entitlements proxy-bindings`: manage public REST entitlement proxy
   bindings.** Get, create, and delete the visibility/tracking link between
   app-scoped source and destination entitlements; the Console's internal
