@@ -20,6 +20,25 @@ func writeResource(cmd *cobra.Command, data []byte, idKey string) error {
 	return writeObject(cmd, unwrapEnvelope(data, idKey))
 }
 
+// writeNamedResource is writeObject for an endpoint whose response envelope
+// names its sole resource explicitly. It keeps envelope siblings while
+// avoiding a heuristic search for a property that a singleton may not have.
+func writeNamedResource(cmd *cobra.Command, data []byte, resourceKey string) error {
+	return writeObject(cmd, unwrapNamedEnvelope(data, resourceKey))
+}
+
+func unwrapNamedEnvelope(data []byte, resourceKey string) []byte {
+	payload, siblings, ok := splitEnvelope(data, []string{resourceKey})
+	if !ok {
+		return data
+	}
+	merged, ok := mergeSiblings(payload, siblings)
+	if !ok {
+		return data
+	}
+	return merged
+}
+
 // unwrapEnvelope hoists a single-object response's payload to the top level,
 // keeping every other envelope key as a sibling — dropping them is the data
 // loss this unwrap exists to avoid. A shape it can't unwrap losslessly comes

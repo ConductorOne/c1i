@@ -8,6 +8,14 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+
+- **`c1i mcp classifiers`: manage MCP gateway AI governance.** This renames
+  the former guardrails concept in c1i's user-facing CLI. List, inspect,
+  create, update, and delete named classifiers; bind them to enforcement
+  targets; inspect and instantiate templates; splice a template rule; manage
+  the singleton agent policy; and manage or search tool gates. Nested policy
+  and rule updates use JSON files and an explicit update mask so an ordered
+  cascade is never replaced accidentally.
 - **`c1i access-reviews`: manage access-review campaigns and reports.**
   List and inspect campaigns, create and update a campaign from validated JSON
   input, list generated reports, and request JSON, CSV, or XLSX report

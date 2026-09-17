@@ -123,8 +123,11 @@ applies either way.
 Access-profile lifecycle, requestable and visibility entitlements, and bundle
 automation are first-class under `access-profiles`; use its nested `--help` to
 choose a command. Use `entitlements proxy-bindings` for directional
-entitlement-to-entitlement links, and `access-reviews` for campaign lists,
-lifecycle calls, and reports.
+entitlement-to-entitlement links, `access-reviews` for campaign lists,
+lifecycle calls, and reports, and `mcp classifiers` for AI-governance
+classifiers, bindings, templates, the singleton agent policy, and tool gates.
+Classifier creates and updates take JSON because their nested, ordered rules
+must be preserved; read first and use the explicit `--update-mask` for updates.
 
 The cobra tree never drifts from what's implemented. Step down it with
 `--help` at each level:
@@ -143,12 +146,11 @@ A few wire conventions if you build a raw request: GET endpoints take
 `page_size`/`page_token` as snake_case query params; POST search endpoints
 take `pageSize`/`pageToken` (camelCase) in the body; response pagination is
 always `nextPageToken`. List/search responses wrap items under `"list"` —
-except the MCP admin endpoints (`mcp_tools`, `mcp_toolsets`,
-`tool_bindings`), which use a resource-named key (`"tools"`, `"profiles"`,
-`"bindings"`) instead. `--paginate` unwraps whichever field it finds, but pass
-`--list-key <field>` to name it yourself rather than hand-rolling the loop when
-auto-detection picks the wrong array. GET and DELETE refuse a body by default;
-the few endpoints that need one on DELETE (e.g. `remove-membership`) want
+except the MCP admin endpoints, which use resource-named keys (`"tools"`,
+`"profiles"`, `"bindings"`, `"classifiers"`, or `"templates"`). `--paginate`
+unwraps whichever field it finds, but pass `--list-key <field>` to name it
+yourself rather than hand-rolling the loop when auto-detection picks the wrong
+array. GET and DELETE refuse a body by default; the few endpoints that need
 `--allow-delete-body`. The UI's "campaign" is the API's access review — a
 campaign ID from a URL is the access review `id` directly, and the UI's "access
 profile" is the API's catalog: `c1i access-profiles list`, `/api/v1/catalogs`, whose
