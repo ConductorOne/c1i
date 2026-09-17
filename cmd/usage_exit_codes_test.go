@@ -256,6 +256,12 @@ func TestValidationGuardsExitUsage(t *testing.T) {
 			cmds: []*cobra.Command{mcpBindingsByToolsCmd},
 		},
 		{
+			name:    "findings create-task: --policy-id empty",
+			args:    []string{"findings", "create-task", "finding-1", "--policy-id", ""},
+			wantMsg: "--policy-id requires a non-empty value",
+			cmds:    []*cobra.Command{findingsCreateTaskCmd},
+		},
+		{
 			name: "auth login: --client-id without --client-secret",
 			args: []string{"auth", "login", "--client-id", "foo"},
 			cmds: []*cobra.Command{authLoginCmd},

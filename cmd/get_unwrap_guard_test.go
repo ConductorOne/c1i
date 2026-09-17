@@ -219,7 +219,43 @@ func getUnwrapCases() []getUnwrapCase {
 			payloadPath: []string{"credential"},
 			wantKeys:    []string{"id", "displayName", "clientId"},
 		},
+		{
+			name:        "findings get",
+			cmd:         findingsGetCmd,
+			args:        []string{"finding-1"},
+			idKey:       "id",
+			body:        `{"finding":{"id":"finding-1","state":"FINDING_STATE_OPEN"}}`,
+			payloadPath: []string{"finding"},
+			wantKeys:    []string{"id", "state"},
+		},
+		{
+			name:        "findings routing-rules get",
+			cmd:         findingRuleSubcommand(findingsRoutingRulesCmd, "get"),
+			args:        []string{"routing-rule-1"},
+			idKey:       "id",
+			body:        `{"routingRule":{"id":"routing-rule-1","displayName":"Route"}}`,
+			payloadPath: []string{"routingRule"},
+			wantKeys:    []string{"id", "displayName"},
+		},
+		{
+			name:        "findings transformation-rules get",
+			cmd:         findingRuleSubcommand(findingsTransformationRulesCmd, "get"),
+			args:        []string{"transformation-rule-1"},
+			idKey:       "id",
+			body:        `{"transformationRule":{"id":"transformation-rule-1","displayName":"Transform"}}`,
+			payloadPath: []string{"transformationRule"},
+			wantKeys:    []string{"id", "displayName"},
+		},
 	}
+}
+
+func findingRuleSubcommand(group *cobra.Command, name string) *cobra.Command {
+	for _, command := range group.Commands() {
+		if command.Name() == name {
+			return command
+		}
+	}
+	panic("missing " + name + " subcommand")
 }
 
 // stubGetClient is stubSearchClient (cmd/mcp_servers_test.go) for the

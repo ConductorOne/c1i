@@ -450,6 +450,51 @@ to scope to another user or `--all` for every request in the tenant. `requests
 get` fetches a single request (the `task_id` returned by `requests create`) as
 pretty JSON, including its current policy step and outcome.
 
+### Findings
+
+`findings` covers the public REST finding, governance-rule, settings, audit,
+and shadow-MCP occurrence surfaces.
+
+```sh
+c1i findings search [--body-file <file|->] [--page-size N] [--page-token TOKEN] [--limit N]
+c1i findings get <finding-id>
+c1i findings create --body-file <file|->
+c1i findings state <finding-id> --body-file <file|->
+c1i findings assignee <finding-id> --body-file <file|->
+c1i findings create-task <finding-id> [--policy-id <policy-id>]
+c1i findings bulk-state --body-file <file|->
+c1i findings bulk-create-tasks --body-file <file|->
+
+c1i findings routing-rules list [--limit N]
+c1i findings routing-rules get <rule-id>
+c1i findings routing-rules create --body-file <file|->
+c1i findings routing-rules update <rule-id> --body-file <file|->
+c1i findings routing-rules delete <rule-id>
+c1i findings transformation-rules list [--limit N]
+c1i findings transformation-rules get <rule-id>
+c1i findings transformation-rules create --body-file <file|->
+c1i findings transformation-rules update <rule-id> --body-file <file|->
+c1i findings transformation-rules delete <rule-id>
+c1i findings settings show
+c1i findings settings update --body-file <file|->
+c1i findings audits search [--body-file <file|->] [--page-size N] [--page-token TOKEN] [--limit N]
+c1i findings shadow-mcp-occurrences search --body-file <file|-> [--page-size N] [--page-token TOKEN] [--limit N]
+```
+
+The rule-list endpoints do not currently expose public filtering or paging; use
+`--limit` only to cap local output. The upstream mapping gap is tracked in
+[#131](https://github.com/ConductorOne/c1i/issues/131). Use JSON files for oneof actions, custom
+finding targets, and nested rules; the commands insert positional IDs into the
+request. `findings create-task` accepts an optional `--policy-id`; C1 otherwise
+selects the app policy or built-in Finding Review policy. `bulk-state` and
+`bulk-create-tasks` are asynchronous and return a `bulkActionId`; prefer
+explicit `refs` in the JSON to avoid unexpectedly applying a broad
+`searchRequest`.
+
+The public API intentionally excludes its internal summary, app-NHI, and
+shadow-MCP notification RPCs. `FindingSearchService.GetSearchTerms` is also not
+routed through public REST; it is tracked in [#130](https://github.com/ConductorOne/c1i/issues/130).
+
 ### Access-review campaigns
 
 Campaigns certify whether existing access should continue. The API calls the
