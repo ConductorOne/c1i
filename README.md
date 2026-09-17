@@ -418,10 +418,50 @@ c1i mcp bindings delete   --app-id <id> --connector-id <id> --toolset-id <tid> -
 c1i mcp bindings by-tools --app-id <id> --connector-id <id> --tool-id <id> [--tool-id <id> ...]   # --tool-id max 32
 c1i mcp bindings history  --app-id <id> --connector-id <id> (--toolset-id <tid> | --tool-id <id>) [--page-size N] [--limit N]
 
+# Classifiers (AI governance for MCP gateways)
+c1i mcp classifiers list                           [--page-size N] [--page-token TOKEN] [--limit N]
+c1i mcp classifiers get                            <classifier-id>
+c1i mcp classifiers create                         --body-file classifier.json
+c1i mcp classifiers update                         <classifier-id> --body-file classifier.json --update-mask <camelCase-fields>
+c1i mcp classifiers delete                         <classifier-id>
+c1i mcp classifiers bindings list                  [--page-size N] [--page-token TOKEN] [--limit N]
+c1i mcp classifiers bindings create                --body-file binding.json
+c1i mcp classifiers bindings delete                <binding-id>
+c1i mcp classifiers templates list                 [--latest-only] [--page-size N] [--page-token TOKEN] [--limit N]
+c1i mcp classifiers templates get                  <template-id> [--template-version <version>]
+c1i mcp classifiers templates instantiate          <template-id> [--body-file params.json]
+c1i mcp classifiers templates add-rule             <classifier-id> <template-id> [--body-file params.json]
+c1i mcp classifiers policy show
+c1i mcp classifiers policy update                  --body-file policy.json --update-mask <camelCase-fields>
+c1i mcp classifiers tool-gates list                [--page-size N] [--page-token TOKEN] [--limit N]
+c1i mcp classifiers tool-gates search              [--query <text>] [--page-size N] [--page-token TOKEN] [--limit N]
+c1i mcp classifiers tool-gates get                 <tool-gate-id>
+c1i mcp classifiers tool-gates create              --body-file tool-gate.json
+c1i mcp classifiers tool-gates update              <tool-gate-id> --body-file tool-gate.json --update-mask <camelCase-fields>
+c1i mcp classifiers tool-gates delete              <tool-gate-id>
+
 # Gateway (verify end to end: list and invoke tools over the live MCP gateway)
 c1i mcp gateway list-tools [--full] [--gateway-url <url>]
 c1i mcp gateway call <tool-name> [--args '{"k":"v"}'] [--gateway-url <url>]
 ```
+
+**`mcp classifiers`** manages the AI-governance API introduced for MCP
+gateways. Named classifiers are reusable ordered rule cascades; bindings attach
+one to an `AGENT` or `GATEWAY` target. `policy` is the separate, tenant-wide
+agent policy. A rule with an empty `celCondition` matches every tool call, and
+rules execute in order, so read the current object before changing `rules`.
+
+`create` accepts a resource JSON object: `Classifier` for classifiers,
+`ClassifierBinding` for bindings, and the full create request for tool gates.
+`classifiers update` must include the classifier's required `displayName`,
+even when the mask changes another field; read, edit, and resubmit the current
+object. Every update requires `--update-mask`; include `rules` only when
+deliberately replacing the complete cascade. `templates get` shows required
+parameter keys. `instantiate` and `add-rule` accept an optional
+JSON object with `templateVersion`, `params`, and, for `add-rule`, `ruleIndex`
+or `insertIndex`; the positional IDs always select the template and
+classifier. A tool gate's `filter` must select either `builtInPattern` or
+`celExpression`, not both.
 
 **Auth for `register` / `update-credentials`:** convenience flags cover the simple methods — `--auth none`, `--auth bearer-token --bearer-token TOKEN`, `--auth custom-header --header-name NAME --header-value VALUE`, `--auth basic-auth --basic-auth-username USER --basic-auth-password PASS`. For OAuth2 / AWS SigV4 / Google service-account auth, pass the full config object via `--hosted-config-file` / `--external-config-file` (JSON file, or `-` for stdin) — generate a ready-to-edit skeleton with `--print-config-template --auth <method> [--type hosted]` instead of hand-writing it. Secrets are sealed server-side; reads only ever return `*_configured` booleans, never the values. `--token-sharing shared|per-user` sets the server's token-sharing mode (case-insensitive; `per_user`/`peruser` are also accepted). Per the register help, `per-user` is only valid with `oauth2` in authorization-code or passthrough mode, `bearerToken`, `customHeader`, or `basicAuth`. Note that a read-back can legitimately differ from what you sent: the backend may store a *resolved* OAuth2 grant such as `..._MODE_AUTHORIZATION_CODE` in place of the input mode, so that is a normal round-trip, not a bug. `--source-app-id` names the source app for a connector-backed HOSTED server. `--data-sensitivity`, `--tool-prefix`, `--require-tool-approval` and `--user-id` (repeatable — sets the connector's integration owners) can all be set at `register` time, not only via `update`.
 
