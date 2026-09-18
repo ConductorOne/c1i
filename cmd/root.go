@@ -127,7 +127,7 @@ func init() {
 	_ = viper.BindPFlag("url", rootCmd.PersistentFlags().Lookup("url"))
 	_ = viper.BindEnv("url", "C1I_URL")
 
-	rootCmd.PersistentFlags().String("fields", "", "Known JSON fields to keep (dot-paths); prefer over jq for simple projection")
+	rootCmd.PersistentFlags().String("fields", "", "Comma-separated JSON fields to keep in read output (dot-paths); prefer over jq for simple projection")
 	_ = viper.BindPFlag("fields", rootCmd.PersistentFlags().Lookup("fields"))
 	_ = viper.BindEnv("fields", "C1I_FIELDS")
 
