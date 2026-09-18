@@ -31,7 +31,8 @@ Use this workflow for agent-driven and scripted operations:
    it needs no authentication.
 2. Pass `--url https://<tenant>` on every C1 command, then authenticate and run
    `c1i auth whoami` before doing anything else.
-3. Run every intended write with `--dry-run` first.
+3. Run every intended C1 REST write with `--dry-run` first. Gateway tool calls
+   reject it and are always live.
 4. Prefer a first-class command. Use `c1i api` only when no command covers the
    public REST endpoint.
 
@@ -1134,7 +1135,7 @@ there's no known case that needs a longer one.
 
 ### Dry run
 
-`--dry-run` (or `C1I_DRY_RUN=1`) previews a mutating request — its method, path,
+`--dry-run` (or `C1I_DRY_RUN=1`) previews a C1 REST mutation — its method, path,
 and pretty-printed JSON body — and returns without sending it:
 
 ```sh
@@ -1147,14 +1148,18 @@ $ c1i requests create grant --app-id A1 --entitlement-id E1 --user-id U1 --dry-r
 }
 ```
 
-It applies to every write command (`requests create`,
-`tasks approve/deny/comment/close/reassign`, `accounts set-owner`, the `mcp`
-mutations) and to non-GET `api` calls, and never
-sends the mutation itself. Most previews run fully offline — no credentials
-required. The exceptions are `tasks approve`/`deny`/`reassign` (authenticate and
-read the task to resolve its current policy step) and `requests create grant`/`revoke`
-when `--user-id` is omitted (authenticate to resolve it to the caller) — both so
-the previewed body is exact.
+It applies to every REST write command (`requests create`,
+`tasks approve/deny/comment/close/reassign`, `accounts set-owner`, and the
+REST-backed `mcp` mutations) and to non-GET `api` calls; it never sends that
+mutation. `mcp gateway call` rejects both `--dry-run` and `C1I_DRY_RUN`: c1i
+cannot preview or suppress a gateway tool's side effects, so inspect the tool
+and treat its invocation as live.
+
+Most previews run fully offline — no credentials required. The exceptions are
+`tasks approve`/`deny`/`reassign` (authenticate and read the task to resolve its
+current policy step) and `requests create grant`/`revoke` when `--user-id` is
+omitted (authenticate to resolve it to the caller) — both so the previewed body
+is exact.
 
 ### Debug tracing
 

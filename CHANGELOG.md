@@ -58,6 +58,10 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- **MCP gateway dry-run safety.** `mcp gateway call` now rejects `--dry-run`
+  before it creates a gateway client or sends a request: c1i cannot safely
+  preview or suppress a tool's side effects.
+
 - **Bundle-automation selection safety.** `access-profiles bundle-automation
   run --refs-file` now refuses JSON `null`; pass a JSON array, including `[]`
   for an intentionally empty selection. A null repeated field is unset and

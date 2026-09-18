@@ -69,7 +69,7 @@ apply it for a whole session; the flag wins for a single invocation.
 |---|---|---|
 | `--url` | `C1I_URL` | tenant host — see above |
 | `--fields` | `C1I_FIELDS` | comma-separated dot-paths to keep in JSON output — see "Reading output" |
-| `--dry-run` | `C1I_DRY_RUN` | preview a mutating request's method, path, and body without sending it |
+| `--dry-run` | `C1I_DRY_RUN` | preview a C1 REST mutation's method, path, and body; unsupported for `mcp gateway call` |
 | `--debug` | `C1I_DEBUG` | trace API HTTP requests (method, URL, status, timing) to stderr |
 | `--max-retries` | `C1I_MAX_RETRIES` | retries for transient API failures (`429`/`5xx`); `0` disables |
 | `--error-format` | `C1I_ERROR_FORMAT` | `text` (default) or `json` |
@@ -273,8 +273,10 @@ auto-pagination once reached.
 
 ## Before you mutate
 
-`--dry-run` (or `C1I_DRY_RUN`) previews a mutating command's method, path,
-and body without sending it.
+`--dry-run` (or `C1I_DRY_RUN`) previews a C1 REST mutation's method, path,
+and body without sending it. `mcp gateway call` rejects it: c1i cannot preview
+or suppress a tool's side effects, so inspect the tool first and treat its call
+as live.
 
 Two things are irreversible in ways their `--help` doesn't make obvious:
 
