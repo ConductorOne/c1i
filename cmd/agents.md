@@ -18,9 +18,9 @@ contracts, exit codes, and when to reach for `c1i api`. Save it locally with
 Get this right first. A wrong tenant returns plausible-looking data with
 exit 0.
 
-`--url` (or `C1I_URL`) selects the tenant. With neither set, c1i falls back
-to whatever `url:` names in `~/.c1i.yaml`. It must be a full host —
-`mycompany.conductor.one` or `mycompany.c1eu.ai` (EU) — and `https` is required:
+`c1i` resolves the tenant in this order: `--url`, `C1I_URL`, then `url:` in
+`~/.c1i.yaml`. It must be a full host — `mycompany.conductor.one` or
+`mycompany.c1eu.ai` (EU) — and `https` is required:
 a bare `mycompany`, a non-https scheme, and a malformed host (an embedded space
 or control character, or a stray scheme like `://host`) are all usage errors
 (exit `2`) before any request is sent.

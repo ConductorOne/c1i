@@ -34,6 +34,11 @@ var newAPIClient = func(cmd *cobra.Command, baseURL string) (apiRequester, error
 var apiCmd = &cobra.Command{
 	Use:   "api",
 	Short: "Make a raw C1 API request and pretty-print the JSON response",
+	Long: `Use this raw escape hatch only when no first-class command covers the endpoint.
+First-class list commands auto-paginate; api returns one response unless
+--paginate is set. A nextPageToken without --paginate is a partial-result
+warning on stderr. You supply the request method and body; use --dry-run before
+an intended non-GET REST write.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		if err := requireNonEmpty(cmd, "path"); err != nil {
 			return err

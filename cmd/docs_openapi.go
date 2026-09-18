@@ -38,6 +38,11 @@ var docsOpenapiCmd = &cobra.Command{
 var docsEndpointsCmd = &cobra.Command{
 	Use:   "endpoints [--filter <pattern>]",
 	Short: "List all API endpoints, filterable by keyword (no auth required)",
+	Long: `Search the public C1 OpenAPI spec for endpoints. Unlike semantic "docs
+search", no output from --filter is a real no-match in that spec. It does not
+prove no C1 operation exists: some supported MCP and access-review operations
+are outside the spec and have first-class commands. Pass a returned path to
+"docs endpoint" for its full schema.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		data, err := fetchOpenAPISpec(cmd)
 		if err != nil {

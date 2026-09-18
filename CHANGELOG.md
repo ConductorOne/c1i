@@ -68,6 +68,10 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   fields in JSON read output; use `jq` for filtering, reshaping, aggregation,
   sorting, and values from mutation confirmations.
 
+- **Operational command guidance.** Built-in help now makes tenant URL
+  precedence, REST-only dry-run scope, raw API pagination, and public OpenAPI
+  endpoint discovery explicit for scripts and agents.
+
 - **Bundle-automation selection safety.** `access-profiles bundle-automation
   run --refs-file` now refuses JSON `null`; pass a JSON array, including `[]`
   for an intentionally empty selection. A null repeated field is unset and

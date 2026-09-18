@@ -123,7 +123,7 @@ func init() {
 	rootCmd.SetFlagErrorFunc(func(_ *cobra.Command, err error) error {
 		return &usageError{err}
 	})
-	rootCmd.PersistentFlags().String("url", "", "C1 URL; https required (e.g. https://mycompany.conductor.one or https://mycompany.c1eu.ai)")
+	rootCmd.PersistentFlags().String("url", "", "C1 tenant URL; https required. Precedence: --url, C1I_URL, then ~/.c1i.yaml")
 	_ = viper.BindPFlag("url", rootCmd.PersistentFlags().Lookup("url"))
 	_ = viper.BindEnv("url", "C1I_URL")
 
@@ -143,7 +143,7 @@ func init() {
 	_ = viper.BindPFlag("debug", rootCmd.PersistentFlags().Lookup("debug"))
 	_ = viper.BindEnv("debug", "C1I_DEBUG")
 
-	rootCmd.PersistentFlags().Bool("dry-run", false, "Preview mutating requests (method, path, body) without sending them")
+	rootCmd.PersistentFlags().Bool("dry-run", false, "Preview C1 REST mutations (method, path, body) without sending; mcp gateway call rejects it")
 	_ = viper.BindPFlag("dry_run", rootCmd.PersistentFlags().Lookup("dry-run"))
 	_ = viper.BindEnv("dry_run", "C1I_DRY_RUN")
 }
