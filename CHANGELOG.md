@@ -66,10 +66,11 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   is correctly documented as `.servicePrincipal.id`, and the embedded command
   reference now includes the `findings` and `role-mining` groups.
 
-- **Quick Start tenant targeting.** The first-run example now passes `--url`
-  explicitly on every C1 command and verifies the authenticated identity before
-  listing users, so it neither relies on an optional config-save prompt nor
-  silently targets a different tenant.
+- **Quick Start, automation, and agent guidance.** The first-run example now
+  passes `--url` explicitly on every C1 command and verifies the authenticated
+  identity before listing users; a concise workflow for agents and scripts now
+  appears before the command reference. It neither relies on an optional
+  config-save prompt nor silently targets a different tenant.
 
 - **Credential restrictions and expiry precision.** `service-principals
   credentials create` now rejects an empty `--scoped-role` or `--allow-cidr`

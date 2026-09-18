@@ -2,8 +2,9 @@
 
 **C1 Interface** — and it looks like `cli`. Get it?
 
-A command-line interface for the [C1](https://www.conductorone.com) API designed for AI agents.
-Structured output (NDJSON/JSON), built-in API docs, and auto-pagination.
+A command-line interface for the [C1](https://www.conductorone.com) API built
+for AI agents and scripts. Machine-readable output (NDJSON/JSON), explicit exit
+codes, built-in API docs, and auto-pagination make it reliable to automate.
 For a human-friendly CLI, see [cone](https://github.com/ConductorOne/cone).
 
 ## Installation
@@ -20,6 +21,19 @@ go install github.com/ConductorOne/c1i@latest
 # Container (image tags omit the leading "v" -- e.g. 0.5.2, not v0.5.2)
 docker pull public.ecr.aws/conductorone/c1i:<version>
 ```
+
+## Start Here
+
+Use this workflow for agent-driven and scripted operations:
+
+1. Run `c1i docs agents` before operating on a tenant. It explains tenant
+   selection, output and exit-code contracts, mutation safety, and raw API use;
+   it needs no authentication.
+2. Pass `--url https://<tenant>` on every C1 command, then authenticate and run
+   `c1i auth whoami` before doing anything else.
+3. Run every intended write with `--dry-run` first.
+4. Prefer a first-class command. Use `c1i api` only when no command covers the
+   public REST endpoint.
 
 ## Quick Start
 
@@ -38,7 +52,7 @@ c1i docs search "access reviews"
 c1i docs endpoints --filter task
 ```
 
-## Commands
+## Command Reference
 
 ### Users
 
