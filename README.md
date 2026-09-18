@@ -698,8 +698,8 @@ c1i service-principals delete <sp-id>
 ```
 
 `service-principals` is aliased to `sp`. `create` needs only `--display-name`;
-the new principal comes back as pretty JSON under `servicePrincipal`, unwrapped
-so its id is at the top level (read it from `.id`).
+the new principal comes back as pretty JSON under `servicePrincipal`; read its
+id from `.servicePrincipal.id`.
 
 **Delete is destructive:** `service-principals delete` removes the principal
 and every credential issued for it. Before deleting, inspect the principal with

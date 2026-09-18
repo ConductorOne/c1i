@@ -58,6 +58,14 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- **Bundle-automation selection safety.** `access-profiles bundle-automation
+  run --refs-file` now refuses JSON `null`; pass a JSON array, including `[]`
+  for an intentionally empty selection. A null repeated field is unset and
+  could otherwise run without the intended restriction.
+- **Service-principal and command-discovery documentation.** The create response
+  is correctly documented as `.servicePrincipal.id`, and the embedded command
+  reference now includes the `findings` and `role-mining` groups.
+
 - **Credential restrictions and expiry precision.** `service-principals
   credentials create` now rejects an empty `--scoped-role` or `--allow-cidr`
   before it can create an unrestricted credential, and preserves fractional

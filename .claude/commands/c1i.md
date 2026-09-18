@@ -13,9 +13,10 @@ missing subcommands, a missing exit code) until that was cut. Don't re-add a
 per-command copy here; if a flag/behavior claim ever looks off, verify
 against `go run . <cmd> --help` rather than any doc. The command groups are
 `access-profiles`, `access-reviews`, `accounts`, `api`, `apps`, `auth`,
-`automations`, `connectors`, `docs`, `entitlements`, `export`, `functions`,
-`grants`, `mcp`, `policies`, `requests`, `service-principals`, `tasks` and
-`users`; run `go run . <group> --help` for each before reaching for raw `api`.
+`automations`, `connectors`, `docs`, `entitlements`, `export`, `findings`,
+`functions`, `grants`, `mcp`, `policies`, `requests`, `role-mining`,
+`service-principals`, `tasks` and `users`; run `go run . <group> --help` for
+each before reaching for raw `api`.
 
 ## Auth
 
