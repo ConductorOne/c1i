@@ -24,11 +24,14 @@ docker pull public.ecr.aws/conductorone/c1i:<version>
 ## Quick Start
 
 ```sh
-# Log in (opens browser)
-c1i auth login --url mycompany.conductor.one
+# Pass --url explicitly on every C1 call to avoid falling back to another tenant.
+c1i auth login --url https://mycompany.conductor.one
 
-# List users
-c1i users list
+# Verify the authenticated identity and tenant.
+c1i auth whoami --url https://mycompany.conductor.one
+
+# List users.
+c1i users list --url https://mycompany.conductor.one
 
 # Explore the API — no credentials needed
 c1i docs search "access reviews"
