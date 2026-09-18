@@ -61,6 +61,9 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - **MCP gateway dry-run safety.** `mcp gateway call` now rejects `--dry-run`
   before it creates a gateway client or sends a request: c1i cannot safely
   preview or suppress a tool's side effects.
+- **C1.ai branding.** Documentation now uses C1.ai for the product and its
+  corporate website; technical GitHub, package, distribution, and endpoint
+  references retain their existing hosts.
 
 - **Bundle-automation selection safety.** `access-profiles bundle-automation
   run --refs-file` now refuses JSON `null`; pass a JSON array, including `[]`

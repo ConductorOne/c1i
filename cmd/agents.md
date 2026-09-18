@@ -1,6 +1,6 @@
 ---
 name: c1i
-description: CLI for the C1 (formerly ConductorOne) identity security platform — manage users, apps, entitlements, tasks, access reviews, and more.
+description: CLI for the C1.ai identity security platform — manage users, apps, entitlements, tasks, access reviews, and more.
 version: {{VERSION}}
 required_bins:
   - c1i
@@ -8,7 +8,7 @@ required_bins:
 
 # c1i for agents ({{VERSION}})
 
-You are an AI agent using `c1i`, the CLI for the C1 API. Read this once,
+You are an AI agent using `c1i`, the CLI for the C1.ai API. Read this once,
 early — it covers what `--help` can't: getting the tenant right, output
 contracts, exit codes, and when to reach for `c1i api`. Save it locally with
 `c1i docs agents -o AGENTS.md`.
