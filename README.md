@@ -2,8 +2,9 @@
 
 **C1 Interface** — and it looks like `cli`. Get it?
 
-A command-line interface for the [C1](https://www.conductorone.com) API designed for AI agents.
-Structured output (NDJSON/JSON), built-in API docs, and auto-pagination.
+A command-line interface for the [C1](https://www.conductorone.com) API built
+for AI agents and scripts. Machine-readable output (NDJSON/JSON), explicit exit
+codes, built-in API docs, and auto-pagination make it reliable to automate.
 For a human-friendly CLI, see [cone](https://github.com/ConductorOne/cone).
 
 ## Installation
@@ -21,21 +22,37 @@ go install github.com/ConductorOne/c1i@latest
 docker pull public.ecr.aws/conductorone/c1i:<version>
 ```
 
+## Start Here
+
+Use this workflow for agent-driven and scripted operations:
+
+1. Run `c1i docs agents` before operating on a tenant. It explains tenant
+   selection, output and exit-code contracts, mutation safety, and raw API use;
+   it needs no authentication.
+2. Pass `--url https://<tenant>` on every C1 command, then authenticate and run
+   `c1i auth whoami` before doing anything else.
+3. Run every intended write with `--dry-run` first.
+4. Prefer a first-class command. Use `c1i api` only when no command covers the
+   public REST endpoint.
+
 ## Quick Start
 
 ```sh
-# Log in (opens browser)
-c1i auth login --url mycompany.conductor.one
+# Pass --url explicitly on every C1 call to avoid falling back to another tenant.
+c1i auth login --url https://mycompany.conductor.one
 
-# List users
-c1i users list
+# Verify the authenticated identity and tenant.
+c1i auth whoami --url https://mycompany.conductor.one
+
+# List users.
+c1i users list --url https://mycompany.conductor.one
 
 # Explore the API — no credentials needed
 c1i docs search "access reviews"
 c1i docs endpoints --filter task
 ```
 
-## Commands
+## Command Reference
 
 ### Users
 
@@ -698,8 +715,8 @@ c1i service-principals delete <sp-id>
 ```
 
 `service-principals` is aliased to `sp`. `create` needs only `--display-name`;
-the new principal comes back as pretty JSON under `servicePrincipal`, unwrapped
-so its id is at the top level (read it from `.id`).
+the new principal comes back as pretty JSON under `servicePrincipal`; read its
+id from `.servicePrincipal.id`.
 
 **Delete is destructive:** `service-principals delete` removes the principal
 and every credential issued for it. Before deleting, inspect the principal with

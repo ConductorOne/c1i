@@ -114,6 +114,9 @@ var accessProfilesBundleAutomationRunCmd = &cobra.Command{
 			if err != nil {
 				return fmt.Errorf("reading --refs-file: %w", err)
 			}
+			if refs == nil {
+				return &usageError{fmt.Errorf("--refs-file must contain a JSON array")}
+			}
 			if err := validateAppEntitlementRefs(refs, "refs"); err != nil {
 				return err
 			}

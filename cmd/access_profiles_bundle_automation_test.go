@@ -149,6 +149,22 @@ func TestBundleAutomationBodyFileRejectsUndocumentedFields(t *testing.T) {
 	}
 }
 
+func TestBundleAutomationRunRejectsNullRefsFile(t *testing.T) {
+	resetCmdFlags(t, accessProfilesBundleAutomationRunCmd)
+	enableBundleAutomationDryRun(t)
+
+	path := writeJSONFile(t, "null-refs.json", `null`)
+	if err := accessProfilesBundleAutomationRunCmd.Flags().Set("refs-file", path); err != nil {
+		t.Fatalf("setting --refs-file: %v", err)
+	}
+	accessProfilesBundleAutomationRunCmd.SetContext(context.Background())
+
+	err := accessProfilesBundleAutomationRunCmd.RunE(accessProfilesBundleAutomationRunCmd, []string{"catalog-1"})
+	if err == nil || !strings.Contains(err.Error(), "--refs-file must contain a JSON array") {
+		t.Errorf("error = %v, want --refs-file JSON-array rejection", err)
+	}
+}
+
 func TestBundleAutomationBodyFileValidatesPublishedRequestFields(t *testing.T) {
 	tests := []struct {
 		name    string
