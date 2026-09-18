@@ -2,7 +2,7 @@
 
 **C1 Interface** — and it looks like `cli`. Get it?
 
-A command-line interface for the [C1](https://www.conductorone.com) API built
+A command-line interface for the [C1.ai](https://www.c1.ai/) API built
 for AI agents and scripts. Machine-readable output (NDJSON/JSON), explicit exit
 codes, built-in API docs, and auto-pagination make it reliable to automate.
 For a human-friendly CLI, see [cone](https://github.com/ConductorOne/cone).

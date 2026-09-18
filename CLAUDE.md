@@ -1,18 +1,20 @@
 # c1i
 
-CLI for the C1 (formerly ConductorOne) API. Go module: `github.com/ConductorOne/c1i`.
+CLI for the C1.ai API. Go module: `github.com/ConductorOne/c1i`.
 
 ## Branding
 
-The product has been rebranded from **ConductorOne** to **C1**. Rules:
+The product is branded **C1.ai**. Rules:
 
-- All user-facing text (help strings, CLI output, README) should use
-  **"C1"**, not "ConductorOne".
+- All user-facing text (help strings, CLI output, README) should use **"C1.ai"**,
+  not "ConductorOne".
+- Corporate website links use `https://www.c1.ai/`.
 - The GitHub org remains `ConductorOne` — do not rename import paths or the
   module.
 - The legal entity is still "ConductorOne, Inc." — do not change LICENSE or
   copyright notices.
-- Domain names (`conductorone.com`, `conductor.one`) are unchanged.
+- Retain `conductorone.com` and `conductor.one` when they identify a technical
+  endpoint, package, distribution, or tenant host.
 
 ## Build & Test
 
