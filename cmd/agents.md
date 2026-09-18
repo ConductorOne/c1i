@@ -185,10 +185,10 @@ Rule of thumb: a product concept starts at `docs search` → `docs page`; a raw
 
 ## Reading output
 
-- List commands emit NDJSON: one object per line — but with `--fields`/
-  `C1I_FIELDS` set, a row whose projection matches nothing is skipped
-  entirely (never printed as `{}`), so the line count can be less than the
-  underlying result count. Pipe to `jq`.
+- List commands emit NDJSON: one object per line. With `--fields`/
+  `C1I_FIELDS`, a row whose projection matches nothing is skipped entirely
+  (never printed as `{}`), so the line count can be less than the underlying
+  result count.
 - Single-object reads emit pretty-printed JSON.
 - Typed `get` commands unwrap the API envelope (since v0.6.0): they print the
   resource itself, so read `.id` — not `.app.id`, `.userView.user.id`, or any
@@ -208,6 +208,26 @@ Rule of thumb: a product concept starts at `docs search` → `docs page`; a raw
   stringified, so `jq 'select(.enabled)'` and numeric comparisons behave.
 - `--fields id,user.email` projects to just those dot-paths; `C1I_FIELDS`
   sets the same thing for the whole session.
+
+Choose the simplest output tool:
+
+- Use `--fields` when you know the keys to keep. It has no external
+  dependency, preserves NDJSON, accepts either snake_case or camelCase field
+  names, and errors (exit `2`) if no requested key exists anywhere in the
+  result.
+- Pipe to `jq` only for conditional selection, reshaping, aggregation, sorting,
+  or extracting a value from a mutation confirmation. `--fields` deliberately
+  never changes create/update/delete output.
+
+```sh
+# Known keys: prefer c1i's built-in projection
+c1i users list --fields id,email
+# Conditional selection: jq is appropriate
+DELETED_APPS="$(c1i apps list | jq -c 'if .deleted_at then . else empty end')"
+
+# Mutation confirmation: jq is required to extract the returned id
+APP_ID=$(c1i apps create --display-name "Example" | jq -r '.app.id')
+```
 
 ## Exit codes
 

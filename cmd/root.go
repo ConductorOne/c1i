@@ -21,7 +21,8 @@ var rootCmd = &cobra.Command{
 
 If you are an AI agent, run "c1i docs agents" first — it covers conventions
 this help text can't (output contracts, exit codes, when to prefer a
-first-class command over raw API calls). It requires NO authentication.
+first-class command over raw API calls, and when to use --fields or jq). It
+requires NO authentication.
 
 For raw API exploration, also with no authentication required:
 
@@ -126,7 +127,7 @@ func init() {
 	_ = viper.BindPFlag("url", rootCmd.PersistentFlags().Lookup("url"))
 	_ = viper.BindEnv("url", "C1I_URL")
 
-	rootCmd.PersistentFlags().String("fields", "", "Comma-separated fields to keep in JSON output (dot-paths for nested, e.g. id,user.email)")
+	rootCmd.PersistentFlags().String("fields", "", "Known JSON fields to keep (dot-paths); prefer over jq for simple projection")
 	_ = viper.BindPFlag("fields", rootCmd.PersistentFlags().Lookup("fields"))
 	_ = viper.BindEnv("fields", "C1I_FIELDS")
 

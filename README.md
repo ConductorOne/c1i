@@ -884,16 +884,27 @@ restriction. Contrast `--fields`, which *is* comma-separated.
 
 ### Field selection
 
-`--fields` trims every emitted JSON object to just the keys you name — a big
-token saver when an agent only needs a couple of fields from a large list.
+`--fields` is the default for reducing JSON read output: use it when you know
+the keys you need. It has no external dependency, keeps list output as NDJSON,
+and understands c1i's snake_case/camelCase field variants.
+
+Use `jq` only when the work is more than projection: conditional selection,
+reshaping, aggregation, sorting, or extracting a value from a mutation
+confirmation. `--fields` deliberately never changes create/update/delete
+output.
 
 ```sh
-# Only id and email from each user
+# Known keys: prefer c1i's built-in projection
 c1i users list --fields id,email
 
-# Dot-paths select nested fields; nesting is preserved in the output
-c1i api --path /api/v1/apps --paginate --fields id,displayName
+# Nested known keys: --fields preserves the object shape
 c1i functions get <id> --fields id,displayName,publishedCommitId
+
+# Conditional selection: jq is appropriate
+DELETED_APPS="$(c1i apps list | jq -c 'if .deleted_at then . else empty end')"
+
+# Mutation confirmation: jq is required to extract the returned id
+APP_ID=$(c1i apps create --display-name "Example" | jq -r '.app.id')
 ```
 
 - Comma-separated; use dot-paths (`user.email`) for nested access.
