@@ -42,6 +42,10 @@ subcommands that also take an external server's address — that one is
 Credentials resolve in this order: `C1I_CLIENT_ID` + `C1I_CLIENT_SECRET` env
 vars (read-only — c1i never writes them), the OS keyring, then a `0600` file
 used automatically where no keyring exists (headless Linux, CI, containers).
+The minted access token is cached in a `0600` file and reused across
+invocations until it nears expiry, so a run of one-shot commands does not write
+a `client_credentials` audit event each time; `C1I_NO_TOKEN_CACHE=1` disables
+it.
 `c1i auth login` to authenticate; then `c1i auth whoami` before doing
 anything else — it reports both the identity you're acting as (principleId,
 plus userId when the principal has one; email and displayName only when a

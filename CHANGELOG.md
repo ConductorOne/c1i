@@ -56,6 +56,16 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   server, and edge subjects; a draft API). This surface is not in the public
   OpenAPI spec, so these first-class commands are the way to reach it.
 
+- **Access-token cache cuts audit-log noise.** c1i now caches the OAuth access
+  token in a `0600` file under the user config dir and reuses it across
+  invocations until it nears expiry, so a burst of one-shot commands no longer
+  mints — and logs — a `client_credentials` grant each time. Measured live, 12
+  sequential commands drop from 12 authentication events to 1. A cached token
+  the server rejects (clock skew, or a revocation) is dropped and re-minted once
+  automatically. Opt out with `C1I_NO_TOKEN_CACHE=1`. The cached token is
+  strictly shorter-lived than the client secret already stored beside it, so it
+  widens no exposure.
+
 ### Fixed
 
 - **MCP gateway dry-run safety.** `mcp gateway call` now rejects `--dry-run`

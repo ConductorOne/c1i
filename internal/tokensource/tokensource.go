@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/ConductorOne/c1i/internal/transport"
@@ -185,22 +186,86 @@ func (c *c1TokenSource) Token() (*oauth2.Token, error) {
 	}, nil
 }
 
-// NewTokenSource returns a TokenSource that mints via the client_credentials
-// JWT-bearer grant. opts are forwarded to the transport it mints through
-// (e.g. to share a caller's --debug/--max-retries with the token request), but
-// the request timeout is always tokenRequestTimeout regardless of what opts
-// contains.
+// NewTokenSource returns a TokenSource that mints a fresh token on every call
+// via the client_credentials JWT-bearer grant, without touching the on-disk
+// cache. `auth token` and the MCP gateway use it: both hand the bearer onward,
+// so it must be freshly minted rather than a possibly-near-expiry cached one.
+// opts are forwarded to the transport it mints through (e.g. to share a
+// caller's --debug/--max-retries with the token request), but the request
+// timeout is always tokenRequestTimeout regardless of what opts contains.
 func NewTokenSource(ctx context.Context, clientID string, clientSecret string, tokenHost string, opts ...transport.Option) (oauth2.TokenSource, error) {
+	return newMintSource(clientID, clientSecret, tokenHost, opts...)
+}
+
+// NewCachingTokenSource wraps NewTokenSource with the cross-process on-disk
+// cache. The REST client uses it so a run of one-shot commands does not mint --
+// and audit-log -- a token each time. It caches only the bearer c1i attaches
+// automatically; a bearer handed to the caller (NewTokenSource) is never cached.
+func NewCachingTokenSource(ctx context.Context, clientID string, clientSecret string, tokenHost string, opts ...transport.Option) (oauth2.TokenSource, error) {
+	mint, err := newMintSource(clientID, clientSecret, tokenHost, opts...)
+	if err != nil {
+		return nil, err
+	}
+	host := strings.TrimPrefix(tokenHost, "https://")
+	return &cacheTokenSource{mint: mint, host: host, clientID: clientID}, nil
+}
+
+func newMintSource(clientID string, clientSecret string, tokenHost string, opts ...transport.Option) (*c1TokenSource, error) {
 	secret, err := parseSecret([]byte(clientSecret))
 	if err != nil {
 		return nil, err
 	}
-
 	t := transport.New(nil, append(opts, transport.WithTimeout(tokenRequestTimeout))...)
-	return oauth2.ReuseTokenSource(nil, &c1TokenSource{
+	return &c1TokenSource{
 		clientID:     clientID,
 		clientSecret: secret,
 		tokenHost:    strings.TrimPrefix(tokenHost, "https://"),
 		transport:    t,
-	}), nil
+	}, nil
+}
+
+// Invalidator is implemented by a caching TokenSource: Invalidate drops the
+// cached token (in memory and on disk) so the next Token() re-mints. The REST
+// client asserts for it to recover from a cached token the server has begun
+// rejecting (clock skew past expirySkew, or a server-side revocation), which
+// would otherwise 401 every invocation until the token's local expiry.
+type Invalidator interface{ Invalidate() }
+
+// cacheTokenSource serves a token from three tiers, cheapest first: an in-memory
+// token reused for the life of this process, the on-disk cache shared across
+// processes, then a fresh mint written back to disk. Cross-process reuse is the
+// point: c1i workloads are long sequences of one-shot processes. Concurrency-safe.
+type cacheTokenSource struct {
+	mu       sync.Mutex
+	tok      *oauth2.Token
+	mint     oauth2.TokenSource
+	host     string
+	clientID string
+}
+
+func (c *cacheTokenSource) Token() (*oauth2.Token, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if tokenFresh(c.tok) {
+		return c.tok, nil
+	}
+	if t := loadCachedToken(c.host, c.clientID); t != nil {
+		c.tok = t
+		return t, nil
+	}
+	t, err := c.mint.Token()
+	if err != nil {
+		return nil, err
+	}
+	storeCachedToken(c.host, c.clientID, t)
+	c.tok = t
+	return t, nil
+}
+
+// Invalidate satisfies Invalidator: drop both the in-memory and on-disk copies.
+func (c *cacheTokenSource) Invalidate() {
+	c.mu.Lock()
+	c.tok = nil
+	c.mu.Unlock()
+	InvalidateCachedToken(c.host, c.clientID)
 }
