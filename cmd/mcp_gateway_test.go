@@ -15,6 +15,7 @@ import (
 	"github.com/ConductorOne/c1i/internal/mcpgateway"
 	"github.com/ConductorOne/c1i/internal/transport"
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 )
 
 func TestDeriveGatewayURL(t *testing.T) {
@@ -348,6 +349,23 @@ func TestGatewayTransportFailureExitsUpstream(t *testing.T) {
 			t.Errorf("exitCode = %d, want exitAuth (%d); err: %v", got, exitAuth, wrapped)
 		}
 	})
+}
+
+func TestGatewayCallRejectsDryRun(t *testing.T) {
+	original := viper.GetBool("dry_run")
+	viper.Set("dry_run", true)
+	t.Cleanup(func() { viper.Set("dry_run", original) })
+
+	err := mcpGatewayCallCmd.RunE(&cobra.Command{}, []string{"some-tool"})
+	if err == nil {
+		t.Fatal("expected --dry-run to be rejected")
+	}
+	if got := exitCode(err); got != exitUsage {
+		t.Errorf("exitCode = %d, want exitUsage (%d); err: %v", got, exitUsage, err)
+	}
+	if !strings.Contains(err.Error(), "cannot preview or suppress") {
+		t.Errorf("error = %q, want dry-run safety explanation", err)
+	}
 }
 
 // TestGatewayCallIsErrorExitCode covers the four required scenarios for a
