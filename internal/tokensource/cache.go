@@ -86,7 +86,7 @@ func loadCachedToken(key string) *oauth2.Token {
 	}
 	if encoded, err := tokenKeyringGet(tokenKeychainService, key); err == nil {
 		return decodeCachedToken([]byte(encoded))
-	} else if !keychain.IsUnavailable(err) {
+	} else if !keychain.IsUnavailable(err) && !keychain.IsNotFound(err) {
 		return nil
 	}
 	return loadFileCachedToken(key)

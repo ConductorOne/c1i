@@ -151,6 +151,11 @@ func IsUnavailable(err error) bool {
 	return isKeyringUnavailable(err)
 }
 
+// IsNotFound reports whether an OS-keyring lookup found no entry.
+func IsNotFound(err error) bool {
+	return errors.Is(err, keyring.ErrNotFound)
+}
+
 func storeKeyring(service, clientID, clientSecret string) error {
 	if err := keyring.Set(service, acctClientID, clientID); err != nil {
 		return err

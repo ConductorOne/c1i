@@ -137,6 +137,20 @@ func TestKeychainCachePreferredOverFile(t *testing.T) {
 	}
 }
 
+func TestKeychainMissFallsBackToFileCache(t *testing.T) {
+	useTempConfig(t)
+	key := testCacheKey("host", "client")
+	storeCachedToken(key, freshToken(30*time.Minute))
+	tokenKeyringGet = func(string, string) (string, error) {
+		return "", keyring.ErrNotFound
+	}
+
+	got := loadCachedToken(key)
+	if got == nil || got.AccessToken != "tok" {
+		t.Fatalf("load after keychain miss = %+v, want token from file cache", got)
+	}
+}
+
 func TestLoadMisses(t *testing.T) {
 	useTempConfig(t)
 	if loadCachedToken(testCacheKey("host", "client")) != nil {
