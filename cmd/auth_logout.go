@@ -3,6 +3,7 @@ package cmd
 import (
 	"fmt"
 
+	"github.com/ConductorOne/c1i/internal/client"
 	"github.com/ConductorOne/c1i/internal/config"
 	"github.com/ConductorOne/c1i/internal/keychain"
 	"github.com/spf13/cobra"
@@ -19,6 +20,7 @@ C1I_CLIENT_SECRET) are not affected.`,
 		if err != nil {
 			return err
 		}
+		client.ClearCachedToken(baseURL)
 		service := config.KeychainService(baseURL)
 		removed, err := keychain.Delete(service)
 		if err != nil {

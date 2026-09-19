@@ -1233,12 +1233,13 @@ the active credentials.
 
 To avoid minting a fresh OAuth token on every invocation — each mint writes a
 `client_credentials` event to the tenant's audit log — `c1i` caches the access
-token in a `0600` file under your config directory (`~/.config/c1i/tokens/` on
-Linux) and reuses it until it nears expiry. A cached token the server rejects
-(clock skew, or a revoked credential) is dropped and re-minted once
-automatically. The token is strictly shorter-lived than the client secret
-already stored beside it. Set `C1I_NO_TOKEN_CACHE=1` to disable caching and mint
-per invocation.
+token and reuses it until it nears expiry. It uses the OS keyring when
+available, and otherwise a hardened `0600` file under the config directory
+(`~/.config/c1i/tokens/` on Linux). A cached token the server rejects (clock
+skew, or a revoked credential) is dropped and re-minted once automatically.
+The token is strictly shorter-lived than the client secret already stored
+beside it. Set `C1I_NO_TOKEN_CACHE=1` to disable caching and mint per
+invocation.
 
 ## Shell Completion
 

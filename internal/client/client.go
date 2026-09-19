@@ -51,6 +51,17 @@ func loadCredentials(baseURL string) (clientID, clientSecret string, err error) 
 	return clientID, clientSecret, nil
 }
 
+// ClearCachedToken removes the cached REST bearer for the credentials currently
+// selected for baseURL. It is best-effort so logout can still remove credentials
+// if their cache path cannot be resolved.
+func ClearCachedToken(baseURL string) {
+	clientID, clientSecret, err := loadCredentials(baseURL)
+	if err != nil {
+		return
+	}
+	tokensource.InvalidateCachedToken(baseURL, clientID, clientSecret)
+}
+
 // isTokenError reports whether err is (or wraps) a rejected client_credentials
 // grant. It powers two things: telling transport.Do to fail fast on it rather
 // than burn the retry budget on credentials that won't fix themselves, and
@@ -177,8 +188,10 @@ func New(ctx context.Context, baseURL string, opts ...Option) (*Client, error) {
 		return nil, &AuthError{fmt.Errorf("creating token source: %w", err)}
 	}
 
-	oauthClient := oauth2.NewClient(ctx, tokenSource)
-	base := oauthClient.Transport
+	// oauth2.NewClient wraps its source in a second ReuseTokenSource. The
+	// cacheTokenSource already owns caching and needs Invalidate to take effect
+	// before a 401 retry, so compose the transport directly.
+	var base http.RoundTripper = &oauth2.Transport{Source: tokenSource}
 	// A cached token can be locally-unexpired yet server-rejected; recover by
 	// dropping it and re-minting once. Only when the source caches.
 	if inv, ok := tokenSource.(tokensource.Invalidator); ok {

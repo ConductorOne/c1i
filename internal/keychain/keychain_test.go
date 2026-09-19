@@ -67,6 +67,26 @@ func TestStoreLoadKeyringHappyPath(t *testing.T) {
 	}
 }
 
+func TestGenericSecretHelpersUseKeyring(t *testing.T) {
+	keyring.MockInit()
+	if err := SetSecret("c1i/token-cache-test", "account", "value"); err != nil {
+		t.Fatalf("SetSecret: %v", err)
+	}
+	got, err := GetSecret("c1i/token-cache-test", "account")
+	if err != nil {
+		t.Fatalf("GetSecret: %v", err)
+	}
+	if got != "value" {
+		t.Fatalf("GetSecret = %q, want %q", got, "value")
+	}
+	if err := DeleteSecret("c1i/token-cache-test", "account"); err != nil {
+		t.Fatalf("DeleteSecret: %v", err)
+	}
+	if _, err := GetSecret("c1i/token-cache-test", "account"); !errors.Is(err, keyring.ErrNotFound) {
+		t.Fatalf("GetSecret after DeleteSecret error = %v, want ErrNotFound", err)
+	}
+}
+
 func TestEnvOverridesKeyring(t *testing.T) {
 	keyring.MockInit()
 	withTempConfigDir(t)

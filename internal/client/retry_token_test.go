@@ -112,18 +112,33 @@ func TestRetryOnTokenReject_ReplaysBody(t *testing.T) {
 	}
 }
 
+// rotatingTokenSource models cacheTokenSource after an invalidation. The retry
+// must invoke it again, not let an outer oauth2.ReuseTokenSource resend stale.
+type rotatingTokenSource struct {
+	invalidated bool
+}
+
+func (s *rotatingTokenSource) Token() (*oauth2.Token, error) {
+	token := "stale"
+	if s.invalidated {
+		token = "fresh"
+	}
+	return &oauth2.Token{AccessToken: token, TokenType: "Bearer"}, nil
+}
+
 // TestRetryOnTokenReject_ThroughOAuth2Transport drives the real oauth2.Transport
 // beneath retryOnTokenReject (the exact composition client.New builds), proving
-// the POST body is replayed and a bearer re-attached on the retry through the
-// actual stack -- not just a fake base RoundTripper.
+// a replayed POST gets a freshly attached bearer after cache invalidation.
 func TestRetryOnTokenReject_ThroughOAuth2Transport(t *testing.T) {
 	base := &seqRT{codes: []int{401, 200}}
-	oauthT := &oauth2.Transport{
-		Source: oauth2.StaticTokenSource(&oauth2.Token{AccessToken: "tok", TokenType: "Bearer"}),
-		Base:   base,
+	source := &rotatingTokenSource{}
+	oauthT := &oauth2.Transport{Source: source, Base: base}
+	rt := &retryOnTokenReject{
+		base: oauthT,
+		invalidate: func() {
+			source.invalidated = true
+		},
 	}
-	inv := 0
-	rt := &retryOnTokenReject{base: oauthT, invalidate: func() { inv++ }}
 	req, err := http.NewRequest(http.MethodPost, "https://x/y", strings.NewReader(`{"k":"v"}`))
 	if err != nil {
 		t.Fatal(err)
@@ -132,14 +147,14 @@ func TestRetryOnTokenReject_ThroughOAuth2Transport(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if resp.StatusCode != 200 || inv != 1 {
-		t.Fatalf("status=%d inv=%d, want 200 and 1", resp.StatusCode, inv)
+	if resp.StatusCode != 200 {
+		t.Fatalf("status=%d, want 200", resp.StatusCode)
 	}
 	if len(base.bodies) != 2 || base.bodies[0] != `{"k":"v"}` || base.bodies[1] != `{"k":"v"}` {
 		t.Errorf("bodies=%q, want the JSON resent on retry", base.bodies)
 	}
-	if base.auths[0] != "Bearer tok" || base.auths[1] != "Bearer tok" {
-		t.Errorf("auth headers=%q, want oauth2.Transport to attach the bearer on both attempts", base.auths)
+	if len(base.auths) != 2 || base.auths[0] != "Bearer stale" || base.auths[1] != "Bearer fresh" {
+		t.Errorf("auth headers=%q, want stale then fresh bearer", base.auths)
 	}
 }
 

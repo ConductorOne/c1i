@@ -207,7 +207,7 @@ func NewCachingTokenSource(ctx context.Context, clientID string, clientSecret st
 		return nil, err
 	}
 	host := strings.TrimPrefix(tokenHost, "https://")
-	return &cacheTokenSource{mint: mint, host: host, clientID: clientID}, nil
+	return &cacheTokenSource{mint: mint, key: cacheKey(host, clientID, clientSecret)}, nil
 }
 
 func newMintSource(clientID string, clientSecret string, tokenHost string, opts ...transport.Option) (*c1TokenSource, error) {
@@ -236,11 +236,10 @@ type Invalidator interface{ Invalidate() }
 // processes, then a fresh mint written back to disk. Cross-process reuse is the
 // point: c1i workloads are long sequences of one-shot processes. Concurrency-safe.
 type cacheTokenSource struct {
-	mu       sync.Mutex
-	tok      *oauth2.Token
-	mint     oauth2.TokenSource
-	host     string
-	clientID string
+	mu   sync.Mutex
+	tok  *oauth2.Token
+	mint oauth2.TokenSource
+	key  string
 }
 
 func (c *cacheTokenSource) Token() (*oauth2.Token, error) {
@@ -249,7 +248,7 @@ func (c *cacheTokenSource) Token() (*oauth2.Token, error) {
 	if tokenFresh(c.tok) {
 		return c.tok, nil
 	}
-	if t := loadCachedToken(c.host, c.clientID); t != nil {
+	if t := loadCachedToken(c.key); t != nil {
 		c.tok = t
 		return t, nil
 	}
@@ -257,7 +256,7 @@ func (c *cacheTokenSource) Token() (*oauth2.Token, error) {
 	if err != nil {
 		return nil, err
 	}
-	storeCachedToken(c.host, c.clientID, t)
+	storeCachedToken(c.key, t)
 	c.tok = t
 	return t, nil
 }
@@ -267,5 +266,5 @@ func (c *cacheTokenSource) Invalidate() {
 	c.mu.Lock()
 	c.tok = nil
 	c.mu.Unlock()
-	InvalidateCachedToken(c.host, c.clientID)
+	invalidateCachedToken(c.key)
 }
