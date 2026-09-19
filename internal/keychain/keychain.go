@@ -127,6 +127,35 @@ func FilePath(service string) (string, error) {
 	return filePath(service)
 }
 
+// GetSecret reads a non-credential secret from the OS keyring. Internal
+// packages use it for short-lived secrets that share the same keychain policy
+// as C1 credentials.
+func GetSecret(service, account string) (string, error) {
+	return keyring.Get(service, account)
+}
+
+// SetSecret stores a non-credential secret in the OS keyring.
+func SetSecret(service, account, value string) error {
+	return keyring.Set(service, account, value)
+}
+
+// DeleteSecret removes a non-credential secret from the OS keyring.
+func DeleteSecret(service, account string) error {
+	return keyring.Delete(service, account)
+}
+
+// IsUnavailable reports whether an OS-keyring error warrants falling back to
+// the secured file store (for example, a headless Linux host without Secret
+// Service). Other keyring failures should not silently downgrade storage.
+func IsUnavailable(err error) bool {
+	return isKeyringUnavailable(err)
+}
+
+// IsNotFound reports whether an OS-keyring lookup found no entry.
+func IsNotFound(err error) bool {
+	return errors.Is(err, keyring.ErrNotFound)
+}
+
 func storeKeyring(service, clientID, clientSecret string) error {
 	if err := keyring.Set(service, acctClientID, clientID); err != nil {
 		return err
@@ -211,12 +240,24 @@ func storeFile(service, clientID, clientSecret string) error {
 	if err != nil {
 		return err
 	}
-	tmp := p + ".tmp"
-	if err := os.WriteFile(tmp, b, 0o600); err != nil {
+	tmp, err := os.CreateTemp(filepath.Dir(p), "."+filepath.Base(p)+".tmp-*")
+	if err != nil {
+		return fmt.Errorf("creating credential temp file: %w", err)
+	}
+	tmpName := tmp.Name()
+	defer func() { _ = os.Remove(tmpName) }()
+	if err := tmp.Chmod(0o600); err != nil {
+		_ = tmp.Close()
+		return fmt.Errorf("setting credential temp file permissions: %w", err)
+	}
+	if _, err := tmp.Write(b); err != nil {
+		_ = tmp.Close()
 		return fmt.Errorf("writing credentials: %w", err)
 	}
-	if err := os.Rename(tmp, p); err != nil {
-		_ = os.Remove(tmp)
+	if err := tmp.Close(); err != nil {
+		return fmt.Errorf("closing credential temp file: %w", err)
+	}
+	if err := os.Rename(tmpName, p); err != nil {
 		return fmt.Errorf("finalizing credentials: %w", err)
 	}
 	return nil

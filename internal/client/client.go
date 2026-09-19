@@ -51,6 +51,17 @@ func loadCredentials(baseURL string) (clientID, clientSecret string, err error) 
 	return clientID, clientSecret, nil
 }
 
+// ClearCachedToken removes the cached REST bearer for the credentials currently
+// selected for baseURL. It is best-effort so logout can still remove credentials
+// if their cache path cannot be resolved.
+func ClearCachedToken(baseURL string) {
+	clientID, clientSecret, err := loadCredentials(baseURL)
+	if err != nil {
+		return
+	}
+	tokensource.InvalidateCachedToken(baseURL, clientID, clientSecret)
+}
+
 // isTokenError reports whether err is (or wraps) a rejected client_credentials
 // grant. It powers two things: telling transport.Do to fail fast on it rather
 // than burn the retry budget on credentials that won't fix themselves, and
@@ -172,19 +183,70 @@ func New(ctx context.Context, baseURL string, opts ...Option) (*Client, error) {
 		return nil, err
 	}
 
-	tokenSource, err := tokensource.NewTokenSource(ctx, clientID, clientSecret, baseURL, transportOpts(opts)...)
+	tokenSource, err := tokensource.NewCachingTokenSource(ctx, clientID, clientSecret, baseURL, transportOpts(opts)...)
 	if err != nil {
 		return nil, &AuthError{fmt.Errorf("creating token source: %w", err)}
 	}
 
-	oauthClient := oauth2.NewClient(ctx, tokenSource)
+	// oauth2.NewClient wraps its source in a second ReuseTokenSource. The
+	// cacheTokenSource already owns caching and needs Invalidate to take effect
+	// before a 401 retry, so compose the transport directly.
+	var base http.RoundTripper = &oauth2.Transport{Source: tokenSource}
+	// A cached token can be locally-unexpired yet server-rejected; recover by
+	// dropping it and re-minting once. Only when the source caches.
+	if inv, ok := tokenSource.(tokensource.Invalidator); ok {
+		base = &retryOnTokenReject{base: base, invalidate: inv.Invalidate}
+	}
 	cfg := resolve(opts)
-	t := transport.New(oauthClient.Transport,
+	t := transport.New(base,
 		transport.WithMaxRetries(cfg.maxRetries),
 		transport.WithDebug(cfg.debug),
 		transport.WithNonRetryable(isTokenError),
 	)
 	return &Client{t: t, baseURL: baseURL}, nil
+}
+
+// retryOnTokenReject recovers from a cached access token the server refuses.
+// On the first 401 it invalidates the cache and retries once with a freshly
+// minted token; a second 401 is a real auth failure and is returned. A 401 is
+// rejected before the request is processed, so retrying a mutation is safe. It
+// retries only when the body can be rewound, and never on 403 (authenticated
+// but forbidden -- a new token of the same identity would not help).
+type retryOnTokenReject struct {
+	base       http.RoundTripper
+	invalidate func()
+}
+
+func (r *retryOnTokenReject) RoundTrip(req *http.Request) (*http.Response, error) {
+	resp, err := r.base.RoundTrip(req)
+	if err != nil || resp.StatusCode != http.StatusUnauthorized {
+		return resp, err
+	}
+	req2, ok := rewind(req)
+	if !ok {
+		return resp, nil
+	}
+	_ = resp.Body.Close()
+	r.invalidate()
+	return r.base.RoundTrip(req2)
+}
+
+// rewind clones req with a fresh copy of its body for a retry, reporting false
+// when the body exists but cannot be replayed.
+func rewind(req *http.Request) (*http.Request, bool) {
+	clone := req.Clone(req.Context())
+	if req.Body == nil || req.Body == http.NoBody {
+		return clone, true
+	}
+	if req.GetBody == nil {
+		return nil, false
+	}
+	body, err := req.GetBody()
+	if err != nil {
+		return nil, false
+	}
+	clone.Body = body
+	return clone, true
 }
 
 // NewForTesting returns a *Client that sends every request through hc's

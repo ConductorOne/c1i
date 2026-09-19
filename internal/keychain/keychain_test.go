@@ -67,6 +67,26 @@ func TestStoreLoadKeyringHappyPath(t *testing.T) {
 	}
 }
 
+func TestGenericSecretHelpersUseKeyring(t *testing.T) {
+	keyring.MockInit()
+	if err := SetSecret("c1i/token-cache-test", "account", "value"); err != nil {
+		t.Fatalf("SetSecret: %v", err)
+	}
+	got, err := GetSecret("c1i/token-cache-test", "account")
+	if err != nil {
+		t.Fatalf("GetSecret: %v", err)
+	}
+	if got != "value" {
+		t.Fatalf("GetSecret = %q, want %q", got, "value")
+	}
+	if err := DeleteSecret("c1i/token-cache-test", "account"); err != nil {
+		t.Fatalf("DeleteSecret: %v", err)
+	}
+	if _, err := GetSecret("c1i/token-cache-test", "account"); !errors.Is(err, keyring.ErrNotFound) {
+		t.Fatalf("GetSecret after DeleteSecret error = %v, want ErrNotFound", err)
+	}
+}
+
 func TestEnvOverridesKeyring(t *testing.T) {
 	keyring.MockInit()
 	withTempConfigDir(t)
@@ -143,6 +163,39 @@ func TestFileFallbackWhenKeyringUnavailable(t *testing.T) {
 	}
 	if b != BackendFile {
 		t.Fatalf("Load backend = %q, want %q", b, BackendFile)
+	}
+}
+
+func TestStoreFileDoesNotFollowPredictableTempSymlink(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("symlink privileges are not portable on Windows")
+	}
+	dir := withTempConfigDir(t)
+	clearEnv(t)
+	p, err := filePath(testService)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Dir(p), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	target := filepath.Join(dir, "target")
+	if err := os.WriteFile(target, []byte("sentinel"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(target, p+".tmp"); err != nil {
+		t.Skipf("creating symlink: %v", err)
+	}
+
+	if err := storeFile(testService, testID, testSecret); err != nil {
+		t.Fatalf("storeFile: %v", err)
+	}
+	got, err := os.ReadFile(target)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(got) != "sentinel" {
+		t.Fatalf("attacker target was changed to %q", got)
 	}
 }
 

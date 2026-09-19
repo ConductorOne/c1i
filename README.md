@@ -1240,6 +1240,19 @@ never written to disk — a new one is minted per invocation.
 file backend transparently. `c1i auth status` tells you which source served
 the active credentials.
 
+### Token cache
+
+To avoid minting a fresh OAuth token on every invocation — each mint writes a
+`client_credentials` event to the tenant's audit log — `c1i` caches the access
+token and reuses it until it nears expiry. It uses the OS keyring when
+available. On Unix-like hosts without a usable keyring, it instead uses a
+hardened `0600` file under the config directory (`~/.config/c1i/tokens/` on
+Linux). A cached token the server rejects (clock skew, or a revoked credential)
+is dropped and re-minted once automatically.
+The token is strictly shorter-lived than the client secret already stored
+beside it. Set `C1I_NO_TOKEN_CACHE=1` to disable caching and mint per
+invocation.
+
 ## Shell Completion
 
 ```sh
