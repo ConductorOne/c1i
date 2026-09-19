@@ -45,8 +45,9 @@ used automatically where no keyring exists (headless Linux, CI, containers).
 Only the bearer c1i attaches automatically for REST commands is cached and
 reused across invocations until it nears expiry, so a run of one-shot commands
 does not write a `client_credentials` audit event each time. It uses the OS
-keychain when available and otherwise a hardened `0600` file fallback. `auth
-token` and `mcp gateway` always mint a fresh bearer and never persist it.
+keychain when available; on Unix-like hosts without a usable keyring, it uses
+a hardened `0600` file fallback. `auth token` and `mcp gateway` always mint a
+fresh bearer and never persist it.
 `C1I_NO_TOKEN_CACHE=1` disables the REST-client cache.
 `c1i auth login` to authenticate; then `c1i auth whoami` before doing
 anything else — it reports both the identity you're acting as (principleId,
