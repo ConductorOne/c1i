@@ -21,7 +21,8 @@ var rootCmd = &cobra.Command{
 
 If you are an AI agent, run "c1i docs agents" first — it covers conventions
 this help text can't (output contracts, exit codes, when to prefer a
-first-class command over raw API calls). It requires NO authentication.
+first-class command over raw API calls, and when to use --fields or jq). It
+requires NO authentication.
 
 For raw API exploration, also with no authentication required:
 
@@ -122,11 +123,11 @@ func init() {
 	rootCmd.SetFlagErrorFunc(func(_ *cobra.Command, err error) error {
 		return &usageError{err}
 	})
-	rootCmd.PersistentFlags().String("url", "", "C1 URL; https required (e.g. https://mycompany.conductor.one or https://mycompany.c1eu.ai)")
+	rootCmd.PersistentFlags().String("url", "", "C1 tenant URL; https required. Precedence: --url, C1I_URL, then ~/.c1i.yaml")
 	_ = viper.BindPFlag("url", rootCmd.PersistentFlags().Lookup("url"))
 	_ = viper.BindEnv("url", "C1I_URL")
 
-	rootCmd.PersistentFlags().String("fields", "", "Comma-separated fields to keep in JSON output (dot-paths for nested, e.g. id,user.email)")
+	rootCmd.PersistentFlags().String("fields", "", "Comma-separated JSON fields to keep in read output (dot-paths); prefer over jq for simple projection")
 	_ = viper.BindPFlag("fields", rootCmd.PersistentFlags().Lookup("fields"))
 	_ = viper.BindEnv("fields", "C1I_FIELDS")
 
@@ -142,7 +143,7 @@ func init() {
 	_ = viper.BindPFlag("debug", rootCmd.PersistentFlags().Lookup("debug"))
 	_ = viper.BindEnv("debug", "C1I_DEBUG")
 
-	rootCmd.PersistentFlags().Bool("dry-run", false, "Preview mutating requests (method, path, body) without sending them")
+	rootCmd.PersistentFlags().Bool("dry-run", false, "Preview C1 REST mutations (method, path, body) without sending; mcp gateway call rejects it")
 	_ = viper.BindPFlag("dry_run", rootCmd.PersistentFlags().Lookup("dry-run"))
 	_ = viper.BindEnv("dry_run", "C1I_DRY_RUN")
 }

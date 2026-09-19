@@ -64,6 +64,13 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - **C1.ai branding.** Documentation now uses C1.ai for the product and its
   corporate website; technical GitHub, package, distribution, and endpoint
   references retain their existing hosts.
+- **Output guidance for agents and scripts.** Prefer `--fields` for known
+  fields in JSON read output; use `jq` for filtering, reshaping, aggregation,
+  sorting, and values from mutation confirmations.
+
+- **Operational command guidance.** Built-in help now makes tenant URL
+  precedence, REST-only dry-run scope, raw API pagination, and public OpenAPI
+  endpoint discovery explicit for scripts and agents.
 
 - **Bundle-automation selection safety.** `access-profiles bundle-automation
   run --refs-file` now refuses JSON `null`; pass a JSON array, including `[]`

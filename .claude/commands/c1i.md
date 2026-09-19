@@ -56,8 +56,8 @@ falls through to whatever the config file names.
   with backoff, honoring `Retry-After`.
 - `--error-format=text|json` / `C1I_ERROR_FORMAT` — `json` emits a structured
   error object instead of `Error: ...` text.
-- `--dry-run` / `C1I_DRY_RUN` — preview a mutating request's method/path/body
-  without sending it; exits 0.
+- `--dry-run` / `C1I_DRY_RUN` — preview a C1 REST mutation's method/path/body
+  without sending it; `mcp gateway call` rejects it and is live.
 - `--debug` / `C1I_DEBUG` — trace HTTP method/URL/status/timing to stderr
   (never headers or bodies).
 
