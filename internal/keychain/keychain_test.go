@@ -166,6 +166,39 @@ func TestFileFallbackWhenKeyringUnavailable(t *testing.T) {
 	}
 }
 
+func TestStoreFileDoesNotFollowPredictableTempSymlink(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("symlink privileges are not portable on Windows")
+	}
+	dir := withTempConfigDir(t)
+	clearEnv(t)
+	p, err := filePath(testService)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Dir(p), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	target := filepath.Join(dir, "target")
+	if err := os.WriteFile(target, []byte("sentinel"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(target, p+".tmp"); err != nil {
+		t.Skipf("creating symlink: %v", err)
+	}
+
+	if err := storeFile(testService, testID, testSecret); err != nil {
+		t.Fatalf("storeFile: %v", err)
+	}
+	got, err := os.ReadFile(target)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(got) != "sentinel" {
+		t.Fatalf("attacker target was changed to %q", got)
+	}
+}
+
 // configRoot returns the subdirectory of the test root that os.UserConfigDir
 // resolves to on the current platform.
 func configRoot(testDir string) string {

@@ -58,8 +58,8 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 - **Access-token cache cuts audit-log noise.** c1i now caches the OAuth access
   token in the OS keyring when available, with a hardened `0600` file fallback
-  for headless hosts, and reuses it across invocations until it nears expiry.
-  A burst of one-shot commands no longer mints — and logs — a
+  on Unix-like headless hosts, and reuses it across invocations until it
+  nears expiry. A burst of one-shot commands no longer mints — and logs — a
   `client_credentials` grant each time. Measured live, 12 sequential commands
   drop from 12 authentication events to 1. A cached token the server rejects
   (clock skew, or a revocation) is dropped and re-minted once automatically.

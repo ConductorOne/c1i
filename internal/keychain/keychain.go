@@ -240,12 +240,24 @@ func storeFile(service, clientID, clientSecret string) error {
 	if err != nil {
 		return err
 	}
-	tmp := p + ".tmp"
-	if err := os.WriteFile(tmp, b, 0o600); err != nil {
+	tmp, err := os.CreateTemp(filepath.Dir(p), "."+filepath.Base(p)+".tmp-*")
+	if err != nil {
+		return fmt.Errorf("creating credential temp file: %w", err)
+	}
+	tmpName := tmp.Name()
+	defer func() { _ = os.Remove(tmpName) }()
+	if err := tmp.Chmod(0o600); err != nil {
+		_ = tmp.Close()
+		return fmt.Errorf("setting credential temp file permissions: %w", err)
+	}
+	if _, err := tmp.Write(b); err != nil {
+		_ = tmp.Close()
 		return fmt.Errorf("writing credentials: %w", err)
 	}
-	if err := os.Rename(tmp, p); err != nil {
-		_ = os.Remove(tmp)
+	if err := tmp.Close(); err != nil {
+		return fmt.Errorf("closing credential temp file: %w", err)
+	}
+	if err := os.Rename(tmpName, p); err != nil {
 		return fmt.Errorf("finalizing credentials: %w", err)
 	}
 	return nil
