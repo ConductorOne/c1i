@@ -79,6 +79,10 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   1.27.1; the lint gate uses golangci-lint 2.13.2, which supports that
   toolchain. Updated OAuth, terminal, JOSE, and Go runtime dependencies are
   included in the release.
+- **Agent runbook discovery.** `docs guide` now lists a concise purpose beside
+  every embedded workflow, and `docs agents` provides a task-to-guide index.
+  Checks ensure every guide has a summary and every embedded cross-reference
+  resolves.
 - **C1.ai branding.** Documentation now uses C1.ai for the product and its
   corporate website; technical GitHub, package, distribution, and endpoint
   references retain their existing hosts.

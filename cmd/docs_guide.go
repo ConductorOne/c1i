@@ -193,8 +193,10 @@ tasks:
 
     c1i grants list --app-id "$APP_ID" --entitlement-id "$ENTITLEMENT_ID"
 
-Grants are eventually consistent — a just-created grant can take up to a
-minute or two to appear in this list.
+Grants are eventually consistent; wait for the expected grant before treating
+the rollout as complete. Next, verify the caller-facing result with
+"c1i docs guide test-mcp-gateway".
+
 `
 
 // guideTestMCPGateway verifies, with c1i, the pieces that must be in place
@@ -776,6 +778,18 @@ checking once immediately.
   what's actually governing a given task.
 `
 
+// guideSummaries makes the no-argument guide listing useful for discovering
+// the right workflow without loading every runbook.
+var guideSummaries = map[string]string{
+	"register-mcp-server":               "Register a hosted or external MCP server and approve its tools",
+	"assign-toolset-everyone":           "Bind approved tools into a toolset and request it for every user",
+	"test-mcp-gateway":                  "Trace a registered tool from configuration through a live gateway call",
+	"delegate-entitlement-provisioning": "Configure a proxy binding and delegated provisioning",
+	"configure-new-app":                 "Create a manually managed app, ownership, and a custom entitlement",
+	"request-access":                    "Request, verify, and revoke access through the approval workflow",
+	"inspect-and-approve-task":          "Inspect a task's current policy step and resolve it safely",
+}
+
 // docsGuides maps a guide name to its embedded content. Keep names stable —
 // they're part of the CLI's public surface (an agent may hardcode
 // "c1i docs guide register-mcp-server" in its own tooling).
@@ -804,10 +818,9 @@ var docsGuideCmd = &cobra.Command{
 	Short: "Print an embedded, task-oriented runbook (no auth required)",
 	Long: `Print an embedded, task-oriented runbook — a numbered sequence of actual
 c1i commands for a common end-to-end workflow.
-
-Run with no argument to list the available guide names. These are static
-content embedded in the c1i binary (no network call), unlike "docs search" /
-"docs page" which hit the C1 documentation site.
+Run with no argument to list the available guide names and their purposes.
+These are static content embedded in the c1i binary (no network call), unlike
+"docs search" / "docs page" which hit the C1 documentation site.
 
 Examples:
   c1i docs guide
@@ -817,7 +830,7 @@ Examples:
 		if len(args) == 0 {
 			_, _ = fmt.Fprintln(cmd.OutOrStdout(), "Available guides:")
 			for _, name := range guideNames() {
-				_, _ = fmt.Fprintf(cmd.OutOrStdout(), "  %s\n", name)
+				_, _ = fmt.Fprintf(cmd.OutOrStdout(), "  %-34s %s\n", name, guideSummaries[name])
 			}
 			_, _ = fmt.Fprintln(cmd.OutOrStdout(), "\nRun \"c1i docs guide <name>\" to print one.")
 			return nil

@@ -3,6 +3,7 @@ package cmd
 import (
 	"bytes"
 	"errors"
+	"regexp"
 	"sort"
 	"strings"
 	"testing"
@@ -22,6 +23,36 @@ func TestGuideNamesSorted(t *testing.T) {
 	for _, n := range names {
 		if _, ok := docsGuides[n]; !ok {
 			t.Errorf("guideNames() returned %q, which is not a key of docsGuides", n)
+		}
+	}
+}
+
+func TestGuideSummariesMatchRegistry(t *testing.T) {
+	if len(guideSummaries) != len(docsGuides) {
+		t.Fatalf("guideSummaries has %d entries, want %d", len(guideSummaries), len(docsGuides))
+	}
+	for name := range docsGuides {
+		if strings.TrimSpace(guideSummaries[name]) == "" {
+			t.Errorf("guide %q has no discovery summary", name)
+		}
+	}
+}
+
+var embeddedGuideReferenceRE = regexp.MustCompile(`(?:c1i )?docs guide ([a-z-]+)`)
+
+func TestEmbeddedGuideReferencesResolve(t *testing.T) {
+	sources := make(map[string]string, len(docsGuides)+1)
+	for name, content := range docsGuides {
+		sources["guide "+name] = content
+	}
+	sources["docs agents"] = agentsTemplate
+
+	for source, content := range sources {
+		for _, match := range embeddedGuideReferenceRE.FindAllStringSubmatch(content, -1) {
+			target := match[1]
+			if _, ok := docsGuides[target]; !ok {
+				t.Errorf("%s references unknown guide %q", source, target)
+			}
 		}
 	}
 }
@@ -71,9 +102,12 @@ func TestDocsGuideCmdNoArgListsNames(t *testing.T) {
 		t.Fatalf("RunE returned unexpected error: %v", err)
 	}
 	out := buf.String()
-	for name := range docsGuides {
+	for name, summary := range guideSummaries {
 		if !strings.Contains(out, name) {
 			t.Errorf("no-arg listing missing guide name %q; got:\n%s", name, out)
+		}
+		if !strings.Contains(out, summary) {
+			t.Errorf("no-arg listing missing guide summary %q; got:\n%s", summary, out)
 		}
 	}
 }
