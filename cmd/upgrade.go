@@ -85,8 +85,8 @@ the right command for that install method instead of self-replacing.
 		}
 
 		// cmp < 0: an upgrade is available.
-		_, _ = fmt.Fprintf(out, "A newer %s release is available: %s -> %s.\n", channel, current, target)
 		if checkOnly {
+			_, _ = fmt.Fprintf(out, "A newer %s release is available: %s -> %s.\n", channel, current, target)
 			return nil
 		}
 
@@ -119,8 +119,8 @@ the right command for that install method instead of self-replacing.
 		// signature (pinned release-workflow identity, keyless/Fulcio) covers
 		// the exact manifest bytes; the per-asset sha256 inside then covers the
 		// downloaded artifact.
-		if entry.Signature == "" || entry.Certificate == "" {
-			return &upstreamError{fmt.Errorf("release %s carries no manifest signature to verify", target)}
+		if entry.Signature == "" || entry.Certificate == "" || manifest.SignatureBundleHref == "" {
+			return &upstreamError{fmt.Errorf("release %s carries incomplete manifest verification material", target)}
 		}
 		sig, err := client.GetBytes(cmd.Context(), entry.Signature)
 		if err != nil {
@@ -130,7 +130,11 @@ the right command for that install method instead of self-replacing.
 		if err != nil {
 			return &upstreamError{fmt.Errorf("fetching the %s manifest certificate: %w", target, err)}
 		}
-		if err := selfupdate.VerifyManifest(cmd.Context(), manifestBytes, sig, cert); err != nil {
+		rekorBundle, err := client.GetBytes(cmd.Context(), manifest.SignatureBundleHref)
+		if err != nil {
+			return &upstreamError{fmt.Errorf("fetching the %s manifest Rekor bundle: %w", target, err)}
+		}
+		if err := selfupdate.VerifyManifest(cmd.Context(), manifestBytes, sig, cert, rekorBundle); err != nil {
 			return &upstreamError{fmt.Errorf("verifying the %s release signature: %w", target, err)}
 		}
 
@@ -144,6 +148,28 @@ the right command for that install method instead of self-replacing.
 			_, _ = fmt.Fprintf(out, "[dry-run] would verify sha256 %s and replace %s\n", asset.SHA256, execPath)
 			return nil
 		}
+		unlock, err := selfupdate.LockExecutable(execPath)
+		if err != nil {
+			return fmt.Errorf("locking %s for upgrade: %w", execPath, err)
+		}
+		defer unlock()
+
+		current, err = selfupdate.InstalledVersion(execPath)
+		if err != nil {
+			return fmt.Errorf("reading installed c1i version: %w", err)
+		}
+		cmp, ok = selfupdate.CompareVersions(current, target)
+		switch {
+		case !ok:
+			return &upstreamError{fmt.Errorf("cannot compare installed version %q with %s", current, target)}
+		case cmp == 0:
+			_, _ = fmt.Fprintf(out, "c1i %s is already the latest %s release.\n", current, channel)
+			return nil
+		case cmp > 0:
+			_, _ = fmt.Fprintf(out, "c1i %s is newer than the %s channel (%s); nothing to do.\n", current, channel, target)
+			return nil
+		}
+		_, _ = fmt.Fprintf(out, "A newer %s release is available: %s -> %s.\n", channel, current, target)
 
 		if !assumeYes {
 			ok, err := confirm(cmd, fmt.Sprintf("Upgrade c1i %s -> %s, replacing %s?", current, target, execPath))
@@ -166,9 +192,9 @@ the right command for that install method instead of self-replacing.
 }
 
 // newUpgradeDoer builds the transport the self-updater fetches metadata
-// (index.json, manifest.json, .sig, .cert) through, bounded to
-// MaxMetadataBytes. A var so a test can inject a fake dist server; production
-// threads --max-retries and --debug like every other network path.
+// (index.json, manifest.json, signature, certificate, and Rekor bundle) through,
+// bounded to MaxMetadataBytes. A var so a test can inject a fake dist server;
+// production threads --max-retries and --debug like every other network path.
 var newUpgradeDoer = func() selfupdate.Doer {
 	return transport.New(nil,
 		transport.WithMaxRetries(viper.GetInt("max_retries")),

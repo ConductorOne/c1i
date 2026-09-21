@@ -1297,14 +1297,13 @@ stdin is not a terminal).
 
 Before anything is installed, `upgrade` verifies the release's authenticity in
 two layers. First it checks the release manifest's **Sigstore signature**
-(keyless / Fulcio) against the pinned ConductorOne release-workflow identity —
-the reusable `release.yaml` workflow issued by GitHub Actions' OIDC — so only a
-manifest signed by that workflow is trusted. The signing certificate's embedded
-SCT proves it was logged to Certificate Transparency (the detached manifest
-signature carries no Rekor entry, so Rekor inclusion is not separately
-enforced). Then the manifest's per-artifact **SHA-256** authenticates the
-downloaded binary. A failure at either layer aborts the upgrade without touching
-the installed binary.
+(keyless / Fulcio) against the pinned C1.ai reusable release workflow, GitHub
+Actions OIDC issuer, and `ConductorOne/c1i` source repository. It also verifies
+the published Rekor signed entry timestamp, which binds the exact manifest,
+signature, and certificate to a transparency-log time while the certificate was
+valid. Then the manifest's per-artifact **SHA-256** authenticates the downloaded
+binary. A failure at either layer aborts the upgrade without touching the
+installed binary.
 
 Only the per-release manifests are signed; the channel catalog (`index.json`)
 that names which version each channel points at, and its `yanked` flags, are
@@ -1314,10 +1313,9 @@ version, no further) or one marked yanked — but never to an unsigned or
 third-party binary. Treat the channel and yank status as best-effort, not a hard
 security boundary.
 
-If c1i was installed with **Homebrew**, **`go install`**, or is running as a
-**container image**, `upgrade` does not self-replace — it prints the right
-command for that install method (`brew upgrade c1i`,
-`go install github.com/ConductorOne/c1i@latest`, or re-pulling the image).
+If c1i was installed with **Homebrew**, **`go install`**, a system package
+manager, or is running as a **container image**, `upgrade` does not self-replace
+— it prints the appropriate remediation instead.
 
 ## License
 

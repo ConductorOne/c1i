@@ -93,7 +93,7 @@ func fromTarGz(archive []byte) ([]byte, error) {
 			return nil, fmt.Errorf("reading tar: %w", err)
 		}
 		if isC1iEntry(hdr.Name) && hdr.Typeflag == tar.TypeReg {
-			return io.ReadAll(io.LimitReader(tr, MaxArtifactBytes))
+			return readBinary(tr)
 		}
 	}
 	return nil, fmt.Errorf("no c1i binary found in archive")
@@ -114,10 +114,25 @@ func fromZip(archive []byte) ([]byte, error) {
 				return nil, fmt.Errorf("opening %s in zip: %w", f.Name, err)
 			}
 			defer func() { _ = rc.Close() }()
-			return io.ReadAll(io.LimitReader(rc, MaxArtifactBytes))
+			return readBinary(rc)
 		}
 	}
 	return nil, fmt.Errorf("no c1i binary found in archive")
+}
+
+func readBinary(reader io.Reader) ([]byte, error) {
+	return readBounded(reader, MaxArtifactBytes)
+}
+
+func readBounded(reader io.Reader, limit int) ([]byte, error) {
+	binary, err := io.ReadAll(io.LimitReader(reader, int64(limit)+1))
+	if err != nil {
+		return nil, err
+	}
+	if len(binary) > limit {
+		return nil, fmt.Errorf("archive c1i binary exceeds %d bytes", limit)
+	}
+	return binary, nil
 }
 
 // isC1iEntry matches the c1i executable whether it sits at the archive root or
@@ -140,13 +155,24 @@ func replaceExecutable(execPath string, newBinary []byte) error {
 	tmpName := tmp.Name()
 	cleanup := func() { _ = os.Remove(tmpName) }
 
+	// Match a normal executable's mode; preserve the existing binary's mode if
+	// we can read it, else fall back to 0755.
+	mode := os.FileMode(0o755)
+	if fi, err := os.Stat(execPath); err == nil {
+		mode = fi.Mode().Perm()
+	}
 	if _, err := tmp.Write(newBinary); err != nil {
 		_ = tmp.Close()
 		cleanup()
 		return fmt.Errorf("writing staged binary: %w", err)
 	}
-	// Flush the staged bytes to disk before the rename so a crash can't leave a
-	// renamed-but-empty file that shadows the working binary.
+	if err := tmp.Chmod(mode); err != nil {
+		_ = tmp.Close()
+		cleanup()
+		return fmt.Errorf("setting mode on staged binary: %w", err)
+	}
+	// Flush bytes and mode together before rename so a crash cannot leave a
+	// renamed binary that is empty or not executable.
 	if err := tmp.Sync(); err != nil {
 		_ = tmp.Close()
 		cleanup()
@@ -155,16 +181,6 @@ func replaceExecutable(execPath string, newBinary []byte) error {
 	if err := tmp.Close(); err != nil {
 		cleanup()
 		return fmt.Errorf("closing staged binary: %w", err)
-	}
-	// Match a normal executable's mode; preserve the existing binary's mode if
-	// we can read it, else fall back to 0755.
-	mode := os.FileMode(0o755)
-	if fi, err := os.Stat(execPath); err == nil {
-		mode = fi.Mode().Perm()
-	}
-	if err := os.Chmod(tmpName, mode); err != nil {
-		cleanup()
-		return fmt.Errorf("setting mode on staged binary: %w", err)
 	}
 	if err := os.Rename(tmpName, execPath); err != nil {
 		cleanup()

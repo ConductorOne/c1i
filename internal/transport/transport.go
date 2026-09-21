@@ -427,3 +427,9 @@ func parseRetryAfter(v string) (time.Duration, bool) {
 	}
 	return 0, false
 }
+
+// NewSingleAttemptHTTPClient adapts callers that require net/http directly.
+// Callers retain request contexts and own retries.
+func NewSingleAttemptHTTPClient(timeout time.Duration) *http.Client {
+	return &http.Client{Timeout: timeout}
+}

@@ -1,7 +1,9 @@
 package selfupdate
 
 import (
+	"encoding/json"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -21,6 +23,8 @@ const (
 	GoInstall
 	// Docker means we are inside a container image — the image is replaced by re-pulling, not in place.
 	Docker
+	// SystemInstall is owned by a system package manager, not this updater.
+	SystemInstall
 	// Windows is handled separately: a running .exe cannot be overwritten in place, and the channel is an MSI.
 	Windows
 )
@@ -34,7 +38,7 @@ func Detect(execPath, goos string) (Method, string) {
 	if goos == "windows" {
 		return Windows, "download the Windows build (or MSI) from " + DefaultBaseURL
 	}
-	if inContainer() {
+	if goos == "linux" && inContainer() {
 		return Docker, "you are running the container image; re-pull it: docker pull public.ecr.aws/conductorone/c1i"
 	}
 	if isHomebrew(execPath) {
@@ -42,6 +46,9 @@ func Detect(execPath, goos string) (Method, string) {
 	}
 	if isGoInstall(execPath) {
 		return GoInstall, "c1i was installed with `go install`; upgrade it there: go install github.com/ConductorOne/c1i@latest"
+	}
+	if isSystemInstall(execPath) {
+		return SystemInstall, "c1i is installed in a system package directory; upgrade it with your system package manager"
 	}
 	return Standalone, ""
 }
@@ -84,31 +91,63 @@ func isHomebrew(execPath string) bool {
 	return strings.Contains(execPath, "/Cellar/")
 }
 
-// isGoInstall reports whether execPath is under the Go install target
-// (GOBIN, else GOPATH/bin, else ~/go/bin).
+func isSystemInstall(execPath string) bool {
+	dir := filepath.Clean(filepath.Dir(execPath))
+	return dir == "/bin" || dir == "/usr/bin"
+}
+
+// goEnv contains Go's effective persisted install settings.
+type goEnv struct {
+	GOBIN  string
+	GOPATH string
+}
+
+var readGoEnv = func() (goEnv, error) {
+	output, err := exec.Command("go", "env", "-json", "GOBIN", "GOPATH").Output()
+	if err != nil {
+		return goEnv{}, err
+	}
+	var env goEnv
+	if err := json.Unmarshal(output, &env); err != nil {
+		return goEnv{}, err
+	}
+	return env, nil
+}
+
+// isGoInstall reports whether execPath is under any effective Go install target.
 func isGoInstall(execPath string) bool {
 	dir := filepath.Dir(execPath)
-	if gobin := os.Getenv("GOBIN"); gobin != "" && sameDir(dir, gobin) {
-		return true
-	}
-	for _, gp := range goPaths() {
-		if sameDir(dir, filepath.Join(gp, "bin")) {
-			return true
-		}
-	}
-	if home, err := os.UserHomeDir(); err == nil {
-		if sameDir(dir, filepath.Join(home, "go", "bin")) {
+	for _, target := range goInstallTargets() {
+		if sameDir(dir, target) {
 			return true
 		}
 	}
 	return false
 }
 
-func goPaths() []string {
-	if gp := os.Getenv("GOPATH"); gp != "" {
-		return filepath.SplitList(gp)
+func goInstallTargets() []string {
+	var targets []string
+	addGoPaths := func(gopath string) {
+		for _, gp := range filepath.SplitList(gopath) {
+			if gp != "" {
+				targets = append(targets, filepath.Join(gp, "bin"))
+			}
+		}
 	}
-	return nil
+	if gobin := os.Getenv("GOBIN"); gobin != "" {
+		targets = append(targets, gobin)
+	}
+	addGoPaths(os.Getenv("GOPATH"))
+	if persisted, err := readGoEnv(); err == nil {
+		if persisted.GOBIN != "" {
+			targets = append(targets, persisted.GOBIN)
+		}
+		addGoPaths(persisted.GOPATH)
+	}
+	if home, err := os.UserHomeDir(); err == nil {
+		targets = append(targets, filepath.Join(home, "go", "bin"))
+	}
+	return targets
 }
 
 func sameDir(a, b string) bool {

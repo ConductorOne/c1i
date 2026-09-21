@@ -65,8 +65,9 @@ type SemverEntry struct {
 
 // Manifest is the subset of a dist <version>/manifest.json the updater reads.
 type Manifest struct {
-	Semver string           `json:"semver"`
-	Assets map[string]Asset `json:"assets"` // keyed by "<goos>-<goarch>", plus "checksums"
+	Semver              string           `json:"semver"`
+	Assets              map[string]Asset `json:"assets"` // keyed by "<goos>-<goarch>", plus "checksums"
+	SignatureBundleHref string           `json:"signatureBundleHref"`
 }
 
 // Asset is one downloadable artifact in a manifest.
