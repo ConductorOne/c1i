@@ -16,8 +16,8 @@ import (
 
 var rootCmd = &cobra.Command{
 	Use:   "c1i",
-	Short: "C1 (formerly ConductorOne) CLI",
-	Long: `c1i is a command-line interface for the C1 (formerly ConductorOne) API.
+	Short: "C1.ai CLI",
+	Long: `c1i is a command-line interface for the C1.ai API.
 
 If you are an AI agent, run "c1i docs agents" first — it covers conventions
 this help text can't (output contracts, exit codes, when to prefer a
