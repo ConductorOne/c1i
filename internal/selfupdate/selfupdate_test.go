@@ -92,6 +92,26 @@ func TestDetect(t *testing.T) {
 	}
 }
 
+func TestDetectSystemAndPersistedGoInstall(t *testing.T) {
+	if m, hint := Detect("/usr/bin/c1i", "darwin"); m != SystemInstall || hint == "" {
+		t.Errorf("/usr/bin -> (%v, %q), want SystemInstall with a remediation", m, hint)
+	}
+
+	original := readGoEnv
+	readGoEnv = func() (goEnv, error) {
+		return goEnv{GOBIN: "/opt/custom-go/bin", GOPATH: "/work/a:/work/b"}, nil
+	}
+	t.Cleanup(func() { readGoEnv = original })
+	t.Setenv("GOBIN", "")
+	t.Setenv("GOPATH", "")
+
+	for _, path := range []string{"/opt/custom-go/bin/c1i", "/work/b/bin/c1i"} {
+		if m, hint := Detect(path, "darwin"); m != GoInstall || hint == "" {
+			t.Errorf("%s -> (%v, %q), want GoInstall with a remediation", path, m, hint)
+		}
+	}
+}
+
 func TestClientIndexAndManifest(t *testing.T) {
 	base := "https://dist.example/releases/ConductorOne/c1i"
 	index := `{"channels":{"stable":"v0.6.0","latest":"v0.7.0"},"semvers":{"v0.7.0":{"yanked":false,"manifest":"` + base + `/v0.7.0/manifest.json"}}}`
@@ -166,6 +186,16 @@ func TestExtractBinary(t *testing.T) {
 	}
 }
 
+func TestReadBoundedRejectsOverflow(t *testing.T) {
+	if _, err := readBounded(bytes.NewReader([]byte("1234")), 3); err == nil {
+		t.Fatal("expected oversized binary to be rejected")
+	}
+	got, err := readBounded(bytes.NewReader([]byte("123")), 3)
+	if err != nil || string(got) != "123" {
+		t.Fatalf("readBounded exact limit = (%q, %v), want (123, nil)", got, err)
+	}
+}
+
 func TestReplaceExecutable(t *testing.T) {
 	dir := t.TempDir()
 	execPath := filepath.Join(dir, "c1i")
@@ -186,6 +216,18 @@ func TestReplaceExecutable(t *testing.T) {
 	entries, _ := os.ReadDir(dir)
 	if len(entries) != 1 {
 		t.Errorf("dir has %d entries, want 1 (temp file leaked)", len(entries))
+	}
+}
+
+func TestLockExecutableRejectsConcurrentUpgrade(t *testing.T) {
+	execPath := filepath.Join(t.TempDir(), "c1i")
+	unlock, err := LockExecutable(execPath)
+	if err != nil {
+		t.Fatalf("first LockExecutable: %v", err)
+	}
+	t.Cleanup(unlock)
+	if _, err := LockExecutable(execPath); err == nil {
+		t.Fatal("second LockExecutable succeeded while the first lock was held")
 	}
 }
 

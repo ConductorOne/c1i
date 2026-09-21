@@ -4,6 +4,7 @@ import (
 	"context"
 	_ "embed"
 	"encoding/base64"
+	"errors"
 	"io"
 	"net/http"
 	"strings"
@@ -22,10 +23,12 @@ var (
 	realSigB64 []byte
 	//go:embed testdata/manifest.json.cert
 	realCertB64 []byte
+	//go:embed testdata/manifest.json.sigstore.json
+	realRekorBundle []byte
 )
 
 func TestVerifyManifestBadBase64(t *testing.T) {
-	err := VerifyManifest(context.Background(), realManifest, []byte("!!!not base64!!!"), realCertB64)
+	err := VerifyManifest(context.Background(), realManifest, []byte("!!!not base64!!!"), realCertB64, realRekorBundle)
 	if err == nil {
 		t.Fatal("expected an error for a non-base64 signature")
 	}
@@ -36,7 +39,7 @@ func TestVerifyManifestBadBase64(t *testing.T) {
 
 func TestVerifyManifestNonPEMCert(t *testing.T) {
 	notPEM := base64.StdEncoding.EncodeToString([]byte("this is not a PEM certificate"))
-	err := VerifyManifest(context.Background(), realManifest, realSigB64, []byte(notPEM))
+	err := VerifyManifest(context.Background(), realManifest, realSigB64, []byte(notPEM), realRekorBundle)
 	if err == nil {
 		t.Fatal("expected an error for a non-PEM certificate")
 	}
@@ -51,7 +54,7 @@ func TestVerifyManifestTamperedBytes(t *testing.T) {
 	// the signature check precedes the trust-root fetch.
 	tampered := append([]byte(nil), realManifest...)
 	tampered[0] ^= 0xff
-	err := VerifyManifest(context.Background(), tampered, realSigB64, realCertB64)
+	err := VerifyManifest(context.Background(), tampered, realSigB64, realCertB64, realRekorBundle)
 	if err == nil {
 		t.Fatal("expected an error for tampered manifest bytes")
 	}
@@ -63,9 +66,9 @@ func TestVerifyManifestTamperedBytes(t *testing.T) {
 func TestVerifyManifestIdentityMismatch(t *testing.T) {
 	// Verify the real signature against a deliberately wrong pinned SAN. The
 	// identity check runs before the trust-root fetch, so this is offline.
-	err := verifyManifest(context.Background(), realManifest, realSigB64, realCertB64,
+	err := verifyManifest(context.Background(), realManifest, realSigB64, realCertB64, realRekorBundle,
 		"https://github.com/evilcorp/evil/.github/workflows/release.yaml@refs/tags/v4",
-		pinnedOIDCIssuer)
+		pinnedOIDCIssuer, pinnedSourceRepositoryURI)
 	if err == nil {
 		t.Fatal("expected an error when the pinned SAN does not match the certificate")
 	}
@@ -74,10 +77,25 @@ func TestVerifyManifestIdentityMismatch(t *testing.T) {
 	}
 
 	// A wrong issuer must fail too.
-	err = verifyManifest(context.Background(), realManifest, realSigB64, realCertB64,
-		pinnedSANURI, "https://accounts.google.com")
+	err = verifyManifest(context.Background(), realManifest, realSigB64, realCertB64, realRekorBundle,
+		pinnedSANURI, "https://accounts.google.com", pinnedSourceRepositoryURI)
 	if err == nil {
 		t.Fatal("expected an error when the pinned issuer does not match the certificate")
+	}
+
+	err = verifyManifest(context.Background(), realManifest, realSigB64, realCertB64, realRekorBundle,
+		pinnedSANURI, pinnedOIDCIssuer, "https://github.com/ConductorOne/other")
+	if err == nil {
+		t.Fatal("expected an error when the source repository does not match the certificate")
+	}
+}
+
+func TestTrustRootFetcherHonorsCancellation(t *testing.T) {
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+	_, err := (trustRootFetcher{ctx: ctx}).DownloadFile("https://tuf-repo-cdn.sigstore.dev/root.json", 1024, 0)
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("DownloadFile error = %v, want context.Canceled", err)
 	}
 }
 
@@ -93,8 +111,9 @@ func TestVerifyManifestReal(t *testing.T) {
 	man := fetchOrSkip(t, base+"/manifest.json")
 	sig := fetchOrSkip(t, base+"/manifest.json.sig")
 	cert := fetchOrSkip(t, base+"/manifest.json.cert")
+	rekorBundle := fetchOrSkip(t, base+"/manifest.json.sigstore.json")
 
-	if err := VerifyManifest(context.Background(), man, sig, cert); err != nil {
+	if err := VerifyManifest(context.Background(), man, sig, cert, rekorBundle); err != nil {
 		t.Fatalf("VerifyManifest on the real v0.7.0 release failed: %v", err)
 	}
 }
