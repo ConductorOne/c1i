@@ -813,6 +813,17 @@ func guideNames() []string {
 	return names
 }
 
+func completeGuideNames(_ *cobra.Command, _ []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+	names := guideNames()
+	completions := make([]string, 0, len(names))
+	for _, name := range names {
+		if strings.HasPrefix(name, toComplete) {
+			completions = append(completions, name+"\t"+guideSummaries[name])
+		}
+	}
+	return completions, cobra.ShellCompDirectiveNoFileComp
+}
+
 var docsGuideCmd = &cobra.Command{
 	Use:   "guide [name]",
 	Short: "Print an embedded, task-oriented runbook (no auth required)",
@@ -825,7 +836,8 @@ These are static content embedded in the c1i binary (no network call), unlike
 Examples:
   c1i docs guide
   c1i docs guide register-mcp-server`,
-	Args: cobra.MaximumNArgs(1),
+	Args:              cobra.MaximumNArgs(1),
+	ValidArgsFunction: completeGuideNames,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		if len(args) == 0 {
 			_, _ = fmt.Fprintln(cmd.OutOrStdout(), "Available guides:")

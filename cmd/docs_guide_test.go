@@ -3,6 +3,7 @@ package cmd
 import (
 	"bytes"
 	"errors"
+	"github.com/spf13/cobra"
 	"regexp"
 	"sort"
 	"strings"
@@ -54,6 +55,27 @@ func TestEmbeddedGuideReferencesResolve(t *testing.T) {
 				t.Errorf("%s references unknown guide %q", source, target)
 			}
 		}
+	}
+}
+
+func TestGuideCompletionListsNamesAndSummaries(t *testing.T) {
+	completions, directive := completeGuideNames(docsGuideCmd, nil, "")
+	if directive != cobra.ShellCompDirectiveNoFileComp {
+		t.Fatalf("completion directive = %v, want no-file-completion", directive)
+	}
+	if len(completions) != len(docsGuides) {
+		t.Fatalf("completion count = %d, want %d", len(completions), len(docsGuides))
+	}
+	for _, completion := range completions {
+		name, summary, ok := strings.Cut(completion, "\t")
+		if !ok || summary != guideSummaries[name] {
+			t.Errorf("completion %q does not contain the guide summary", completion)
+		}
+	}
+
+	completions, _ = completeGuideNames(docsGuideCmd, nil, "test-")
+	if len(completions) != 1 || !strings.HasPrefix(completions[0], "test-mcp-gateway\t") {
+		t.Errorf("filtered completions = %q, want test-mcp-gateway only", completions)
 	}
 }
 
