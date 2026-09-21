@@ -56,6 +56,30 @@ type guideInvocation struct {
 	completeExample bool
 }
 
+func trimOutgoingPipeline(line string) string {
+	var quote rune
+	var parentheses int
+	for i, r := range line {
+		switch {
+		case quote != 0:
+			if r == quote {
+				quote = 0
+			}
+		case r == '\'' || r == '"':
+			quote = r
+		case r == '(':
+			parentheses++
+		case r == ')' && parentheses > 0:
+			parentheses--
+		case r == '|' && parentheses == 0 && i > 0 && (line[i-1] == ' ' || line[i-1] == '\t'):
+			if rest := strings.TrimSpace(line[i+1:]); rest != "" && !strings.HasPrefix(rest, "-") {
+				return strings.TrimSpace(line[:i])
+			}
+		}
+	}
+	return line
+}
+
 // extractGuideInvocations returns every "c1i ..." invocation in guide, in
 // four recognized shapes: a command block (a line trimmed-starting with
 // "c1i " — an optional leading shell prompt ("$ " or "> ") stripped first —
@@ -94,6 +118,7 @@ func extractGuideInvocations(t *testing.T, guide string) []guideInvocation {
 			line = p
 		}
 		if strings.HasPrefix(line, "c1i ") {
+			line = trimOutgoingPipeline(line)
 			if loc := redirectRe.FindStringIndex(line); loc != nil {
 				line = line[:loc[0]]
 			}
@@ -114,6 +139,16 @@ func extractGuideInvocations(t *testing.T, guide string) []guideInvocation {
 	}
 
 	return invocations
+}
+
+func TestExtractGuideInvocationsDropsOutgoingPipeline(t *testing.T) {
+	invocations := extractGuideInvocations(t, "c1i completion powershell | Out-String | Invoke-Expression")
+	if len(invocations) != 1 {
+		t.Fatalf("invocation count = %d, want 1", len(invocations))
+	}
+	if got, want := invocations[0].text, "c1i completion powershell"; got != want {
+		t.Errorf("invocation = %q, want %q", got, want)
+	}
 }
 
 // checkUnclaimedMentions flags a "c1i" mention that falls outside all three
