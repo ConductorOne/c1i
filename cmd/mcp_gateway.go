@@ -32,18 +32,16 @@ Subcommands:
   call        - Invoke a tool and print its result`,
 }
 
-// deriveGatewayURL turns an API base URL into the MCP gateway endpoint by
-// inserting "-mcp" before the first dot of the host and appending /v1
-// (https://acme.conductor.one -> https://acme-mcp.conductor.one/v1).
+// deriveGatewayURL turns an API base URL into the MCP gateway endpoint.
 func deriveGatewayURL(baseURL string) (string, error) {
 	u, err := url.Parse(baseURL)
 	if err != nil || u.Host == "" {
 		return "", &usageError{fmt.Errorf("cannot derive gateway URL from %q", baseURL)}
 	}
-	// Insert -mcp into the hostname (not the port): acme.conductor.one ->
-	// acme-mcp.conductor.one.
 	hostname := u.Hostname()
-	if i := strings.Index(hostname, "."); i > 0 {
+	if i := strings.Index(hostname, "--"); i > 0 {
+		hostname = hostname[:i] + "-mcp" + hostname[i:]
+	} else if i := strings.Index(hostname, "."); i > 0 {
 		hostname = hostname[:i] + "-mcp" + hostname[i:]
 	} else {
 		hostname += "-mcp"
