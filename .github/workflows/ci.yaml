@@ -17,7 +17,7 @@ jobs:
       - name: Run linters
         uses: golangci/golangci-lint-action@v7
         with:
-          version: v2.11
+          version: v2.13.2
           args: --timeout=3m
       # goreleaser runs `go mod tidy` before building. If that changes anything,
       # the release build's tree is dirty and Go stamps the version "+dirty".
