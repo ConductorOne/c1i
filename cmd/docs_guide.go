@@ -191,11 +191,12 @@ tasks:
 
 ## 6. Verify
 
-    c1i grants list --app-id "$APP_ID" --entitlement-id "$ENTITLEMENT_ID"
+For each user ID from step 4, wait for that user's grant:
 
-Grants are eventually consistent; wait for the expected grant before treating
-the rollout as complete. Next, verify the caller-facing result with
-"c1i docs guide test-mcp-gateway".
+    c1i grants list --app-id "$APP_ID" --entitlement-id "$ENTITLEMENT_ID" \
+      --user-id "$USER_ID" --wait --wait-min 1
+
+Next, verify the caller-facing result with "c1i docs guide test-mcp-gateway".
 
 `
 

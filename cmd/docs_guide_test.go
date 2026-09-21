@@ -79,6 +79,13 @@ func TestGuideCompletionListsNamesAndSummaries(t *testing.T) {
 	}
 }
 
+func TestAssignToolsetGuideWaitsForEachRequestedGrant(t *testing.T) {
+	verification := regexp.MustCompile(`(?s)c1i grants list --app-id "\$APP_ID" --entitlement-id "\$ENTITLEMENT_ID"\s*\\?\s*--user-id "\$USER_ID" --wait --wait-min 1`)
+	if !verification.MatchString(guideAssignToolsetEveryone) {
+		t.Fatalf("assign-toolset-everyone guide does not verify every requested grant with --wait-min 1")
+	}
+}
+
 // TestGuideRegistryLookup pins that every guide the task requires is
 // registered with non-empty content, so a lookup by name never silently
 // returns an empty runbook.
