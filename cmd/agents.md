@@ -182,9 +182,16 @@ authenticating. Which one depends on what you are after:
   endpoints --filter <text>` lists matching routes and has a real no-match — an
   empty result means nothing matched, not "the search gave up" — then `docs
   endpoint <path>` prints that route's full request/response schema.
-- **A step-by-step runbook** (register an MCP server, configure a new app,
-  request access): `docs guide` lists the embedded guides and `docs guide
-  <name>` prints one. These are static content, no network call.
+- **A step-by-step runbook**: `docs guide` lists the embedded guides with a
+  one-line purpose, and `docs guide <name>` prints one. These are static
+  content, no network call. The complete workflow index is:
+
+  | Goal | Guide |
+  |---|---|
+  | Register, distribute, or test MCP tools | `register-mcp-server` → `assign-toolset-everyone` → `test-mcp-gateway` |
+  | Create a manually managed app | `configure-new-app` |
+  | Request or approve access | `request-access` → `inspect-and-approve-task` |
+  | Configure delegated provisioning | `delegate-entitlement-provisioning` |
 - **The raw OpenAPI spec**: `docs openapi` (cached 24h locally).
 
 Rule of thumb: a product concept starts at `docs search` → `docs page`; a raw
@@ -277,26 +284,15 @@ List commands auto-paginate to completion by default — one invocation gets
 every page. Pass `--page-token` to opt out and fetch a single page manually.
 Don't write your own pagination loop.
 
-`--page-size` is a request, not a promise: a page may come back with more
-rows than you asked for. That is server behavior, not a c1i bug. How much
-more varies per endpoint and per size, so treat any figure you measure as
-true of that endpoint, at that size, today.
 
-Three more traps in the same flag:
+`--page-size` is a request, not a promise: a page can come back with more
+rows. Some endpoints won't return fewer than their server-side floor, but that
+is not universal. `--page-size 0` uses the server's default of 25. A value
+above the maximum is not an error; c1i clamps it. A negative page size or
+limit rejects it before sending.
 
-- Most endpoints won't return fewer than 5 rows however small a positive
-  value you pass, but that is not universal: `policies list` floors at 6,
-  and `mcp servers catalog list` has no floor.
-- `--page-size 0` does not mean "no paging". The server substitutes its own
-  default of 25, and the rows returned may then overshoot that.
-- A value above the max is not an error: c1i clamps it and sends the max. A
-  negative `--page-size` or `--limit` is a usage error — c1i rejects it
-  before sending, at exit 2.
-
-So never size a batch, count a result set, or infer "there are only N of
-these" from `--page-size`. `--limit N` is the exact control: c1i enforces
-it client-side, so it holds whatever the server returns, and it stops
-auto-pagination once reached.
+`--limit N` is the exact control: c1i enforces it client-side, whatever size
+the server returns.
 
 ## Before you mutate
 
@@ -342,21 +338,11 @@ resource with `--resource-id` likewise means you drop
   each id is still its own request, but don't loop the CLI per id — pass them
   all at once (pipe `mcp tools search --state pending --fields id | jq -r .id`).
 - Owner and grant provisioning are asynchronous. A read immediately after a
-  write can look like a silent no-op for a couple of minutes (owner writes
-  observed at 45-150s across set-owners, add-owner, remove-owner and the
-  owner "apps create" assigns; grants: up to a couple of minutes). Verify
-  owners with `c1i apps owners <app-id>`, not `apps get`'s `appOwners`
-  field, and don't wait for that field to fill — it read [] on every app
-  checked, including all those `apps owners` reported
-  owners for. An empty `appOwners` is not evidence an app has no owners.
-  `apps owners` also
-  returns zero rows at exit 0 for a well-formed but nonexistent app id, so an
-  empty result is either "no owners" or "wrong id"; `apps add-owner` on the
-  same id exits 4. Don't write your own poll loop for this: `apps set-owners`
-  takes `--wait` (with `--wait-timeout`, default `4m`) and blocks until every
-  requested owner appears. A `--wait` timeout exits `1` and does not mean the
-  write failed — provisioning may still be in flight, so re-check with
-  `apps owners` instead of re-issuing the write.
+  write can look like a no-op. Verify app owners with `c1i apps owners
+  <app-id>`, not `apps get`'s `appOwners` field; an empty `appOwners` is not
+  evidence an app has no owners. Use `apps set-owners --wait` when the write
+  must converge before the next step. A wait timeout does not mean the write
+  failed — re-check before writing again.
 - `grants list --wait` can report success with zero rows. An empty result is
   stable, so a filter matching nothing settles in ~10s and exits `0` -- which
   looks identical to "the grant did not happen" but usually means "not yet".
@@ -382,14 +368,10 @@ resource with `--resource-id` likewise means you drop
   `callFunction.functionId`, same as `accounts list --unmapped-only` above.
   With `--page-token` a page can come back with zero rows while a matching
   automation exists on another page.
-- Same rule, worse case: a `--fields`/`C1I_FIELDS` spec that matches nothing
-  anywhere, combined with `--limit`, scans the whole collection before
-  erroring exit `2` — like `--unmapped-only` above, a post-fetch filter can't
-  bound the work when nothing has matched yet. A typo is the ordinary way to
-  hit this. Measured: `tasks list --fields <typo> --limit 2` made 193
-  requests over ~41s on a ~9,650-row tenant; a 35,000-row `entitlements list`
-  would take minutes. No cap exists for this on purpose — a first-page-only
-  check would false-error on a real field that's just sparse.
+- A `--fields`/`C1I_FIELDS` projection that matches nothing scans until the
+  command can prove no row contains that field, even when `--limit` is set.
+  Correct the field name instead of treating a long-running command as an API
+  failure.
 - A task's `outcome` field is omitted while it's unspecified, not while the
   task is open — a task can be `TASK_STATE_OPEN` and already carry a real,
   non-UNSPECIFIED outcome (e.g. a provisioning failure mid-flow). Use

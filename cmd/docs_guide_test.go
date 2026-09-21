@@ -3,6 +3,8 @@ package cmd
 import (
 	"bytes"
 	"errors"
+	"github.com/spf13/cobra"
+	"regexp"
 	"sort"
 	"strings"
 	"testing"
@@ -23,6 +25,64 @@ func TestGuideNamesSorted(t *testing.T) {
 		if _, ok := docsGuides[n]; !ok {
 			t.Errorf("guideNames() returned %q, which is not a key of docsGuides", n)
 		}
+	}
+}
+
+func TestGuideSummariesMatchRegistry(t *testing.T) {
+	if len(guideSummaries) != len(docsGuides) {
+		t.Fatalf("guideSummaries has %d entries, want %d", len(guideSummaries), len(docsGuides))
+	}
+	for name := range docsGuides {
+		if strings.TrimSpace(guideSummaries[name]) == "" {
+			t.Errorf("guide %q has no discovery summary", name)
+		}
+	}
+}
+
+var embeddedGuideReferenceRE = regexp.MustCompile(`(?:c1i )?docs guide ([a-z-]+)`)
+
+func TestEmbeddedGuideReferencesResolve(t *testing.T) {
+	sources := make(map[string]string, len(docsGuides)+1)
+	for name, content := range docsGuides {
+		sources["guide "+name] = content
+	}
+	sources["docs agents"] = agentsTemplate
+
+	for source, content := range sources {
+		for _, match := range embeddedGuideReferenceRE.FindAllStringSubmatch(content, -1) {
+			target := match[1]
+			if _, ok := docsGuides[target]; !ok {
+				t.Errorf("%s references unknown guide %q", source, target)
+			}
+		}
+	}
+}
+
+func TestGuideCompletionListsNamesAndSummaries(t *testing.T) {
+	completions, directive := completeGuideNames(docsGuideCmd, nil, "")
+	if directive != cobra.ShellCompDirectiveNoFileComp {
+		t.Fatalf("completion directive = %v, want no-file-completion", directive)
+	}
+	if len(completions) != len(docsGuides) {
+		t.Fatalf("completion count = %d, want %d", len(completions), len(docsGuides))
+	}
+	for _, completion := range completions {
+		name, summary, ok := strings.Cut(completion, "\t")
+		if !ok || summary != guideSummaries[name] {
+			t.Errorf("completion %q does not contain the guide summary", completion)
+		}
+	}
+
+	completions, _ = completeGuideNames(docsGuideCmd, nil, "test-")
+	if len(completions) != 1 || !strings.HasPrefix(completions[0], "test-mcp-gateway\t") {
+		t.Errorf("filtered completions = %q, want test-mcp-gateway only", completions)
+	}
+}
+
+func TestAssignToolsetGuideWaitsForEachRequestedGrant(t *testing.T) {
+	verification := regexp.MustCompile(`(?s)c1i grants list --app-id "\$APP_ID" --entitlement-id "\$ENTITLEMENT_ID"\s*\\?\s*--user-id "\$USER_ID" --wait --wait-min 1`)
+	if !verification.MatchString(guideAssignToolsetEveryone) {
+		t.Fatalf("assign-toolset-everyone guide does not verify every requested grant with --wait-min 1")
 	}
 }
 
@@ -71,9 +131,12 @@ func TestDocsGuideCmdNoArgListsNames(t *testing.T) {
 		t.Fatalf("RunE returned unexpected error: %v", err)
 	}
 	out := buf.String()
-	for name := range docsGuides {
+	for name, summary := range guideSummaries {
 		if !strings.Contains(out, name) {
 			t.Errorf("no-arg listing missing guide name %q; got:\n%s", name, out)
+		}
+		if !strings.Contains(out, summary) {
+			t.Errorf("no-arg listing missing guide summary %q; got:\n%s", summary, out)
 		}
 	}
 }

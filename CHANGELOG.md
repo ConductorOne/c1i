@@ -72,6 +72,18 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - **MCP gateway dry-run safety.** `mcp gateway call` now rejects `--dry-run`
   before it creates a gateway client or sends a request: c1i cannot safely
   preview or suppress a tool's side effects.
+- **MCP gateway compound-host routing.** Default gateway URL derivation now
+  preserves a compound routing suffix, so `mcp gateway list-tools` and `call`
+  reach the live gateway without requiring `--gateway-url`.
+- **Current Go toolchain and runtime dependencies.** Release builds now use Go
+  1.27.1; the lint gate uses golangci-lint 2.13.2, which supports that
+  toolchain. Updated OAuth, terminal, JOSE, and Go runtime dependencies are
+  included in the release.
+- **Agent runbook discovery.** `docs guide` now lists a concise purpose beside
+  every embedded workflow, `docs agents` provides a task-to-guide index, and
+  shell completion offers guide names with the same summaries. The README now
+  shows the PowerShell loading command. Checks ensure every guide has a summary
+  and every embedded cross-reference resolves.
 - **C1.ai branding.** Documentation now uses C1.ai for the product and its
   corporate website; technical GitHub, package, distribution, and endpoint
   references retain their existing hosts.

@@ -1266,6 +1266,12 @@ c1i completion zsh > "${fpath[1]}/_c1i"
 c1i completion fish > ~/.config/fish/completions/c1i.fish
 ```
 
+
+```powershell
+# PowerShell (load in the current session)
+c1i completion powershell | Out-String | Invoke-Expression
+```
+
 `powershell` is also available. Each generator takes `--no-descriptions` to
 emit a script that completes names only, without the per-command help text.
 

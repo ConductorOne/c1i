@@ -9,6 +9,15 @@ import (
 	"github.com/spf13/cobra"
 )
 
+func TestRootHelpUsesC1AIBrand(t *testing.T) {
+	if rootCmd.Short != "C1.ai CLI" {
+		t.Errorf("root short help = %q, want C1.ai CLI", rootCmd.Short)
+	}
+	if !strings.Contains(rootCmd.Long, "C1.ai API") {
+		t.Errorf("root long help must identify the C1.ai API: %q", rootCmd.Long)
+	}
+}
+
 // TestNoSubcommandDefinesOwnPersistentPostRunE guards an invariant the
 // --fields zero-match-in-list check (checkFieldsMatchedAnyRow in
 // cmd/fields.go) depends on: cobra runs only the NEAREST ancestor's
