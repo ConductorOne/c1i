@@ -160,6 +160,14 @@ func listPaginationCases() []listPaginationCase {
 			rowIDs:     idRows("id"),
 		},
 		{
+			name:     "roles list",
+			cmd:      rolesListCmd,
+			method:   http.MethodGet,
+			wantPath: "/api/v1/iam/roles",
+			page:     flatPage("list", "id"),
+			rowIDs:   idRows("id"),
+		},
+		{
 			name:     "apps list",
 			cmd:      appsListCmd,
 			method:   http.MethodGet,

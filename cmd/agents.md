@@ -67,6 +67,15 @@ tenant, so a failure exits nonzero with no tenant rather than naming a
 target you can't reach. `c1i auth status` prints the same tenant as plain
 text, plus which credential store served it.
 
+To log in with less than your full access, run `c1i auth login --scoped-role <role-id>`
+(repeatable; ids from `c1i roles list`, which itself needs a login). An unknown
+id fails with `404` only after a human approves the device code; without an
+existing login to run `c1i roles list` from, have the human run
+`c1i auth login --choose-roles` instead. A scoped
+credential gets `403` on commands its roles don't cover, though whoami still
+works. The interactive form is `c1i auth login --choose-roles` (needs a terminal);
+`c1i auth login --display-name <name>` names the credential.
+
 ## Global flags
 
 Every command accepts these, each with an env-var twin. Set the env var to

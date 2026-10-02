@@ -697,6 +697,21 @@ reports a non-zero count, so the key is omitted from list rows. `access-profiles
 also carries the catalog's `accessEntitlements` (its visibility bindings),
 empty when there are none, which list rows omit.
 
+### Roles
+
+Role ids are what `--scoped-role` takes, on both `auth login` and
+`service-principals credentials create`.
+
+```sh
+c1i roles list [--page-size <n>] [--page-token <token>] [--limit <n>]
+c1i roles get <role-id>
+```
+
+List rows carry `id`, `name` (e.g. `system:viewer`), `display_name`,
+`system_builtin`, `system_api_only`, `created_at` and `updated_at`; `get` adds
+the role's permissions. Both need an existing login; before the first one,
+`auth login --choose-roles` is the way to see roles.
+
 ### Service principals
 
 A service principal (SPC) is a tenant-owned non-human identity. The principal is
@@ -1192,6 +1207,11 @@ $ cat trace.log
 # Browser-based login (OAuth device flow)
 c1i auth login
 
+# Restrict the browser-login credential to chosen roles
+c1i auth login --choose-roles                  # pick from a menu after approving
+c1i auth login --scoped-role <role-id>         # repeatable; ids from c1i roles list (needs a login)
+c1i auth login --display-name "laptop, read-only" --scoped-role <role-id>
+
 # Or store credentials directly
 c1i auth login --client-id <id> --client-secret <secret>
 
@@ -1215,6 +1235,35 @@ c1i auth token            # add --json for token type and absolute expiry (RFC33
 # Remove stored credentials
 c1i auth logout
 ```
+
+Browser login mints a personal client credential that, by default, inherits all
+of your roles. To restrict it:
+
+- **First login to a tenant, in a terminal:** before showing the device code,
+  login asks whether the credential gets all of your roles (Enter) or only roles
+  you choose. Later logins don't ask; pass `--choose-roles` to choose again.
+- **`--choose-roles`** (terminals only) shows a menu after you approve in the
+  browser. Pick one or more numbers, or `0` for full permissions; a blank answer
+  asks again. The menu offers what C1.ai's own pickers do: the roles you hold
+  directly, Basic User, Read-Only Administrator and the API-only roles, or every
+  role if you are a super administrator or read-only administrator.
+- **`--scoped-role <role-id>`** (repeatable) names roles up front, for scripts.
+  It isn't checked against that menu; an id the tenant doesn't have fails with
+  the server's `404 not found` after browser approval.
+
+The device-flow token can only create the credential, not read roles, so the
+menu first creates a temporary credential named `c1i login role lookup
+(temporary)` to read them, and deletes it before creating the scoped one. If
+that delete fails, login warns with its id; delete it under your personal
+clients in C1.ai.
+
+Login prints the outcome (`Credential scoped to: …` or `Credential inherits all
+of your roles.`). A credential scoped away from the permissions c1i commands need
+gets `403` on them; `c1i auth whoami` still works. Logging in again doesn't
+revoke the previous credential; login names it so you can.
+`--display-name` names the credential (default `Created by c1i`). None of
+`--choose-roles`, `--scoped-role` or `--display-name` applies to
+`--client-id`/`--client-secret`.
 
 `c1i auth token` prints just the access token, newline-terminated, so it
 composes into `curl -H "Authorization: Bearer $(c1i auth token)" ...`. It is

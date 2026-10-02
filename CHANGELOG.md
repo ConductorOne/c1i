@@ -6,6 +6,23 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- **`c1i auth login` can scope its credential to chosen roles.** The first
+  browser login to a tenant in a terminal asks whether the credential gets all
+  of your roles or only roles you pick from a menu after approval;
+  `--choose-roles` shows that menu on any login, and `--scoped-role <role-id>`
+  (repeatable) names roles for scripts. `--display-name` names the credential.
+  Login now states the resulting scope, and names the previous credential on a
+  re-login so it can be revoked.
+- **`c1i roles list` and `c1i roles get`** list and inspect IAM roles.
+
+### Changed
+
+- `c1i auth login` verifies new credentials with `/api/v1/auth/introspect`
+  instead of a user search, so a narrowly scoped credential is no longer
+  rejected and deleted from the keychain.
+
 ## [0.8.0] - 2026-09-25
 
 ### Added
