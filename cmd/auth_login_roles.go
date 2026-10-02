@@ -188,7 +188,7 @@ func resolveScopedRoles(cmd *cobra.Command, baseURL, accessToken string, opts []
 		}
 	}
 	if !named {
-		return values, nil, nil
+		return dedupe(values), nil, nil
 	}
 
 	var resolved []menuRole
@@ -210,42 +210,67 @@ func resolveScopedRoles(cmd *cobra.Command, baseURL, accessToken string, opts []
 	return ids, resolved, nil
 }
 
+func dedupe(values []string) []string {
+	var out []string
+	seen := map[string]bool{}
+	for _, v := range values {
+		if !seen[v] {
+			seen[v] = true
+			out = append(out, v)
+		}
+	}
+	return out
+}
+
 // normalizeRoleName lets "basic-user", "Basic User" and "basic_user" match.
 func normalizeRoleName(s string) string {
 	return strings.NewReplacer(" ", "-", "_", "-").Replace(strings.ToLower(strings.TrimSpace(s)))
 }
 
-// matchRoles resolves each value by id, name (e.g. system:user) or display
-// name, ignoring case and treating spaces, hyphens and underscores alike.
+// matchRoles resolves each value by exact id, then name (e.g. system:user),
+// then display name, comparing names after normalizeRoleName. Only a tie
+// within the first tier that matches is ambiguous.
 func matchRoles(values []string, catalog []roleListItem) ([]menuRole, error) {
 	var out []menuRole
 	seen := map[string]bool{}
 	for _, v := range values {
-		var hits []roleListItem
-		for _, r := range catalog {
-			if r.ID == v || normalizeRoleName(r.Name) == normalizeRoleName(v) || normalizeRoleName(r.DisplayName) == normalizeRoleName(v) {
-				hits = append(hits, r)
+		n := normalizeRoleName(v)
+		tiers := []func(roleListItem) bool{
+			func(r roleListItem) bool { return r.ID == v },
+			func(r roleListItem) bool { return normalizeRoleName(r.Name) == n },
+			func(r roleListItem) bool { return normalizeRoleName(r.DisplayName) == n },
+		}
+		var hits []menuRole
+		for _, match := range tiers {
+			for _, r := range catalog {
+				if match(r) {
+					hits = append(hits, menuRole{roleListItem: r})
+				}
+			}
+			if len(hits) > 0 {
+				break
 			}
 		}
 		switch len(hits) {
 		case 0:
-			names := make([]string, len(catalog))
+			all := make([]menuRole, len(catalog))
 			for i, r := range catalog {
-				names[i] = r.DisplayName
+				all[i] = menuRole{roleListItem: r}
 			}
-			sort.Strings(names)
-			return nil, &usageError{fmt.Errorf("--scoped-role %q matches no role; roles: %s", v, strings.Join(names, ", "))}
+			labels := roleLabels(all)
+			sort.Strings(labels)
+			return nil, &usageError{fmt.Errorf("--scoped-role %q matches no role; roles: %s", v, strings.Join(labels, "; "))}
 		case 1:
 		default:
-			ids := make([]string, len(hits))
+			labels := make([]string, len(hits))
 			for i, r := range hits {
-				ids[i] = r.DisplayName + " (" + r.ID + ")"
+				labels[i] = r.DisplayName + " [" + r.ID + "]"
 			}
-			return nil, &usageError{fmt.Errorf("--scoped-role %q matches several roles; pass one id: %s", v, strings.Join(ids, ", "))}
+			return nil, &usageError{fmt.Errorf("--scoped-role %q matches several roles; pass one id: %s", v, strings.Join(labels, "; "))}
 		}
 		if !seen[hits[0].ID] {
 			seen[hits[0].ID] = true
-			out = append(out, menuRole{roleListItem: hits[0]})
+			out = append(out, hits[0])
 		}
 	}
 	return out, nil
@@ -353,22 +378,32 @@ func filterDelegable(catalog []roleListItem, held map[string]bool) []menuRole {
 	return out
 }
 
+// roleLabels names roles for display, adding the id where display names collide.
+func roleLabels(roles []menuRole) []string {
+	count := map[string]int{}
+	for _, r := range roles {
+		count[r.DisplayName]++
+	}
+	labels := make([]string, len(roles))
+	for i, r := range roles {
+		labels[i] = r.DisplayName
+		if count[r.DisplayName] > 1 {
+			labels[i] += " [" + r.ID + "]"
+		}
+	}
+	return labels
+}
+
 // promptForRoles shows roles as a numbered menu and reads a selection. A nil
 // result means full permissions; a blank answer re-prompts, so a stray Enter
 // can't silently widen the credential.
 func promptForRoles(cmd *cobra.Command, in io.Reader, roles []menuRole) ([]menuRole, error) {
 	out := cmd.OutOrStdout()
-	names := map[string]int{}
-	for _, r := range roles {
-		names[r.DisplayName]++
-	}
+	labels := roleLabels(roles)
 	_, _ = fmt.Fprintf(out, "\nChoose the roles this credential may use (* = a role you hold):\n")
 	_, _ = fmt.Fprintf(out, "  %2d) Full permissions (all of your roles)\n", 0)
 	for i, r := range roles {
-		label := r.DisplayName
-		if names[label] > 1 {
-			label += " [" + r.ID + "]"
-		}
+		label := labels[i]
 		if r.Held {
 			label += " *"
 		}
@@ -380,7 +415,7 @@ func promptForRoles(cmd *cobra.Command, in io.Reader, roles []menuRole) ([]menuR
 		_, _ = fmt.Fprintf(out, "Enter one or more numbers (e.g. 1,3): ")
 		line, err := scanLine(cmd.Context(), scanner)
 		if errors.Is(err, io.EOF) {
-			return nil, &usageError{fmt.Errorf("no role selection read (stdin closed); re-run, or pass --scoped-role <role-id>")}
+			return nil, &usageError{fmt.Errorf("no role selection read (stdin closed); re-run, or pass --scoped-role <role>")}
 		}
 		if err != nil {
 			return nil, err
@@ -428,11 +463,7 @@ func reportScope(cmd *cobra.Command, scopedIDs []string, chosen []menuRole) {
 	case len(scopedIDs) == 0:
 		_, _ = fmt.Fprintf(out, "Credential inherits all of your roles.\n")
 	case len(chosen) > 0:
-		names := make([]string, len(chosen))
-		for i, r := range chosen {
-			names[i] = r.DisplayName
-		}
-		_, _ = fmt.Fprintf(out, "Credential scoped to: %s\n", strings.Join(names, ", "))
+		_, _ = fmt.Fprintf(out, "Credential scoped to: %s\n", strings.Join(roleLabels(chosen), ", "))
 	default:
 		_, _ = fmt.Fprintf(out, "Credential scoped to role ids: %s\n", strings.Join(scopedIDs, ", "))
 	}

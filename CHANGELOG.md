@@ -12,8 +12,8 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   browser login to a tenant in a terminal asks whether the credential gets all
   of your roles or only roles you pick from a menu after approval;
   `--choose-roles` shows that menu on any login, and `--scoped-role <role>`
-  (repeatable, by id or by name such as `basic-user`) names roles for scripts. `--display-name` names the credential.
-  Login now states the resulting scope, and names the previous credential on a
+  (repeatable, by id or by name such as `basic-user`) names roles for scripts.
+  `--display-name` names the credential. Login now states the resulting scope, and names the previous credential on a
   re-login so it can be revoked.
 - **`c1i roles list` and `c1i roles get`** list and inspect IAM roles.
 

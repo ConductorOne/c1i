@@ -37,10 +37,11 @@ first browser login to a tenant in a terminal asks whether to keep that or
 choose roles; --choose-roles chooses on any login. Choosing shows a menu after
 you approve in the browser (0 = full permissions); c1i reads the roles with a
 temporary credential and deletes it before creating yours. --scoped-role
-<role> (repeatable) names roles up front, for scripts: a role ID passes
-through to the server, which rejects an unknown one with 404 after approval;
-a name (e.g. basic-user, "Basic User" or system:user) is looked up the same
-way the menu is, so a typo fails before your credential is created.
+<role> (repeatable) names roles up front, for scripts. A 27-character
+alphanumeric value is a role ID; IDs alone pass through to the server, which
+rejects an unknown one with 404 after approval. Any other value is a name
+(e.g. basic-user, "Basic User" or system:user): c1i then checks every value
+against the tenant's roles, so a typo fails before your credential is created.
 
 If a previous login used a mixed-case URL and commands now report "not
 authenticated", re-run this command: the keychain key is derived from a
@@ -237,7 +238,7 @@ func loginWithBrowser(cmd *cobra.Command, baseURL string, scope loginScope) erro
 	if err != nil {
 		var apiErr *client.APIError
 		switch {
-		case len(pcc.ScopedRoles) > 0 && exitCode(err) == exitNotFound:
+		case len(scope.roles) > 0 && chosen == nil && exitCode(err) == exitNotFound:
 			return fmt.Errorf("%w (a --scoped-role id may not exist; pass the role's name instead, and c1i checks it against the tenant's roles)", err)
 		case scope.choose && errors.As(err, &apiErr) && apiErr.StatusCode == http.StatusUnauthorized:
 			return fmt.Errorf("%w (the browser approval may have expired while the menu was open; run c1i auth login again)", err)

@@ -305,7 +305,7 @@ type stubTenant struct {
 	deleted    []string
 	rolesFail  bool
 	deleteFail bool
-	// finalStatus, when set, fails every create after the first.
+	// finalStatus, when set, fails every create except the helper's.
 	finalStatus int
 }
 
@@ -342,7 +342,7 @@ func (s *stubTenant) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		raw, _ := io.ReadAll(r.Body)
 		_ = json.Unmarshal(raw, &body)
 		s.created = append(s.created, body)
-		if s.finalStatus != 0 && len(s.created) > 1 {
+		if s.finalStatus != 0 && body["displayName"] != helperDisplayName {
 			w.WriteHeader(s.finalStatus)
 			_, _ = fmt.Fprint(w, `{"code":16,"message":"denied"}`)
 			return
@@ -574,6 +574,7 @@ func TestMatchRoles(t *testing.T) {
 		{ID: stubAppsRoleID, Name: "system:application-admin", DisplayName: "Application Administrator"},
 		{ID: "aud100000000000000000000000", Name: "custom:aud-1", DisplayName: "Auditor"},
 		{ID: "aud200000000000000000000000", Name: "custom:aud-2", DisplayName: "Auditor"},
+		{ID: "decoy0000000000000000000000", Name: "custom:decoy", DisplayName: "system:user"},
 	}
 	tests := []struct {
 		values  []string
@@ -583,10 +584,11 @@ func TestMatchRoles(t *testing.T) {
 		{values: []string{"basic-user"}, want: []string{stubUserRoleID}},
 		{values: []string{"Basic User"}, want: []string{stubUserRoleID}},
 		{values: []string{"BASIC_USER"}, want: []string{stubUserRoleID}},
+		// A role's name outranks another role's identical display name.
 		{values: []string{"system:user"}, want: []string{stubUserRoleID}},
 		{values: []string{stubAppsRoleID, "basic-user", "Basic User"}, want: []string{stubAppsRoleID, stubUserRoleID}},
 		{values: []string{"auditor"}, wantErr: "matches several roles"},
-		{values: []string{"basic-usr"}, wantErr: "matches no role; roles: Application Administrator, Auditor, Auditor, Basic User"},
+		{values: []string{"basic-usr"}, wantErr: "matches no role; roles: Application Administrator; Auditor [aud100000000000000000000000]; Auditor [aud200000000000000000000000]; Basic User; system:user"},
 		{values: []string{"zzzz00000000000000000000000"}, wantErr: "matches no role"},
 	}
 	for _, tt := range tests {
@@ -638,4 +640,90 @@ func TestAuthLoginScopedRoleUnknownNameCreatesNothing(t *testing.T) {
 	if len(tenant.created) != 1 || !reflect.DeepEqual(tenant.deleted, []string{"pc-1"}) {
 		t.Errorf("created %d, deleted %v; want only the helper, then deleted", len(tenant.created), tenant.deleted)
 	}
+}
+
+func TestRoleIDPattern(t *testing.T) {
+	for v, want := range map[string]bool{
+		stubUserRoleID:                 true,
+		stubUserRoleID[:26]:            false,
+		stubUserRoleID + "0":           false,
+		"user-0000000000000000000000x": false,
+		"basic-user":                   false,
+	} {
+		if got := roleIDPattern.MatchString(v); got != want {
+			t.Errorf("roleIDPattern(%q) = %v, want %v", v, got, want)
+		}
+	}
+}
+
+func TestAuthLoginScopedRoleIDsAreDeduped(t *testing.T) {
+	tenant := &stubTenant{t: t}
+	if err := runScopedLogin(t, tenant, stubAppsRoleID, stubAppsRoleID); err != nil {
+		t.Fatalf("login: %v", err)
+	}
+	if got := tenant.created[0]["scopedRoles"]; !reflect.DeepEqual(got, []any{stubAppsRoleID}) {
+		t.Errorf("scopedRoles = %v, want one id", got)
+	}
+}
+
+func TestAuthLoginMixedIDAndNameChecksBoth(t *testing.T) {
+	tenant := &stubTenant{t: t}
+	if err := runScopedLogin(t, tenant, stubAppsRoleID, "basic-user"); err != nil {
+		t.Fatalf("login: %v", err)
+	}
+	final := tenant.created[len(tenant.created)-1]
+	if got := final["scopedRoles"]; !reflect.DeepEqual(got, []any{stubAppsRoleID, stubUserRoleID}) {
+		t.Errorf("scopedRoles = %v, want both, resolved", got)
+	}
+	if len(tenant.created) != 2 {
+		t.Errorf("created %d, want the helper then the credential", len(tenant.created))
+	}
+}
+
+// TestAuthLoginNotFoundHintOnlyForBareIDs pins that the "id may not exist"
+// hint appears only when ids went to the server unchecked.
+func TestAuthLoginNotFoundHintOnlyForBareIDs(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		values   []string
+		wantHint bool
+	}{
+		{"bare id", []string{stubAppsRoleID}, true},
+		{"resolved name", []string{"basic-user"}, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			err := runScopedLogin(t, &stubTenant{t: t, finalStatus: http.StatusNotFound}, tc.values...)
+			if code := exitCode(err); code != exitNotFound {
+				t.Fatalf("exit = %d (%v), want %d", code, err, exitNotFound)
+			}
+			if got := strings.Contains(err.Error(), "may not exist"); got != tc.wantHint {
+				t.Errorf("hint present = %v, want %v: %v", got, tc.wantHint, err)
+			}
+		})
+	}
+	_, _, err := runBrowserLogin(t, &stubTenant{t: t, finalStatus: http.StatusNotFound}, map[string]string{"choose-roles": "true"}, "1\n")
+	if err == nil || strings.Contains(err.Error(), "may not exist") {
+		t.Errorf("--choose-roles 404: err = %v, want no --scoped-role hint", err)
+	}
+}
+
+// runScopedLogin runs a browser login with --scoped-role set to values.
+func runScopedLogin(t *testing.T, tenant *stubTenant, values ...string) error {
+	t.Helper()
+	srv := httptest.NewServer(tenant)
+	t.Cleanup(srv.Close)
+	stubGetClient(t, srv)
+	origHelper, origOpen := newHelperClient, openBrowser
+	newHelperClient = func(_ *cobra.Command, _, _, _ string) (*client.Client, error) {
+		return client.NewForTesting(srv.URL, srv.Client(), client.WithMaxRetries(0)), nil
+	}
+	openBrowser = func(string) error { return nil }
+	t.Cleanup(func() { newHelperClient, openBrowser = origHelper, origOpen })
+	t.Cleanup(func() { _, _ = keychain.Delete(config.KeychainService(srv.URL)) })
+
+	authLoginCmd.SetOut(io.Discard)
+	authLoginCmd.SetErr(io.Discard)
+	t.Cleanup(func() { authLoginCmd.SetOut(nil); authLoginCmd.SetErr(nil) })
+	authLoginCmd.SetContext(context.Background())
+	return loginWithBrowser(authLoginCmd, srv.URL, loginScope{roles: values})
 }
