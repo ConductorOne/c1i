@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -141,25 +142,113 @@ var newHelperClient = func(cmd *cobra.Command, baseURL, clientID, clientSecret s
 	)
 }
 
-// chooseRoles runs the role menu. The device token may only create a personal
-// client, so an unscoped helper one reads the roles and is deleted on return.
-func chooseRoles(cmd *cobra.Command, baseURL, accessToken string, opts []transport.Option) ([]menuRole, error) {
+// withHelper runs fn with a client for a temporary unscoped personal client.
+// The device token may only create personal clients, so reading roles needs
+// one; it is deleted when fn returns, even after Ctrl-C.
+func withHelper(cmd *cobra.Command, baseURL, accessToken string, opts []transport.Option, fn func(*client.Client) error) error {
 	helper, err := login.CreatePersonalClient(cmd.Context(), baseURL, accessToken, login.PersonalClientOptions{DisplayName: helperDisplayName}, opts...)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	c, err := newHelperClient(cmd, baseURL, helper.ClientID, helper.ClientSecret)
 	if err != nil {
 		warnHelperLeft(cmd, helper.ID, err)
-		return nil, err
+		return err
 	}
 	defer deleteHelper(cmd, c, helper.ID)
+	return fn(c)
+}
 
-	roles, err := delegableRoles(cmd.Context(), c)
-	if err != nil {
-		return nil, err
+// chooseRoles runs the role menu.
+func chooseRoles(cmd *cobra.Command, baseURL, accessToken string, opts []transport.Option) ([]menuRole, error) {
+	var chosen []menuRole
+	err := withHelper(cmd, baseURL, accessToken, opts, func(c *client.Client) error {
+		roles, err := delegableRoles(cmd.Context(), c)
+		if err != nil {
+			return err
+		}
+		chosen, err = promptForRoles(cmd, os.Stdin, roles)
+		return err
+	})
+	return chosen, err
+}
+
+// roleIDPattern is the server's role id format; any other --scoped-role value
+// is a role name.
+var roleIDPattern = regexp.MustCompile(`^[a-zA-Z0-9]{27}$`)
+
+// resolveScopedRoles turns --scoped-role values into role ids. Ids alone pass
+// through for the server to validate; a name needs the role catalog, which
+// then checks the ids too.
+func resolveScopedRoles(cmd *cobra.Command, baseURL, accessToken string, opts []transport.Option, values []string) ([]string, []menuRole, error) {
+	named := false
+	for _, v := range values {
+		if !roleIDPattern.MatchString(v) {
+			named = true
+		}
 	}
-	return promptForRoles(cmd, os.Stdin, roles)
+	if !named {
+		return values, nil, nil
+	}
+
+	var resolved []menuRole
+	err := withHelper(cmd, baseURL, accessToken, opts, func(c *client.Client) error {
+		catalog, err := roleCatalog(cmd.Context(), c)
+		if err != nil {
+			return err
+		}
+		resolved, err = matchRoles(values, catalog)
+		return err
+	})
+	if err != nil {
+		return nil, nil, err
+	}
+	ids := make([]string, len(resolved))
+	for i, r := range resolved {
+		ids[i] = r.ID
+	}
+	return ids, resolved, nil
+}
+
+// normalizeRoleName lets "basic-user", "Basic User" and "basic_user" match.
+func normalizeRoleName(s string) string {
+	return strings.NewReplacer(" ", "-", "_", "-").Replace(strings.ToLower(strings.TrimSpace(s)))
+}
+
+// matchRoles resolves each value by id, name (e.g. system:user) or display
+// name, ignoring case and treating spaces, hyphens and underscores alike.
+func matchRoles(values []string, catalog []roleListItem) ([]menuRole, error) {
+	var out []menuRole
+	seen := map[string]bool{}
+	for _, v := range values {
+		var hits []roleListItem
+		for _, r := range catalog {
+			if r.ID == v || normalizeRoleName(r.Name) == normalizeRoleName(v) || normalizeRoleName(r.DisplayName) == normalizeRoleName(v) {
+				hits = append(hits, r)
+			}
+		}
+		switch len(hits) {
+		case 0:
+			names := make([]string, len(catalog))
+			for i, r := range catalog {
+				names[i] = r.DisplayName
+			}
+			sort.Strings(names)
+			return nil, &usageError{fmt.Errorf("--scoped-role %q matches no role; roles: %s", v, strings.Join(names, ", "))}
+		case 1:
+		default:
+			ids := make([]string, len(hits))
+			for i, r := range hits {
+				ids[i] = r.DisplayName + " (" + r.ID + ")"
+			}
+			return nil, &usageError{fmt.Errorf("--scoped-role %q matches several roles; pass one id: %s", v, strings.Join(ids, ", "))}
+		}
+		if !seen[hits[0].ID] {
+			seen[hits[0].ID] = true
+			out = append(out, menuRole{roleListItem: hits[0]})
+		}
+	}
+	return out, nil
 }
 
 // deleteHelper removes the helper credential, even after Ctrl-C.
@@ -207,6 +296,15 @@ func delegableRoles(ctx context.Context, c *client.Client) ([]menuRole, error) {
 		held[id] = true
 	}
 
+	catalog, err := roleCatalog(ctx, c)
+	if err != nil {
+		return nil, err
+	}
+	return filterDelegable(catalog, held), nil
+}
+
+// roleCatalog reads every role in the tenant.
+func roleCatalog(ctx context.Context, c *client.Client) ([]roleListItem, error) {
 	var catalog []roleListItem
 	params := map[string]string{}
 	for {
@@ -227,7 +325,7 @@ func delegableRoles(ctx context.Context, c *client.Client) ([]menuRole, error) {
 		}
 		params["page_token"] = page.NextPageToken
 	}
-	return filterDelegable(catalog, held), nil
+	return catalog, nil
 }
 
 // filterDelegable combines C1.ai's two web pickers: the personal-client page

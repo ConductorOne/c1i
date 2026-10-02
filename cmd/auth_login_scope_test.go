@@ -321,7 +321,7 @@ func (s *stubTenant) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	case r.URL.Path == "/api/v1/auth/introspect":
 		_, _ = fmt.Fprint(w, `{"userId":"u-1"}`)
 	case r.URL.Path == "/api/v1/users/u-1":
-		_, _ = fmt.Fprint(w, `{"userView":{"user":{"roleIds":["r-apps"]}}}`)
+		_, _ = fmt.Fprintf(w, `{"userView":{"user":{"roleIds":[%q]}}}`, stubAppsRoleID)
 	case r.URL.Path == "/api/v1/iam/roles":
 		if s.rolesFail {
 			w.WriteHeader(http.StatusForbidden)
@@ -330,10 +330,10 @@ func (s *stubTenant) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 		// Two pages, so the lookup must paginate to reach Basic User.
 		if r.URL.Query().Get("page_token") == "" {
-			_, _ = fmt.Fprint(w, `{"list":[{"id":"r-apps","name":"system:application-admin","displayName":"Application Administrator"}],"nextPageToken":"p2"}`)
+			_, _ = fmt.Fprintf(w, `{"list":[{"id":%q,"name":"system:application-admin","displayName":"Application Administrator"}],"nextPageToken":"p2"}`, stubAppsRoleID)
 			return
 		}
-		_, _ = fmt.Fprint(w, `{"list":[{"id":"r-user","name":"system:user","displayName":"Basic User"}]}`)
+		_, _ = fmt.Fprintf(w, `{"list":[{"id":%q,"name":"system:user","displayName":"Basic User"}]}`, stubUserRoleID)
 	case r.URL.Path == "/api/v1/iam/personal_clients" && r.Method == http.MethodPost:
 		if got := r.Header.Get("Authorization"); got != "Bearer device-tok" {
 			s.t.Errorf("personal_clients create Authorization = %q, want the device token", got)
@@ -410,17 +410,24 @@ func runBrowserLogin(t *testing.T, tenant *stubTenant, flags map[string]string, 
 	return out.String(), errOut.String(), err
 }
 
-func TestAuthLoginScopedRoleSkipsRoleLookup(t *testing.T) {
+// Role ids in the stub tenant: the id format, but lowercase so the
+// placeholder guard doesn't read them as copied tenant data.
+const (
+	stubAppsRoleID = "apps00000000000000000000000"
+	stubUserRoleID = "user00000000000000000000000"
+)
+
+func TestAuthLoginScopedRoleIDSkipsRoleLookup(t *testing.T) {
 	tenant := &stubTenant{t: t}
-	out, _, err := runBrowserLogin(t, tenant, map[string]string{"scoped-role": "r-apps", "display-name": "laptop"}, "")
+	out, _, err := runBrowserLogin(t, tenant, map[string]string{"scoped-role": stubAppsRoleID, "display-name": "laptop"}, "")
 	if err != nil {
 		t.Fatalf("login: %v\n%s", err, out)
 	}
-	want := []map[string]any{{"displayName": "laptop", "scopedRoles": []any{"r-apps"}}}
+	want := []map[string]any{{"displayName": "laptop", "scopedRoles": []any{stubAppsRoleID}}}
 	if !reflect.DeepEqual(tenant.created, want) {
 		t.Errorf("created = %#v, want only %#v (no helper credential)", tenant.created, want)
 	}
-	if !strings.Contains(out, "Credential scoped to role ids: r-apps") {
+	if !strings.Contains(out, "Credential scoped to role ids: "+stubAppsRoleID) {
 		t.Errorf("output missing scope line:\n%s", out)
 	}
 }
@@ -434,7 +441,7 @@ func TestAuthLoginChooseRolesUsesAndDeletesHelper(t *testing.T) {
 	}
 	want := []map[string]any{
 		{"displayName": helperDisplayName},
-		{"displayName": "Created by c1i", "scopedRoles": []any{"r-user"}},
+		{"displayName": "Created by c1i", "scopedRoles": []any{stubUserRoleID}},
 	}
 	if !reflect.DeepEqual(tenant.created, want) {
 		t.Errorf("created = %#v, want %#v", tenant.created, want)
@@ -558,5 +565,77 @@ func TestAuthLoginExpiryHintOnlyOn401(t *testing.T) {
 				t.Errorf("expiry hint present = %v, want %v: %v", got, tc.wantHint, err)
 			}
 		})
+	}
+}
+
+func TestMatchRoles(t *testing.T) {
+	catalog := []roleListItem{
+		{ID: stubUserRoleID, Name: roleBasicUser, DisplayName: "Basic User"},
+		{ID: stubAppsRoleID, Name: "system:application-admin", DisplayName: "Application Administrator"},
+		{ID: "aud100000000000000000000000", Name: "custom:aud-1", DisplayName: "Auditor"},
+		{ID: "aud200000000000000000000000", Name: "custom:aud-2", DisplayName: "Auditor"},
+	}
+	tests := []struct {
+		values  []string
+		want    []string
+		wantErr string
+	}{
+		{values: []string{"basic-user"}, want: []string{stubUserRoleID}},
+		{values: []string{"Basic User"}, want: []string{stubUserRoleID}},
+		{values: []string{"BASIC_USER"}, want: []string{stubUserRoleID}},
+		{values: []string{"system:user"}, want: []string{stubUserRoleID}},
+		{values: []string{stubAppsRoleID, "basic-user", "Basic User"}, want: []string{stubAppsRoleID, stubUserRoleID}},
+		{values: []string{"auditor"}, wantErr: "matches several roles"},
+		{values: []string{"basic-usr"}, wantErr: "matches no role; roles: Application Administrator, Auditor, Auditor, Basic User"},
+		{values: []string{"zzzz00000000000000000000000"}, wantErr: "matches no role"},
+	}
+	for _, tt := range tests {
+		t.Run(strings.Join(tt.values, ","), func(t *testing.T) {
+			got, err := matchRoles(tt.values, catalog)
+			if tt.wantErr != "" {
+				if code := exitCode(err); code != exitUsage || !strings.Contains(err.Error(), tt.wantErr) {
+					t.Fatalf("err = %v (exit %d), want usage error containing %q", err, code, tt.wantErr)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if !reflect.DeepEqual(menuIDs(got), tt.want) {
+				t.Errorf("ids = %v, want %v", menuIDs(got), tt.want)
+			}
+		})
+	}
+}
+
+func TestAuthLoginScopedRoleNameResolvesWithHelper(t *testing.T) {
+	tenant := &stubTenant{t: t}
+	out, _, err := runBrowserLogin(t, tenant, map[string]string{"scoped-role": "basic-user"}, "")
+	if err != nil {
+		t.Fatalf("login: %v\n%s", err, out)
+	}
+	want := []map[string]any{
+		{"displayName": helperDisplayName},
+		{"displayName": "Created by c1i", "scopedRoles": []any{stubUserRoleID}},
+	}
+	if !reflect.DeepEqual(tenant.created, want) {
+		t.Errorf("created = %#v, want %#v", tenant.created, want)
+	}
+	if !reflect.DeepEqual(tenant.deleted, []string{"pc-1"}) {
+		t.Errorf("deleted = %v, want the helper [pc-1]", tenant.deleted)
+	}
+	if !strings.Contains(out, "Credential scoped to: Basic User") {
+		t.Errorf("output missing scope line:\n%s", out)
+	}
+}
+
+func TestAuthLoginScopedRoleUnknownNameCreatesNothing(t *testing.T) {
+	tenant := &stubTenant{t: t}
+	_, _, err := runBrowserLogin(t, tenant, map[string]string{"scoped-role": "basic-usr"}, "")
+	if code := exitCode(err); code != exitUsage || !strings.Contains(err.Error(), "matches no role") {
+		t.Fatalf("err = %v (exit %d), want a usage error naming the miss", err, code)
+	}
+	if len(tenant.created) != 1 || !reflect.DeepEqual(tenant.deleted, []string{"pc-1"}) {
+		t.Errorf("created %d, deleted %v; want only the helper, then deleted", len(tenant.created), tenant.deleted)
 	}
 }

@@ -699,8 +699,8 @@ empty when there are none, which list rows omit.
 
 ### Roles
 
-Role ids are what `--scoped-role` takes, on both `auth login` and
-`service-principals credentials create`.
+Role ids are what `--scoped-role` takes on `service-principals credentials
+create`; `auth login --scoped-role` also accepts a role name.
 
 ```sh
 c1i roles list [--page-size <n>] [--page-token <token>] [--limit <n>]
@@ -1209,7 +1209,7 @@ c1i auth login
 
 # Restrict the browser-login credential to chosen roles
 c1i auth login --choose-roles                  # pick from a menu after approving
-c1i auth login --scoped-role <role-id>         # repeatable; ids from c1i roles list (needs a login)
+c1i auth login --scoped-role basic-user        # repeatable; a role name or id
 c1i auth login --display-name "laptop, read-only" --scoped-role <role-id>
 
 # Or store credentials directly
@@ -1247,12 +1247,16 @@ of your roles. To restrict it:
   asks again. The menu offers what C1.ai's own pickers do: the roles you hold
   directly, Basic User, Read-Only Administrator and the API-only roles, or every
   role if you are a super administrator or read-only administrator.
-- **`--scoped-role <role-id>`** (repeatable) names roles up front, for scripts.
-  It isn't checked against that menu; an id the tenant doesn't have fails with
-  the server's `404 not found` after browser approval.
+- **`--scoped-role <role>`** (repeatable) names roles up front, for scripts. A
+  role id passes straight to the server, unchecked against that menu; one the
+  tenant doesn't have fails with the server's `404 not found` after browser
+  approval. A role name — `basic-user`, `Basic User` or `system:user`, ignoring
+  case and treating spaces, hyphens and underscores alike — is looked up in the
+  tenant's roles first, so a miss or an ambiguous name is a usage error that
+  lists the choices, before your credential is created.
 
 The device-flow token can only create the credential, not read roles, so the
-menu first creates a temporary credential named `c1i login role lookup
+menu (and a `--scoped-role` name lookup) first creates a temporary credential named `c1i login role lookup
 (temporary)` to read them, and deletes it before creating the scoped one. If
 that delete fails, login warns with its id; delete it under your personal
 clients in C1.ai.

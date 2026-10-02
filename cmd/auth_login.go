@@ -37,8 +37,10 @@ first browser login to a tenant in a terminal asks whether to keep that or
 choose roles; --choose-roles chooses on any login. Choosing shows a menu after
 you approve in the browser (0 = full permissions); c1i reads the roles with a
 temporary credential and deletes it before creating yours. --scoped-role
-<role-id> (repeatable) names roles up front, for scripts; an unknown id fails
-with 404 after approval.
+<role> (repeatable) names roles up front, for scripts: a role ID passes
+through to the server, which rejects an unknown one with 404 after approval;
+a name (e.g. basic-user, "Basic User" or system:user) is looked up the same
+way the menu is, so a typo fails before your credential is created.
 
 If a previous login used a mixed-case URL and commands now report "not
 authenticated", re-run this command: the keychain key is derived from a
@@ -98,7 +100,7 @@ func init() {
 	authLoginCmd.Flags().String("client-id", "", "C1 API client ID (skip browser login)")
 	authLoginCmd.Flags().String("client-secret", "", "C1 API client secret (skip browser login)")
 	authLoginCmd.Flags().Bool("choose-roles", false, "Choose the browser-login credential's roles from a menu after approval (needs a terminal)")
-	addRepeatableStringFlag(authLoginCmd, "scoped-role", "Restrict the browser-login credential to a role ID (repeatable; see c1i roles list)")
+	addRepeatableStringFlag(authLoginCmd, "scoped-role", "Restrict the browser-login credential to a role, by ID or name such as basic-user (repeatable)")
 	authLoginCmd.Flags().String("display-name", "", "Name for the browser-login credential (default \""+login.DefaultDisplayName+"\")")
 	authCmd.AddCommand(authLoginCmd)
 }
@@ -216,16 +218,19 @@ func loginWithBrowser(cmd *cobra.Command, baseURL string, scope loginScope) erro
 		return err
 	}
 
-	pcc := login.PersonalClientOptions{DisplayName: scope.displayName, ScopedRoles: scope.roles}
+	pcc := login.PersonalClientOptions{DisplayName: scope.displayName}
 	var chosen []menuRole
-	if scope.choose {
+	switch {
+	case scope.choose:
 		chosen, err = chooseRoles(cmd, baseURL, accessToken, opts)
-		if err != nil {
-			return err
-		}
 		for _, r := range chosen {
 			pcc.ScopedRoles = append(pcc.ScopedRoles, r.ID)
 		}
+	case len(scope.roles) > 0:
+		pcc.ScopedRoles, chosen, err = resolveScopedRoles(cmd, baseURL, accessToken, opts, scope.roles)
+	}
+	if err != nil {
+		return err
 	}
 
 	creds, err := login.CreatePersonalClient(ctx, baseURL, accessToken, pcc, opts...)
@@ -233,7 +238,7 @@ func loginWithBrowser(cmd *cobra.Command, baseURL string, scope loginScope) erro
 		var apiErr *client.APIError
 		switch {
 		case len(pcc.ScopedRoles) > 0 && exitCode(err) == exitNotFound:
-			return fmt.Errorf("%w (a scoped role id may not exist; c1i roles list shows them once you are logged in, or use --choose-roles)", err)
+			return fmt.Errorf("%w (a --scoped-role id may not exist; pass the role's name instead, and c1i checks it against the tenant's roles)", err)
 		case scope.choose && errors.As(err, &apiErr) && apiErr.StatusCode == http.StatusUnauthorized:
 			return fmt.Errorf("%w (the browser approval may have expired while the menu was open; run c1i auth login again)", err)
 		}
