@@ -463,8 +463,13 @@ func reportScope(cmd *cobra.Command, scopedIDs []string, chosen []menuRole) {
 	case len(scopedIDs) == 0:
 		_, _ = fmt.Fprintf(out, "Credential inherits all of your roles.\n")
 	case len(chosen) > 0:
-		_, _ = fmt.Fprintf(out, "Credential scoped to: %s\n", strings.Join(roleLabels(chosen), ", "))
+		// Ids always: duplicate display names can't be told apart within a subset.
+		labels := make([]string, len(chosen))
+		for i, r := range chosen {
+			labels[i] = r.DisplayName + " [" + r.ID + "]"
+		}
+		_, _ = fmt.Fprintf(out, "Credential scoped to: %s\n", strings.Join(labels, "; "))
 	default:
-		_, _ = fmt.Fprintf(out, "Credential scoped to role ids: %s\n", strings.Join(scopedIDs, ", "))
+		_, _ = fmt.Fprintf(out, "Credential scoped to role ids: %s\n", strings.Join(scopedIDs, "; "))
 	}
 }

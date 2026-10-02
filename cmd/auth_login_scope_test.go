@@ -449,7 +449,7 @@ func TestAuthLoginChooseRolesUsesAndDeletesHelper(t *testing.T) {
 	if !reflect.DeepEqual(tenant.deleted, []string{"pc-1"}) {
 		t.Errorf("deleted = %v, want the helper [pc-1]", tenant.deleted)
 	}
-	if !strings.Contains(out, "Credential scoped to: Basic User") {
+	if !strings.Contains(out, "Credential scoped to: Basic User ["+stubUserRoleID+"]") {
 		t.Errorf("output missing scope line:\n%s", out)
 	}
 }
@@ -626,7 +626,7 @@ func TestAuthLoginScopedRoleNameResolvesWithHelper(t *testing.T) {
 	if !reflect.DeepEqual(tenant.deleted, []string{"pc-1"}) {
 		t.Errorf("deleted = %v, want the helper [pc-1]", tenant.deleted)
 	}
-	if !strings.Contains(out, "Credential scoped to: Basic User") {
+	if !strings.Contains(out, "Credential scoped to: Basic User ["+stubUserRoleID+"]") {
 		t.Errorf("output missing scope line:\n%s", out)
 	}
 }
@@ -726,4 +726,14 @@ func runScopedLogin(t *testing.T, tenant *stubTenant, values ...string) error {
 	t.Cleanup(func() { authLoginCmd.SetOut(nil); authLoginCmd.SetErr(nil) })
 	authLoginCmd.SetContext(context.Background())
 	return loginWithBrowser(authLoginCmd, srv.URL, loginScope{roles: values})
+}
+
+func TestReportScopeNamesDuplicateDisplayNamesByID(t *testing.T) {
+	var out bytes.Buffer
+	authLoginCmd.SetOut(&out)
+	t.Cleanup(func() { authLoginCmd.SetOut(nil) })
+	reportScope(authLoginCmd, []string{"aud1", "aud2"}, []menuRole{menuRoles[1], menuRoles[2]})
+	if want := "Credential scoped to: Auditor [r-aud1]; Auditor [r-aud2]\n"; out.String() != want {
+		t.Errorf("scope line = %q, want %q", out.String(), want)
+	}
 }
