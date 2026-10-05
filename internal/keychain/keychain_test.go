@@ -410,3 +410,21 @@ func TestFileBackendRejectsIncomplete(t *testing.T) {
 		t.Fatalf("expected error on incomplete credentials file")
 	}
 }
+
+func TestStoredClientIDIgnoresEnv(t *testing.T) {
+	keyring.MockInit()
+	withTempConfigDir(t)
+	clearEnv(t)
+
+	if id := StoredClientID(testService); id != "" {
+		t.Fatalf("before store: %q, want none", id)
+	}
+	if _, err := Store(testService, testID, testSecret); err != nil {
+		t.Fatalf("Store: %v", err)
+	}
+	t.Setenv(envClientID, "env-id")
+	t.Setenv(envClientSecret, "env-secret")
+	if id := StoredClientID(testService); id != testID {
+		t.Errorf("StoredClientID = %q, want the stored %q despite env credentials", id, testID)
+	}
+}

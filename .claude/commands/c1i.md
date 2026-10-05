@@ -84,8 +84,8 @@ there does not mean no request was sent.
 Typed internally and classified in one place, `cmd/errors.go`: from the client,
 `APIError`, `AuthError`, `PathError`, `RedirectError`, `RedirectLoopError`; from
 the gateway, `mcpgateway.TransportError` (unreachable); plus package-`cmd`
-wrappers `usageError`, `toolExecutionError`, `nonJSONResponseError`, and
-`upstreamError`.
+wrappers `usageError`, `toolExecutionError`, `nonJSONResponseError`,
+`upstreamError`, and `helperLeftError`.
 
 ## Documentation
 

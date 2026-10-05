@@ -204,7 +204,8 @@ tracked root file outside its allowlist. Stage explicit paths rather than `-A`.
   that never settles in 5 hops); `internal/mcpgateway` adds `TransportError`
   for an unreachable gateway. `cmd/errors.go` maps them — plus its own
   `usageError`, `toolExecutionError`, `nonJSONResponseError`, and
-  `upstreamError` wrappers, for failures with no natural client-level type —
+  `upstreamError` wrappers, for failures with no natural client-level type,
+  and `helperLeftError` (a login's undeleted temporary credential, always 1) —
   to exit codes:
 
   | Code | Meaning |

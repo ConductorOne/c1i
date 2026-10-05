@@ -187,7 +187,24 @@ func New(ctx context.Context, baseURL string, opts ...Option) (*Client, error) {
 	if err != nil {
 		return nil, &AuthError{fmt.Errorf("creating token source: %w", err)}
 	}
+	return newWithSource(baseURL, tokenSource, opts), nil
+}
 
+// NewWithCredentials is New for credentials not (yet) stored: its bearer is
+// reused in memory but never written to the on-disk cache.
+func NewWithCredentials(ctx context.Context, baseURL, clientID, clientSecret string, opts ...Option) (*Client, error) {
+	tokenSource, err := tokensource.NewTokenSource(ctx, clientID, clientSecret, baseURL, transportOpts(opts)...)
+	if err != nil {
+		return nil, &AuthError{fmt.Errorf("creating token source: %w", err)}
+	}
+	return newReusing(baseURL, tokenSource, opts), nil
+}
+
+func newReusing(baseURL string, mint oauth2.TokenSource, opts []Option) *Client {
+	return newWithSource(baseURL, oauth2.ReuseTokenSource(nil, mint), opts)
+}
+
+func newWithSource(baseURL string, tokenSource oauth2.TokenSource, opts []Option) *Client {
 	// oauth2.NewClient wraps its source in a second ReuseTokenSource. The
 	// cacheTokenSource already owns caching and needs Invalidate to take effect
 	// before a 401 retry, so compose the transport directly.
@@ -203,7 +220,7 @@ func New(ctx context.Context, baseURL string, opts ...Option) (*Client, error) {
 		transport.WithDebug(cfg.debug),
 		transport.WithNonRetryable(isTokenError),
 	)
-	return &Client{t: t, baseURL: baseURL}, nil
+	return &Client{t: t, baseURL: baseURL}
 }
 
 // retryOnTokenReject recovers from a cached access token the server refuses.

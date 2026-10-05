@@ -83,7 +83,7 @@ func TestCreatePersonalClientClassifiesHTTPError(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	_, err := createPersonalClient(context.Background(), srv.URL, "tok")
+	_, err := CreatePersonalClient(context.Background(), srv.URL, "tok", PersonalClientOptions{})
 	if err == nil {
 		t.Fatal("expected an error from a 502 personal-client endpoint")
 	}
@@ -158,7 +158,10 @@ func TestAPIErrorPathIsRequestPath(t *testing.T) {
 			_, err := PollForToken(context.Background(), base, &DeviceCode{DeviceCode: "dc", Interval: 1, ExpiresIn: 60})
 			return err
 		}, "/auth/v1/token"},
-		{"personal client", func(base string) error { _, err := createPersonalClient(context.Background(), base, "tok"); return err },
+		{"personal client", func(base string) error {
+			_, err := CreatePersonalClient(context.Background(), base, "tok", PersonalClientOptions{})
+			return err
+		},
 			"/api/v1/iam/personal_clients"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -275,7 +278,7 @@ func TestDeviceFlowSendsUserAgent(t *testing.T) {
 		t.Errorf("device_authorization User-Agent = %q, want it to start with c1.ai/c1i", gotUA)
 	}
 
-	_, _ = createPersonalClient(context.Background(), srv.URL, "tok")
+	_, _ = CreatePersonalClient(context.Background(), srv.URL, "tok", PersonalClientOptions{})
 	if !strings.HasPrefix(gotUA, "c1.ai/c1i") {
 		t.Errorf("personal_clients User-Agent = %q, want it to start with c1.ai/c1i", gotUA)
 	}

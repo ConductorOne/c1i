@@ -1208,6 +1208,10 @@ $ cat trace.log
 # Browser-based login (OAuth device flow)
 c1i auth login
 
+# Limit the browser-login credential to chosen roles
+c1i auth login --choose-roles                  # pick from a menu after approving
+c1i auth login --scoped-role basic-user        # repeatable; a role name or id
+
 # Or store credentials directly
 c1i auth login --client-id <id> --client-secret <secret>
 
@@ -1231,6 +1235,34 @@ c1i auth token            # add --json for token type and absolute expiry (RFC33
 # Remove stored credentials
 c1i auth logout
 ```
+
+Browser login creates a personal client credential with all of your roles. To
+limit it, pass `--choose-roles` (a menu after you approve in the browser; needs
+a terminal) or `--scoped-role <role>` (repeatable). The two can't be combined,
+and neither applies to `--client-id`/`--client-secret` (exit 2). When no
+credential is stored for the tenant, a terminal login asks which you want:
+Enter keeps all of your roles, and `--choose-roles=false` skips the question.
+
+- **Which roles.** A scoped credential keeps only the overlap between its roles
+  and your own access. The menu and role names offer the roles you hold, Basic
+  User, and Read-Only Administrator (a read-only view of your access); holders
+  of Super Administrator or Read-Only Administrator see every role. In the
+  menu, enter numbers or `0` for all of your roles; a blank answer asks again.
+- **Names and IDs.** A role ID is 27 letters and digits and goes to C1 as
+  given; an unknown one exits 4. Anything else is a name: case is ignored, and
+  spaces, underscores and hyphens are interchangeable. A name that matches no
+  offered role, or more than one, exits 2 before your credential is created,
+  listing the choices.
+- **Checks.** Login verifies the new credential before storing it. If C1
+  scoped it wider than asked (exit 6), a scoped credential has no access
+  (exit 2), verification or storing fails, or you press Ctrl-C, login deletes
+  it. Scoped credentials are named `Created by c1i (<role or count>)`.
+- **The temporary credential.** The device-flow token can only create a
+  credential, so reading roles uses a short-lived one with all of your roles,
+  deleted before yours is created. If that delete fails, login still stores
+  yours, names the temporary one, and exits 1.
+- A browser login that replaces a stored credential names it; it stays active
+  in C1.ai.
 
 `c1i auth token` prints just the access token, newline-terminated, so it
 composes into `curl -H "Authorization: Bearer $(c1i auth token)" ...`. It is

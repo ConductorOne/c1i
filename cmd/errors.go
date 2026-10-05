@@ -216,6 +216,12 @@ func exitCode(err error) int {
 	if errors.As(err, &usageErr) {
 		return exitUsage
 	}
+	// A leftover helper's message embeds the server's error text, which the
+	// usage-message sniff below could misread.
+	var leftErr *helperLeftError
+	if errors.As(err, &leftErr) {
+		return exitError
+	}
 	if isCobraUsageError(err) {
 		return exitUsage
 	}

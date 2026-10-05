@@ -8,8 +8,26 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **`c1i auth login` can limit its credential to chosen roles.** Pass
+  `--scoped-role <role>` (a name such as `basic-user`, or an id) or
+  `--choose-roles` for a menu after browser approval. The new credential is
+  checked with C1 before it is stored, named after its role, and its scope is
+  printed.
 - **`c1i roles list` and `c1i roles get`** list and inspect IAM roles, the ids
   `service-principals credentials create --scoped-role` takes.
+
+### Changed
+
+- A terminal `c1i auth login` with no stored credential now asks whether to
+  limit the credential before showing the device code;
+  `--choose-roles=false` skips the question.
+- `c1i auth login` verifies a new credential before storing it, so a narrowly
+  scoped one is no longer rejected and one that fails the check no longer
+  replaces the stored credential. Every login prompt honors Ctrl-C, and a
+  browser login names the credential it replaces.
+- Commands that resolve the current user (`tasks list --assigned-to-me`,
+  `requests list`, `requests create`) exit 6, not 1, when introspect returns
+  a body that isn't JSON.
 
 ## [0.8.0] - 2026-09-25
 

@@ -97,6 +97,19 @@ func Load(service string) (string, string, Backend, error) {
 	return id, sec, BackendFile, nil
 }
 
+// StoredClientID returns the client id saved in the keyring or file store,
+// ignoring env-var credentials, which are never stored.
+// It returns "" when nothing is stored.
+func StoredClientID(service string) string {
+	if id, _, err := loadKeyring(service); err == nil {
+		return id
+	}
+	if id, _, err := loadFile(service); err == nil {
+		return id
+	}
+	return ""
+}
+
 // Delete removes credentials from every writable backend (keyring + file).
 // Env vars are not touched. Best-effort: missing entries are not errors.
 // Keyring delete errors are swallowed (the entry may simply not exist or the

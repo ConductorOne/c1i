@@ -36,8 +36,14 @@ type DeviceCode struct {
 }
 
 type Credentials struct {
+	// ID is the personal client's resource id, for deleting it.
+	ID           string
 	ClientID     string
 	ClientSecret string
+	// ScopedRoles is the scope as the server stored it.
+	ScopedRoles []string
+	// ExpiresTime is the server's expiry timestamp, or "" if none.
+	ExpiresTime string
 }
 
 // StartDeviceFlow initiates the OAuth device authorization flow.
@@ -82,14 +88,15 @@ func StartDeviceFlow(ctx context.Context, baseURL string, opts ...transport.Opti
 }
 
 // PollForToken polls the token endpoint until the user approves or the code
-// expires. Each poll goes through the shared transport (timeout, user-agent,
-// debug tracing, path/redirect guards) but with no retry layer of its own:
+// expires, and returns the approved access token. Each poll goes through the
+// shared transport (timeout, user-agent, debug tracing, path/redirect guards)
+// but with no retry layer of its own:
 // the polling loop below IS this call's retry strategy, on the RFC 8628
 // interval, so a second retry layer underneath would just double up delays.
 // A 5xx therefore fails this poll immediately rather than being retried
 // in-place — see the status handling below, which treats it identically to
 // any other unparseable non-2xx body.
-func PollForToken(ctx context.Context, baseURL string, code *DeviceCode, opts ...transport.Option) (*Credentials, error) {
+func PollForToken(ctx context.Context, baseURL string, code *DeviceCode, opts ...transport.Option) (string, error) {
 	tokenURL := baseURL + "/auth/v1/token"
 	t := transport.New(nil, append(opts, transport.WithMaxRetries(0), transport.WithTimeout(requestTimeout))...)
 
@@ -108,21 +115,21 @@ func PollForToken(ctx context.Context, baseURL string, code *DeviceCode, opts ..
 		select {
 		case <-time.After(time.Duration(interval) * time.Second):
 			if time.Now().After(deadline) {
-				return nil, fmt.Errorf("device code expired")
+				return "", fmt.Errorf("device code expired")
 			}
 		case <-ctx.Done():
-			return nil, ctx.Err()
+			return "", ctx.Err()
 		}
 
 		req, err := http.NewRequestWithContext(ctx, http.MethodPost, tokenURL, strings.NewReader(vals.Encode()))
 		if err != nil {
-			return nil, err
+			return "", err
 		}
 		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 
 		resp, err := t.Do(req)
 		if err != nil {
-			return nil, err
+			return "", err
 		}
 
 		if resp.StatusCode != http.StatusOK {
@@ -143,7 +150,7 @@ func PollForToken(ctx context.Context, baseURL string, code *DeviceCode, opts ..
 			// one, or a server failure would classify as an auth failure
 			// (exit 3) instead of exit 6.
 			if err := json.Unmarshal(resp.Body, &errResp); err != nil || errResp.Error == "" {
-				return nil, apiErr()
+				return "", apiErr()
 			}
 
 			// A 5xx is a server failure whatever its body says, so it stays on
@@ -155,7 +162,7 @@ func PollForToken(ctx context.Context, baseURL string, code *DeviceCode, opts ..
 			// polling through a real outage and then report the far less useful
 			// "device code expired" at exit 1.
 			if resp.StatusCode >= http.StatusInternalServerError {
-				return nil, apiErr()
+				return "", apiErr()
 			}
 
 			switch errResp.Error {
@@ -174,26 +181,48 @@ func PollForToken(ctx context.Context, baseURL string, code *DeviceCode, opts ..
 			if detail == "" {
 				detail = errResp.Error
 			}
-			return nil, &client.AuthError{Err: fmt.Errorf("authorization failed: %s", detail)}
+			return "", &client.AuthError{Err: fmt.Errorf("authorization failed: %s", detail)}
 		}
 
 		var tokenResp struct {
 			AccessToken string `json:"access_token"`
 		}
 		if err := json.Unmarshal(resp.Body, &tokenResp); err != nil {
-			return nil, fmt.Errorf("failed to parse token response: %w", err)
+			return "", fmt.Errorf("failed to parse token response: %w", err)
 		}
-
-		return createPersonalClient(ctx, baseURL, tokenResp.AccessToken, opts...)
+		return tokenResp.AccessToken, nil
 	}
 }
 
-func createPersonalClient(ctx context.Context, baseURL, accessToken string, opts ...transport.Option) (*Credentials, error) {
+// DefaultDisplayName names the personal client when the caller gives none.
+const DefaultDisplayName = "Created by c1i"
+
+// PersonalClientOptions shapes the personal client minted at login.
+type PersonalClientOptions struct {
+	DisplayName string
+	// ScopedRoles restricts the credential to these role IDs; empty inherits
+	// all of the user's roles.
+	ScopedRoles []string
+	// Expires is a protobuf duration such as "600s"; empty never expires.
+	Expires string
+}
+
+// CreatePersonalClient exchanges a device-flow access token for a durable
+// personal client credential.
+func CreatePersonalClient(ctx context.Context, baseURL, accessToken string, o PersonalClientOptions, opts ...transport.Option) (*Credentials, error) {
 	pccURL := baseURL + "/api/v1/iam/personal_clients"
 
-	reqBody, _ := json.Marshal(map[string]string{
-		"display_name": "Created by c1i",
-	})
+	body := map[string]any{"displayName": o.DisplayName}
+	if o.DisplayName == "" {
+		body["displayName"] = DefaultDisplayName
+	}
+	if len(o.ScopedRoles) > 0 {
+		body["scopedRoles"] = o.ScopedRoles
+	}
+	if o.Expires != "" {
+		body["expires"] = o.Expires
+	}
+	reqBody, _ := json.Marshal(body)
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, pccURL, bytes.NewReader(reqBody))
 	if err != nil {
@@ -213,7 +242,10 @@ func createPersonalClient(ctx context.Context, baseURL, accessToken string, opts
 
 	var clientResp struct {
 		Client struct {
-			ClientID string `json:"clientId"`
+			ID          string   `json:"id"`
+			ClientID    string   `json:"clientId"`
+			ScopedRoles []string `json:"scopedRoles"`
+			ExpiresTime string   `json:"expiresTime"`
 		} `json:"client"`
 		ClientSecret string `json:"clientSecret"`
 	}
@@ -222,7 +254,10 @@ func createPersonalClient(ctx context.Context, baseURL, accessToken string, opts
 	}
 
 	return &Credentials{
+		ID:           clientResp.Client.ID,
 		ClientID:     clientResp.Client.ClientID,
 		ClientSecret: clientResp.ClientSecret,
+		ScopedRoles:  clientResp.Client.ScopedRoles,
+		ExpiresTime:  clientResp.Client.ExpiresTime,
 	}, nil
 }
