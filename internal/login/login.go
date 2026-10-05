@@ -42,6 +42,8 @@ type Credentials struct {
 	ClientSecret string
 	// ScopedRoles is the scope as the server stored it.
 	ScopedRoles []string
+	// ExpiresTime is the server's expiry timestamp, or "" if none.
+	ExpiresTime string
 }
 
 // StartDeviceFlow initiates the OAuth device authorization flow.
@@ -243,6 +245,7 @@ func CreatePersonalClient(ctx context.Context, baseURL, accessToken string, o Pe
 			ID          string   `json:"id"`
 			ClientID    string   `json:"clientId"`
 			ScopedRoles []string `json:"scopedRoles"`
+			ExpiresTime string   `json:"expiresTime"`
 		} `json:"client"`
 		ClientSecret string `json:"clientSecret"`
 	}
@@ -255,5 +258,6 @@ func CreatePersonalClient(ctx context.Context, baseURL, accessToken string, o Pe
 		ClientID:     clientResp.Client.ClientID,
 		ClientSecret: clientResp.ClientSecret,
 		ScopedRoles:  clientResp.Client.ScopedRoles,
+		ExpiresTime:  clientResp.Client.ExpiresTime,
 	}, nil
 }

@@ -29,7 +29,7 @@ const (
 	// helperDisplayName marks the short-lived credential that reads roles.
 	helperDisplayName = "c1i login role lookup (temporary)"
 	// helperLifetime caps a helper the delete never reaches (e.g. kill -9).
-	helperLifetime = "600s"
+	helperLifetime = 10 * time.Minute
 )
 
 // Built-in role names, stable across tenants.
@@ -77,43 +77,54 @@ func storedClientID(baseURL string) string {
 	return ""
 }
 
-// lineReader reads stdin lines on a single goroutine, so a prompt abandoned
-// on Ctrl-C can't race the next one for input; an unread line is simply
-// handed to the next prompt.
+// lineReader reads stdin a line at a time, only when a prompt asks, so input
+// typed after the last prompt stays with the terminal. A read abandoned on
+// Ctrl-C keeps running and hands its line to the next prompt.
 type lineReader struct {
 	scanner *bufio.Scanner
-	start   sync.Once
-	lines   chan string
+	mu      sync.Mutex
+	pending chan scanResult
+}
+
+type scanResult struct {
+	line string
+	ok   bool
 }
 
 func newLineReader(r io.Reader) *lineReader {
-	return &lineReader{scanner: bufio.NewScanner(r), lines: make(chan string)}
+	return &lineReader{scanner: bufio.NewScanner(r)}
 }
 
-// readLine returns the next line, ctx.Err() once ctx ends (Ctrl-C), or io.EOF
-// at end of input.
+// readLine returns the next line, ctx.Err() once ctx ends, or io.EOF.
 func (l *lineReader) readLine(ctx context.Context) (string, error) {
-	l.start.Do(func() {
+	l.mu.Lock()
+	if l.pending == nil {
+		ch := make(chan scanResult, 1)
+		l.pending = ch
 		go func() {
-			for l.scanner.Scan() {
-				l.lines <- l.scanner.Text()
-			}
-			close(l.lines)
+			ok := l.scanner.Scan()
+			ch <- scanResult{l.scanner.Text(), ok}
 		}()
-	})
+	}
+	ch := l.pending
+	l.mu.Unlock()
+
 	select {
 	case <-ctx.Done():
 		return "", ctx.Err()
-	case line, ok := <-l.lines:
-		if !ok {
+	case r := <-ch:
+		l.mu.Lock()
+		l.pending = nil
+		l.mu.Unlock()
+		if !r.ok {
 			return "", io.EOF
 		}
-		return line, nil
+		return r.line, nil
 	}
 }
 
 // askToChooseRoles asks, before the device code is shown, whether to scope the
-// credential. Enter or EOF keeps all roles.
+// credential. Enter or EOF keeps all of your roles.
 func askToChooseRoles(cmd *cobra.Command, in *lineReader) (bool, error) {
 	out := cmd.OutOrStdout()
 	_, _ = fmt.Fprintf(out, "Browser login creates a long-lived credential for c1i. What access should it have?\n")
@@ -140,23 +151,15 @@ func askToChooseRoles(cmd *cobra.Command, in *lineReader) (bool, error) {
 
 // roleListItem is the subset of a Role the login needs.
 type roleListItem struct {
-	ID            string `json:"id"`
-	Name          string `json:"name"`
-	DisplayName   string `json:"displayName"`
-	SystemAPIOnly bool   `json:"systemApiOnly"`
+	ID          string `json:"id"`
+	Name        string `json:"name"`
+	DisplayName string `json:"displayName"`
 }
 
 // menuRole is a role a login may scope to.
 type menuRole struct {
 	roleListItem
 	Held bool
-}
-
-// roleLookup is what a login reads about roles: the ones it may scope to, and
-// the whole catalog, to explain a role outside that set.
-type roleLookup struct {
-	offered []menuRole
-	catalog []roleListItem
 }
 
 // newCredentialClient builds a client for credentials that aren't stored (the
@@ -168,23 +171,19 @@ var newCredentialClient = func(cmd *cobra.Command, baseURL, clientID, clientSecr
 	)
 }
 
-// helperLeftError reports a helper credential the login could not delete. It
-// keeps a fixed exit code (1) whatever the delete failed on, so a successful
-// login isn't misread as, say, an auth failure.
+// helperLeftError reports a helper credential login could not delete. It has
+// no Unwrap, so it exits 1 whatever the delete failed on.
 type helperLeftError struct {
-	id  string
-	err error
+	helper *login.Credentials
+	err    error
 }
 
 func (e *helperLeftError) Error() string {
-	return fmt.Sprintf("the temporary credential %q (%s) was not deleted: %v. It has all of your roles until it expires in 10 minutes; delete it sooner under your personal clients in C1.ai", helperDisplayName, e.id, e.err)
-}
-
-// loginSucceeded reports whether a login completed: no error, or only a
-// leftover helper. A helper report joined to another error is a failure.
-func loginSucceeded(err error) bool {
-	_, left := err.(*helperLeftError)
-	return err == nil || left
+	until := ""
+	if e.helper.ExpiresTime != "" {
+		until = " until " + e.helper.ExpiresTime
+	}
+	return fmt.Sprintf("the temporary credential %q (%s) was not deleted (%v); it has all of your roles%s, so delete it under your personal clients in C1.ai", helperDisplayName, e.helper.ID, e.err, until)
 }
 
 // detached gives a request that must finish even after Ctrl-C.
@@ -193,64 +192,56 @@ func detached(ctx context.Context) (context.Context, context.CancelFunc) {
 }
 
 // withHelper runs fn with a client for a temporary unscoped personal client,
-// which the device token can create but nothing else, then deletes it, even
-// after Ctrl-C. A failed delete is warned about and returned as leftover,
-// separate from fn's error, so the caller can still finish.
+// the only thing the device token can create, then deletes it, even after
+// Ctrl-C. A failed delete comes back as leftover, separate from fn's error.
 func withHelper(cmd *cobra.Command, baseURL, accessToken string, opts []transport.Option, fn func(*client.Client) error) (leftover, err error) {
-	ctx := cmd.Context()
-	createCtx, cancel := detached(ctx)
+	createCtx, cancel := detached(cmd.Context())
 	defer cancel()
-	helper, err := login.CreatePersonalClient(createCtx, baseURL, accessToken, login.PersonalClientOptions{DisplayName: helperDisplayName, Expires: helperLifetime}, opts...)
+	helper, err := login.CreatePersonalClient(createCtx, baseURL, accessToken, login.PersonalClientOptions{
+		DisplayName: helperDisplayName,
+		Expires:     formatProtoJSONDuration(helperLifetime),
+	}, opts...)
 	if err != nil {
 		return nil, err
 	}
 	c, err := newCredentialClient(cmd, baseURL, helper.ClientID, helper.ClientSecret)
-	if err == nil {
-		err = fn(c)
-		if delErr := deletePersonalClient(ctx, c, helper.ID); delErr != nil {
-			leftover = &helperLeftError{helper.ID, delErr}
-		}
-	} else {
-		leftover = &helperLeftError{helper.ID, err}
+	if err != nil {
+		return &helperLeftError{helper, err}, err
 	}
-	if leftover != nil {
-		_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "Warning: %v\n", leftover)
+	err = fn(c)
+	if delErr := deletePersonalClient(cmd.Context(), c, helper.ID); delErr != nil {
+		leftover = &helperLeftError{helper, delErr}
 	}
 	return leftover, err
 }
 
-// lookupRoles reads the roles a login may scope to, through a helper.
-func lookupRoles(cmd *cobra.Command, baseURL, accessToken string, opts []transport.Option) (lookup roleLookup, leftover, err error) {
-	leftover, err = withHelper(cmd, baseURL, accessToken, opts, func(c *client.Client) error {
-		if err := cmd.Context().Err(); err != nil {
-			return err
-		}
-		var rerr error
-		lookup, rerr = readRoles(cmd.Context(), c)
-		return rerr
-	})
-	return lookup, leftover, err
-}
-
-// deletePersonalClient deletes a personal client even after Ctrl-C.
+// deletePersonalClient deletes a personal client even after Ctrl-C. A 404
+// means it is already gone.
 func deletePersonalClient(ctx context.Context, c *client.Client, id string) error {
 	ctx, cancel := detached(ctx)
 	defer cancel()
 	_, err := c.Delete(ctx, client.Path("/api/v1/iam/personal_clients/%s", id))
+	if exitCode(err) == exitNotFound {
+		return nil
+	}
 	return err
 }
 
-func readRoles(ctx context.Context, c *client.Client) (roleLookup, error) {
+// readRoles returns the roles a login may scope to.
+func readRoles(ctx context.Context, c *client.Client) ([]menuRole, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	userID, err := currentUserID(ctx, c)
 	if err != nil {
-		return roleLookup{}, err
+		return nil, err
 	}
 	if userID == "" {
-		return roleLookup{}, &nonJSONResponseError{fmt.Errorf("introspect returned no user id for the login's credential")}
+		return nil, &nonJSONResponseError{fmt.Errorf("introspect returned no user id for the login's credential")}
 	}
 	data, err := c.Get(ctx, client.Path("/api/v1/users/%s", userID), nil)
 	if err != nil {
-		return roleLookup{}, err
+		return nil, err
 	}
 	var user struct {
 		UserView struct {
@@ -260,7 +251,7 @@ func readRoles(ctx context.Context, c *client.Client) (roleLookup, error) {
 		} `json:"userView"`
 	}
 	if err := json.Unmarshal(data, &user); err != nil {
-		return roleLookup{}, &nonJSONResponseError{fmt.Errorf("parsing user response: %w", err)}
+		return nil, &nonJSONResponseError{fmt.Errorf("parsing user response: %w", err)}
 	}
 	held := map[string]bool{}
 	for _, id := range user.UserView.User.RoleIDs {
@@ -272,14 +263,14 @@ func readRoles(ctx context.Context, c *client.Client) (roleLookup, error) {
 	for {
 		data, err := c.Get(ctx, "/api/v1/iam/roles", params)
 		if err != nil {
-			return roleLookup{}, err
+			return nil, err
 		}
 		var page struct {
 			List          []roleListItem `json:"list"`
 			NextPageToken string         `json:"nextPageToken"`
 		}
 		if err := json.Unmarshal(data, &page); err != nil {
-			return roleLookup{}, &nonJSONResponseError{fmt.Errorf("parsing roles response: %w", err)}
+			return nil, &nonJSONResponseError{fmt.Errorf("parsing roles response: %w", err)}
 		}
 		catalog = append(catalog, page.List...)
 		if page.NextPageToken == "" {
@@ -287,15 +278,13 @@ func readRoles(ctx context.Context, c *client.Client) (roleLookup, error) {
 		}
 		params["page_token"] = page.NextPageToken
 	}
-	return roleLookup{offered: filterDelegable(catalog, held), catalog: catalog}, nil
+	return filterDelegable(catalog, held), nil
 }
 
 // filterDelegable returns the roles worth scoping to, sorted by display name.
 // A scoped credential keeps only the overlap between its roles and its owner's
-// own access, so an unheld role adds little or nothing. Offered: roles you
-// hold, Basic User, and Read-Only Administrator (a read-only copy of your
-// access). Administrators see every role; for read-only administrators the
-// server downgrades each to read-only, as C1.ai's own picker assumes.
+// access, so an unheld role adds little or nothing. Offered: roles you hold,
+// Basic User and Read-Only Administrator; administrators see every role.
 func filterDelegable(catalog []roleListItem, held map[string]bool) []menuRole {
 	admin := false
 	for _, r := range catalog {
@@ -322,15 +311,17 @@ func filterDelegable(catalog []roleListItem, held map[string]bool) []menuRole {
 // is a role name.
 var roleIDPattern = regexp.MustCompile(`^[a-zA-Z0-9]{27}$`)
 
-// needsLookup reports whether any --scoped-role value is a name. Ids alone go
-// to the server unchecked, so no helper credential is created.
-func needsLookup(values []string) bool {
-	for _, v := range values {
-		if !roleIDPattern.MatchString(v) {
-			return true
+// splitScopedRoles separates --scoped-role ids, which go to C1 as given, from
+// names, which must be looked up.
+func splitScopedRoles(values []string) (ids, names []string) {
+	for _, v := range dedupe(values) {
+		if roleIDPattern.MatchString(v) {
+			ids = append(ids, v)
+		} else {
+			names = append(names, v)
 		}
 	}
-	return false
+	return ids, names
 }
 
 func dedupe(values []string) []string {
@@ -352,32 +343,23 @@ func normalizeRoleName(s string) string {
 	return roleNameSeparators.Replace(strings.ToLower(strings.TrimSpace(s)))
 }
 
-// matchRoles resolves each value against the offered roles by id, name (e.g.
-// system:user) or display name, comparing names after normalizeRoleName. More
-// than one match is ambiguous rather than guessed.
-func matchRoles(values []string, lookup roleLookup) ([]menuRole, error) {
+// matchRoles resolves each name against the offered roles by name (e.g.
+// system:user) or display name; more than one match is an error, not a guess.
+func matchRoles(names []string, offered []menuRole) ([]menuRole, error) {
 	var out []menuRole
-	seen := map[string]bool{}
-	for _, v := range values {
+	for _, v := range names {
 		n := normalizeRoleName(v)
-		matches := func(r roleListItem) bool {
-			return r.ID == v || normalizeRoleName(r.Name) == n || normalizeRoleName(r.DisplayName) == n
-		}
 		var hits []menuRole
-		for _, r := range lookup.offered {
-			if matches(r.roleListItem) {
+		for _, r := range offered {
+			if normalizeRoleName(r.Name) == n || normalizeRoleName(r.DisplayName) == n {
 				hits = append(hits, r)
 			}
 		}
 		switch len(hits) {
 		case 1:
+			out = append(out, hits[0])
 		case 0:
-			for _, r := range lookup.catalog {
-				if matches(r) {
-					return nil, &usageError{fmt.Errorf("--scoped-role %q: you don't hold %s, and a credential scoped to it gets only the overlap with your own access; choose from: %s", v, roleLabel(r), offeredLabels(lookup.offered))}
-				}
-			}
-			return nil, &usageError{fmt.Errorf("--scoped-role %q matches no role; choose from: %s", v, offeredLabels(lookup.offered))}
+			return nil, &usageError{fmt.Errorf("--scoped-role %q matches no role you can scope to; choose from: %s", v, strings.Join(roleNames(offered), "; "))}
 		default:
 			labels := make([]string, len(hits))
 			for i, r := range hits {
@@ -385,19 +367,16 @@ func matchRoles(values []string, lookup roleLookup) ([]menuRole, error) {
 			}
 			return nil, &usageError{fmt.Errorf("--scoped-role %q matches several roles; pass one id: %s", v, strings.Join(labels, "; "))}
 		}
-		if !seen[hits[0].ID] {
-			seen[hits[0].ID] = true
-			out = append(out, hits[0])
-		}
 	}
 	return out, nil
 }
 
-// printable strips control characters from server-supplied text, so a role
-// name can't fake menu lines or send terminal escape sequences.
+// printable strips control and format characters (including bidi overrides
+// and zero-width spaces) from server-supplied text, so a role name can't fake
+// menu lines, look like another role, or send terminal escape sequences.
 func printable(s string) string {
 	return strings.Map(func(r rune) rune {
-		if unicode.IsControl(r) {
+		if unicode.IsControl(r) || unicode.Is(unicode.Cf, r) {
 			return -1
 		}
 		return r
@@ -406,41 +385,41 @@ func printable(s string) string {
 
 // roleLabel names a role unambiguously: display name and id.
 func roleLabel(r roleListItem) string {
-	return printable(r.DisplayName) + " [" + r.ID + "]"
+	return printable(r.DisplayName) + " [" + printable(r.ID) + "]"
 }
 
-func offeredLabels(roles []menuRole) string {
-	labels := make([]string, len(roles))
-	for i, r := range roles {
-		labels[i] = printable(r.DisplayName)
+// roleNames lists display names as printed, with ids where they collide.
+func roleNames(roles []menuRole) []string {
+	count := map[string]int{}
+	for _, r := range roles {
+		count[printable(r.DisplayName)]++
 	}
-	return strings.Join(labels, "; ")
+	names := make([]string, len(roles))
+	for i, r := range roles {
+		names[i] = printable(r.DisplayName)
+		if count[names[i]] > 1 {
+			names[i] = roleLabel(r.roleListItem)
+		}
+	}
+	return names
 }
 
 // promptForRoles shows roles as a numbered menu and reads a selection. A nil
-// result means all roles; a blank answer re-prompts, so a stray Enter can't
-// silently widen the credential.
+// result means all of your roles; a blank answer re-prompts, so a stray Enter
+// can't silently widen the credential.
 func promptForRoles(cmd *cobra.Command, in *lineReader, roles []menuRole) ([]menuRole, error) {
 	out := cmd.OutOrStdout()
-	count := map[string]int{}
-	for _, r := range roles {
-		count[r.DisplayName]++
-	}
 	_, _ = fmt.Fprintf(out, "\nChoose the roles this credential may use (* = a role you hold):\n")
 	_, _ = fmt.Fprintf(out, "  %2d) All of your roles\n", 0)
-	for i, r := range roles {
-		label := printable(r.DisplayName)
-		if count[r.DisplayName] > 1 {
-			label = roleLabel(r.roleListItem)
+	for i, name := range roleNames(roles) {
+		if roles[i].Held {
+			name += " *"
 		}
-		if r.Held {
-			label += " *"
-		}
-		_, _ = fmt.Fprintf(out, "  %2d) %s\n", i+1, label)
+		_, _ = fmt.Fprintf(out, "  %2d) %s\n", i+1, name)
 	}
 
 	for {
-		_, _ = fmt.Fprintf(out, "Enter one or more numbers (e.g. 1,3): ")
+		_, _ = fmt.Fprintf(out, "Enter numbers (e.g. 1,3), or 0 for all of your roles: ")
 		line, err := in.readLine(cmd.Context())
 		if errors.Is(err, io.EOF) {
 			return nil, &usageError{fmt.Errorf("no role selection read (stdin closed); re-run, or pass --scoped-role <role>")}
@@ -486,31 +465,27 @@ func parseRoleSelection(answer string, roles []menuRole) ([]menuRole, error) {
 
 // credentialName names the new credential after its scope, so several c1i
 // logins can be told apart in C1.ai.
-func credentialName(ids []string, chosen []menuRole) string {
+func credentialName(ids []string, named []menuRole) string {
 	switch {
 	case len(ids) == 0:
 		return login.DefaultDisplayName
-	case len(chosen) == 0:
-		return login.DefaultDisplayName + " (scoped)"
-	case len(chosen) > 3:
-		return fmt.Sprintf("%s (%d roles)", login.DefaultDisplayName, len(chosen))
+	case len(ids) == 1 && len(named) == 1:
+		return login.DefaultDisplayName + " (" + printable(named[0].DisplayName) + ")"
+	case len(ids) == 1:
+		return login.DefaultDisplayName + " (1 role)"
 	}
-	names := make([]string, len(chosen))
-	for i, r := range chosen {
-		names[i] = printable(r.DisplayName)
-	}
-	return login.DefaultDisplayName + " (" + strings.Join(names, ", ") + ")"
+	return fmt.Sprintf("%s (%d roles)", login.DefaultDisplayName, len(ids))
 }
 
 // reportScope states the new credential's scope as the server returned it.
-func reportScope(cmd *cobra.Command, granted []string, chosen []menuRole) {
+func reportScope(cmd *cobra.Command, granted []string, named []menuRole) {
 	out := cmd.OutOrStdout()
 	if len(granted) == 0 {
 		_, _ = fmt.Fprintf(out, "Credential has all of your roles.\n")
 		return
 	}
 	byID := map[string]roleListItem{}
-	for _, r := range chosen {
+	for _, r := range named {
 		byID[r.ID] = r.roleListItem
 	}
 	labels := make([]string, len(granted))
@@ -518,7 +493,7 @@ func reportScope(cmd *cobra.Command, granted []string, chosen []menuRole) {
 		if r, ok := byID[id]; ok {
 			labels[i] = roleLabel(r)
 		} else {
-			labels[i] = id
+			labels[i] = printable(id)
 		}
 	}
 	_, _ = fmt.Fprintf(out, "Credential scoped to: %s\n", strings.Join(labels, "; "))
@@ -542,17 +517,18 @@ func sameRoles(requested, granted []string) bool {
 	return true
 }
 
-// authRolePrefix marks the session-only service roles (introspect, ping) a
-// credential keeps even when its scope leaves it nothing else.
+// authRolePrefix marks the session service role (c1.api.auth.v1.Auth: the
+// introspect and ping calls) a credential keeps even when its scope leaves it
+// nothing else.
 const authRolePrefix = "role/c1.api.auth.v1.Auth:"
 
 // hasNoAccess reports whether a scoped credential's introspect shows it can do
-// nothing: a scope with no overlap loses introspect itself (a 403 naming it),
-// and a nearly empty one keeps only the Auth service.
+// nothing: a scope with no overlap can't even call introspect (403), and a
+// nearly empty one keeps only the Auth service.
 func hasNoAccess(introspect []byte, err error) bool {
 	var apiErr *client.APIError
 	if errors.As(err, &apiErr) {
-		return apiErr.StatusCode == http.StatusForbidden && strings.Contains(apiErr.Body, "c1.api.auth.v1.Auth.Introspect")
+		return apiErr.StatusCode == http.StatusForbidden
 	}
 	if err != nil {
 		return false

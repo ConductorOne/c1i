@@ -67,10 +67,11 @@ tenant, so a failure exits nonzero with no tenant rather than naming a
 target you can't reach. `c1i auth status` prints the same tenant as plain
 text, plus which credential store served it.
 
-To log in with less than your full access, run `c1i auth login --scoped-role basic-user`
-(repeatable; a role name or a 27-character id). Without a terminal there is no
-prompt, but a human must still approve the device code; a bad name then exits
-2. README's Authentication section has the rules.
+To log in with less than your full access, run
+`c1i auth login --scoped-role basic-user` (repeatable; a role name or id).
+There is no prompt without a terminal, but a human must still approve the
+device code. A name you can't scope to exits 2; an unknown id exits 4. The
+credential then gets `403` (exit 3) on commands its roles don't cover.
 
 ## Global flags
 

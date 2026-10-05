@@ -10,17 +10,22 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 - **`c1i auth login` can limit its credential to chosen roles.** Pass
   `--scoped-role <role>` (a name such as `basic-user`, or an id) or
-  `--choose-roles` for a menu after browser approval; a terminal login with no
-  stored credential asks first. Reading roles uses a temporary credential that
-  expires in 10 minutes and is deleted before yours is created. The new
-  credential is checked with C1 before it is stored, and login prints its scope.
+  `--choose-roles` for a menu after browser approval. The new credential is
+  checked with C1 before it is stored, named after its role, and its scope is
+  printed. Reading roles uses a short-lived temporary credential.
 
 ### Changed
 
+- A terminal `c1i auth login` with no stored credential now asks whether to
+  limit the credential before showing the device code;
+  `--choose-roles=false` skips the question.
 - `c1i auth login` verifies new credentials with `/api/v1/auth/introspect`
   before storing them, instead of a user search after. A narrowly scoped
-  credential is no longer rejected, and one that fails the check no longer
-  replaces the stored credential. Every login prompt now honors Ctrl-C.
+  credential is no longer rejected, one that fails the check no longer
+  replaces the stored credential, and every login prompt honors Ctrl-C.
+- Commands that resolve the current user (`tasks list --assigned-to-me`,
+  `requests list`, `requests create`) exit 6, not 1, when introspect returns
+  a body that isn't JSON.
 
 ## [0.8.0] - 2026-09-25
 

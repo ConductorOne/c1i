@@ -1220,37 +1220,31 @@ c1i auth token            # add --json for token type and absolute expiry (RFC33
 c1i auth logout
 ```
 
-Browser login creates a personal client credential with all of your roles. To
-limit it, pass `--choose-roles` (a menu after you approve in the browser; needs
-a terminal) or `--scoped-role <role>` (repeatable; for scripts). When no
+Browser login creates a personal client credential with all of your roles.
+`--choose-roles` (a menu after you approve in the browser; needs a terminal)
+and `--scoped-role <role>` (repeatable, for scripts) limit it. When no
 credential is stored for the tenant, a terminal login asks which you want:
-Enter keeps all roles, and `--choose-roles=false` skips the question.
+Enter keeps all of your roles, and `--choose-roles=false` skips the question.
 
-- **The menu** offers the roles you hold, Basic User and Read-Only
-  Administrator (a read-only copy of your access); administrators see every
-  role, which C1 makes read-only for read-only administrators. A scoped
-  credential keeps only the overlap between its roles and your own access, so
-  other roles would add little or nothing. Enter one or more numbers, or `0`
-  for all roles; a blank answer asks again.
-- **`--scoped-role`** takes a role name (`basic-user`, `Basic User` or
-  `system:user`; case, spaces, hyphens and underscores don't matter) or a
-  27-character role id. Names are checked against the menu's roles right after
-  you approve, so a typo, an ambiguous name or a role outside them exits 2
-  before your credential is created. Ids alone go to the server unchecked; it
-  rejects an unknown one with `404`.
-- **Reading roles** needs a temporary credential, `c1i login role lookup
-  (temporary)`, with all of your roles. It expires after 10 minutes and is
-  deleted before your credential is created; if the delete fails, login says so
-  and exits non-zero.
-- **The new credential** is checked with C1 before it is stored. If its scope
-  isn't what was asked for, its roles give it no access, it can't be stored, or
-  you press Ctrl-C, it is deleted (by a temporary credential, if it can't
-  delete itself) and login fails; if even that fails, login names it. Otherwise
-  it is named after its roles (`Created by c1i (Basic User)`) and login prints
-  its scope. It gets `403` on commands its roles don't cover.
-- Logging in again doesn't revoke the previous credential; login names it.
-  `--choose-roles` and `--scoped-role` don't apply to
-  `--client-id`/`--client-secret`.
+- **Which roles.** A scoped credential keeps only the overlap between its roles
+  and your own access, so the menu and role names offer the roles you hold,
+  Basic User and Read-Only Administrator; administrators see every role. In the
+  menu, enter numbers or `0` for all of your roles; a blank answer asks again.
+- **Names and ids.** A name (`basic-user`, `Basic User`, `system:user`; case,
+  spaces, hyphens and underscores don't matter) that matches no offered role,
+  or more than one, exits 2 before your credential is created. A 27-character role id
+  goes to C1 as given; an unknown one exits 4.
+- **Checks.** Before storing the new credential, login confirms C1 scoped it as
+  asked (else exit 6) and that it has some access (else exit 2), and deletes it
+  if either fails, it can't be stored, or you press Ctrl-C. The credential is
+  named after its role (`Created by c1i (Basic User)`), and login prints its
+  scope. It gets `403` on commands its roles don't cover.
+- **The temporary credential.** The device-flow token can only create a
+  credential, so reading roles needs a short-lived one with all of your roles,
+  deleted before yours is created. If that delete fails, login still stores
+  yours but names the temporary one and exits 1.
+- Logging in again leaves the previous credential active and names it. The
+  role flags are rejected with `--client-id`/`--client-secret` (exit 2).
 
 `c1i auth token` prints just the access token, newline-terminated, so it
 composes into `curl -H "Authorization: Bearer $(c1i auth token)" ...`. It is

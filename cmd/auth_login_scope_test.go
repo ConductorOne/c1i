@@ -15,10 +15,12 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/ConductorOne/c1i/internal/client"
 	"github.com/ConductorOne/c1i/internal/config"
 	"github.com/ConductorOne/c1i/internal/keychain"
+	"github.com/ConductorOne/c1i/internal/login"
 	"github.com/spf13/cobra"
 	"github.com/zalando/go-keyring"
 )
@@ -182,7 +184,7 @@ var testCatalog = []roleListItem{
 	{ID: "r-user", Name: roleBasicUser, DisplayName: "Basic User"},
 	{ID: "r-apps", Name: "system:application-admin", DisplayName: "Application Administrator"},
 	{ID: "r-camp", Name: "system:campaign-admin", DisplayName: "Campaign Administrator"},
-	{ID: "r-logs", Name: "system:system-logs-reader", DisplayName: "Read-Only to System Logs", SystemAPIOnly: true},
+	{ID: "r-logs", Name: "system:system-logs-reader", DisplayName: "Read-Only to System Logs"},
 }
 
 func TestFilterDelegable(t *testing.T) {
@@ -228,31 +230,28 @@ func TestFilterDelegable(t *testing.T) {
 func TestMatchRoles(t *testing.T) {
 	held := map[string]bool{"r-apps": true, "r-aud1": true, "r-aud2": true, "r-decoy": true}
 	catalog := append(append([]roleListItem{}, testCatalog...),
-		roleListItem{ID: "r-aud1", Name: "custom:aud-1", DisplayName: "Auditor", SystemAPIOnly: true},
-		roleListItem{ID: "r-aud2", Name: "custom:aud-2", DisplayName: "Auditor", SystemAPIOnly: true},
-		roleListItem{ID: "r-decoy", Name: "custom:decoy", DisplayName: "system:user", SystemAPIOnly: true},
+		roleListItem{ID: "r-aud1", Name: "custom:aud-1", DisplayName: "Auditor"},
+		roleListItem{ID: "r-aud2", Name: "custom:aud-2", DisplayName: "Auditor"},
+		roleListItem{ID: "r-decoy", Name: "custom:decoy", DisplayName: "system:user"},
 	)
-	lookup := roleLookup{offered: filterDelegable(catalog, held), catalog: catalog}
+	offered := filterDelegable(catalog, held)
 	tests := []struct {
-		values  []string
+		names   []string
 		want    []string
 		wantErr string
 	}{
-		{values: []string{"basic-user"}, want: []string{"r-user"}},
-		{values: []string{"Basic User"}, want: []string{"r-user"}},
-		{values: []string{"BASIC_USER"}, want: []string{"r-user"}},
-		{values: []string{"r-apps", "basic-user", "Basic User"}, want: []string{"r-apps", "r-user"}},
+		{names: []string{"basic-user"}, want: []string{"r-user"}},
+		{names: []string{"Basic User"}, want: []string{"r-user"}},
+		{names: []string{"BASIC_USER"}, want: []string{"r-user"}},
 		// A role's name and another role's display name collide: refuse to guess.
-		{values: []string{"system:user"}, wantErr: "matches several roles"},
-		{values: []string{"auditor"}, wantErr: "matches several roles"},
-		{values: []string{"campaign-administrator"}, wantErr: "you don't hold Campaign Administrator [r-camp]"},
-		{values: []string{"r-camp"}, wantErr: "you don't hold Campaign Administrator"},
-		{values: []string{"read-only-to-system-logs"}, wantErr: "you don't hold Read-Only to System Logs"},
-		{values: []string{"basic-usr"}, wantErr: "matches no role; choose from: Application Administrator; Auditor; Auditor; Basic User; Read-Only Administrator; system:user"},
+		{names: []string{"system:user"}, wantErr: "matches several roles"},
+		{names: []string{"auditor"}, wantErr: "matches several roles"},
+		{names: []string{"campaign-administrator"}, wantErr: "matches no role you can scope to"},
+		{names: []string{"basic-usr"}, wantErr: "choose from: Application Administrator; Auditor [r-aud1]; Auditor [r-aud2]; Basic User; Read-Only Administrator; system:user"},
 	}
 	for _, tt := range tests {
-		t.Run(strings.Join(tt.values, ","), func(t *testing.T) {
-			got, err := matchRoles(tt.values, lookup)
+		t.Run(strings.Join(tt.names, ","), func(t *testing.T) {
+			got, err := matchRoles(tt.names, offered)
 			if tt.wantErr != "" {
 				if code := exitCode(err); code != exitUsage || !strings.Contains(err.Error(), tt.wantErr) {
 					t.Fatalf("err = %v (exit %d), want usage error containing %q", err, code, tt.wantErr)
@@ -266,6 +265,13 @@ func TestMatchRoles(t *testing.T) {
 				t.Errorf("ids = %v, want %v", menuIDs(got), tt.want)
 			}
 		})
+	}
+}
+
+func TestSplitScopedRoles(t *testing.T) {
+	ids, names := splitScopedRoles([]string{stubAppsRoleID, "basic-user", stubAppsRoleID, "Basic User"})
+	if !reflect.DeepEqual(ids, []string{stubAppsRoleID}) || !reflect.DeepEqual(names, []string{"basic-user", "Basic User"}) {
+		t.Errorf("ids = %v, names = %v", ids, names)
 	}
 }
 
@@ -283,29 +289,35 @@ func TestRoleIDPattern(t *testing.T) {
 	}
 }
 
-func TestPrintableStripsControlCharacters(t *testing.T) {
-	if got := printable("Auditor\n  7) Basic User\x1b]0;x\x07"); got != "Auditor  7) Basic User]0;x" {
+func TestPrintableStripsControlAndFormatCharacters(t *testing.T) {
+	if got := printable("Auditor\n  7) Basic User\x1b]0;x\x07\u202e\u200b"); got != "Auditor  7) Basic User]0;x" {
 		t.Errorf("printable = %q", got)
+	}
+	// A lookalike that only differs by a zero-width space is labeled by id.
+	names := roleNames([]menuRole{
+		{roleListItem: roleListItem{ID: "r-1", DisplayName: "Basic User"}},
+		{roleListItem: roleListItem{ID: "r-2", DisplayName: "Basic User\u200b"}},
+	})
+	if want := []string{"Basic User [r-1]", "Basic User [r-2]"}; !reflect.DeepEqual(names, want) {
+		t.Errorf("roleNames = %q, want %q", names, want)
 	}
 }
 
 func TestCredentialName(t *testing.T) {
 	user := menuRole{roleListItem: roleListItem{ID: "r-user", DisplayName: "Basic User"}}
-	if got := credentialName(nil, nil); got != "Created by c1i" {
-		t.Errorf("unscoped = %q", got)
-	}
-	if got := credentialName([]string{"r-user"}, nil); got != "Created by c1i (scoped)" {
-		t.Errorf("bare ids = %q", got)
-	}
-	if got := credentialName([]string{"r-user"}, []menuRole{user}); got != "Created by c1i (Basic User)" {
-		t.Errorf("named = %q", got)
-	}
-	var long []menuRole
-	for i := 0; i < 20; i++ {
-		long = append(long, menuRole{roleListItem: roleListItem{ID: fmt.Sprint(i), DisplayName: "Some Long Role Name"}})
-	}
-	if got := credentialName([]string{"x"}, long); got != "Created by c1i (20 roles)" {
-		t.Errorf("long = %q", got)
+	for _, tc := range []struct {
+		ids   []string
+		named []menuRole
+		want  string
+	}{
+		{nil, nil, "Created by c1i"},
+		{[]string{"r-user"}, []menuRole{user}, "Created by c1i (Basic User)"},
+		{[]string{"r-x"}, nil, "Created by c1i (1 role)"},
+		{[]string{"r-x", "r-user"}, []menuRole{user}, "Created by c1i (2 roles)"},
+	} {
+		if got := credentialName(tc.ids, tc.named); got != tc.want {
+			t.Errorf("credentialName(%v) = %q, want %q", tc.ids, got, tc.want)
+		}
 	}
 }
 
@@ -396,20 +408,22 @@ func TestAuthLoginScopeFlagConflictsAreUsageErrors(t *testing.T) {
 // stubTenant answers the device flow, the role lookup, and personal-client
 // create/delete, recording personal-client events in order.
 type stubTenant struct {
-	t          *testing.T
-	mu         sync.Mutex
-	created    []map[string]any
-	events     []string
-	rolesFail  bool
-	deleteFail bool
-	dropScope  bool // the server ignores scopedRoles
-	noAccess   bool // the final credential can't introspect or delete itself
-	authOnly   bool // the final credential keeps only the Auth service
-	verifyFail bool // introspect rejects the final credential
-	onRoles    func()
-	onCreate   func(kind string)
-	onDelete   func()
-	finalID    string
+	t              *testing.T
+	mu             sync.Mutex
+	created        []map[string]any
+	events         []string
+	rolesFail      bool
+	deleteFail     bool
+	dropScope      bool // the server ignores scopedRoles
+	noAccess       bool // the final credential can't introspect or delete itself
+	authOnly       bool // the final credential keeps only the Auth service
+	verifyFail     bool // introspect rejects the final credential
+	onRoles        func()
+	onCreate       func(kind string)
+	onDelete       func()
+	finalID        string
+	lostDelete     bool // the final credential's first delete commits but answers 500
+	introspectedBy []string
 }
 
 // stubCredentialHeader carries which credential a stub client speaks for, so
@@ -440,6 +454,7 @@ func (s *stubTenant) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	case r.URL.Path == "/auth/v1/token":
 		_, _ = fmt.Fprint(w, `{"access_token":"device-tok"}`)
 	case r.URL.Path == "/api/v1/auth/introspect":
+		s.introspectedBy = append(s.introspectedBy, r.Header.Get(stubCredentialHeader))
 		final := s.finalID != "" && r.Header.Get(stubCredentialHeader) == s.finalID
 		switch {
 		case s.verifyFail && final:
@@ -501,9 +516,22 @@ func (s *stubTenant) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		if s.onDelete != nil {
 			s.onDelete()
 		}
+		id := strings.TrimPrefix(r.URL.Path, "/api/v1/iam/personal_clients/")
 		if s.deleteFail || (s.noAccess && by == s.finalID) {
 			w.WriteHeader(http.StatusForbidden)
 			_, _ = fmt.Fprint(w, `{"code":7,"message":"Permission denied"}`)
+			return
+		}
+		for _, e := range s.events {
+			if strings.HasPrefix(e, "delete "+id+" ") {
+				w.WriteHeader(http.StatusNotFound)
+				_, _ = fmt.Fprint(w, `{"code":5,"message":"not found"}`)
+				return
+			}
+		}
+		if s.lostDelete && id == s.finalID {
+			s.events = append(s.events, "delete "+id+" by "+by)
+			w.WriteHeader(http.StatusInternalServerError)
 			return
 		}
 		s.events = append(s.events, "delete "+strings.TrimPrefix(r.URL.Path, "/api/v1/iam/personal_clients/")+" by "+by)
@@ -515,9 +543,9 @@ func (s *stubTenant) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 type loginRun struct {
-	out, errOut string
-	err         error
-	baseURL     string
+	out, errOut   string
+	err, leftover error
+	baseURL       string
 }
 
 // runLogin drives browserLogin against tenant. Token minting is https-only, so
@@ -548,8 +576,8 @@ func runLogin(t *testing.T, tenant *stubTenant, scope loginScope, stdin string, 
 	if authLoginCmd.Context() == nil {
 		authLoginCmd.SetContext(context.Background())
 	}
-	err := browserLogin(authLoginCmd, scannerOf(stdin), srv.URL, scope)
-	return loginRun{out: out.String(), errOut: errOut.String(), err: err, baseURL: srv.URL}
+	leftover, err := browserLogin(authLoginCmd, scannerOf(stdin), srv.URL, scope)
+	return loginRun{out: out.String(), errOut: errOut.String(), err: err, leftover: leftover, baseURL: srv.URL}
 }
 
 func storedFor(baseURL string) string {
@@ -568,7 +596,7 @@ func TestLoginScopedRoleIDsSkipLookup(t *testing.T) {
 	if r.err != nil {
 		t.Fatalf("login: %v\n%s", r.err, r.out)
 	}
-	want := []map[string]any{{"displayName": "Created by c1i (scoped)", "scopedRoles": []any{stubAppsRoleID}}}
+	want := []map[string]any{{"displayName": "Created by c1i (1 role)", "scopedRoles": []any{stubAppsRoleID}}}
 	if !reflect.DeepEqual(tenant.created, want) {
 		t.Errorf("created = %#v, want only %#v (no helper, ids deduped)", tenant.created, want)
 	}
@@ -587,8 +615,8 @@ func TestLoginScopedRoleNameDeletesHelperFirst(t *testing.T) {
 	if want := []string{"create helper pc-1", "delete pc-1 by pc-1", "create final pc-2"}; !reflect.DeepEqual(tenant.events, want) {
 		t.Errorf("events = %v, want %v", tenant.events, want)
 	}
-	if got := tenant.created[0]["expires"]; got != helperLifetime {
-		t.Errorf("helper expires = %v, want %s", got, helperLifetime)
+	if got := tenant.created[0]["expires"]; got != "600s" {
+		t.Errorf("helper expires = %v, want 600s", got)
 	}
 	if got := tenant.created[1]; !reflect.DeepEqual(got, map[string]any{"displayName": "Created by c1i (Basic User)", "scopedRoles": []any{stubUserRoleID}}) {
 		t.Errorf("final create = %#v", got)
@@ -604,9 +632,7 @@ func TestLoginScopedRoleRefusals(t *testing.T) {
 		want   string
 	}{
 		{[]string{"basic-usr"}, "matches no role"},
-		{[]string{"campaign-administrator"}, "you don't hold Campaign Administrator"},
-		// With a name present, ids are checked too.
-		{[]string{stubCampRoleID, "basic-user"}, "you don't hold Campaign Administrator"},
+		{[]string{"campaign-administrator"}, "matches no role you can scope to"},
 	} {
 		t.Run(strings.Join(tc.values, ","), func(t *testing.T) {
 			freshContext(t)
@@ -622,14 +648,16 @@ func TestLoginScopedRoleRefusals(t *testing.T) {
 	}
 }
 
+// TestLoginScopedRoleMixedIDAndName: ids go to C1 as given even beside a
+// name, so an unheld id isn't refused by c1i.
 func TestLoginScopedRoleMixedIDAndName(t *testing.T) {
 	freshContext(t)
 	tenant := &stubTenant{t: t}
-	r := runLogin(t, tenant, loginScope{roles: []string{stubAppsRoleID, "basic-user"}}, "", false, nil)
+	r := runLogin(t, tenant, loginScope{roles: []string{stubCampRoleID, "basic-user"}}, "", false, nil)
 	if r.err != nil {
 		t.Fatalf("login: %v", r.err)
 	}
-	if got := tenant.created[1]["scopedRoles"]; !reflect.DeepEqual(got, []any{stubAppsRoleID, stubUserRoleID}) {
+	if got := tenant.created[1]["scopedRoles"]; !reflect.DeepEqual(got, []any{stubCampRoleID, stubUserRoleID}) {
 		t.Errorf("scopedRoles = %v, want both", got)
 	}
 }
@@ -702,15 +730,15 @@ func TestLoginHelperDeleteFailureFailsTheLogin(t *testing.T) {
 	freshContext(t)
 	tenant := &stubTenant{t: t, deleteFail: true}
 	r := runLogin(t, tenant, loginScope{roles: []string{"basic-user"}}, "", false, nil)
+	if r.err != nil {
+		t.Fatalf("login itself failed: %v", r.err)
+	}
 	var left *helperLeftError
-	if !errors.As(r.err, &left) || exitCode(r.err) == 0 {
-		t.Fatalf("err = %v, want a non-zero helperLeftError", r.err)
+	if !errors.As(r.leftover, &left) || !strings.Contains(r.leftover.Error(), "(pc-1)") {
+		t.Fatalf("leftover = %v, want the helper named", r.leftover)
 	}
-	if !strings.Contains(r.errOut, "Warning:") || !strings.Contains(r.err.Error(), "(pc-1)") {
-		t.Errorf("want the helper named in a warning and in the final error:\nstderr: %s\nerr: %v", r.errOut, r.err)
-	}
-	if exitCode(r.err) != exitError {
-		t.Errorf("exit = %d, want %d whatever the delete failed on", exitCode(r.err), exitError)
+	if exitCode(r.leftover) != exitError {
+		t.Errorf("exit = %d, want %d whatever the delete failed on", exitCode(r.leftover), exitError)
 	}
 	if got := storedFor(r.baseURL); got != "pc-2@tenant/pcc" {
 		t.Errorf("stored = %q, want the scoped credential kept", got)
@@ -782,7 +810,7 @@ func TestHasNoAccess(t *testing.T) {
 		want bool
 	}{
 		{"introspect itself forbidden", "", &client.APIError{StatusCode: http.StatusForbidden, Body: `{"message":"Permission denied, missing permission/c1.api.auth.v1.Auth.Introspect"}`}, true},
-		{"some other 403", "", &client.APIError{StatusCode: http.StatusForbidden, Body: `{"message":"source IP not allowed"}`}, false},
+		{"any 403", "", &client.APIError{StatusCode: http.StatusForbidden}, true},
 		{"401", "", &client.APIError{StatusCode: http.StatusUnauthorized}, false},
 		{"only the Auth service", `{"roles":["role/c1.api.auth.v1.Auth:reflection"]}`, nil, true},
 		{"real access", `{"roles":["role/c1.api.auth.v1.Auth:reflection","role/c1.api.app.v1.Apps:viewer"]}`, nil, false},
@@ -813,6 +841,9 @@ func TestLoginCtrlCAfterCreateDeletesCredential(t *testing.T) {
 	if want := []string{"create final pc-1", "delete pc-1 by pc-1"}; !reflect.DeepEqual(tenant.events, want) {
 		t.Errorf("events = %v, want the credential deleted despite the cancel", tenant.events)
 	}
+	if !strings.Contains(r.errOut, "Deleting the new credential (pc-1)") {
+		t.Errorf("stderr doesn't announce the cleanup:\n%s", r.errOut)
+	}
 }
 
 // TestLoginStoreFailureDeletesCredential makes both credential stores fail:
@@ -840,14 +871,29 @@ func TestLoginStoreFailureDeletesCredential(t *testing.T) {
 
 func TestLoginVerifiesWithTheNewCredential(t *testing.T) {
 	freshContext(t)
-	tenant := &stubTenant{t: t, verifyFail: true}
-	// verifyFail rejects only calls made as the new credential, so this fails
-	// exactly when verification uses it rather than stored or env credentials.
+	tenant := &stubTenant{t: t}
 	t.Setenv("C1I_CLIENT_ID", "env-1@tenant/pcc")
 	t.Setenv("C1I_CLIENT_SECRET", "env-sec")
 	r := runLogin(t, tenant, loginScope{}, "", false, nil)
-	if r.err == nil || !strings.Contains(r.err.Error(), "credential verification failed") {
-		t.Fatalf("err = %v, want verification of the new credential to fail", r.err)
+	if r.err != nil {
+		t.Fatalf("login: %v", r.err)
+	}
+	if !reflect.DeepEqual(tenant.introspectedBy, []string{"pc-1"}) {
+		t.Errorf("introspect called as %v, want only the new credential pc-1", tenant.introspectedBy)
+	}
+	if !strings.Contains(r.out, "C1I_CLIENT_ID/C1I_CLIENT_SECRET are set") {
+		t.Errorf("no note that env credentials take precedence:\n%s", r.out)
+	}
+}
+
+// TestLoginDiscardTreatsGoneAsDeleted: a delete that committed but answered
+// 500 is retried through a helper, whose 404 means it is gone.
+func TestLoginDiscardTreatsGoneAsDeleted(t *testing.T) {
+	freshContext(t)
+	tenant := &stubTenant{t: t, verifyFail: true, lostDelete: true}
+	r := runLogin(t, tenant, loginScope{}, "", false, nil)
+	if r.err == nil || !strings.Contains(r.err.Error(), "the new credential was deleted") {
+		t.Fatalf("err = %v, want the credential reported deleted", r.err)
 	}
 }
 
@@ -878,7 +924,7 @@ func TestLoginFirstLoginAsksThenMenu(t *testing.T) {
 			t.Errorf("output missing %q:\n%s", want, r.out)
 		}
 	}
-	if strings.Contains(r.out, "was not revoked") {
+	if strings.Contains(r.out, "previous credential") {
 		t.Errorf("first login printed a previous-credential note:\n%s", r.out)
 	}
 }
@@ -905,28 +951,8 @@ func TestLoginReloginSkipsPromptAndNamesPrevious(t *testing.T) {
 	if strings.Contains(r.out, "What access should it have?") {
 		t.Errorf("re-login asked the first-login question:\n%s", r.out)
 	}
-	if !strings.Contains(r.out, "The previous credential (old-1@tenant/pcc) was not revoked.") {
+	if !strings.Contains(r.out, "Your previous credential (client id old-1@tenant/pcc) is still active") {
 		t.Errorf("re-login did not name the previous credential:\n%s", r.out)
-	}
-}
-
-func TestLoginSucceeded(t *testing.T) {
-	left := &helperLeftError{"pc-1", errors.New("boom")}
-	for _, tc := range []struct {
-		err  error
-		want bool
-	}{
-		{nil, true},
-		{left, true},
-		{errors.New("failed"), false},
-		{withLeftover(errors.New("failed"), left), false},
-	} {
-		if got := loginSucceeded(tc.err); got != tc.want {
-			t.Errorf("loginSucceeded(%v) = %v, want %v", tc.err, got, tc.want)
-		}
-	}
-	if got := withLeftover(errors.New("failed"), left).Error(); !strings.Contains(got, "failed") || !strings.Contains(got, "(pc-1)") {
-		t.Errorf("withLeftover dropped part of the report: %q", got)
 	}
 }
 
@@ -936,16 +962,14 @@ func TestLoginFailureKeepsLeftoverReport(t *testing.T) {
 	freshContext(t)
 	tenant := &stubTenant{t: t, deleteFail: true, verifyFail: true}
 	r := runLogin(t, tenant, loginScope{roles: []string{"basic-user"}}, "", false, nil)
-	if loginSucceeded(r.err) {
-		t.Fatalf("err = %v, want a failure", r.err)
+	if r.err == nil || r.leftover == nil {
+		t.Fatalf("err = %v, leftover = %v; want both", r.err, r.leftover)
 	}
 	if code := exitCode(r.err); code != exitAuth {
 		t.Errorf("exit = %d, want %d from the failed verification", code, exitAuth)
 	}
-	for _, id := range []string{"(pc-1)", "(pc-2)"} {
-		if !strings.Contains(r.err.Error(), id) {
-			t.Errorf("err doesn't name %s: %v", id, r.err)
-		}
+	if !strings.Contains(r.leftover.Error(), "(pc-1)") || !strings.Contains(r.err.Error(), "(pc-2)") {
+		t.Errorf("want the helper and the new credential named: err %v; leftover %v", r.err, r.leftover)
 	}
 	if got := storedFor(r.baseURL); got != "" {
 		t.Errorf("stored = %q, want nothing", got)
@@ -988,5 +1012,39 @@ func TestLoginCtrlCBeforeCreateCreatesNothing(t *testing.T) {
 	}
 	if want := []string{"create helper pc-1", "delete pc-1 by pc-1"}; !reflect.DeepEqual(tenant.events, want) {
 		t.Errorf("events = %v, want no final credential", tenant.events)
+	}
+}
+
+// TestLineReaderReadsOnlyWhenAsked: nothing reads stdin between prompts, so
+// type-ahead after the last prompt stays with the terminal.
+func TestLineReaderReadsOnlyWhenAsked(t *testing.T) {
+	r, w := io.Pipe()
+	t.Cleanup(func() { _ = r.Close(); _ = w.Close() })
+	in := newLineReader(r)
+	go func() { _, _ = io.WriteString(w, "a\n") }()
+	if line, err := in.readLine(context.Background()); err != nil || line != "a" {
+		t.Fatalf("readLine = %q, %v", line, err)
+	}
+	wrote := make(chan struct{})
+	go func() { _, _ = io.WriteString(w, "b\n"); close(wrote) }()
+	select {
+	case <-wrote:
+		t.Error("stdin was read with no prompt waiting")
+	case <-time.After(100 * time.Millisecond):
+	}
+}
+
+func TestJoinLeftover(t *testing.T) {
+	failed := &usageError{errors.New("failed")}
+	left := &helperLeftError{&login.Credentials{ID: "pc-1"}, errors.New("boom")}
+	if got := joinLeftover(failed, nil); got != failed {
+		t.Errorf("no leftover: got %v", got)
+	}
+	got := joinLeftover(failed, left)
+	if !strings.Contains(got.Error(), "failed") || !strings.Contains(got.Error(), "(pc-1)") {
+		t.Errorf("joined = %q, want both reports", got)
+	}
+	if exitCode(got) != exitUsage {
+		t.Errorf("exit = %d, want the login failure's %d", exitCode(got), exitUsage)
 	}
 }

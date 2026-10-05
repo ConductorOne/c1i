@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -30,18 +31,20 @@ file under your config directory. For non-interactive / CI use, you can skip
 storage entirely and pass credentials each invocation via the C1I_CLIENT_ID
 and C1I_CLIENT_SECRET environment variables (combined with C1I_URL).
 
-Browser login creates a personal client with all of your roles. To limit it,
-use --choose-roles (a menu after you approve in the browser; 0 = all roles;
-needs a terminal) or --scoped-role <role> (repeatable; a name such as
-basic-user, "Basic User" or system:user, or a 27-character role ID). When no
-credential is stored for the tenant, a terminal login asks which you want;
-Enter keeps all roles and --choose-roles=false skips the question. Scripts are
-never asked.
+Browser login creates a personal client with all of your roles. To limit it:
 
-Names are checked right after you approve, so a typo exits 2 before your
-credential is created; IDs alone go to the server unchecked. Reading roles
-briefly creates a temporary credential, deleted before yours is created. Login
-then checks the new credential with C1 and prints its scope.
+  --choose-roles         pick roles from a menu after you approve in the browser
+  --scoped-role <role>   name a role (repeatable): basic-user, "Basic User",
+                         system:user, or a role ID
+
+A terminal login with no stored credential asks which you want; Enter keeps
+all of your roles and --choose-roles=false skips the question.
+
+The menu and role names offer only roles that limit you usefully: those you
+hold, Basic User and Read-Only Administrator (administrators see every role).
+A name outside them exits 2 before your credential is created. IDs go to C1 as
+given; an unknown one exits 4. The new credential is checked before it is stored and
+deleted if its scope is wrong (exit 6) or gives it no access (exit 2).
 
 If a previous login used a mixed-case URL and commands now report "not
 authenticated", re-run this command: the keychain key is derived from a
@@ -79,31 +82,32 @@ longer found.`,
 			}
 		}
 
-		var loginErr error
+		var loginErr, leftover error
 		if clientID != "" && clientSecret != "" {
 			loginErr = loginWithCredentials(cmd, baseURL, clientID, clientSecret)
 		} else if clientID != "" || clientSecret != "" {
 			return &usageError{fmt.Errorf("both --client-id and --client-secret are required for credential login")}
 		} else {
-			loginErr = browserLogin(cmd, in, baseURL, scope)
+			leftover, loginErr = browserLogin(cmd, in, baseURL, scope)
 		}
-
-		if !loginSucceeded(loginErr) {
-			return loginErr
+		if loginErr != nil {
+			return joinLeftover(loginErr, leftover)
 		}
 
 		if source != URLSourceConfig && isTerminal() {
 			offerSaveURL(cmd, in, baseURL)
 		}
 
-		return loginErr
+		// The login stored its credential; a helper it couldn't delete still
+		// fails the command.
+		return leftover
 	},
 }
 
 func init() {
 	authLoginCmd.Flags().String("client-id", "", "C1 API client ID (skip browser login)")
 	authLoginCmd.Flags().String("client-secret", "", "C1 API client secret (skip browser login)")
-	authLoginCmd.Flags().Bool("choose-roles", false, "Choose the browser-login credential's roles from a menu after approval (needs a terminal); =false skips the question")
+	authLoginCmd.Flags().Bool("choose-roles", false, "Choose the browser-login credential's roles from a menu after approval (needs a terminal); =false: never ask whether to")
 	addRepeatableStringFlag(authLoginCmd, "scoped-role", "Restrict the browser-login credential to a role, by name (e.g. basic-user) or ID (repeatable)")
 	authCmd.AddCommand(authLoginCmd)
 }
@@ -167,27 +171,32 @@ func offerSaveURL(cmd *cobra.Command, in *lineReader, baseURL string) {
 	_, _ = fmt.Fprintf(out, "URL saved to ~/.c1i.yaml\n")
 }
 
-// browserLogin asks, when no credential is stored for the tenant, whether to
-// scope the new one, and names the stored credential a re-login replaces.
-func browserLogin(cmd *cobra.Command, in *lineReader, baseURL string, scope loginScope) error {
-	previous := storedClientID(baseURL)
-	if previous == "" && !scope.requested() && isTerminal() {
-		var err error
-		if scope.choose, err = askToChooseRoles(cmd, in); err != nil {
-			return err
-		}
-	}
-	err := loginWithBrowser(cmd, in, baseURL, scope)
-	if !loginSucceeded(err) {
+// joinLeftover adds a helper credential login couldn't delete to its error.
+func joinLeftover(err, leftover error) error {
+	if leftover == nil {
 		return err
 	}
-	if previous != "" {
-		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "The previous credential (%s) was not revoked.\n", previous)
-	}
-	return err
+	return errors.Join(err, leftover)
 }
 
-func loginWithBrowser(cmd *cobra.Command, in *lineReader, baseURL string, scope loginScope) error {
+// browserLogin asks, when no credential is stored for the tenant, whether to
+// scope the new one, and names the stored credential this login supersedes.
+// leftover reports a helper credential it couldn't delete, even on success.
+func browserLogin(cmd *cobra.Command, in *lineReader, baseURL string, scope loginScope) (leftover, err error) {
+	previous := storedClientID(baseURL)
+	if previous == "" && !scope.requested() && isTerminal() {
+		if scope.choose, err = askToChooseRoles(cmd, in); err != nil {
+			return nil, err
+		}
+	}
+	leftover, err = loginWithBrowser(cmd, in, baseURL, scope)
+	if err == nil && previous != "" {
+		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Your previous credential (client id %s) is still active; revoke it in C1.ai if you no longer need it.\n", previous)
+	}
+	return leftover, err
+}
+
+func loginWithBrowser(cmd *cobra.Command, in *lineReader, baseURL string, scope loginScope) (leftover, err error) {
 	ctx := cmd.Context()
 	out := cmd.OutOrStdout()
 
@@ -201,7 +210,7 @@ func loginWithBrowser(cmd *cobra.Command, in *lineReader, baseURL string, scope 
 
 	code, err := login.StartDeviceFlow(ctx, baseURL, opts...)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	_, _ = fmt.Fprintf(out, "Opening browser to authenticate...\n\n")
@@ -214,91 +223,87 @@ func loginWithBrowser(cmd *cobra.Command, in *lineReader, baseURL string, scope 
 
 	accessToken, err := login.PollForToken(ctx, baseURL, code, opts...)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
-	// A helper that outlives its lookup doesn't stop the login, but is
-	// reported again at the end and fails the command.
-	var chosen []menuRole
-	var leftover error
-	ids := dedupe(scope.roles)
-	if scope.choose || needsLookup(scope.roles) {
-		var lookup roleLookup
-		lookup, leftover, err = lookupRoles(cmd, baseURL, accessToken, opts)
+	ids, names := splitScopedRoles(scope.roles)
+	var named []menuRole
+	if scope.choose || len(names) > 0 {
+		var offered []menuRole
+		leftover, err = withHelper(cmd, baseURL, accessToken, opts, func(c *client.Client) error {
+			var rerr error
+			offered, rerr = readRoles(ctx, c)
+			return rerr
+		})
 		if err != nil {
-			return withLeftover(err, leftover)
+			return leftover, err
 		}
 		if scope.choose {
-			chosen, err = promptForRoles(cmd, in, lookup.offered)
+			named, err = promptForRoles(cmd, in, offered)
 		} else {
-			chosen, err = matchRoles(scope.roles, lookup)
+			named, err = matchRoles(names, offered)
 		}
 		if err != nil {
-			return withLeftover(err, leftover)
+			return leftover, err
 		}
-		ids = nil
-		for _, r := range chosen {
+		for _, r := range named {
 			ids = append(ids, r.ID)
 		}
+		ids = dedupe(ids)
+	}
+	if err := ctx.Err(); err != nil {
+		return leftover, err
 	}
 
-	if err := ctx.Err(); err != nil {
-		return withLeftover(err, leftover)
-	}
-	pcc := login.PersonalClientOptions{DisplayName: credentialName(ids, chosen), ScopedRoles: ids}
+	pcc := login.PersonalClientOptions{DisplayName: credentialName(ids, named), ScopedRoles: ids}
 	// Detached from Ctrl-C, like the helper: an interrupted create could commit
 	// a credential whose id we never learn.
 	createCtx, cancel := detached(ctx)
 	creds, err := login.CreatePersonalClient(createCtx, baseURL, accessToken, pcc, opts...)
 	cancel()
 	if err != nil {
-		return withLeftover(err, leftover)
+		return leftover, err
 	}
 	if err := keepNewCredential(cmd, baseURL, accessToken, opts, creds, ids); err != nil {
-		return withLeftover(err, leftover)
+		return leftover, err
 	}
-	reportScope(cmd, creds.ScopedRoles, chosen)
-	return leftover
-}
-
-// withLeftover adds a leftover-helper report to a login failure.
-func withLeftover(err, leftover error) error {
-	if leftover == nil {
-		return err
-	}
-	return errors.Join(err, leftover)
+	reportScope(cmd, creds.ScopedRoles, named)
+	return leftover, nil
 }
 
 // keepNewCredential checks a just-created credential and stores it. If either
-// fails it deletes the credential, so nothing unwanted or non-expiring is
-// left behind.
+// fails, the credential is deleted so nothing unwanted is left behind.
 func keepNewCredential(cmd *cobra.Command, baseURL, accessToken string, opts []transport.Option, creds *login.Credentials, requested []string) error {
-	problem := checkNewCredential(cmd, baseURL, creds, requested)
+	c, problem := newCredentialClient(cmd, baseURL, creds.ClientID, creds.ClientSecret)
+	if problem != nil {
+		problem = fmt.Errorf("credential verification failed: %w", problem)
+	} else {
+		problem = checkNewCredential(cmd, c, creds, requested)
+	}
 	if problem == nil {
 		problem = storeCredential(cmd, baseURL, creds.ClientID, creds.ClientSecret)
 	}
 	if problem == nil {
 		return nil
 	}
-	return fmt.Errorf("%w; %s", problem, discardCredential(cmd, baseURL, accessToken, opts, creds))
+	if errors.Is(problem, context.Canceled) {
+		_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "Deleting the new credential (%s)...\n", creds.ID)
+	}
+	return fmt.Errorf("%w; %s", problem, discardCredential(cmd, baseURL, accessToken, opts, c, creds))
 }
 
-// checkNewCredential confirms a credential is usable and has the scope that
-// was asked for.
-func checkNewCredential(cmd *cobra.Command, baseURL string, creds *login.Credentials, requested []string) error {
+// checkNewCredential confirms C1 stored the requested scope and that the
+// credential can do something with it.
+func checkNewCredential(cmd *cobra.Command, c *client.Client, creds *login.Credentials, requested []string) error {
 	if err := cmd.Context().Err(); err != nil {
 		return err
 	}
 	if !sameRoles(requested, creds.ScopedRoles) {
 		return &nonJSONResponseError{fmt.Errorf("C1 scoped the new credential to %v, not the requested %v", creds.ScopedRoles, requested)}
 	}
-	c, err := newCredentialClient(cmd, baseURL, creds.ClientID, creds.ClientSecret)
-	if err != nil {
-		return fmt.Errorf("credential verification failed: %w", err)
-	}
 	introspect, err := c.Get(cmd.Context(), "/api/v1/auth/introspect", nil)
 	if len(requested) > 0 && hasNoAccess(introspect, err) {
-		return &usageError{fmt.Errorf("those roles give the credential no access: a scoped credential keeps only the overlap between its roles and your own")}
+		return &usageError{fmt.Errorf("the requested roles give the credential no access: a scoped credential keeps only the overlap between its roles and your own")}
 	}
 	if err != nil {
 		return fmt.Errorf("credential verification failed: %w", err)
@@ -306,24 +311,19 @@ func checkNewCredential(cmd *cobra.Command, baseURL string, creds *login.Credent
 	return nil
 }
 
-// discardCredential deletes a credential login won't keep, and says whether it
-// worked. One scoped to nothing can't delete itself, so a temporary helper
-// does it instead.
-func discardCredential(cmd *cobra.Command, baseURL, accessToken string, opts []transport.Option, creds *login.Credentials) string {
-	const deleted = "the new credential was deleted"
-	if c, err := newCredentialClient(cmd, baseURL, creds.ClientID, creds.ClientSecret); err == nil {
-		if deletePersonalClient(cmd.Context(), c, creds.ID) == nil {
-			return deleted
-		}
+// discardCredential deletes a credential login won't keep, using c when it
+// works and otherwise a temporary helper (one scoped to nothing can't delete
+// itself), and says how it went.
+func discardCredential(cmd *cobra.Command, baseURL, accessToken string, opts []transport.Option, c *client.Client, creds *login.Credentials) string {
+	if c != nil && deletePersonalClient(cmd.Context(), c, creds.ID) == nil {
+		return "the new credential was deleted"
 	}
 	leftover, err := withHelper(cmd, baseURL, accessToken, opts, func(h *client.Client) error {
 		return deletePersonalClient(cmd.Context(), h, creds.ID)
 	})
-	msg := deleted
+	msg := "the new credential was deleted"
 	if err != nil {
 		msg = fmt.Sprintf("the new credential (%s) could not be deleted, so delete it under your personal clients in C1.ai", creds.ID)
-		// Also said here: some errors print without their wrapping message.
-		_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "Warning: %s\n", msg)
 	}
 	if leftover != nil {
 		msg += "; " + leftover.Error()
@@ -364,6 +364,9 @@ func storeCredential(cmd *cobra.Command, baseURL, clientID, clientSecret string)
 		_, _ = fmt.Fprintf(out, "No OS keyring available — stored as a 0600 file at %s\n", path)
 	} else {
 		_, _ = fmt.Fprintf(out, "Credentials verified and stored in the %s for %s.\n", keyringName(), baseURL)
+	}
+	if keychain.EnvCredentialsSet() {
+		_, _ = fmt.Fprintln(out, "Note: C1I_CLIENT_ID/C1I_CLIENT_SECRET are set in your environment and take precedence over this login; unset them to use it.")
 	}
 	return nil
 }
