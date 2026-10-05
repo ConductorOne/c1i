@@ -710,7 +710,7 @@ c1i roles get <role-id>
 List rows carry `id`, `name` (e.g. `system:viewer`), `display_name`,
 `system_builtin`, `system_api_only`, `created_at` and `updated_at`; `get` adds
 the role's `serviceRoles` and `permissions`. A role id is 27 letters and
-digits; anything else is rejected with `value does not match regex pattern
+digits; a malformed one is rejected with `value does not match regex pattern
 "^[a-zA-Z0-9]{27}$"` (exit 2).
 
 ### Service principals
