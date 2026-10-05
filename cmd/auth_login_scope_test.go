@@ -408,6 +408,7 @@ type stubTenant struct {
 	verifyFail bool // introspect rejects the final credential
 	onRoles    func()
 	onCreate   func(kind string)
+	onDelete   func()
 	finalID    string
 }
 
@@ -497,6 +498,9 @@ func (s *stubTenant) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		_, _ = w.Write(resp)
 	case strings.HasPrefix(r.URL.Path, "/api/v1/iam/personal_clients/") && r.Method == http.MethodDelete:
 		by := r.Header.Get(stubCredentialHeader)
+		if s.onDelete != nil {
+			s.onDelete()
+		}
 		if s.deleteFail || (s.noAccess && by == s.finalID) {
 			w.WriteHeader(http.StatusForbidden)
 			_, _ = fmt.Fprint(w, `{"code":7,"message":"Permission denied"}`)
@@ -903,5 +907,86 @@ func TestLoginReloginSkipsPromptAndNamesPrevious(t *testing.T) {
 	}
 	if !strings.Contains(r.out, "The previous credential (old-1@tenant/pcc) was not revoked.") {
 		t.Errorf("re-login did not name the previous credential:\n%s", r.out)
+	}
+}
+
+func TestLoginSucceeded(t *testing.T) {
+	left := &helperLeftError{"pc-1", errors.New("boom")}
+	for _, tc := range []struct {
+		err  error
+		want bool
+	}{
+		{nil, true},
+		{left, true},
+		{errors.New("failed"), false},
+		{withLeftover(errors.New("failed"), left), false},
+	} {
+		if got := loginSucceeded(tc.err); got != tc.want {
+			t.Errorf("loginSucceeded(%v) = %v, want %v", tc.err, got, tc.want)
+		}
+	}
+	if got := withLeftover(errors.New("failed"), left).Error(); !strings.Contains(got, "failed") || !strings.Contains(got, "(pc-1)") {
+		t.Errorf("withLeftover dropped part of the report: %q", got)
+	}
+}
+
+// TestLoginFailureKeepsLeftoverReport: a leftover helper plus a later failure
+// is a failure that names both credentials, with nothing stored.
+func TestLoginFailureKeepsLeftoverReport(t *testing.T) {
+	freshContext(t)
+	tenant := &stubTenant{t: t, deleteFail: true, verifyFail: true}
+	r := runLogin(t, tenant, loginScope{roles: []string{"basic-user"}}, "", false, nil)
+	if loginSucceeded(r.err) {
+		t.Fatalf("err = %v, want a failure", r.err)
+	}
+	if code := exitCode(r.err); code != exitAuth {
+		t.Errorf("exit = %d, want %d from the failed verification", code, exitAuth)
+	}
+	for _, id := range []string{"(pc-1)", "(pc-2)"} {
+		if !strings.Contains(r.err.Error(), id) {
+			t.Errorf("err doesn't name %s: %v", id, r.err)
+		}
+	}
+	if got := storedFor(r.baseURL); got != "" {
+		t.Errorf("stored = %q, want nothing", got)
+	}
+}
+
+// TestLoginCtrlCWithNoAccessCredentialStillDeletesIt: Ctrl-C during the final
+// create of a credential that can't delete itself; the helper must still
+// delete it rather than skip its work.
+func TestLoginCtrlCWithNoAccessCredentialStillDeletesIt(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	authLoginCmd.SetContext(ctx)
+	t.Cleanup(func() { authLoginCmd.SetContext(context.Background()) })
+	tenant := &stubTenant{t: t, noAccess: true, onCreate: func(kind string) {
+		if kind == "final" {
+			cancel()
+		}
+	}}
+
+	r := runLogin(t, tenant, loginScope{roles: []string{stubAppsRoleID}}, "", false, nil)
+	if !errors.Is(r.err, context.Canceled) {
+		t.Fatalf("err = %v, want context.Canceled", r.err)
+	}
+	if want := []string{"create final pc-1", "create helper pc-2", "delete pc-1 by pc-2", "delete pc-2 by pc-2"}; !reflect.DeepEqual(tenant.events, want) {
+		t.Errorf("events = %v, want %v", tenant.events, want)
+	}
+}
+
+// TestLoginCtrlCBeforeCreateCreatesNothing: Ctrl-C after the role lookup but
+// before the final create must not create a credential at all.
+func TestLoginCtrlCBeforeCreateCreatesNothing(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	authLoginCmd.SetContext(ctx)
+	t.Cleanup(func() { authLoginCmd.SetContext(context.Background()) })
+	tenant := &stubTenant{t: t, onDelete: cancel}
+
+	r := runLogin(t, tenant, loginScope{roles: []string{"basic-user"}}, "", false, nil)
+	if !errors.Is(r.err, context.Canceled) {
+		t.Fatalf("err = %v, want context.Canceled", r.err)
+	}
+	if want := []string{"create helper pc-1", "delete pc-1 by pc-1"}; !reflect.DeepEqual(tenant.events, want) {
+		t.Errorf("events = %v, want no final credential", tenant.events)
 	}
 }

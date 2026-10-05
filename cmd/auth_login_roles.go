@@ -180,6 +180,13 @@ func (e *helperLeftError) Error() string {
 	return fmt.Sprintf("the temporary credential %q (%s) was not deleted: %v. It has all of your roles until it expires in 10 minutes; delete it sooner under your personal clients in C1.ai", helperDisplayName, e.id, e.err)
 }
 
+// loginSucceeded reports whether a login completed: no error, or only a
+// leftover helper. A helper report joined to another error is a failure.
+func loginSucceeded(err error) bool {
+	_, left := err.(*helperLeftError)
+	return err == nil || left
+}
+
 // detached gives a request that must finish even after Ctrl-C.
 func detached(ctx context.Context) (context.Context, context.CancelFunc) {
 	return context.WithTimeout(context.WithoutCancel(ctx), 30*time.Second)
@@ -199,9 +206,7 @@ func withHelper(cmd *cobra.Command, baseURL, accessToken string, opts []transpor
 	}
 	c, err := newCredentialClient(cmd, baseURL, helper.ClientID, helper.ClientSecret)
 	if err == nil {
-		if err = ctx.Err(); err == nil {
-			err = fn(c)
-		}
+		err = fn(c)
 		if delErr := deletePersonalClient(ctx, c, helper.ID); delErr != nil {
 			leftover = &helperLeftError{helper.ID, delErr}
 		}
@@ -217,6 +222,9 @@ func withHelper(cmd *cobra.Command, baseURL, accessToken string, opts []transpor
 // lookupRoles reads the roles a login may scope to, through a helper.
 func lookupRoles(cmd *cobra.Command, baseURL, accessToken string, opts []transport.Option) (lookup roleLookup, leftover, err error) {
 	leftover, err = withHelper(cmd, baseURL, accessToken, opts, func(c *client.Client) error {
+		if err := cmd.Context().Err(); err != nil {
+			return err
+		}
 		var rerr error
 		lookup, rerr = readRoles(cmd.Context(), c)
 		return rerr

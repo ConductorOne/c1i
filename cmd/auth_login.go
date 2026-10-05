@@ -88,8 +88,7 @@ longer found.`,
 			loginErr = browserLogin(cmd, in, baseURL, scope)
 		}
 
-		// A lone helperLeftError means the login itself succeeded.
-		if _, left := loginErr.(*helperLeftError); loginErr != nil && !left {
+		if !loginSucceeded(loginErr) {
 			return loginErr
 		}
 
@@ -179,7 +178,7 @@ func browserLogin(cmd *cobra.Command, in *lineReader, baseURL string, scope logi
 		}
 	}
 	err := loginWithBrowser(cmd, in, baseURL, scope)
-	if _, left := err.(*helperLeftError); err != nil && !left {
+	if !loginSucceeded(err) {
 		return err
 	}
 	if previous != "" {
@@ -227,7 +226,7 @@ func loginWithBrowser(cmd *cobra.Command, in *lineReader, baseURL string, scope 
 		var lookup roleLookup
 		lookup, leftover, err = lookupRoles(cmd, baseURL, accessToken, opts)
 		if err != nil {
-			return err
+			return withLeftover(err, leftover)
 		}
 		if scope.choose {
 			chosen, err = promptForRoles(cmd, in, lookup.offered)
@@ -235,7 +234,7 @@ func loginWithBrowser(cmd *cobra.Command, in *lineReader, baseURL string, scope 
 			chosen, err = matchRoles(scope.roles, lookup)
 		}
 		if err != nil {
-			return err
+			return withLeftover(err, leftover)
 		}
 		ids = nil
 		for _, r := range chosen {
@@ -243,6 +242,9 @@ func loginWithBrowser(cmd *cobra.Command, in *lineReader, baseURL string, scope 
 		}
 	}
 
+	if err := ctx.Err(); err != nil {
+		return withLeftover(err, leftover)
+	}
 	pcc := login.PersonalClientOptions{DisplayName: credentialName(ids, chosen), ScopedRoles: ids}
 	// Detached from Ctrl-C, like the helper: an interrupted create could commit
 	// a credential whose id we never learn.
@@ -308,18 +310,25 @@ func checkNewCredential(cmd *cobra.Command, baseURL string, creds *login.Credent
 // worked. One scoped to nothing can't delete itself, so a temporary helper
 // does it instead.
 func discardCredential(cmd *cobra.Command, baseURL, accessToken string, opts []transport.Option, creds *login.Credentials) string {
+	const deleted = "the new credential was deleted"
 	if c, err := newCredentialClient(cmd, baseURL, creds.ClientID, creds.ClientSecret); err == nil {
 		if deletePersonalClient(cmd.Context(), c, creds.ID) == nil {
-			return "the new credential was deleted"
+			return deleted
 		}
 	}
-	_, err := withHelper(cmd, baseURL, accessToken, opts, func(h *client.Client) error {
+	leftover, err := withHelper(cmd, baseURL, accessToken, opts, func(h *client.Client) error {
 		return deletePersonalClient(cmd.Context(), h, creds.ID)
 	})
-	if err == nil {
-		return "the new credential was deleted"
+	msg := deleted
+	if err != nil {
+		msg = fmt.Sprintf("the new credential (%s) could not be deleted, so delete it under your personal clients in C1.ai", creds.ID)
+		// Also said here: some errors print without their wrapping message.
+		_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "Warning: %s\n", msg)
 	}
-	return fmt.Sprintf("the new credential (%s) could not be deleted, so delete it under your personal clients in C1.ai", creds.ID)
+	if leftover != nil {
+		msg += "; " + leftover.Error()
+	}
+	return msg
 }
 
 func loginWithCredentials(cmd *cobra.Command, baseURL, clientID, clientSecret string) error {
