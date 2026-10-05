@@ -55,6 +55,15 @@ func newFakeDist(t *testing.T) *fakeDist {
 
 func (d *fakeDist) url(path string) string { return d.srv.URL + "/c1i/" + path }
 
+func (d *fakeDist) requested(path string) bool {
+	for _, p := range d.requests {
+		if p == "/c1i/"+path {
+			return true
+		}
+	}
+	return false
+}
+
 // release publishes a release: an index whose stable channel points at
 // target, a manifest for manifestSemver signed by sig, and the archive.
 type release struct {
@@ -233,6 +242,10 @@ func TestUpgradeExitCodes(t *testing.T) {
 		{"index not found", status(http.StatusNotFound), false, exitNotFound, "reading release channels"},
 		{"rate limited", status(http.StatusTooManyRequests), false, exitRateLimited, "reading release channels"},
 		{"server error", status(http.StatusBadGateway), false, exitServer, "reading release channels"},
+		// dist needs no auth and takes no caller input: other 4xx are dist's fault.
+		{"unauthorized", status(http.StatusUnauthorized), false, exitUpstream, "reading release channels"},
+		{"forbidden", status(http.StatusForbidden), false, exitUpstream, "reading release channels"},
+		{"bad request", status(http.StatusBadRequest), false, exitUpstream, "reading release channels"},
 		{"redirect refused", func(w http.ResponseWriter, r *http.Request) {
 			http.Redirect(w, r, "/elsewhere", http.StatusFound)
 		}, false, exitUpstream, "reading release channels"},
@@ -258,8 +271,10 @@ func TestUpgradeExitCodes(t *testing.T) {
 }
 
 func TestUpgradeLocalFailuresExitOneAndNameTheDirectory(t *testing.T) {
+	var d *fakeDist
 	setup := func(t *testing.T) string {
-		sig, d := newFakeSigstore(t), newFakeDist(t)
+		var sig *fakeSigstore
+		sig, d = newFakeSigstore(t), newFakeDist(t)
 		d.publish(t, sig, release{target: "v0.7.0", manifestSemver: "v0.7.0", archive: tarGz(t, []byte("NEW BINARY"))})
 		return useDist(t, d, sig.root, "v0.6.0")
 	}
@@ -277,11 +292,14 @@ func TestUpgradeLocalFailuresExitOneAndNameTheDirectory(t *testing.T) {
 		if got := exitCode(err); got != exitError {
 			t.Errorf("exit = %d (%v), want %d", got, err, exitError)
 		}
-		if err == nil || !strings.Contains(err.Error(), dir) {
-			t.Errorf("error = %v, want it to name %s", err, dir)
+		if err == nil || strings.Count(err.Error(), dir) != 1 {
+			t.Errorf("error = %v, want it to name %s once", err, dir)
 		}
 		if got := readFile(t, exe); got != "OLD BINARY" {
 			t.Errorf("binary = %q, want it untouched", got)
+		}
+		if d.requested("c1i.tar.gz") {
+			t.Error("downloaded the release before finding the install directory unwritable")
 		}
 	})
 	t.Run("upgrade already running", func(t *testing.T) {
@@ -429,12 +447,42 @@ func TestUpgradeUnknownChannelIsUsageError(t *testing.T) {
 }
 
 func TestUpgradeYankedTargetErrors(t *testing.T) {
-	d := newFakeDist(t)
-	publishIndex(t, d, `{"channels":{"stable":"v0.6.0"},"semvers":{"v0.6.0":{"yanked":true,"manifest":"m"}}}`)
-	useDist(t, d, nil, "v0.5.0")
-	_, err := runUpgrade(t)
-	if got := exitCode(err); got != exitUpstream {
-		t.Errorf("exit = %d (%v), want %d (upstream)", got, err, exitUpstream)
+	sig, d := newFakeSigstore(t), newFakeDist(t)
+	d.publish(t, sig, release{target: "v0.7.0", manifestSemver: "v0.7.0", archive: tarGz(t, []byte("NEW BINARY"))})
+	var idx map[string]any
+	if err := json.Unmarshal(d.files["index.json"], &idx); err != nil {
+		t.Fatal(err)
+	}
+	idx["semvers"].(map[string]any)["v0.7.0"].(map[string]any)["yanked"] = true
+	d.files["index.json"], _ = json.Marshal(idx)
+	exe := useDist(t, d, sig.root, "v0.6.0")
+	_, err := runUpgrade(t, "-y")
+	if got := exitCode(err); got != exitUpstream || !strings.Contains(err.Error(), "yanked") {
+		t.Errorf("exit = %d (%v), want %d naming the yank", got, err, exitUpstream)
+	}
+	if got := readFile(t, exe); got != "OLD BINARY" {
+		t.Errorf("binary = %q, want it untouched", got)
+	}
+}
+
+// Another upgrade may finish between the first version check and the lock.
+func TestUpgradeRechecksInstalledVersionUnderLock(t *testing.T) {
+	sig, d := newFakeSigstore(t), newFakeDist(t)
+	d.publish(t, sig, release{target: "v0.7.0", manifestSemver: "v0.7.0", archive: tarGz(t, []byte("NEW BINARY"))})
+	exe := useDist(t, d, sig.root, "v0.6.0")
+	installedVersion = func(string) (string, error) { return "v0.7.0", nil }
+	out, err := runUpgrade(t, "-y")
+	if err != nil {
+		t.Fatalf("upgrade: %v", err)
+	}
+	if !strings.Contains(out, "nothing to do") {
+		t.Errorf("output = %q, want nothing to do", out)
+	}
+	if got := readFile(t, exe); got != "OLD BINARY" {
+		t.Errorf("binary = %q, want it untouched", got)
+	}
+	if d.requested("c1i.tar.gz") {
+		t.Error("downloaded the release although it was already installed")
 	}
 }
 

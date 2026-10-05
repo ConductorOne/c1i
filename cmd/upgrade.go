@@ -95,6 +95,10 @@ and exits 0. --check prints a JSON report and changes nothing.
 			_, _ = fmt.Fprintf(out, "Not upgrading in place: %s\n", hint)
 			return nil
 		}
+		installDir := filepath.Dir(execPath)
+		if err := selfupdate.CheckWritable(installDir); err != nil {
+			return fmt.Errorf("cannot write to the install directory %s: %w", installDir, err)
+		}
 
 		entry, ok := idx.Semvers[target]
 		if !ok || entry.Manifest == "" {
@@ -171,7 +175,7 @@ and exits 0. --check prints a JSON report and changes nothing.
 			return distError(err, "downloading %s", target)
 		}
 		if err := selfupdate.ReplaceExecutable(execPath, bin); err != nil {
-			return fmt.Errorf("installing into %s: %w", filepath.Dir(execPath), err)
+			return fmt.Errorf("installing into %s: %w", installDir, err)
 		}
 		_, _ = fmt.Fprintf(out, "Upgraded c1i %s -> %s.\n", current, target)
 		return nil
@@ -224,12 +228,19 @@ func writeUpgradeReport(cmd *cobra.Command, current, target, channel string, ava
 	return writeObject(cmd, data)
 }
 
-// distError classifies a failure fetching or verifying a release. An HTTP
-// status keeps its own exit code through the wrapped APIError; anything else
-// is upstream (8). A refused redirect or bad path from dist is dist's fault,
-// not a usage error, so that chain is flattened.
+// distError classifies a failure fetching or verifying a release as upstream
+// (8), except that a dist 404, 429 or 5xx keeps its own exit code. dist needs
+// no auth and takes no input from the caller, so a refused redirect, a bad
+// path, or any other 4xx is dist's fault: that chain is flattened.
 func distError(err error, format string, args ...any) error {
 	msg := fmt.Sprintf(format, args...)
+	var apiErr *client.APIError
+	if errors.As(err, &apiErr) {
+		if s := apiErr.StatusCode; s == 404 || s == 429 || s >= 500 {
+			return &upstreamError{fmt.Errorf("%s: %w", msg, err)}
+		}
+		return &upstreamError{fmt.Errorf("%s: %v", msg, err)}
+	}
 	var redirErr *client.RedirectError
 	var pathErr *client.PathError
 	if errors.As(err, &redirErr) || errors.As(err, &pathErr) {

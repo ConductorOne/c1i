@@ -338,6 +338,25 @@ func TestTUFFetcher(t *testing.T) {
 	}
 }
 
+// With no injected trust root, the TUF fetch goes through the client's Doer.
+func TestTrustRootFetchUsesClientDoer(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	d := &recordingDoer{resp: &transport.Response{StatusCode: http.StatusServiceUnavailable}}
+	c := &Client{HTTP: d}
+	if err := c.VerifyManifest(t.Context(), realManifest, realSigB64, realCertB64, realRekorBundle, realSemver); err == nil {
+		t.Fatal("VerifyManifest = nil with the trust root unavailable, want an error")
+	}
+	sawTUF := false
+	for _, u := range d.urls {
+		if strings.HasPrefix(u, "https://tuf-repo-cdn.sigstore.dev/") {
+			sawTUF = true
+		}
+	}
+	if !sawTUF {
+		t.Errorf("Doer requests = %v, want the Sigstore TUF repository", d.urls)
+	}
+}
+
 // TestVerifyManifestReal verifies the live v0.7.0 release, fetching the trust
 // root through the shared transport into an empty TUF cache. Skips offline.
 func TestVerifyManifestReal(t *testing.T) {

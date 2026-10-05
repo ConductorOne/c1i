@@ -8,8 +8,10 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
 	"path"
 	"path/filepath"
@@ -132,15 +134,27 @@ func isC1iEntry(name string) bool {
 	return base == "c1i" || base == "c1i.exe"
 }
 
+// CheckWritable reports whether a file can be created in dir, so an upgrade
+// can fail before it downloads anything. Like ReplaceExecutable, its error
+// omits the path for the caller to name once.
+func CheckWritable(dir string) error {
+	f, err := os.CreateTemp(dir, ".c1i-upgrade-*")
+	if err != nil {
+		return pathless(err)
+	}
+	_ = f.Close()
+	return pathless(os.Remove(f.Name()))
+}
+
 // ReplaceExecutable atomically swaps newBinary in for the file at execPath: it
 // stages a temp file in the same directory (so the rename is atomic) and renames
 // it over execPath, which POSIX permits while the old binary runs. A failure
-// leaves execPath untouched.
+// leaves execPath untouched. Errors omit the path for the caller to name.
 func ReplaceExecutable(execPath string, newBinary []byte) error {
 	dir := filepath.Dir(execPath)
 	tmp, err := os.CreateTemp(dir, ".c1i-upgrade-*")
 	if err != nil {
-		return fmt.Errorf("staging upgrade in %s: %w (is the install directory writable?)", dir, err)
+		return fmt.Errorf("staging the new binary: %w", pathless(err))
 	}
 	tmpName := tmp.Name()
 	cleanup := func() { _ = os.Remove(tmpName) }
@@ -153,29 +167,42 @@ func ReplaceExecutable(execPath string, newBinary []byte) error {
 	if _, err := tmp.Write(newBinary); err != nil {
 		_ = tmp.Close()
 		cleanup()
-		return fmt.Errorf("writing staged binary: %w", err)
+		return fmt.Errorf("writing the new binary: %w", pathless(err))
 	}
 	if err := tmp.Chmod(mode); err != nil {
 		_ = tmp.Close()
 		cleanup()
-		return fmt.Errorf("setting mode on staged binary: %w", err)
+		return fmt.Errorf("setting the new binary's mode: %w", pathless(err))
 	}
 	// Sync before rename so a crash can't leave an empty or non-executable binary.
 	if err := tmp.Sync(); err != nil {
 		_ = tmp.Close()
 		cleanup()
-		return fmt.Errorf("syncing staged binary: %w", err)
+		return fmt.Errorf("syncing the new binary: %w", pathless(err))
 	}
 	if err := tmp.Close(); err != nil {
 		cleanup()
-		return fmt.Errorf("closing staged binary: %w", err)
+		return fmt.Errorf("closing the new binary: %w", pathless(err))
 	}
 	if err := os.Rename(tmpName, execPath); err != nil {
 		cleanup()
-		return fmt.Errorf("replacing %s: %w", execPath, err)
+		return fmt.Errorf("replacing c1i: %w", pathless(err))
 	}
 	syncDir(dir)
 	return nil
+}
+
+// pathless drops the path an *fs.PathError or *os.LinkError repeats.
+func pathless(err error) error {
+	var pe *fs.PathError
+	if errors.As(err, &pe) {
+		return pe.Err
+	}
+	var le *os.LinkError
+	if errors.As(err, &le) {
+		return le.Err
+	}
+	return err
 }
 
 // syncDir makes the rename durable, best-effort: not every filesystem can sync
