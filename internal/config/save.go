@@ -4,7 +4,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"gopkg.in/yaml.v3"
+	"go.yaml.in/yaml/v3"
 )
 
 // SaveToConfigFile reads ~/.c1i.yaml, sets the given key to value, and writes it back.
