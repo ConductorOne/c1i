@@ -39,6 +39,27 @@ Never weaken, loosen, or delete a test to make a change pass. For a new test,
 confirm it fails before your fix and passes after — a test that compiles but
 never fails proves nothing.
 
+## Dependency scan
+
+Dependabot is not enabled on this repo, so do its job by hand: run this before
+opening any PR, and act on what it reports.
+
+```sh
+rc=0; for goos in linux darwin windows; do GOOS=$goos govulncheck -show verbose ./... || rc=$?; done; test $rc -eq 0
+go list -m -u -f '{{if and (not .Indirect) (not .Main) .Update}}{{.Path}} {{.Version}} -> {{.Update.Version}}{{end}}' all
+```
+
+- govulncheck (here and in CI) exits non-zero only on *called*
+  vulnerabilities, so read its output. Bump any vulnerable module to its fixed
+  version, called or not — in your PR if it touches `go.mod`, otherwise in a
+  separate `chore(deps)` PR.
+- Bump an outdated direct dependency (`go get <path>@latest && go mod tidy`) in
+  a `chore(deps)` PR. A PR that adds a dependency adds its latest release.
+- In the same PR, check what `.github/workflows/` pins: actions with
+  `gh release list -R <owner/repo> -L 1`, `go install`ed tools with
+  `go list -m <module>@latest` (golang/vuln no longer publishes GitHub
+  releases, so `gh` reports a stale version for govulncheck).
+
 ## Scratch files
 
 Temp output, test data, and debug dumps go in `dev/`. Its contents are
