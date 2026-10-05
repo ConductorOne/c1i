@@ -302,6 +302,26 @@ func TestUpgradeLocalFailuresExitOneAndNameTheDirectory(t *testing.T) {
 			t.Error("downloaded the release before finding the install directory unwritable")
 		}
 	})
+	t.Run("replace fails after download", func(t *testing.T) {
+		exe := setup(t)
+		// A directory where the binary should be: staging works, the rename can't.
+		if err := os.Remove(exe); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.MkdirAll(filepath.Join(exe, "keep"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		_, err := runUpgrade(t, "-y")
+		if got := exitCode(err); got != exitError {
+			t.Errorf("exit = %d (%v), want %d", got, err, exitError)
+		}
+		if dir := filepath.Dir(exe); err == nil || strings.Count(err.Error(), dir) != 1 {
+			t.Errorf("error = %v, want it to name %s once", err, dir)
+		}
+		if _, statErr := os.Stat(filepath.Join(exe, "keep")); statErr != nil {
+			t.Errorf("install path changed: %v", statErr)
+		}
+	})
 	t.Run("upgrade already running", func(t *testing.T) {
 		exe := setup(t)
 		unlock, err := selfupdate.LockExecutable(exe)
