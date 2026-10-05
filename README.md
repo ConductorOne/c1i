@@ -1333,37 +1333,23 @@ c1i version       # or: c1i --version
 
 ```sh
 c1i upgrade                       # upgrade to the latest stable release (prompts first)
-c1i upgrade --check               # report whether a newer release is available; change nothing
+c1i upgrade --check               # print a JSON report; change nothing
 c1i upgrade --channel latest -y   # take the newest release without prompting
 ```
 
-`upgrade` reads the release channels published by the C1 distribution center
-(`dist.conductorone.com`) — `stable` by default, or `latest`/`preview` via
-`--channel` — and, for a standalone downloaded binary, replaces the running
-binary in place. `--yes`/`-y` skips the confirmation prompt (and is required when
-stdin is not a terminal).
+`upgrade` follows a release channel from the C1.ai distribution center
+(`dist.conductorone.com`): `stable` by default, or `latest`/`preview` via
+`--channel`. It replaces a standalone binary only after verifying the release
+manifest's Sigstore signature (c1i's release workflow, recorded in Rekor) and
+the download's SHA-256 from that manifest. `--yes`/`-y` skips the prompt and is
+required when stdin is not a terminal. `--check` prints `current`, `latest`,
+`channel`, `update_available`, `install_method`, and, for a Homebrew,
+`go install`, or container install, `upgrade_command`. For those installs
+`upgrade` prints that command and exits 0 without replacing anything.
 
-Before anything is installed, `upgrade` verifies the release's authenticity in
-two layers. First it checks the release manifest's **Sigstore signature**
-(keyless / Fulcio) against the pinned C1.ai reusable release workflow, GitHub
-Actions OIDC issuer, and `ConductorOne/c1i` source repository. It also verifies
-the published Rekor signed entry timestamp, which binds the exact manifest,
-signature, and certificate to a transparency-log time while the certificate was
-valid. Then the manifest's per-artifact **SHA-256** authenticates the downloaded
-binary. A failure at either layer aborts the upgrade without touching the
-installed binary.
-
-Only the per-release manifests are signed; the channel catalog (`index.json`)
-that names which version each channel points at, and its `yanked` flags, are
-not. So a compromised distribution origin could steer you to a *different but
-authentic, ConductorOne-signed* release — an older one (down to your current
-version, no further) or one marked yanked — but never to an unsigned or
-third-party binary. Treat the channel and yank status as best-effort, not a hard
-security boundary.
-
-If c1i was installed with **Homebrew**, **`go install`**, a system package
-manager, or is running as a **container image**, `upgrade` does not self-replace
-— it prints the appropriate remediation instead.
+The channel list (`index.json`) and its yank flags are not signed, so a
+compromised distribution origin could withhold an upgrade or offer a yanked
+release, but never an unsigned build or one older than the one you run.
 
 ## License
 

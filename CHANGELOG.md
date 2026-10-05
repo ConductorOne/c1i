@@ -15,17 +15,11 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   printed.
 - **`c1i roles list` and `c1i roles get`** list and inspect IAM roles, the ids
   `service-principals credentials create --scoped-role` takes.
-- **`c1i upgrade`** (alias `update`) — check for and install a newer release
-  from the C1 distribution center. Reads the `stable` channel by default
-  (`--channel latest|preview` to opt into newer builds), verifies the download
-  against the release manifest's SHA-256, and replaces a standalone binary in
-  place. For a Homebrew, `go install`, or container-image install it prints the
-  matching upgrade command instead of self-replacing. `--check` reports whether
-  a newer release exists without changing anything. Before installing, `upgrade`
-  verifies the release manifest's **Sigstore signature** (keyless / Fulcio)
-  against the pinned ConductorOne release-workflow identity, in addition to the
-  per-artifact SHA-256 — so a tampered or unsigned manifest is rejected before
-  anything is replaced.
+- **`c1i upgrade`** (alias `update`) installs a newer release from the C1.ai
+  distribution center after verifying its manifest's Sigstore signature and
+  the download's SHA-256. `--channel` picks `stable`, `latest` or `preview`;
+  `--check` prints a JSON report. Homebrew, `go install` and container
+  installs get their upgrade command instead.
 
 ### Changed
 
