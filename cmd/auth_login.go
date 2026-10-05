@@ -283,7 +283,7 @@ func keepNewCredential(cmd *cobra.Command, baseURL, accessToken string, opts []t
 	switch {
 	case !scopeWithin(requested, creds.ScopedRoles):
 		problem = &nonJSONResponseError{fmt.Errorf("C1 scoped the new credential to %s, not the requested %s", printable(strings.Join(creds.ScopedRoles, ", ")), strings.Join(requested, ", "))}
-	case len(requested) > 0 && c != nil && hasNoAccess(introspect, problem):
+	case len(requested) > 0 && hasNoAccess(introspect, problem):
 		problem = &usageError{fmt.Errorf("the requested roles give the credential no access: a scoped credential keeps only the overlap between its roles and your own")}
 	}
 	if problem == nil {

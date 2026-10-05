@@ -417,24 +417,27 @@ func TestAuthLoginScopeFlagConflictsAreUsageErrors(t *testing.T) {
 // stubTenant answers the device flow, the role lookup, and personal-client
 // create/delete, recording personal-client events in order.
 type stubTenant struct {
-	t              *testing.T
-	mu             sync.Mutex
-	created        []map[string]any
-	events         []string
-	rolesFail      bool
-	deleteFail     bool
-	dropScope      bool // the server ignores scopedRoles
-	noAccess       bool // the final credential can't introspect or delete itself
-	authOnly       bool // the final credential keeps only the Auth service
-	verifyFail     bool // introspect rejects the final credential
-	onRoles        func()
-	onCreate       func(kind string)
-	onDelete       func()
-	onFinalCheck   func()
-	clientFails    map[string]bool // credentials whose client can't be built
-	finalID        string
-	lostDelete     bool // the final credential's first delete commits but answers 500
-	introspectedBy []string
+	t            *testing.T
+	mu           sync.Mutex
+	created      []map[string]any
+	events       []string
+	rolesFail    bool
+	deleteFail   bool
+	dropScope    bool // the server ignores scopedRoles
+	noAccess     bool // the final credential can't introspect or delete itself
+	authOnly     bool // the final credential keeps only the Auth service
+	verifyFail   bool // introspect rejects the final credential
+	onRoles      func()
+	onCreate     func(kind string)
+	onDelete     func()
+	onFinalCheck func()
+	// cancelAtFinalCheck presses Ctrl-C during the final check and answers
+	// only once the client has seen it, so the cancel always wins.
+	cancelAtFinalCheck context.CancelFunc
+	clientFails        map[string]bool // credentials whose client can't be built
+	finalID            string
+	lostDelete         bool // the final credential's first delete commits but answers 500
+	introspectedBy     []string
 }
 
 // stubCredentialHeader carries which credential a stub client speaks for, so
@@ -469,6 +472,11 @@ func (s *stubTenant) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		final := s.finalID != "" && r.Header.Get(stubCredentialHeader) == s.finalID
 		if final && s.onFinalCheck != nil {
 			s.onFinalCheck()
+		}
+		if final && s.cancelAtFinalCheck != nil {
+			s.cancelAtFinalCheck()
+			<-r.Context().Done()
+			return
 		}
 		switch {
 		case s.verifyFail && final:
@@ -845,7 +853,7 @@ func TestLoginCtrlCAfterCreateDeletesCredential(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	authLoginCmd.SetContext(ctx)
 	t.Cleanup(func() { authLoginCmd.SetContext(context.Background()) })
-	tenant := &stubTenant{t: t, onFinalCheck: cancel}
+	tenant := &stubTenant{t: t, cancelAtFinalCheck: cancel}
 
 	r := runLogin(t, tenant, loginScope{}, "", false, nil)
 	if !errors.Is(r.err, context.Canceled) {
@@ -1000,12 +1008,11 @@ func TestLoginCtrlCWithNoAccessCredentialStillDeletesIt(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	authLoginCmd.SetContext(ctx)
 	t.Cleanup(func() { authLoginCmd.SetContext(context.Background()) })
-	tenant := &stubTenant{t: t, noAccess: true, onFinalCheck: cancel}
+	tenant := &stubTenant{t: t, noAccess: true, cancelAtFinalCheck: cancel}
 
 	r := runLogin(t, tenant, loginScope{roles: []string{stubAppsRoleID}}, "", false, nil)
-	// The cancel races the no-access answer; either failure is right.
-	if !errors.Is(r.err, context.Canceled) && exitCode(r.err) != exitUsage {
-		t.Fatalf("err = %v, want Ctrl-C or the no-access usage error", r.err)
+	if !errors.Is(r.err, context.Canceled) {
+		t.Fatalf("err = %v, want context.Canceled", r.err)
 	}
 	if want := []string{"create final pc-1", "create helper pc-2", "delete pc-1 by pc-2", "delete pc-2 by pc-2"}; !reflect.DeepEqual(tenant.events, want) {
 		t.Errorf("events = %v, want %v", tenant.events, want)
