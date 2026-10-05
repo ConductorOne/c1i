@@ -13,6 +13,8 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `--choose-roles` for a menu after browser approval. The new credential is
   checked with C1 before it is stored, named after its role, and its scope is
   printed.
+- **`c1i roles list` and `c1i roles get`** list and inspect IAM roles, the ids
+  `service-principals credentials create --scoped-role` takes.
 
 ### Changed
 
