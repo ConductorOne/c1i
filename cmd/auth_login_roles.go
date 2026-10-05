@@ -168,8 +168,9 @@ var newCredentialClient = func(cmd *cobra.Command, baseURL, clientID, clientSecr
 	)
 }
 
-// helperLeftError reports a helper credential the login could not delete. The
-// login itself succeeded; exiting non-zero keeps a script from missing it.
+// helperLeftError reports a helper credential the login could not delete. It
+// keeps a fixed exit code (1) whatever the delete failed on, so a successful
+// login isn't misread as, say, an auth failure.
 type helperLeftError struct {
 	id  string
 	err error
@@ -179,41 +180,53 @@ func (e *helperLeftError) Error() string {
 	return fmt.Sprintf("the temporary credential %q (%s) was not deleted: %v. It has all of your roles until it expires in 10 minutes; delete it sooner under your personal clients in C1.ai", helperDisplayName, e.id, e.err)
 }
 
-func (e *helperLeftError) Unwrap() error { return e.err }
+// detached gives a request that must finish even after Ctrl-C.
+func detached(ctx context.Context) (context.Context, context.CancelFunc) {
+	return context.WithTimeout(context.WithoutCancel(ctx), 30*time.Second)
+}
 
-// lookupRoles reads the roles a login may scope to. The device token may only
-// create personal clients, so a temporary unscoped one does the reading and is
-// deleted before this returns, even after Ctrl-C. A failed delete comes back
-// as leftover, separate from err, so the login can still finish.
-func lookupRoles(cmd *cobra.Command, baseURL, accessToken string, opts []transport.Option) (lookup roleLookup, leftover, err error) {
+// withHelper runs fn with a client for a temporary unscoped personal client,
+// which the device token can create but nothing else, then deletes it, even
+// after Ctrl-C. A failed delete is warned about and returned as leftover,
+// separate from fn's error, so the caller can still finish.
+func withHelper(cmd *cobra.Command, baseURL, accessToken string, opts []transport.Option, fn func(*client.Client) error) (leftover, err error) {
 	ctx := cmd.Context()
-	// Detached from Ctrl-C: an interrupted create could commit a helper whose id
-	// we never learn.
-	createCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 30*time.Second)
+	createCtx, cancel := detached(ctx)
 	defer cancel()
 	helper, err := login.CreatePersonalClient(createCtx, baseURL, accessToken, login.PersonalClientOptions{DisplayName: helperDisplayName, Expires: helperLifetime}, opts...)
 	if err != nil {
-		return lookup, nil, err
+		return nil, err
 	}
 	c, err := newCredentialClient(cmd, baseURL, helper.ClientID, helper.ClientSecret)
-	if err != nil {
+	if err == nil {
+		if err = ctx.Err(); err == nil {
+			err = fn(c)
+		}
+		if delErr := deletePersonalClient(ctx, c, helper.ID); delErr != nil {
+			leftover = &helperLeftError{helper.ID, delErr}
+		}
+	} else {
 		leftover = &helperLeftError{helper.ID, err}
-		_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "Warning: %v\n", leftover)
-		return lookup, leftover, err
 	}
-	if err = ctx.Err(); err == nil {
-		lookup, err = readRoles(ctx, c)
-	}
-	if delErr := deletePersonalClient(ctx, c, helper.ID); delErr != nil {
-		leftover = &helperLeftError{helper.ID, delErr}
+	if leftover != nil {
 		_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "Warning: %v\n", leftover)
 	}
+	return leftover, err
+}
+
+// lookupRoles reads the roles a login may scope to, through a helper.
+func lookupRoles(cmd *cobra.Command, baseURL, accessToken string, opts []transport.Option) (lookup roleLookup, leftover, err error) {
+	leftover, err = withHelper(cmd, baseURL, accessToken, opts, func(c *client.Client) error {
+		var rerr error
+		lookup, rerr = readRoles(cmd.Context(), c)
+		return rerr
+	})
 	return lookup, leftover, err
 }
 
 // deletePersonalClient deletes a personal client even after Ctrl-C.
 func deletePersonalClient(ctx context.Context, c *client.Client, id string) error {
-	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 30*time.Second)
+	ctx, cancel := detached(ctx)
 	defer cancel()
 	_, err := c.Delete(ctx, client.Path("/api/v1/iam/personal_clients/%s", id))
 	return err
@@ -223,6 +236,9 @@ func readRoles(ctx context.Context, c *client.Client) (roleLookup, error) {
 	userID, err := currentUserID(ctx, c)
 	if err != nil {
 		return roleLookup{}, err
+	}
+	if userID == "" {
+		return roleLookup{}, &nonJSONResponseError{fmt.Errorf("introspect returned no user id for the login's credential")}
 	}
 	data, err := c.Get(ctx, client.Path("/api/v1/users/%s", userID), nil)
 	if err != nil {
@@ -270,7 +286,8 @@ func readRoles(ctx context.Context, c *client.Client) (roleLookup, error) {
 // A scoped credential keeps only the overlap between its roles and its owner's
 // own access, so an unheld role adds little or nothing. Offered: roles you
 // hold, Basic User, and Read-Only Administrator (a read-only copy of your
-// access). Administrators hold every permission, so they see every role.
+// access). Administrators see every role; for read-only administrators the
+// server downgrades each to read-only, as C1.ai's own picker assumes.
 func filterDelegable(catalog []roleListItem, held map[string]bool) []menuRole {
 	admin := false
 	for _, r := range catalog {
@@ -467,16 +484,14 @@ func credentialName(ids []string, chosen []menuRole) string {
 		return login.DefaultDisplayName
 	case len(chosen) == 0:
 		return login.DefaultDisplayName + " (scoped)"
+	case len(chosen) > 3:
+		return fmt.Sprintf("%s (%d roles)", login.DefaultDisplayName, len(chosen))
 	}
 	names := make([]string, len(chosen))
 	for i, r := range chosen {
 		names[i] = printable(r.DisplayName)
 	}
-	name := login.DefaultDisplayName + " (" + strings.Join(names, ", ") + ")"
-	if len(name) > 200 {
-		name = fmt.Sprintf("%s (%d roles)", login.DefaultDisplayName, len(chosen))
-	}
-	return name
+	return login.DefaultDisplayName + " (" + strings.Join(names, ", ") + ")"
 }
 
 // reportScope states the new credential's scope as the server returned it.
@@ -524,12 +539,12 @@ func sameRoles(requested, granted []string) bool {
 const authRolePrefix = "role/c1.api.auth.v1.Auth:"
 
 // hasNoAccess reports whether a scoped credential's introspect shows it can do
-// nothing: a scope with no overlap loses introspect itself (403), and a nearly
-// empty one keeps only the Auth service.
+// nothing: a scope with no overlap loses introspect itself (a 403 naming it),
+// and a nearly empty one keeps only the Auth service.
 func hasNoAccess(introspect []byte, err error) bool {
 	var apiErr *client.APIError
 	if errors.As(err, &apiErr) {
-		return apiErr.StatusCode == http.StatusForbidden
+		return apiErr.StatusCode == http.StatusForbidden && strings.Contains(apiErr.Body, "c1.api.auth.v1.Auth.Introspect")
 	}
 	if err != nil {
 		return false
@@ -537,7 +552,7 @@ func hasNoAccess(introspect []byte, err error) bool {
 	var resp struct {
 		Roles []string `json:"roles"`
 	}
-	if json.Unmarshal(introspect, &resp) != nil {
+	if json.Unmarshal(introspect, &resp) != nil || len(resp.Roles) == 0 {
 		return false
 	}
 	for _, r := range resp.Roles {

@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"path/filepath"
 	"reflect"
 	"strings"
 	"sync"
@@ -19,6 +20,7 @@ import (
 	"github.com/ConductorOne/c1i/internal/config"
 	"github.com/ConductorOne/c1i/internal/keychain"
 	"github.com/spf13/cobra"
+	"github.com/zalando/go-keyring"
 )
 
 // Role ids in the stub tenant: the id format, but lowercase so the
@@ -364,7 +366,7 @@ func TestAuthLoginScopeFlagConflictsAreUsageErrors(t *testing.T) {
 		{"choose and scoped together", map[string][]string{"choose-roles": {"true"}, "scoped-role": {"r-1"}}, "mutually exclusive"},
 		{"choose without a terminal", map[string][]string{"choose-roles": {"true"}}, "interactive terminal"},
 		{"scoped role with credential login", map[string][]string{"scoped-role": {"r-1"}, "client-id": {"id"}, "client-secret": {"sec"}}, "only to browser login"},
-		{"choose-roles=false with half a credential", map[string][]string{"choose-roles": {"false"}, "client-id": {"id"}}, "only to browser login"},
+		{"choose-roles with credential login", map[string][]string{"choose-roles": {"true"}, "client-id": {"id"}, "client-secret": {"sec"}}, "only to browser login"},
 		{"empty scoped role", map[string][]string{"scoped-role": {""}}, "scoped-role"},
 	}
 	for _, tt := range tests {
@@ -401,10 +403,27 @@ type stubTenant struct {
 	rolesFail  bool
 	deleteFail bool
 	dropScope  bool // the server ignores scopedRoles
-	noAccess   bool // introspect is forbidden to the final credential
+	noAccess   bool // the final credential can't introspect or delete itself
 	authOnly   bool // the final credential keeps only the Auth service
 	verifyFail bool // introspect rejects the final credential
 	onRoles    func()
+	onCreate   func(kind string)
+	finalID    string
+}
+
+// stubCredentialHeader carries which credential a stub client speaks for, so
+// the tenant can check every call uses the right one.
+const stubCredentialHeader = "X-Stub-Credential"
+
+type credentialTransport struct {
+	id   string
+	base http.RoundTripper
+}
+
+func (c credentialTransport) RoundTrip(r *http.Request) (*http.Response, error) {
+	r = r.Clone(r.Context())
+	r.Header.Set(stubCredentialHeader, c.id)
+	return c.base.RoundTrip(r)
 }
 
 func (s *stubTenant) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -420,14 +439,14 @@ func (s *stubTenant) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	case r.URL.Path == "/auth/v1/token":
 		_, _ = fmt.Fprint(w, `{"access_token":"device-tok"}`)
 	case r.URL.Path == "/api/v1/auth/introspect":
-		final := len(s.created) > 0 && s.created[len(s.created)-1]["displayName"] != helperDisplayName
+		final := s.finalID != "" && r.Header.Get(stubCredentialHeader) == s.finalID
 		switch {
 		case s.verifyFail && final:
 			w.WriteHeader(http.StatusUnauthorized)
 			_, _ = fmt.Fprint(w, `{"code":16,"message":"unauthenticated"}`)
 		case s.noAccess && final:
 			w.WriteHeader(http.StatusForbidden)
-			_, _ = fmt.Fprint(w, `{"code":7,"message":"Permission denied, missing permission/c1.api.auth.v1.Auth.Introspect"}`)
+			_, _ = fmt.Fprint(w, `{"code":7,"message":"Permission denied, missing permission/c1.api.auth.v1.Auth.Introspect (request-id: x)"}`)
 		case s.authOnly && final:
 			_, _ = fmt.Fprint(w, `{"userId":"u-1","roles":["role/c1.api.auth.v1.Auth:reflection"],"permissions":["permission/c1.api.auth.v1.Auth.Introspect"]}`)
 		default:
@@ -461,6 +480,12 @@ func (s *stubTenant) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			kind = "helper"
 		}
 		s.events = append(s.events, fmt.Sprintf("create %s pc-%d", kind, n))
+		if kind == "final" {
+			s.finalID = fmt.Sprintf("pc-%d", n)
+		}
+		if s.onCreate != nil {
+			s.onCreate(kind)
+		}
 		scope := body["scopedRoles"]
 		if scope == nil || s.dropScope {
 			scope = []any{}
@@ -471,11 +496,13 @@ func (s *stubTenant) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		})
 		_, _ = w.Write(resp)
 	case strings.HasPrefix(r.URL.Path, "/api/v1/iam/personal_clients/") && r.Method == http.MethodDelete:
-		if s.deleteFail {
-			w.WriteHeader(http.StatusInternalServerError)
+		by := r.Header.Get(stubCredentialHeader)
+		if s.deleteFail || (s.noAccess && by == s.finalID) {
+			w.WriteHeader(http.StatusForbidden)
+			_, _ = fmt.Fprint(w, `{"code":7,"message":"Permission denied"}`)
 			return
 		}
-		s.events = append(s.events, "delete "+strings.TrimPrefix(r.URL.Path, "/api/v1/iam/personal_clients/"))
+		s.events = append(s.events, "delete "+strings.TrimPrefix(r.URL.Path, "/api/v1/iam/personal_clients/")+" by "+by)
 		_, _ = fmt.Fprint(w, `{}`)
 	default:
 		s.t.Errorf("unexpected request %s %s", r.Method, r.URL.Path)
@@ -500,8 +527,10 @@ func runLogin(t *testing.T, tenant *stubTenant, scope loginScope, stdin string, 
 	}
 
 	origCred, origOpen, origTTY := newCredentialClient, openBrowser, isTerminal
-	newCredentialClient = func(_ *cobra.Command, _, _, _ string) (*client.Client, error) {
-		return client.NewForTesting(srv.URL, srv.Client(), client.WithMaxRetries(0)), nil
+	newCredentialClient = func(_ *cobra.Command, _, clientID, _ string) (*client.Client, error) {
+		id, _, _ := strings.Cut(clientID, "@")
+		hc := &http.Client{Transport: credentialTransport{id: id, base: srv.Client().Transport}}
+		return client.NewForTesting(srv.URL, hc, client.WithMaxRetries(0)), nil
 	}
 	openBrowser = func(string) error { return nil }
 	isTerminal = func() bool { return tty }
@@ -551,7 +580,7 @@ func TestLoginScopedRoleNameDeletesHelperFirst(t *testing.T) {
 	if r.err != nil {
 		t.Fatalf("login: %v\n%s", r.err, r.out)
 	}
-	if want := []string{"create helper pc-1", "delete pc-1", "create final pc-2"}; !reflect.DeepEqual(tenant.events, want) {
+	if want := []string{"create helper pc-1", "delete pc-1 by pc-1", "create final pc-2"}; !reflect.DeepEqual(tenant.events, want) {
 		t.Errorf("events = %v, want %v", tenant.events, want)
 	}
 	if got := tenant.created[0]["expires"]; got != helperLifetime {
@@ -582,7 +611,7 @@ func TestLoginScopedRoleRefusals(t *testing.T) {
 			if code := exitCode(r.err); code != exitUsage || !strings.Contains(r.err.Error(), tc.want) {
 				t.Fatalf("err = %v (exit %d), want usage error containing %q", r.err, code, tc.want)
 			}
-			if want := []string{"create helper pc-1", "delete pc-1"}; !reflect.DeepEqual(tenant.events, want) {
+			if want := []string{"create helper pc-1", "delete pc-1 by pc-1"}; !reflect.DeepEqual(tenant.events, want) {
 				t.Errorf("events = %v, want only the helper, then deleted", tenant.events)
 			}
 		})
@@ -613,7 +642,7 @@ func TestLoginChooseRolesDeletesHelperBeforeMenu(t *testing.T) {
 	if strings.Contains(r.out, "Campaign Administrator") {
 		t.Errorf("menu offered an unheld role:\n%s", r.out)
 	}
-	if want := []string{"create helper pc-1", "delete pc-1", "create final pc-2"}; !reflect.DeepEqual(tenant.events, want) {
+	if want := []string{"create helper pc-1", "delete pc-1 by pc-1", "create final pc-2"}; !reflect.DeepEqual(tenant.events, want) {
 		t.Errorf("events = %v, want %v", tenant.events, want)
 	}
 	if !strings.Contains(r.out, "Credential scoped to: Basic User") {
@@ -643,7 +672,7 @@ func TestLoginLookupFailureDeletesHelper(t *testing.T) {
 	if code := exitCode(r.err); code != exitAuth {
 		t.Errorf("exit code = %d (%v), want %d", code, r.err, exitAuth)
 	}
-	if want := []string{"create helper pc-1", "delete pc-1"}; !reflect.DeepEqual(tenant.events, want) {
+	if want := []string{"create helper pc-1", "delete pc-1 by pc-1"}; !reflect.DeepEqual(tenant.events, want) {
 		t.Errorf("events = %v, want %v", tenant.events, want)
 	}
 }
@@ -660,7 +689,7 @@ func TestLoginCtrlCDuringLookupDeletesHelper(t *testing.T) {
 	if !errors.Is(r.err, context.Canceled) {
 		t.Fatalf("err = %v, want context.Canceled", r.err)
 	}
-	if want := []string{"create helper pc-1", "delete pc-1"}; !reflect.DeepEqual(tenant.events, want) {
+	if want := []string{"create helper pc-1", "delete pc-1 by pc-1"}; !reflect.DeepEqual(tenant.events, want) {
 		t.Errorf("events = %v, want the helper deleted despite the cancel", tenant.events)
 	}
 }
@@ -673,8 +702,11 @@ func TestLoginHelperDeleteFailureFailsTheLogin(t *testing.T) {
 	if !errors.As(r.err, &left) || exitCode(r.err) == 0 {
 		t.Fatalf("err = %v, want a non-zero helperLeftError", r.err)
 	}
-	if n := strings.Count(r.errOut, "(pc-1)"); n != 2 {
-		t.Errorf("warning naming the helper printed %d times, want 2 (at once and at the end):\n%s", n, r.errOut)
+	if !strings.Contains(r.errOut, "Warning:") || !strings.Contains(r.err.Error(), "(pc-1)") {
+		t.Errorf("want the helper named in a warning and in the final error:\nstderr: %s\nerr: %v", r.errOut, r.err)
+	}
+	if exitCode(r.err) != exitError {
+		t.Errorf("exit = %d, want %d whatever the delete failed on", exitCode(r.err), exitError)
 	}
 	if got := storedFor(r.baseURL); got != "pc-2@tenant/pcc" {
 		t.Errorf("stored = %q, want the scoped credential kept", got)
@@ -688,7 +720,7 @@ func TestLoginRejectsDroppedScope(t *testing.T) {
 	if code := exitCode(r.err); code != exitServer || !strings.Contains(r.err.Error(), "not the requested") {
 		t.Fatalf("err = %v (exit %d), want exit %d naming the mismatch", r.err, code, exitServer)
 	}
-	if want := []string{"create final pc-1", "delete pc-1"}; !reflect.DeepEqual(tenant.events, want) {
+	if want := []string{"create final pc-1", "delete pc-1 by pc-1"}; !reflect.DeepEqual(tenant.events, want) {
 		t.Errorf("events = %v, want the wrongly scoped credential deleted", tenant.events)
 	}
 	if got := storedFor(r.baseURL); got != "" {
@@ -699,18 +731,37 @@ func TestLoginRejectsDroppedScope(t *testing.T) {
 func TestLoginRejectsNoAccess(t *testing.T) {
 	for _, tc := range []struct {
 		name   string
-		tenant func(*testing.T) *stubTenant
+		tenant *stubTenant
 		want   string
+		events []string
 	}{
-		{"introspect forbidden", func(t *testing.T) *stubTenant { return &stubTenant{t: t, noAccess: true} }, "the credential was deleted"},
-		{"only the Auth service left", func(t *testing.T) *stubTenant { return &stubTenant{t: t, authOnly: true} }, "the credential was deleted"},
-		{"and it can't delete itself", func(t *testing.T) *stubTenant { return &stubTenant{t: t, noAccess: true, deleteFail: true} }, "(pc-1) could not delete itself"},
+		{
+			name:   "keeps only the Auth service: deletes itself",
+			tenant: &stubTenant{authOnly: true},
+			want:   "the new credential was deleted",
+			events: []string{"create final pc-1", "delete pc-1 by pc-1"},
+		},
+		{
+			name:   "introspect forbidden: a helper deletes it",
+			tenant: &stubTenant{noAccess: true},
+			want:   "the new credential was deleted",
+			events: []string{"create final pc-1", "create helper pc-2", "delete pc-1 by pc-2", "delete pc-2 by pc-2"},
+		},
+		{
+			name:   "nothing can delete it: name it",
+			tenant: &stubTenant{noAccess: true, deleteFail: true},
+			want:   "the new credential (pc-1) could not be deleted",
+		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			freshContext(t)
-			r := runLogin(t, tc.tenant(t), loginScope{roles: []string{stubAppsRoleID}}, "", false, nil)
+			tc.tenant.t = t
+			r := runLogin(t, tc.tenant, loginScope{roles: []string{stubAppsRoleID}}, "", false, nil)
 			if code := exitCode(r.err); code != exitUsage || !strings.Contains(r.err.Error(), "no access") || !strings.Contains(r.err.Error(), tc.want) {
 				t.Fatalf("err = %v (exit %d), want a usage error containing %q", r.err, code, tc.want)
+			}
+			if tc.events != nil && !reflect.DeepEqual(tc.tenant.events, tc.events) {
+				t.Errorf("events = %v, want %v", tc.tenant.events, tc.events)
 			}
 			if got := storedFor(r.baseURL); got != "" {
 				t.Errorf("stored = %q, want nothing", got)
@@ -720,20 +771,79 @@ func TestLoginRejectsNoAccess(t *testing.T) {
 }
 
 func TestHasNoAccess(t *testing.T) {
-	forbidden := &client.APIError{StatusCode: http.StatusForbidden}
 	for _, tc := range []struct {
+		name string
 		body string
 		err  error
 		want bool
 	}{
-		{"", forbidden, true},
-		{"", &client.APIError{StatusCode: http.StatusUnauthorized}, false},
-		{`{"roles":["role/c1.api.auth.v1.Auth:reflection"]}`, nil, true},
-		{`{"roles":["role/c1.api.auth.v1.Auth:reflection","role/c1.api.app.v1.Apps:viewer"]}`, nil, false},
+		{"introspect itself forbidden", "", &client.APIError{StatusCode: http.StatusForbidden, Body: `{"message":"Permission denied, missing permission/c1.api.auth.v1.Auth.Introspect"}`}, true},
+		{"some other 403", "", &client.APIError{StatusCode: http.StatusForbidden, Body: `{"message":"source IP not allowed"}`}, false},
+		{"401", "", &client.APIError{StatusCode: http.StatusUnauthorized}, false},
+		{"only the Auth service", `{"roles":["role/c1.api.auth.v1.Auth:reflection"]}`, nil, true},
+		{"real access", `{"roles":["role/c1.api.auth.v1.Auth:reflection","role/c1.api.app.v1.Apps:viewer"]}`, nil, false},
+		{"no roles key", `{}`, nil, false},
 	} {
 		if got := hasNoAccess([]byte(tc.body), tc.err); got != tc.want {
-			t.Errorf("hasNoAccess(%s, %v) = %v, want %v", tc.body, tc.err, got, tc.want)
+			t.Errorf("%s: hasNoAccess = %v, want %v", tc.name, got, tc.want)
 		}
+	}
+}
+
+// TestLoginCtrlCAfterCreateDeletesCredential cancels right after the final
+// credential is created, as Ctrl-C would: it must not be left behind.
+func TestLoginCtrlCAfterCreateDeletesCredential(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	authLoginCmd.SetContext(ctx)
+	t.Cleanup(func() { authLoginCmd.SetContext(context.Background()) })
+	tenant := &stubTenant{t: t, onCreate: func(kind string) {
+		if kind == "final" {
+			cancel()
+		}
+	}}
+
+	r := runLogin(t, tenant, loginScope{}, "", false, nil)
+	if !errors.Is(r.err, context.Canceled) {
+		t.Fatalf("err = %v, want context.Canceled", r.err)
+	}
+	if want := []string{"create final pc-1", "delete pc-1 by pc-1"}; !reflect.DeepEqual(tenant.events, want) {
+		t.Errorf("events = %v, want the credential deleted despite the cancel", tenant.events)
+	}
+}
+
+// TestLoginStoreFailureDeletesCredential makes both credential stores fail:
+// the verified credential must be deleted, not left unnamed in C1.ai.
+func TestLoginStoreFailureDeletesCredential(t *testing.T) {
+	freshContext(t)
+	keyring.MockInitWithError(keyring.ErrUnsupportedPlatform)
+	t.Cleanup(keyring.MockInit)
+	notADir := filepath.Join(t.TempDir(), "file")
+	if err := os.WriteFile(notADir, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("XDG_CONFIG_HOME", notADir)
+	t.Setenv("HOME", notADir)
+
+	tenant := &stubTenant{t: t}
+	r := runLogin(t, tenant, loginScope{}, "", false, nil)
+	if r.err == nil || !strings.Contains(r.err.Error(), "failed to store credentials") || !strings.Contains(r.err.Error(), "the new credential was deleted") {
+		t.Fatalf("err = %v, want a store failure that deleted the credential", r.err)
+	}
+	if want := []string{"create final pc-1", "delete pc-1 by pc-1"}; !reflect.DeepEqual(tenant.events, want) {
+		t.Errorf("events = %v, want %v", tenant.events, want)
+	}
+}
+
+func TestLoginVerifiesWithTheNewCredential(t *testing.T) {
+	freshContext(t)
+	tenant := &stubTenant{t: t, verifyFail: true}
+	// verifyFail rejects only calls made as the new credential, so this fails
+	// exactly when verification uses it rather than stored or env credentials.
+	t.Setenv("C1I_CLIENT_ID", "env-1@tenant/pcc")
+	t.Setenv("C1I_CLIENT_SECRET", "env-sec")
+	r := runLogin(t, tenant, loginScope{}, "", false, nil)
+	if r.err == nil || !strings.Contains(r.err.Error(), "credential verification failed") {
+		t.Fatalf("err = %v, want verification of the new credential to fail", r.err)
 	}
 }
 
@@ -745,8 +855,8 @@ func TestLoginVerifyFailureKeepsPreviousCredential(t *testing.T) {
 		}
 	}
 	r := runLogin(t, &stubTenant{t: t, verifyFail: true}, loginScope{}, "", false, seed)
-	if r.err == nil || !strings.Contains(r.err.Error(), "pc-1") {
-		t.Fatalf("err = %v, want a verification failure naming the new credential", r.err)
+	if r.err == nil || !strings.Contains(r.err.Error(), "the new credential was deleted") {
+		t.Fatalf("err = %v, want a verification failure that deleted the new credential", r.err)
 	}
 	if got := storedFor(r.baseURL); got != "old-1@tenant/pcc" {
 		t.Errorf("stored = %q, want the previous credential kept", got)

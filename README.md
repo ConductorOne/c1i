@@ -1228,9 +1228,10 @@ Enter keeps all roles, and `--choose-roles=false` skips the question.
 
 - **The menu** offers the roles you hold, Basic User and Read-Only
   Administrator (a read-only copy of your access); administrators see every
-  role. A scoped credential keeps only the overlap between its roles and your
-  own access, so other roles would add little or nothing. Enter one or more numbers, or `0` for all roles; a blank
-  answer asks again.
+  role, which C1 makes read-only for read-only administrators. A scoped
+  credential keeps only the overlap between its roles and your own access, so
+  other roles would add little or nothing. Enter one or more numbers, or `0`
+  for all roles; a blank answer asks again.
 - **`--scoped-role`** takes a role name (`basic-user`, `Basic User` or
   `system:user`; case, spaces, hyphens and underscores don't matter) or a
   27-character role id. Names are checked against the menu's roles right after
@@ -1241,11 +1242,12 @@ Enter keeps all roles, and `--choose-roles=false` skips the question.
   (temporary)`, with all of your roles. It expires after 10 minutes and is
   deleted before your credential is created; if the delete fails, login says so
   and exits non-zero.
-- **The new credential** is checked with C1 before it is stored: if its scope
-  isn't what was asked for, or its roles give it no access, it is deleted and
-  login fails. Otherwise it is named after its roles (`Created by c1i (Basic
-  User)`) and login prints its scope. It gets `403` on commands its roles don't
-  cover.
+- **The new credential** is checked with C1 before it is stored. If its scope
+  isn't what was asked for, its roles give it no access, it can't be stored, or
+  you press Ctrl-C, it is deleted (by a temporary credential, if it can't
+  delete itself) and login fails; if even that fails, login names it. Otherwise
+  it is named after its roles (`Created by c1i (Basic User)`) and login prints
+  its scope. It gets `403` on commands its roles don't cover.
 - Logging in again doesn't revoke the previous credential; login names it.
   `--choose-roles` and `--scoped-role` don't apply to
   `--client-id`/`--client-secret`.
