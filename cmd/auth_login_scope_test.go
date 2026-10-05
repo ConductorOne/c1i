@@ -321,12 +321,21 @@ func TestCredentialName(t *testing.T) {
 	}
 }
 
-func TestSameRoles(t *testing.T) {
-	if !sameRoles([]string{"a", "b"}, []string{"b", "a"}) || !sameRoles(nil, []string{}) {
-		t.Error("equal sets reported different")
-	}
-	if sameRoles([]string{"a"}, nil) || sameRoles([]string{"a"}, []string{"a", "b"}) {
-		t.Error("different sets reported equal")
+func TestScopeWithin(t *testing.T) {
+	for _, tc := range []struct {
+		requested, granted []string
+		want               bool
+	}{
+		{nil, nil, true},
+		{[]string{"a", "b"}, []string{"b", "a"}, true},
+		{[]string{"a", "b"}, []string{"a"}, true}, // narrower is fine
+		{[]string{"a"}, nil, false},               // dropped: unscoped
+		{[]string{"a"}, []string{"a", "b"}, false},
+		{nil, []string{"a"}, false},
+	} {
+		if got := scopeWithin(tc.requested, tc.granted); got != tc.want {
+			t.Errorf("scopeWithin(%v, %v) = %v, want %v", tc.requested, tc.granted, got, tc.want)
+		}
 	}
 }
 
@@ -421,6 +430,7 @@ type stubTenant struct {
 	onRoles        func()
 	onCreate       func(kind string)
 	onDelete       func()
+	onFinalCheck   func()
 	finalID        string
 	lostDelete     bool // the final credential's first delete commits but answers 500
 	introspectedBy []string
@@ -456,6 +466,9 @@ func (s *stubTenant) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	case r.URL.Path == "/api/v1/auth/introspect":
 		s.introspectedBy = append(s.introspectedBy, r.Header.Get(stubCredentialHeader))
 		final := s.finalID != "" && r.Header.Get(stubCredentialHeader) == s.finalID
+		if final && s.onFinalCheck != nil {
+			s.onFinalCheck()
+		}
 		switch {
 		case s.verifyFail && final:
 			w.WriteHeader(http.StatusUnauthorized)
@@ -828,11 +841,7 @@ func TestLoginCtrlCAfterCreateDeletesCredential(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	authLoginCmd.SetContext(ctx)
 	t.Cleanup(func() { authLoginCmd.SetContext(context.Background()) })
-	tenant := &stubTenant{t: t, onCreate: func(kind string) {
-		if kind == "final" {
-			cancel()
-		}
-	}}
+	tenant := &stubTenant{t: t, onFinalCheck: cancel}
 
 	r := runLogin(t, tenant, loginScope{}, "", false, nil)
 	if !errors.Is(r.err, context.Canceled) {
@@ -881,8 +890,13 @@ func TestLoginVerifiesWithTheNewCredential(t *testing.T) {
 	if !reflect.DeepEqual(tenant.introspectedBy, []string{"pc-1"}) {
 		t.Errorf("introspect called as %v, want only the new credential pc-1", tenant.introspectedBy)
 	}
-	if !strings.Contains(r.out, "C1I_CLIENT_ID/C1I_CLIENT_SECRET are set") {
-		t.Errorf("no note that env credentials take precedence:\n%s", r.out)
+
+	var out bytes.Buffer
+	authLoginCmd.SetOut(&out)
+	t.Cleanup(func() { authLoginCmd.SetOut(nil) })
+	noteEnvCredentials(authLoginCmd)
+	if !strings.Contains(out.String(), "take precedence over this login") {
+		t.Errorf("no note that env credentials take precedence: %q", out.String())
 	}
 }
 
@@ -983,15 +997,11 @@ func TestLoginCtrlCWithNoAccessCredentialStillDeletesIt(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	authLoginCmd.SetContext(ctx)
 	t.Cleanup(func() { authLoginCmd.SetContext(context.Background()) })
-	tenant := &stubTenant{t: t, noAccess: true, onCreate: func(kind string) {
-		if kind == "final" {
-			cancel()
-		}
-	}}
+	tenant := &stubTenant{t: t, noAccess: true, onFinalCheck: cancel}
 
 	r := runLogin(t, tenant, loginScope{roles: []string{stubAppsRoleID}}, "", false, nil)
-	if !errors.Is(r.err, context.Canceled) {
-		t.Fatalf("err = %v, want context.Canceled", r.err)
+	if r.err == nil {
+		t.Fatal("want the login to fail")
 	}
 	if want := []string{"create final pc-1", "create helper pc-2", "delete pc-1 by pc-2", "delete pc-2 by pc-2"}; !reflect.DeepEqual(tenant.events, want) {
 		t.Errorf("events = %v, want %v", tenant.events, want)
@@ -1046,5 +1056,67 @@ func TestJoinLeftover(t *testing.T) {
 	}
 	if exitCode(got) != exitUsage {
 		t.Errorf("exit = %d, want the login failure's %d", exitCode(got), exitUsage)
+	}
+}
+
+// TestLineReaderKeepsOneScan: a read abandoned on Ctrl-C keeps the only Scan,
+// and its line goes to the next prompt instead of being lost.
+func TestLineReaderKeepsOneScan(t *testing.T) {
+	r, w := io.Pipe()
+	t.Cleanup(func() { _ = r.Close(); _ = w.Close() })
+	in := newLineReader(r)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan error, 1)
+	go func() { _, err := in.readLine(ctx); done <- err }()
+	time.Sleep(20 * time.Millisecond) // let the Scan start
+	cancel()
+	if err := <-done; !errors.Is(err, context.Canceled) {
+		t.Fatalf("cancelled read = %v, want context.Canceled", err)
+	}
+	if _, err := in.readLine(ctx); !errors.Is(err, context.Canceled) {
+		t.Errorf("read on a cancelled context = %v, want context.Canceled", err)
+	}
+
+	go func() { _, _ = io.WriteString(w, "x\n") }()
+	// Bounded, so a lost line fails fast instead of hanging the suite.
+	next, stop := context.WithTimeout(context.Background(), 2*time.Second)
+	defer stop()
+	if line, err := in.readLine(next); err != nil || line != "x" {
+		t.Errorf("next read = %q, %v; want the line the abandoned read took", line, err)
+	}
+}
+
+func TestHelperLeftErrorExitsOne(t *testing.T) {
+	left := &helperLeftError{&login.Credentials{ID: "pc-1"}, &client.APIError{StatusCode: http.StatusBadRequest, Body: `{"code":3,"message":"invalid argument"}`}}
+	if code := exitCode(left); code != exitError {
+		t.Errorf("exit = %d, want %d despite the usage-like message", code, exitError)
+	}
+}
+
+// TestLoginStoreFailureNamesWipedPrevious: keychain.Store clears the old entry
+// before writing, so a failed store must name the previous credential.
+func TestLoginStoreFailureNamesWipedPrevious(t *testing.T) {
+	freshContext(t)
+	seed := func(baseURL string) {
+		if _, err := keychain.Store(config.KeychainService(baseURL), "old-1@tenant/pcc", "old-sec"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	notADir := filepath.Join(t.TempDir(), "file")
+	if err := os.WriteFile(notADir, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(keyring.MockInit)
+	// Break both stores mid-login, after the previous credential is read.
+	tenant := &stubTenant{t: t, onFinalCheck: func() {
+		keyring.MockInitWithError(keyring.ErrUnsupportedPlatform)
+		t.Setenv("XDG_CONFIG_HOME", notADir)
+		t.Setenv("HOME", notADir)
+	}}
+
+	r := runLogin(t, tenant, loginScope{}, "", false, seed)
+	if r.err == nil || !strings.Contains(r.err.Error(), "previous credential (client id old-1@tenant/pcc) is no longer stored here") {
+		t.Fatalf("err = %v, want the wiped previous credential named", r.err)
 	}
 }

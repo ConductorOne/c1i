@@ -12,7 +12,6 @@ import (
 	"sort"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 	"unicode"
 
@@ -32,7 +31,7 @@ const (
 	helperLifetime = 10 * time.Minute
 )
 
-// Built-in role names, stable across tenants.
+// Built-in role names.
 const (
 	roleSuperAdmin         = "system:owner"
 	roleReadOnlySuperAdmin = "system:viewer"
@@ -77,12 +76,11 @@ func storedClientID(baseURL string) string {
 	return ""
 }
 
-// lineReader reads stdin a line at a time, only when a prompt asks, so input
-// typed after the last prompt stays with the terminal. A read abandoned on
-// Ctrl-C keeps running and hands its line to the next prompt.
+// lineReader reads stdin a line at a time, only while a prompt waits, so
+// input typed after the last prompt stays with the terminal. It keeps at most
+// one Scan in flight, so a read abandoned on Ctrl-C never races a new one.
 type lineReader struct {
 	scanner *bufio.Scanner
-	mu      sync.Mutex
 	pending chan scanResult
 }
 
@@ -97,7 +95,9 @@ func newLineReader(r io.Reader) *lineReader {
 
 // readLine returns the next line, ctx.Err() once ctx ends, or io.EOF.
 func (l *lineReader) readLine(ctx context.Context) (string, error) {
-	l.mu.Lock()
+	if err := ctx.Err(); err != nil {
+		return "", err
+	}
 	if l.pending == nil {
 		ch := make(chan scanResult, 1)
 		l.pending = ch
@@ -106,16 +106,11 @@ func (l *lineReader) readLine(ctx context.Context) (string, error) {
 			ch <- scanResult{l.scanner.Text(), ok}
 		}()
 	}
-	ch := l.pending
-	l.mu.Unlock()
-
 	select {
 	case <-ctx.Done():
 		return "", ctx.Err()
-	case r := <-ch:
-		l.mu.Lock()
+	case r := <-l.pending:
 		l.pending = nil
-		l.mu.Unlock()
 		if !r.ok {
 			return "", io.EOF
 		}
@@ -181,23 +176,22 @@ type helperLeftError struct {
 func (e *helperLeftError) Error() string {
 	until := ""
 	if e.helper.ExpiresTime != "" {
-		until = " until " + e.helper.ExpiresTime
+		until = " until " + printable(e.helper.ExpiresTime)
 	}
-	return fmt.Sprintf("the temporary credential %q (%s) was not deleted (%v); it has all of your roles%s, so delete it under your personal clients in C1.ai", helperDisplayName, e.helper.ID, e.err, until)
+	return fmt.Sprintf("the temporary credential %q (%s) was not deleted (%v); it has all of your roles%s, so delete it under your personal clients in C1.ai", helperDisplayName, printable(e.helper.ID), e.err, until)
 }
 
-// detached gives a request that must finish even after Ctrl-C.
+// detached returns a context that outlives Ctrl-C, for deletes that must run.
 func detached(ctx context.Context) (context.Context, context.CancelFunc) {
 	return context.WithTimeout(context.WithoutCancel(ctx), 30*time.Second)
 }
 
 // withHelper runs fn with a client for a temporary unscoped personal client,
-// the only thing the device token can create, then deletes it, even after
-// Ctrl-C. A failed delete comes back as leftover, separate from fn's error.
-func withHelper(cmd *cobra.Command, baseURL, accessToken string, opts []transport.Option, fn func(*client.Client) error) (leftover, err error) {
-	createCtx, cancel := detached(cmd.Context())
-	defer cancel()
-	helper, err := login.CreatePersonalClient(createCtx, baseURL, accessToken, login.PersonalClientOptions{
+// the only thing the device token can create, created on ctx, then deletes it,
+// even after Ctrl-C. A failed delete comes back as leftover, separate from
+// fn's error.
+func withHelper(ctx context.Context, cmd *cobra.Command, baseURL, accessToken string, opts []transport.Option, fn func(*client.Client) error) (leftover, err error) {
+	helper, err := login.CreatePersonalClient(ctx, baseURL, accessToken, login.PersonalClientOptions{
 		DisplayName: helperDisplayName,
 		Expires:     formatProtoJSONDuration(helperLifetime),
 	}, opts...)
@@ -206,7 +200,7 @@ func withHelper(cmd *cobra.Command, baseURL, accessToken string, opts []transpor
 	}
 	c, err := newCredentialClient(cmd, baseURL, helper.ClientID, helper.ClientSecret)
 	if err != nil {
-		return &helperLeftError{helper, err}, err
+		return nil, &helperLeftError{helper, err}
 	}
 	err = fn(c)
 	if delErr := deletePersonalClient(cmd.Context(), c, helper.ID); delErr != nil {
@@ -499,27 +493,26 @@ func reportScope(cmd *cobra.Command, granted []string, named []menuRole) {
 	_, _ = fmt.Fprintf(out, "Credential scoped to: %s\n", strings.Join(labels, "; "))
 }
 
-// sameRoles reports whether the server granted exactly the requested roles.
-func sameRoles(requested, granted []string) bool {
-	a, b := dedupe(requested), dedupe(granted)
-	if len(a) != len(b) {
-		return false
+// scopeWithin reports whether C1 kept the credential within what was asked:
+// unscoped only when unscoped was asked, otherwise a non-empty subset.
+func scopeWithin(requested, granted []string) bool {
+	if len(requested) == 0 || len(granted) == 0 {
+		return len(requested) == len(granted)
 	}
-	set := map[string]bool{}
-	for _, id := range a {
-		set[id] = true
+	asked := map[string]bool{}
+	for _, id := range requested {
+		asked[id] = true
 	}
-	for _, id := range b {
-		if !set[id] {
+	for _, id := range granted {
+		if !asked[id] {
 			return false
 		}
 	}
 	return true
 }
 
-// authRolePrefix marks the session service role (c1.api.auth.v1.Auth: the
-// introspect and ping calls) a credential keeps even when its scope leaves it
-// nothing else.
+// authRolePrefix is the session service role (introspect, ping). Observed
+// from C1: a scope with almost no overlap keeps only this role.
 const authRolePrefix = "role/c1.api.auth.v1.Auth:"
 
 // hasNoAccess reports whether a scoped credential's introspect shows it can do
