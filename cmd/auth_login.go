@@ -38,8 +38,8 @@ Browser login creates a personal client with all of your roles. To limit it:
                          basic-user, "Basic User" or system:user
 
 A terminal login with no stored credential asks which you want; Enter keeps all
-of your roles and --choose-roles=false skips the question. The two flags can't
-be combined.
+of your roles and --choose-roles=false skips the question. --choose-roles and
+--scoped-role can't be combined.
 
 A name that matches no role you can scope to exits 2 before your credential is
 created; role IDs go to C1 as given. Login checks the new credential before
@@ -328,6 +328,10 @@ func discardCredential(cmd *cobra.Command, baseURL, accessToken string, opts []t
 	leftover, err := withHelper(ctx, cmd, baseURL, accessToken, opts, func(h *client.Client) error {
 		return deletePersonalClient(ctx, h, creds.ID)
 	})
+	var left *helperLeftError
+	if leftover == nil && errors.As(err, &left) {
+		leftover = left // a helper that couldn't even be used is still left
+	}
 	if err != nil {
 		return fmt.Sprintf("the new credential (%s) could not be deleted, so delete it under your personal clients in C1.ai", printable(creds.ID)), leftover
 	}

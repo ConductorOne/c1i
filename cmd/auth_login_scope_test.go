@@ -431,6 +431,7 @@ type stubTenant struct {
 	onCreate       func(kind string)
 	onDelete       func()
 	onFinalCheck   func()
+	clientFails    map[string]bool // credentials whose client can't be built
 	finalID        string
 	lostDelete     bool // the final credential's first delete commits but answers 500
 	introspectedBy []string
@@ -574,6 +575,9 @@ func runLogin(t *testing.T, tenant *stubTenant, scope loginScope, stdin string, 
 	origCred, origOpen, origTTY := newCredentialClient, openBrowser, isTerminal
 	newCredentialClient = func(_ *cobra.Command, _, clientID, _ string) (*client.Client, error) {
 		id, _, _ := strings.Cut(clientID, "@")
+		if tenant.clientFails[id] {
+			return nil, errors.New("invalid client secret")
+		}
 		hc := &http.Client{Transport: credentialTransport{id: id, base: srv.Client().Transport}}
 		return client.NewForTesting(srv.URL, hc, client.WithMaxRetries(0)), nil
 	}
@@ -1000,8 +1004,9 @@ func TestLoginCtrlCWithNoAccessCredentialStillDeletesIt(t *testing.T) {
 	tenant := &stubTenant{t: t, noAccess: true, onFinalCheck: cancel}
 
 	r := runLogin(t, tenant, loginScope{roles: []string{stubAppsRoleID}}, "", false, nil)
-	if r.err == nil {
-		t.Fatal("want the login to fail")
+	// The cancel races the no-access answer; either failure is right.
+	if !errors.Is(r.err, context.Canceled) && exitCode(r.err) != exitUsage {
+		t.Fatalf("err = %v, want Ctrl-C or the no-access usage error", r.err)
 	}
 	if want := []string{"create final pc-1", "create helper pc-2", "delete pc-1 by pc-2", "delete pc-2 by pc-2"}; !reflect.DeepEqual(tenant.events, want) {
 		t.Errorf("events = %v, want %v", tenant.events, want)
@@ -1118,5 +1123,31 @@ func TestLoginStoreFailureNamesWipedPrevious(t *testing.T) {
 	r := runLogin(t, tenant, loginScope{}, "", false, seed)
 	if r.err == nil || !strings.Contains(r.err.Error(), "previous credential (client id old-1@tenant/pcc) is no longer stored here") {
 		t.Fatalf("err = %v, want the wiped previous credential named", r.err)
+	}
+}
+
+// TestLoginUnusableCleanupHelperIsReported: when neither the new credential nor
+// the cleanup helper can be used, both must be named.
+func TestLoginUnusableCleanupHelperIsReported(t *testing.T) {
+	freshContext(t)
+	tenant := &stubTenant{t: t, clientFails: map[string]bool{"pc-1": true, "pc-2": true}}
+	r := runLogin(t, tenant, loginScope{}, "", false, nil)
+	if r.err == nil || !strings.Contains(r.err.Error(), "(pc-1) could not be deleted") || !strings.Contains(r.err.Error(), "(pc-2)") {
+		t.Fatalf("err = %v, want both the new credential and the helper named", r.err)
+	}
+}
+
+// TestLineReaderCancelledReadIgnoresReadyLine: once ctx is cancelled, a read
+// returns the cancellation even if a line is already waiting.
+func TestLineReaderCancelledReadIgnoresReadyLine(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	for i := 0; i < 50; i++ {
+		in := newLineReader(strings.NewReader("x\n"))
+		in.pending = make(chan scanResult, 1)
+		in.pending <- scanResult{line: "x", ok: true}
+		if _, err := in.readLine(ctx); !errors.Is(err, context.Canceled) {
+			t.Fatalf("read %d = %v, want context.Canceled", i, err)
+		}
 	}
 }
