@@ -30,6 +30,11 @@ const productClientID = login.C1iClientID
 // across apps is expected, not a data error.
 const sharedAccessEntitlementID = "287oY0rG4UirjDNFEYguMBvxyim"
 
+// Fragments of Sigstore's public keys in the snapshot trust root
+// (internal/selfupdate/testdata/trusted_root.json): public key material that
+// merely matches the id shape.
+var sigstoreKeyFragments = []string{"stJ5TfcLLeABLE4BNJOsQ4vnBHJ", "RJudXscgRBRpKX1XFDy3PyudDxz"}
+
 // objectIDLen is the length of a C1 object id.
 const objectIDLen = 27
 
@@ -47,6 +52,9 @@ var (
 
 func TestFixturesAndDocsUsePlaceholders(t *testing.T) {
 	allowedID := map[string]bool{productClientID: true, sharedAccessEntitlementID: true}
+	for _, id := range sigstoreKeyFragments {
+		allowedID[id] = true
+	}
 
 	scanned := 0
 	for _, path := range trackedFiles(t) {
