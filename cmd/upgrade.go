@@ -2,15 +2,19 @@ package cmd
 
 import (
 	"bufio"
+	"encoding/json"
+	"errors"
 	"fmt"
-	"os"
+	"path/filepath"
 	"runtime"
 	"strings"
 
+	"github.com/ConductorOne/c1i/internal/client"
 	"github.com/ConductorOne/c1i/internal/selfupdate"
 	"github.com/ConductorOne/c1i/internal/transport"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
+	"golang.org/x/mod/module"
 )
 
 var upgradeChannels = map[string]bool{"stable": true, "latest": true, "preview": true}
@@ -18,20 +22,20 @@ var upgradeChannels = map[string]bool{"stable": true, "latest": true, "preview":
 var upgradeCmd = &cobra.Command{
 	Use:     "upgrade",
 	Aliases: []string{"update"},
-	Short:   "Upgrade c1i to the latest release from the C1 distribution center",
+	Short:   "Upgrade c1i to the latest release from the C1.ai distribution center",
 	Long: `Check for and install a newer c1i release.
 
-Release metadata comes from the C1 distribution center
-(dist.conductorone.com): the "stable" channel by default, with "latest" and
-"preview" available via --channel. The downloaded artifact is verified against
-the release manifest's SHA-256 before anything is replaced.
+Release channels come from the C1.ai distribution center (dist.conductorone.com):
+"stable" by default, or "latest" and "preview" via --channel. Before replacing
+anything, upgrade verifies the release manifest's Sigstore signature (made by
+c1i's release workflow) and the download's SHA-256 from that manifest.
 
-Only a standalone downloaded binary is replaced in place. If c1i was installed
-with Homebrew, "go install", or is running as a container image, upgrade prints
-the right command for that install method instead of self-replacing.
+Only a standalone binary is replaced in place. For a Homebrew, "go install", or
+container-image install, upgrade prints that method's upgrade command instead
+and exits 0. --check prints a JSON report and changes nothing.
 
-  c1i upgrade            # upgrade to the latest stable release (asks first)
-  c1i upgrade --check    # report whether a newer release is available; change nothing
+  c1i upgrade                       # upgrade to the latest stable release (asks first)
+  c1i upgrade --check               # report whether a newer release is available
   c1i upgrade --channel latest -y   # take the newest release without prompting`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		channel, _ := cmd.Flags().GetString("channel")
@@ -42,131 +46,110 @@ the right command for that install method instead of self-replacing.
 		assumeYes, _ := cmd.Flags().GetBool("yes")
 		out := cmd.OutOrStdout()
 
-		client := &selfupdate.Client{HTTP: newUpgradeDoer(), Download: newUpgradeDownloadDoer()}
-
-		idx, err := client.Index(cmd.Context())
+		dist := newUpgradeClient()
+		idx, err := dist.Index(cmd.Context())
 		if err != nil {
-			return &upstreamError{fmt.Errorf("reading release channels: %w", err)}
+			return distError(err, "reading release channels")
 		}
 		target := idx.Channels[channel]
 		if target == "" {
 			return &upstreamError{fmt.Errorf("the distribution center lists no %q channel", channel)}
 		}
-		// index.json (channel + yank status) is NOT signed — only the per-release
-		// manifest is. So this yank check, and channel resolution, are best-effort
-		// against a compromised distribution origin: it could re-point a channel
-		// to a different but authentic ConductorOne-signed release, or un-yank one.
-		// The signature + monotonicity below bound that to authentic, not-older
-		// binaries; closing it fully needs a signed index (a dist-side change).
+		// index.json is unsigned, so this yank check is best-effort (see README).
 		if e, ok := idx.Semvers[target]; ok && e.Yanked {
-			return &upstreamError{fmt.Errorf("the %q channel points at %s, which has been yanked; try again later", channel, target)}
+			return &upstreamError{fmt.Errorf("the %q channel points at %q, which has been yanked; try again later", channel, target)}
 		}
 
 		current := Version
-		if !isReleaseVersion(current) {
-			_, _ = fmt.Fprintf(out, "c1i is a development build (version %q); `c1i upgrade` works on released binaries.\n", current)
-			_, _ = fmt.Fprintf(out, "The current %s release is %s.\n", channel, target)
-			return nil
+		cmp := 0
+		if isReleaseVersion(current) {
+			var ok bool
+			if cmp, ok = selfupdate.CompareVersions(current, target); !ok {
+				return &upstreamError{fmt.Errorf("cannot compare current version %q with %q", current, target)}
+			}
 		}
-
-		cmp, ok := selfupdate.CompareVersions(current, target)
+		if checkOnly {
+			return writeUpgradeReport(cmd, current, target, channel, isReleaseVersion(current) && cmp < 0)
+		}
 		switch {
-		case !ok:
-			return &upstreamError{fmt.Errorf("cannot compare current version %q with %s", current, target)}
+		case !isReleaseVersion(current):
+			_, _ = fmt.Fprintf(out, "c1i is a development build (version %q); `c1i upgrade` works on released binaries.\n", current)
+			_, _ = fmt.Fprintf(out, "The current %s release is %q.\n", channel, target)
+			return nil
 		case cmp == 0:
-			_, _ = fmt.Fprintf(out, "c1i %s is already the latest %s release.\n", current, channel)
+			_, _ = fmt.Fprintf(out, "c1i %s is current on the %s channel.\n", current, channel)
 			return nil
 		case cmp > 0:
-			_, _ = fmt.Fprintf(out, "c1i %s is newer than the %s channel (%s); nothing to do.\n", current, channel, target)
+			_, _ = fmt.Fprintf(out, "c1i %s is newer than the %s channel (%q); nothing to do.\n", current, channel, target)
 			if channel == "stable" {
 				_, _ = fmt.Fprintln(out, "(Pass --channel latest to track the newest release.)")
 			}
 			return nil
 		}
 
-		// cmp < 0: an upgrade is available.
-		if checkOnly {
-			_, _ = fmt.Fprintf(out, "A newer %s release is available: %s -> %s.\n", channel, current, target)
-			return nil
-		}
-
-		execPath, err := selfupdate.ExecutablePath()
+		execPath, err := upgradeExecutable()
 		if err != nil {
 			return fmt.Errorf("locating the running binary: %w", err)
 		}
-		method, hint := selfupdate.Detect(execPath, runtime.GOOS)
-		if method != selfupdate.Standalone {
+		if method, hint := selfupdate.Detect(execPath, runtime.GOOS); method != selfupdate.Standalone {
 			_, _ = fmt.Fprintf(out, "Not upgrading in place: %s\n", hint)
 			return nil
 		}
 
 		entry, ok := idx.Semvers[target]
 		if !ok || entry.Manifest == "" {
-			return &upstreamError{fmt.Errorf("no manifest listed for %s", target)}
+			return &upstreamError{fmt.Errorf("no manifest listed for %q", target)}
 		}
-		manifest, manifestBytes, err := client.ManifestRaw(cmd.Context(), entry.Manifest)
+		manifest, manifestBytes, err := dist.ManifestRaw(cmd.Context(), entry.Manifest)
 		if err != nil {
-			return &upstreamError{fmt.Errorf("reading the %s manifest: %w", target, err)}
+			return distError(err, "reading the %q manifest", target)
 		}
-		// The manifest must describe the version the channel points at; a
-		// mismatch means the index and manifest disagree about what this is.
-		// Compare as semver so a formatting skew (v-prefix) isn't a false reject.
 		if cmp, ok := selfupdate.CompareVersions(manifest.Semver, target); !ok || cmp != 0 {
-			return &upstreamError{fmt.Errorf("manifest for %s reports version %q; refusing the mismatch", target, manifest.Semver)}
+			return &upstreamError{fmt.Errorf("manifest for %q reports version %q; refusing the mismatch", target, manifest.Semver)}
 		}
-
-		// Authenticate the manifest itself before trusting anything in it: the
-		// signature (pinned release-workflow identity, keyless/Fulcio) covers
-		// the exact manifest bytes; the per-asset sha256 inside then covers the
-		// downloaded artifact.
 		if entry.Signature == "" || entry.Certificate == "" || manifest.SignatureBundleHref == "" {
-			return &upstreamError{fmt.Errorf("release %s carries incomplete manifest verification material", target)}
+			return &upstreamError{fmt.Errorf("release %q carries incomplete signature material", target)}
 		}
-		sig, err := client.GetBytes(cmd.Context(), entry.Signature)
+		sig, err := dist.GetBytes(cmd.Context(), entry.Signature)
 		if err != nil {
-			return &upstreamError{fmt.Errorf("fetching the %s manifest signature: %w", target, err)}
+			return distError(err, "fetching the %q manifest signature", target)
 		}
-		cert, err := client.GetBytes(cmd.Context(), entry.Certificate)
+		cert, err := dist.GetBytes(cmd.Context(), entry.Certificate)
 		if err != nil {
-			return &upstreamError{fmt.Errorf("fetching the %s manifest certificate: %w", target, err)}
+			return distError(err, "fetching the %q manifest certificate", target)
 		}
-		rekorBundle, err := client.GetBytes(cmd.Context(), manifest.SignatureBundleHref)
+		rekorBundle, err := dist.GetBytes(cmd.Context(), manifest.SignatureBundleHref)
 		if err != nil {
-			return &upstreamError{fmt.Errorf("fetching the %s manifest Rekor bundle: %w", target, err)}
+			return distError(err, "fetching the %q manifest Rekor bundle", target)
 		}
-		if err := selfupdate.VerifyManifest(cmd.Context(), manifestBytes, sig, cert, rekorBundle); err != nil {
-			return &upstreamError{fmt.Errorf("verifying the %s release signature: %w", target, err)}
+		if err := dist.VerifyManifest(cmd.Context(), manifestBytes, sig, cert, rekorBundle, manifest.Semver); err != nil {
+			return distError(err, "verifying the %q release", target)
 		}
 
 		asset, ok := manifest.Assets[selfupdate.PlatformKey()]
 		if !ok {
 			return &upstreamError{fmt.Errorf("%s has no build for %s", target, selfupdate.PlatformKey())}
 		}
-
 		if dryRunActive() {
 			_, _ = fmt.Fprintf(out, "[dry-run] manifest signature verified; would download %s\n", asset.Href)
 			_, _ = fmt.Fprintf(out, "[dry-run] would verify sha256 %s and replace %s\n", asset.SHA256, execPath)
 			return nil
 		}
+
 		unlock, err := selfupdate.LockExecutable(execPath)
 		if err != nil {
-			return fmt.Errorf("locking %s for upgrade: %w", execPath, err)
+			return err
 		}
 		defer unlock()
-
-		current, err = selfupdate.InstalledVersion(execPath)
+		// Re-read under the lock: a concurrent upgrade may have replaced the binary.
+		current, err = installedVersion(execPath)
 		if err != nil {
-			return fmt.Errorf("reading installed c1i version: %w", err)
+			return fmt.Errorf("reading the installed c1i version: %w", err)
 		}
-		cmp, ok = selfupdate.CompareVersions(current, target)
-		switch {
-		case !ok:
+		if cmp, ok := selfupdate.CompareVersions(current, target); !ok {
 			return &upstreamError{fmt.Errorf("cannot compare installed version %q with %s", current, target)}
-		case cmp == 0:
-			_, _ = fmt.Fprintf(out, "c1i %s is already the latest %s release.\n", current, channel)
-			return nil
-		case cmp > 0:
-			_, _ = fmt.Fprintf(out, "c1i %s is newer than the %s channel (%s); nothing to do.\n", current, channel, target)
+		} else if cmp >= 0 {
+			_, _ = fmt.Fprintf(out, "Installed c1i is %s; nothing to do.\n", current)
 			return nil
 		}
 		_, _ = fmt.Fprintf(out, "A newer %s release is available: %s -> %s.\n", channel, current, target)
@@ -183,48 +166,85 @@ the right command for that install method instead of self-replacing.
 		}
 
 		_, _ = fmt.Fprintf(out, "Downloading %s...\n", asset.Filename)
-		if err := client.Apply(cmd.Context(), asset, execPath); err != nil {
-			return &upstreamError{fmt.Errorf("applying upgrade: %w", err)}
+		bin, err := dist.FetchBinary(cmd.Context(), asset)
+		if err != nil {
+			return distError(err, "downloading %s", target)
+		}
+		if err := selfupdate.ReplaceExecutable(execPath, bin); err != nil {
+			return fmt.Errorf("installing into %s: %w", filepath.Dir(execPath), err)
 		}
 		_, _ = fmt.Fprintf(out, "Upgraded c1i %s -> %s.\n", current, target)
 		return nil
 	},
 }
 
-// newUpgradeDoer builds the transport the self-updater fetches metadata
-// (index.json, manifest.json, signature, certificate, and Rekor bundle) through,
-// bounded to MaxMetadataBytes. A var so a test can inject a fake dist server;
-// production threads --max-retries and --debug like every other network path.
-var newUpgradeDoer = func() selfupdate.Doer {
-	return transport.New(nil,
-		transport.WithMaxRetries(viper.GetInt("max_retries")),
-		transport.WithDebug(viper.GetBool("debug")),
-		transport.WithMaxResponseBytes(selfupdate.MaxMetadataBytes),
-	)
-}
-
-// newUpgradeDownloadDoer builds the transport for the (larger) release archive,
-// bounded to MaxArtifactBytes. Separate from newUpgradeDoer so the two fetch
-// paths carry different size ceilings.
-var newUpgradeDownloadDoer = func() selfupdate.Doer {
-	return transport.New(nil,
-		transport.WithMaxRetries(viper.GetInt("max_retries")),
-		transport.WithDebug(viper.GetBool("debug")),
-		transport.WithMaxResponseBytes(selfupdate.MaxArtifactBytes),
-	)
-}
+// Test seams.
+var (
+	newUpgradeClient = func() *selfupdate.Client {
+		doer := func(limit int64) selfupdate.Doer {
+			return transport.New(nil,
+				transport.WithMaxRetries(viper.GetInt("max_retries")),
+				transport.WithDebug(viper.GetBool("debug")),
+				transport.WithMaxResponseBytes(limit),
+			)
+		}
+		return &selfupdate.Client{HTTP: doer(selfupdate.MaxMetadataBytes), Download: doer(selfupdate.MaxArtifactBytes)}
+	}
+	upgradeExecutable = selfupdate.ExecutablePath
+	installedVersion  = selfupdate.InstalledVersion
+)
 
 func init() {
-	upgradeCmd.Flags().Bool("check", false, "Report whether a newer release is available; change nothing")
+	upgradeCmd.Flags().Bool("check", false, "Print a JSON report of whether a newer release is available; change nothing")
 	upgradeCmd.Flags().String("channel", "stable", "Release channel: stable, latest, or preview")
 	upgradeCmd.Flags().BoolP("yes", "y", false, "Skip the confirmation prompt")
 	rootCmd.AddCommand(upgradeCmd)
 }
 
-// isReleaseVersion reports whether Version looks like a real release tag
-// (vMAJOR.MINOR.PATCH). A `go run`/source build reports "dev" (or "(devel)"),
-// which cannot be compared or upgraded from.
+func writeUpgradeReport(cmd *cobra.Command, current, target, channel string, available bool) error {
+	execPath, err := upgradeExecutable()
+	if err != nil {
+		return fmt.Errorf("locating the running binary: %w", err)
+	}
+	method, _ := selfupdate.Detect(execPath, runtime.GOOS)
+	report := map[string]any{
+		"current":          current,
+		"latest":           target,
+		"channel":          channel,
+		"update_available": available,
+		"install_method":   method.String(),
+	}
+	if c := method.Command(); c != "" {
+		report["upgrade_command"] = c
+	}
+	data, err := json.Marshal(report)
+	if err != nil {
+		return err
+	}
+	return writeObject(cmd, data)
+}
+
+// distError classifies a failure fetching or verifying a release. An HTTP
+// status keeps its own exit code through the wrapped APIError; anything else
+// is upstream (8). A refused redirect or bad path from dist is dist's fault,
+// not a usage error, so that chain is flattened.
+func distError(err error, format string, args ...any) error {
+	msg := fmt.Sprintf(format, args...)
+	var redirErr *client.RedirectError
+	var pathErr *client.PathError
+	if errors.As(err, &redirErr) || errors.As(err, &pathErr) {
+		return &upstreamError{fmt.Errorf("%s: %v", msg, err)}
+	}
+	return &upstreamError{fmt.Errorf("%s: %w", msg, err)}
+}
+
+// isReleaseVersion reports whether v is a release tag. A source build reports
+// "dev" or, since Go 1.24, a pseudo-version such as
+// v0.8.1-0.20261005220836-bb1be01ebd69; neither is a release to upgrade from.
 func isReleaseVersion(v string) bool {
+	if module.IsPseudoVersion(v) {
+		return false
+	}
 	_, ok := selfupdate.CompareVersions(v, v)
 	return ok
 }
@@ -236,7 +256,7 @@ func confirm(cmd *cobra.Command, prompt string) (bool, error) {
 		return false, &usageError{fmt.Errorf("re-run with --yes to upgrade without a prompt (stdin is not a terminal)")}
 	}
 	_, _ = fmt.Fprintf(cmd.OutOrStdout(), "%s [y/N] ", prompt)
-	scanner := bufio.NewScanner(os.Stdin)
+	scanner := bufio.NewScanner(cmd.InOrStdin())
 	if !scanner.Scan() {
 		return false, nil
 	}

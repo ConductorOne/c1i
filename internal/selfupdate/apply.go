@@ -16,35 +16,25 @@ import (
 	"strings"
 )
 
-// Apply downloads asset, verifies its sha256, extracts the c1i binary, and
-// atomically replaces the running executable at execPath. It never overwrites
-// execPath unless the replacement is fully staged and verified, so a failed or
-// interrupted upgrade leaves the current binary intact.
-func (c *Client) Apply(ctx context.Context, asset Asset, execPath string) error {
+// FetchBinary downloads asset, verifies its sha256, and returns the c1i
+// executable extracted from it.
+func (c *Client) FetchBinary(ctx context.Context, asset Asset) ([]byte, error) {
 	raw, err := c.download(ctx, asset.Href)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	if err := verifySHA256(raw, asset.SHA256); err != nil {
-		return err
+		return nil, err
 	}
-	bin, err := extractBinary(raw, asset.Filename)
-	if err != nil {
-		return err
-	}
-	return replaceExecutable(execPath, bin)
+	return extractBinary(raw, asset.Filename)
 }
 
 func (c *Client) download(ctx context.Context, url string) ([]byte, error) {
-	if err := c.validateURL(url); err != nil {
-		return nil, err
-	}
-	body, err := c.get(ctx, c.downloadDoer(), url)
+	body, _, err := c.get(ctx, c.downloadDoer(), url)
 	if err != nil {
 		return nil, err
 	}
-	// Belt-and-suspenders: the backing transport is bounded to MaxArtifactBytes,
-	// but a test Doer or an unbounded transport is not, so re-check here.
+	// The Doer may not be size-bounded.
 	if len(body) > MaxArtifactBytes {
 		return nil, fmt.Errorf("downloading %s: artifact exceeds %d bytes", url, MaxArtifactBytes)
 	}
@@ -142,11 +132,11 @@ func isC1iEntry(name string) bool {
 	return base == "c1i" || base == "c1i.exe"
 }
 
-// replaceExecutable atomically swaps newBinary in for the file at execPath. The
-// new binary is written to a temp file in the SAME directory (so the final
-// rename stays on one filesystem and is atomic), made executable, then renamed
-// over execPath — which POSIX permits even while the old binary is running.
-func replaceExecutable(execPath string, newBinary []byte) error {
+// ReplaceExecutable atomically swaps newBinary in for the file at execPath: it
+// stages a temp file in the same directory (so the rename is atomic) and renames
+// it over execPath, which POSIX permits while the old binary runs. A failure
+// leaves execPath untouched.
+func ReplaceExecutable(execPath string, newBinary []byte) error {
 	dir := filepath.Dir(execPath)
 	tmp, err := os.CreateTemp(dir, ".c1i-upgrade-*")
 	if err != nil {
@@ -155,8 +145,7 @@ func replaceExecutable(execPath string, newBinary []byte) error {
 	tmpName := tmp.Name()
 	cleanup := func() { _ = os.Remove(tmpName) }
 
-	// Match a normal executable's mode; preserve the existing binary's mode if
-	// we can read it, else fall back to 0755.
+	// Keep the installed binary's mode.
 	mode := os.FileMode(0o755)
 	if fi, err := os.Stat(execPath); err == nil {
 		mode = fi.Mode().Perm()
@@ -171,8 +160,7 @@ func replaceExecutable(execPath string, newBinary []byte) error {
 		cleanup()
 		return fmt.Errorf("setting mode on staged binary: %w", err)
 	}
-	// Flush bytes and mode together before rename so a crash cannot leave a
-	// renamed binary that is empty or not executable.
+	// Sync before rename so a crash can't leave an empty or non-executable binary.
 	if err := tmp.Sync(); err != nil {
 		_ = tmp.Close()
 		cleanup()
@@ -186,16 +174,12 @@ func replaceExecutable(execPath string, newBinary []byte) error {
 		cleanup()
 		return fmt.Errorf("replacing %s: %w", execPath, err)
 	}
-	// Best-effort: fsync the containing directory so the rename itself is
-	// durable. A failure here doesn't undo a successful rename, so don't fail
-	// the upgrade over it.
 	syncDir(dir)
 	return nil
 }
 
-// syncDir flushes a directory's own metadata (the rename entry) to disk. Errors
-// are ignored: some platforms/filesystems don't permit opening a directory for
-// sync, and the rename has already succeeded.
+// syncDir makes the rename durable, best-effort: not every filesystem can sync
+// a directory, and the rename has already succeeded.
 func syncDir(dir string) {
 	d, err := os.Open(dir) // #nosec G304 -- dir is filepath.Dir(execPath), the install directory, not attacker input
 	if err != nil {

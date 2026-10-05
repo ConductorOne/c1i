@@ -7,7 +7,6 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
-	"encoding/pem"
 	"fmt"
 	"time"
 
@@ -19,7 +18,7 @@ import (
 	"github.com/sigstore/sigstore-go/pkg/verify"
 )
 
-// legacyRekorBundle is the release bundle format currently published by dist.
+// legacyRekorBundle is the cosign bundle format dist publishes beside each manifest.
 type legacyRekorBundle struct {
 	Base64Signature string `json:"base64Signature"`
 	Cert            string `json:"cert"`
@@ -47,17 +46,9 @@ func verifyRekorBundle(manifest, signature []byte, leaf *x509.Certificate, rawBu
 	if !bytes.Equal(bundleSignature, signature) {
 		return time.Time{}, fmt.Errorf("rekor bundle signature does not match manifest signature")
 	}
-	bundleCertificatePEM, err := base64.StdEncoding.DecodeString(legacy.Cert)
+	bundleCertificate, err := decodeCertificate([]byte(legacy.Cert))
 	if err != nil {
-		return time.Time{}, fmt.Errorf("decoding Rekor bundle certificate: %w", err)
-	}
-	block, _ := pem.Decode(bundleCertificatePEM)
-	if block == nil || block.Type != "CERTIFICATE" {
-		return time.Time{}, fmt.Errorf("rekor bundle certificate is not PEM-encoded")
-	}
-	bundleCertificate, err := x509.ParseCertificate(block.Bytes)
-	if err != nil {
-		return time.Time{}, fmt.Errorf("parsing Rekor bundle certificate: %w", err)
+		return time.Time{}, fmt.Errorf("rekor bundle: %w", err)
 	}
 	if !bytes.Equal(bundleCertificate.Raw, leaf.Raw) {
 		return time.Time{}, fmt.Errorf("rekor bundle certificate does not match manifest certificate")

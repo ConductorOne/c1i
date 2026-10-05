@@ -8,8 +8,10 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"testing"
 
@@ -92,6 +94,47 @@ func TestDetect(t *testing.T) {
 	}
 }
 
+func TestMethodNamesAndCommands(t *testing.T) {
+	cases := []struct {
+		m             Method
+		name, command string
+	}{
+		{Standalone, "standalone", ""},
+		{Homebrew, "homebrew", "brew upgrade c1i"},
+		{GoInstall, "go-install", "go install github.com/ConductorOne/c1i@latest"},
+		{Docker, "container", "docker pull public.ecr.aws/conductorone/c1i"},
+		{SystemInstall, "system", ""},
+		{Windows, "windows", ""},
+	}
+	for _, c := range cases {
+		if c.m.String() != c.name || c.m.Command() != c.command {
+			t.Errorf("%d: (%q, %q), want (%q, %q)", c.m, c.m.String(), c.m.Command(), c.name, c.command)
+		}
+	}
+}
+
+// A go.mod in the caller's cwd that needs a newer toolchain must not make
+// readGoEnv fail or download one.
+func TestReadGoEnvIgnoresCallerModule(t *testing.T) {
+	if _, err := exec.LookPath("go"); err != nil {
+		t.Skip("no go toolchain on PATH")
+	}
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "go.mod"), []byte("module example.com/x\n\ngo 1.999\n\ntoolchain go1.999.0\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	t.Chdir(dir)
+	t.Setenv("GOTOOLCHAIN", "auto")
+	t.Setenv("GOPROXY", "off")
+	env, err := readGoEnv()
+	if err != nil {
+		t.Fatalf("readGoEnv: %v", err)
+	}
+	if env.GOPATH == "" {
+		t.Error("readGoEnv returned an empty GOPATH")
+	}
+}
+
 func TestDetectSystemAndPersistedGoInstall(t *testing.T) {
 	if m, hint := Detect("/usr/bin/c1i", "darwin"); m != SystemInstall || hint == "" {
 		t.Errorf("/usr/bin -> (%v, %q), want SystemInstall with a remediation", m, hint)
@@ -128,12 +171,15 @@ func TestClientIndexAndManifest(t *testing.T) {
 	if idx.Channels["stable"] != "v0.6.0" || idx.Channels["latest"] != "v0.7.0" {
 		t.Errorf("channels = %v", idx.Channels)
 	}
-	m, err := c.Manifest(context.Background(), idx.Semvers["v0.7.0"].Manifest)
+	m, raw, err := c.ManifestRaw(context.Background(), idx.Semvers["v0.7.0"].Manifest)
 	if err != nil {
-		t.Fatalf("Manifest: %v", err)
+		t.Fatalf("ManifestRaw: %v", err)
 	}
 	if a := m.Assets["linux-amd64"]; a.SHA256 != "abc" || a.Filename == "" {
 		t.Errorf("asset = %+v", a)
+	}
+	if string(raw) != manifest {
+		t.Errorf("raw = %q, want the exact bytes served", raw)
 	}
 }
 
@@ -146,8 +192,10 @@ func TestClientRejectsHTMLShellAndNon200(t *testing.T) {
 	}
 
 	c2 := &Client{BaseURL: base, HTTP: &fakeDoer{}} // everything 404s
-	if _, err := c2.Index(context.Background()); err == nil {
-		t.Error("expected an error on a 404 index, got nil")
+	_, err := c2.Index(context.Background())
+	var apiErr *transport.APIError
+	if !errors.As(err, &apiErr) || apiErr.StatusCode != http.StatusNotFound || apiErr.Path != "/releases/ConductorOne/c1i/index.json" {
+		t.Errorf("404 index error = %#v, want a *transport.APIError for the index path", err)
 	}
 }
 
@@ -202,7 +250,7 @@ func TestReplaceExecutable(t *testing.T) {
 	if err := os.WriteFile(execPath, []byte("OLD"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := replaceExecutable(execPath, []byte("NEW")); err != nil {
+	if err := ReplaceExecutable(execPath, []byte("NEW")); err != nil {
 		t.Fatalf("replace: %v", err)
 	}
 	got, _ := os.ReadFile(execPath)
@@ -231,12 +279,34 @@ func TestLockExecutableRejectsConcurrentUpgrade(t *testing.T) {
 	}
 }
 
-func TestApplyEndToEndAndChecksumGuard(t *testing.T) {
+func TestLockExecutableLeavesNothingBehind(t *testing.T) {
 	dir := t.TempDir()
 	execPath := filepath.Join(dir, "c1i")
-	if err := os.WriteFile(execPath, []byte("OLD"), 0o755); err != nil {
+	if err := os.WriteFile(execPath, []byte("BIN"), 0o755); err != nil {
 		t.Fatal(err)
 	}
+	unlock, err := LockExecutable(execPath)
+	if err != nil {
+		t.Fatalf("LockExecutable: %v", err)
+	}
+	unlock()
+	entries, _ := os.ReadDir(dir)
+	if len(entries) != 1 {
+		var names []string
+		for _, e := range entries {
+			names = append(names, e.Name())
+		}
+		t.Errorf("install dir holds %v after unlock, want only c1i", names)
+	}
+	// Released: a later upgrade can take the lock.
+	unlock, err = LockExecutable(execPath)
+	if err != nil {
+		t.Fatalf("LockExecutable after unlock: %v", err)
+	}
+	unlock()
+}
+
+func TestFetchBinaryAndChecksumGuard(t *testing.T) {
 	newBin := []byte("#!c1i-v0.7.0")
 	tgz := makeTarGz(t, "c1i", newBin)
 	sum := sha256.Sum256(tgz)
@@ -248,23 +318,14 @@ func TestApplyEndToEndAndChecksumGuard(t *testing.T) {
 		href: {StatusCode: 200, Body: tgz},
 	}}}
 
-	// Happy path: replaces the binary.
 	asset := Asset{Filename: "c1i-v0.7.0-linux-amd64.tar.gz", SHA256: hex.EncodeToString(sum[:]), Href: href}
-	if err := client.Apply(context.Background(), asset, execPath); err != nil {
-		t.Fatalf("Apply: %v", err)
-	}
-	if got, _ := os.ReadFile(execPath); !bytes.Equal(got, newBin) {
-		t.Errorf("binary not replaced: %q", got)
+	if got, err := client.FetchBinary(context.Background(), asset); err != nil || !bytes.Equal(got, newBin) {
+		t.Fatalf("FetchBinary = (%q, %v), want the extracted binary", got, err)
 	}
 
-	// Checksum mismatch: aborts, leaves the (now-new) binary untouched.
-	_ = os.WriteFile(execPath, []byte("KEEP"), 0o755)
 	bad := Asset{Filename: asset.Filename, SHA256: "00", Href: href}
-	if err := client.Apply(context.Background(), bad, execPath); err == nil {
-		t.Error("Apply with a bad checksum did not error")
-	}
-	if got, _ := os.ReadFile(execPath); string(got) != "KEEP" {
-		t.Errorf("binary changed despite checksum mismatch: %q", got)
+	if got, err := client.FetchBinary(context.Background(), bad); err == nil {
+		t.Errorf("FetchBinary with a bad checksum returned %q, want an error", got)
 	}
 }
 
@@ -292,13 +353,15 @@ func TestValidateURLRejectsOffHostAndNonHTTPS(t *testing.T) {
 	}
 }
 
-func TestApplyRejectsOffHostHref(t *testing.T) {
-	// An asset href on a host other than the client's base is refused before
-	// any download.
-	c := &Client{BaseURL: "https://dist.example", HTTP: &fakeDoer{}}
+func TestFetchBinaryRejectsOffHostHref(t *testing.T) {
+	d := &recordingDoer{resp: &transport.Response{StatusCode: 200}}
+	c := &Client{BaseURL: "https://dist.example", HTTP: d}
 	asset := Asset{Filename: "c1i.tar.gz", SHA256: "abc", Href: "https://evil.example/c1i.tar.gz"}
-	if err := c.Apply(context.Background(), asset, filepath.Join(t.TempDir(), "c1i")); err == nil {
-		t.Fatal("Apply followed an off-host href; expected a refusal")
+	if _, err := c.FetchBinary(context.Background(), asset); err == nil {
+		t.Fatal("FetchBinary followed an off-host href; expected a refusal")
+	}
+	if len(d.urls) != 0 {
+		t.Errorf("requests = %v, want none", d.urls)
 	}
 }
 

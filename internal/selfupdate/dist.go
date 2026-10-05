@@ -1,11 +1,7 @@
 // Package selfupdate resolves and applies c1i upgrades from the C1
-// distribution center (dist.conductorone.com). It consumes the public release
-// interface documented in ConductorOne/baton-admin's dist-release RFC: a
-// per-CLI index.json (release channels + version list) and a per-release
-// manifest.json (per-GOOS-GOARCH assets with sha256). The canonical schema is
-// the protobuf in ConductorOne/github-workflows/pb/artifacts/v1; this package
-// hand-rolls the small stable subset it needs rather than importing that
-// workflow-tooling module.
+// distribution center (dist.conductorone.com): a per-CLI index.json (release
+// channels and versions) and a signed per-release manifest.json (per-platform
+// assets with sha256). It decodes only the subset of each it needs.
 package selfupdate
 
 import (
@@ -19,25 +15,22 @@ import (
 	"strings"
 
 	"github.com/ConductorOne/c1i/internal/transport"
+	"github.com/sigstore/sigstore-go/pkg/root"
 )
 
 // DefaultBaseURL is the dist release path for c1i. Assets, index.json and
 // per-version manifest.json all live under it.
 const DefaultBaseURL = "https://dist.conductorone.com/releases/ConductorOne/c1i"
 
-// MaxMetadataBytes bounds a JSON metadata fetch (index.json, manifest.json) and
-// the small detached .sig/.cert, so a hostile endpoint can't stream an
-// unbounded body into memory before it is parsed. MaxArtifactBytes bounds the
-// release archive download. Callers wire these into the transport that backs
-// the Doer(s) below.
+// MaxMetadataBytes bounds a metadata fetch (index, manifest, signature
+// material, TUF); MaxArtifactBytes bounds the release archive. Callers set them
+// on the transports behind Client's Doers.
 const (
 	MaxMetadataBytes = 8 << 20   // 8 MiB
 	MaxArtifactBytes = 200 << 20 // 200 MiB
 )
 
-// Doer sends a request through the shared transport, so upgrade inherits the
-// same retries, --max-retries, --debug tracing and user-agent as every other
-// network path. *transport.Client satisfies it; tests fake it.
+// Doer is satisfied by *transport.Client; tests fake it.
 type Doer interface {
 	Do(*http.Request) (*transport.Response, error)
 }
@@ -77,15 +70,13 @@ type Asset struct {
 	Href     string `json:"href"` // absolute download URL
 }
 
-// Client fetches the dist index and manifests.
+// Client fetches and verifies releases from dist.
 type Client struct {
-	// HTTP fetches metadata (index.json, manifest.json, .sig, .cert). Its
-	// backing transport should be bounded to MaxMetadataBytes.
-	HTTP Doer
-	// Download fetches the (larger) release archive; its transport should be
-	// bounded to MaxArtifactBytes. When nil, HTTP is used.
-	Download Doer
+	HTTP     Doer // metadata and the TUF trust root
+	Download Doer // the release archive; HTTP when nil
 	BaseURL  string
+	// TrustedRoot supplies the Sigstore trust root; nil fetches it via TUF.
+	TrustedRoot func(context.Context) (root.TrustedMaterial, error)
 }
 
 func (c *Client) downloadDoer() Doer {
@@ -138,13 +129,6 @@ func (c *Client) Index(ctx context.Context) (*Index, error) {
 	return &idx, nil
 }
 
-// Manifest fetches and decodes a version's manifest.json from the URL the
-// index entry names.
-func (c *Client) Manifest(ctx context.Context, url string) (*Manifest, error) {
-	m, _, err := c.ManifestRaw(ctx, url)
-	return m, err
-}
-
 // ManifestRaw fetches a version's manifest.json and returns both the decoded
 // Manifest and the exact bytes it was decoded from. The Sigstore signature is
 // over those raw bytes, so the caller must verify the same bytes it parsed.
@@ -160,14 +144,10 @@ func (c *Client) ManifestRaw(ctx context.Context, url string) (*Manifest, []byte
 	return &m, raw, nil
 }
 
-// GetBytes fetches url and returns the response body for a 200, with no
-// JSON/content-type check. Used for the detached .sig/.cert, which are
-// base64 text rather than JSON.
+// GetBytes fetches url with no content-type check, for the signature material.
 func (c *Client) GetBytes(ctx context.Context, url string) ([]byte, error) {
-	if err := c.validateURL(url); err != nil {
-		return nil, err
-	}
-	return c.get(ctx, c.HTTP, url)
+	body, _, err := c.get(ctx, c.HTTP, url)
+	return body, err
 }
 
 func (c *Client) getJSON(ctx context.Context, url string, out any) error {
@@ -182,44 +162,35 @@ func (c *Client) getJSON(ctx context.Context, url string, out any) error {
 }
 
 func (c *Client) getJSONBytes(ctx context.Context, url string) ([]byte, error) {
-	if err := c.validateURL(url); err != nil {
-		return nil, err
-	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	body, header, err := c.get(ctx, c.HTTP, url)
 	if err != nil {
 		return nil, err
 	}
-	resp, err := c.HTTP.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("fetching %s: %w", url, err)
-	}
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("fetching %s: HTTP %d", url, resp.StatusCode)
-	}
-	// dist serves the SPA HTML shell (text/html) with 200 for a path that has
-	// no object; a real API response is application/json. Guard against
-	// decoding the shell as an empty struct.
-	if ct := resp.Header.Get("Content-Type"); ct != "" && !strings.Contains(ct, "json") {
+	// dist answers a path with no object with its HTML app shell and a 200.
+	if ct := header.Get("Content-Type"); ct != "" && !strings.Contains(ct, "json") {
 		return nil, fmt.Errorf("fetching %s: expected JSON, got Content-Type %q (no such release object?)", url, ct)
 	}
-	return resp.Body, nil
+	return body, nil
 }
 
-// get issues a GET through the given Doer and returns the body for a 200. The
-// URL must already have been validated by the caller.
-func (c *Client) get(ctx context.Context, doer Doer, url string) ([]byte, error) {
+// get fetches a validated url and returns the body of a 200; any other status
+// is a *transport.APIError, so the exit code reflects it.
+func (c *Client) get(ctx context.Context, doer Doer, url string) ([]byte, http.Header, error) {
+	if err := c.validateURL(url); err != nil {
+		return nil, nil, err
+	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	resp, err := doer.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("fetching %s: %w", url, err)
+		return nil, nil, fmt.Errorf("fetching %s: %w", url, err)
 	}
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("fetching %s: HTTP %d", url, resp.StatusCode)
+		return nil, nil, &transport.APIError{Method: req.Method, Path: req.URL.Path, StatusCode: resp.StatusCode, Body: string(resp.Body)}
 	}
-	return resp.Body, nil
+	return resp.Body, resp.Header, nil
 }
 
 // CompareVersions orders two "vMAJOR.MINOR.PATCH[-prerelease]" tags: it returns

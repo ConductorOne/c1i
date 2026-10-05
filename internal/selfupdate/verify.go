@@ -7,12 +7,12 @@ import (
 	"crypto/x509"
 	"encoding/base64"
 	"encoding/pem"
+	"errors"
 	"fmt"
-	"io"
 	"net/http"
+	"strings"
 	"time"
 
-	"github.com/ConductorOne/c1i/internal/transport"
 	"github.com/sigstore/sigstore-go/pkg/fulcio/certificate"
 	"github.com/sigstore/sigstore-go/pkg/root"
 	"github.com/sigstore/sigstore-go/pkg/tuf"
@@ -22,155 +22,138 @@ import (
 	tuffetcher "github.com/theupdateframework/go-tuf/v2/metadata/fetcher"
 )
 
-// The release manifest is signed keylessly by ConductorOne's reusable release
-// workflow via Fulcio. These pin the exact identity that signature must carry:
-// a wrong or absent pin makes the whole check worthless.
+// The manifest is signed keylessly (Fulcio) by the shared release workflow
+// running in c1i's repository. A wrong or absent pin makes the check worthless.
 const (
-	// releaseSANURI is the Subject Alternative Name (a URI) Fulcio stamps with
-	// the signing workflow's identity: the reusable workflow at the v4 tag.
-	releaseSANURI = "https://github.com/ConductorOne/github-workflows/.github/workflows/release.yaml@refs/tags/v4"
-	// releaseOIDCIssuer is the OIDC issuer that minted the workflow's identity
-	// token (GitHub Actions).
-	releaseOIDCIssuer = "https://token.actions.githubusercontent.com"
-	// releaseSourceRepositoryURI binds the shared release workflow to c1i.
+	// Any major tag of the workflow, so its next major doesn't strand installed clients.
+	releaseSANPattern          = `^https://github\.com/ConductorOne/github-workflows/\.github/workflows/release\.yaml@refs/tags/v[0-9]+$`
+	releaseOIDCIssuer          = "https://token.actions.githubusercontent.com"
 	releaseSourceRepositoryURI = "https://github.com/ConductorOne/c1i"
-
-	trustRootTimeout = 30 * time.Second
 )
 
-// Indirected so tests can pin different identities / a stub trust root without
-// the network. Nothing in production writes to them.
-var (
-	pinnedSANURI              = releaseSANURI
-	pinnedOIDCIssuer          = releaseOIDCIssuer
-	pinnedSourceRepositoryURI = releaseSourceRepositoryURI
-	fetchTrustedRoot          = fetchTrustedRootWithContext
-)
-
-// VerifyManifest verifies that manifestBytes carries a valid Sigstore signature
-// from ConductorOne's pinned release-workflow identity (keyless / Fulcio). dist
-// serves the signature and certificate base64-encoded: sigBase64 decodes to the
-// raw signature bytes, certBase64 decodes to the signing certificate in PEM.
-func VerifyManifest(ctx context.Context, manifestBytes, sigBase64, certBase64, rekorBundle []byte) error {
-	return verifyManifest(ctx, manifestBytes, sigBase64, certBase64, rekorBundle, pinnedSANURI, pinnedOIDCIssuer, pinnedSourceRepositoryURI)
+// releaseIdentity is the certificate identity a manifest for semver must carry:
+// c1i's tag for that version, built on a tag push by a GitHub-hosted runner.
+func releaseIdentity(semver string) (verify.CertificateIdentity, error) {
+	san, err := verify.NewSANMatcher("", releaseSANPattern)
+	if err != nil {
+		return verify.CertificateIdentity{}, err
+	}
+	issuer, err := verify.NewIssuerMatcher(releaseOIDCIssuer, "")
+	if err != nil {
+		return verify.CertificateIdentity{}, err
+	}
+	return verify.NewCertificateIdentity(san, issuer, certificate.Extensions{
+		SourceRepositoryURI: releaseSourceRepositoryURI,
+		SourceRepositoryRef: "refs/tags/v" + strings.TrimPrefix(semver, "v"),
+		BuildTrigger:        "push",
+		RunnerEnvironment:   "github-hosted",
+	})
 }
 
-// verifyManifest is the identity-parameterized core so a test can drive a
-// deliberately wrong pin. Every check below is mandatory: the function returns
-// nil only if the certificate identity matches the pin, the signature is valid
-// over exactly manifestBytes, the certificate chains to a Fulcio root, and the
-// signed Rekor entry proves the signature existed while the certificate was valid.
-func verifyManifest(ctx context.Context, manifestBytes, sigBase64, certBase64, rekorBundle []byte, sanURI, issuer, sourceRepositoryURI string) error {
-	if err := ctx.Err(); err != nil {
-		return err
-	}
-
-	sig, err := base64.StdEncoding.DecodeString(string(bytes.TrimSpace(sigBase64)))
-	if err != nil {
-		return fmt.Errorf("manifest signature verification failed: decoding signature: %w", err)
-	}
-	certPEM, err := base64.StdEncoding.DecodeString(string(bytes.TrimSpace(certBase64)))
-	if err != nil {
-		return fmt.Errorf("manifest signature verification failed: decoding certificate: %w", err)
-	}
-	block, _ := pem.Decode(certPEM)
-	if block == nil || block.Type != "CERTIFICATE" {
-		return fmt.Errorf("manifest signature verification failed: certificate is not PEM-encoded")
-	}
-	leaf, err := x509.ParseCertificate(block.Bytes)
-	if err != nil {
-		return fmt.Errorf("manifest signature verification failed: parsing certificate: %w", err)
-	}
-
-	// Identity pin (local): the certificate must name the exact release
-	// workflow and OIDC issuer.
-	sanMatcher, err := verify.NewSANMatcher(sanURI, "")
-	if err != nil {
-		return fmt.Errorf("manifest signature verification failed: %w", err)
-	}
-	issuerMatcher, err := verify.NewIssuerMatcher(issuer, "")
-	if err != nil {
-		return fmt.Errorf("manifest signature verification failed: %w", err)
-	}
-	certID, err := verify.NewCertificateIdentity(sanMatcher, issuerMatcher, certificate.Extensions{SourceRepositoryURI: sourceRepositoryURI})
-	if err != nil {
-		return fmt.Errorf("manifest signature verification failed: %w", err)
-	}
-	summary, err := certificate.SummarizeCertificate(leaf)
-	if err != nil {
-		return fmt.Errorf("manifest signature verification failed: %w", err)
-	}
-	if err := certID.Verify(summary); err != nil {
-		return fmt.Errorf("manifest signature verification failed: %w", err)
-	}
-
-	// Signature (local): the certificate's key must sign exactly these bytes.
-	sv, err := signature.LoadVerifier(leaf.PublicKey, crypto.SHA256)
-	if err != nil {
-		return fmt.Errorf("manifest signature verification failed: %w", err)
-	}
-	if err := sv.VerifySignature(bytes.NewReader(sig), bytes.NewReader(manifestBytes)); err != nil {
-		return fmt.Errorf("manifest signature verification failed: %w", err)
-	}
-
-	// Trust root + signed Rekor entry: the entry binds this manifest signature
-	// and certificate to a trusted transparency-log timestamp.
-	trustedRoot, err := fetchTrustedRoot(ctx)
-	if err != nil {
-		return fmt.Errorf("could not load Sigstore trust root: %w", err)
-	}
-	integratedTime, err := verifyRekorBundle(manifestBytes, sig, leaf, rekorBundle, trustedRoot)
-	if err != nil {
-		return fmt.Errorf("manifest signature verification failed: %w", err)
-	}
-	chains, err := verify.VerifyLeafCertificate(integratedTime, leaf, trustedRoot)
-	if err != nil {
-		return fmt.Errorf("manifest signature verification failed: %w", err)
-	}
-	if err := verify.VerifySignedCertificateTimestamp(chains, 1, trustedRoot); err != nil {
+// VerifyManifest checks that manifestBytes carry a valid Sigstore signature
+// from c1i's release workflow for release semver. dist serves the signature
+// and the PEM certificate base64-encoded.
+func (c *Client) VerifyManifest(ctx context.Context, manifestBytes, sigBase64, certBase64, rekorBundle []byte, semver string) error {
+	if err := c.verifyManifest(ctx, manifestBytes, sigBase64, certBase64, rekorBundle, semver); err != nil {
 		return fmt.Errorf("manifest signature verification failed: %w", err)
 	}
 	return nil
 }
 
-func fetchTrustedRootWithContext(ctx context.Context) (root.TrustedMaterial, error) {
+func (c *Client) verifyManifest(ctx context.Context, manifestBytes, sigBase64, certBase64, rekorBundle []byte, semver string) error {
 	if err := ctx.Err(); err != nil {
-		return nil, err
+		return err
 	}
-	opts := tuf.DefaultOptions().
-		WithContext(ctx).
-		WithFetcher(trustRootFetcher{ctx: ctx})
+	sig, err := base64.StdEncoding.DecodeString(string(bytes.TrimSpace(sigBase64)))
+	if err != nil {
+		return fmt.Errorf("decoding signature: %w", err)
+	}
+	leaf, err := decodeCertificate(certBase64)
+	if err != nil {
+		return err
+	}
+
+	// Local checks first, so a bad identity or signature fails without the network.
+	id, err := releaseIdentity(semver)
+	if err != nil {
+		return err
+	}
+	summary, err := certificate.SummarizeCertificate(leaf)
+	if err != nil {
+		return err
+	}
+	if err := id.Verify(summary); err != nil {
+		return err
+	}
+	sv, err := signature.LoadVerifier(leaf.PublicKey, crypto.SHA256)
+	if err != nil {
+		return err
+	}
+	if err := sv.VerifySignature(bytes.NewReader(sig), bytes.NewReader(manifestBytes)); err != nil {
+		return err
+	}
+
+	trustedRoot, err := c.trustedRoot(ctx)
+	if err != nil {
+		return fmt.Errorf("loading the Sigstore trust root: %w", err)
+	}
+	// The Rekor entry proves when the signature was made; the certificate must
+	// chain to Fulcio and carry a CT log SCT as of that time.
+	integratedTime, err := verifyRekorBundle(manifestBytes, sig, leaf, rekorBundle, trustedRoot)
+	if err != nil {
+		return err
+	}
+	chains, err := verify.VerifyLeafCertificate(integratedTime, leaf, trustedRoot)
+	if err != nil {
+		return err
+	}
+	return verify.VerifySignedCertificateTimestamp(chains, 1, trustedRoot)
+}
+
+func decodeCertificate(certBase64 []byte) (*x509.Certificate, error) {
+	certPEM, err := base64.StdEncoding.DecodeString(string(bytes.TrimSpace(certBase64)))
+	if err != nil {
+		return nil, fmt.Errorf("decoding certificate: %w", err)
+	}
+	block, _ := pem.Decode(certPEM)
+	if block == nil || block.Type != "CERTIFICATE" {
+		return nil, errors.New("certificate is not PEM-encoded")
+	}
+	return x509.ParseCertificate(block.Bytes)
+}
+
+func (c *Client) trustedRoot(ctx context.Context) (root.TrustedMaterial, error) {
+	if c.TrustedRoot != nil {
+		return c.TrustedRoot(ctx)
+	}
+	opts := tuf.DefaultOptions().WithContext(ctx).WithFetcher(tufFetcher{ctx: ctx, doer: c.HTTP})
 	return root.FetchTrustedRootWithOptions(opts)
 }
 
-type trustRootFetcher struct {
-	ctx context.Context
+// tufFetcher routes TUF downloads through the shared transport, so they get
+// the redirect guard, --debug and --max-retries.
+type tufFetcher struct {
+	ctx  context.Context
+	doer Doer
 }
 
-var _ tuffetcher.Fetcher = trustRootFetcher{}
+var _ tuffetcher.Fetcher = tufFetcher{}
 
-func (f trustRootFetcher) DownloadFile(url string, maxLength int64, _ time.Duration) ([]byte, error) {
+func (f tufFetcher) DownloadFile(url string, maxLength int64, _ time.Duration) ([]byte, error) {
 	req, err := http.NewRequestWithContext(f.ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return nil, err
 	}
-	resp, err := transport.NewSingleAttemptHTTPClient(trustRootTimeout).Do(req)
+	resp, err := f.doer.Do(req)
 	if err != nil {
 		return nil, err
 	}
-	defer func() { _ = resp.Body.Close() }()
+	// go-tuf stops probing for newer roots on this typed 404.
 	if resp.StatusCode != http.StatusOK {
 		return nil, &metadata.ErrDownloadHTTP{StatusCode: resp.StatusCode, URL: url}
 	}
-	if length := resp.ContentLength; length > maxLength {
-		return nil, &metadata.ErrDownloadLengthMismatch{Msg: fmt.Sprintf("download failed for %s, length %d is larger than expected %d", url, length, maxLength)}
+	if int64(len(resp.Body)) > maxLength {
+		return nil, &metadata.ErrDownloadLengthMismatch{Msg: fmt.Sprintf("%s exceeds %d bytes", url, maxLength)}
 	}
-	body, err := io.ReadAll(io.LimitReader(resp.Body, maxLength+1))
-	if err != nil {
-		return nil, err
-	}
-	if int64(len(body)) > maxLength {
-		return nil, &metadata.ErrDownloadLengthMismatch{Msg: fmt.Sprintf("download failed for %s: response exceeds %d bytes", url, maxLength)}
-	}
-	return body, nil
+	return resp.Body, nil
 }

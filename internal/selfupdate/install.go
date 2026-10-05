@@ -5,7 +5,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"runtime"
 	"strings"
 )
 
@@ -29,23 +28,53 @@ const (
 	Windows
 )
 
-// Detect classifies how this binary was installed. execPath should be the
-// resolved (symlink-followed) path of the running executable; goos is
-// runtime.GOOS (a parameter so tests can exercise every branch). It returns
-// the method and, for the non-self-replace methods, a one-line remediation the
-// caller can print.
+// String names the method for machine-readable output.
+func (m Method) String() string {
+	switch m {
+	case Homebrew:
+		return "homebrew"
+	case GoInstall:
+		return "go-install"
+	case Docker:
+		return "container"
+	case SystemInstall:
+		return "system"
+	case Windows:
+		return "windows"
+	default:
+		return "standalone"
+	}
+}
+
+// Command is the command that upgrades an install of this kind, or "" when
+// there is none to run (a standalone binary upgrades itself).
+func (m Method) Command() string {
+	switch m {
+	case Homebrew:
+		return "brew upgrade c1i"
+	case GoInstall:
+		return "go install github.com/ConductorOne/c1i@latest"
+	case Docker:
+		return "docker pull public.ecr.aws/conductorone/c1i"
+	default:
+		return ""
+	}
+}
+
+// Detect classifies how the binary at the resolved execPath was installed and,
+// unless it is Standalone, returns a one-line remediation to print.
 func Detect(execPath, goos string) (Method, string) {
 	if goos == "windows" {
 		return Windows, "download the Windows build (or MSI) from " + DefaultBaseURL
 	}
 	if goos == "linux" && inContainer() {
-		return Docker, "you are running the container image; re-pull it: docker pull public.ecr.aws/conductorone/c1i"
+		return Docker, "you are running the container image; re-pull it: " + Docker.Command()
 	}
 	if isHomebrew(execPath) {
-		return Homebrew, "c1i was installed with Homebrew; upgrade it there: brew upgrade c1i"
+		return Homebrew, "c1i was installed with Homebrew; upgrade it there: " + Homebrew.Command()
 	}
 	if isGoInstall(execPath) {
-		return GoInstall, "c1i was installed with `go install`; upgrade it there: go install github.com/ConductorOne/c1i@latest"
+		return GoInstall, "c1i was installed with `go install`; upgrade it there: " + GoInstall.Command()
 	}
 	if isSystemInstall(execPath) {
 		return SystemInstall, "c1i is installed in a system package directory; upgrade it with your system package manager"
@@ -53,13 +82,9 @@ func Detect(execPath, goos string) (Method, string) {
 	return Standalone, ""
 }
 
-// containerMarkerFiles are the runtime-dropped marker files whose presence
-// signals a container. Overridable so a test can point them at a temp file.
-// /.dockerenv is Docker's; /run/.containerenv is Podman's.
+// Docker's and Podman's container markers; vars so tests can redirect them.
 var containerMarkerFiles = []string{"/.dockerenv", "/run/.containerenv"}
 
-// containerCgroupFile is the cgroup path inspected for runtime markers.
-// Overridable for the same reason.
 var containerCgroupFile = "/proc/1/cgroup"
 
 // inContainer reports whether we are running inside a container image, where an
@@ -102,8 +127,13 @@ type goEnv struct {
 	GOPATH string
 }
 
+// readGoEnv runs from a neutral directory with GOTOOLCHAIN=local, so a go.mod
+// or go.work in the caller's cwd can't trigger a toolchain download.
 var readGoEnv = func() (goEnv, error) {
-	output, err := exec.Command("go", "env", "-json", "GOBIN", "GOPATH").Output()
+	cmd := exec.Command("go", "env", "-json", "GOBIN", "GOPATH")
+	cmd.Dir = os.TempDir()
+	cmd.Env = append(os.Environ(), "GOTOOLCHAIN=local")
+	output, err := cmd.Output()
 	if err != nil {
 		return goEnv{}, err
 	}
@@ -176,7 +206,3 @@ func ExecutablePath() (string, error) {
 	}
 	return p, nil
 }
-
-// SelfReplaceGOOS reports whether the current OS supports replacing the running
-// binary in place (POSIX rename over a running executable). Windows does not.
-func SelfReplaceGOOS() bool { return runtime.GOOS != "windows" }

@@ -3,23 +3,28 @@
 package selfupdate
 
 import (
+	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"syscall"
 )
 
-// LockExecutable acquires a non-blocking advisory lock for an in-place update.
+// LockExecutable takes a non-blocking advisory lock on execPath's directory.
+// Locking the directory rather than a sidecar file leaves nothing behind, and
+// it is where the replacement is staged and renamed.
 func LockExecutable(execPath string) (func(), error) {
-	file, err := os.OpenFile(execPath+".upgrade-lock", os.O_CREATE|os.O_RDWR, 0o600) // #nosec G304 -- execPath comes from os.Executable
+	dir := filepath.Dir(execPath)
+	f, err := os.Open(dir) // #nosec G304 -- the install directory, from os.Executable
 	if err != nil {
-		return nil, fmt.Errorf("opening upgrade lock: %w", err)
+		return nil, fmt.Errorf("opening %s to lock it: %w", dir, err)
 	}
-	if err := syscall.Flock(int(file.Fd()), syscall.LOCK_EX|syscall.LOCK_NB); err != nil {
-		_ = file.Close()
-		return nil, fmt.Errorf("another c1i upgrade is already running: %w", err)
+	if err := syscall.Flock(int(f.Fd()), syscall.LOCK_EX|syscall.LOCK_NB); err != nil {
+		_ = f.Close()
+		if errors.Is(err, syscall.EWOULDBLOCK) {
+			return nil, fmt.Errorf("another c1i upgrade is already running in %s", dir)
+		}
+		return nil, fmt.Errorf("locking %s: %w", dir, err)
 	}
-	return func() {
-		_ = syscall.Flock(int(file.Fd()), syscall.LOCK_UN)
-		_ = file.Close()
-	}, nil
+	return func() { _ = f.Close() }, nil // closing releases the lock
 }
