@@ -200,7 +200,7 @@ func withHelper(ctx context.Context, cmd *cobra.Command, baseURL, accessToken st
 	}
 	c, err := newCredentialClient(cmd, baseURL, helper.ClientID, helper.ClientSecret)
 	if err != nil {
-		return nil, &helperLeftError{helper, err}
+		return &helperLeftError{helper, err}, fmt.Errorf("using the temporary credential: %w", err)
 	}
 	err = fn(c)
 	if delErr := deletePersonalClient(cmd.Context(), c, helper.ID); delErr != nil {

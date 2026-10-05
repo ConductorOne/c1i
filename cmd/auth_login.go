@@ -279,11 +279,12 @@ func loginWithBrowser(cmd *cobra.Command, in *lineReader, baseURL string, scope 
 // keepNewCredential checks a just-created credential and stores it. If either
 // fails, the credential is deleted so nothing unwanted is left behind.
 func keepNewCredential(cmd *cobra.Command, baseURL, accessToken string, opts []transport.Option, creds *login.Credentials, requested []string) error {
-	c, problem := newCredentialClient(cmd, baseURL, creds.ClientID, creds.ClientSecret)
-	if problem != nil {
-		problem = fmt.Errorf("credential verification failed: %w", problem)
-	} else {
-		problem = checkNewCredential(cmd, c, creds, requested)
+	c, introspect, problem := verifyCredential(cmd, baseURL, creds.ClientID, creds.ClientSecret)
+	switch {
+	case !scopeWithin(requested, creds.ScopedRoles):
+		problem = &nonJSONResponseError{fmt.Errorf("C1 scoped the new credential to %s, not the requested %s", printable(strings.Join(creds.ScopedRoles, ", ")), strings.Join(requested, ", "))}
+	case len(requested) > 0 && c != nil && hasNoAccess(introspect, problem):
+		problem = &usageError{fmt.Errorf("the requested roles give the credential no access: a scoped credential keeps only the overlap between its roles and your own")}
 	}
 	if problem == nil {
 		problem = storeCredential(cmd, baseURL, creds.ClientID, creds.ClientSecret)
@@ -296,22 +297,6 @@ func keepNewCredential(cmd *cobra.Command, baseURL, accessToken string, opts []t
 	}
 	outcome, leftover := discardCredential(cmd, baseURL, accessToken, opts, c, creds)
 	return joinLeftover(fmt.Errorf("%w; %s", problem, outcome), leftover)
-}
-
-// checkNewCredential confirms C1 kept the scope within what was asked and that
-// the credential can do something with it.
-func checkNewCredential(cmd *cobra.Command, c *client.Client, creds *login.Credentials, requested []string) error {
-	if !scopeWithin(requested, creds.ScopedRoles) {
-		return &nonJSONResponseError{fmt.Errorf("C1 scoped the new credential to %s, not the requested %s", printable(strings.Join(creds.ScopedRoles, ", ")), strings.Join(requested, ", "))}
-	}
-	introspect, err := c.Get(cmd.Context(), "/api/v1/auth/introspect", nil)
-	if len(requested) > 0 && hasNoAccess(introspect, err) {
-		return &usageError{fmt.Errorf("the requested roles give the credential no access: a scoped credential keeps only the overlap between its roles and your own")}
-	}
-	if err != nil {
-		return fmt.Errorf("credential verification failed: %w", err)
-	}
-	return nil
 }
 
 // discardCredential deletes a credential login won't keep, using c when it
@@ -328,10 +313,6 @@ func discardCredential(cmd *cobra.Command, baseURL, accessToken string, opts []t
 	leftover, err := withHelper(ctx, cmd, baseURL, accessToken, opts, func(h *client.Client) error {
 		return deletePersonalClient(ctx, h, creds.ID)
 	})
-	var left *helperLeftError
-	if leftover == nil && errors.As(err, &left) {
-		leftover = left // a helper that couldn't even be used is still left
-	}
 	if err != nil {
 		return fmt.Sprintf("the new credential (%s) could not be deleted, so delete it under your personal clients in C1.ai", printable(creds.ID)), leftover
 	}
@@ -339,22 +320,24 @@ func discardCredential(cmd *cobra.Command, baseURL, accessToken string, opts []t
 }
 
 func loginWithCredentials(cmd *cobra.Command, baseURL, clientID, clientSecret string) error {
-	if err := verifyCredential(cmd, baseURL, clientID, clientSecret); err != nil {
+	if _, _, err := verifyCredential(cmd, baseURL, clientID, clientSecret); err != nil {
 		return err
 	}
 	return storeCredential(cmd, baseURL, clientID, clientSecret)
 }
 
-// verifyCredential proves credentials work before they replace a stored one.
-func verifyCredential(cmd *cobra.Command, baseURL, clientID, clientSecret string) error {
+// verifyCredential proves credentials work before they replace a stored one,
+// returning their client (nil if it couldn't be built) and introspect body.
+func verifyCredential(cmd *cobra.Command, baseURL, clientID, clientSecret string) (*client.Client, []byte, error) {
 	c, err := newCredentialClient(cmd, baseURL, clientID, clientSecret)
 	if err != nil {
-		return fmt.Errorf("credential verification failed: %w", err)
+		return nil, nil, fmt.Errorf("credential verification failed: %w", err)
 	}
-	if _, err := c.Get(cmd.Context(), "/api/v1/auth/introspect", nil); err != nil {
-		return fmt.Errorf("credential verification failed: %w", err)
+	introspect, err := c.Get(cmd.Context(), "/api/v1/auth/introspect", nil)
+	if err != nil {
+		return c, nil, fmt.Errorf("credential verification failed: %w", err)
 	}
-	return nil
+	return c, introspect, nil
 }
 
 func storeCredential(cmd *cobra.Command, baseURL, clientID, clientSecret string) error {

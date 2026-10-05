@@ -995,8 +995,7 @@ func TestLoginFailureKeepsLeftoverReport(t *testing.T) {
 }
 
 // TestLoginCtrlCWithNoAccessCredentialStillDeletesIt: Ctrl-C during the final
-// create of a credential that can't delete itself; the helper must still
-// delete it rather than skip its work.
+// check of a credential that can't delete itself; a helper must still delete it.
 func TestLoginCtrlCWithNoAccessCredentialStillDeletesIt(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	authLoginCmd.SetContext(ctx)

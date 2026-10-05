@@ -190,8 +190,8 @@ func New(ctx context.Context, baseURL string, opts ...Option) (*Client, error) {
 	return newWithSource(baseURL, tokenSource, opts), nil
 }
 
-// NewWithCredentials is New for credentials that are never stored: its bearer
-// is reused in memory but never written to the on-disk cache.
+// NewWithCredentials is New for credentials not (yet) stored: its bearer is
+// reused in memory but never written to the on-disk cache.
 func NewWithCredentials(ctx context.Context, baseURL, clientID, clientSecret string, opts ...Option) (*Client, error) {
 	tokenSource, err := tokensource.NewTokenSource(ctx, clientID, clientSecret, baseURL, transportOpts(opts)...)
 	if err != nil {
