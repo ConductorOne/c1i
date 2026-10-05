@@ -68,13 +68,9 @@ target you can't reach. `c1i auth status` prints the same tenant as plain
 text, plus which credential store served it.
 
 To log in with less than your full access, run `c1i auth login --scoped-role basic-user`
-(repeatable; a role name or id). With a name present, every value is checked
-against the tenant's roles after the human approves the device code, and a miss
-is a usage error listing them; ids alone go unchecked, so an unknown one is a
-`404`. A scoped
-credential gets `403` on commands its roles don't cover, though whoami still
-works. The interactive form is `c1i auth login --choose-roles` (needs a terminal);
-`c1i auth login --display-name <name>` names the credential.
+(repeatable; a role name or a 27-character id). Without a terminal there is no
+prompt, but a human must still approve the device code; a bad name then exits
+2. README's Authentication section has the rules.
 
 ## Global flags
 

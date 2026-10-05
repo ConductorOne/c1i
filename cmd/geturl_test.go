@@ -122,10 +122,11 @@ func TestGetBaseURLNoSourceIsUsageError(t *testing.T) {
 
 func TestPromptForURLBareTokenNamesInteractivePrompt(t *testing.T) {
 	cmd := &cobra.Command{Use: "test"}
+	cmd.SetContext(context.Background())
 	var out bytes.Buffer
 	cmd.SetOut(&out)
 
-	_, err := promptForURL(cmd, strings.NewReader("acme\n"))
+	_, err := promptForURL(cmd, newLineReader(strings.NewReader("acme\n")))
 	if err == nil {
 		t.Fatal("expected an error for a bare name typed at the prompt, got nil")
 	}
@@ -144,10 +145,11 @@ func TestPromptForURLBareTokenNamesInteractivePrompt(t *testing.T) {
 // typed at the prompt must still work.
 func TestPromptForURLValidInputUnaffected(t *testing.T) {
 	cmd := &cobra.Command{Use: "test"}
+	cmd.SetContext(context.Background())
 	var out bytes.Buffer
 	cmd.SetOut(&out)
 
-	got, err := promptForURL(cmd, strings.NewReader("acme.conductor.one\n"))
+	got, err := promptForURL(cmd, newLineReader(strings.NewReader("acme.conductor.one\n")))
 	if err != nil {
 		t.Fatalf("promptForURL error = %v, want nil", err)
 	}
@@ -161,9 +163,10 @@ func TestPromptForURLValidInputUnaffected(t *testing.T) {
 // shortcut. It must be gone.
 func TestAuthLoginPromptDoesNotAdvertiseShortcut(t *testing.T) {
 	cmd := &cobra.Command{Use: "test"}
+	cmd.SetContext(context.Background())
 	var out bytes.Buffer
 	cmd.SetOut(&out)
-	_, _ = promptForURL(cmd, strings.NewReader("acme.conductor.one\n"))
+	_, _ = promptForURL(cmd, newLineReader(strings.NewReader("acme.conductor.one\n")))
 
 	if strings.Contains(out.String(), "for conductor.one") {
 		t.Errorf("prompt = %q, still advertises the retired bare short-name shortcut", out.String())

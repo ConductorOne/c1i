@@ -40,6 +40,8 @@ type Credentials struct {
 	ID           string
 	ClientID     string
 	ClientSecret string
+	// ScopedRoles is the scope as the server stored it.
+	ScopedRoles []string
 }
 
 // StartDeviceFlow initiates the OAuth device authorization flow.
@@ -199,6 +201,8 @@ type PersonalClientOptions struct {
 	// ScopedRoles restricts the credential to these role IDs; empty inherits
 	// all of the user's roles.
 	ScopedRoles []string
+	// Expires is a protobuf duration such as "600s"; empty never expires.
+	Expires string
 }
 
 // CreatePersonalClient exchanges a device-flow access token for a durable
@@ -212,6 +216,9 @@ func CreatePersonalClient(ctx context.Context, baseURL, accessToken string, o Pe
 	}
 	if len(o.ScopedRoles) > 0 {
 		body["scopedRoles"] = o.ScopedRoles
+	}
+	if o.Expires != "" {
+		body["expires"] = o.Expires
 	}
 	reqBody, _ := json.Marshal(body)
 
@@ -233,8 +240,9 @@ func CreatePersonalClient(ctx context.Context, baseURL, accessToken string, o Pe
 
 	var clientResp struct {
 		Client struct {
-			ID       string `json:"id"`
-			ClientID string `json:"clientId"`
+			ID          string   `json:"id"`
+			ClientID    string   `json:"clientId"`
+			ScopedRoles []string `json:"scopedRoles"`
 		} `json:"client"`
 		ClientSecret string `json:"clientSecret"`
 	}
@@ -246,5 +254,6 @@ func CreatePersonalClient(ctx context.Context, baseURL, accessToken string, o Pe
 		ID:           clientResp.Client.ID,
 		ClientID:     clientResp.Client.ClientID,
 		ClientSecret: clientResp.ClientSecret,
+		ScopedRoles:  clientResp.Client.ScopedRoles,
 	}, nil
 }

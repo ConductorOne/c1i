@@ -100,7 +100,7 @@ func currentUserID(ctx context.Context, c *client.Client) (string, error) {
 		UserID string `json:"userId"`
 	}
 	if err := json.Unmarshal(data, &introspect); err != nil {
-		return "", fmt.Errorf("failed to parse introspect response: %w", err)
+		return "", &nonJSONResponseError{fmt.Errorf("failed to parse introspect response: %w", err)}
 	}
 	return introspect.UserID, nil
 }

@@ -229,15 +229,6 @@ func getUnwrapCases() []getUnwrapCase {
 			wantKeys:    []string{"id", "serviceName"},
 		},
 		{
-			name:        "roles get",
-			cmd:         rolesGetCmd,
-			args:        []string{"role-1"},
-			idKey:       "id",
-			body:        `{"role":{"id":"role-1","displayName":"Read-Only Administrator"}}`,
-			payloadPath: []string{"role"},
-			wantKeys:    []string{"id", "displayName"},
-		},
-		{
 			name:        "service-principals get",
 			cmd:         servicePrincipalsGetCmd,
 			args:        []string{"sp-1"},

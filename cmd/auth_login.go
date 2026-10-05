@@ -1,11 +1,9 @@
 package cmd
 
 import (
-	"bufio"
 	"errors"
 	"fmt"
 	"io"
-	"net/http"
 	"os"
 	"os/exec"
 	"runtime"
@@ -32,16 +30,18 @@ file under your config directory. For non-interactive / CI use, you can skip
 storage entirely and pass credentials each invocation via the C1I_CLIENT_ID
 and C1I_CLIENT_SECRET environment variables (combined with C1I_URL).
 
-Browser login mints a personal client that inherits all of your roles. The
-first browser login to a tenant in a terminal asks whether to keep that or
-choose roles; --choose-roles chooses on any login. Choosing shows a menu after
-you approve in the browser (0 = full permissions); c1i reads the roles with a
-temporary credential and deletes it before creating yours. --scoped-role
-<role> (repeatable) names roles up front, for scripts. A 27-character
-alphanumeric value is a role ID; IDs alone pass through to the server, which
-rejects an unknown one with 404 after approval. Any other value is a name
-(e.g. basic-user, "Basic User" or system:user): c1i then checks every value
-against the tenant's roles, so a typo fails before your credential is created.
+Browser login creates a personal client with all of your roles. To limit it,
+use --choose-roles (a menu after you approve in the browser; 0 = all roles;
+needs a terminal) or --scoped-role <role> (repeatable; a name such as
+basic-user, "Basic User" or system:user, or a 27-character role ID). When no
+credential is stored for the tenant, a terminal login asks which you want;
+Enter keeps all roles and --choose-roles=false skips the question. Scripts are
+never asked.
+
+Names are checked right after you approve, so a typo exits 2 before your
+credential is created; IDs alone go to the server unchecked. Reading roles
+briefly creates a temporary credential, deleted before yours is created. Login
+then checks the new credential with C1 and prints its scope.
 
 If a previous login used a mixed-case URL and commands now report "not
 authenticated", re-run this command: the keychain key is derived from a
@@ -55,7 +55,7 @@ longer found.`,
 		clientID, _ := cmd.Flags().GetString("client-id")
 		clientSecret, _ := cmd.Flags().GetString("client-secret")
 		if (clientID != "" || clientSecret != "") && scope.requested() {
-			return &usageError{fmt.Errorf("--choose-roles, --scoped-role and --display-name apply only to browser login, not --client-id/--client-secret")}
+			return &usageError{fmt.Errorf("--choose-roles and --scoped-role apply only to browser login, not --client-id/--client-secret")}
 		}
 		if scope.choose && !isTerminal() {
 			return &usageError{fmt.Errorf("--choose-roles needs an interactive terminal; pass --scoped-role instead")}
@@ -66,11 +66,14 @@ longer found.`,
 			return err
 		}
 
+		// One reader for every prompt: separate buffered readers on stdin would
+		// each swallow input meant for the next.
+		in := newLineReader(os.Stdin)
 		if baseURL == "" {
 			if !isTerminal() {
 				return &usageError{fmt.Errorf("url is required: set --url flag, C1I_URL env var, or url in ~/.c1i.yaml")}
 			}
-			baseURL, err = promptForURL(cmd, os.Stdin)
+			baseURL, err = promptForURL(cmd, in)
 			if err != nil {
 				return err
 			}
@@ -82,46 +85,44 @@ longer found.`,
 		} else if clientID != "" || clientSecret != "" {
 			return &usageError{fmt.Errorf("both --client-id and --client-secret are required for credential login")}
 		} else {
-			loginErr = browserLogin(cmd, baseURL, scope)
+			loginErr = browserLogin(cmd, in, baseURL, scope)
 		}
 
-		if loginErr != nil {
+		var left *helperLeftError
+		if loginErr != nil && !errors.As(loginErr, &left) {
 			return loginErr
 		}
 
 		if source != URLSourceConfig && isTerminal() {
-			return offerSaveURL(cmd, baseURL)
+			offerSaveURL(cmd, in, baseURL)
 		}
 
-		return nil
+		return loginErr
 	},
 }
 
 func init() {
 	authLoginCmd.Flags().String("client-id", "", "C1 API client ID (skip browser login)")
 	authLoginCmd.Flags().String("client-secret", "", "C1 API client secret (skip browser login)")
-	authLoginCmd.Flags().Bool("choose-roles", false, "Choose the browser-login credential's roles from a menu after approval (needs a terminal)")
-	addRepeatableStringFlag(authLoginCmd, "scoped-role", "Restrict the browser-login credential to a role, by ID or name such as basic-user (repeatable)")
-	authLoginCmd.Flags().String("display-name", "", "Name for the browser-login credential (default \""+login.DefaultDisplayName+"\")")
+	authLoginCmd.Flags().Bool("choose-roles", false, "Choose the browser-login credential's roles from a menu after approval (needs a terminal); =false skips the question")
+	addRepeatableStringFlag(authLoginCmd, "scoped-role", "Restrict the browser-login credential to a role, by name (e.g. basic-user) or ID (repeatable)")
 	authCmd.AddCommand(authLoginCmd)
 }
 
 // isTerminal reports whether stdin is an interactive terminal. It gates every
-// login prompt, so it must be false under a redirect:
-// os.ModeCharDevice alone is not enough, as /dev/null is also a character
-// device -- term.IsTerminal issues the TTY ioctl that tells them apart.
-// A var so tests can drive the interactive paths.
+// login prompt, so it must be false under a redirect: os.ModeCharDevice alone
+// is not enough, as /dev/null is also a character device -- term.IsTerminal
+// issues the TTY ioctl that tells them apart. A var so tests can stub it.
 var isTerminal = func() bool {
 	return term.IsTerminal(int(os.Stdin.Fd()))
 }
 
-// promptForURL reads a URL interactively from in (os.Stdin in production;
-// injectable for tests).
-func promptForURL(cmd *cobra.Command, in io.Reader) (string, error) {
+// promptForURL reads a URL interactively from in.
+func promptForURL(cmd *cobra.Command, in *lineReader) (string, error) {
 	out := cmd.OutOrStdout()
 	_, _ = fmt.Fprintf(out, "Enter your C1 URL (e.g. mycompany.conductor.one or mycompany.c1eu.ai): ")
 
-	line, err := scanLine(cmd.Context(), bufio.NewScanner(in))
+	line, err := in.readLine(cmd.Context())
 	if errors.Is(err, io.EOF) {
 		return "", &usageError{fmt.Errorf("url is required: set --url flag, C1I_URL env var, or url in ~/.c1i.yaml")}
 	}
@@ -142,54 +143,53 @@ func promptForURL(cmd *cobra.Command, in io.Reader) (string, error) {
 	return url, nil
 }
 
-// offerSaveURL asks to save baseURL as the default. Ctrl-C saves nothing and
-// is returned; EOF just declines.
-func offerSaveURL(cmd *cobra.Command, baseURL string) error {
+// offerSaveURL asks to save baseURL as the default. EOF or Ctrl-C declines:
+// the login has already succeeded.
+func offerSaveURL(cmd *cobra.Command, in *lineReader, baseURL string) {
 	out := cmd.OutOrStdout()
 	_, _ = fmt.Fprintf(out, "Save %s as default URL in ~/.c1i.yaml? [Y/n] ", baseURL)
 
-	line, err := scanLine(cmd.Context(), bufio.NewScanner(os.Stdin))
-	if errors.Is(err, io.EOF) {
-		return nil
-	}
+	line, err := in.readLine(cmd.Context())
 	if err != nil {
-		return err
+		_, _ = fmt.Fprintln(out)
+		return
 	}
 
 	answer := strings.TrimSpace(strings.ToLower(line))
 	if answer != "" && answer != "y" && answer != "yes" {
-		return nil
+		return
 	}
 
 	if err := config.SaveToConfigFile("url", baseURL); err != nil {
 		_, _ = fmt.Fprintf(out, "Warning: could not save config: %v\n", err)
-		return nil
+		return
 	}
 
 	_, _ = fmt.Fprintf(out, "URL saved to ~/.c1i.yaml\n")
-	return nil
 }
 
-// browserLogin asks on a tenant's first interactive login whether to scope the
-// credential, and names the credential a re-login replaces.
-func browserLogin(cmd *cobra.Command, baseURL string, scope loginScope) error {
+// browserLogin asks, when no credential is stored for the tenant, whether to
+// scope the new one, and names the stored credential a re-login replaces.
+func browserLogin(cmd *cobra.Command, in *lineReader, baseURL string, scope loginScope) error {
 	previous := storedClientID(baseURL)
-	if !scope.choose && len(scope.roles) == 0 && previous == "" && isTerminal() {
+	if previous == "" && !scope.requested() && isTerminal() {
 		var err error
-		if scope.choose, err = askToChooseRoles(cmd, os.Stdin); err != nil {
+		if scope.choose, err = askToChooseRoles(cmd, in); err != nil {
 			return err
 		}
 	}
-	if err := loginWithBrowser(cmd, baseURL, scope); err != nil {
+	err := loginWithBrowser(cmd, in, baseURL, scope)
+	var left *helperLeftError
+	if err != nil && !errors.As(err, &left) {
 		return err
 	}
 	if previous != "" {
-		_, _ = fmt.Fprint(cmd.OutOrStdout(), previousCredentialNote(previous))
+		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "The previous credential (%s) was not revoked.\n", previous)
 	}
-	return nil
+	return err
 }
 
-func loginWithBrowser(cmd *cobra.Command, baseURL string, scope loginScope) error {
+func loginWithBrowser(cmd *cobra.Command, in *lineReader, baseURL string, scope loginScope) error {
 	ctx := cmd.Context()
 	out := cmd.OutOrStdout()
 
@@ -219,62 +219,103 @@ func loginWithBrowser(cmd *cobra.Command, baseURL string, scope loginScope) erro
 		return err
 	}
 
-	pcc := login.PersonalClientOptions{DisplayName: scope.displayName}
+	// A helper that outlives its lookup doesn't stop the login, but is
+	// reported again at the end and fails the command.
 	var chosen []menuRole
-	switch {
-	case scope.choose:
-		chosen, err = chooseRoles(cmd, baseURL, accessToken, opts)
-		for _, r := range chosen {
-			pcc.ScopedRoles = append(pcc.ScopedRoles, r.ID)
+	var leftover error
+	ids := dedupe(scope.roles)
+	if scope.choose || needsLookup(scope.roles) {
+		var lookup roleLookup
+		lookup, leftover, err = lookupRoles(cmd, baseURL, accessToken, opts)
+		if err != nil {
+			return err
 		}
-	case len(scope.roles) > 0:
-		pcc.ScopedRoles, chosen, err = resolveScopedRoles(cmd, baseURL, accessToken, opts, scope.roles)
-	}
-	if err != nil {
-		return err
+		if scope.choose {
+			chosen, err = promptForRoles(cmd, in, lookup.offered)
+		} else {
+			chosen, err = matchRoles(scope.roles, lookup)
+		}
+		if err != nil {
+			return err
+		}
+		ids = nil
+		for _, r := range chosen {
+			ids = append(ids, r.ID)
+		}
 	}
 
+	pcc := login.PersonalClientOptions{DisplayName: credentialName(ids, chosen), ScopedRoles: ids}
 	creds, err := login.CreatePersonalClient(ctx, baseURL, accessToken, pcc, opts...)
 	if err != nil {
-		var apiErr *client.APIError
-		switch {
-		case len(scope.roles) > 0 && chosen == nil && exitCode(err) == exitNotFound:
-			return fmt.Errorf("%w (a --scoped-role id may not exist; pass the role's name instead, and c1i checks it against the tenant's roles)", err)
-		case scope.choose && errors.As(err, &apiErr) && apiErr.StatusCode == http.StatusUnauthorized:
-			return fmt.Errorf("%w (the browser approval may have expired while the menu was open; run c1i auth login again)", err)
-		}
 		return err
 	}
-
-	if err := storeAndVerify(cmd, baseURL, creds.ClientID, creds.ClientSecret); err != nil {
+	if err := checkNewCredential(cmd, baseURL, creds, ids); err != nil {
 		return err
 	}
-	reportScope(cmd, pcc.ScopedRoles, chosen)
+	if err := storeCredential(cmd, baseURL, creds.ClientID, creds.ClientSecret); err != nil {
+		return err
+	}
+	reportScope(cmd, creds.ScopedRoles, chosen)
+	if leftover != nil {
+		_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "Warning: %v\n", leftover)
+		return leftover
+	}
 	return nil
 }
 
-func loginWithCredentials(cmd *cobra.Command, baseURL, clientID, clientSecret string) error {
-	return storeAndVerify(cmd, baseURL, clientID, clientSecret)
+// checkNewCredential confirms a just-created credential works and has the
+// scope that was asked for, deleting it otherwise so nothing wrong is kept.
+func checkNewCredential(cmd *cobra.Command, baseURL string, creds *login.Credentials, requested []string) error {
+	c, err := newCredentialClient(cmd, baseURL, creds.ClientID, creds.ClientSecret)
+	if err != nil {
+		return fmt.Errorf("credential verification failed: %w (the new credential %s was left in C1.ai; delete it under your personal clients)", err, creds.ID)
+	}
+	// Introspect works under any scope that leaves the credential some access.
+	introspect, verr := c.Get(cmd.Context(), "/api/v1/auth/introspect", nil)
+	var problem error
+	switch {
+	case !sameRoles(requested, creds.ScopedRoles):
+		problem = &nonJSONResponseError{fmt.Errorf("C1 scoped the new credential to %v, not the requested %v", creds.ScopedRoles, requested)}
+	case len(requested) > 0 && hasNoAccess(introspect, verr):
+		problem = &usageError{fmt.Errorf("those roles give the credential no access: a scoped credential keeps only the overlap between its roles and your own")}
+	case verr != nil:
+		return fmt.Errorf("credential verification failed: %w (the new credential %s was left in C1.ai; delete it under your personal clients)", verr, creds.ID)
+	default:
+		return nil
+	}
+	if err := deletePersonalClient(cmd.Context(), c, creds.ID); err != nil {
+		return fmt.Errorf("%w; the credential (%s) could not delete itself, so delete it under your personal clients in C1.ai", problem, creds.ID)
+	}
+	return fmt.Errorf("%w; the credential was deleted", problem)
 }
 
-func storeAndVerify(cmd *cobra.Command, baseURL, clientID, clientSecret string) error {
+func loginWithCredentials(cmd *cobra.Command, baseURL, clientID, clientSecret string) error {
+	if _, _, err := verifyCredential(cmd, baseURL, clientID, clientSecret); err != nil {
+		return err
+	}
+	return storeCredential(cmd, baseURL, clientID, clientSecret)
+}
+
+// verifyCredential proves credentials work before they replace a stored one,
+// returning a client for them and their introspect response. Introspect works
+// under any role scope, unlike most endpoints.
+func verifyCredential(cmd *cobra.Command, baseURL, clientID, clientSecret string) (*client.Client, []byte, error) {
+	c, err := newCredentialClient(cmd, baseURL, clientID, clientSecret)
+	if err != nil {
+		return nil, nil, fmt.Errorf("credential verification failed: %w", err)
+	}
+	data, err := c.Get(cmd.Context(), "/api/v1/auth/introspect", nil)
+	if err != nil {
+		return nil, nil, fmt.Errorf("credential verification failed: %w", err)
+	}
+	return c, data, nil
+}
+
+func storeCredential(cmd *cobra.Command, baseURL, clientID, clientSecret string) error {
 	service := config.KeychainService(baseURL)
 	backend, err := keychain.Store(service, clientID, clientSecret)
 	if err != nil {
 		return fmt.Errorf("failed to store credentials: %w", err)
-	}
-
-	c, err := newClient(cmd, baseURL)
-	if err != nil {
-		_, _ = keychain.Delete(service)
-		return fmt.Errorf("credentials stored but verification failed: %w", err)
-	}
-
-	// Introspect works under any role scope; a narrowly scoped credential
-	// can't call most other endpoints.
-	if _, err := c.Get(cmd.Context(), "/api/v1/auth/introspect", nil); err != nil {
-		_, _ = keychain.Delete(service)
-		return fmt.Errorf("credentials stored but API test failed: %w", err)
 	}
 
 	out := cmd.OutOrStdout()
