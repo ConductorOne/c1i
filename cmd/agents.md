@@ -411,8 +411,8 @@ resource with `--resource-id` likewise means you drop
   `cannot update grant duration for a ticket in a provision step`; the value
   lands as `grantDuration`.
 - `c1i upgrade --check` prints one JSON object (`current`, `latest`,
-  `channel`, `update_available`, `install_method`, and `upgrade_command` unless
-  the binary is standalone) and changes nothing. `upgrade` exits 0 without
+  `channel`, `update_available`, `install_method`, and, for a Homebrew,
+  `go install`, or container install, `upgrade_command`) and changes nothing. `upgrade` exits 0 without
   replacing anything for a source build or a Homebrew, `go install`, or
   container install, printing the command to run instead. Without a terminal
   it needs `-y`/`--yes`; `--channel latest|preview` tracks releases newer than

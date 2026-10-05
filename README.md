@@ -1348,8 +1348,9 @@ required when stdin is not a terminal. `--check` prints `current`, `latest`,
 `upgrade` prints that command and exits 0 without replacing anything.
 
 The channel list (`index.json`) and its yank flags are not signed, so a
-compromised distribution origin could withhold an upgrade or offer a yanked
-release, but never an unsigned build or one older than the one you run.
+compromised distribution origin could withhold upgrades or offer any signed
+release newer than yours, yanked or prerelease, but never an unsigned build or
+one older than the one you run.
 
 ## License
 
