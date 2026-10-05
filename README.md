@@ -697,6 +697,21 @@ reports a non-zero count, so the key is omitted from list rows. `access-profiles
 also carries the catalog's `accessEntitlements` (its visibility bindings),
 empty when there are none, which list rows omit.
 
+### Roles
+
+Role ids are what `--scoped-role` takes on `service-principals credentials
+create`.
+
+```sh
+c1i roles list [--page-size <n>] [--page-token <token>] [--limit <n>]
+c1i roles get <role-id>
+```
+
+List rows carry `id`, `name` (e.g. `system:viewer`), `display_name`,
+`system_builtin`, `system_api_only`, `created_at` and `updated_at`; `get` adds
+the role's `serviceRoles` and `permissions`. Reading roles needs a credential
+whose roles allow it.
+
 ### Service principals
 
 A service principal (SPC) is a tenant-owned non-human identity. The principal is

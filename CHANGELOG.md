@@ -6,6 +6,11 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- **`c1i roles list` and `c1i roles get`** list and inspect IAM roles, the ids
+  `service-principals credentials create --scoped-role` takes.
+
 ## [0.8.0] - 2026-09-25
 
 ### Added
