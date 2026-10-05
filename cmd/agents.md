@@ -135,6 +135,10 @@ lifecycle calls, and reports, and `mcp classifiers` for AI-governance
 classifiers, bindings, templates, the singleton agent policy, and tool gates.
 Classifier creates and updates take JSON because their nested, ordered rules
 must be preserved; read first and use the explicit `--update-mask` for updates.
+Role ids for `service-principals credentials create --scoped-role` come from
+`c1i roles list` (NDJSON: `id`, `name`, `display_name`, `system_builtin`,
+`system_api_only`); `c1i roles get <role-id>` adds a role's `serviceRoles` and
+`permissions`.
 
 The cobra tree never drifts from what's implemented. Step down it with
 `--help` at each level:
