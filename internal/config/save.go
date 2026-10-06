@@ -26,7 +26,10 @@ func SaveToConfigFile(key, value string) error {
 	switch {
 	case err == nil:
 		if err := yaml.Unmarshal(existing, &data); err != nil {
-			return fmt.Errorf("%s is not valid YAML, so it was left unchanged: %w", path, err)
+			return fmt.Errorf("%s isn't a valid c1i config (a YAML mapping), so it was left unchanged: %w", path, err)
+		}
+		if data == nil { // a document of only "---", "~" or "null"
+			data = map[string]any{}
 		}
 	case !errors.Is(err, fs.ErrNotExist):
 		return err

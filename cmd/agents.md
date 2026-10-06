@@ -447,9 +447,9 @@ resource with `--resource-id` likewise means you drop
 `latest`, `channel`, `update_available`, `install_method`
 (`standalone|homebrew|go-install|container|system|windows`), and, for a
 Homebrew, `go install`, or container install, `upgrade_command`. `upgrade`
-exits 0 without replacing anything for a source build or a non-standalone
-install, printing that command (Windows and system installs get a hint but no
-`upgrade_command`). Without a terminal it needs `-y`/`--yes`. `stable` is the
+exits 0 without replacing anything for a source build, which prints the
+channel's current release, or a non-standalone install, which prints that
+command (Windows and system installs get a hint but no `upgrade_command`). Without a terminal it needs `-y`/`--yes`. `stable` is the
 default channel; `latest` and `preview` are separate channels. `--dry-run`
 fetches and verifies the release (index, manifest, signature, TUF root) and
 checks the install directory is writable, then prints what it would download
