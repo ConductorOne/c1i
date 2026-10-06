@@ -21,7 +21,8 @@ pseudo-terminal should pass `--choose-roles=false` (keep all roles) or
   `--scoped-role <role>` (a name such as `basic-user`, or an id) or
   `--choose-roles` for a menu after browser approval. The new credential is
   checked with C1 before it is stored, named after its role, and its scope is
-  printed.
+  printed. Reading roles uses a temporary credential that login deletes; if
+  that delete fails, login names it and exits 1.
 - **`c1i roles list` and `c1i roles get`** list and inspect IAM roles, the ids
   `service-principals credentials create --scoped-role` takes.
 - **`c1i upgrade`** (alias `update`) installs a newer release from the C1.ai
