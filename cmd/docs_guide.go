@@ -17,7 +17,8 @@ const guideRegisterMCPServer = `# Register an MCP server
 End-to-end walkthrough for registering a new MCP server (HOSTED or EXTERNAL)
 under a C1 app, then approving its discovered tools so the MCP gateway will
 proxy calls to them. Every step below (other than "docs" commands) requires
-authentication — see "c1i auth login".
+authentication — see "c1i auth login". A credential scoped at login
+("--scoped-role") gets 403 (exit 3) on calls its roles don't cover.
 
 ## 1. Get an app to register under
 
@@ -373,6 +374,9 @@ via toolset sync).
 
       c1i auth whoami --fields tenant
       c1i auth whoami
+
+  A credential scoped at login ("--scoped-role") gets 403 (exit 3) on
+  calls its roles don't cover.
 - At least one candidate owner already exists as a C1 user (owners are
   existing users, never created here — C1 users come from a connected
   directory, not from this or any other write path):
@@ -555,6 +559,9 @@ you'd take it back.
 
       c1i auth whoami
 
+  A credential scoped at login ("--scoped-role") gets 403 (exit 3) on
+  calls its roles don't cover.
+
 - An app and an entitlement that already exist to request against. Find real
   ones — "entitlements create" only makes manually-managed ones, which is not
   what this workflow is for (see "c1i docs guide configure-new-app"):
@@ -683,9 +690,10 @@ gap report).
 
 ## Prerequisites
 
-Requires authentication ("c1i auth login"). You need the task's own id —
-from a "c1i tasks list" row, a notification, or the output of
-"c1i requests create grant"/"revoke".
+Requires authentication ("c1i auth login"); a credential scoped at login
+("--scoped-role") gets 403 (exit 3) on calls its roles don't cover. You need
+the task's own id — from a "c1i tasks list" row, a notification, or the
+output of "c1i requests create grant"/"revoke".
 
 ## Steps
 

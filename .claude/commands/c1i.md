@@ -14,14 +14,16 @@ per-command copy here; if a flag/behavior claim ever looks off, verify
 against `go run . <cmd> --help` rather than any doc. The command groups are
 `access-profiles`, `access-reviews`, `accounts`, `api`, `apps`, `auth`,
 `automations`, `connectors`, `docs`, `entitlements`, `export`, `findings`,
-`functions`, `grants`, `mcp`, `policies`, `requests`, `role-mining`,
-`service-principals`, `tasks` and `users`; run `go run . <group> --help` for
-each before reaching for raw `api`.
+`functions`, `grants`, `mcp`, `policies`, `requests`, `role-mining`, `roles`,
+`service-principals`, `tasks`, `upgrade` and `users`; run
+`go run . <group> --help` for each before reaching for raw `api`.
 
 ## Auth
 
 ```sh
 go run . auth login                                          # OAuth device flow
+go run . auth login --scoped-role basic-user                 # limit the credential (role name or id; repeatable)
+go run . auth login --choose-roles                           # pick roles from a menu after approval
 go run . auth login --client-id=ID --client-secret=SECRET    # direct credential login
 go run . auth status                                          # verify stored credentials + backend in use
 go run . auth whoami                                          # show the authenticated principal
@@ -31,7 +33,9 @@ go run . auth logout                                          # remove stored cr
 
 Credentials resolve in order: `C1I_CLIENT_ID`/`C1I_CLIENT_SECRET` env vars
 (read-only) → OS keyring → a `0600` JSON file under `os.UserConfigDir()`
-(headless Linux/CI fallback).
+(headless Linux/CI fallback). Login verifies a new credential before storing
+it; role names and ids come from `go run . roles list`. A terminal login with nothing
+stored first asks whether to scope (`--choose-roles=false` skips it).
 
 ## Configuration
 
@@ -57,13 +61,14 @@ falls through to whatever the config file names.
 - `--error-format=text|json` / `C1I_ERROR_FORMAT` — `json` emits a structured
   error object instead of `Error: ...` text.
 - `--dry-run` / `C1I_DRY_RUN` — preview a C1 REST mutation's method/path/body
-  without sending it; `mcp gateway call` rejects it and is live.
+  without sending it; `mcp gateway call` and `auth login` reject it. `upgrade
+  --dry-run` verifies the release and installs nothing.
 - `--debug` / `C1I_DEBUG` — trace HTTP method/URL/status/timing to stderr
   (never headers or bodies).
 
 `--debug` and `--max-retries` take effect only on the paths built on the shared
-transport (REST, `mcp gateway`, `auth login`). They are inert on the `docs`
-subcommands that fetch — `docs search`, `docs page`, `docs openapi`,
+transport (REST, `mcp gateway`, `auth login`, `upgrade`). They are inert on the
+`docs` subcommands that fetch — `docs search`, `docs page`, `docs openapi`,
 `docs endpoints`, `docs endpoint` — which issue their own HTTP, so no trace
 there does not mean no request was sent.
 
@@ -73,7 +78,7 @@ there does not mean no request was sent.
 |---|---|
 | 0 | success |
 | 1 | generic / unclassified error |
-| 2 | usage error (bad flags/args, unknown command, an empty id argument, an id the API redirects to a collection, or any API `4xx` other than `401`/`403`/`404`/`408`/`429`/`499`) |
+| 2 | usage error (bad flags/args, unknown command, an empty id argument, a refused redirect, or any API `4xx` other than `401`/`403`/`404`/`408`/`429`/`499`) |
 | 3 | not authenticated, or API `401`/`403` |
 | 4 | API `404` (not found) |
 | 5 | API `429` (rate limited) |
@@ -111,3 +116,9 @@ Where to look: a product concept or how-to → `docs search "<terms>"`, then
 existence or shape → `docs endpoints --filter <text>`, then `docs endpoint
 <path>`. A task runbook → `docs guide [<name>]`. The raw spec → `docs openapi`.
 `docs agents` prints the full agent contract (`cmd/agents.md`).
+
+## Changing c1i
+
+`CLAUDE.md` is binding: run its full gate list and its dependency scan before a
+PR, and keep commit messages and PR text free of tenant names, internal repo
+names and ticket IDs.

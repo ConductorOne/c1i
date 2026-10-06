@@ -29,7 +29,7 @@ func TestOperationalHelpStatesDecisionBoundaries(t *testing.T) {
 		{
 			name: "dry-run REST scope",
 			text: rootCmd.PersistentFlags().Lookup("dry-run").Usage,
-			want: []string{"C1 REST mutations", "mcp gateway call rejects it"},
+			want: []string{"C1 REST mutations", "mcp gateway call and auth login reject it"},
 		},
 		{
 			name: "raw API escape hatch and pagination",

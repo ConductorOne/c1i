@@ -44,13 +44,17 @@ of your roles and --choose-roles=false skips the question. --choose-roles and
 A name that matches no role you can scope to exits 2 before your credential is
 created; role IDs go to C1 as given. Login checks the new credential before
 storing it and deletes it if the check fails. README's Authentication section
-has the full rules and exit codes.
+has the full rules and exit codes. --dry-run is rejected (exit 2): a login
+can't be previewed.
 
 If a previous login used a mixed-case URL and commands now report "not
 authenticated", re-run this command: the keychain key is derived from a
 lower-cased host, so a credential stored under the old mixed-case key is no
 longer found.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
+		if dryRunActive() {
+			return &usageError{fmt.Errorf("--dry-run is unsupported for auth login: it cannot preview or suppress creating and storing a credential")}
+		}
 		scope, err := loginScopeFromFlags(cmd)
 		if err != nil {
 			return err

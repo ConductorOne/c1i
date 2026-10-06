@@ -33,7 +33,8 @@ manifest.
 
 Only a standalone binary is replaced in place. For a Homebrew, "go install", or
 container-image install, upgrade prints that method's upgrade command instead
-and exits 0. --check prints a JSON report and changes nothing.
+and exits 0. --check prints a JSON report and changes nothing; --dry-run
+verifies the release and prints what it would replace, installing nothing.
 
   c1i upgrade                       # upgrade to the latest stable release (asks first)
   c1i upgrade --check               # report whether a newer release is available
@@ -82,7 +83,7 @@ and exits 0. --check prints a JSON report and changes nothing.
 			return nil
 		case cmp > 0:
 			_, _ = fmt.Fprintf(out, "c1i %s is newer than the %s channel (%q); nothing to do.\n", current, channel, target)
-			if channel == "stable" {
+			if latest := idx.Channels["latest"]; channel == "stable" && newerRelease(latest, current) && !idx.Semvers[latest].Yanked {
 				_, _ = fmt.Fprintln(out, "(Pass --channel latest to track the newest release.)")
 			}
 			return nil
@@ -202,6 +203,7 @@ var (
 func init() {
 	upgradeCmd.Flags().Bool("check", false, "Print a JSON report of whether a newer release is available; change nothing")
 	upgradeCmd.Flags().String("channel", "stable", "Release channel: stable, latest, or preview")
+	_ = upgradeCmd.RegisterFlagCompletionFunc("channel", cobra.FixedCompletions([]string{"stable", "latest", "preview"}, cobra.ShellCompDirectiveNoFileComp))
 	upgradeCmd.Flags().BoolP("yes", "y", false, "Skip the confirmation prompt")
 	rootCmd.AddCommand(upgradeCmd)
 }
@@ -248,6 +250,12 @@ func distError(err error, format string, args ...any) error {
 		return &upstreamError{fmt.Errorf("%s: %v", msg, err)}
 	}
 	return &upstreamError{fmt.Errorf("%s: %w", msg, err)}
+}
+
+// newerRelease reports whether candidate is a version newer than current.
+func newerRelease(candidate, current string) bool {
+	cmp, ok := selfupdate.CompareVersions(candidate, current)
+	return ok && cmp > 0
 }
 
 // isReleaseVersion reports whether v is a release tag. A source build reports

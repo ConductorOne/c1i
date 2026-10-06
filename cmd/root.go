@@ -143,7 +143,7 @@ func init() {
 	_ = viper.BindPFlag("debug", rootCmd.PersistentFlags().Lookup("debug"))
 	_ = viper.BindEnv("debug", "C1I_DEBUG")
 
-	rootCmd.PersistentFlags().Bool("dry-run", false, "Preview C1 REST mutations (method, path, body) without sending; mcp gateway call rejects it")
+	rootCmd.PersistentFlags().Bool("dry-run", false, "Preview C1 REST mutations (method, path, body) without sending; mcp gateway call and auth login reject it")
 	_ = viper.BindPFlag("dry_run", rootCmd.PersistentFlags().Lookup("dry-run"))
 	_ = viper.BindEnv("dry_run", "C1I_DRY_RUN")
 }

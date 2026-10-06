@@ -19,6 +19,7 @@ import (
 	"github.com/ConductorOne/c1i/internal/selfupdate"
 	"github.com/ConductorOne/c1i/internal/transport"
 	"github.com/sigstore/sigstore-go/pkg/root"
+	"github.com/spf13/cobra"
 )
 
 // fakeDist is an httptest distribution center. files maps a path under /c1i
@@ -456,6 +457,38 @@ func TestUpgradeNewerThanChannel(t *testing.T) {
 	}
 }
 
+// The --channel latest hint must point somewhere newer than what's installed.
+func TestUpgradeLatestHintOnlyWhenLatestIsNewer(t *testing.T) {
+	cases := []struct {
+		name, latest string
+		want         bool
+	}{
+		{"latest is newer", `"v0.8.0"`, true},
+		{"latest is yanked", `"v0.9.0"`, false},
+		{"latest equals installed", `"v0.7.0"`, false},
+		{"latest equals stable", `"v0.6.0"`, false},
+		{"no latest channel", ``, false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			channels := `"stable":"v0.6.0"`
+			if tc.latest != "" {
+				channels += `,"latest":` + tc.latest
+			}
+			d := newFakeDist(t)
+			publishIndex(t, d, `{"channels":{`+channels+`},"semvers":{"v0.6.0":{"manifest":"m"},"v0.9.0":{"manifest":"m","yanked":true}}}`)
+			useDist(t, d, nil, "v0.7.0")
+			out, err := runUpgrade(t)
+			if err != nil {
+				t.Fatalf("err = %v", err)
+			}
+			if got := strings.Contains(out, "--channel latest"); got != tc.want {
+				t.Errorf("hint shown = %v, want %v; output = %q", got, tc.want, out)
+			}
+		})
+	}
+}
+
 func TestUpgradeUnknownChannelIsUsageError(t *testing.T) {
 	d := newFakeDist(t)
 	publishIndex(t, d, idxStable06Latest07)
@@ -523,5 +556,27 @@ func TestUpgradeSourceBuildDoesNotReplace(t *testing.T) {
 				t.Errorf("binary = %q, want it untouched", got)
 			}
 		})
+	}
+}
+
+func TestUpgradeChannelCompletesChannels(t *testing.T) {
+	var out bytes.Buffer
+	rootCmd.SetOut(&out)
+	rootCmd.SetErr(&bytes.Buffer{})
+	t.Cleanup(func() { rootCmd.SetOut(nil); rootCmd.SetErr(nil) })
+	// Cobra adds __complete to the shared tree on use; tree-walking tests
+	// must not see it.
+	t.Cleanup(func() {
+		if c, _, err := rootCmd.Find([]string{cobra.ShellCompRequestCmd}); err == nil && c != rootCmd {
+			rootCmd.RemoveCommand(c)
+		}
+	})
+	rootCmd.SetArgs([]string{cobra.ShellCompRequestCmd, "upgrade", "--channel", ""})
+	if err := rootCmd.ExecuteContext(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	want := "stable\nlatest\npreview\n:4\n" // 4 = ShellCompDirectiveNoFileComp
+	if got := out.String(); got != want {
+		t.Errorf("completions = %q, want %q", got, want)
 	}
 }

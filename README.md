@@ -18,9 +18,11 @@ brew install conductorone/baton/c1i
 # Go
 go install github.com/ConductorOne/c1i@latest
 
-# Container (image tags omit the leading "v" -- e.g. 0.5.2, not v0.5.2)
+# Container (image tags omit the leading "v" -- e.g. 0.9.0, not v0.9.0)
 docker pull public.ecr.aws/conductorone/c1i:<version>
 ```
+
+A standalone binary updates itself with `c1i upgrade`; see [Upgrading](#upgrading).
 
 ## Start Here
 
@@ -700,7 +702,8 @@ empty when there are none, which list rows omit.
 ### Roles
 
 Role ids are what `--scoped-role` takes on `service-principals credentials
-create`.
+create`; `auth login --scoped-role` also takes a role name (see
+[Authentication](#authentication)).
 
 ```sh
 c1i roles list [--page-size <n>] [--page-token <token>] [--limit <n>]
@@ -993,7 +996,7 @@ branch on without parsing text:
 |------|---------|
 | `0` | success |
 | `1` | generic / unclassified error |
-| `2` | usage error (bad flags or arguments, an empty id, an id the API redirects to a collection, or the API returned any `4xx` other than `401`/`403`/`404`/`408`/`429`/`499`) |
+| `2` | usage error (bad flags or arguments, an empty id, a refused redirect, or the API returned any `4xx` other than `401`/`403`/`404`/`408`/`429`/`499`) |
 | `3` | not authenticated, or API returned `401`/`403` |
 | `4` | API returned `404` (not found) |
 | `5` | API returned `429` (rate limited — back off and retry) |
@@ -1037,11 +1040,12 @@ A chain of allowed redirects that doesn't settle within five hops fails as a
 remote error (exit `6`) rather than looping.
 
 This applies to every command built on the shared transport: the REST client,
-the MCP gateway, and the login handshake, so the path and redirect guards,
-`--debug` tracing, and `--max-retries` cover the gateway and login too, not just
-REST commands. **None of those four** applies to the `docs` subcommands that
-fetch — `docs search`, `docs page`, `docs openapi`, `docs endpoints`,
-`docs endpoint` — which call Go's default HTTP client directly: no path or
+the MCP gateway, the login handshake, and `upgrade`, so the path and redirect
+guards, `--debug` tracing, and `--max-retries` cover all of them, not just REST
+commands (`upgrade` maps a refused redirect to exit `8`; see Upgrading).
+**None of those four** applies to the `docs` subcommands that fetch —
+`docs search`, `docs page`, `docs openapi`, `docs endpoints`, `docs endpoint` —
+which call Go's default HTTP client directly: no path or
 redirect guard there, and `--debug` and `--max-retries` are both inert.
 
 One narrower carve-out inside login: the device-flow token poll forces its own
@@ -1101,6 +1105,10 @@ Set it via (in order of precedence):
    ```yaml
    url: https://mycompany.conductor.one
    ```
+
+   A terminal `c1i auth login` given the URL another way offers to save it
+   there. If the file isn't a valid YAML mapping, login warns and leaves it
+   unchanged.
 
 These are equivalent:
 - `--url https://mycompany.conductor.one`
@@ -1180,7 +1188,8 @@ It applies to every REST write command (`requests create`,
 REST-backed `mcp` mutations) and to non-GET `api` calls; it never sends that
 mutation. `mcp gateway call` rejects both `--dry-run` and `C1I_DRY_RUN`: c1i
 cannot preview or suppress a gateway tool's side effects, so inspect the tool
-and treat its invocation as live.
+and treat its invocation as live. `auth login` rejects both too: it can't preview
+or suppress storing a credential.
 
 Most previews run fully offline — no credentials required. The exceptions are
 `upgrade` (it fetches and verifies the release; see Upgrading),
@@ -1260,8 +1269,9 @@ Enter keeps all of your roles, and `--choose-roles=false` skips the question.
   it. Scoped credentials are named `Created by c1i (<role or count>)`.
 - **The temporary credential.** The device-flow token can only create a
   credential, so reading roles uses a short-lived one with all of your roles,
-  deleted before yours is created. If that delete fails, login still stores
-  yours, names the temporary one, and exits 1.
+  deleted before yours is created. If it isn't deleted, login names it. If
+  yours was stored, login exits 1; otherwise it exits with the login's own
+  failure code and stores nothing.
 - A browser login that replaces a stored credential names it; it stays active
   in C1.ai.
 
@@ -1321,8 +1331,8 @@ c1i completion fish > ~/.config/fish/completions/c1i.fish
 c1i completion powershell | Out-String | Invoke-Expression
 ```
 
-`powershell` is also available. Each generator takes `--no-descriptions` to
-emit a script that completes names only, without the per-command help text.
+Each generator takes `--no-descriptions` to emit a script that completes names
+only, without the per-command help text.
 
 ## Version
 
@@ -1349,7 +1359,9 @@ tag, recorded in Rekor) and the download's SHA-256 from that manifest.
 or `windows`), and, for a Homebrew, `go install`, or container install,
 `upgrade_command`. For those installs `upgrade` prints that command and exits 0
 without replacing anything; Windows and system installs print a hint but no
-`upgrade_command`. `--dry-run` fetches and verifies the release (index,
+`upgrade_command`. A source build (`dev` or a Go pseudo-version) is never
+replaced: `upgrade` prints the channel's release and exits 0, and `--check`
+reports `update_available: false`. `--dry-run` fetches and verifies the release (index,
 manifest, signature, TUF root) and checks the install directory is writable,
 then prints what it would download and replace; it takes no lock, doesn't
 prompt, and installs nothing.

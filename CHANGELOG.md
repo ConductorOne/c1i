@@ -6,23 +6,37 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-10-06
+
+### Upgrading from 0.8.x
+
+A terminal `c1i auth login` with no stored credential now asks one question
+before showing the device code. A script that drives login through a
+pseudo-terminal should pass `--choose-roles=false` (keep all roles) or
+`--scoped-role`. Non-terminal logins are unchanged. An exported
+`C1I_DRY_RUN` (or `--dry-run`) now makes `c1i auth login` exit 2.
+
 ### Added
 
 - **`c1i auth login` can limit its credential to chosen roles.** Pass
   `--scoped-role <role>` (a name such as `basic-user`, or an id) or
   `--choose-roles` for a menu after browser approval. The new credential is
   checked with C1 before it is stored, named after its role, and its scope is
-  printed.
+  printed. Reading roles uses a temporary credential that login deletes; if
+  that delete fails, login names it and exits 1.
 - **`c1i roles list` and `c1i roles get`** list and inspect IAM roles, the ids
   `service-principals credentials create --scoped-role` takes.
 - **`c1i upgrade`** (alias `update`) installs a newer release from the C1.ai
   distribution center after verifying its manifest's Sigstore signature and
   the download's SHA-256. `--channel` picks `stable`, `latest` or `preview`;
-  `--check` prints a JSON report. Homebrew, `go install` and container
-  installs get their upgrade command instead.
+  `--check` prints a JSON report and `--dry-run` previews the install.
+  Homebrew, `go install` and container installs get their upgrade command
+  instead.
 
 ### Changed
 
+- `c1i auth login` rejects `--dry-run` and `C1I_DRY_RUN` (exit 2) instead of
+  ignoring them and creating a credential.
 - A terminal `c1i auth login` with no stored credential now asks whether to
   limit the credential before showing the device code;
   `--choose-roles=false` skips the question.
@@ -33,11 +47,14 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Commands that resolve the current user (`tasks list --assigned-to-me`,
   `requests list`, `requests create`) exit 6, not 1, when introspect returns
   a body that isn't JSON.
+- A redirect from https to http is refused (exit 2) instead of followed.
+- Dependencies are updated to their latest releases.
 
 ### Fixed
 
 - `c1i auth login` no longer overwrites a `~/.c1i.yaml` it can't parse when
-  saving the URL; it warns and leaves the file as it was.
+  saving the URL; it warns and leaves the file as it was. A `~/.c1i.yaml`
+  holding only `---`, `~` or `null` no longer crashes it.
 
 ## [0.8.0] - 2026-09-25
 
@@ -1829,7 +1846,8 @@ First changelog entry; releases through v0.1.5 predate this file (see the
 
 - CI enforces `gofmt` via golangci-lint; module-wide formatting normalized.
 
-[Unreleased]: https://github.com/ConductorOne/c1i/compare/v0.8.0...HEAD
+[Unreleased]: https://github.com/ConductorOne/c1i/compare/v0.9.0...HEAD
+[0.9.0]: https://github.com/ConductorOne/c1i/releases/tag/v0.9.0
 [0.8.0]: https://github.com/ConductorOne/c1i/releases/tag/v0.8.0
 [0.7.0]: https://github.com/ConductorOne/c1i/releases/tag/v0.7.0
 [0.6.0]: https://github.com/ConductorOne/c1i/releases/tag/v0.6.0
