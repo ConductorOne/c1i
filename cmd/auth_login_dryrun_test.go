@@ -1,12 +1,15 @@
 package cmd
 
 import (
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"sync/atomic"
 	"testing"
 
+	"github.com/ConductorOne/c1i/internal/client"
+	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
 
@@ -25,12 +28,29 @@ func TestAuthLoginRejectsDryRun(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			var requests atomic.Int32
-			srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-				requests.Add(1)
-				w.WriteHeader(http.StatusInternalServerError)
+			// Count connections at accept, so a request counts even when its
+			// TLS handshake later fails.
+			var conns atomic.Int32
+			srv := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
+				_, _ = w.Write([]byte(`{}`))
 			}))
+			srv.Config.ConnState = func(_ net.Conn, s http.ConnState) {
+				if s == http.StateNew {
+					conns.Add(1)
+				}
+			}
+			srv.StartTLS()
 			t.Cleanup(srv.Close)
+
+			// A credential check that reaches the server succeeds, so only the
+			// connection count can catch a guard that runs after it.
+			origCred := newCredentialClient
+			newCredentialClient = func(*cobra.Command, string, string, string) (*client.Client, error) {
+				return client.NewForTesting(srv.URL, srv.Client(), client.WithMaxRetries(0)), nil
+			}
+			t.Cleanup(func() { newCredentialClient = origCred })
+
 			resetCmds(t, authLoginCmd)
 			resetRootDryRunFlag(t)
 			// Other tests leave a viper.Set override, which beats the flag and
@@ -47,14 +67,14 @@ func TestAuthLoginRejectsDryRun(t *testing.T) {
 			t.Cleanup(func() { rootCmd.SetOut(nil); rootCmd.SetErr(nil) })
 
 			err := runRootWithArgs(t, append([]string{"auth", "login", "--url", srv.URL}, tc.args...))
+			if n := conns.Load(); n != 0 {
+				t.Errorf("%d connections opened; want none", n)
+			}
 			if got := exitCode(err); got != exitUsage {
 				t.Fatalf("exitCode = %d, want %d; err: %v", got, exitUsage, err)
 			}
 			if !strings.Contains(err.Error(), "--dry-run is unsupported for auth login") {
 				t.Errorf("error = %q, want the dry-run explanation", err)
-			}
-			if n := requests.Load(); n != 0 {
-				t.Errorf("%d requests sent; want none", n)
 			}
 		})
 	}
