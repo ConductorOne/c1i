@@ -13,7 +13,8 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 A terminal `c1i auth login` with no stored credential now asks one question
 before showing the device code. A script that drives login through a
 pseudo-terminal should pass `--choose-roles=false` (keep all roles) or
-`--scoped-role`. Non-terminal logins are unchanged.
+`--scoped-role`. Non-terminal logins are unchanged. An exported
+`C1I_DRY_RUN` (or `--dry-run`) now makes `c1i auth login` exit 2.
 
 ### Added
 
@@ -28,8 +29,9 @@ pseudo-terminal should pass `--choose-roles=false` (keep all roles) or
 - **`c1i upgrade`** (alias `update`) installs a newer release from the C1.ai
   distribution center after verifying its manifest's Sigstore signature and
   the download's SHA-256. `--channel` picks `stable`, `latest` or `preview`;
-  `--check` prints a JSON report. Homebrew, `go install` and container
-  installs get their upgrade command instead.
+  `--check` prints a JSON report and `--dry-run` previews the install.
+  Homebrew, `go install` and container installs get their upgrade command
+  instead.
 
 ### Changed
 

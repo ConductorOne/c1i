@@ -87,7 +87,7 @@ apply it for a whole session; the flag wins for a single invocation.
 |---|---|---|
 | `--url` | `C1I_URL` | tenant host — see above |
 | `--fields` | `C1I_FIELDS` | comma-separated dot-paths to keep in JSON output — see "Reading output" |
-| `--dry-run` | `C1I_DRY_RUN` | preview a C1 REST mutation's method, path, and body; unsupported for `mcp gateway call` |
+| `--dry-run` | `C1I_DRY_RUN` | preview a C1 REST mutation's method, path, and body; unsupported for `mcp gateway call` and `auth login` |
 | `--debug` | `C1I_DEBUG` | trace API HTTP requests (method, URL, status, timing) to stderr |
 | `--max-retries` | `C1I_MAX_RETRIES` | retries for transient API failures (`429`/`5xx`); `0` disables |
 | `--error-format` | `C1I_ERROR_FORMAT` | `text` (default) or `json` |
@@ -98,10 +98,11 @@ failures: instead of `Error: <prose>` on stderr you get one JSON object,
 when the failure came from the API. Still branch on the exit code — the JSON is
 for the detail, not the classification.
 
-`--debug` and `--max-retries` cover `mcp gateway`, `auth login` and `upgrade`
-as well as the REST commands: the gateway client threads both into its bearer
-mint and its JSON-RPC calls. On a `mcp gateway call` that hangs or fails oddly, `--debug`
-is the fastest way to see which request stopped.
+`--debug` and `--max-retries` cover `mcp gateway`, `auth login` (except its
+device-code polling, which never retries) and `upgrade` as well as the REST
+commands: the gateway client threads both into its bearer mint and its JSON-RPC
+calls. On a `mcp gateway call` that hangs or fails oddly, `--debug` is the
+fastest way to see which request stopped.
 
 They do **not** reach the `docs` subcommands that fetch — `docs search`,
 `docs page`, `docs openapi`, `docs endpoints`, `docs endpoint`. Those bypass

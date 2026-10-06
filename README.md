@@ -1269,8 +1269,9 @@ Enter keeps all of your roles, and `--choose-roles=false` skips the question.
   it. Scoped credentials are named `Created by c1i (<role or count>)`.
 - **The temporary credential.** The device-flow token can only create a
   credential, so reading roles uses a short-lived one with all of your roles,
-  deleted before yours is created. If that delete fails, login still stores
-  yours, names the temporary one, and exits 1.
+  deleted before yours is created. If that delete fails, login names the
+  temporary one and exits 1; yours is stored only if the rest of the login
+  succeeded.
 - A browser login that replaces a stored credential names it; it stays active
   in C1.ai.
 

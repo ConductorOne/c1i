@@ -44,7 +44,8 @@ of your roles and --choose-roles=false skips the question. --choose-roles and
 A name that matches no role you can scope to exits 2 before your credential is
 created; role IDs go to C1 as given. Login checks the new credential before
 storing it and deletes it if the check fails. README's Authentication section
-has the full rules and exit codes.
+has the full rules and exit codes. --dry-run is rejected (exit 2): a login
+can't be previewed.
 
 If a previous login used a mixed-case URL and commands now report "not
 authenticated", re-run this command: the keychain key is derived from a
