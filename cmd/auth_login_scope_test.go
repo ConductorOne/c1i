@@ -1157,3 +1157,28 @@ func TestLineReaderCancelledReadIgnoresReadyLine(t *testing.T) {
 		}
 	}
 }
+
+// Login has already stored its credential, so a config it can't parse costs
+// only the saved URL: warn, and leave the file alone.
+func TestOfferSaveURLWarnsOnUnparseableConfig(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	path := filepath.Join(home, ".c1i.yaml")
+	const bad = "url: [unclosed\n"
+	if err := os.WriteFile(path, []byte(bad), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	var out bytes.Buffer
+	authLoginCmd.SetOut(&out)
+	authLoginCmd.SetContext(t.Context())
+	t.Cleanup(func() { authLoginCmd.SetOut(nil) })
+
+	offerSaveURL(authLoginCmd, newLineReader(strings.NewReader("y\n")), "https://acme.example.invalid")
+	if !strings.Contains(out.String(), "Warning: the URL was not saved") || !strings.Contains(out.String(), path) {
+		t.Errorf("output = %q, want a warning naming %s", out.String(), path)
+	}
+	if b, _ := os.ReadFile(path); string(b) != bad { // #nosec G304 -- a test temp file
+		t.Errorf("config = %q, want it unchanged", b)
+	}
+}

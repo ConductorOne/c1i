@@ -34,6 +34,11 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `requests list`, `requests create`) exit 6, not 1, when introspect returns
   a body that isn't JSON.
 
+### Fixed
+
+- `c1i auth login` no longer overwrites a `~/.c1i.yaml` it can't parse when
+  saving the URL; it warns and leaves the file as it was.
+
 ## [0.8.0] - 2026-09-25
 
 ### Added

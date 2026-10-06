@@ -72,16 +72,17 @@ func TestSaveToConfigFileKeepsOtherKeysDropsComments(t *testing.T) {
 	}
 }
 
-// An unparseable file is not an error: it is replaced by the one key.
-func TestSaveToConfigFileReplacesUnparseableFile(t *testing.T) {
+func TestSaveToConfigFileRefusesUnparseableFile(t *testing.T) {
 	path := tempHome(t)
-	if err := os.WriteFile(path, []byte("url: [unclosed\nfields: id\n"), 0o600); err != nil {
+	const bad = "url: [unclosed\nfields: id\n"
+	if err := os.WriteFile(path, []byte(bad), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if err := SaveToConfigFile("url", "https://example.conductor.one"); err != nil {
-		t.Fatalf("SaveToConfigFile = %v, want nil", err)
+	err := SaveToConfigFile("url", "https://example.conductor.one")
+	if err == nil || !strings.Contains(err.Error(), path) {
+		t.Errorf("SaveToConfigFile = %v, want an error naming %s", err, path)
 	}
-	if got := readConfig(t, path); len(got) != 1 || got["url"] != "https://example.conductor.one" {
-		t.Errorf("config = %v, want only the new url", got)
+	if b, _ := os.ReadFile(path); string(b) != bad { // #nosec G304 -- a test temp file
+		t.Errorf("file = %q, want it unchanged", b)
 	}
 }
