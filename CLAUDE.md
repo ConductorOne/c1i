@@ -101,6 +101,10 @@ tracked root file outside its allowlist. Stage explicit paths rather than `-A`.
   comment is published text — brevity limits both noise and the chance of
   leaking an internal tenant/hostname/ticket ID. Applies to comments you touch;
   don't go reformatting untouched ones.
+- **Commit messages and PR text are public too.** Never name a tenant or its
+  host, an internal repo, or a ticket ID in a commit message, PR title or PR
+  body; say what was verified live, not where. The placeholder test scans
+  tracked files only, so nothing catches these; grep before pushing.
 
 ### Global flags (persistent, on `rootCmd`)
 

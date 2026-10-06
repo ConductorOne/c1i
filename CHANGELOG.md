@@ -6,6 +6,15 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-10-06
+
+### Upgrading from 0.8.x
+
+A terminal `c1i auth login` with no stored credential now asks one question
+before showing the device code. A script that drives login through a
+pseudo-terminal should pass `--choose-roles=false` (keep all roles) or
+`--scoped-role`. Non-terminal logins are unchanged.
+
 ### Added
 
 - **`c1i auth login` can limit its credential to chosen roles.** Pass
@@ -33,11 +42,14 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Commands that resolve the current user (`tasks list --assigned-to-me`,
   `requests list`, `requests create`) exit 6, not 1, when introspect returns
   a body that isn't JSON.
+- A redirect from https to http is refused (exit 2) instead of followed.
+- Dependencies are updated to their latest releases.
 
 ### Fixed
 
 - `c1i auth login` no longer overwrites a `~/.c1i.yaml` it can't parse when
-  saving the URL; it warns and leaves the file as it was.
+  saving the URL; it warns and leaves the file as it was. A `~/.c1i.yaml`
+  holding only `---`, `~` or `null` no longer crashes it.
 
 ## [0.8.0] - 2026-09-25
 
@@ -1829,7 +1841,8 @@ First changelog entry; releases through v0.1.5 predate this file (see the
 
 - CI enforces `gofmt` via golangci-lint; module-wide formatting normalized.
 
-[Unreleased]: https://github.com/ConductorOne/c1i/compare/v0.8.0...HEAD
+[Unreleased]: https://github.com/ConductorOne/c1i/compare/v0.9.0...HEAD
+[0.9.0]: https://github.com/ConductorOne/c1i/releases/tag/v0.9.0
 [0.8.0]: https://github.com/ConductorOne/c1i/releases/tag/v0.8.0
 [0.7.0]: https://github.com/ConductorOne/c1i/releases/tag/v0.7.0
 [0.6.0]: https://github.com/ConductorOne/c1i/releases/tag/v0.6.0
