@@ -68,11 +68,15 @@ target you can't reach. `c1i auth status` prints the same tenant as plain
 text, plus which credential store served it.
 
 To log in with less than your full access, run
-`c1i auth login --scoped-role basic-user` (repeatable; a role name or ID).
-There is no prompt without a terminal, but a human must still approve the
-device code. A name you can't scope to exits 2 and lists the valid names; an
-unknown ID exits 4. The credential gets `403` (exit 3) on commands its roles
-don't cover.
+`c1i auth login --scoped-role basic-user` (repeatable; a role name or ID from
+`c1i roles list`). There is no prompt without a terminal, but a human must
+still approve the device code; in a terminal with nothing stored, login first
+asks whether to scope, which `--choose-roles=false` skips. A name you can't
+scope to exits 2 and lists the valid names; an unknown ID exits 4. The
+credential gets `403` (exit 3) on commands its roles don't cover. An error
+naming a "temporary credential" (exit 1) means login couldn't delete the helper
+it used to read roles; your own credential may still have been stored, so check
+`c1i auth status`, and delete the helper in C1.ai.
 
 ## Global flags
 
@@ -94,9 +98,9 @@ failures: instead of `Error: <prose>` on stderr you get one JSON object,
 when the failure came from the API. Still branch on the exit code — the JSON is
 for the detail, not the classification.
 
-`--debug` and `--max-retries` cover `mcp gateway` as well as the REST
-commands: the gateway client threads both into its bearer mint and its
-JSON-RPC calls. On a `mcp gateway call` that hangs or fails oddly, `--debug`
+`--debug` and `--max-retries` cover `mcp gateway`, `auth login` and `upgrade`
+as well as the REST commands: the gateway client threads both into its bearer
+mint and its JSON-RPC calls. On a `mcp gateway call` that hangs or fails oddly, `--debug`
 is the fastest way to see which request stopped.
 
 They do **not** reach the `docs` subcommands that fetch — `docs search`,
@@ -143,9 +147,10 @@ classifiers, bindings, templates, the singleton agent policy, and tool gates.
 Classifier creates and updates take JSON because their nested, ordered rules
 must be preserved; read first and use the explicit `--update-mask` for updates.
 
-Role ids for `service-principals credentials create --scoped-role` come from
-`c1i roles list` (NDJSON; README lists the fields); `c1i roles get <role-id>`
-adds a role's `serviceRoles` and `permissions`.
+Role ids for `service-principals credentials create --scoped-role` and
+`auth login --scoped-role` come from `c1i roles list` (NDJSON; README lists the
+fields); `c1i roles get <role-id>` adds a role's `serviceRoles` and
+`permissions`.
 
 The cobra tree never drifts from what's implemented. Step down it with
 `--help` at each level:
@@ -260,8 +265,8 @@ APP_ID=$(c1i apps create --display-name "Example" | jq -r '.app.id')
 |---|---|---|
 | 0 | success | — |
 | 1 | generic / unclassified error | inspect the message |
-| 2 | usage error (bad flags/args, an empty id, or any API `4xx` other than `401`/`403`/`404`/`408`/`429`/`499`) | fix the invocation, don't retry as-is — but read the message first: an API `4xx` can also be a state rejection (e.g. `task is closed`) rather than a bad argument |
-| 3 | not authenticated, or API `401`/`403` | re-authenticate (`c1i auth login`) |
+| 2 | usage error (bad flags/args, an empty id, a refused redirect, or any API `4xx` other than `401`/`403`/`404`/`408`/`429`/`499`) | fix the invocation, don't retry as-is — but read the message first: an API `4xx` can also be a state rejection (e.g. `task is closed`) rather than a bad argument |
+| 3 | not authenticated, or API `401`/`403` | re-authenticate (`c1i auth login`); a scoped credential needs a role that covers the call |
 | 4 | API `404` | stop — the resource/path doesn't exist |
 | 5 | API `429` | back off and retry |
 | 6 | C1 failed: API `5xx`, a `200` with a body that isn't JSON, or a redirect chain that never settles | retryable, not your fault |
@@ -274,10 +279,10 @@ build ids programmatically, because it used to return the whole collection with
 exit 0. An id of `/` or `.` is refused the same way: those escape to a path the
 API redirects to the collection, and the REST client refuses a redirect that
 changes the path, so you get exit 2 instead of a full listing that looks like a
-successful read. It also refuses a same-path redirect to an unrelated host, since
-a followed redirect carries your token. It does follow pure host/scheme
-canonicalization. `mcp gateway` is guarded the same way: it is built on
-the same shared transport, which applies the empty-path and redirect checks
+successful read. It also refuses a same-path redirect to an unrelated host or
+from `https` to `http`, since a followed redirect carries your token. It does
+follow pure host canonicalization. `mcp gateway` is guarded the same way: it is
+built on the same shared transport, which applies the empty-path and redirect checks
 unconditionally.
 
 `6` versus `8`: `6` means C1 itself failed, so waiting and retrying is sensible.
