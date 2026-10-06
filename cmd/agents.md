@@ -315,7 +315,7 @@ the server returns.
 `--dry-run` (or `C1I_DRY_RUN`) previews a C1 REST mutation's method, path,
 and body without sending it. `mcp gateway call` rejects it: c1i cannot preview
 or suppress a tool's side effects, so inspect the tool first and treat its call
-as live.
+as live. `auth login` rejects it too.
 
 Two things are irreversible in ways their `--help` doesn't make obvious:
 

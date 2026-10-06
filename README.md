@@ -1188,7 +1188,8 @@ It applies to every REST write command (`requests create`,
 REST-backed `mcp` mutations) and to non-GET `api` calls; it never sends that
 mutation. `mcp gateway call` rejects both `--dry-run` and `C1I_DRY_RUN`: c1i
 cannot preview or suppress a gateway tool's side effects, so inspect the tool
-and treat its invocation as live.
+and treat its invocation as live. `auth login` rejects both too: it can't preview
+or suppress storing a credential.
 
 Most previews run fully offline — no credentials required. The exceptions are
 `upgrade` (it fetches and verifies the release; see Upgrading),

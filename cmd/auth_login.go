@@ -51,6 +51,9 @@ authenticated", re-run this command: the keychain key is derived from a
 lower-cased host, so a credential stored under the old mixed-case key is no
 longer found.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
+		if dryRunActive() {
+			return &usageError{fmt.Errorf("--dry-run is unsupported for auth login: it cannot preview or suppress creating and storing a credential")}
+		}
 		scope, err := loginScopeFromFlags(cmd)
 		if err != nil {
 			return err

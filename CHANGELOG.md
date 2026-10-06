@@ -33,6 +33,8 @@ pseudo-terminal should pass `--choose-roles=false` (keep all roles) or
 
 ### Changed
 
+- `c1i auth login` rejects `--dry-run` and `C1I_DRY_RUN` (exit 2) instead of
+  ignoring them and creating a credential.
 - A terminal `c1i auth login` with no stored credential now asks whether to
   limit the credential before showing the device code;
   `--choose-roles=false` skips the question.

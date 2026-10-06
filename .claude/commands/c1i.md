@@ -61,7 +61,7 @@ falls through to whatever the config file names.
 - `--error-format=text|json` / `C1I_ERROR_FORMAT` — `json` emits a structured
   error object instead of `Error: ...` text.
 - `--dry-run` / `C1I_DRY_RUN` — preview a C1 REST mutation's method/path/body
-  without sending it; `mcp gateway call` rejects it and is live. `upgrade
+  without sending it; `mcp gateway call` and `auth login` reject it. `upgrade
   --dry-run` verifies the release and installs nothing.
 - `--debug` / `C1I_DEBUG` — trace HTTP method/URL/status/timing to stderr
   (never headers or bodies).
