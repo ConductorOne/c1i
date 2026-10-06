@@ -165,7 +165,7 @@ func offerSaveURL(cmd *cobra.Command, in *lineReader, baseURL string) {
 	}
 
 	if err := config.SaveToConfigFile("url", baseURL); err != nil {
-		_, _ = fmt.Fprintf(out, "Warning: could not save config: %v\n", err)
+		_, _ = fmt.Fprintf(out, "Warning: the URL was not saved: %v\n", err)
 		return
 	}
 

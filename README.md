@@ -1023,9 +1023,9 @@ only when both hold: the target path is identical to what was requested (a
 trailing-slash difference counts as a change), and the target host is in the same
 trust scope as the request host — the same host differing only in scheme or port,
 or a `label.`-prefix relationship in either direction with at least two labels,
-which covers `apex ↔ www` canonicalization. Anything else — a different path, or
-the same path on an unrelated host — is refused as an error (exit `2`) naming the
-target.
+which covers `apex ↔ www` canonicalization. An `https`→`http` downgrade is never
+followed. Anything else — a different path, or the same path on an unrelated host
+— is refused as an error (exit `2`) naming the target.
 
 Both halves matter. The path rule is what closed a real bug: an id of `/` or `.`
 escapes to a path the API redirects to the collection, which turned a
@@ -1183,6 +1183,7 @@ cannot preview or suppress a gateway tool's side effects, so inspect the tool
 and treat its invocation as live.
 
 Most previews run fully offline — no credentials required. The exceptions are
+`upgrade` (it fetches and verifies the release; see Upgrading),
 `tasks approve`/`deny`/`reassign` (authenticate and read the task to resolve its
 current policy step) and `requests create grant`/`revoke` when `--user-id` is
 omitted (authenticate to resolve it to the caller) — both so the previewed body
@@ -1328,6 +1329,40 @@ emit a script that completes names only, without the per-command help text.
 ```sh
 c1i version       # or: c1i --version
 ```
+
+## Upgrading
+
+```sh
+c1i upgrade                       # upgrade to the latest stable release (prompts first)
+c1i upgrade --check               # print a JSON report; change nothing
+c1i upgrade --channel latest -y   # take the newest release without prompting
+```
+
+`upgrade` follows a release channel from the C1.ai distribution center
+(`dist.conductorone.com`): `stable` by default, or `latest`/`preview` via
+`--channel`. It replaces a standalone binary only after verifying the release
+manifest's Sigstore signature (signed by the release workflow run for that c1i
+tag, recorded in Rekor) and the download's SHA-256 from that manifest.
+`--yes`/`-y` skips the prompt and is required when stdin is not a terminal.
+`--check` prints `current`, `latest`, `channel`, `update_available`,
+`install_method` (`standalone`, `homebrew`, `go-install`, `container`, `system`,
+or `windows`), and, for a Homebrew, `go install`, or container install,
+`upgrade_command`. For those installs `upgrade` prints that command and exits 0
+without replacing anything; Windows and system installs print a hint but no
+`upgrade_command`. `--dry-run` fetches and verifies the release (index,
+manifest, signature, TUF root) and checks the install directory is writable,
+then prints what it would download and replace; it takes no lock, doesn't
+prompt, and installs nothing.
+
+`upgrade` treats the distribution center as a system beyond C1: a dist `404`,
+`429`, or `5xx` exits `4`, `5`, or `6` and a same-path redirect loop `6`, but
+any other dist `4xx`, a refused redirect, a non-JSON `200`, or a TUF, signature,
+or checksum failure exits `8`.
+
+The channel list (`index.json`) and its yank flags are not signed, so a
+compromised distribution origin could withhold upgrades or offer any signed
+release newer than yours, yanked or prerelease, but never an unsigned build or
+one older than the one you run.
 
 ## License
 

@@ -74,7 +74,7 @@ recipe above reads.`,
 			// GET /api/v1/policies takes snake_case query params
 			// (page_size/page_token), unlike the search/create bodies below
 			// it (which are ordinary camelCase protojson) — verified against
-			// the platform source's generated apigw decoder.
+			// the API gateway's generated decoder.
 			params := map[string]string{
 				"page_size": strconv.Itoa(pageSize),
 			}

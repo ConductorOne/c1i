@@ -297,9 +297,10 @@ func validateRuleConditions(rules []any) error {
 //     OTHER, unrecognized key instead (a typo, or wrong casing) never
 //     reaches that check at all — the server's JSON decoder rejects the
 //     whole request for the unrecognized field first (HTTP 400), verified
-//     against the generated apigw decoder (protojson.UnmarshalOptions with
-//     no DiscardUnknown). An arm present with an empty body (e.g.
-//     {"reject":{}}) is a legitimate step and is NOT rejected here.
+//     against the API gateway's generated decoder
+//     (protojson.UnmarshalOptions with no DiscardUnknown). An arm present
+//     with an empty body (e.g. {"reject":{}}) is a legitimate step and is
+//     NOT rejected here.
 //  2. An `action` step is recognized as a real arm (so case 1 above doesn't
 //     misfire on it) but isn't supported by create/update yet: the
 //     platform's own API->model conversion (PolicyStepToModel) has no case

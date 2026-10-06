@@ -15,6 +15,11 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   printed.
 - **`c1i roles list` and `c1i roles get`** list and inspect IAM roles, the ids
   `service-principals credentials create --scoped-role` takes.
+- **`c1i upgrade`** (alias `update`) installs a newer release from the C1.ai
+  distribution center after verifying its manifest's Sigstore signature and
+  the download's SHA-256. `--channel` picks `stable`, `latest` or `preview`;
+  `--check` prints a JSON report. Homebrew, `go install` and container
+  installs get their upgrade command instead.
 
 ### Changed
 
@@ -28,6 +33,11 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Commands that resolve the current user (`tasks list --assigned-to-me`,
   `requests list`, `requests create`) exit 6, not 1, when introspect returns
   a body that isn't JSON.
+
+### Fixed
+
+- `c1i auth login` no longer overwrites a `~/.c1i.yaml` it can't parse when
+  saving the URL; it warns and leaves the file as it was.
 
 ## [0.8.0] - 2026-09-25
 

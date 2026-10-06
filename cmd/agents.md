@@ -441,6 +441,25 @@ resource with `--resource-id` likewise means you drop
   row is null in practice — don't read the null as "not deleted", check with a
   get.
 
+## Upgrading c1i
+
+`c1i upgrade --check` prints one JSON object and changes nothing: `current`,
+`latest`, `channel`, `update_available`, `install_method`
+(`standalone|homebrew|go-install|container|system|windows`), and, for a
+Homebrew, `go install`, or container install, `upgrade_command`. `upgrade`
+exits 0 without replacing anything for a source build, which prints the
+channel's current release, or a non-standalone install, which prints that
+command (Windows and system installs get a hint but no `upgrade_command`). Without a terminal it needs `-y`/`--yes`. `stable` is the
+default channel; `latest` and `preview` are separate channels. `--dry-run`
+fetches and verifies the release (index, manifest, signature, TUF root) and
+checks the install directory is writable, then prints what it would download
+and replace; it takes no lock, doesn't prompt, and installs nothing.
+
+Exit codes treat the distribution center as a system beyond C1: a dist `404`,
+`429`, or `5xx` exits 4, 5, or 6 and a same-path redirect loop 6, but any other
+dist `4xx`, a refused redirect, a non-JSON `200`, or a TUF, signature, or
+checksum failure exits 8.
+
 ## Carry forward
 
 Record tenant-specific facts you learn this session — app/connector ids,
