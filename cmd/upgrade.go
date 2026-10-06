@@ -33,7 +33,8 @@ manifest.
 
 Only a standalone binary is replaced in place. For a Homebrew, "go install", or
 container-image install, upgrade prints that method's upgrade command instead
-and exits 0. --check prints a JSON report and changes nothing.
+and exits 0. --check prints a JSON report and changes nothing; --dry-run
+verifies the release and prints what it would replace, installing nothing.
 
   c1i upgrade                       # upgrade to the latest stable release (asks first)
   c1i upgrade --check               # report whether a newer release is available
