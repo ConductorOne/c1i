@@ -83,7 +83,7 @@ verifies the release and prints what it would replace, installing nothing.
 			return nil
 		case cmp > 0:
 			_, _ = fmt.Fprintf(out, "c1i %s is newer than the %s channel (%q); nothing to do.\n", current, channel, target)
-			if channel == "stable" {
+			if channel == "stable" && newerRelease(idx.Channels["latest"], current) {
 				_, _ = fmt.Fprintln(out, "(Pass --channel latest to track the newest release.)")
 			}
 			return nil
@@ -249,6 +249,12 @@ func distError(err error, format string, args ...any) error {
 		return &upstreamError{fmt.Errorf("%s: %v", msg, err)}
 	}
 	return &upstreamError{fmt.Errorf("%s: %w", msg, err)}
+}
+
+// newerRelease reports whether candidate is a version newer than current.
+func newerRelease(candidate, current string) bool {
+	cmp, ok := selfupdate.CompareVersions(candidate, current)
+	return ok && cmp > 0
 }
 
 // isReleaseVersion reports whether v is a release tag. A source build reports

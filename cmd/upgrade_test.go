@@ -456,6 +456,37 @@ func TestUpgradeNewerThanChannel(t *testing.T) {
 	}
 }
 
+// The --channel latest hint must point somewhere newer than what's installed.
+func TestUpgradeLatestHintOnlyWhenLatestIsNewer(t *testing.T) {
+	cases := []struct {
+		name, latest string
+		want         bool
+	}{
+		{"latest is newer", `"v0.8.0"`, true},
+		{"latest equals installed", `"v0.7.0"`, false},
+		{"latest equals stable", `"v0.6.0"`, false},
+		{"no latest channel", ``, false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			channels := `"stable":"v0.6.0"`
+			if tc.latest != "" {
+				channels += `,"latest":` + tc.latest
+			}
+			d := newFakeDist(t)
+			publishIndex(t, d, `{"channels":{`+channels+`},"semvers":{"v0.6.0":{"manifest":"m"}}}`)
+			useDist(t, d, nil, "v0.7.0")
+			out, err := runUpgrade(t)
+			if err != nil {
+				t.Fatalf("err = %v", err)
+			}
+			if got := strings.Contains(out, "--channel latest"); got != tc.want {
+				t.Errorf("hint shown = %v, want %v; output = %q", got, tc.want, out)
+			}
+		})
+	}
+}
+
 func TestUpgradeUnknownChannelIsUsageError(t *testing.T) {
 	d := newFakeDist(t)
 	publishIndex(t, d, idxStable06Latest07)
