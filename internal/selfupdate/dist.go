@@ -86,11 +86,8 @@ func (c *Client) downloadDoer() Doer {
 	return c.HTTP
 }
 
-// validateURL rejects any URL that is not https or whose host differs from the
-// configured dist base host, before it is fetched. In production baseURL() is
-// DefaultBaseURL, so this pins every fetched URL (manifest, .sig, .cert, asset
-// href) to dist.conductorone.com over TLS; a test that points BaseURL at its
-// own host pins to that host instead.
+// validateURL pins every fetched URL (manifest, signature material, asset) to
+// https on the base URL's host.
 func (c *Client) validateURL(raw string) error {
 	u, err := url.Parse(raw)
 	if err != nil {

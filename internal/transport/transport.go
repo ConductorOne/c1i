@@ -317,9 +317,7 @@ func (c *Client) sendWithRetry(req *http.Request) (*Response, error) {
 	}
 }
 
-// readBody reads a response body, enforcing maxRespBytes when it is set. It
-// reads one byte past the cap via io.LimitReader so an exactly-at-cap body is
-// accepted while a larger one is refused before the whole thing is buffered.
+// readBody reads a response body, refusing one over maxRespBytes when set.
 func (c *Client) readBody(r io.Reader) ([]byte, error) {
 	if c.maxRespBytes <= 0 {
 		return io.ReadAll(r)

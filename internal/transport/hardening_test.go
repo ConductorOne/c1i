@@ -38,11 +38,7 @@ func TestResolveAllowedRedirect_Scheme(t *testing.T) {
 	}
 }
 
-// TestClient_RefusesSchemeDowngradeRedirect drives a real server that (over
-// http, standing in for the request scheme) issues an absolute https->http
-// same-path redirect; the client must refuse it as *RedirectError rather than
-// follow a downgrade. The request scheme is rewritten to https by the same
-// scheme-swap trick used elsewhere so the guard sees an https base.
+// An https->http same-path redirect must be refused as *RedirectError.
 func TestClient_RefusesSchemeDowngradeRedirect(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.EscapedPath() != "/x/abc" {

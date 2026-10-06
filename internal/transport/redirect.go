@@ -100,7 +100,7 @@ func resolveAllowedRedirect(base *url.URL, location string) (*url.URL, bool) {
 	}
 	// Refuse a scheme downgrade: an https request must not be redirected to a
 	// plaintext http target, which would carry the caller's credentials over
-	// cleartext. An http->https upgrade (or a same-scheme hop) stays allowed.
+	// cleartext.
 	if strings.EqualFold(base.Scheme, "https") && !strings.EqualFold(target.Scheme, "https") {
 		return nil, false
 	}
