@@ -19,6 +19,7 @@ import (
 	"github.com/ConductorOne/c1i/internal/selfupdate"
 	"github.com/ConductorOne/c1i/internal/transport"
 	"github.com/sigstore/sigstore-go/pkg/root"
+	"github.com/spf13/cobra"
 )
 
 // fakeDist is an httptest distribution center. files maps a path under /c1i
@@ -562,7 +563,14 @@ func TestUpgradeChannelCompletesChannels(t *testing.T) {
 	rootCmd.SetOut(&out)
 	rootCmd.SetErr(&bytes.Buffer{})
 	t.Cleanup(func() { rootCmd.SetOut(nil); rootCmd.SetErr(nil) })
-	rootCmd.SetArgs([]string{"__complete", "upgrade", "--channel", ""})
+	// Cobra adds __complete to the shared tree on use; tree-walking tests
+	// must not see it.
+	t.Cleanup(func() {
+		if c, _, err := rootCmd.Find([]string{cobra.ShellCompRequestCmd}); err == nil && c != rootCmd {
+			rootCmd.RemoveCommand(c)
+		}
+	})
+	rootCmd.SetArgs([]string{cobra.ShellCompRequestCmd, "upgrade", "--channel", ""})
 	if err := rootCmd.ExecuteContext(t.Context()); err != nil {
 		t.Fatal(err)
 	}
