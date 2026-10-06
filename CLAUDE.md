@@ -220,8 +220,8 @@ tracked root file outside its allowlist. Stage explicit paths rather than `-A`.
 - **Errors:** the client returns typed `client.APIError` (carries status),
   `client.AuthError`, `client.PathError`, `client.RedirectError` (a 3xx is
   followed only when the path is unchanged AND the host is in the same trust
-  scope — a followed hop is re-authenticated, so an unrestricted follow would
-  leak the bearer token), and `client.RedirectLoopError` (a same-path chain
+  scope, never as an https→http downgrade — a followed hop is
+  re-authenticated, so an unrestricted follow would leak the bearer token), and `client.RedirectLoopError` (a same-path chain
   that never settles in 5 hops); `internal/mcpgateway` adds `TransportError`
   for an unreachable gateway. `cmd/errors.go` maps them — plus its own
   `usageError`, `toolExecutionError`, `nonJSONResponseError`, and

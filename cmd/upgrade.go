@@ -27,8 +27,9 @@ var upgradeCmd = &cobra.Command{
 
 Release channels come from the C1.ai distribution center (dist.conductorone.com):
 "stable" by default, or "latest" and "preview" via --channel. Before replacing
-anything, upgrade verifies the release manifest's Sigstore signature (made by
-c1i's release workflow) and the download's SHA-256 from that manifest.
+anything, upgrade verifies the release manifest's Sigstore signature (signed by
+the release workflow run for that c1i tag) and the download's SHA-256 from that
+manifest.
 
 Only a standalone binary is replaced in place. For a Homebrew, "go install", or
 container-image install, upgrade prints that method's upgrade command instead
@@ -230,8 +231,8 @@ func writeUpgradeReport(cmd *cobra.Command, current, target, channel string, ava
 
 // distError classifies a failure fetching or verifying a release as upstream
 // (8), except that a dist 404, 429 or 5xx keeps its own exit code. dist needs
-// no auth and takes no input from the caller, so a refused redirect, a bad
-// path, or any other 4xx is dist's fault: that chain is flattened.
+// no auth and takes no input from the caller, so for a refused redirect, a bad
+// path, or any other 4xx the status is dropped and the exit code is 8.
 func distError(err error, format string, args ...any) error {
 	msg := fmt.Sprintf(format, args...)
 	var apiErr *client.APIError
