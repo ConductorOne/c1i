@@ -556,3 +556,18 @@ func TestUpgradeSourceBuildDoesNotReplace(t *testing.T) {
 		})
 	}
 }
+
+func TestUpgradeChannelCompletesChannels(t *testing.T) {
+	var out bytes.Buffer
+	rootCmd.SetOut(&out)
+	rootCmd.SetErr(&bytes.Buffer{})
+	t.Cleanup(func() { rootCmd.SetOut(nil); rootCmd.SetErr(nil) })
+	rootCmd.SetArgs([]string{"__complete", "upgrade", "--channel", ""})
+	if err := rootCmd.ExecuteContext(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	want := "stable\nlatest\npreview\n:4\n" // 4 = ShellCompDirectiveNoFileComp
+	if got := out.String(); got != want {
+		t.Errorf("completions = %q, want %q", got, want)
+	}
+}

@@ -203,6 +203,7 @@ var (
 func init() {
 	upgradeCmd.Flags().Bool("check", false, "Print a JSON report of whether a newer release is available; change nothing")
 	upgradeCmd.Flags().String("channel", "stable", "Release channel: stable, latest, or preview")
+	_ = upgradeCmd.RegisterFlagCompletionFunc("channel", cobra.FixedCompletions([]string{"stable", "latest", "preview"}, cobra.ShellCompDirectiveNoFileComp))
 	upgradeCmd.Flags().BoolP("yes", "y", false, "Skip the confirmation prompt")
 	rootCmd.AddCommand(upgradeCmd)
 }
