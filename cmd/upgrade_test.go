@@ -464,6 +464,7 @@ func TestUpgradeLatestHintOnlyWhenLatestIsNewer(t *testing.T) {
 		want         bool
 	}{
 		{"latest is newer", `"v0.8.0"`, true},
+		{"latest is yanked", `"v0.9.0"`, false},
 		{"latest equals installed", `"v0.7.0"`, false},
 		{"latest equals stable", `"v0.6.0"`, false},
 		{"no latest channel", ``, false},
@@ -475,7 +476,7 @@ func TestUpgradeLatestHintOnlyWhenLatestIsNewer(t *testing.T) {
 				channels += `,"latest":` + tc.latest
 			}
 			d := newFakeDist(t)
-			publishIndex(t, d, `{"channels":{`+channels+`},"semvers":{"v0.6.0":{"manifest":"m"}}}`)
+			publishIndex(t, d, `{"channels":{`+channels+`},"semvers":{"v0.6.0":{"manifest":"m"},"v0.9.0":{"manifest":"m","yanked":true}}}`)
 			useDist(t, d, nil, "v0.7.0")
 			out, err := runUpgrade(t)
 			if err != nil {

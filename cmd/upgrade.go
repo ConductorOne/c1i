@@ -83,7 +83,7 @@ verifies the release and prints what it would replace, installing nothing.
 			return nil
 		case cmp > 0:
 			_, _ = fmt.Fprintf(out, "c1i %s is newer than the %s channel (%q); nothing to do.\n", current, channel, target)
-			if channel == "stable" && newerRelease(idx.Channels["latest"], current) {
+			if latest := idx.Channels["latest"]; channel == "stable" && newerRelease(latest, current) && !idx.Semvers[latest].Yanked {
 				_, _ = fmt.Fprintln(out, "(Pass --channel latest to track the newest release.)")
 			}
 			return nil
