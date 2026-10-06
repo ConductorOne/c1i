@@ -416,6 +416,9 @@ resource with `--resource-id` likewise means you drop
   not `1h`) and only works before provisioning, after which the server says
   `cannot update grant duration for a ticket in a provision step`; the value
   lands as `grantDuration`.
+- `requests create grant --duration` also needs a protobuf duration (`86400s`);
+  `24h` or `7d` is refused with `invalid google.protobuf.Duration value` (exit
+  2). The value lands on the task as `grantDuration`.
 - Entitlement ids are unique only within an app — some system-builtin
   entitlements reuse the same id across every app that has one. Always key
   on `(app_id, id)` together, never `id` alone.

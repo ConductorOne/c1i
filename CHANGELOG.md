@@ -6,6 +6,14 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed
+
+- **`requests create grant --duration` documented a format the server
+  refuses.** Its help and the README suggested `24h` or `7d`, which the API
+  rejects with `invalid google.protobuf.Duration value` (exit 2). They now say
+  it takes a protobuf duration in seconds, such as `86400s`, matching
+  `tasks update-grant-duration` and `entitlements create --duration-grant`.
+
 ## [0.9.0] - 2026-10-06
 
 ### Upgrading from 0.8.x
