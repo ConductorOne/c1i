@@ -499,9 +499,10 @@ c1i requests get <request-id>
 ```
 
 On `create`, `--user-id` defaults to the authenticated user when omitted.
-`requests create grant --duration` is a Go-style duration (`24h`, `7d`) — unlike
-`entitlements create --duration-grant` and `tasks update-grant-duration --duration`,
-which take a protobuf duration (`3600s`, not `1h`).
+`requests create grant --duration` takes a protobuf duration in seconds
+(`86400s`), like `entitlements create --duration-grant` and
+`tasks update-grant-duration --duration`. A Go-style `24h` or `7d` is refused by
+the server with `invalid google.protobuf.Duration value "24h"`.
 
 `requests list` is the requester lens on access requests (the grant/revoke tasks
 you file): by default it shows requests you opened or are the subject of —

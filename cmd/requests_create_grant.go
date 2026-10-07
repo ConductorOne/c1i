@@ -43,6 +43,11 @@ func buildGrantTaskBody(appID, entitlementID, userID, duration, description stri
 var requestsCreateGrantCmd = &cobra.Command{
 	Use:   "grant",
 	Short: "Create a grant access request",
+	Long: `Create a grant access request.
+
+--duration takes a protobuf duration, not a Go one: seconds with an "s"
+suffix, e.g. 86400s. "24h" and "7d" are refused by the server with:
+  invalid google.protobuf.Duration value "24h"`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		baseURL, err := GetBaseURL()
 		if err != nil {
@@ -120,7 +125,8 @@ func init() {
 	requestsCreateGrantCmd.Flags().String("app-id", "", "Application ID")
 	requestsCreateGrantCmd.Flags().String("entitlement-id", "", "Entitlement ID")
 	requestsCreateGrantCmd.Flags().String("user-id", "", "User ID (defaults to self if omitted)")
-	requestsCreateGrantCmd.Flags().String("duration", "", "Grant duration (e.g. 24h, 7d)")
+	requestsCreateGrantCmd.Flags().String("duration", "",
+		`Grant duration as a protobuf duration, e.g. 86400s; "24h" is refused`)
 	requestsCreateGrantCmd.Flags().String("description", "", "Justification or description")
 	requestsCreateGrantCmd.Flags().Bool("emergency", false, "Request emergency access")
 	markRequired(requestsCreateGrantCmd, "app-id")

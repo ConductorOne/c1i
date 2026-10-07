@@ -23,7 +23,7 @@ import (
 // proto field names — identityUserId (not userId) and grantDuration (not
 // duration) — which would otherwise be rejected as unknown fields too.
 func TestBuildGrantTaskBodyNoWrapper(t *testing.T) {
-	body := buildGrantTaskBody("app1", "ent1", "user1", "24h", "test", true)
+	body := buildGrantTaskBody("app1", "ent1", "user1", "86400s", "test", true)
 
 	if _, wrapped := body["task"]; wrapped {
 		t.Fatalf("body must not wrap fields under a \"task\" key: %v", body)
@@ -43,7 +43,7 @@ func TestBuildGrantTaskBodyNoWrapper(t *testing.T) {
 		"appId":            "app1",
 		"appEntitlementId": "ent1",
 		"identityUserId":   "user1",
-		"grantDuration":    "24h",
+		"grantDuration":    "86400s",
 		"description":      "test",
 		"emergencyAccess":  true,
 	}
