@@ -16,10 +16,10 @@ import (
 )
 
 const (
-	openapiURL    = "https://conductorone.com/docs/openapi.yaml"
+	openapiURL    = "https://www.c1.ai/api/openapi.yaml"
 	cacheMaxAge   = 24 * time.Hour
 	cacheDirName  = ".c1i"
-	cacheFileName = "openapi.yaml"
+	cacheFileName = "api-openapi.yaml"
 )
 
 var docsOpenapiCmd = &cobra.Command{
@@ -40,8 +40,8 @@ var docsEndpointsCmd = &cobra.Command{
 	Short: "List all API endpoints, filterable by keyword (no auth required)",
 	Long: `Search the public C1 OpenAPI spec for endpoints. Unlike semantic "docs
 search", no output from --filter is a real no-match in that spec. It does not
-prove no C1 operation exists: some supported MCP and access-review operations
-are outside the spec and have first-class commands. Pass a returned path to
+prove no C1 operation exists. Use first-class commands to inspect tenant
+resources. Pass a returned path to
 "docs endpoint" for its full schema.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		data, err := fetchOpenAPISpec(cmd)
@@ -104,12 +104,9 @@ are outside the spec and have first-class commands. Pass a returned path to
 			_ = enc.Encode(e)
 		}
 
-		// When a filter returns nothing, name endpoint families confirmed real
-		// but omitted from the public OpenAPI spec, and direct callers to their
-		// first-class commands rather than losing pagination or body guards.
 		if len(endpoints) == 0 && filter != "" {
 			_, _ = fmt.Fprintf(cmd.ErrOrStderr(),
-				"No endpoints matched %q. Some C1 endpoints aren't in the public OpenAPI spec: the MCP admin surface (mcp_servers/mcp_tools/mcp_toolsets — use 'c1i mcp') and access reviews (access_review* — use 'c1i access-reviews'; use 'c1i api' only for an unsupported operation). For anything else, try 'c1i docs search %q'.\n",
+				"No endpoints matched %q in the public OpenAPI spec. Try 'c1i docs search %q' for related documentation, or a first-class command to inspect tenant resources.\n",
 				filter, filter)
 		}
 

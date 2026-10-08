@@ -235,7 +235,7 @@ func transportFreeSenders(path string) ([]string, error) {
 // that file IS the transport, and changing it is not the drift this guards.
 var httpBypassFiles = map[string]string{
 	"cmd/docs_search.go":              "bypass: docs search / docs page -> api.mintlify.com",
-	"cmd/docs_openapi.go":             "bypass: docs openapi / endpoints / endpoint -> conductorone.com",
+	"cmd/docs_openapi.go":             "bypass: docs openapi / endpoints / endpoint -> www.c1.ai",
 	"internal/transport/transport.go": "NOT a bypass: the shared transport itself",
 }
 
