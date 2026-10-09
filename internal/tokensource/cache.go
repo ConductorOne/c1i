@@ -36,6 +36,9 @@ const (
 	maxCachedTokenBytes = 64 << 10
 
 	noCacheEnv = "C1I_NO_TOKEN_CACHE"
+
+	// tmpFileGrace spares a temp file a concurrent store may still be renaming.
+	tmpFileGrace = time.Minute
 )
 
 const tokenKeychainService = "com.conductorone.c1i.tokens"
@@ -112,11 +115,16 @@ func loadFileCachedToken(key string) *oauth2.Token {
 	if !trustedCacheDir(filepath.Dir(filepath.Dir(p))) || !trustedCacheDir(filepath.Dir(p)) {
 		return nil
 	}
+	return readCachedTokenFile(p)
+}
+
+// readCachedTokenFile assumes the caller has checked p's directories.
+func readCachedTokenFile(p string) *oauth2.Token {
 	info, err := os.Lstat(p)
 	if err != nil || !info.Mode().IsRegular() || info.Mode().Perm()&0o077 != 0 {
 		return nil
 	}
-	f, err := os.Open(p) // #nosec G304 -- p contains only a locally-derived cache key
+	f, err := os.Open(p) // #nosec G304 -- p is a local cache key or an entry of the checked cache dir
 	if err != nil {
 		return nil
 	}
@@ -187,7 +195,64 @@ func storeFileCachedToken(key string, b []byte) {
 	if err := tmp.Close(); err != nil {
 		return
 	}
-	_ = os.Rename(tmpName, p)
+	if os.Rename(tmpName, p) == nil {
+		pruneTokenDir(dir, filepath.Base(p))
+	}
+}
+
+// pruneTokenDir deletes the token files in dir that no load would serve, so a
+// token minted from credentials since replaced or removed doesn't stay on disk
+// forever. It is best-effort and touches only regular files named exactly as
+// this package names them. Keyring entries can't be enumerated, so expired
+// tokens stored there are only ever overwritten, never swept.
+func pruneTokenDir(dir, keep string) {
+	if !trustedCacheDir(filepath.Dir(dir)) || !trustedCacheDir(dir) {
+		return
+	}
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return
+	}
+	for _, e := range entries {
+		name := e.Name()
+		p := filepath.Join(dir, name)
+		info, err := os.Lstat(p)
+		if err != nil || !info.Mode().IsRegular() || name == keep {
+			continue
+		}
+		isToken, isTemp := tokenFileName(name)
+		switch {
+		case isToken:
+			// Delete corrupt or unreadable files too: no load serves them, and a transient error costs one re-mint.
+			if readCachedTokenFile(p) != nil {
+				continue
+			}
+		case isTemp:
+			if time.Since(info.ModTime()) < tmpFileGrace {
+				continue
+			}
+		default:
+			continue
+		}
+		_ = os.Remove(p)
+	}
+}
+
+// tokenFileName reports whether name is shaped like a file cachePath or
+// storeFileCachedToken's temp file would create.
+func tokenFileName(name string) (isToken, isTemp bool) {
+	if key, ok := strings.CutSuffix(name, ".json"); ok {
+		return isCacheKey(key), false
+	}
+	rest, dotted := strings.CutPrefix(name, ".")
+	key, _, found := strings.Cut(rest, ".json.tmp-")
+	return false, dotted && found && isCacheKey(key)
+}
+
+// isCacheKey matches cacheKey's output exactly, lowercase included.
+func isCacheKey(s string) bool {
+	b, err := hex.DecodeString(s)
+	return err == nil && len(b) == sha256.Size && hex.EncodeToString(b) == s
 }
 
 func invalidateFileCachedToken(key string) {

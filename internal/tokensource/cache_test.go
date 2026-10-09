@@ -444,3 +444,171 @@ func TestCacheKeyChangeForcesMint(t *testing.T) {
 		t.Errorf("token=%q mints=%d, want fresh token from exactly one mint", got.AccessToken, m.n)
 	}
 }
+
+func writeTokenFile(t *testing.T, p string, expiry time.Time) {
+	t.Helper()
+	body := `{"access_token":"t","token_type":"Bearer","expiry":"` + expiry.UTC().Format(time.RFC3339) + `"}`
+	if err := os.WriteFile(p, []byte(body), 0o600); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestStoreSweepsExpiredTokenFiles(t *testing.T) {
+	useTempConfig(t)
+	keep, _ := cachePath(testCacheKey("host", "client"))
+	dir := filepath.Dir(keep)
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	expired := filepath.Join(dir, cacheKey("h", "c", "old-secret")+".json")
+	nearExpiry := filepath.Join(dir, cacheKey("h", "c", "skew-secret")+".json")
+	fresh := filepath.Join(dir, cacheKey("h", "c", "other-secret")+".json")
+	corrupt := filepath.Join(dir, cacheKey("h", "c", "corrupt-secret")+".json")
+	staleTmp := filepath.Join(dir, "."+cacheKey("h", "c", "old-secret")+".json.tmp-1")
+	youngTmp := filepath.Join(dir, "."+cacheKey("h", "c", "other-secret")+".json.tmp-2")
+	notOurs := filepath.Join(dir, "notes.txt")
+	key := cacheKey("h", "c", "near-miss-secret")
+	// Each is expired and old, so only its name keeps it.
+	var nearMisses []string
+	for _, name := range []string{
+		"backup.json", "abcd.json", key[:32] + ".json",
+		".backup.json.tmp-old", ".abcd.json.tmp-old", key + ".json.tmp-old", "." + key,
+		"." + key + ".json.tmpx",
+	} {
+		nearMisses = append(nearMisses, filepath.Join(dir, name))
+	}
+	subdir := filepath.Join(dir, cacheKey("h", "c", "dir-secret")+".json")
+	upperJSON := filepath.Join(dir, strings.ToUpper(cacheKey("h", "c", "upper-secret"))+".json")
+	loosePerms := filepath.Join(dir, cacheKey("h", "c", "perm-secret")+".json")
+	oversized := filepath.Join(dir, cacheKey("h", "c", "big-secret")+".json")
+	if err := os.Mkdir(subdir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	writeTokenFile(t, expired, time.Now().Add(-time.Hour))
+	writeTokenFile(t, nearExpiry, time.Now().Add(30*time.Second))
+	writeTokenFile(t, fresh, time.Now().Add(time.Hour))
+	writeTokenFile(t, upperJSON, time.Now().Add(-time.Hour))
+	writeTokenFile(t, loosePerms, time.Now().Add(time.Hour))
+	if err := os.Chmod(loosePerms, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	// Valid JSON once the padding is trimmed, so only the size bound rejects it.
+	writeTokenFile(t, oversized, time.Now().Add(time.Hour))
+	f, err := os.OpenFile(oversized, os.O_APPEND|os.O_WRONLY, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.WriteString(strings.Repeat(" ", maxCachedTokenBytes)); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.Close(); err != nil {
+		t.Fatal(err)
+	}
+	// A link is never followed or removed, even when its target is an expired token.
+	link := filepath.Join(dir, cacheKey("h", "c", "link-secret")+".json")
+	target := filepath.Join(t.TempDir(), "target.json")
+	writeTokenFile(t, target, time.Now().Add(-time.Hour))
+	survivors := append([]string{keep, fresh, youngTmp, notOurs, subdir, upperJSON}, nearMisses...)
+	if err := os.Symlink(target, link); err == nil {
+		survivors = append(survivors, link, target)
+	}
+	for _, p := range []string{corrupt, staleTmp, youngTmp, notOurs} {
+		if err := os.WriteFile(p, []byte("not json"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	old := time.Now().Add(-2 * tmpFileGrace)
+	for _, p := range nearMisses {
+		writeTokenFile(t, p, time.Now().Add(-time.Hour))
+	}
+	for _, p := range append([]string{staleTmp}, nearMisses...) {
+		if err := os.Chtimes(p, old, old); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	storeCachedToken(testCacheKey("host", "client"), freshToken(30*time.Minute))
+
+	for _, p := range []string{expired, nearExpiry, corrupt, staleTmp, loosePerms, oversized} {
+		if _, err := os.Lstat(p); !errors.Is(err, os.ErrNotExist) {
+			t.Errorf("%s survived the sweep: %v", filepath.Base(p), err)
+		}
+	}
+	for _, p := range survivors {
+		if _, err := os.Lstat(p); err != nil {
+			t.Errorf("%s was removed: %v", filepath.Base(p), err)
+		}
+	}
+}
+
+// The token just written is kept even when it is already too close to expiry
+// for a load to serve it.
+func TestStoreSweepKeepsTokenJustWritten(t *testing.T) {
+	useTempConfig(t)
+	key := testCacheKey("host", "client")
+	storeCachedToken(key, freshToken(30*time.Second))
+	p, _ := cachePath(key)
+	if _, err := os.Lstat(p); err != nil {
+		t.Errorf("token just written was swept: %v", err)
+	}
+}
+
+func TestStoreSweepLeavesCredentialsDir(t *testing.T) {
+	dir := useTempConfig(t)
+	creds := filepath.Join(dir, "c1i", "credentials")
+	if err := os.MkdirAll(creds, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	cred := filepath.Join(creds, cacheKey("h", "c", "cred-secret")+".json")
+	writeTokenFile(t, cred, time.Now().Add(-time.Hour))
+
+	key := testCacheKey("host", "client")
+	storeCachedToken(key, freshToken(30*time.Minute))
+
+	if p, _ := cachePath(key); loadFileCachedToken(key) == nil {
+		t.Fatalf("store did not write %s, so the sweep never ran", p)
+	}
+	if _, err := os.Lstat(cred); err != nil {
+		t.Errorf("credentials file was removed: %v", err)
+	}
+}
+
+// Store refuses a symlinked tokens dir or c1i parent before the sweep runs, so
+// this calls the sweep directly to hold its own guard.
+func TestTokenSweepSkipsSymlinkedDir(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("symlink privileges are not portable on Windows")
+	}
+	for _, linked := range []string{"tokens", "c1i"} {
+		t.Run(linked, func(t *testing.T) {
+			dir := useTempConfig(t)
+			target := filepath.Join(dir, "untrusted")
+			tokens := filepath.Join(dir, "c1i", "tokens")
+			strayDir := target
+			if linked == "c1i" {
+				strayDir = filepath.Join(target, "tokens")
+			}
+			if err := os.MkdirAll(strayDir, 0o700); err != nil {
+				t.Fatal(err)
+			}
+			stray := filepath.Join(strayDir, cacheKey("h", "c", "stray-secret")+".json")
+			writeTokenFile(t, stray, time.Now().Add(-time.Hour))
+			link := filepath.Join(dir, "c1i")
+			if linked == "tokens" {
+				link = tokens
+				if err := os.MkdirAll(filepath.Dir(tokens), 0o700); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if err := os.Symlink(target, link); err != nil {
+				t.Skipf("creating symlink: %v", err)
+			}
+
+			pruneTokenDir(tokens, "")
+
+			if _, err := os.Lstat(stray); err != nil {
+				t.Errorf("file behind a symlinked %s dir was removed: %v", linked, err)
+			}
+		})
+	}
+}

@@ -1312,7 +1312,10 @@ token and reuses it until it nears expiry. It uses the OS keyring when
 available. On Unix-like hosts without a usable keyring, it instead uses a
 hardened `0600` file under the config directory (`~/.config/c1i/tokens/` on
 Linux). A cached token the server rejects (clock skew, or a revoked credential)
-is dropped and re-minted once automatically.
+is dropped and re-minted once automatically. Each file-cache write also deletes
+the other token files there that c1i would refuse to load (expired or expiring
+within a minute, corrupt or unreadable, or open to group or other users) and
+temp files over a minute old.
 The token is strictly shorter-lived than the client secret already stored
 beside it. Set `C1I_NO_TOKEN_CACHE=1` to disable caching and mint per
 invocation.
@@ -1380,6 +1383,52 @@ The channel list (`index.json`) and its yank flags are not signed, so a
 compromised distribution origin could withhold upgrades or offer any signed
 release newer than yours, yanked or prerelease, but never an unsigned build or
 one older than the one you run.
+
+## Uninstalling
+
+Removing the binary leaves these behind:
+
+- `~/.c1i/`, the OpenAPI spec cache.
+- `~/.c1i.yaml`, the config file.
+- `<UserConfigDir>/c1i/`, holding the file-fallback credentials
+  (`credentials/`) and the access-token file cache (`tokens/`). See
+  [Credential sources](#credential-sources) for each OS's config directory.
+- OS keyring entries: credentials under `c1i/<host>`, and cached access tokens
+  under `com.conductorone.c1i.tokens`. Older releases stored a
+  `<name>.conductor.one` tenant's credentials under `c1i/<name>`.
+
+c1i can't list keyring entries or keep track of the tenants you've logged in to.
+To remove its keyring credentials, run `auth logout` once per tenant before you
+remove the binary. If `C1I_CLIENT_ID` and `C1I_CLIENT_SECRET` are both set, unset
+them first: logout still removes the stored credentials, but drops the cached
+token for the env-var credentials instead of theirs.
+
+```sh
+c1i auth logout --url example.conductor.one
+```
+
+Logout also drops the cached token for the credentials stored now. A token
+cached under credentials you since replaced stays in the keyring. To remove
+keyring entries by hand, replace `<host>` below with a tenant's host, such as
+`example.conductor.one`, or with `<name>` for an entry an older release stored:
+
+```sh
+# macOS: each call deletes one item; repeat until it reports "could not be found"
+security delete-generic-password -s 'c1i/<host>'
+security delete-generic-password -s com.conductorone.c1i.tokens
+
+# Linux (Secret Service): each call deletes every matching item
+secret-tool clear service 'c1i/<host>'
+secret-tool clear service com.conductorone.c1i.tokens
+```
+
+On Windows, open Credential Manager → Windows Credentials and remove
+`c1i/<host>:client_id`, `c1i/<host>:client_secret`, and every
+`com.conductorone.c1i.tokens:` entry. To find which hosts you have, search for
+`c1i` in Keychain Access (macOS), Seahorse (Linux) or Credential Manager.
+
+`~/.sigstore/root/`, which `upgrade` uses to verify releases, is shared with
+other Sigstore tools, so leave it in place.
 
 ## License
 
