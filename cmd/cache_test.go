@@ -17,6 +17,16 @@ type stubRoundTripper func(*http.Request) (*http.Response, error)
 
 func (f stubRoundTripper) RoundTrip(r *http.Request) (*http.Response, error) { return f(r) }
 
+// useTempHome points the home dir at a temp dir and returns the cache path.
+// USERPROFILE is what os.UserHomeDir reads on Windows.
+func useTempHome(t *testing.T) string {
+	t.Helper()
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	return filepath.Join(home, cacheDirName, "cache", cacheFileName)
+}
+
 // refreshOpenAPICache runs `docs openapi` against an expired cache so it
 // fetches a stub spec and rewrites the cache.
 func refreshOpenAPICache(t *testing.T, cacheDir string) {
@@ -57,11 +67,12 @@ func refreshOpenAPICache(t *testing.T, cacheDir string) {
 }
 
 func TestCacheWritePrunesLeftoverFiles(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-	cacheDir := filepath.Join(home, cacheDirName, "cache")
-	if err := os.MkdirAll(filepath.Join(cacheDir, "subdir"), 0o700); err != nil {
-		t.Fatal(err)
+	cacheDir := filepath.Dir(useTempHome(t))
+	home := filepath.Dir(filepath.Dir(cacheDir))
+	for _, d := range []string{"subdir", "empty-subdir"} {
+		if err := os.MkdirAll(filepath.Join(cacheDir, d), 0o700); err != nil {
+			t.Fatal(err)
+		}
 	}
 	for _, name := range []string{"openapi.yaml", ".tmp-leftover"} {
 		if err := os.WriteFile(filepath.Join(cacheDir, name), []byte("x"), 0o600); err != nil {
@@ -92,7 +103,7 @@ func TestCacheWritePrunesLeftoverFiles(t *testing.T) {
 	for _, e := range entries {
 		got = append(got, e.Name())
 	}
-	want := []string{cacheFileName, "subdir"}
+	want := []string{cacheFileName, "empty-subdir", "subdir"}
 	if strings.Join(got, ",") != strings.Join(want, ",") {
 		t.Errorf("cache dir holds %v, want %v", got, want)
 	}
@@ -105,8 +116,7 @@ func TestCacheWritePrunesLeftoverFiles(t *testing.T) {
 
 // A cache dir the user redirected elsewhere may hold files c1i doesn't own.
 func TestCachePruneSkipsSymlinkedCacheDir(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
+	home := filepath.Dir(filepath.Dir(filepath.Dir(useTempHome(t))))
 	target := t.TempDir()
 	stray := filepath.Join(target, "not-ours.txt")
 	if err := os.WriteFile(stray, []byte("x"), 0o600); err != nil {

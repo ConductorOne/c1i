@@ -22,15 +22,13 @@ paths:
       operationId: c1.api.user.v1.Users.Get
 `
 
-// primeOpenAPICache points HOME at a temp dir and pre-populates the OpenAPI
-// cache file so fetchOpenAPISpec reads the stub spec above without hitting
-// the network. The cache file's mtime is "now", which is inside the 24h
+// primeOpenAPICache points the home dir at a temp dir and pre-populates the
+// OpenAPI cache file so fetchOpenAPISpec reads the stub spec above without
+// hitting the network. The cache file's mtime is "now", which is inside the 24h
 // cacheMaxAge window fetchOpenAPISpec checks.
 func primeOpenAPICache(t *testing.T) {
 	t.Helper()
-	dir := t.TempDir()
-	t.Setenv("HOME", dir)
-	cacheDir := filepath.Join(dir, cacheDirName, "cache")
+	cacheDir := filepath.Dir(useTempHome(t))
 	if err := os.MkdirAll(cacheDir, 0o700); err != nil {
 		t.Fatalf("failed to create cache dir: %v", err)
 	}
