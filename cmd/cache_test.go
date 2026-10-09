@@ -12,6 +12,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/ConductorOne/c1i/internal/client"
 )
 
 type stubRoundTripper func(*http.Request) (*http.Response, error)
@@ -470,5 +472,61 @@ func TestOpenAPIUnreadableFreshCacheFetches(t *testing.T) {
 	}
 	if got != stubOpenAPISpec {
 		t.Errorf("printed %q, want the fetched spec", got)
+	}
+}
+
+// unsetRetriesEnv clears C1I_MAX_RETRIES for the test.
+func unsetRetriesEnv(t *testing.T) {
+	t.Helper()
+	t.Setenv("C1I_MAX_RETRIES", "")
+	_ = os.Unsetenv("C1I_MAX_RETRIES")
+}
+
+func serve503(attempts *int) stubRoundTripper {
+	return func(r *http.Request) (*http.Response, error) {
+		*attempts++
+		return &http.Response{StatusCode: http.StatusServiceUnavailable, Body: http.NoBody, Request: r}, nil
+	}
+}
+
+// With a cache to fall back on, retries only delay the answer.
+func TestOpenAPIStaleCacheMakesOneAttempt(t *testing.T) {
+	unsetRetriesEnv(t)
+	writeExpiredCache(t, useTempHome(t), stubOpenAPISpec)
+	attempts := 0
+	out, err := runDocsOpenapiRoot(t, serve503(&attempts))
+	if err != nil {
+		t.Fatalf("docs openapi: %v", err)
+	}
+	if attempts != 1 || !strings.Contains(out, "Warning: using cached OpenAPI spec") {
+		t.Errorf("sent %d requests, output %.200q; want 1 and the stale-cache warning", attempts, out)
+	}
+}
+
+func TestOpenAPIExplicitRetriesApplyWithCache(t *testing.T) {
+	unsetRetriesEnv(t)
+	writeExpiredCache(t, useTempHome(t), stubOpenAPISpec)
+	attempts := 0
+	if _, err := runDocsOpenapiRoot(t, serve503(&attempts), "--max-retries", "2"); err != nil {
+		t.Fatalf("docs openapi: %v", err)
+	}
+	if attempts != 3 {
+		t.Errorf("sent %d requests, want 3", attempts)
+	}
+}
+
+func TestOpenAPIRetries(t *testing.T) {
+	unsetRetriesEnv(t)
+	cachePath := useTempHome(t)
+	if got := openAPIRetries(cachePath); got != client.DefaultMaxRetries {
+		t.Errorf("no cache: %d retries, want the default %d", got, client.DefaultMaxRetries)
+	}
+	writeExpiredCache(t, cachePath, stubOpenAPISpec)
+	if got := openAPIRetries(cachePath); got != 0 {
+		t.Errorf("cache: %d retries, want 0", got)
+	}
+	t.Setenv("C1I_MAX_RETRIES", "2")
+	if got := openAPIRetries(cachePath); got != 2 {
+		t.Errorf("cache and C1I_MAX_RETRIES=2: %d retries, want 2", got)
 	}
 }

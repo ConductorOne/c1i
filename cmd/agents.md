@@ -112,8 +112,9 @@ never reached that path, NOT that no request was sent — don't read it as
 evidence either way when a `docs` command comes back empty.
 
 Nor do the fetching `docs` commands call the same place, which matters for
-egress rules and for why one can fail while another works: `docs openapi`, `docs endpoints` and
-`docs endpoint` fetch `https://www.c1.ai/api/openapi.yaml` (cached 24h at
+egress rules and for why one can fail while another works: `docs openapi`,
+`docs endpoints` and `docs endpoint` fetch
+`https://www.c1.ai/api/openapi.yaml` (cached 24h at
 `~/.c1i/cache/api-openapi.yaml`, so a run can return rows without sending a
 request), while `docs search` and `docs page` call a third party —
 `api.mintlify.com` — with a public client-side key. `docs search` is semantic
@@ -121,8 +122,10 @@ with no relevance threshold, so it always returns up to 10 plausible hits even
 for a nonsense query: never read a result as proof a concept exists, or an
 unexpected result as proof it is absent. `docs endpoints --filter` DOES have a
 true no-match. If a spec fetch fails, an expired cache is served with a
-one-line `Warning:` on stderr naming its age; with no cache, it exits 4, 5 or 6
-for a 404, 429 or 5xx, and 8 otherwise.
+one-line `Warning:` on stderr naming its age; with no cache, it exits 4 for a
+404, 5 for a 429, 6 for a 5xx or a redirect loop, and 8 otherwise. With a cache
+to fall back on, the fetch makes one attempt unless you set `--max-retries` or
+`C1I_MAX_RETRIES`.
 
 Don't store files in `~/.c1i/cache/`: a spec refresh deletes any file there
 that the running version doesn't use.

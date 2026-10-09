@@ -14,10 +14,12 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 - **`--debug` and `--max-retries` did nothing on `docs openapi`,
   `docs endpoints` and `docs endpoint`.** The spec fetch now uses the shared
-  transport, so it traces, retries, refuses a redirect to another host, and
-  treats a response over 32 MiB as a failed fetch. With no cache to fall back
-  on, a failed fetch now exits 4, 5 or 6 for a 404, 429 or 5xx, and 8
-  otherwise, instead of 1.
+  transport, so it traces, refuses a redirect to a different path or host,
+  and treats a response over 32 MiB as a failed fetch. With no cache to fall
+  back on, it retries a 429 or 5xx up to 4 times by default, and a failed
+  fetch exits 4 for a 404, 5 for a 429, 6 for a 5xx or a redirect loop, and 8
+  otherwise, instead of 1. With a cache, it makes one attempt unless you set
+  `--max-retries` or `C1I_MAX_RETRIES`.
 
 - **An unreadable OpenAPI cache under a day old failed the `docs` OpenAPI
   commands** instead of refetching, for example when the cache path was a

@@ -192,7 +192,7 @@ func fetchOpenAPISpec(cmd *cobra.Command) ([]byte, error) {
 	}
 
 	hc := transport.New(openAPIBase,
-		transport.WithMaxRetries(viper.GetInt("max_retries")),
+		transport.WithMaxRetries(openAPIRetries(cachePath)),
 		transport.WithDebug(viper.GetBool("debug")),
 		transport.WithMaxResponseBytes(maxOpenAPISpecBytes),
 	)
@@ -217,6 +217,17 @@ func fetchOpenAPISpec(cmd *cobra.Command) ([]byte, error) {
 		writeOpenAPICache(cachePath, data)
 	}
 	return data, nil
+}
+
+// openAPIRetries is the configured retry count, except that a fetch with a
+// cached spec to fall back on makes one attempt unless the user set
+// --max-retries or C1I_MAX_RETRIES: retries would only delay the fallback.
+func openAPIRetries(cachePath string) int {
+	if info, err := os.Stat(cachePath); err == nil && info.Mode().IsRegular() &&
+		os.Getenv("C1I_MAX_RETRIES") == "" && !rootCmd.PersistentFlags().Changed("max-retries") {
+		return 0
+	}
+	return viper.GetInt("max_retries")
 }
 
 // staleOpenAPISpec returns the cached spec, however old, or err if there is
