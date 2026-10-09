@@ -1314,8 +1314,8 @@ hardened `0600` file under the config directory (`~/.config/c1i/tokens/` on
 Linux). A cached token the server rejects (clock skew, or a revoked credential)
 is dropped and re-minted once automatically. Each file-cache write also deletes
 the other token files there that c1i would refuse to load (expired or expiring
-within a minute, corrupt, or accessible to other users) and temp files over a
-minute old.
+within a minute, corrupt or unreadable, or open to group or other users) and
+temp files over a minute old.
 The token is strictly shorter-lived than the client secret already stored
 beside it. Set `C1I_NO_TOKEN_CACHE=1` to disable caching and mint per
 invocation.

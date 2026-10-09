@@ -473,6 +473,7 @@ func TestStoreSweepsExpiredTokenFiles(t *testing.T) {
 	for _, name := range []string{
 		"backup.json", "abcd.json", key[:32] + ".json",
 		".backup.json.tmp-old", ".abcd.json.tmp-old", key + ".json.tmp-old", "." + key,
+		"." + key + ".json.tmpx",
 	} {
 		nearMisses = append(nearMisses, filepath.Join(dir, name))
 	}
