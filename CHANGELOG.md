@@ -6,6 +6,14 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Upgrading from 0.9.1
+
+With no cached spec, a failed `docs openapi`, `docs endpoints` or
+`docs endpoint` now exits 4, 5, 6 or 8 instead of 1, and a 429 or 5xx is
+retried by default; `--max-retries 0` restores a single attempt. With a
+relative `HOME` or `%AppData%`, the credential and token file fallbacks and
+`~/.c1i.yaml` now error or are skipped instead of using the working directory.
+
 ### Changed
 
 - `golang.org/x/term` moves to 0.47.0 and `golang.org/x/sys` to 0.49.0.
@@ -37,8 +45,9 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 - **`upgrade` no longer runs `go env`.** It ran the go command to find
   `GOBIN` and `GOPATH`, which made Go write telemetry counters under your
-  config dir. It now reads the environment and Go's env file itself, so
-  install-method detection is unchanged.
+  config dir. It now reads the environment and Go's env file itself. It reads
+  that file even when Go isn't installed, so a `GOBIN` set there marks a
+  binary in that dir as a `go install`.
 
 - **With a relative `HOME`, c1i read and wrote `.c1i.yaml` in the working
   directory**, so a `.c1i.yaml` planted in a repository could point it, and
