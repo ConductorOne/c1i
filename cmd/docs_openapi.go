@@ -182,24 +182,24 @@ func fetchOpenAPISpec(cmd *cobra.Command) ([]byte, error) {
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		return staleOpenAPISpec(cachePath, fmt.Errorf("fetching OpenAPI spec: %w", err))
+		return staleOpenAPISpec(cmd, cachePath, fmt.Errorf("fetching OpenAPI spec: %w", err))
 	}
 	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
-		return staleOpenAPISpec(cachePath, fmt.Errorf("fetching OpenAPI spec: HTTP %d", resp.StatusCode))
+		return staleOpenAPISpec(cmd, cachePath, fmt.Errorf("fetching OpenAPI spec: HTTP %d", resp.StatusCode))
 	}
 
 	data, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return staleOpenAPISpec(cachePath, fmt.Errorf("reading OpenAPI spec: %w", err))
+		return staleOpenAPISpec(cmd, cachePath, fmt.Errorf("reading OpenAPI spec: %w", err))
 	}
 	// A captive portal answers 200 with HTML, and caching that would serve it
 	// until cacheMaxAge.
 	var doc map[string]any
 	err = yaml.Unmarshal(data, &doc)
 	if _, ok := doc["paths"]; err != nil || !ok {
-		return staleOpenAPISpec(cachePath, fmt.Errorf("fetching OpenAPI spec: %s did not return an OpenAPI document", openapiURL))
+		return staleOpenAPISpec(cmd, cachePath, fmt.Errorf("fetching OpenAPI spec: %s did not return an OpenAPI document", openapiURL))
 	}
 
 	if cachePath != "" {
@@ -208,14 +208,31 @@ func fetchOpenAPISpec(cmd *cobra.Command) ([]byte, error) {
 	return data, nil
 }
 
-// staleOpenAPISpec returns the cached spec, however old, or err if there is none.
-func staleOpenAPISpec(cachePath string, err error) ([]byte, error) {
-	if cachePath != "" {
-		if data, readErr := os.ReadFile(cachePath); readErr == nil { // #nosec G304 -- cachePath is a fixed internal path (openAPICachePath), not caller input
-			return data, nil
-		}
+// staleOpenAPISpec returns the cached spec, however old, or err if there is
+// none. It warns on stderr, leaving stdout clean for pipes.
+func staleOpenAPISpec(cmd *cobra.Command, cachePath string, err error) ([]byte, error) {
+	if cachePath == "" {
+		return nil, err
 	}
-	return nil, err
+	info, statErr := os.Stat(cachePath)
+	data, readErr := os.ReadFile(cachePath) // #nosec G304 -- cachePath is a fixed internal path (openAPICachePath), not caller input
+	if statErr != nil || readErr != nil {
+		return nil, err
+	}
+	_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "warning: using cached OpenAPI spec from %s ago (%v)\n",
+		formatAge(time.Since(info.ModTime())), err)
+	return data, nil
+}
+
+func formatAge(d time.Duration) string {
+	switch {
+	case d >= 24*time.Hour:
+		return fmt.Sprintf("%dd", int(d/(24*time.Hour)))
+	case d >= time.Hour:
+		return fmt.Sprintf("%dh", int(d/time.Hour))
+	default:
+		return fmt.Sprintf("%dm", int(d/time.Minute))
+	}
 }
 
 // writeOpenAPICache is best-effort. The rename keeps a reader from seeing a

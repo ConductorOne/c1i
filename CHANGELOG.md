@@ -48,7 +48,8 @@ names `c1i mcp` or `access-reviews`, since the spec now covers both.
   page, was cached and served as the spec. Now only a body that parses as one
   is cached; otherwise the existing cache is used, or the command fails. A
   download that fails partway falls back the same way, and the cache file is
-  replaced atomically.
+  replaced atomically. Any fallback to an expired cache now prints a one-line
+  warning on stderr with the cache's age and the failure.
 
 - **With no home dir, the `docs` OpenAPI commands cached the spec in the
   working directory**, under `./.c1i/cache/`. They now fetch the spec and use

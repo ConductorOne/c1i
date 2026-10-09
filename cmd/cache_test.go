@@ -18,23 +18,26 @@ type stubRoundTripper func(*http.Request) (*http.Response, error)
 
 func (f stubRoundTripper) RoundTrip(r *http.Request) (*http.Response, error) { return f(r) }
 
-// runDocsOpenapi runs `docs openapi` with rt serving every request.
-func runDocsOpenapi(t *testing.T, rt stubRoundTripper) (string, error) {
+// runDocsOpenapi runs `docs openapi` with rt serving every request and returns
+// its stdout and stderr.
+func runDocsOpenapi(t *testing.T, rt stubRoundTripper) (string, string, error) {
 	t.Helper()
 	orig := http.DefaultClient.Transport
 	http.DefaultClient.Transport = rt
 	t.Cleanup(func() { http.DefaultClient.Transport = orig })
 
-	out := &bytes.Buffer{}
+	out, errOut := &bytes.Buffer{}, &bytes.Buffer{}
 	prevCtx := docsOpenapiCmd.Context()
 	docsOpenapiCmd.SetOut(out)
+	docsOpenapiCmd.SetErr(errOut)
 	docsOpenapiCmd.SetContext(context.Background())
 	t.Cleanup(func() {
 		docsOpenapiCmd.SetOut(nil)
+		docsOpenapiCmd.SetErr(nil)
 		docsOpenapiCmd.SetContext(prevCtx)
 	})
 	err := docsOpenapiCmd.RunE(docsOpenapiCmd, nil)
-	return out.String(), err
+	return out.String(), errOut.String(), err
 }
 
 func serveSpec(body string) stubRoundTripper {
@@ -78,7 +81,7 @@ func refreshOpenAPICache(t *testing.T, cacheDir string) {
 	t.Helper()
 	cachePath := filepath.Join(cacheDir, cacheFileName)
 	writeExpiredCache(t, cachePath, stubOpenAPISpec)
-	if _, err := runDocsOpenapi(t, serveSpec(stubOpenAPISpec)); err != nil {
+	if _, _, err := runDocsOpenapi(t, serveSpec(stubOpenAPISpec)); err != nil {
 		t.Fatalf("docs openapi: %v", err)
 	}
 	info, err := os.Stat(cachePath)
@@ -177,7 +180,7 @@ func TestOpenAPISpecWithoutHomeDirSkipsCache(t *testing.T) {
 			}
 			before := snapshotTree(t, ".")
 
-			got, err := runDocsOpenapi(t, serveSpec(stubOpenAPISpec))
+			got, _, err := runDocsOpenapi(t, serveSpec(stubOpenAPISpec))
 			if err != nil {
 				t.Fatalf("docs openapi: %v", err)
 			}
@@ -221,7 +224,7 @@ func TestOpenAPIInvalidBodyKeepsCache(t *testing.T) {
 		cachePath := useTempHome(t)
 		writeExpiredCache(t, cachePath, stubOpenAPISpec)
 
-		got, err := runDocsOpenapi(t, serveSpec(body))
+		got, _, err := runDocsOpenapi(t, serveSpec(body))
 		if err != nil {
 			t.Fatalf("docs openapi: %v", err)
 		}
@@ -238,7 +241,7 @@ func TestOpenAPIInvalidBodyWithoutCacheErrors(t *testing.T) {
 	for _, body := range notASpec {
 		cachePath := useTempHome(t)
 
-		if _, err := runDocsOpenapi(t, serveSpec(body)); err == nil {
+		if _, _, err := runDocsOpenapi(t, serveSpec(body)); err == nil {
 			t.Errorf("expected an error for %q", body)
 		}
 		if _, err := os.Stat(filepath.Dir(cachePath)); !errors.Is(err, fs.ErrNotExist) {
@@ -255,7 +258,7 @@ func TestOpenAPIReadErrorFallsBackToCache(t *testing.T) {
 	cachePath := useTempHome(t)
 	writeExpiredCache(t, cachePath, stubOpenAPISpec)
 
-	got, err := runDocsOpenapi(t, func(r *http.Request) (*http.Response, error) {
+	got, _, err := runDocsOpenapi(t, func(r *http.Request) (*http.Response, error) {
 		body := io.MultiReader(strings.NewReader("paths:\n"), failingReader{})
 		return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(body), Request: r}, nil
 	})
@@ -264,5 +267,43 @@ func TestOpenAPIReadErrorFallsBackToCache(t *testing.T) {
 	}
 	if got != stubOpenAPISpec {
 		t.Errorf("printed %q, want the cached spec", got)
+	}
+}
+
+// Serving an expired cache because the fetch failed warns on stderr with its
+// age and the reason; stdout stays the bare spec.
+func TestOpenAPIStaleCacheWarns(t *testing.T) {
+	for name, rt := range map[string]stubRoundTripper{
+		"network": func(*http.Request) (*http.Response, error) { return nil, errors.New("no route to host") },
+		"status": func(r *http.Request) (*http.Response, error) {
+			return &http.Response{StatusCode: http.StatusServiceUnavailable, Body: http.NoBody, Request: r}, nil
+		},
+		"not a spec": serveSpec(notASpec[0]),
+	} {
+		t.Run(name, func(t *testing.T) {
+			writeExpiredCache(t, useTempHome(t), stubOpenAPISpec)
+
+			got, stderr, err := runDocsOpenapi(t, rt)
+			if err != nil {
+				t.Fatalf("docs openapi: %v", err)
+			}
+			if got != stubOpenAPISpec {
+				t.Errorf("printed %q, want the cached spec", got)
+			}
+			if want := "warning: using cached OpenAPI spec from 2d ago ("; !strings.HasPrefix(stderr, want) || strings.Count(stderr, "\n") != 1 {
+				t.Errorf("stderr = %q, want one line starting %q", stderr, want)
+			}
+		})
+	}
+}
+
+func TestOpenAPIFreshCacheIsSilent(t *testing.T) {
+	primeOpenAPICache(t)
+	_, stderr, err := runDocsOpenapi(t, func(*http.Request) (*http.Response, error) {
+		t.Error("a fresh cache hit sent a request")
+		return nil, errors.New("unexpected request")
+	})
+	if err != nil || stderr != "" {
+		t.Errorf("err = %v, stderr = %q; want neither", err, stderr)
 	}
 }
