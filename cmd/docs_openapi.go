@@ -3,7 +3,6 @@ package cmd
 import (
 	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -11,7 +10,10 @@ import (
 	"strings"
 	"time"
 
+	"github.com/ConductorOne/c1i/internal/client"
+	"github.com/ConductorOne/c1i/internal/transport"
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 	"go.yaml.in/yaml/v3"
 )
 
@@ -20,7 +22,13 @@ const (
 	cacheMaxAge   = 24 * time.Hour
 	cacheDirName  = ".c1i"
 	cacheFileName = "api-openapi.yaml"
+
+	// maxOpenAPISpecBytes is several times the ~4 MB spec.
+	maxOpenAPISpecBytes = 32 << 20
 )
+
+// openAPIBase is the spec fetch's innermost transport; tests stub it.
+var openAPIBase http.RoundTripper
 
 var docsOpenapiCmd = &cobra.Command{
 	Use:   "openapi",
@@ -171,7 +179,10 @@ func fetchOpenAPISpec(cmd *cobra.Command) ([]byte, error) {
 
 	if cachePath != "" {
 		if info, err := os.Stat(cachePath); err == nil && time.Since(info.ModTime()) < cacheMaxAge {
-			return os.ReadFile(cachePath) // #nosec G304 -- cachePath is a fixed internal path (openAPICachePath), not caller input
+			// An unreadable cache falls through to a fetch.
+			if data, err := os.ReadFile(cachePath); err == nil { // #nosec G304 -- cachePath is a fixed internal path (openAPICachePath), not caller input
+				return data, nil
+			}
 		}
 	}
 
@@ -180,32 +191,43 @@ func fetchOpenAPISpec(cmd *cobra.Command) ([]byte, error) {
 		return nil, err
 	}
 
-	resp, err := http.DefaultClient.Do(req)
+	hc := transport.New(openAPIBase,
+		transport.WithMaxRetries(openAPIRetries(cachePath)),
+		transport.WithDebug(viper.GetBool("debug")),
+		transport.WithMaxResponseBytes(maxOpenAPISpecBytes),
+	)
+	resp, err := hc.Do(req)
 	if err != nil {
-		return staleOpenAPISpec(cmd, cachePath, fmt.Errorf("fetching OpenAPI spec: %w", err))
+		return staleOpenAPISpec(cmd, cachePath, distError(err, "fetching OpenAPI spec"))
 	}
-	defer func() { _ = resp.Body.Close() }()
-
 	if resp.StatusCode != http.StatusOK {
-		return staleOpenAPISpec(cmd, cachePath, fmt.Errorf("fetching OpenAPI spec: HTTP %d", resp.StatusCode))
+		apiErr := &client.APIError{Method: req.Method, Path: req.URL.Path, StatusCode: resp.StatusCode}
+		return staleOpenAPISpec(cmd, cachePath, distError(apiErr, "fetching OpenAPI spec"))
 	}
-
-	data, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return staleOpenAPISpec(cmd, cachePath, fmt.Errorf("reading OpenAPI spec: %w", err))
-	}
+	data := resp.Body
 	// A captive portal answers 200 with HTML, and caching that would serve it
 	// until cacheMaxAge.
 	var doc map[string]any
 	err = yaml.Unmarshal(data, &doc)
 	if _, ok := doc["paths"]; err != nil || !ok {
-		return staleOpenAPISpec(cmd, cachePath, fmt.Errorf("fetching OpenAPI spec: %s did not return an OpenAPI document", openapiURL))
+		return staleOpenAPISpec(cmd, cachePath, distError(fmt.Errorf("%s did not return an OpenAPI document", openapiURL), "fetching OpenAPI spec"))
 	}
 
 	if cachePath != "" {
 		writeOpenAPICache(cachePath, data)
 	}
 	return data, nil
+}
+
+// openAPIRetries is the configured retry count, except that a fetch with a
+// cached spec to fall back on makes one attempt unless the user set
+// --max-retries or C1I_MAX_RETRIES: retries would only delay the fallback.
+func openAPIRetries(cachePath string) int {
+	if info, err := os.Stat(cachePath); err == nil && info.Mode().IsRegular() &&
+		os.Getenv("C1I_MAX_RETRIES") == "" && !rootCmd.PersistentFlags().Changed("max-retries") {
+		return 0
+	}
+	return viper.GetInt("max_retries")
 }
 
 // staleOpenAPISpec returns the cached spec, however old, or err if there is

@@ -4,7 +4,6 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
-	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -47,6 +46,10 @@ var (
 	tokenKeyringGet    = keychain.GetSecret
 	tokenKeyringSet    = keychain.SetSecret
 	tokenKeyringDelete = keychain.DeleteSecret
+
+	// sweepBeforeRemove runs between the sweep's check of a file and its
+	// remove; tests use it to race a store.
+	sweepBeforeRemove = func(string) {}
 )
 
 type cachedToken struct {
@@ -64,9 +67,9 @@ func cacheKey(tokenHost, clientID, clientSecret string) string {
 }
 
 func cachePath(key string) (string, error) {
-	dir, err := os.UserConfigDir()
+	dir, err := keychain.ConfigDir()
 	if err != nil {
-		return "", fmt.Errorf("locating config dir: %w", err)
+		return "", err
 	}
 	return filepath.Join(dir, "c1i", "tokens", key+".json"), nil
 }
@@ -220,6 +223,7 @@ func pruneTokenDir(dir, keep string) {
 		if err != nil || !info.Mode().IsRegular() || name == keep {
 			continue
 		}
+		_ = os.SameFile(info, info) // Windows reads the file id lazily; pin it now
 		isToken, isTemp := tokenFileName(name)
 		switch {
 		case isToken:
@@ -234,7 +238,12 @@ func pruneTokenDir(dir, keep string) {
 		default:
 			continue
 		}
-		_ = os.Remove(p)
+		sweepBeforeRemove(p)
+		// A concurrent store may have renamed a fresh token over p since the
+		// first Lstat. This narrows that window; it can't close it.
+		if now, err := os.Lstat(p); err == nil && os.SameFile(info, now) {
+			_ = os.Remove(p)
+		}
 	}
 }
 

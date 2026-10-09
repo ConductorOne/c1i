@@ -6,6 +6,61 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Upgrading from 0.9.1
+
+With no cached spec, a failed `docs openapi`, `docs endpoints` or
+`docs endpoint` now exits 4, 5, 6 or 8 instead of 1, and a 429, a transient
+5xx or a network error is retried up to 4 times by default, so an unreachable
+host takes several seconds to fail; `--max-retries 0` restores a single
+attempt. When the config directory resolves to a relative path (a relative
+`HOME`, `%AppData%` or `XDG_CONFIG_HOME`), every command that needs stored
+credentials fails instead of using the working directory. With a relative
+`HOME`, `~/.c1i.yaml` is ignored.
+
+### Changed
+
+- `golang.org/x/term` moves to 0.47.0 and `golang.org/x/sys` to 0.49.0.
+
+### Fixed
+
+- **`--debug` and `--max-retries` did nothing on `docs openapi`,
+  `docs endpoints` and `docs endpoint`.** The spec fetch now uses the shared
+  transport, so it traces, refuses a redirect to a different path or host, and
+  treats a response over 32 MiB as a failed fetch. With no cache to fall back
+  on, it retries a 429, a transient 5xx or a network error up to 4 times by
+  default, and a failed fetch exits 4 for a 404, 5 for a 429, 6 for a 5xx or a
+  redirect loop, and 8 otherwise, instead of 1. With a cache, it makes one
+  attempt unless you set `--max-retries` or `C1I_MAX_RETRIES`.
+
+- **An unreadable OpenAPI cache under a day old failed the `docs` OpenAPI
+  commands** instead of refetching, for example when the cache path was a
+  directory. They now fetch the spec.
+
+- **The token-file sweep could delete a token another c1i process had just
+  written**, when that process renamed it over an expired file the sweep had
+  read. The sweep now removes a file only if it is still the one it read.
+
+- **A relative `HOME`, `%AppData%` or `XDG_CONFIG_HOME` put credentials and
+  tokens under the working directory.** When the config directory resolves to
+  a relative path, the credential file fallback now fails with an error naming
+  it (a browser `auth login` then deletes the credential it just created), and
+  the token file cache is skipped.
+
+- **`upgrade` no longer runs `go env`.** It ran the go command to find
+  `GOBIN` and `GOPATH`, which made Go write telemetry counters under your
+  config dir. It now reads the environment and Go's env file itself. It reads
+  that file even when Go isn't installed, so a `GOBIN` set there marks a
+  binary in that dir as a `go install`.
+
+- **With a relative `HOME`, c1i read and wrote `.c1i.yaml` in the working
+  directory**, so a `.c1i.yaml` planted in a repository could point it, and
+  any `C1I_CLIENT_ID`/`C1I_CLIENT_SECRET` credentials, at another host. It
+  now neither reads nor writes the config file then; `auth login` warns that
+  the URL wasn't saved.
+
+- The README's uninstall steps now say where each install method puts the
+  binary, and that the Linux config directory follows `XDG_CONFIG_HOME`.
+
 ## [0.9.1] - 2026-10-09
 
 ### Security

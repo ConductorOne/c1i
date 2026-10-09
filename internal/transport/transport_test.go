@@ -511,3 +511,14 @@ func TestNew_WiresTimeout(t *testing.T) {
 		t.Errorf("httpClient.Timeout = %v, want the WithTimeout override (%v)", c.httpClient.Timeout, want)
 	}
 }
+
+func TestAPIErrorWithoutBody(t *testing.T) {
+	for body, want := range map[string]string{
+		"":     "API GET /x returned 403",
+		"nope": "API GET /x returned 403: nope",
+	} {
+		if got := (&APIError{Method: "GET", Path: "/x", StatusCode: 403, Body: body}).Error(); got != want {
+			t.Errorf("body %q: %q, want %q", body, got, want)
+		}
+	}
+}

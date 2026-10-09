@@ -67,10 +67,10 @@ falls through to whatever the config file names.
   (never headers or bodies).
 
 `--debug` and `--max-retries` take effect only on the paths built on the shared
-transport (REST, `mcp gateway`, `auth login`, `upgrade`). They are inert on the
-`docs` subcommands that fetch — `docs search`, `docs page`, `docs openapi`,
-`docs endpoints`, `docs endpoint` — which issue their own HTTP, so no trace
-there does not mean no request was sent.
+transport (REST, `mcp gateway`, `auth login`, `upgrade`, `docs openapi`,
+`docs endpoints`, `docs endpoint`). They are inert on `docs search` and
+`docs page`, which issue their own HTTP, so no trace there does not mean no
+request was sent.
 
 ## Errors & exit codes
 

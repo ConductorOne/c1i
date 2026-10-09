@@ -19,8 +19,9 @@ Get this right first. A wrong tenant returns plausible-looking data with
 exit 0.
 
 `c1i` resolves the tenant in this order: `--url`, `C1I_URL`, then `url:` in
-`~/.c1i.yaml`. It must be a full host — `mycompany.conductor.one` or
-`mycompany.c1eu.ai` (EU) — and `https` is required:
+`~/.c1i.yaml` (never read with a relative `HOME`). It must be a full host —
+`mycompany.conductor.one` or `mycompany.c1eu.ai` (EU) — and `https` is
+required:
 a bare `mycompany`, a non-https scheme, and a malformed host (an embedded space
 or control character, or a stray scheme like `://host`) are all usage errors
 (exit `2`) before any request is sent.
@@ -42,6 +43,10 @@ subcommands that also take an external server's address — that one is
 Credentials resolve in this order: `C1I_CLIENT_ID` + `C1I_CLIENT_SECRET` env
 vars (read-only — c1i never writes them), the OS keyring, then a `0600` file
 used automatically where no keyring exists (headless Linux, CI, containers).
+With a relative `HOME` and no keyring, that file fallback errors rather than
+write under the working directory, so every command that needs stored
+credentials fails: `auth login`, `auth logout`, and any authenticated command
+run without the env vars.
 Only the bearer c1i attaches automatically for REST commands is cached and
 reused across invocations until it nears expiry, so a run of one-shot commands
 does not write a `client_credentials` audit event each time. It uses the OS
@@ -99,29 +104,33 @@ when the failure came from the API. Still branch on the exit code — the JSON i
 for the detail, not the classification.
 
 `--debug` and `--max-retries` cover `mcp gateway`, `auth login` (except its
-device-code polling, which never retries) and `upgrade` as well as the REST
-commands: the gateway client threads both into its bearer mint and its JSON-RPC
-calls. On a `mcp gateway call` that hangs or fails oddly, `--debug` is the
-fastest way to see which request stopped.
+device-code polling, which never retries), `upgrade`, `docs openapi`,
+`docs endpoints` and `docs endpoint` as well as the REST commands: the gateway
+client threads both into its bearer mint and its JSON-RPC calls. On a
+`mcp gateway call` that hangs or fails oddly, `--debug` is the fastest way to
+see which request stopped.
 
-They do **not** reach the `docs` subcommands that fetch — `docs search`,
-`docs page`, `docs openapi`, `docs endpoints`, `docs endpoint`. Those bypass
-the shared transport for Go's default HTTP client, so `--debug` prints nothing
-and `--max-retries` is ignored. Silent `--debug` output there means the flag
+They do **not** reach `docs search` or `docs page`. Those bypass the shared
+transport for Go's default HTTP client, so `--debug` prints nothing and
+`--max-retries` is ignored. Silent `--debug` output there means the flag
 never reached that path, NOT that no request was sent — don't read it as
 evidence either way when a `docs` command comes back empty.
 
-Nor do those five call the same place, which matters for egress rules and for
-why one can fail while another works: `docs openapi`, `docs endpoints` and
-`docs endpoint` fetch `https://www.c1.ai/api/openapi.yaml` (cached 24h at
+Nor do the fetching `docs` commands call the same place, which matters for
+egress rules and for why one can fail while another works: `docs openapi`,
+`docs endpoints` and `docs endpoint` fetch
+`https://www.c1.ai/api/openapi.yaml` (cached 24h at
 `~/.c1i/cache/api-openapi.yaml`, so a run can return rows without sending a
 request), while `docs search` and `docs page` call a third party —
 `api.mintlify.com` — with a public client-side key. `docs search` is semantic
 with no relevance threshold, so it always returns up to 10 plausible hits even
 for a nonsense query: never read a result as proof a concept exists, or an
 unexpected result as proof it is absent. `docs endpoints --filter` DOES have a
-true no-match. If a fetch fails, an expired cache is served with a one-line
-`Warning:` on stderr naming its age.
+true no-match. If a spec fetch fails, an expired cache is served with a
+one-line `Warning:` on stderr naming its age; with no cache, it exits 4 for a
+404, 5 for a 429, 6 for a 5xx or a redirect loop, and 8 otherwise. With a cache
+to fall back on, the fetch makes one attempt unless you set `--max-retries` or
+`C1I_MAX_RETRIES`.
 
 Don't store files in `~/.c1i/cache/`: a spec refresh deletes any file there
 that the running version doesn't use.

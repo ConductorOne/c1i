@@ -1,9 +1,8 @@
 package selfupdate
 
 import (
-	"encoding/json"
+	"cmp"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 )
@@ -127,21 +126,42 @@ type goEnv struct {
 	GOPATH string
 }
 
-// readGoEnv runs from a neutral directory with GOTOOLCHAIN=local, so a go.mod
-// or go.work in the caller's cwd can't trigger a toolchain download.
-var readGoEnv = func() (goEnv, error) {
-	cmd := exec.Command("go", "env", "-json", "GOBIN", "GOPATH")
-	cmd.Dir = os.TempDir()
-	cmd.Env = append(os.Environ(), "GOTOOLCHAIN=local")
-	output, err := cmd.Output()
+// readGoEnv resolves GOBIN and GOPATH as the go command does: the environment,
+// then the go env file, then GOPATH's default. It doesn't run go, because any
+// go command writes telemetry counters under the user's config dir.
+var readGoEnv = func() goEnv {
+	var file goEnv
+	if path := goEnvFile(); path != "" {
+		data, _ := os.ReadFile(path) // #nosec G304 -- the go command's own env file
+		for _, line := range strings.Split(string(data), "\n") {
+			switch key, val, _ := strings.Cut(line, "="); key {
+			case "GOBIN":
+				file.GOBIN = val
+			case "GOPATH":
+				file.GOPATH = val
+			}
+		}
+	}
+	env := goEnv{GOBIN: cmp.Or(os.Getenv("GOBIN"), file.GOBIN), GOPATH: cmp.Or(os.Getenv("GOPATH"), file.GOPATH)}
+	if home, err := os.UserHomeDir(); err == nil && env.GOPATH == "" {
+		env.GOPATH = filepath.Join(home, "go")
+	}
+	return env
+}
+
+// goEnvFile is where `go env -w` writes, or "" with GOENV=off.
+func goEnvFile() string {
+	if file := os.Getenv("GOENV"); file != "" {
+		if file == "off" {
+			return ""
+		}
+		return file
+	}
+	dir, err := os.UserConfigDir()
 	if err != nil {
-		return goEnv{}, err
+		return ""
 	}
-	var env goEnv
-	if err := json.Unmarshal(output, &env); err != nil {
-		return goEnv{}, err
-	}
-	return env, nil
+	return filepath.Join(dir, "go", "env")
 }
 
 // isGoInstall reports whether execPath is under any effective Go install target.
@@ -168,12 +188,11 @@ func goInstallTargets() []string {
 		targets = append(targets, gobin)
 	}
 	addGoPaths(os.Getenv("GOPATH"))
-	if persisted, err := readGoEnv(); err == nil {
-		if persisted.GOBIN != "" {
-			targets = append(targets, persisted.GOBIN)
-		}
-		addGoPaths(persisted.GOPATH)
+	persisted := readGoEnv()
+	if persisted.GOBIN != "" {
+		targets = append(targets, persisted.GOBIN)
 	}
+	addGoPaths(persisted.GOPATH)
 	if home, err := os.UserHomeDir(); err == nil {
 		targets = append(targets, filepath.Join(home, "go", "bin"))
 	}

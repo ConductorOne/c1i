@@ -14,7 +14,7 @@ import (
 
 // Flag SCOPE coverage: --debug/--max-retries do not reach every command.
 //
-// The fetching `docs` subcommands send HTTP without internal/transport, so both
+// `docs search` and `docs page` send HTTP without internal/transport, so both
 // flags are inert there and no path/redirect guard applies. That single fact
 // reached six documents, stated as an unqualified universal in four of them,
 // before anyone checked it against the code — and the cost is a reader who
@@ -31,11 +31,7 @@ import (
 var scopedFlags = []string{"--debug", "--max-retries"}
 
 // fetchingDocsSubcommands are the `docs` leaves that issue their own HTTP.
-// "docs endpoints" and "docs endpoint" are distinct commands, matched with a
-// trailing boundary so the longer name can't satisfy a mention of the shorter.
-var fetchingDocsSubcommands = []string{
-	"docs search", "docs page", "docs openapi", "docs endpoints", "docs endpoint",
-}
+var fetchingDocsSubcommands = []string{"docs search", "docs page"}
 
 // flagScopeDocs are the documents that describe what --debug and
 // --max-retries do. agentsTemplate is the embedded copy `c1i docs agents`
@@ -50,8 +46,8 @@ func flagScopeDocs(t *testing.T) []struct{ name, body string } {
 	}
 }
 
-// namesFetchingDocsCommands counts how many of the five fetching subcommands a
-// block of text names.
+// namesFetchingDocsCommands counts how many of the fetching subcommands a block
+// of text names.
 func namesFetchingDocsCommands(block string) int {
 	n := 0
 	for _, c := range fetchingDocsSubcommands {
@@ -68,14 +64,14 @@ func namesFetchingDocsCommands(block string) int {
 var exceptionMarkerRe = regexp.MustCompile(`(?i)\b(not|never|inert|ignored|bypass|exception|only|don't|doesn't)\b`)
 
 // hasFlagScopeCarveOut reports whether doc contains a blank-line-separated
-// block naming both scoped flags and at least two fetching docs subcommands,
-// and saying they do not apply.
+// block naming both scoped flags and both fetching docs subcommands, and saying
+// they do not apply.
 func hasFlagScopeCarveOut(doc string) bool {
 	for _, block := range strings.Split(doc, "\n\n") {
 		if !strings.Contains(block, scopedFlags[0]) || !strings.Contains(block, scopedFlags[1]) {
 			continue
 		}
-		if namesFetchingDocsCommands(block) >= 2 && exceptionMarkerRe.MatchString(block) {
+		if namesFetchingDocsCommands(block) == len(fetchingDocsSubcommands) && exceptionMarkerRe.MatchString(block) {
 			return true
 		}
 	}
@@ -99,7 +95,7 @@ func TestFlagScopeExceptionDocumented(t *testing.T) {
 		stated++
 		if !hasFlagScopeCarveOut(d.body) {
 			t.Errorf("%s documents %v but never carves out the fetching docs subcommands; "+
-				"add a paragraph naming both flags, at least two of %v, and saying they do not apply there",
+				"add a paragraph naming both flags and each of %v, and saying they do not apply there",
 				d.name, scopedFlags, fetchingDocsSubcommands)
 		}
 	}
@@ -227,15 +223,14 @@ func transportFreeSenders(path string) ([]string, error) {
 // from this set in either direction.
 //
 // Trap for the next reader: entries mean two different things and the loops
-// below treat them identically. The two cmd/ files ARE bypasses, documented as
-// such in the four docs. internal/transport is the opposite — it is the shared
+// below treat them identically. The cmd/ file IS a bypass, documented as such
+// in the four docs. internal/transport is the opposite — it is the shared
 // transport, so its http.Client is the one every other package is supposed to
 // inherit; it is listed only to keep it from reporting itself. A new sender
 // appended to transport.go would therefore pass silently, which is accepted:
 // that file IS the transport, and changing it is not the drift this guards.
 var httpBypassFiles = map[string]string{
 	"cmd/docs_search.go":              "bypass: docs search / docs page -> api.mintlify.com",
-	"cmd/docs_openapi.go":             "bypass: docs openapi / endpoints / endpoint -> www.c1.ai",
 	"internal/transport/transport.go": "NOT a bypass: the shared transport itself",
 }
 

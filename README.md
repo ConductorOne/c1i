@@ -874,7 +874,7 @@ c1i docs guide
 c1i docs guide register-mcp-server
 ```
 
-`docs openapi`, `docs endpoints`, and `docs endpoint` use the current public API contract at `https://www.c1.ai/api/openapi.yaml`, including MCP server, tool, and toolset operations. The spec is cached for 24 hours at `~/.c1i/cache/api-openapi.yaml`; fetch failures fall back to that cache, however old, with a one-line warning on stderr naming its age.
+`docs openapi`, `docs endpoints`, and `docs endpoint` use the current public API contract at `https://www.c1.ai/api/openapi.yaml`, including MCP server, tool, and toolset operations. The spec is cached for 24 hours at `~/.c1i/cache/api-openapi.yaml`; fetch failures fall back to that cache, however old, with a one-line warning on stderr naming its age. A response over 32 MiB counts as a failed fetch. With a cache to fall back on, a fetch makes one attempt unless you set `--max-retries` or `C1I_MAX_RETRIES`. With no cache, a failed fetch exits `4` for a `404`, `5` for a `429`, `6` for a `5xx` or a redirect loop, and `8` for anything else, such as an unreachable host or a refused redirect.
 
 `docs search` is a semantic search with no relevance threshold: every query returns up to 10 nearest matches, so even a nonsense query comes back with plausible-looking hits. A returned hit is not proof a concept exists, and an unexpected hit is not proof the thing you searched for is absent — read the snippet, or fetch the page with `docs page`, to judge. To check whether an API endpoint exists, use `docs endpoints --filter`, which has a real no-match.
 
@@ -1050,13 +1050,13 @@ A chain of allowed redirects that doesn't settle within five hops fails as a
 remote error (exit `6`) rather than looping.
 
 This applies to every command built on the shared transport: the REST client,
-the MCP gateway, the login handshake, and `upgrade`, so the path and redirect
-guards, `--debug` tracing, and `--max-retries` cover all of them, not just REST
-commands (`upgrade` maps a refused redirect to exit `8`; see Upgrading).
-**None of those four** applies to the `docs` subcommands that fetch —
-`docs search`, `docs page`, `docs openapi`, `docs endpoints`, `docs endpoint` —
-which call Go's default HTTP client directly: no path or
-redirect guard there, and `--debug` and `--max-retries` are both inert.
+the MCP gateway, the login handshake, `upgrade`, and `docs openapi`,
+`docs endpoints` and `docs endpoint`, so the path and redirect guards, `--debug`
+tracing, and `--max-retries` cover all of them, not just REST commands
+(`upgrade` and those `docs` commands map a refused redirect to exit `8`).
+**None of those four** applies to `docs search` and `docs page`, which call
+Go's default HTTP client directly: no path or redirect guard there, and
+`--debug` and `--max-retries` are both inert.
 
 One narrower carve-out inside login: the device-flow token poll forces its own
 retry count to zero, because RFC 8628's polling interval already *is* that
@@ -1118,7 +1118,8 @@ Set it via (in order of precedence):
 
    A terminal `c1i auth login` given the URL another way offers to save it
    there. If the file isn't a valid YAML mapping, login warns and leaves it
-   unchanged.
+   unchanged. With a relative `HOME`, c1i neither reads nor writes it, so a
+   `.c1i.yaml` in the working directory is never used.
 
 These are equivalent:
 - `--url https://mycompany.conductor.one`
@@ -1307,7 +1308,10 @@ never written to disk — a new one is minted per invocation.
 
 `c1i auth login` writes to the OS keyring when it can and falls back to the
 file backend transparently. `c1i auth status` tells you which source served
-the active credentials.
+the active credentials. If the config directory resolves to a relative path,
+from a relative `HOME`, `%AppData%` or `XDG_CONFIG_HOME`, the file fallback
+fails with an error and the token cache below skips its file, rather than
+writing under the working directory.
 
 ### Token cache
 
@@ -1392,16 +1396,26 @@ one older than the one you run.
 
 ## Uninstalling
 
+Remove the binary the way you installed it: `brew uninstall c1i` for
+Homebrew; for `go install`, delete `c1i` from `GOBIN` (set in the environment
+or with `go env -w`), or from `$GOPATH/bin` (`~/go/bin` by default) when
+`GOBIN` is unset; a downloaded binary is wherever you put it; and
+`docker rmi public.ecr.aws/conductorone/c1i:<version>` for the container image.
+
 Removing the binary leaves these behind:
 
 - `~/.c1i/`, the OpenAPI spec cache.
 - `~/.c1i.yaml`, the config file.
 - `<UserConfigDir>/c1i/`, holding the file-fallback credentials
   (`credentials/`) and the access-token file cache (`tokens/`). See
-  [Credential sources](#credential-sources) for each OS's config directory.
+  [Credential sources](#credential-sources) for each OS's config directory;
+  on Linux it is `$XDG_CONFIG_HOME` when that is set.
 - OS keyring entries: credentials under `c1i/<host>`, and cached access tokens
-  under `com.conductorone.c1i.tokens`. Older releases stored a
+  (including tokens for `C1I_CLIENT_ID`/`C1I_CLIENT_SECRET` credentials) under
+  `com.conductorone.c1i.tokens`. Older releases stored a
   `<name>.conductor.one` tenant's credentials under `c1i/<name>`.
+- Any [shell completion](#shell-completion) script you installed, and the
+  `c1i completion powershell` line if you added it to your PowerShell profile.
 
 c1i can't list keyring entries or keep track of the tenants you've logged in to.
 To remove its keyring credentials, run `auth logout` once per tenant before you

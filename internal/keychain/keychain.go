@@ -217,10 +217,23 @@ type fileCreds struct {
 	ClientSecret string `json:"client_secret"`
 }
 
-func filePath(service string) (string, error) {
+// ConfigDir is os.UserConfigDir, refusing a relative result: a relative HOME
+// or %AppData% would put credentials and tokens under the working directory.
+func ConfigDir() (string, error) {
 	dir, err := os.UserConfigDir()
 	if err != nil {
 		return "", fmt.Errorf("locating config dir: %w", err)
+	}
+	if !filepath.IsAbs(dir) {
+		return "", fmt.Errorf("locating config dir: %q is not an absolute path", dir)
+	}
+	return dir, nil
+}
+
+func filePath(service string) (string, error) {
+	dir, err := ConfigDir()
+	if err != nil {
+		return "", err
 	}
 	return filepath.Join(dir, "c1i", "credentials", sanitizeService(service)+".json"), nil
 }

@@ -3,6 +3,7 @@ package cmd
 import (
 	"bytes"
 	"context"
+	"os"
 	"strings"
 	"testing"
 
@@ -268,3 +269,19 @@ func TestGetBaseURLFullHostsUnaffected(t *testing.T) {
 // -HOME'd read within the same process unreliable). Not attempted here for
 // that reason; TestGetBaseURLBareTokenFromConfigNamesConfigFile covers the
 // same GetBaseURLWithSource code path via viper.Set instead.
+
+// A relative HOME must not read a .c1i.yaml planted in the working directory,
+// which could point the CLI, and any env-var credentials, at another host.
+func TestRelativeHomeSkipsConfigFile(t *testing.T) {
+	t.Setenv("HOME", ".")
+	t.Setenv("USERPROFILE", ".")
+	t.Chdir(t.TempDir())
+	if err := os.WriteFile(".c1i.yaml", []byte("url: https://attacker.example\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	v := viper.New()
+	loadConfigFile(v)
+	if got := v.GetString("url"); got != "" {
+		t.Errorf("read url %q from the working directory's .c1i.yaml", got)
+	}
+}
