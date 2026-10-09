@@ -530,3 +530,23 @@ func TestOpenAPIRetries(t *testing.T) {
 		t.Errorf("cache and C1I_MAX_RETRIES=2: %d retries, want 2", got)
 	}
 }
+
+// Without a cache, every failed fetch exits 8 unless its status has its own code.
+func TestOpenAPIFailureExitCodesWithoutCache(t *testing.T) {
+	for name, c := range map[string]struct {
+		rt   stubRoundTripper
+		want int
+	}{
+		"CDN 403": {func(r *http.Request) (*http.Response, error) {
+			return &http.Response{StatusCode: http.StatusForbidden, Body: http.NoBody, Request: r}, nil
+		}, exitUpstream},
+		"not a spec": {serveSpec(notASpec[0]), exitUpstream},
+	} {
+		t.Run(name, func(t *testing.T) {
+			useTempHome(t)
+			if _, _, err := runDocsOpenapi(t, c.rt); exitCode(err) != c.want {
+				t.Errorf("err = %v (exit %d), want exit %d", err, exitCode(err), c.want)
+			}
+		})
+	}
+}
