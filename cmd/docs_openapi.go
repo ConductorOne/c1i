@@ -179,7 +179,10 @@ func fetchOpenAPISpec(cmd *cobra.Command) ([]byte, error) {
 
 	if cachePath != "" {
 		if info, err := os.Stat(cachePath); err == nil && time.Since(info.ModTime()) < cacheMaxAge {
-			return os.ReadFile(cachePath) // #nosec G304 -- cachePath is a fixed internal path (openAPICachePath), not caller input
+			// An unreadable cache falls through to a fetch.
+			if data, err := os.ReadFile(cachePath); err == nil { // #nosec G304 -- cachePath is a fixed internal path (openAPICachePath), not caller input
+				return data, nil
+			}
 		}
 	}
 

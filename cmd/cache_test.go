@@ -458,3 +458,17 @@ func TestOpenAPIOverCapBody(t *testing.T) {
 		}
 	})
 }
+
+// A fresh cache that can't be read is skipped, not returned as an error.
+func TestOpenAPIUnreadableFreshCacheFetches(t *testing.T) {
+	if err := os.MkdirAll(useTempHome(t), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	got, _, err := runDocsOpenapi(t, serveSpec(stubOpenAPISpec))
+	if err != nil {
+		t.Fatalf("docs openapi: %v", err)
+	}
+	if got != stubOpenAPISpec {
+		t.Errorf("printed %q, want the fetched spec", got)
+	}
+}

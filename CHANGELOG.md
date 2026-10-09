@@ -15,6 +15,10 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   on, a failed fetch now exits 4, 5 or 6 for a 404, 429 or 5xx, and 8
   otherwise, instead of 1.
 
+- **An unreadable OpenAPI cache under a day old failed the `docs` OpenAPI
+  commands** instead of refetching, for example when the cache path was a
+  directory. They now fetch the spec.
+
 ## [0.9.1] - 2026-10-09
 
 ### Security
