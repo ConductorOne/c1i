@@ -628,3 +628,34 @@ func TestTokenSweepSkipsSymlinkedDir(t *testing.T) {
 		})
 	}
 }
+
+// A store that renames a fresh token over an expired one after the sweep read
+// it must not lose the fresh token.
+func TestStoreSweepSparesTokenReplacedMidSweep(t *testing.T) {
+	useTempConfig(t)
+	keep, _ := cachePath(testCacheKey("host", "client"))
+	dir := filepath.Dir(keep)
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	raced := filepath.Join(dir, cacheKey("h", "c", "raced-secret")+".json")
+	writeTokenFile(t, raced, time.Now().Add(-time.Hour))
+	orig := sweepBeforeRemove
+	t.Cleanup(func() { sweepBeforeRemove = orig })
+	sweepBeforeRemove = func(p string) {
+		if p != raced {
+			return
+		}
+		tmp := filepath.Join(dir, ".raced.tmp")
+		writeTokenFile(t, tmp, time.Now().Add(time.Hour))
+		if err := os.Rename(tmp, raced); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	storeCachedToken(testCacheKey("host", "client"), freshToken(30*time.Minute))
+
+	if readCachedTokenFile(raced) == nil {
+		t.Error("the sweep deleted a fresh token renamed over the expired one it read")
+	}
+}

@@ -19,6 +19,10 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   commands** instead of refetching, for example when the cache path was a
   directory. They now fetch the spec.
 
+- **The token-file sweep could delete a token another c1i process had just
+  written**, when that process renamed it over an expired file the sweep had
+  read. The sweep now removes a file only if it is still the one it read.
+
 ## [0.9.1] - 2026-10-09
 
 ### Security
