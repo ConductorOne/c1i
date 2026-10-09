@@ -561,15 +561,31 @@ func TestStoreSweepLeavesCredentialsDir(t *testing.T) {
 	}
 	cred := filepath.Join(creds, cacheKey("h", "c", "cred-secret")+".json")
 	writeTokenFile(t, cred, time.Now().Add(-time.Hour))
-
+	// Expired token-shaped files above the tokens dir, so only the sweep's
+	// scope keeps them. A 0700 root, as ~/.config often is, passes the trust check.
 	key := testCacheKey("host", "client")
+	p, _ := cachePath(key)
+	c1iDir := filepath.Dir(filepath.Dir(p))
+	if err := os.Chmod(filepath.Dir(c1iDir), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	decoys := []string{
+		filepath.Join(c1iDir, cacheKey("h", "c", "c1i-secret")+".json"),
+		filepath.Join(filepath.Dir(c1iDir), cacheKey("h", "c", "root-secret")+".json"),
+	}
+	for _, d := range decoys {
+		writeTokenFile(t, d, time.Now().Add(-time.Hour))
+	}
+
 	storeCachedToken(key, freshToken(30*time.Minute))
 
-	if p, _ := cachePath(key); loadFileCachedToken(key) == nil {
+	if loadFileCachedToken(key) == nil {
 		t.Fatalf("store did not write %s, so the sweep never ran", p)
 	}
-	if _, err := os.Lstat(cred); err != nil {
-		t.Errorf("credentials file was removed: %v", err)
+	for _, f := range append([]string{cred}, decoys...) {
+		if _, err := os.Lstat(f); err != nil {
+			t.Errorf("%s was removed: %v", f, err)
+		}
 	}
 }
 

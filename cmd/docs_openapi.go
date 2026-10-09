@@ -160,7 +160,7 @@ Examples:
 }
 
 func init() {
-	docsEndpointsCmd.Flags().String("filter", "", "Filter endpoints by pattern (matches path, summary, operation ID)")
+	docsEndpointsCmd.Flags().String("filter", "", "Filter endpoints by pattern (matches path, summary, operation ID, description)")
 	docsCmd.AddCommand(docsOpenapiCmd)
 	docsCmd.AddCommand(docsEndpointsCmd)
 	docsCmd.AddCommand(docsEndpointCmd)
@@ -169,8 +169,8 @@ func init() {
 func fetchOpenAPISpec(cmd *cobra.Command) ([]byte, error) {
 	cachePath := openAPICachePath()
 
-	if info, err := os.Stat(cachePath); err == nil {
-		if time.Since(info.ModTime()) < cacheMaxAge {
+	if cachePath != "" {
+		if info, err := os.Stat(cachePath); err == nil && time.Since(info.ModTime()) < cacheMaxAge {
 			return os.ReadFile(cachePath) // #nosec G304 -- cachePath is a fixed internal path (openAPICachePath), not caller input
 		}
 	}
@@ -182,36 +182,92 @@ func fetchOpenAPISpec(cmd *cobra.Command) ([]byte, error) {
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		// Fall back to cache on network error.
-		if data, readErr := os.ReadFile(cachePath); readErr == nil { // #nosec G304 -- cachePath is a fixed internal path (openAPICachePath), not caller input
-			return data, nil
-		}
-		return nil, fmt.Errorf("fetching OpenAPI spec: %w", err)
+		return staleOpenAPISpec(cmd, cachePath, fmt.Errorf("fetching OpenAPI spec: %w", err))
 	}
 	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
-		if data, readErr := os.ReadFile(cachePath); readErr == nil { // #nosec G304 -- cachePath is a fixed internal path (openAPICachePath), not caller input
-			return data, nil
-		}
-		return nil, fmt.Errorf("fetching OpenAPI spec: HTTP %d", resp.StatusCode)
+		return staleOpenAPISpec(cmd, cachePath, fmt.Errorf("fetching OpenAPI spec: HTTP %d", resp.StatusCode))
 	}
 
 	data, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return nil, err
+		return staleOpenAPISpec(cmd, cachePath, fmt.Errorf("reading OpenAPI spec: %w", err))
+	}
+	// A captive portal answers 200 with HTML, and caching that would serve it
+	// until cacheMaxAge.
+	var doc map[string]any
+	err = yaml.Unmarshal(data, &doc)
+	if _, ok := doc["paths"]; err != nil || !ok {
+		return staleOpenAPISpec(cmd, cachePath, fmt.Errorf("fetching OpenAPI spec: %s did not return an OpenAPI document", openapiURL))
 	}
 
-	_ = os.MkdirAll(filepath.Dir(cachePath), 0o700)
-	if os.WriteFile(cachePath, data, 0o644) == nil { // #nosec G306 -- cached OpenAPI spec is public C1 API documentation, not sensitive
-		pruneCacheDir(filepath.Dir(cachePath))
+	if cachePath != "" {
+		writeOpenAPICache(cachePath, data)
 	}
-
 	return data, nil
 }
 
+// staleOpenAPISpec returns the cached spec, however old, or err if there is
+// none. It warns on stderr, leaving stdout clean for pipes.
+func staleOpenAPISpec(cmd *cobra.Command, cachePath string, err error) ([]byte, error) {
+	if cachePath == "" {
+		return nil, err
+	}
+	info, statErr := os.Stat(cachePath)
+	data, readErr := os.ReadFile(cachePath) // #nosec G304 -- cachePath is a fixed internal path (openAPICachePath), not caller input
+	if statErr != nil || readErr != nil {
+		return nil, err
+	}
+	_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "Warning: using cached OpenAPI spec from %s ago (%v)\n",
+		formatAge(time.Since(info.ModTime())), err)
+	return data, nil
+}
+
+func formatAge(d time.Duration) string {
+	d = max(d, 0) // a future mtime (clock skew) reads as 0m, not negative
+	switch {
+	case d >= 24*time.Hour:
+		return fmt.Sprintf("%dd", int(d/(24*time.Hour)))
+	case d >= time.Hour:
+		return fmt.Sprintf("%dh", int(d/time.Hour))
+	default:
+		return fmt.Sprintf("%dm", int(d/time.Minute))
+	}
+}
+
+// writeOpenAPICache is best-effort. The rename keeps a reader from seeing a
+// partial file. The temp name isn't in cacheFiles, so the prune after the
+// rename sweeps one a crash left behind; a concurrent refresh's prune can also
+// remove ours, which only skips this write.
+func writeOpenAPICache(cachePath string, data []byte) {
+	dir := filepath.Dir(cachePath)
+	if os.MkdirAll(dir, 0o700) != nil {
+		return
+	}
+	tmp, err := os.CreateTemp(dir, "."+cacheFileName+".tmp-*")
+	if err != nil {
+		return
+	}
+	tmpName := tmp.Name()
+	defer func() { _ = os.Remove(tmpName) }()
+	_, writeErr := tmp.Write(data)
+	chmodErr := tmp.Chmod(0o644) // #nosec G302 -- cached OpenAPI spec is public C1 API documentation, not sensitive
+	if closeErr := tmp.Close(); writeErr != nil || chmodErr != nil || closeErr != nil {
+		return
+	}
+	if os.Rename(tmpName, cachePath) == nil {
+		pruneCacheDir(dir)
+	}
+}
+
+// openAPICachePath returns "" when there is no usable home dir, which disables
+// the cache: a relative path would put it in the working directory.
 func openAPICachePath() string {
-	home, _ := os.UserHomeDir()
+	home, err := os.UserHomeDir()
+	if err != nil || !filepath.IsAbs(home) {
+		return ""
+	}
 	return filepath.Join(home, cacheDirName, "cache", cacheFileName)
 }
 
@@ -237,9 +293,16 @@ func resolveRefs(node any, root map[string]any, depth int, seen map[string]bool)
 				return resolveRefs(resolved, root, depth+1, seen)
 			}
 		}
+		// seen is shared across siblings, so only the first to reach a ref
+		// expands it; sorted keys make that the same sibling on every run.
+		keys := make([]string, 0, len(v))
+		for key := range v {
+			keys = append(keys, key)
+		}
+		sort.Strings(keys)
 		out := make(map[string]any, len(v))
-		for key, val := range v {
-			out[key] = resolveRefs(val, root, depth, seen)
+		for _, key := range keys {
+			out[key] = resolveRefs(v[key], root, depth, seen)
 		}
 		return out
 	case []any:

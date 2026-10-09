@@ -755,6 +755,11 @@ c1i service-principals credentials update <credential-id> --service-principal-id
 c1i service-principals credentials revoke <credential-id> --service-principal-id <sp-id>
 ```
 
+Delete and revoke are soft: `get` on a deleted principal and `credentials get`
+on a revoked credential still return the record, exit 0, with no field marking
+it (the principal's embedded `user.status` stays `ENABLED`). Only the lists
+omit them; `users get <sp-id>` shows `"status": "DELETED"` and `deletedAt`.
+
 `--expires` takes a positive Go duration (e.g. `720h`). The server accepts the
 range `(0s, 4320h]` — up to 180 days — rejecting more with `value must be inside
 range (0s, 4320h0m0s]`. Fractional seconds are preserved.
@@ -869,7 +874,7 @@ c1i docs guide
 c1i docs guide register-mcp-server
 ```
 
-`docs openapi`, `docs endpoints`, and `docs endpoint` use the current public API contract at `https://www.c1.ai/api/openapi.yaml`, including MCP server, tool, and toolset operations. The spec is cached for 24 hours at `~/.c1i/cache/api-openapi.yaml`; fetch failures fall back to that cache.
+`docs openapi`, `docs endpoints`, and `docs endpoint` use the current public API contract at `https://www.c1.ai/api/openapi.yaml`, including MCP server, tool, and toolset operations. The spec is cached for 24 hours at `~/.c1i/cache/api-openapi.yaml`; fetch failures fall back to that cache, however old, with a one-line warning on stderr naming its age.
 
 `docs search` is a semantic search with no relevance threshold: every query returns up to 10 nearest matches, so even a nonsense query comes back with plausible-looking hits. A returned hit is not proof a concept exists, and an unexpected hit is not proof the thing you searched for is absent — read the snippet, or fetch the page with `docs page`, to judge. To check whether an API endpoint exists, use `docs endpoints --filter`, which has a real no-match.
 
@@ -1324,7 +1329,8 @@ invocation.
 
 ```sh
 # bash
-c1i completion bash > /etc/bash_completion.d/c1i
+mkdir -p ~/.local/share/bash-completion/completions
+c1i completion bash > ~/.local/share/bash-completion/completions/c1i
 
 # zsh
 c1i completion zsh > "${fpath[1]}/_c1i"

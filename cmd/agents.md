@@ -115,11 +115,13 @@ Nor do those five call the same place, which matters for egress rules and for
 why one can fail while another works: `docs openapi`, `docs endpoints` and
 `docs endpoint` fetch `https://www.c1.ai/api/openapi.yaml` (cached 24h at
 `~/.c1i/cache/api-openapi.yaml`, so a run can return rows without sending a
-request), while `docs search` and `docs page` call a third party — `api.mintlify.com` —
-with a public client-side key. `docs search` is semantic with no relevance
-threshold, so it always returns up to 10 plausible hits even for a nonsense
-query: never read a result as proof a concept exists, or an unexpected result
-as proof it is absent. `docs endpoints --filter` DOES have a true no-match.
+request), while `docs search` and `docs page` call a third party —
+`api.mintlify.com` — with a public client-side key. `docs search` is semantic
+with no relevance threshold, so it always returns up to 10 plausible hits even
+for a nonsense query: never read a result as proof a concept exists, or an
+unexpected result as proof it is absent. `docs endpoints --filter` DOES have a
+true no-match. If a fetch fails, an expired cache is served with a one-line
+`Warning:` on stderr naming its age.
 
 Don't store files in `~/.c1i/cache/`: a spec refresh deletes any file there
 that the running version doesn't use.
@@ -452,6 +454,11 @@ resource with `--resource-id` likewise means you drop
   exit `0` with `deletedAt` set. So a `deleted_at` in an `access-profiles list`
   row is null in practice — don't read the null as "not deleted", check with a
   get.
+- `service-principals delete` and `service-principals credentials revoke` are
+  soft: `get` and `credentials get` still return the record at exit `0` with no
+  field marking it (the principal's `user.status` stays `ENABLED`). Only the
+  lists omit them; `users get <sp-id>` shows `"status": "DELETED"` and
+  `deletedAt`.
 
 ## Upgrading c1i
 

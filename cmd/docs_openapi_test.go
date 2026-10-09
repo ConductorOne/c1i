@@ -2,10 +2,13 @@ package cmd
 
 import (
 	"bytes"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"go.yaml.in/yaml/v3"
 )
 
 // stubOpenAPISpec is a minimal spec with one path, just enough for
@@ -19,15 +22,13 @@ paths:
       operationId: c1.api.user.v1.Users.Get
 `
 
-// primeOpenAPICache points HOME at a temp dir and pre-populates the OpenAPI
-// cache file so fetchOpenAPISpec reads the stub spec above without hitting
-// the network. The cache file's mtime is "now", which is inside the 24h
+// primeOpenAPICache points the home dir at a temp dir and pre-populates the
+// OpenAPI cache file so fetchOpenAPISpec reads the stub spec above without
+// hitting the network. The cache file's mtime is "now", which is inside the 24h
 // cacheMaxAge window fetchOpenAPISpec checks.
 func primeOpenAPICache(t *testing.T) {
 	t.Helper()
-	dir := t.TempDir()
-	t.Setenv("HOME", dir)
-	cacheDir := filepath.Join(dir, cacheDirName, "cache")
+	cacheDir := filepath.Dir(useTempHome(t))
 	if err := os.MkdirAll(cacheDir, 0o700); err != nil {
 		t.Fatalf("failed to create cache dir: %v", err)
 	}
@@ -101,5 +102,46 @@ func TestDocsEndpointsNoFilterHasNoMissMessage(t *testing.T) {
 
 	if stderr != "" {
 		t.Errorf("expected no stderr output with no filter, got: %q", stderr)
+	}
+}
+
+// Siblings sharing a ref must resolve the same way on every run.
+func TestResolveRefsDeterministicAcrossSiblings(t *testing.T) {
+	const spec = `
+paths:
+  /things:
+    get:
+      responses:
+        "200": {$ref: "#/components/responses/Thing"}
+    post:
+      requestBody: {$ref: "#/components/schemas/Thing"}
+      responses:
+        "200": {$ref: "#/components/responses/Thing"}
+    put:
+      requestBody: {$ref: "#/components/schemas/Thing"}
+components:
+  responses:
+    Thing:
+      content: {schema: {$ref: "#/components/schemas/Thing"}}
+  schemas:
+    Thing:
+      properties: {id: {type: string}}
+`
+	var root map[string]any
+	if err := yaml.Unmarshal([]byte(spec), &root); err != nil {
+		t.Fatal(err)
+	}
+	pathObj := root["paths"].(map[string]any)["/things"]
+	var first []byte
+	for i := 0; i < 20; i++ {
+		out, err := json.Marshal(resolveRefs(pathObj, root, 0, nil))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if i == 0 {
+			first = out
+		} else if !bytes.Equal(out, first) {
+			t.Fatalf("run %d differs:\n%s\nfirst:\n%s", i, out, first)
+		}
 	}
 }

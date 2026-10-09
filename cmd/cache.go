@@ -13,8 +13,8 @@ var cacheFiles = map[string]bool{cacheFileName: true}
 
 // pruneCacheDir is best-effort: cleanup must never fail the command. It skips
 // subdirectories, a symlinked dir (Lstat sees a link, not a dir) whose target
-// may hold files c1i doesn't own, and a relative dir, which is what an unset
-// HOME yields and would sweep the working directory instead.
+// may hold files c1i doesn't own, and a relative dir, which would sweep the
+// working directory instead.
 func pruneCacheDir(dir string) {
 	if !filepath.IsAbs(dir) {
 		return
