@@ -1310,7 +1310,9 @@ token and reuses it until it nears expiry. It uses the OS keyring when
 available. On Unix-like hosts without a usable keyring, it instead uses a
 hardened `0600` file under the config directory (`~/.config/c1i/tokens/` on
 Linux). A cached token the server rejects (clock skew, or a revoked credential)
-is dropped and re-minted once automatically.
+is dropped and re-minted once automatically. Each file-cache write also deletes
+the other token files there that can't be read or whose token expires within a
+minute.
 The token is strictly shorter-lived than the client secret already stored
 beside it. Set `C1I_NO_TOKEN_CACHE=1` to disable caching and mint per
 invocation.
@@ -1378,6 +1380,28 @@ The channel list (`index.json`) and its yank flags are not signed, so a
 compromised distribution origin could withhold upgrades or offer any signed
 release newer than yours, yanked or prerelease, but never an unsigned build or
 one older than the one you run.
+
+## Uninstalling
+
+Removing the binary leaves these behind:
+
+- `~/.c1i/`, the OpenAPI spec cache.
+- `~/.c1i.yaml`, the config file.
+- `<UserConfigDir>/c1i/`, holding the file-fallback credentials
+  (`credentials/`) and the access-token file cache (`tokens/`). See
+  [Credential sources](#credential-sources) for each OS's config directory.
+- OS keyring entries: credentials under `c1i/<host>`, and cached access tokens
+  under `com.conductorone.c1i.tokens`.
+
+c1i can't list keyring entries or keep track of the tenants you've logged in to.
+The only way it can remove keyring credentials is `c1i auth logout --url <tenant>`.
+Run it once per tenant, before you remove the binary. Logout also drops the
+cached token for the credentials stored now. A token cached under credentials
+you since replaced stays in the keyring until you delete it with your OS's
+keyring tool.
+
+`~/.sigstore/root/`, which `upgrade` uses to verify releases, is shared with
+other Sigstore tools. It isn't c1i's to delete.
 
 ## License
 

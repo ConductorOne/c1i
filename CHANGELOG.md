@@ -13,6 +13,14 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   file in `~/.c1i/cache/` that the running version doesn't use. It leaves
   subdirectories alone, and skips the sweep when the cache dir is a symlink or,
   with no home dir, a path relative to the working directory.
+- **Expired access-token files stayed on disk forever.** Without a usable OS
+  keyring, c1i caches tokens as files under `<UserConfigDir>/c1i/tokens/`, one
+  per set of credentials. Writing one now deletes the others that can't be read
+  or whose token expires within a minute. It touches only files named as c1i
+  names them, skips the sweep when that dir fails the cache's trust checks, and
+  spares a temp file under a minute old. Cached tokens
+  in the OS keyring can't be listed, so they aren't swept. The README's new
+  "Uninstalling" section lists everything c1i leaves on disk and in the keyring.
 - **`requests create grant --duration` documented a format the server
   refuses.** Its help and the README suggested `24h` or `7d`, which the API
   rejects with `invalid google.protobuf.Duration value` (exit 2). They now say
