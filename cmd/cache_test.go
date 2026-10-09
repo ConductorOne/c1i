@@ -102,3 +102,23 @@ func TestCachePruneSkipsSymlinkedCacheDir(t *testing.T) {
 		t.Errorf("file behind a symlinked cache dir was removed: %v", err)
 	}
 }
+
+// With no home dir the cache path is relative, so it lands in the working dir.
+func TestCachePruneSkipsRelativeCacheDir(t *testing.T) {
+	t.Setenv("HOME", "")
+	t.Chdir(t.TempDir())
+	cacheDir := filepath.Join(cacheDirName, "cache")
+	if err := os.MkdirAll(cacheDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	stray := filepath.Join(cacheDir, "not-ours.txt")
+	if err := os.WriteFile(stray, []byte("x"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	refreshOpenAPICache(t, cacheDir)
+
+	if _, err := os.Stat(stray); err != nil {
+		t.Errorf("file in a working-dir-relative cache dir was removed: %v", err)
+	}
+}

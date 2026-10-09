@@ -10,8 +10,9 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 - **Old cache files stayed on disk forever.** A cache file renamed or dropped
   by a release was never removed. Refreshing the OpenAPI spec now deletes any
-  file in `~/.c1i/cache/` that the running version doesn't use. Subdirectories
-  and a symlinked cache dir are left alone.
+  file in `~/.c1i/cache/` that the running version doesn't use. It leaves
+  subdirectories alone, and skips the sweep when the cache dir is a symlink or,
+  with no home dir, a path relative to the working directory.
 - **`requests create grant --duration` documented a format the server
   refuses.** Its help and the README suggested `24h` or `7d`, which the API
   rejects with `invalid google.protobuf.Duration value` (exit 2). They now say
