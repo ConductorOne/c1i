@@ -6,19 +6,59 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
-### Fixed
+## [0.9.1] - 2026-10-09
+
+### Security
+
+- **v0.9.0 binaries were built with Go 1.27.1, which has 9 published
+  vulnerabilities in code c1i calls. Upgrade.** This release builds with Go
+  1.27.2 and `golang.org/x/net` 0.60.0, fixing 13 vulnerabilities in Go
+  1.27.1's standard library and `x/net` 0.59.0's `http2`, 9 of them in code
+  c1i calls: GO-2026-6617, -6613, -6612, -6611, -6610, -6609, -6608, -6607,
+  -6605, -6604, -6603, -6600 and -6599. `google.golang.org/grpc` moves from
+  1.83.2 to 1.84.0, and `grpc-gateway` and `timestamp-authority` to their
+  latest releases.
+
+### Upgrading from 0.9.0
+
+No flags change. The OpenAPI spec cache moves to
+`~/.c1i/cache/api-openapi.yaml`, so the first offline `docs openapi`,
+`docs endpoints` or `docs endpoint` after upgrading fails until one fetch
+succeeds. A spec refresh deletes any other file in `~/.c1i/cache/`, and a
+write to the file token cache deletes the expired and unusable token files in
+its tokens dir. The `docs endpoints --filter` no-match message no longer
+names `c1i mcp` or `access-reviews`, since the spec now covers both.
+
+### Changed
 
 - **API discovery uses the current public API contract**, including MCP server,
   tool, and toolset operations. `docs openapi`, `docs endpoints`, and
   `docs endpoint` fetch `https://www.c1.ai/api/openapi.yaml` and use a
   source-specific cache at `~/.c1i/cache/api-openapi.yaml`.
 
+### Fixed
+
+- **`docs endpoint` output changed from run to run.** A `$ref` shared by
+  several fields was expanded under whichever one a random map order reached
+  first, and left bare under the rest. The order is now fixed, so the same
+  endpoint prints the same schema every time.
+
+- **A non-spec response could poison the OpenAPI cache for 24 hours.** A 200
+  whose body isn't an OpenAPI document, such as a captive portal's sign-in
+  page, was cached and served as the spec. Now only a body that parses as one
+  is cached; otherwise the existing cache is used, or the command fails. A
+  download that fails partway falls back the same way, and the cache file is
+  replaced atomically.
+
+- **With no home dir, the `docs` OpenAPI commands cached the spec in the
+  working directory**, under `./.c1i/cache/`. They now fetch the spec and use
+  it without a cache.
+
 - **Old cache files stayed on disk forever.** A cache file renamed or dropped
-  by a release, such as the `openapi.yaml` the entry above replaces, was never
-  removed. Refreshing the OpenAPI spec now deletes any file in `~/.c1i/cache/`
-  that the running version doesn't use. It leaves subdirectories alone, and
-  skips the sweep when the cache dir is a symlink or, with no home dir, a path
-  relative to the working directory.
+  by a release, such as the `openapi.yaml` that `api-openapi.yaml` replaces,
+  was never removed. Refreshing the OpenAPI spec now deletes any file in
+  `~/.c1i/cache/` that the running version doesn't use. It leaves
+  subdirectories alone, and skips the sweep when the cache dir is a symlink.
 
 - **Stale access-token files stayed on disk forever.** Without a usable OS
   keyring, c1i caches one token file per set of credentials under
@@ -33,12 +73,16 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   it takes a protobuf duration in seconds, such as `86400s`, matching
   `tasks update-grant-duration` and `entitlements create --duration-grant`.
 
-- **Builds now use Go 1.27.2 and `golang.org/x/net` 0.60.0**, fixing 13
-  published vulnerabilities in Go 1.27.1's standard library and `x/net`
-  0.59.0's `http2`, 9 of them in code c1i calls: GO-2026-6617, -6613, -6612,
-  -6611, -6610, -6609, -6608, -6607, -6605, -6604, -6603, -6600 and -6599.
-  `google.golang.org/grpc` moves from 1.83.2 to 1.84.0, and `grpc-gateway`
-  and `timestamp-authority` to their latest releases.
+- **The docs didn't say service principal delete and credential revoke are
+  soft.** `service-principals get` on a deleted principal and
+  `service-principals credentials get` on a revoked credential still return
+  the record with exit 0 and no field marking it. Their help and the README
+  now say so: the lists omit them, and `users get` shows a deleted principal
+  as `DELETED`.
+
+- The README's bash completion example wrote to `/etc/bash_completion.d`,
+  which needs root; it now installs per user. `docs endpoints --filter` help
+  now says it also matches operation descriptions.
 
 ## [0.9.0] - 2026-10-06
 
@@ -1880,7 +1924,8 @@ First changelog entry; releases through v0.1.5 predate this file (see the
 
 - CI enforces `gofmt` via golangci-lint; module-wide formatting normalized.
 
-[Unreleased]: https://github.com/ConductorOne/c1i/compare/v0.9.0...HEAD
+[Unreleased]: https://github.com/ConductorOne/c1i/compare/v0.9.1...HEAD
+[0.9.1]: https://github.com/ConductorOne/c1i/releases/tag/v0.9.1
 [0.9.0]: https://github.com/ConductorOne/c1i/releases/tag/v0.9.0
 [0.8.0]: https://github.com/ConductorOne/c1i/releases/tag/v0.8.0
 [0.7.0]: https://github.com/ConductorOne/c1i/releases/tag/v0.7.0
