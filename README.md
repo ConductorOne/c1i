@@ -1411,8 +1411,11 @@ Removing the binary leaves these behind:
   [Credential sources](#credential-sources) for each OS's config directory;
   on Linux it is `$XDG_CONFIG_HOME` when that is set.
 - OS keyring entries: credentials under `c1i/<host>`, and cached access tokens
-  under `com.conductorone.c1i.tokens`. Older releases stored a
+  (including tokens for `C1I_CLIENT_ID`/`C1I_CLIENT_SECRET` credentials) under
+  `com.conductorone.c1i.tokens`. Older releases stored a
   `<name>.conductor.one` tenant's credentials under `c1i/<name>`.
+- Any [shell completion](#shell-completion) script you installed, and the
+  `c1i completion powershell` line if you added it to your PowerShell profile.
 
 c1i can't list keyring entries or keep track of the tenants you've logged in to.
 To remove its keyring credentials, run `auth logout` once per tenant before you
