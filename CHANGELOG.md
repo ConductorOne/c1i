@@ -8,25 +8,40 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- **API discovery uses the current public API contract**, including MCP server,
+  tool, and toolset operations. `docs openapi`, `docs endpoints`, and
+  `docs endpoint` fetch `https://www.c1.ai/api/openapi.yaml` and use a
+  source-specific cache at `~/.c1i/cache/api-openapi.yaml`.
+
 - **Old cache files stayed on disk forever.** A cache file renamed or dropped
-  by a release was never removed. Refreshing the OpenAPI spec now deletes any
-  file in `~/.c1i/cache/` that the running version doesn't use. It leaves
-  subdirectories alone, and skips the sweep when the cache dir is a symlink or,
-  with no home dir, a path relative to the working directory.
+  by a release, such as the `openapi.yaml` the entry above replaces, was never
+  removed. Refreshing the OpenAPI spec now deletes any file in `~/.c1i/cache/`
+  that the running version doesn't use. It leaves subdirectories alone, and
+  skips the sweep when the cache dir is a symlink or, with no home dir, a path
+  relative to the working directory.
+
 - **Expired access-token files stayed on disk forever.** Without a usable OS
   keyring, c1i caches tokens as files under `<UserConfigDir>/c1i/tokens/`, one
   per set of credentials. Writing one now deletes the others that can't be read
   or whose token expires within a minute. It touches only files named as c1i
   names them, skips the sweep when that dir fails the cache's trust checks, and
-  spares a temp file under a minute old. Cached tokens
-  in the OS keyring can't be listed, so they aren't swept. The README's new
-  "Uninstalling" section lists everything c1i leaves on disk and in the keyring,
-  and gives the commands that remove the keyring entries on each OS.
+  spares a temp file under a minute old. Cached tokens in the OS keyring can't
+  be listed, so they aren't swept. The README's new "Uninstalling" section lists
+  everything c1i leaves on disk and in the keyring, and gives the commands that
+  remove the keyring entries on each OS.
+
 - **`requests create grant --duration` documented a format the server
   refuses.** Its help and the README suggested `24h` or `7d`, which the API
   rejects with `invalid google.protobuf.Duration value` (exit 2). They now say
   it takes a protobuf duration in seconds, such as `86400s`, matching
   `tasks update-grant-duration` and `entitlements create --duration-grant`.
+
+- **Builds now use Go 1.27.2 and `golang.org/x/net` 0.60.0**, fixing 13
+  published vulnerabilities in Go 1.27.1's standard library and `x/net`
+  0.59.0's `http2`, 9 of them in code c1i calls: GO-2026-6617, -6613, -6612,
+  -6611, -6610, -6609, -6608, -6607, -6605, -6604, -6603, -6600 and -6599.
+  `google.golang.org/grpc` moves from 1.83.2 to 1.84.0, and `grpc-gateway`
+  and `timestamp-authority` to their latest releases.
 
 ## [0.9.0] - 2026-10-06
 

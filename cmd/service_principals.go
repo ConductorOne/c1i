@@ -8,8 +8,7 @@ import (
 )
 
 // service-principals manages tenant-owned non-human identities (SPCs): the
-// principal, its client credentials, and its subject bindings. The API is not
-// in the public OpenAPI spec, so these commands are the first-class surface.
+// principal, its client credentials, and its subject bindings.
 
 var servicePrincipalsCmd = &cobra.Command{
 	Use:     "service-principals",
