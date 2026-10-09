@@ -126,12 +126,90 @@ func TestReadGoEnvIgnoresCallerModule(t *testing.T) {
 	t.Chdir(dir)
 	t.Setenv("GOTOOLCHAIN", "auto")
 	t.Setenv("GOPROXY", "off")
-	env, err := readGoEnv()
-	if err != nil {
-		t.Fatalf("readGoEnv: %v", err)
-	}
-	if env.GOPATH == "" {
+	if env := readGoEnv(); env.GOPATH == "" {
 		t.Error("readGoEnv returned an empty GOPATH")
+	}
+}
+
+// isolateGoEnv points everything readGoEnv consults at an empty temp home and
+// returns that home and the config dir it implies.
+func isolateGoEnv(t *testing.T) (home, configDir string) {
+	t.Helper()
+	home = t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, "config"))
+	t.Setenv("AppData", filepath.Join(home, "config"))
+	for _, k := range []string{"GOBIN", "GOPATH", "GOENV"} {
+		t.Setenv(k, "")
+	}
+	configDir, err := os.UserConfigDir()
+	if err != nil {
+		t.Fatal(err)
+	}
+	return home, configDir
+}
+
+func TestDetectGoInstallSources(t *testing.T) {
+	writeEnvFile := func(t *testing.T, path, gobin string) {
+		t.Helper()
+		if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+			t.Fatal(err)
+		}
+		// The format `go env -w GOBIN=...` writes.
+		if err := os.WriteFile(path, []byte("GOFLAGS=-mod=mod\nGOBIN="+gobin+"\n"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for name, c := range map[string]struct {
+		setup func(t *testing.T, home, configDir string) string // returns the binary's path
+		want  Method
+	}{
+		"GOBIN env var": {func(t *testing.T, home, _ string) string {
+			t.Setenv("GOBIN", filepath.Join(home, "gobin"))
+			return filepath.Join(home, "gobin", "c1i")
+		}, GoInstall},
+		"GOPATH list": {func(t *testing.T, home, _ string) string {
+			t.Setenv("GOPATH", filepath.Join(home, "a")+string(filepath.ListSeparator)+filepath.Join(home, "b"))
+			return filepath.Join(home, "b", "bin", "c1i")
+		}, GoInstall},
+		"go env file": {func(t *testing.T, home, configDir string) string {
+			writeEnvFile(t, filepath.Join(configDir, "go", "env"), filepath.Join(home, "persisted"))
+			return filepath.Join(home, "persisted", "c1i")
+		}, GoInstall},
+		"GOENV file": {func(t *testing.T, home, _ string) string {
+			writeEnvFile(t, filepath.Join(home, "custom-env"), filepath.Join(home, "persisted"))
+			t.Setenv("GOENV", filepath.Join(home, "custom-env"))
+			return filepath.Join(home, "persisted", "c1i")
+		}, GoInstall},
+		"GOENV=off": {func(t *testing.T, home, configDir string) string {
+			writeEnvFile(t, filepath.Join(configDir, "go", "env"), filepath.Join(home, "persisted"))
+			t.Setenv("GOENV", "off")
+			return filepath.Join(home, "persisted", "c1i")
+		}, Standalone},
+		"default GOPATH": {func(t *testing.T, home, _ string) string {
+			return filepath.Join(home, "go", "bin", "c1i")
+		}, GoInstall},
+		"elsewhere": {func(t *testing.T, home, _ string) string {
+			return filepath.Join(home, "downloads", "c1i")
+		}, Standalone},
+	} {
+		t.Run(name, func(t *testing.T) {
+			home, configDir := isolateGoEnv(t)
+			path := c.setup(t, home, configDir)
+			if m, _ := Detect(path, "darwin"); m != c.want {
+				t.Errorf("%s -> %v, want %v", path, m, c.want)
+			}
+		})
+	}
+}
+
+// Running the go command writes telemetry counters under the config dir.
+func TestReadGoEnvWritesNoTelemetry(t *testing.T) {
+	_, configDir := isolateGoEnv(t)
+	readGoEnv()
+	if _, err := os.Stat(filepath.Join(configDir, "go", "telemetry")); !errors.Is(err, os.ErrNotExist) {
+		t.Errorf("readGoEnv left go/telemetry under the config dir: %v", err)
 	}
 }
 
@@ -141,8 +219,8 @@ func TestDetectSystemAndPersistedGoInstall(t *testing.T) {
 	}
 
 	original := readGoEnv
-	readGoEnv = func() (goEnv, error) {
-		return goEnv{GOBIN: "/opt/custom-go/bin", GOPATH: "/work/a:/work/b"}, nil
+	readGoEnv = func() goEnv {
+		return goEnv{GOBIN: "/opt/custom-go/bin", GOPATH: "/work/a:/work/b"}
 	}
 	t.Cleanup(func() { readGoEnv = original })
 	t.Setenv("GOBIN", "")

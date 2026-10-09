@@ -33,6 +33,11 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `auth login` then deletes the credential it just created), and the token
   file cache is skipped.
 
+- **`upgrade` no longer runs `go env`.** It ran the go command to find
+  `GOBIN` and `GOPATH`, which made Go write telemetry counters under your
+  config dir. It now reads the environment and Go's env file itself, so
+  install-method detection is unchanged.
+
 - The README's uninstall steps now say where each install method puts the
   binary, and that the Linux config directory follows `XDG_CONFIG_HOME`.
 
