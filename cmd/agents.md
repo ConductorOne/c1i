@@ -19,8 +19,9 @@ Get this right first. A wrong tenant returns plausible-looking data with
 exit 0.
 
 `c1i` resolves the tenant in this order: `--url`, `C1I_URL`, then `url:` in
-`~/.c1i.yaml`. It must be a full host — `mycompany.conductor.one` or
-`mycompany.c1eu.ai` (EU) — and `https` is required:
+`~/.c1i.yaml` (never read with a relative `HOME`). It must be a full host —
+`mycompany.conductor.one` or `mycompany.c1eu.ai` (EU) — and `https` is
+required:
 a bare `mycompany`, a non-https scheme, and a malformed host (an embedded space
 or control character, or a stray scheme like `://host`) are all usage errors
 (exit `2`) before any request is sent.

@@ -40,6 +40,12 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   config dir. It now reads the environment and Go's env file itself, so
   install-method detection is unchanged.
 
+- **With a relative `HOME`, c1i read and wrote `.c1i.yaml` in the working
+  directory**, so a `.c1i.yaml` planted in a repository could point it, and
+  any `C1I_CLIENT_ID`/`C1I_CLIENT_SECRET` credentials, at another host. It
+  now neither reads nor writes the config file then; `auth login` warns that
+  the URL wasn't saved.
+
 - The README's uninstall steps now say where each install method puts the
   binary, and that the Linux config directory follows `XDG_CONFIG_HOME`.
 

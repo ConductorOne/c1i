@@ -148,14 +148,18 @@ func init() {
 	_ = viper.BindEnv("dry_run", "C1I_DRY_RUN")
 }
 
-func initConfig() {
-	home, err := os.UserHomeDir()
-	if err == nil {
-		viper.AddConfigPath(home)
+func initConfig() { loadConfigFile(viper.GetViper()) }
+
+// loadConfigFile reads ~/.c1i.yaml into v, or nothing without a usable home.
+func loadConfigFile(v *viper.Viper) {
+	home, err := config.HomeDir()
+	if err != nil {
+		return
 	}
-	viper.SetConfigName(".c1i")
-	viper.SetConfigType("yaml")
-	_ = viper.ReadInConfig()
+	v.AddConfigPath(home)
+	v.SetConfigName(".c1i")
+	v.SetConfigType("yaml")
+	_ = v.ReadInConfig()
 }
 
 // GetBaseURL returns the configured base URL or exits with an error. Embedded

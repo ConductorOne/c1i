@@ -10,11 +10,24 @@ import (
 	"go.yaml.in/yaml/v3"
 )
 
+// HomeDir is os.UserHomeDir, refusing a relative result: with HOME="." the
+// config file would be read from, and written to, the working directory.
+func HomeDir() (string, error) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", err
+	}
+	if !filepath.IsAbs(home) {
+		return "", fmt.Errorf("home dir %q is not an absolute path", home)
+	}
+	return home, nil
+}
+
 // SaveToConfigFile reads ~/.c1i.yaml, sets the given key to value, and writes it back.
 // The file is created with mode 0600 if it does not exist. A file it can't read
 // or parse is left untouched and reported, so the user's settings aren't lost.
 func SaveToConfigFile(key, value string) error {
-	home, err := os.UserHomeDir()
+	home, err := HomeDir()
 	if err != nil {
 		return err
 	}

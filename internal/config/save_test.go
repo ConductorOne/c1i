@@ -141,3 +141,16 @@ func TestSaveToConfigFileUnreadableFileLeftAlone(t *testing.T) {
 		t.Errorf("file = %q, want it unchanged", b)
 	}
 }
+
+func TestSaveToConfigFileRefusesRelativeHome(t *testing.T) {
+	t.Setenv("HOME", ".")
+	t.Setenv("USERPROFILE", ".")
+	wd := t.TempDir()
+	t.Chdir(wd)
+	if err := SaveToConfigFile("url", "https://example.conductor.one"); err == nil {
+		t.Error("SaveToConfigFile = nil, want an error for a relative home dir")
+	}
+	if entries, _ := os.ReadDir(wd); len(entries) != 0 {
+		t.Errorf("wrote %v under the working directory", entries)
+	}
+}

@@ -1118,7 +1118,8 @@ Set it via (in order of precedence):
 
    A terminal `c1i auth login` given the URL another way offers to save it
    there. If the file isn't a valid YAML mapping, login warns and leaves it
-   unchanged.
+   unchanged. With a relative `HOME`, c1i neither reads nor writes it, so a
+   `.c1i.yaml` in the working directory is never used.
 
 These are equivalent:
 - `--url https://mycompany.conductor.one`
