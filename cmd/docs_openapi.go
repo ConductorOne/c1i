@@ -41,8 +41,7 @@ var docsEndpointsCmd = &cobra.Command{
 	Long: `Search the public C1 OpenAPI spec for endpoints. Unlike semantic "docs
 search", no output from --filter is a real no-match in that spec. It does not
 prove no C1 operation exists. Use first-class commands to inspect tenant
-resources. Pass a returned path to
-"docs endpoint" for its full schema.`,
+resources. Pass a returned path to "docs endpoint" for its full schema.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		data, err := fetchOpenAPISpec(cmd)
 		if err != nil {
