@@ -79,7 +79,7 @@ func TestCacheWritePrunesLeftoverFiles(t *testing.T) {
 		}
 	}
 	if err := os.Symlink(outside, filepath.Join(cacheDir, "link")); err != nil {
-		t.Skipf("symlinks unavailable: %v", err)
+		t.Logf("symlinks unavailable, link entry not covered: %v", err)
 	}
 
 	refreshOpenAPICache(t, cacheDir)
