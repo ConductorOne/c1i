@@ -29,6 +29,9 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `auth login` then deletes the credential it just created), and the token
   file cache is skipped.
 
+- The README's uninstall steps now say where each install method puts the
+  binary, and that the Linux config directory follows `XDG_CONFIG_HOME`.
+
 ## [0.9.1] - 2026-10-09
 
 ### Security

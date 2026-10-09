@@ -1395,13 +1395,20 @@ one older than the one you run.
 
 ## Uninstalling
 
+Remove the binary the way you installed it: `brew uninstall c1i` for
+Homebrew; for `go install`, delete `c1i` from `$GOBIN`, or from `$GOPATH/bin`
+(`~/go/bin` by default) when `GOBIN` is unset; a downloaded binary is wherever
+you put it; and `docker rmi public.ecr.aws/conductorone/c1i:<version>` for the
+container image.
+
 Removing the binary leaves these behind:
 
 - `~/.c1i/`, the OpenAPI spec cache.
 - `~/.c1i.yaml`, the config file.
 - `<UserConfigDir>/c1i/`, holding the file-fallback credentials
   (`credentials/`) and the access-token file cache (`tokens/`). See
-  [Credential sources](#credential-sources) for each OS's config directory.
+  [Credential sources](#credential-sources) for each OS's config directory;
+  on Linux it is `$XDG_CONFIG_HOME` when that is set.
 - OS keyring entries: credentials under `c1i/<host>`, and cached access tokens
   under `com.conductorone.c1i.tokens`. Older releases stored a
   `<name>.conductor.one` tenant's credentials under `c1i/<name>`.
