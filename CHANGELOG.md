@@ -14,6 +14,12 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   it takes a protobuf duration in seconds, such as `86400s`, matching
   `tasks update-grant-duration` and `entitlements create --duration-grant`.
 
+- **Builds now use Go 1.27.2 and `golang.org/x/net` 0.60.0**, fixing 13
+  published vulnerabilities in Go 1.27.1's standard library and `x/net`
+  0.59.0's `http2`, 9 of them in code c1i calls: GO-2026-6617, -6613, -6612,
+  -6611, -6610, -6609, -6608, -6607, -6605, -6604, -6603, -6600 and -6599.
+  `google.golang.org/grpc` moves from 1.83.2 to 1.84.0.
+
 ## [0.9.0] - 2026-10-06
 
 ### Upgrading from 0.8.x
