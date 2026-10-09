@@ -3,6 +3,7 @@ package cmd
 import (
 	"bytes"
 	"context"
+	"errors"
 	"io"
 	"io/fs"
 	"net/http"
@@ -206,4 +207,62 @@ func snapshotTree(t *testing.T, root string) string {
 		t.Fatal(err)
 	}
 	return b.String()
+}
+
+// Bodies a 200 can carry that aren't a spec: a captive portal page, which
+// isn't a YAML map, and a JSON object with no paths.
+var notASpec = []string{
+	"<!DOCTYPE html><html><body>Sign in to Wi-Fi</body></html>",
+	`{"message": "sign in required"}`,
+}
+
+func TestOpenAPIInvalidBodyKeepsCache(t *testing.T) {
+	for _, body := range notASpec {
+		cachePath := useTempHome(t)
+		writeExpiredCache(t, cachePath, stubOpenAPISpec)
+
+		got, err := runDocsOpenapi(t, serveSpec(body))
+		if err != nil {
+			t.Fatalf("docs openapi: %v", err)
+		}
+		if got != stubOpenAPISpec {
+			t.Errorf("printed %q, want the cached spec", got)
+		}
+		if b, err := os.ReadFile(cachePath); err != nil || string(b) != stubOpenAPISpec {
+			t.Errorf("cache was overwritten: %q, %v", b, err)
+		}
+	}
+}
+
+func TestOpenAPIInvalidBodyWithoutCacheErrors(t *testing.T) {
+	for _, body := range notASpec {
+		cachePath := useTempHome(t)
+
+		if _, err := runDocsOpenapi(t, serveSpec(body)); err == nil {
+			t.Errorf("expected an error for %q", body)
+		}
+		if _, err := os.Stat(filepath.Dir(cachePath)); !errors.Is(err, fs.ErrNotExist) {
+			t.Errorf("cache dir was created for %q: %v", body, err)
+		}
+	}
+}
+
+type failingReader struct{}
+
+func (failingReader) Read([]byte) (int, error) { return 0, errors.New("connection reset") }
+
+func TestOpenAPIReadErrorFallsBackToCache(t *testing.T) {
+	cachePath := useTempHome(t)
+	writeExpiredCache(t, cachePath, stubOpenAPISpec)
+
+	got, err := runDocsOpenapi(t, func(r *http.Request) (*http.Response, error) {
+		body := io.MultiReader(strings.NewReader("paths:\n"), failingReader{})
+		return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(body), Request: r}, nil
+	})
+	if err != nil {
+		t.Fatalf("docs openapi: %v", err)
+	}
+	if got != stubOpenAPISpec {
+		t.Errorf("printed %q, want the cached spec", got)
+	}
 }

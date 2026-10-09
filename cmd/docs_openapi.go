@@ -192,14 +192,18 @@ func fetchOpenAPISpec(cmd *cobra.Command) ([]byte, error) {
 
 	data, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return nil, err
+		return staleOpenAPISpec(cachePath, fmt.Errorf("reading OpenAPI spec: %w", err))
+	}
+	// A captive portal answers 200 with HTML, and caching that would serve it
+	// until cacheMaxAge.
+	var doc map[string]any
+	err = yaml.Unmarshal(data, &doc)
+	if _, ok := doc["paths"]; err != nil || !ok {
+		return staleOpenAPISpec(cachePath, fmt.Errorf("fetching OpenAPI spec: %s did not return an OpenAPI document", openapiURL))
 	}
 
 	if cachePath != "" {
-		_ = os.MkdirAll(filepath.Dir(cachePath), 0o700)
-		if os.WriteFile(cachePath, data, 0o644) == nil { // #nosec G306 -- cached OpenAPI spec is public C1 API documentation, not sensitive
-			pruneCacheDir(filepath.Dir(cachePath))
-		}
+		writeOpenAPICache(cachePath, data)
 	}
 	return data, nil
 }
@@ -212,6 +216,31 @@ func staleOpenAPISpec(cachePath string, err error) ([]byte, error) {
 		}
 	}
 	return nil, err
+}
+
+// writeOpenAPICache is best-effort. The rename keeps a reader from seeing a
+// partial file. The temp name isn't in cacheFiles, so the prune after the
+// rename sweeps one a crash left behind; a concurrent refresh's prune can also
+// remove ours, which only skips this write.
+func writeOpenAPICache(cachePath string, data []byte) {
+	dir := filepath.Dir(cachePath)
+	if os.MkdirAll(dir, 0o700) != nil {
+		return
+	}
+	tmp, err := os.CreateTemp(dir, "."+cacheFileName+".tmp-*")
+	if err != nil {
+		return
+	}
+	tmpName := tmp.Name()
+	defer func() { _ = os.Remove(tmpName) }()
+	_, writeErr := tmp.Write(data)
+	chmodErr := tmp.Chmod(0o644) // #nosec G302 -- cached OpenAPI spec is public C1 API documentation, not sensitive
+	if closeErr := tmp.Close(); writeErr != nil || chmodErr != nil || closeErr != nil {
+		return
+	}
+	if os.Rename(tmpName, cachePath) == nil {
+		pruneCacheDir(dir)
+	}
 }
 
 // openAPICachePath returns "" when there is no usable home dir, which disables
