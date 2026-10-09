@@ -44,8 +44,9 @@ Credentials resolve in this order: `C1I_CLIENT_ID` + `C1I_CLIENT_SECRET` env
 vars (read-only — c1i never writes them), the OS keyring, then a `0600` file
 used automatically where no keyring exists (headless Linux, CI, containers).
 With a relative `HOME` and no keyring, that file fallback errors rather than
-write under the working directory, so `auth login`, `auth logout` and (without
-the env vars) `auth token` fail.
+write under the working directory, so every command that needs stored
+credentials fails: `auth login`, `auth logout`, and any authenticated command
+run without the env vars.
 Only the bearer c1i attaches automatically for REST commands is cached and
 reused across invocations until it nears expiry, so a run of one-shot commands
 does not write a `client_credentials` audit event each time. It uses the OS

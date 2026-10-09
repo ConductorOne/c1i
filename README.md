@@ -1309,9 +1309,9 @@ never written to disk — a new one is minted per invocation.
 `c1i auth login` writes to the OS keyring when it can and falls back to the
 file backend transparently. `c1i auth status` tells you which source served
 the active credentials. If the config directory resolves to a relative path,
-from a relative `HOME` or `%AppData%`, the file fallback fails with an error
-and the token cache below skips its file, rather than writing under the working
-directory.
+from a relative `HOME`, `%AppData%` or `XDG_CONFIG_HOME`, the file fallback
+fails with an error and the token cache below skips its file, rather than
+writing under the working directory.
 
 ### Token cache
 
@@ -1397,10 +1397,10 @@ one older than the one you run.
 ## Uninstalling
 
 Remove the binary the way you installed it: `brew uninstall c1i` for
-Homebrew; for `go install`, delete `c1i` from `$GOBIN`, or from `$GOPATH/bin`
-(`~/go/bin` by default) when `GOBIN` is unset; a downloaded binary is wherever
-you put it; and `docker rmi public.ecr.aws/conductorone/c1i:<version>` for the
-container image.
+Homebrew; for `go install`, delete `c1i` from `GOBIN` (set in the environment
+or with `go env -w`), or from `$GOPATH/bin` (`~/go/bin` by default) when
+`GOBIN` is unset; a downloaded binary is wherever you put it; and
+`docker rmi public.ecr.aws/conductorone/c1i:<version>` for the container image.
 
 Removing the binary leaves these behind:
 
