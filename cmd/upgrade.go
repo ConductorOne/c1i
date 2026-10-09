@@ -231,10 +231,11 @@ func writeUpgradeReport(cmd *cobra.Command, current, target, channel string, ava
 	return writeObject(cmd, data)
 }
 
-// distError classifies a failure fetching or verifying a release as upstream
-// (8), except that a dist 404, 429 or 5xx keeps its own exit code. dist needs
-// no auth and takes no input from the caller, so for a refused redirect, a bad
-// path, or any other 4xx the status is dropped and the exit code is 8.
+// distError classifies a failure fetching or verifying a release, or fetching
+// the OpenAPI spec, as upstream (8), except that a 404, 429 or 5xx keeps its
+// own exit code. Neither host needs auth or takes input from the caller, so for
+// a refused redirect, a bad path, or any other 4xx the status is dropped and
+// the exit code is 8.
 func distError(err error, format string, args ...any) error {
 	msg := fmt.Sprintf(format, args...)
 	var apiErr *client.APIError

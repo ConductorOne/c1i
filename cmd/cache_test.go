@@ -18,13 +18,35 @@ type stubRoundTripper func(*http.Request) (*http.Response, error)
 
 func (f stubRoundTripper) RoundTrip(r *http.Request) (*http.Response, error) { return f(r) }
 
+// stubOpenAPIBase makes rt serve every spec fetch.
+func stubOpenAPIBase(t *testing.T, rt http.RoundTripper) {
+	t.Helper()
+	orig := openAPIBase
+	openAPIBase = rt
+	t.Cleanup(func() { openAPIBase = orig })
+}
+
+// setRootFlag sets one of rootCmd's persistent flags for the test.
+func setRootFlag(t *testing.T, name, value string) {
+	t.Helper()
+	f := rootCmd.PersistentFlags().Lookup(name)
+	orig, origChanged := f.Value.String(), f.Changed
+	if err := f.Value.Set(value); err != nil {
+		t.Fatal(err)
+	}
+	f.Changed = true
+	t.Cleanup(func() {
+		_ = f.Value.Set(orig)
+		f.Changed = origChanged
+	})
+}
+
 // runDocsOpenapi runs `docs openapi` with rt serving every request and returns
-// its stdout and stderr.
+// its stdout and stderr. Retries are off, so one stub response is final.
 func runDocsOpenapi(t *testing.T, rt stubRoundTripper) (string, string, error) {
 	t.Helper()
-	orig := http.DefaultClient.Transport
-	http.DefaultClient.Transport = rt
-	t.Cleanup(func() { http.DefaultClient.Transport = orig })
+	stubOpenAPIBase(t, rt)
+	setRootFlag(t, "max-retries", "0")
 
 	out, errOut := &bytes.Buffer{}, &bytes.Buffer{}
 	prevCtx := docsOpenapiCmd.Context()
@@ -337,4 +359,102 @@ func TestFormatAgeClampsFutureMtime(t *testing.T) {
 			t.Errorf("formatAge(%v) = %q, want %q", d, got, want)
 		}
 	}
+}
+
+// runDocsOpenapiRoot runs `c1i docs openapi args...` through rootCmd, so the
+// global flags are parsed as a user passes them.
+func runDocsOpenapiRoot(t *testing.T, rt http.RoundTripper, args ...string) (string, error) {
+	t.Helper()
+	stubOpenAPIBase(t, rt)
+	for _, name := range []string{"debug", "max-retries"} {
+		f := rootCmd.PersistentFlags().Lookup(name)
+		t.Cleanup(func() {
+			_ = f.Value.Set(f.DefValue)
+			f.Changed = false
+		})
+	}
+	var out bytes.Buffer
+	rootCmd.SetOut(&out)
+	rootCmd.SetErr(&out)
+	prevCtx := docsOpenapiCmd.Context()
+	docsOpenapiCmd.SetContext(t.Context()) // cobra keeps a subcommand's first context
+	t.Cleanup(func() {
+		rootCmd.SetOut(nil)
+		rootCmd.SetErr(nil)
+		docsOpenapiCmd.SetContext(prevCtx)
+	})
+	rootCmd.SetArgs(append([]string{"docs", "openapi"}, args...))
+	err := rootCmd.ExecuteContext(t.Context())
+	return out.String(), err
+}
+
+func TestOpenAPIMaxRetriesFlag(t *testing.T) {
+	for flag, want := range map[string]int{"0": 1, "1": 2} {
+		t.Run("--max-retries="+flag, func(t *testing.T) {
+			useTempHome(t)
+			attempts := 0
+			_, err := runDocsOpenapiRoot(t, stubRoundTripper(func(r *http.Request) (*http.Response, error) {
+				attempts++
+				return &http.Response{StatusCode: http.StatusServiceUnavailable, Body: http.NoBody, Request: r}, nil
+			}), "--max-retries", flag)
+			if err == nil || exitCode(err) != exitServer {
+				t.Errorf("err = %v (exit %d), want exit %d", err, exitCode(err), exitServer)
+			}
+			if attempts != want {
+				t.Errorf("sent %d requests, want %d", attempts, want)
+			}
+		})
+	}
+}
+
+func TestOpenAPIDebugTracesFetch(t *testing.T) {
+	useTempHome(t)
+	var err error
+	trace := captureStderr(t, func() {
+		_, err = runDocsOpenapiRoot(t, serveSpec(stubOpenAPISpec), "--debug")
+	})
+	if err != nil {
+		t.Fatalf("docs openapi --debug: %v", err)
+	}
+	if want := "> GET " + openapiURL; !strings.Contains(trace, want) {
+		t.Errorf("stderr = %q, want a trace line %q", trace, want)
+	}
+}
+
+func TestOpenAPIRefusesCrossHostRedirect(t *testing.T) {
+	useTempHome(t)
+	_, err := runDocsOpenapiRoot(t, stubRoundTripper(func(r *http.Request) (*http.Response, error) {
+		if r.URL.String() != openapiURL {
+			t.Errorf("followed a redirect to %s", r.URL)
+			return serveSpec(stubOpenAPISpec)(r)
+		}
+		h := http.Header{"Location": {"https://elsewhere.example/api/openapi.yaml"}}
+		return &http.Response{StatusCode: http.StatusFound, Header: h, Body: http.NoBody, Request: r}, nil
+	}))
+	if err == nil || !strings.Contains(err.Error(), "refusing to follow redirect") || exitCode(err) != exitUpstream {
+		t.Errorf("err = %v (exit %d), want a refused redirect, exit %d", err, exitCode(err), exitUpstream)
+	}
+}
+
+// A body over the cap is a failed fetch, even one that would parse as a spec.
+func TestOpenAPIOverCapBody(t *testing.T) {
+	filler := "# filler\n"
+	body := "paths: {}\n" + strings.Repeat(filler, maxOpenAPISpecBytes/len(filler)+1)
+	t.Run("no cache", func(t *testing.T) {
+		useTempHome(t)
+		_, _, err := runDocsOpenapi(t, serveSpec(body))
+		if err == nil || exitCode(err) != exitUpstream {
+			t.Errorf("err = %v (exit %d), want exit %d", err, exitCode(err), exitUpstream)
+		}
+	})
+	t.Run("expired cache", func(t *testing.T) {
+		writeExpiredCache(t, useTempHome(t), stubOpenAPISpec)
+		got, stderr, err := runDocsOpenapi(t, serveSpec(body))
+		if err != nil {
+			t.Fatalf("docs openapi: %v", err)
+		}
+		if got != stubOpenAPISpec || !strings.Contains(stderr, "Warning: using cached OpenAPI spec") {
+			t.Errorf("stdout = %.40q, stderr = %q; want the cached spec and a warning", got, stderr)
+		}
+	})
 }

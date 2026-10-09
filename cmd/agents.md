@@ -99,20 +99,20 @@ when the failure came from the API. Still branch on the exit code — the JSON i
 for the detail, not the classification.
 
 `--debug` and `--max-retries` cover `mcp gateway`, `auth login` (except its
-device-code polling, which never retries) and `upgrade` as well as the REST
-commands: the gateway client threads both into its bearer mint and its JSON-RPC
-calls. On a `mcp gateway call` that hangs or fails oddly, `--debug` is the
-fastest way to see which request stopped.
+device-code polling, which never retries), `upgrade`, `docs openapi`,
+`docs endpoints` and `docs endpoint` as well as the REST commands: the gateway
+client threads both into its bearer mint and its JSON-RPC calls. On a
+`mcp gateway call` that hangs or fails oddly, `--debug` is the fastest way to
+see which request stopped.
 
-They do **not** reach the `docs` subcommands that fetch — `docs search`,
-`docs page`, `docs openapi`, `docs endpoints`, `docs endpoint`. Those bypass
-the shared transport for Go's default HTTP client, so `--debug` prints nothing
-and `--max-retries` is ignored. Silent `--debug` output there means the flag
+They do **not** reach `docs search` or `docs page`. Those bypass the shared
+transport for Go's default HTTP client, so `--debug` prints nothing and
+`--max-retries` is ignored. Silent `--debug` output there means the flag
 never reached that path, NOT that no request was sent — don't read it as
 evidence either way when a `docs` command comes back empty.
 
-Nor do those five call the same place, which matters for egress rules and for
-why one can fail while another works: `docs openapi`, `docs endpoints` and
+Nor do the fetching `docs` commands call the same place, which matters for
+egress rules and for why one can fail while another works: `docs openapi`, `docs endpoints` and
 `docs endpoint` fetch `https://www.c1.ai/api/openapi.yaml` (cached 24h at
 `~/.c1i/cache/api-openapi.yaml`, so a run can return rows without sending a
 request), while `docs search` and `docs page` call a third party —
@@ -120,8 +120,9 @@ request), while `docs search` and `docs page` call a third party —
 with no relevance threshold, so it always returns up to 10 plausible hits even
 for a nonsense query: never read a result as proof a concept exists, or an
 unexpected result as proof it is absent. `docs endpoints --filter` DOES have a
-true no-match. If a fetch fails, an expired cache is served with a one-line
-`Warning:` on stderr naming its age.
+true no-match. If a spec fetch fails, an expired cache is served with a
+one-line `Warning:` on stderr naming its age; with no cache, it exits 4, 5 or 6
+for a 404, 429 or 5xx, and 8 otherwise.
 
 Don't store files in `~/.c1i/cache/`: a spec refresh deletes any file there
 that the running version doesn't use.

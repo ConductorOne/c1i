@@ -874,7 +874,7 @@ c1i docs guide
 c1i docs guide register-mcp-server
 ```
 
-`docs openapi`, `docs endpoints`, and `docs endpoint` use the current public API contract at `https://www.c1.ai/api/openapi.yaml`, including MCP server, tool, and toolset operations. The spec is cached for 24 hours at `~/.c1i/cache/api-openapi.yaml`; fetch failures fall back to that cache, however old, with a one-line warning on stderr naming its age.
+`docs openapi`, `docs endpoints`, and `docs endpoint` use the current public API contract at `https://www.c1.ai/api/openapi.yaml`, including MCP server, tool, and toolset operations. The spec is cached for 24 hours at `~/.c1i/cache/api-openapi.yaml`; fetch failures fall back to that cache, however old, with a one-line warning on stderr naming its age. A response over 32 MiB counts as a failed fetch. With no cache to fall back on, a failed fetch exits `4`, `5`, or `6` for a `404`, `429`, or `5xx`, and `8` for anything else, such as an unreachable host or a refused redirect.
 
 `docs search` is a semantic search with no relevance threshold: every query returns up to 10 nearest matches, so even a nonsense query comes back with plausible-looking hits. A returned hit is not proof a concept exists, and an unexpected hit is not proof the thing you searched for is absent — read the snippet, or fetch the page with `docs page`, to judge. To check whether an API endpoint exists, use `docs endpoints --filter`, which has a real no-match.
 
@@ -1050,13 +1050,13 @@ A chain of allowed redirects that doesn't settle within five hops fails as a
 remote error (exit `6`) rather than looping.
 
 This applies to every command built on the shared transport: the REST client,
-the MCP gateway, the login handshake, and `upgrade`, so the path and redirect
-guards, `--debug` tracing, and `--max-retries` cover all of them, not just REST
-commands (`upgrade` maps a refused redirect to exit `8`; see Upgrading).
-**None of those four** applies to the `docs` subcommands that fetch —
-`docs search`, `docs page`, `docs openapi`, `docs endpoints`, `docs endpoint` —
-which call Go's default HTTP client directly: no path or
-redirect guard there, and `--debug` and `--max-retries` are both inert.
+the MCP gateway, the login handshake, `upgrade`, and `docs openapi`,
+`docs endpoints` and `docs endpoint`, so the path and redirect guards, `--debug`
+tracing, and `--max-retries` cover all of them, not just REST commands
+(`upgrade` and those `docs` commands map a refused redirect to exit `8`).
+**None of those four** applies to `docs search` and `docs page`, which call
+Go's default HTTP client directly: no path or redirect guard there, and
+`--debug` and `--max-retries` are both inert.
 
 One narrower carve-out inside login: the device-flow token poll forces its own
 retry count to zero, because RFC 8628's polling interval already *is* that

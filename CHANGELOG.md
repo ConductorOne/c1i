@@ -6,6 +6,15 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed
+
+- **`--debug` and `--max-retries` did nothing on `docs openapi`,
+  `docs endpoints` and `docs endpoint`.** The spec fetch now uses the shared
+  transport, so it traces, retries, refuses a redirect to another host, and
+  treats a response over 32 MiB as a failed fetch. With no cache to fall back
+  on, a failed fetch now exits 4, 5 or 6 for a 404, 429 or 5xx, and 8
+  otherwise, instead of 1.
+
 ## [0.9.1] - 2026-10-09
 
 ### Security
