@@ -237,9 +237,16 @@ func resolveRefs(node any, root map[string]any, depth int, seen map[string]bool)
 				return resolveRefs(resolved, root, depth+1, seen)
 			}
 		}
+		// seen is shared across siblings, so only the first to reach a ref
+		// expands it; sorted keys make that the same sibling on every run.
+		keys := make([]string, 0, len(v))
+		for key := range v {
+			keys = append(keys, key)
+		}
+		sort.Strings(keys)
 		out := make(map[string]any, len(v))
-		for key, val := range v {
-			out[key] = resolveRefs(val, root, depth, seen)
+		for _, key := range keys {
+			out[key] = resolveRefs(v[key], root, depth, seen)
 		}
 		return out
 	case []any:
