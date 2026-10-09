@@ -40,8 +40,13 @@ func refreshOpenAPICache(t *testing.T, cacheDir string) {
 	})
 	t.Cleanup(func() { http.DefaultClient.Transport = orig })
 
+	prevCtx := docsOpenapiCmd.Context()
 	docsOpenapiCmd.SetOut(&bytes.Buffer{})
 	docsOpenapiCmd.SetContext(context.Background())
+	t.Cleanup(func() {
+		docsOpenapiCmd.SetOut(nil)
+		docsOpenapiCmd.SetContext(prevCtx)
+	})
 	if err := docsOpenapiCmd.RunE(docsOpenapiCmd, nil); err != nil {
 		t.Fatalf("docs openapi: %v", err)
 	}
@@ -63,6 +68,19 @@ func TestCacheWritePrunesLeftoverFiles(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
+	// None of these is a cache file, so all must survive: a link's target, a
+	// file inside a subdirectory, and state beside the cache dir.
+	outside := filepath.Join(t.TempDir(), "outside.txt")
+	inner := filepath.Join(cacheDir, "subdir", "inner.txt")
+	sibling := filepath.Join(home, cacheDirName, "other-state.json")
+	for _, p := range []string{outside, inner, sibling} {
+		if err := os.WriteFile(p, []byte("keep"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.Symlink(outside, filepath.Join(cacheDir, "link")); err != nil {
+		t.Skipf("symlinks unavailable: %v", err)
+	}
 
 	refreshOpenAPICache(t, cacheDir)
 
@@ -77,6 +95,11 @@ func TestCacheWritePrunesLeftoverFiles(t *testing.T) {
 	want := []string{cacheFileName, "subdir"}
 	if strings.Join(got, ",") != strings.Join(want, ",") {
 		t.Errorf("cache dir holds %v, want %v", got, want)
+	}
+	for _, p := range []string{outside, inner, sibling} {
+		if b, err := os.ReadFile(p); err != nil || string(b) != "keep" {
+			t.Errorf("%s was removed or changed: %q, %v", p, b, err)
+		}
 	}
 }
 
