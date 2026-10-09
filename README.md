@@ -1313,8 +1313,9 @@ available. On Unix-like hosts without a usable keyring, it instead uses a
 hardened `0600` file under the config directory (`~/.config/c1i/tokens/` on
 Linux). A cached token the server rejects (clock skew, or a revoked credential)
 is dropped and re-minted once automatically. Each file-cache write also deletes
-the other token files there that can't be read or whose token expires within a
-minute.
+the other token files there that c1i would refuse to load (expired or expiring
+within a minute, corrupt, or accessible to other users) and temp files over a
+minute old.
 The token is strictly shorter-lived than the client secret already stored
 beside it. Set `C1I_NO_TOKEN_CACHE=1` to disable caching and mint per
 invocation.
@@ -1397,9 +1398,10 @@ Removing the binary leaves these behind:
   `<name>.conductor.one` tenant's credentials under `c1i/<name>`.
 
 c1i can't list keyring entries or keep track of the tenants you've logged in to.
-The only way it can remove keyring credentials is `auth logout`, once per
-tenant, before you remove the binary. Unset `C1I_CLIENT_ID` and
-`C1I_CLIENT_SECRET` first, or logout drops the cached token for those instead:
+To remove its keyring credentials, run `auth logout` once per tenant before you
+remove the binary. If `C1I_CLIENT_ID` and `C1I_CLIENT_SECRET` are both set, unset
+them first: logout still removes the stored credentials, but drops the cached
+token for the env-var credentials instead of theirs.
 
 ```sh
 c1i auth logout --url example.conductor.one
@@ -1407,8 +1409,8 @@ c1i auth logout --url example.conductor.one
 
 Logout also drops the cached token for the credentials stored now. A token
 cached under credentials you since replaced stays in the keyring. To remove
-keyring entries by hand, where `<host>` is a tenant's host such as
-`example.conductor.one`, or its `<name>` for an entry from an older release:
+keyring entries by hand, replace `<host>` below with a tenant's host, such as
+`example.conductor.one`, or with `<name>` for an entry an older release stored:
 
 ```sh
 # macOS: each call deletes one item; repeat until it reports "could not be found"
@@ -1426,7 +1428,7 @@ On Windows, open Credential Manager → Windows Credentials and remove
 `c1i` in Keychain Access (macOS), Seahorse (Linux) or Credential Manager.
 
 `~/.sigstore/root/`, which `upgrade` uses to verify releases, is shared with
-other Sigstore tools. It isn't c1i's to delete.
+other Sigstore tools, so leave it in place.
 
 ## License
 

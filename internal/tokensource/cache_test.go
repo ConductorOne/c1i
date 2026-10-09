@@ -467,8 +467,15 @@ func TestStoreSweepsExpiredTokenFiles(t *testing.T) {
 	staleTmp := filepath.Join(dir, "."+cacheKey("h", "c", "old-secret")+".json.tmp-1")
 	youngTmp := filepath.Join(dir, "."+cacheKey("h", "c", "other-secret")+".json.tmp-2")
 	notOurs := filepath.Join(dir, "notes.txt")
-	userJSON := filepath.Join(dir, "backup.json")
-	userTmp := filepath.Join(dir, ".backup.json.tmp-old")
+	key := cacheKey("h", "c", "near-miss-secret")
+	// Each is expired and old, so only its name keeps it.
+	var nearMisses []string
+	for _, name := range []string{
+		"backup.json", "abcd.json", key[:32] + ".json",
+		".backup.json.tmp-old", ".abcd.json.tmp-old", key + ".json.tmp-old", "." + key,
+	} {
+		nearMisses = append(nearMisses, filepath.Join(dir, name))
+	}
 	subdir := filepath.Join(dir, cacheKey("h", "c", "dir-secret")+".json")
 	upperJSON := filepath.Join(dir, strings.ToUpper(cacheKey("h", "c", "upper-secret"))+".json")
 	loosePerms := filepath.Join(dir, cacheKey("h", "c", "perm-secret")+".json")
@@ -479,30 +486,41 @@ func TestStoreSweepsExpiredTokenFiles(t *testing.T) {
 	writeTokenFile(t, expired, time.Now().Add(-time.Hour))
 	writeTokenFile(t, nearExpiry, time.Now().Add(30*time.Second))
 	writeTokenFile(t, fresh, time.Now().Add(time.Hour))
-	writeTokenFile(t, userJSON, time.Now().Add(-time.Hour))
 	writeTokenFile(t, upperJSON, time.Now().Add(-time.Hour))
 	writeTokenFile(t, loosePerms, time.Now().Add(time.Hour))
 	if err := os.Chmod(loosePerms, 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(oversized, []byte(strings.Repeat("x", maxCachedTokenBytes+1)), 0o600); err != nil {
+	// Valid JSON once the padding is trimmed, so only the size bound rejects it.
+	writeTokenFile(t, oversized, time.Now().Add(time.Hour))
+	f, err := os.OpenFile(oversized, os.O_APPEND|os.O_WRONLY, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.WriteString(strings.Repeat(" ", maxCachedTokenBytes)); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.Close(); err != nil {
 		t.Fatal(err)
 	}
 	// A link is never followed or removed, even when its target is an expired token.
 	link := filepath.Join(dir, cacheKey("h", "c", "link-secret")+".json")
 	target := filepath.Join(t.TempDir(), "target.json")
 	writeTokenFile(t, target, time.Now().Add(-time.Hour))
-	survivors := []string{keep, fresh, youngTmp, notOurs, subdir, userJSON, userTmp, upperJSON}
+	survivors := append([]string{keep, fresh, youngTmp, notOurs, subdir, upperJSON}, nearMisses...)
 	if err := os.Symlink(target, link); err == nil {
 		survivors = append(survivors, link, target)
 	}
-	for _, p := range []string{corrupt, staleTmp, youngTmp, notOurs, userTmp} {
+	for _, p := range []string{corrupt, staleTmp, youngTmp, notOurs} {
 		if err := os.WriteFile(p, []byte("not json"), 0o600); err != nil {
 			t.Fatal(err)
 		}
 	}
 	old := time.Now().Add(-2 * tmpFileGrace)
-	for _, p := range []string{staleTmp, userTmp} {
+	for _, p := range nearMisses {
+		writeTokenFile(t, p, time.Now().Add(-time.Hour))
+	}
+	for _, p := range append([]string{staleTmp}, nearMisses...) {
 		if err := os.Chtimes(p, old, old); err != nil {
 			t.Fatal(err)
 		}

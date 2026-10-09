@@ -223,7 +223,7 @@ func pruneTokenDir(dir, keep string) {
 		isToken, isTemp := tokenFileName(name)
 		switch {
 		case isToken:
-			// Corrupt or unreadable goes too: no load serves it; a transient error costs one re-mint.
+			// Delete corrupt or unreadable files too: no load serves them, and a transient error costs one re-mint.
 			if readCachedTokenFile(p) != nil {
 				continue
 			}
