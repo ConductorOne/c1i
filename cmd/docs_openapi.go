@@ -169,8 +169,8 @@ func init() {
 func fetchOpenAPISpec(cmd *cobra.Command) ([]byte, error) {
 	cachePath := openAPICachePath()
 
-	if info, err := os.Stat(cachePath); err == nil {
-		if time.Since(info.ModTime()) < cacheMaxAge {
+	if cachePath != "" {
+		if info, err := os.Stat(cachePath); err == nil && time.Since(info.ModTime()) < cacheMaxAge {
 			return os.ReadFile(cachePath) // #nosec G304 -- cachePath is a fixed internal path (openAPICachePath), not caller input
 		}
 	}
@@ -182,19 +182,12 @@ func fetchOpenAPISpec(cmd *cobra.Command) ([]byte, error) {
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		// Fall back to cache on network error.
-		if data, readErr := os.ReadFile(cachePath); readErr == nil { // #nosec G304 -- cachePath is a fixed internal path (openAPICachePath), not caller input
-			return data, nil
-		}
-		return nil, fmt.Errorf("fetching OpenAPI spec: %w", err)
+		return staleOpenAPISpec(cachePath, fmt.Errorf("fetching OpenAPI spec: %w", err))
 	}
 	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
-		if data, readErr := os.ReadFile(cachePath); readErr == nil { // #nosec G304 -- cachePath is a fixed internal path (openAPICachePath), not caller input
-			return data, nil
-		}
-		return nil, fmt.Errorf("fetching OpenAPI spec: HTTP %d", resp.StatusCode)
+		return staleOpenAPISpec(cachePath, fmt.Errorf("fetching OpenAPI spec: HTTP %d", resp.StatusCode))
 	}
 
 	data, err := io.ReadAll(resp.Body)
@@ -202,16 +195,32 @@ func fetchOpenAPISpec(cmd *cobra.Command) ([]byte, error) {
 		return nil, err
 	}
 
-	_ = os.MkdirAll(filepath.Dir(cachePath), 0o700)
-	if os.WriteFile(cachePath, data, 0o644) == nil { // #nosec G306 -- cached OpenAPI spec is public C1 API documentation, not sensitive
-		pruneCacheDir(filepath.Dir(cachePath))
+	if cachePath != "" {
+		_ = os.MkdirAll(filepath.Dir(cachePath), 0o700)
+		if os.WriteFile(cachePath, data, 0o644) == nil { // #nosec G306 -- cached OpenAPI spec is public C1 API documentation, not sensitive
+			pruneCacheDir(filepath.Dir(cachePath))
+		}
 	}
-
 	return data, nil
 }
 
+// staleOpenAPISpec returns the cached spec, however old, or err if there is none.
+func staleOpenAPISpec(cachePath string, err error) ([]byte, error) {
+	if cachePath != "" {
+		if data, readErr := os.ReadFile(cachePath); readErr == nil { // #nosec G304 -- cachePath is a fixed internal path (openAPICachePath), not caller input
+			return data, nil
+		}
+	}
+	return nil, err
+}
+
+// openAPICachePath returns "" when there is no usable home dir, which disables
+// the cache: a relative path would put it in the working directory.
 func openAPICachePath() string {
-	home, _ := os.UserHomeDir()
+	home, err := os.UserHomeDir()
+	if err != nil || !filepath.IsAbs(home) {
+		return ""
+	}
 	return filepath.Join(home, cacheDirName, "cache", cacheFileName)
 }
 
