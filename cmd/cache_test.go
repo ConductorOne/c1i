@@ -58,7 +58,7 @@ func TestCacheWritePrunesLeftoverFiles(t *testing.T) {
 	if err := os.MkdirAll(filepath.Join(cacheDir, "subdir"), 0o700); err != nil {
 		t.Fatal(err)
 	}
-	for _, name := range []string{"old-openapi.yaml", ".tmp-leftover"} {
+	for _, name := range []string{"openapi.yaml", ".tmp-leftover"} {
 		if err := os.WriteFile(filepath.Join(cacheDir, name), []byte("x"), 0o600); err != nil {
 			t.Fatal(err)
 		}
