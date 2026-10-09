@@ -1329,7 +1329,8 @@ invocation.
 
 ```sh
 # bash
-c1i completion bash > /etc/bash_completion.d/c1i
+mkdir -p ~/.local/share/bash-completion/completions
+c1i completion bash > ~/.local/share/bash-completion/completions/c1i
 
 # zsh
 c1i completion zsh > "${fpath[1]}/_c1i"

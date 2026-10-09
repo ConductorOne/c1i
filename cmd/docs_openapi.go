@@ -160,7 +160,7 @@ Examples:
 }
 
 func init() {
-	docsEndpointsCmd.Flags().String("filter", "", "Filter endpoints by pattern (matches path, summary, operation ID)")
+	docsEndpointsCmd.Flags().String("filter", "", "Filter endpoints by pattern (matches path, summary, operation ID, description)")
 	docsCmd.AddCommand(docsOpenapiCmd)
 	docsCmd.AddCommand(docsEndpointsCmd)
 	docsCmd.AddCommand(docsEndpointCmd)
