@@ -6,6 +6,10 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed
+
+- `golang.org/x/term` moves to 0.47.0 and `golang.org/x/sys` to 0.49.0.
+
 ### Fixed
 
 - **`--debug` and `--max-retries` did nothing on `docs openapi`,
