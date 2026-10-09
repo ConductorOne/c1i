@@ -59,6 +59,28 @@ func runDocsEndpoints(t *testing.T, filter string) (stdout, stderr string) {
 	return outBuf.String(), errBuf.String()
 }
 
+// A miss prints no rows, quotes the filter, and offers docs search for the
+// same query. The spec now carries the MCP and access-review APIs, so the miss
+// must not claim they are missing from it.
+func TestDocsEndpointsMissSuggestsDocsSearch(t *testing.T) {
+	stdout, stderr := runDocsEndpoints(t, "does-not-exist-anywhere")
+
+	if stdout != "" {
+		t.Errorf("expected no rows on a miss, got: %q", stdout)
+	}
+	for _, want := range []string{
+		`"does-not-exist-anywhere"`,
+		`c1i docs search "does-not-exist-anywhere"`,
+	} {
+		if !strings.Contains(stderr, want) {
+			t.Errorf("miss message missing %q; got:\n%s", want, stderr)
+		}
+	}
+	if strings.Contains(stderr, "aren't in the public OpenAPI spec") {
+		t.Errorf("miss message still claims endpoints are missing from the spec:\n%s", stderr)
+	}
+}
+
 // Matching endpoint rows keep diagnostics on a separate stream.
 func TestDocsEndpointsMatchHasNoMissMessage(t *testing.T) {
 	stdout, stderr := runDocsEndpoints(t, "users")
