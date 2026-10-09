@@ -1393,7 +1393,8 @@ Removing the binary leaves these behind:
   (`credentials/`) and the access-token file cache (`tokens/`). See
   [Credential sources](#credential-sources) for each OS's config directory.
 - OS keyring entries: credentials under `c1i/<host>`, and cached access tokens
-  under `com.conductorone.c1i.tokens`.
+  under `com.conductorone.c1i.tokens`. Older releases stored a
+  `<name>.conductor.one` tenant's credentials under `c1i/<name>`.
 
 c1i can't list keyring entries or keep track of the tenants you've logged in to.
 The only way it can remove keyring credentials is `auth logout`, once per
@@ -1406,7 +1407,7 @@ c1i auth logout --url example.conductor.one
 Logout also drops the cached token for the credentials stored now. A token
 cached under credentials you since replaced stays in the keyring. To remove
 keyring entries by hand, where `<host>` is a tenant's host such as
-`example.conductor.one`:
+`example.conductor.one`, or its `<name>` for an entry from an older release:
 
 ```sh
 # macOS: each call deletes one item; repeat until it reports "could not be found"

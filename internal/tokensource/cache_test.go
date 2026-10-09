@@ -470,6 +470,9 @@ func TestStoreSweepsExpiredTokenFiles(t *testing.T) {
 	userJSON := filepath.Join(dir, "backup.json")
 	userTmp := filepath.Join(dir, ".backup.json.tmp-old")
 	subdir := filepath.Join(dir, cacheKey("h", "c", "dir-secret")+".json")
+	upperJSON := filepath.Join(dir, strings.ToUpper(cacheKey("h", "c", "upper-secret"))+".json")
+	loosePerms := filepath.Join(dir, cacheKey("h", "c", "perm-secret")+".json")
+	oversized := filepath.Join(dir, cacheKey("h", "c", "big-secret")+".json")
 	if err := os.Mkdir(subdir, 0o700); err != nil {
 		t.Fatal(err)
 	}
@@ -477,6 +480,22 @@ func TestStoreSweepsExpiredTokenFiles(t *testing.T) {
 	writeTokenFile(t, nearExpiry, time.Now().Add(30*time.Second))
 	writeTokenFile(t, fresh, time.Now().Add(time.Hour))
 	writeTokenFile(t, userJSON, time.Now().Add(-time.Hour))
+	writeTokenFile(t, upperJSON, time.Now().Add(-time.Hour))
+	writeTokenFile(t, loosePerms, time.Now().Add(time.Hour))
+	if err := os.Chmod(loosePerms, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(oversized, []byte(strings.Repeat("x", maxCachedTokenBytes+1)), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	// A link is never followed or removed, even when its target is an expired token.
+	link := filepath.Join(dir, cacheKey("h", "c", "link-secret")+".json")
+	target := filepath.Join(t.TempDir(), "target.json")
+	writeTokenFile(t, target, time.Now().Add(-time.Hour))
+	survivors := []string{keep, fresh, youngTmp, notOurs, subdir, userJSON, userTmp, upperJSON}
+	if err := os.Symlink(target, link); err == nil {
+		survivors = append(survivors, link, target)
+	}
 	for _, p := range []string{corrupt, staleTmp, youngTmp, notOurs, userTmp} {
 		if err := os.WriteFile(p, []byte("not json"), 0o600); err != nil {
 			t.Fatal(err)
@@ -491,12 +510,12 @@ func TestStoreSweepsExpiredTokenFiles(t *testing.T) {
 
 	storeCachedToken(testCacheKey("host", "client"), freshToken(30*time.Minute))
 
-	for _, p := range []string{expired, nearExpiry, corrupt, staleTmp} {
+	for _, p := range []string{expired, nearExpiry, corrupt, staleTmp, loosePerms, oversized} {
 		if _, err := os.Lstat(p); !errors.Is(err, os.ErrNotExist) {
 			t.Errorf("%s survived the sweep: %v", filepath.Base(p), err)
 		}
 	}
-	for _, p := range []string{keep, fresh, youngTmp, notOurs, subdir, userJSON, userTmp} {
+	for _, p := range survivors {
 		if _, err := os.Lstat(p); err != nil {
 			t.Errorf("%s was removed: %v", filepath.Base(p), err)
 		}

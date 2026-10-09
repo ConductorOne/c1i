@@ -249,9 +249,10 @@ func tokenFileName(name string) (isToken, isTemp bool) {
 	return false, dotted && found && isCacheKey(key)
 }
 
+// isCacheKey matches cacheKey's output exactly, lowercase included.
 func isCacheKey(s string) bool {
-	_, err := hex.DecodeString(s)
-	return err == nil && len(s) == sha256.Size*2
+	b, err := hex.DecodeString(s)
+	return err == nil && len(b) == sha256.Size && hex.EncodeToString(b) == s
 }
 
 func invalidateFileCachedToken(key string) {
