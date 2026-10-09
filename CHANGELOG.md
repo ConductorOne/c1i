@@ -8,6 +8,11 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- **API discovery uses the current public API contract**, including MCP server,
+  tool, and toolset operations. `docs openapi`, `docs endpoints`, and
+  `docs endpoint` fetch `https://www.c1.ai/api/openapi.yaml` and use a
+  source-specific cache at `~/.c1i/cache/api-openapi.yaml`.
+
 - **`requests create grant --duration` documented a format the server
   refuses.** Its help and the README suggested `24h` or `7d`, which the API
   rejects with `invalid google.protobuf.Duration value` (exit 2). They now say

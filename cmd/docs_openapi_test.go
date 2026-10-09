@@ -59,32 +59,29 @@ func runDocsEndpoints(t *testing.T, filter string) (stdout, stderr string) {
 	return outBuf.String(), errBuf.String()
 }
 
-// TestDocsEndpointsMissNamesHiddenFamilies pins that a filter miss names the
-// two endpoint families confirmed real but omitted from the public OpenAPI spec
-// (mcp_servers/mcp_tools/mcp_toolsets and access_review/access_reviews), with
-// the first-class command for each rather than only `docs search`.
-func TestDocsEndpointsMissNamesHiddenFamilies(t *testing.T) {
-	_, stderr := runDocsEndpoints(t, "does-not-exist-anywhere")
+// A miss prints no rows, quotes the filter, and offers docs search for the
+// same query. The spec now carries the MCP and access-review APIs, so the miss
+// must not claim they are missing from it.
+func TestDocsEndpointsMissSuggestsDocsSearch(t *testing.T) {
+	stdout, stderr := runDocsEndpoints(t, "does-not-exist-anywhere")
 
-	wantSubstrings := []string{
-		`"does-not-exist-anywhere"`,
-		"mcp_servers",
-		"c1i mcp",
-		"access_review",
-		"c1i access-reviews",
-		`c1i docs search "does-not-exist-anywhere"`,
+	if stdout != "" {
+		t.Errorf("expected no rows on a miss, got: %q", stdout)
 	}
-	for _, want := range wantSubstrings {
+	for _, want := range []string{
+		`"does-not-exist-anywhere"`,
+		`c1i docs search "does-not-exist-anywhere"`,
+	} {
 		if !strings.Contains(stderr, want) {
 			t.Errorf("miss message missing %q; got:\n%s", want, stderr)
 		}
 	}
+	if strings.Contains(stderr, "aren't in the public OpenAPI spec") {
+		t.Errorf("miss message still claims endpoints are missing from the spec:\n%s", stderr)
+	}
 }
 
-// TestDocsEndpointsMatchHasNoMissMessage pins that a filter which actually
-// matches an endpoint in the spec prints only the matching row(s) and never
-// the hidden-family hint, so the new message doesn't leak onto the success
-// path.
+// Matching endpoint rows keep diagnostics on a separate stream.
 func TestDocsEndpointsMatchHasNoMissMessage(t *testing.T) {
 	stdout, stderr := runDocsEndpoints(t, "users")
 

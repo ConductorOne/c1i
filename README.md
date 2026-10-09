@@ -724,8 +724,8 @@ just an identity; a **client credential** on it is what a caller authenticates
 with (a `client_id`/secret pair), and a **binding** lets another subject — a
 function, SSO application, AuthZEN server, or edge — act as the principal.
 
-This API is not in the public OpenAPI spec, so these first-class commands are the
-way to reach it (the raw `c1i api` escape hatch works too).
+These first-class commands are the way to reach it; the raw `c1i api` escape
+hatch works too.
 
 ```sh
 c1i service-principals list [--page-size <n>] [--page-token <token>] [--limit <n>]
@@ -868,6 +868,8 @@ c1i docs openapi
 c1i docs guide
 c1i docs guide register-mcp-server
 ```
+
+`docs openapi`, `docs endpoints`, and `docs endpoint` use the current public API contract at `https://www.c1.ai/api/openapi.yaml`, including MCP server, tool, and toolset operations. The spec is cached for 24 hours at `~/.c1i/cache/api-openapi.yaml`; fetch failures fall back to that cache.
 
 `docs search` is a semantic search with no relevance threshold: every query returns up to 10 nearest matches, so even a nonsense query comes back with plausible-looking hits. A returned hit is not proof a concept exists, and an unexpected hit is not proof the thing you searched for is absent — read the snippet, or fetch the page with `docs page`, to judge. To check whether an API endpoint exists, use `docs endpoints --filter`, which has a real no-match.
 
