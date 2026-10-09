@@ -18,7 +18,8 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   published vulnerabilities in Go 1.27.1's standard library and `x/net`
   0.59.0's `http2`, 9 of them in code c1i calls: GO-2026-6617, -6613, -6612,
   -6611, -6610, -6609, -6608, -6607, -6605, -6604, -6603, -6600 and -6599.
-  `google.golang.org/grpc` moves from 1.83.2 to 1.84.0.
+  `google.golang.org/grpc` moves from 1.83.2 to 1.84.0, and `grpc-gateway`
+  and `timestamp-authority` to their latest releases.
 
 ## [0.9.0] - 2026-10-06
 
