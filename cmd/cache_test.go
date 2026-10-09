@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -105,6 +106,9 @@ func TestCachePruneSkipsSymlinkedCacheDir(t *testing.T) {
 
 // With no home dir the cache path is relative, so it lands in the working dir.
 func TestCachePruneSkipsRelativeCacheDir(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("an empty HOME doesn't unset the home dir on Windows")
+	}
 	t.Setenv("HOME", "")
 	t.Chdir(t.TempDir())
 	cacheDir := filepath.Join(cacheDirName, "cache")
