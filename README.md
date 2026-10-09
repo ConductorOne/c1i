@@ -1398,7 +1398,8 @@ Removing the binary leaves these behind:
 
 c1i can't list keyring entries or keep track of the tenants you've logged in to.
 The only way it can remove keyring credentials is `auth logout`, once per
-tenant, before you remove the binary:
+tenant, before you remove the binary. Unset `C1I_CLIENT_ID` and
+`C1I_CLIENT_SECRET` first, or logout drops the cached token for those instead:
 
 ```sh
 c1i auth logout --url example.conductor.one
