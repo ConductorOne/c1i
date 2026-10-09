@@ -878,6 +878,8 @@ c1i docs guide register-mcp-server
 `docs skill` is kept as an alias of `docs agents` for backward compatibility;
 both print identical output.
 
+`~/.c1i/cache/` belongs to c1i: when `docs openapi`, `docs endpoints` or `docs endpoint` refreshes the spec, any file there that the running version doesn't use (such as one left by an older release) is deleted. Don't keep your own files in it.
+
 ## Output Conventions
 
 - **List commands** (`users list`, `apps list`, etc.) output NDJSON (one JSON object per line).

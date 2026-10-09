@@ -121,6 +121,9 @@ threshold, so it always returns up to 10 plausible hits even for a nonsense
 query: never read a result as proof a concept exists, or an unexpected result
 as proof it is absent. `docs endpoints --filter` DOES have a true no-match.
 
+Don't store files in `~/.c1i/cache/`: a spec refresh deletes any file there
+that the running version doesn't use.
+
 ## Choosing a command
 
 Prefer a first-class command (`users get`, `mcp servers register`, `grants

@@ -13,6 +13,13 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `docs endpoint` fetch `https://www.c1.ai/api/openapi.yaml` and use a
   source-specific cache at `~/.c1i/cache/api-openapi.yaml`.
 
+- **Old cache files stayed on disk forever.** A cache file renamed or dropped
+  by a release, such as the `openapi.yaml` the entry above replaces, was never
+  removed. Refreshing the OpenAPI spec now deletes any file in `~/.c1i/cache/`
+  that the running version doesn't use. It leaves subdirectories alone, and
+  skips the sweep when the cache dir is a symlink or, with no home dir, a path
+  relative to the working directory.
+
 - **`requests create grant --duration` documented a format the server
   refuses.** Its help and the README suggested `24h` or `7d`, which the API
   rejects with `invalid google.protobuf.Duration value` (exit 2). They now say

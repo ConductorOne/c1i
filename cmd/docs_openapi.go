@@ -203,7 +203,9 @@ func fetchOpenAPISpec(cmd *cobra.Command) ([]byte, error) {
 	}
 
 	_ = os.MkdirAll(filepath.Dir(cachePath), 0o700)
-	_ = os.WriteFile(cachePath, data, 0o644) // #nosec G306 -- cached OpenAPI spec is public C1 API documentation, not sensitive
+	if os.WriteFile(cachePath, data, 0o644) == nil { // #nosec G306 -- cached OpenAPI spec is public C1 API documentation, not sensitive
+		pruneCacheDir(filepath.Dir(cachePath))
+	}
 
 	return data, nil
 }
