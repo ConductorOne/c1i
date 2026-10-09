@@ -9,7 +9,12 @@ import (
 var servicePrincipalsGetCmd = &cobra.Command{
 	Use:   "get <sp-id>",
 	Short: "Get a single service principal by ID (pretty JSON)",
-	Args:  cobra.ExactArgs(1),
+	Long: `Get a single service principal by ID (pretty JSON).
+
+A deleted principal is still returned, with exit 0 and no field marking it
+deleted: its embedded user.status stays "ENABLED". "service-principals list"
+omits it, and "users get <sp-id>" shows "status": "DELETED" and "deletedAt".`,
+	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		baseURL, err := GetBaseURL()
 		if err != nil {

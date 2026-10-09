@@ -111,7 +111,11 @@ var spCredentialsListCmd = &cobra.Command{
 var spCredentialsGetCmd = &cobra.Command{
 	Use:   "get <credential-id>",
 	Short: "Get a single client credential (pretty JSON)",
-	Args:  cobra.ExactArgs(1),
+	Long: `Get a single client credential (pretty JSON).
+
+A revoked credential is still returned, unchanged and with exit 0: no field
+marks it revoked. "service-principals credentials list" omits it.`,
+	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		if err := requireNonEmpty(cmd, "service-principal-id"); err != nil {
 			return err

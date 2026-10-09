@@ -755,6 +755,11 @@ c1i service-principals credentials update <credential-id> --service-principal-id
 c1i service-principals credentials revoke <credential-id> --service-principal-id <sp-id>
 ```
 
+Delete and revoke are soft: `get` on a deleted principal and `credentials get`
+on a revoked credential still return the record, exit 0, with no field marking
+it (the principal's embedded `user.status` stays `ENABLED`). Only the lists
+omit them; `users get <sp-id>` shows `"status": "DELETED"` and `deletedAt`.
+
 `--expires` takes a positive Go duration (e.g. `720h`). The server accepts the
 range `(0s, 4320h]` — up to 180 days — rejecting more with `value must be inside
 range (0s, 4320h0m0s]`. Fractional seconds are preserved.
