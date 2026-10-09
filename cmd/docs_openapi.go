@@ -219,12 +219,13 @@ func staleOpenAPISpec(cmd *cobra.Command, cachePath string, err error) ([]byte, 
 	if statErr != nil || readErr != nil {
 		return nil, err
 	}
-	_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "warning: using cached OpenAPI spec from %s ago (%v)\n",
+	_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "Warning: using cached OpenAPI spec from %s ago (%v)\n",
 		formatAge(time.Since(info.ModTime())), err)
 	return data, nil
 }
 
 func formatAge(d time.Duration) string {
+	d = max(d, 0) // a future mtime (clock skew) reads as 0m, not negative
 	switch {
 	case d >= 24*time.Hour:
 		return fmt.Sprintf("%dd", int(d/(24*time.Hour)))

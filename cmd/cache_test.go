@@ -290,7 +290,7 @@ func TestOpenAPIStaleCacheWarns(t *testing.T) {
 			if got != stubOpenAPISpec {
 				t.Errorf("printed %q, want the cached spec", got)
 			}
-			if want := "warning: using cached OpenAPI spec from 2d ago ("; !strings.HasPrefix(stderr, want) || strings.Count(stderr, "\n") != 1 {
+			if want := "Warning: using cached OpenAPI spec from 2d ago ("; !strings.HasPrefix(stderr, want) || strings.Count(stderr, "\n") != 1 {
 				t.Errorf("stderr = %q, want one line starting %q", stderr, want)
 			}
 		})
@@ -305,5 +305,36 @@ func TestOpenAPIFreshCacheIsSilent(t *testing.T) {
 	})
 	if err != nil || stderr != "" {
 		t.Errorf("err = %v, stderr = %q; want neither", err, stderr)
+	}
+}
+
+// The only caller never passes a relative dir today; this pins the guard so a
+// future caller can't turn the prune loose on the working directory.
+func TestPruneCacheDirSkipsRelativeDir(t *testing.T) {
+	t.Chdir(t.TempDir())
+	dir := filepath.Join(cacheDirName, "cache")
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	stray := filepath.Join(dir, "not-ours.txt")
+	if err := os.WriteFile(stray, []byte("keep"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	pruneCacheDir(dir)
+	if _, err := os.Stat(stray); err != nil {
+		t.Errorf("prune of a relative dir removed %s: %v", stray, err)
+	}
+}
+
+func TestFormatAgeClampsFutureMtime(t *testing.T) {
+	for d, want := range map[time.Duration]string{
+		-5 * time.Minute: "0m",
+		90 * time.Second: "1m",
+		3 * time.Hour:    "3h",
+		50 * time.Hour:   "2d",
+	} {
+		if got := formatAge(d); got != want {
+			t.Errorf("formatAge(%v) = %q, want %q", d, got, want)
+		}
 	}
 }
