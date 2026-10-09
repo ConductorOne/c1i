@@ -1394,11 +1394,32 @@ Removing the binary leaves these behind:
   under `com.conductorone.c1i.tokens`.
 
 c1i can't list keyring entries or keep track of the tenants you've logged in to.
-The only way it can remove keyring credentials is `c1i auth logout --url <tenant>`.
-Run it once per tenant, before you remove the binary. Logout also drops the
-cached token for the credentials stored now. A token cached under credentials
-you since replaced stays in the keyring until you delete it with your OS's
-keyring tool.
+The only way it can remove keyring credentials is `auth logout`, once per
+tenant, before you remove the binary:
+
+```sh
+c1i auth logout --url example.conductor.one
+```
+
+Logout also drops the cached token for the credentials stored now. A token
+cached under credentials you since replaced stays in the keyring. To remove
+keyring entries by hand, where `<host>` is a tenant's host such as
+`example.conductor.one`:
+
+```sh
+# macOS: each call deletes one item; repeat until it reports "could not be found"
+security delete-generic-password -s 'c1i/<host>'
+security delete-generic-password -s com.conductorone.c1i.tokens
+
+# Linux (Secret Service): each call deletes every matching item
+secret-tool clear service 'c1i/<host>'
+secret-tool clear service com.conductorone.c1i.tokens
+```
+
+On Windows, open Credential Manager → Windows Credentials and remove
+`c1i/<host>:client_id`, `c1i/<host>:client_secret`, and every
+`com.conductorone.c1i.tokens:` entry. To find which hosts you have, search for
+`c1i` in Keychain Access (macOS), Seahorse (Linux) or Credential Manager.
 
 `~/.sigstore/root/`, which `upgrade` uses to verify releases, is shared with
 other Sigstore tools. It isn't c1i's to delete.

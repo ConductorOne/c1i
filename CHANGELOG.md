@@ -20,7 +20,8 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   names them, skips the sweep when that dir fails the cache's trust checks, and
   spares a temp file under a minute old. Cached tokens
   in the OS keyring can't be listed, so they aren't swept. The README's new
-  "Uninstalling" section lists everything c1i leaves on disk and in the keyring.
+  "Uninstalling" section lists everything c1i leaves on disk and in the keyring,
+  and gives the commands that remove the keyring entries on each OS.
 - **`requests create grant --duration` documented a format the server
   refuses.** Its help and the README suggested `24h` or `7d`, which the API
   rejects with `invalid google.protobuf.Duration value` (exit 2). They now say
