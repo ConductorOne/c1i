@@ -23,6 +23,12 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   written**, when that process renamed it over an expired file the sweep had
   read. The sweep now removes a file only if it is still the one it read.
 
+- **A relative `HOME` or `%AppData%` put credentials and tokens under the
+  working directory.** When the config directory resolves to a relative path,
+  the credential file fallback now fails with an error naming it (a browser
+  `auth login` then deletes the credential it just created), and the token
+  file cache is skipped.
+
 ## [0.9.1] - 2026-10-09
 
 ### Security

@@ -428,3 +428,32 @@ func TestStoredClientIDIgnoresEnv(t *testing.T) {
 		t.Errorf("StoredClientID = %q, want the stored %q despite env credentials", id, testID)
 	}
 }
+
+// useRelativeConfigDir makes os.UserConfigDir relative and returns the working
+// directory it would resolve under.
+func useRelativeConfigDir(t *testing.T) string {
+	t.Helper()
+	t.Setenv("HOME", ".")
+	t.Setenv("XDG_CONFIG_HOME", "")
+	t.Setenv("AppData", ".")
+	wd := t.TempDir()
+	t.Chdir(wd)
+	return wd
+}
+
+// A relative config dir must not put credentials under the working directory.
+func TestFileFallbackRefusesRelativeConfigDir(t *testing.T) {
+	keyring.MockInitWithError(keyring.ErrUnsupportedPlatform)
+	clearEnv(t)
+	wd := useRelativeConfigDir(t)
+
+	if _, err := Store(testService, testID, testSecret); err == nil || !strings.Contains(err.Error(), "config dir") {
+		t.Errorf("Store err = %v, want a config dir error", err)
+	}
+	if _, _, _, err := Load(testService); err == nil || !strings.Contains(err.Error(), "config dir") {
+		t.Errorf("Load err = %v, want a config dir error", err)
+	}
+	if entries, _ := os.ReadDir(wd); len(entries) != 0 {
+		t.Errorf("wrote %v under the working directory", entries)
+	}
+}

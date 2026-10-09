@@ -4,7 +4,6 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
-	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -68,9 +67,9 @@ func cacheKey(tokenHost, clientID, clientSecret string) string {
 }
 
 func cachePath(key string) (string, error) {
-	dir, err := os.UserConfigDir()
+	dir, err := keychain.ConfigDir()
 	if err != nil {
-		return "", fmt.Errorf("locating config dir: %w", err)
+		return "", err
 	}
 	return filepath.Join(dir, "c1i", "tokens", key+".json"), nil
 }

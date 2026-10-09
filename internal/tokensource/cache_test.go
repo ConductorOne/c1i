@@ -659,3 +659,24 @@ func TestStoreSweepSparesTokenReplacedMidSweep(t *testing.T) {
 		t.Error("the sweep deleted a fresh token renamed over the expired one it read")
 	}
 }
+
+// A relative config dir skips the file cache instead of writing under the
+// working directory.
+func TestRelativeConfigDirSkipsFileCache(t *testing.T) {
+	useTempConfig(t)
+	t.Setenv("HOME", ".")
+	t.Setenv("XDG_CONFIG_HOME", "")
+	t.Setenv("AppData", ".")
+	wd := t.TempDir()
+	t.Chdir(wd)
+	key := testCacheKey("host", "client")
+
+	storeCachedToken(key, freshToken(time.Hour))
+
+	if loadCachedToken(key) != nil {
+		t.Error("loaded a token from a relative config dir")
+	}
+	if entries, _ := os.ReadDir(wd); len(entries) != 0 {
+		t.Errorf("wrote %v under the working directory", entries)
+	}
+}

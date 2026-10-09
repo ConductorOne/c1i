@@ -1307,7 +1307,10 @@ never written to disk — a new one is minted per invocation.
 
 `c1i auth login` writes to the OS keyring when it can and falls back to the
 file backend transparently. `c1i auth status` tells you which source served
-the active credentials.
+the active credentials. If the config directory resolves to a relative path,
+from a relative `HOME` or `%AppData%`, the file fallback fails with an error
+and the token cache below skips its file, rather than writing under the working
+directory.
 
 ### Token cache
 
