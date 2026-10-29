@@ -115,7 +115,7 @@ func TestAppsManagedStatePromoteSendsOwners(t *testing.T) {
 		t.Fatalf("managedStatePromoteBody: %v", err)
 	}
 	want := map[string]any{
-		"userIds": []string{"user-1"},
+		"userIds":                 []string{"user-1"},
 		"appEntitlementOwnerRefs": []map[string]string{{"appId": "source", "id": "entitlement"}},
 	}
 	if !reflect.DeepEqual(body, want) {
