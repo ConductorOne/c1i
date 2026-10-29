@@ -74,8 +74,24 @@ c1i apps owners <app-id> [--page-size N] [--page-token TOKEN] [--limit N]
 c1i apps add-owner <user-id> --app-id <id>
 c1i apps remove-owner <user-id> --app-id <id>
 c1i apps set-owners <app-id> --user-id <id> [--user-id <id> ...] [--wait] [--wait-timeout 4m]
+c1i apps managed-state list --app-id <id> --resource-type-id <id> [--page-size N] [--page-token TOKEN] [--limit N]
+c1i apps managed-state get <resource-id> --app-id <id> --resource-type-id <id>
+c1i apps managed-state promote <resource-id> --app-id <id> --resource-type-id <id> [--user-id <id> ...] [--entitlement-owner <app-id>:<entitlement-id> ...]
 c1i apps delete <app-id>
 ```
+
+`apps managed-state` operates on applications discovered by a connector. The
+connector app and resource type are required scope flags; `get` and `promote`
+take the discovered resource ID positionally. `list` auto-paginates and emits
+the API's managed-state view as NDJSON; `get` and `promote` emit a single
+pretty-printed view with the API's `appManagementState` envelope unwrapped.
+
+`promote` changes an unmanaged discovered app into a managed app. With neither
+owner option, C1 inherits the source connector app's direct user and entitlement
+owners. Repeat `--user-id` to set user owners, and/or repeat
+`--entitlement-owner APP_ID:ENTITLEMENT_ID` to set entitlement owners explicitly.
+This calls the public promote endpoint and honors `--dry-run`; it does not
+discover linked entitlement candidates.
 
 `apps create` needs only `--display-name`; it makes a plain, unmanaged
 container app — the zero state for "make an app, then register MCP servers

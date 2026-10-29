@@ -368,6 +368,14 @@ resource with `--resource-id` likewise means you drop
   one process (one token, one TLS handshake). The API has no batch approve, so
   each id is still its own request, but don't loop the CLI per id — pass them
   all at once (pipe `mcp tools search --state pending --fields id | jq -r .id`).
+- For connector-discovered applications, use `apps managed-state list
+  --app-id <connector-app-id> --resource-type-id <type-id>`,
+  `apps managed-state get <resource-id> ...`, and `apps managed-state promote
+  <resource-id> ...`; the parent scope IDs are flags and the discovered
+  resource ID is positional. Promotion inherits connector-app owners unless
+  explicit `--user-id` / `--entitlement-owner APP_ID:ENTITLEMENT_ID` values
+  are supplied. The list auto-paginates and emits NDJSON; get/promote emit a
+  single JSON view.
 - Owner and grant provisioning are asynchronous. A read immediately after a
   write can look like a no-op. Verify app owners with `c1i apps owners
   <app-id>`, not `apps get`'s `appOwners` field; an empty `appOwners` is not
