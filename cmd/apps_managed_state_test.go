@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -120,6 +121,14 @@ func TestAppsManagedStatePromoteSendsOwners(t *testing.T) {
 	if !reflect.DeepEqual(body, want) {
 		t.Fatalf("body = %#v, want %#v", body, want)
 	}
+	wireBytes, err := json.Marshal(want)
+	if err != nil {
+		t.Fatalf("marshal expected body: %v", err)
+	}
+	var wantWireBody map[string]any
+	if err := json.Unmarshal(wireBytes, &wantWireBody); err != nil {
+		t.Fatalf("normalize expected body: %v", err)
+	}
 
 	var requests int
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -128,8 +137,8 @@ func TestAppsManagedStatePromoteSendsOwners(t *testing.T) {
 			t.Errorf("request = %s %s, unexpected", r.Method, r.URL.Path)
 		}
 		gotBody := decodeJSONBody(t, r)
-		if !reflect.DeepEqual(gotBody, want) {
-			t.Errorf("request body = %#v, want %#v", gotBody, want)
+		if !reflect.DeepEqual(gotBody, wantWireBody) {
+			t.Errorf("request body = %#v, want %#v", gotBody, wantWireBody)
 		}
 		_, _ = fmt.Fprint(w, `{"appManagementState":{"appManagementStateBinding":{"resourceId":"resource"},"resourcePath":"/resource"}}`)
 	}))
@@ -188,5 +197,37 @@ func TestAppsManagedStatePromoteDryRunPreviewsWithoutSending(t *testing.T) {
 	want := "[dry-run] POST /api/v1/apps/connector/resource_types/type/managed_state_bindings/resource/promote"
 	if !bytes.Contains(out.Bytes(), []byte(want)) || !bytes.Contains(out.Bytes(), []byte("{}")) {
 		t.Fatalf("dry-run output = %q, want path and empty inheritance body", out.String())
+	}
+}
+
+func TestManagedStateCommandsRejectEmptyResourceIDBeforeRequest(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		cmd  *cobra.Command
+	}{
+		{name: "get", cmd: appsManagedStateGetCmd},
+		{name: "promote", cmd: appsManagedStatePromoteCmd},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var requests int
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				requests++
+			}))
+			defer srv.Close()
+			withManagedStateTestClient(t, srv)
+
+			resetCmdFlags(t, tc.cmd)
+			_ = tc.cmd.Flags().Set("app-id", "connector")
+			_ = tc.cmd.Flags().Set("resource-type-id", "type")
+			tc.cmd.SetContext(context.Background())
+			err := tc.cmd.RunE(tc.cmd, []string{""})
+			var pathErr *client.PathError
+			if !errors.As(err, &pathErr) {
+				t.Fatalf("RunE error = %v, want shared client PathError", err)
+			}
+			if requests != 0 {
+				t.Fatalf("requests = %d, want no request for an empty resource id", requests)
+			}
+		})
 	}
 }
