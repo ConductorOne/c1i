@@ -17,7 +17,7 @@ jobs:
       - name: Run linters
         uses: golangci/golangci-lint-action@v9
         with:
-          version: v2.14.0
+          version: v2.15.0
           args: --timeout=3m
       # goreleaser runs `go mod tidy` before building. If that changes anything,
       # the release build's tree is dirty and Go stamps the version "+dirty".
@@ -33,7 +33,7 @@ jobs:
         env:
           GOTOOLCHAIN: auto
         run: |
-          go install golang.org/x/vuln/cmd/govulncheck@v1.8.0
+          go install golang.org/x/vuln/cmd/govulncheck@v1.9.0
           for goos in linux darwin windows; do
             echo "== govulncheck GOOS=$goos"
             GOOS=$goos govulncheck ./...
@@ -45,7 +45,7 @@ jobs:
         env:
           GOTOOLCHAIN: auto
         run: |
-          go install github.com/securego/gosec/v2/cmd/gosec@v2.29.0
+          go install github.com/securego/gosec/v2/cmd/gosec@v2.30.0
           gosec -quiet -nosec-require-rules -nosec-require-justification ./...
       # A secret can be removed from HEAD and still sit exposed in a public
       # repo's history, so this needs full history, not the default shallow
