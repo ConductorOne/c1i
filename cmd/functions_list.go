@@ -77,7 +77,12 @@ var functionsListCmd = &cobra.Command{
 		clientFilter := publishedOnly || draftOnly
 
 		enc := newEmitter(cmd)
+		guard := newPaginationCursorGuard()
 		for !limitReached(enc.Written(), limit) {
+			if guard.tokenAlreadyUsed(pageToken) {
+				return warnStuckCursor(cmd, "GET /api/v1/functions")
+			}
+
 			pageSize := requestedPageSize
 			if !clientFilter && !enc.Filtered() {
 				pageSize = effectivePageSize(requestedPageSize, limit, enc.Written())
@@ -102,6 +107,15 @@ var functionsListCmd = &cobra.Command{
 				return fmt.Errorf("failed to parse response: %w", err)
 			}
 
+			ids := make([]string, len(resp.List))
+			for i, f := range resp.List {
+				ids[i] = f.ID
+			}
+			if guard.pageIsDuplicate(ids) {
+				return warnStuckCursor(cmd, "GET /api/v1/functions")
+			}
+			guard.markIDs(ids)
+
 			for _, f := range resp.List {
 				published := functionIsPublished(f)
 				if publishedOnly && !published {
@@ -119,6 +133,7 @@ var functionsListCmd = &cobra.Command{
 			if resp.NextPageToken == "" || manualPaging {
 				break
 			}
+			guard.markTokenUsed(pageToken)
 			pageToken = resp.NextPageToken
 		}
 

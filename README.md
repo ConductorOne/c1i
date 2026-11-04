@@ -307,6 +307,15 @@ c1i functions usage <function-id> [--page-size N] [--page-token TOKEN] [--limit 
 
 `functions source` auto-resolves the function's published commit (falling back to its head/latest draft) and base64-decodes the source files. Without `--out-dir`, each file is printed to stdout with a `// ===== <name> =====` delimiter; with `--out-dir`, files are written to disk. Fetched source is developer-authored code that commonly inlines credentials, so files are written `0600` and the directory is created — or, if it already exists, tightened, never widened — to at most `0700` (owner-only; group access to the directory would buy nothing since the files inside are already unreadable to group/other, and a filename alone can be informative). Any setuid/setgid/sticky bit on the directory is stripped outright, since none of them mean anything once there is no group or other access left. A tightened pre-existing directory prints a warning to stderr naming its old mode. `functions usage` scans every automation and emits one row per step that calls the given function — useful before deleting a draft.
 
+`functions list`, `functions commits`, and `functions usage` (which reads
+`/api/v1/automations`) guard against a known C1 API server defect on their
+underlying GET routes: `page_size`/`page_token` are not bound server-side, so
+a server stuck on this can keep resealing a fresh-looking `nextPageToken`
+over the same page forever. If that happens, the command stops instead of
+looping, prints each row it already fetched with no duplicates, warns on
+stderr that results are INCOMPLETE and names the route, and exits `6` ("C1
+failed") rather than 0.
+
 ### Automations
 
 ```sh
@@ -316,6 +325,10 @@ c1i automations executions list [--state done|error|pending|...] [--template-id 
 ```
 
 Each `automations list` row includes `function_ids` (every distinct function the automation invokes), so `--calls-function` can answer "which automations call function X?". `executions list --state` accepts the short forms (`done`, `error`, `pending`, ...) or the full `AUTOMATION_EXECUTION_STATE_*` enum; state and template filtering are applied client-side, so pair a narrow filter with `--limit` to bound the work.
+
+`automations list` and `automations executions list` carry the same
+known-server-defect guard described under Functions above, for
+`/api/v1/automations` and `/api/v1/automation_executions` respectively.
 
 ### Policies
 
@@ -843,7 +856,7 @@ file, or `-` for stdin) — the two are mutually exclusive. GET and DELETE refus
 a body by default (a body on either is more likely a mistake than intent); pass
 `--allow-delete-body` to lift that for DELETE specifically, for the handful of
 C1 endpoints that require one. `--query key=value` and
-`--header key=value` are both repeatable. When `--paginate` is used, each page's first array-valued field is unwrapped and each item is emitted as a single line of NDJSON — the same format used by list commands. This covers both the canonical `list` key and typed keys like `automationExecutions`; use `--list-key <field>` to force a specific field. If the server returns the same `nextPageToken` twice in a row, `c1i` aborts with an error rather than looping forever. Without `--paginate`, the full JSON response is pretty-printed — and if that response carries a non-empty `nextPageToken`, `c1i` warns on stderr that the result is partial and names `--paginate`, since a truncated page is otherwise indistinguishable from a complete one at exit 0. stdout is unchanged either way.
+`--header key=value` are both repeatable. When `--paginate` is used, each page's first array-valued field is unwrapped and each item is emitted as a single line of NDJSON — the same format used by list commands. This covers both the canonical `list` key and typed keys like `automationExecutions`; use `--list-key <field>` to force a specific field. A server whose pagination cursor never makes real progress — the exact same `nextPageToken` sent twice, or a non-empty page whose every item was already emitted under an earlier (possibly different-looking) token — is a known C1 API server defect on some routes: `c1i` stops rather than looping forever, prints each row it already fetched with no duplicates, warns on stderr that results are INCOMPLETE and names the route, and exits `6` ("C1 failed"). Without `--paginate`, the full JSON response is pretty-printed — and if that response carries a non-empty `nextPageToken`, `c1i` warns on stderr that the result is partial and names `--paginate`, since a truncated page is otherwise indistinguishable from a complete one at exit 0. stdout is unchanged either way.
 
 ### API Discovery & Documentation
 
@@ -1010,7 +1023,7 @@ branch on without parsing text:
 | `3` | not authenticated, or API returned `401`/`403` |
 | `4` | API returned `404` (not found) |
 | `5` | API returned `429` (rate limited — back off and retry) |
-| `6` | C1 failed: the API returned `5xx`, a redirect chain never settled, or it answered `200` with a body that isn't JSON |
+| `6` | C1 failed: the API returned `5xx`, a redirect chain never settled, it answered `200` with a body that isn't JSON, or a list route's pagination cursor never advanced |
 | `7` | `mcp gateway call` completed, but the tool itself reported an error (`isError: true` in its result) |
 | `8` | a system beyond C1, or the MCP protocol layer, failed — an upstream connector was unreachable or errored, the gateway itself was unreachable (DNS failure, refused connection), or the gateway returned a protocol-level JSON-RPC error |
 

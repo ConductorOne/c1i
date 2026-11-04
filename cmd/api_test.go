@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -809,5 +810,156 @@ func TestAPIPaginateDrainsCursorWithoutWarning(t *testing.T) {
 		if !strings.Contains(out.String(), want) {
 			t.Errorf("stdout missing %s; got %q", want, out.String())
 		}
+	}
+}
+
+// TestAPIPaginateSameTokenTwiceReturnsExitServer is the simplest stuck-cursor
+// shape: the server sends the exact same nextPageToken forever. `api
+// --paginate` must stop after the repeat is detected (not loop), emit the
+// one row exactly once, warn on stderr naming the route, and exit 6 ("C1
+// failed") -- this is a known C1 API server defect, not a usage mistake.
+func TestAPIPaginateSameTokenTwiceReturnsExitServer(t *testing.T) {
+	var requestCount int
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requestCount++
+		if requestCount > 4 {
+			t.Fatalf("server received a 5th request; --paginate did not terminate")
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = fmt.Fprint(w, `{"list":[{"id":"a"}],"nextPageToken":"stuck-tok"}`)
+	}))
+	defer srv.Close()
+
+	resetAPICmdFlags(t)
+	stubNewAPIClient(t, srv)
+	t.Setenv("C1I_URL", srv.URL)
+
+	var out, errOut bytes.Buffer
+	apiCmd.SetOut(&out)
+	apiCmd.SetErr(&errOut)
+	rootCmd.SetArgs([]string{"api", "--path", "/api/v1/automations", "--paginate"})
+
+	err := rootCmd.ExecuteContext(context.Background())
+	if err == nil {
+		t.Fatalf("ExecuteContext: want an error (stuck cursor -> exit 6), got nil; stdout=%q stderr=%q", out.String(), errOut.String())
+	}
+	if got, want := exitCode(err), exitServer; got != want {
+		t.Errorf("exitCode(err) = %d, want %d (exitServer); err=%v", got, want, err)
+	}
+	if requestCount != 2 {
+		t.Fatalf("server received %d requests, want exactly 2 (one to discover the stuck page, one to confirm it repeats)", requestCount)
+	}
+	rows := decodeNDJSONRows(t, out.String())
+	if len(rows) != 1 || rows[0]["id"] != "a" {
+		t.Fatalf("got rows %v, want exactly one occurrence of id=a", rows)
+	}
+	if !strings.Contains(errOut.String(), "INCOMPLETE") || !strings.Contains(errOut.String(), "GET /api/v1/automations") {
+		t.Errorf("stderr = %q, want it to say results are INCOMPLETE and name GET /api/v1/automations", errOut.String())
+	}
+}
+
+// TestAPIPaginateChangingTokenSameRowsReturnsExitServer reproduces the live
+// defect exactly: the server reseals a different-looking nextPageToken on
+// every call (so a bare seen-token check never fires) while returning the
+// exact same row. The guard must key off the duplicate item id instead.
+func TestAPIPaginateChangingTokenSameRowsReturnsExitServer(t *testing.T) {
+	var requestCount int
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requestCount++
+		if requestCount > 4 {
+			t.Fatalf("server received a 5th request; --paginate did not terminate")
+		}
+		tok := r.URL.Query().Get("page_token")
+		w.Header().Set("Content-Type", "application/json")
+		switch tok {
+		case "":
+			_, _ = fmt.Fprint(w, `{"list":[{"id":"a"}],"nextPageToken":"tok-v1"}`)
+		case "tok-v1":
+			_, _ = fmt.Fprint(w, `{"list":[{"id":"a"}],"nextPageToken":"tok-v2"}`)
+		default:
+			t.Errorf("unexpected page_token: %q", tok)
+			w.WriteHeader(http.StatusInternalServerError)
+		}
+	}))
+	defer srv.Close()
+
+	resetAPICmdFlags(t)
+	stubNewAPIClient(t, srv)
+	t.Setenv("C1I_URL", srv.URL)
+
+	var out, errOut bytes.Buffer
+	apiCmd.SetOut(&out)
+	apiCmd.SetErr(&errOut)
+	rootCmd.SetArgs([]string{"api", "--path", "/api/v1/automations", "--paginate"})
+
+	err := rootCmd.ExecuteContext(context.Background())
+	if err == nil {
+		t.Fatalf("ExecuteContext: want an error (stuck cursor -> exit 6), got nil; stdout=%q stderr=%q", out.String(), errOut.String())
+	}
+	if got, want := exitCode(err), exitServer; got != want {
+		t.Errorf("exitCode(err) = %d, want %d (exitServer); err=%v", got, want, err)
+	}
+	if requestCount != 2 {
+		t.Fatalf("server received %d requests, want exactly 2", requestCount)
+	}
+	rows := decodeNDJSONRows(t, out.String())
+	if len(rows) != 1 || rows[0]["id"] != "a" {
+		t.Fatalf("got rows %v, want exactly one occurrence of id=a (no duplicate emission)", rows)
+	}
+	if !strings.Contains(errOut.String(), "INCOMPLETE") || !strings.Contains(errOut.String(), "GET /api/v1/automations") {
+		t.Errorf("stderr = %q, want it to say results are INCOMPLETE and name GET /api/v1/automations", errOut.String())
+	}
+}
+
+// TestAPIPaginateStuckCursorWithoutIDFallsBackToCanonicalJSON covers an
+// endpoint whose items carry no "id" field at all -- `api --path` can target
+// any endpoint, so the guard cannot assume one. The duplicate check must
+// fall back to the item's own canonical JSON instead of treating every
+// idless item as distinct (which would never detect a stuck cursor at all).
+func TestAPIPaginateStuckCursorWithoutIDFallsBackToCanonicalJSON(t *testing.T) {
+	var requestCount int
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requestCount++
+		if requestCount > 4 {
+			t.Fatalf("server received a 5th request; --paginate did not terminate")
+		}
+		tok := r.URL.Query().Get("page_token")
+		w.Header().Set("Content-Type", "application/json")
+		switch tok {
+		case "":
+			_, _ = fmt.Fprint(w, `{"list":[{"name":"n1","value":1}],"nextPageToken":"tok-v1"}`)
+		case "tok-v1":
+			// Same logical item, same key order even -- a changing token is
+			// the only thing that looks different.
+			_, _ = fmt.Fprint(w, `{"list":[{"name":"n1","value":1}],"nextPageToken":"tok-v2"}`)
+		default:
+			t.Errorf("unexpected page_token: %q", tok)
+			w.WriteHeader(http.StatusInternalServerError)
+		}
+	}))
+	defer srv.Close()
+
+	resetAPICmdFlags(t)
+	stubNewAPIClient(t, srv)
+	t.Setenv("C1I_URL", srv.URL)
+
+	var out, errOut bytes.Buffer
+	apiCmd.SetOut(&out)
+	apiCmd.SetErr(&errOut)
+	rootCmd.SetArgs([]string{"api", "--path", "/api/v1/decoys", "--paginate"})
+
+	err := rootCmd.ExecuteContext(context.Background())
+	if err == nil {
+		t.Fatalf("ExecuteContext: want an error (stuck cursor -> exit 6), got nil; stdout=%q stderr=%q", out.String(), errOut.String())
+	}
+	if got, want := exitCode(err), exitServer; got != want {
+		t.Errorf("exitCode(err) = %d, want %d (exitServer); err=%v", got, want, err)
+	}
+	if requestCount != 2 {
+		t.Fatalf("server received %d requests, want exactly 2", requestCount)
+	}
+	rows := decodeNDJSONRows(t, out.String())
+	if len(rows) != 1 || rows[0]["name"] != "n1" {
+		t.Fatalf("got rows %v, want exactly one occurrence of name=n1 (no duplicate emission)", rows)
 	}
 }

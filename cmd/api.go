@@ -167,10 +167,14 @@ an intended non-GET REST write.`,
 		}
 
 		enc := newEmitter(cmd)
+		guard := newPaginationCursorGuard()
 		pageToken := ""
-		prevToken := ""
+		route := fmt.Sprintf("%s %s", method, path)
 
 		for !limitReached(enc.Written(), limit) {
+			if guard.tokenAlreadyUsed(pageToken) {
+				return warnStuckCursor(cmd, route)
+			}
 			reqPath := path
 			var bodyBytes []byte
 			switch method {
@@ -250,6 +254,15 @@ an intended non-GET REST write.`,
 				return fmt.Errorf("failed to parse response: %w", err)
 			}
 
+			ids := make([]string, len(items))
+			for i, item := range items {
+				ids[i] = itemIdentity(item)
+			}
+			if guard.pageIsDuplicate(ids) {
+				return warnStuckCursor(cmd, route)
+			}
+			guard.markIDs(ids)
+
 			for _, item := range items {
 				// Encode the raw item, not a decoded any: decoding to any turns
 				// JSON numbers into float64 and corrupts large integer IDs. The
@@ -266,12 +279,7 @@ an intended non-GET REST write.`,
 			if nextToken == "" {
 				break
 			}
-			// Guard against servers that return the same token forever.
-			// Without this, c1i would loop indefinitely emitting no progress.
-			if nextToken == prevToken {
-				return fmt.Errorf("API returned the same nextPageToken twice in a row for %s; the endpoint may not support pagination via the cursor c1i is sending. Drop --paginate and call the endpoint directly, or report this with the path", path)
-			}
-			prevToken = nextToken
+			guard.markTokenUsed(pageToken)
 			pageToken = nextToken
 		}
 
@@ -413,4 +421,32 @@ func extractListAndToken(data []byte, listKey string) ([]json.RawMessage, string
 	}
 
 	return nil, nextPageToken, nil
+}
+
+// itemIdentity returns a stable identity for a decoded list item, used by
+// the `api --paginate` stuck-cursor guard to detect a page whose rows never
+// change even though the server keeps resealing a fresh nextPageToken. Most
+// C1 items have a string "id" field; when one is present and non-empty it is
+// used verbatim, matching the identity the first-class list commands' own
+// guards key off. `api` can hit literally any endpoint, so an item without a
+// usable "id" falls back to its own canonical JSON: an unmarshal/remarshal
+// round trip through a generic value deterministically sorts object keys, so
+// two byte-for-byte-different encodings of the same logical item still
+// compare equal.
+func itemIdentity(item json.RawMessage) string {
+	var withID struct {
+		ID string `json:"id"`
+	}
+	if err := json.Unmarshal(item, &withID); err == nil && withID.ID != "" {
+		return withID.ID
+	}
+	var decoded any
+	if err := json.Unmarshal(item, &decoded); err != nil {
+		return string(item)
+	}
+	canon, err := json.Marshal(decoded)
+	if err != nil {
+		return string(item)
+	}
+	return string(canon)
 }

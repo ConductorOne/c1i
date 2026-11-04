@@ -31,7 +31,13 @@ var functionsCommitsCmd = &cobra.Command{
 		limit := getIntFlag(cmd, "limit")
 
 		enc := newEmitter(cmd)
+		guard := newPaginationCursorGuard()
+		route := fmt.Sprintf("GET /api/v1/functions/%s/commits", functionID)
 		for !limitReached(enc.Written(), limit) {
+			if guard.tokenAlreadyUsed(pageToken) {
+				return warnStuckCursor(cmd, route)
+			}
+
 			pageSize := requestedPageSize
 			if !enc.Filtered() {
 				pageSize = effectivePageSize(requestedPageSize, limit, enc.Written())
@@ -62,6 +68,15 @@ var functionsCommitsCmd = &cobra.Command{
 				return fmt.Errorf("failed to parse response: %w", err)
 			}
 
+			ids := make([]string, len(resp.List))
+			for i, item := range resp.List {
+				ids[i] = item.ID
+			}
+			if guard.pageIsDuplicate(ids) {
+				return warnStuckCursor(cmd, route)
+			}
+			guard.markIDs(ids)
+
 			for _, c := range resp.List {
 				_ = enc.Encode(map[string]string{
 					"id":          c.ID,
@@ -78,6 +93,7 @@ var functionsCommitsCmd = &cobra.Command{
 			if resp.NextPageToken == "" || manualPaging {
 				break
 			}
+			guard.markTokenUsed(pageToken)
 			pageToken = resp.NextPageToken
 		}
 

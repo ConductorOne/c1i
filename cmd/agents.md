@@ -284,7 +284,7 @@ APP_ID=$(c1i apps create --display-name "Example" | jq -r '.app.id')
 | 3 | not authenticated, or API `401`/`403` | re-authenticate (`c1i auth login`); a scoped credential needs a role that covers the call |
 | 4 | API `404` | stop — the resource/path doesn't exist |
 | 5 | API `429` | back off and retry |
-| 6 | C1 failed: API `5xx`, a `200` with a body that isn't JSON, or a redirect chain that never settles | retryable, not your fault |
+| 6 | C1 failed: API `5xx`, a `200` with a body that isn't JSON, a redirect chain that never settles, or a list route whose pagination cursor never advances | retryable for the first three; a stuck pagination cursor is a persistent server defect on that route — rows already printed are complete as far as they go, but re-running the same command won't reach the rest until C1 fixes it |
 | 7 | `mcp gateway call` succeeded but the tool reported `isError: true` | inspect the printed result, not just the code |
 | 8 | a system beyond C1, or the protocol layer, failed — including a gateway that is unreachable (DNS failure, refused connection) | retrying the same call usually repeats it. For a connector failure, check the server with `mcp servers get <connector-id> --app-id <id>` and `mcp servers test-connection`; the upstream may be unreachable or its credentials expired. For a protocol error, it's a version mismatch or a c1i bug — report it, don't work around it |
 

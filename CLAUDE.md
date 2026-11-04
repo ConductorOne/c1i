@@ -228,10 +228,11 @@ tracked root file outside its allowlist. Stage explicit paths rather than `-A`.
   and `client.RedirectLoopError` (a same-path chain that never settles in 5
   hops); `internal/mcpgateway` adds `TransportError`
   for an unreachable gateway. `cmd/errors.go` maps them — plus its own
-  `usageError`, `toolExecutionError`, `nonJSONResponseError`, and
-  `upstreamError` wrappers, for failures with no natural client-level type,
-  and `helperLeftError` (a login's undeleted temporary credential, always 1) —
-  to exit codes:
+  `usageError`, `toolExecutionError`, `nonJSONResponseError`,
+  `stuckPaginationCursorError` (a list route's pagination cursor never
+  advances), and `upstreamError` wrappers, for failures with no natural
+  client-level type, and `helperLeftError` (a login's undeleted temporary
+  credential, always 1) — to exit codes:
 
   | Code | Meaning |
   |------|---------|
@@ -241,7 +242,7 @@ tracked root file outside its allowlist. Stage explicit paths rather than `-A`.
   | `3` | auth (`401`/`403`) |
   | `4` | not-found (`404`) |
   | `5` | rate-limited (`429`) |
-  | `6` | C1 failed (API `5xx`, a redirect loop, or a `200` with a non-JSON body) |
+  | `6` | C1 failed (API `5xx`, a redirect loop, a `200` with a non-JSON body, or a list route whose pagination cursor never advances) |
   | `7` | tool-execution error (`mcp gateway call` result has `isError: true`) |
   | `8` | a system beyond C1 or the protocol layer failed (an unreachable gateway, an upstream connector failure, or a protocol-level JSON-RPC error) |
 
