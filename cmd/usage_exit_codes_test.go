@@ -163,6 +163,30 @@ func TestValidationGuardsExitUsage(t *testing.T) {
 			cmds: []*cobra.Command{mcpServersUpdateCmd},
 		},
 		{
+			name:    "apps update: nothing to update",
+			args:    []string{"apps", "update", "app-1"},
+			wantMsg: "nothing to update",
+			cmds:    []*cobra.Command{appsUpdateCmd},
+		},
+		{
+			name:    "apps update: unknown --identity-matching",
+			args:    []string{"apps", "update", "app-1", "--identity-matching", "fuzzy"},
+			wantMsg: "invalid --identity-matching",
+			cmds:    []*cobra.Command{appsUpdateCmd},
+		},
+		{
+			name:    "apps update: unreadable --app-user-mapper-file",
+			args:    []string{"apps", "update", "app-1", "--app-user-mapper-file", "/nonexistent/mapper.json"},
+			wantMsg: "reading --app-user-mapper-file",
+			cmds:    []*cobra.Command{appsUpdateCmd},
+		},
+		{
+			name:    "apps create: unknown --identity-matching",
+			args:    []string{"apps", "create", "--display-name", "a", "--identity-matching", "fuzzy"},
+			wantMsg: "invalid --identity-matching",
+			cmds:    []*cobra.Command{appsCreateCmd},
+		},
+		{
 			name: "mcp toolsets update: nothing to update",
 			args: []string{"mcp", "toolsets", "update", "toolset-1", "--app-id", "a", "--connector-id", "c"},
 			cmds: []*cobra.Command{mcpToolsetsUpdateCmd},

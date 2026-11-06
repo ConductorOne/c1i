@@ -71,7 +71,8 @@ c1i users get <user-id>
 ```sh
 c1i apps list [--page-size N] [--page-token TOKEN] [--limit N]
 c1i apps get <app-id>
-c1i apps create --display-name <name> [--description <text>]
+c1i apps create --display-name <name> [--description <text>] [--grant-policy-id <id>] [--revoke-policy-id <id>] [--certify-policy-id <id>] [--identity-matching strict|display-name|custom]
+c1i apps update <app-id> [--display-name <name>] [--description <text>] [--grant-policy-id <id>] [--revoke-policy-id <id>] [--certify-policy-id <id>] [--identity-matching strict|display-name|custom] [--app-user-mapper-file <path|->]
 c1i apps owners <app-id> [--page-size N] [--page-token TOKEN] [--limit N]
 c1i apps add-owner <user-id> --app-id <id>
 c1i apps remove-owner <user-id> --app-id <id>
@@ -85,6 +86,23 @@ under it". The caller is auto-assigned as an owner, showing up in `apps owners`
 after the usual provisioning lag. The new app comes back as pretty JSON under
 an `app` key, and `--fields` is never applied to mutation output, so read the
 new id from `.app.id` on the full object, not `.id`.
+
+`apps update` sends only the fields whose flags you pass, and returns
+`{"app": ...}`. `--grant-policy-id`, `--revoke-policy-id` and
+`--certify-policy-id` bind policies, on `apps create` too (omitted at create,
+the server assigns its default grant and revoke policies and no certify
+policy); `""` unbinds one on update. The server does not check these ids: a
+nonexistent policy, or a revoke policy passed as `--grant-policy-id`, is
+stored as given with exit `0`, so check the id with `policies get` first.
+`--identity-matching` takes `strict`, `display-name`, `custom`, or the full
+`APP_USER_IDENTITY_MATCHING_*` name; any other value is a usage error (exit
+`2`). `--app-user-mapper-file` replaces the whole mapper with a JSON object
+such as
+`{"mappingCases":[{"userKeyCel":"subject.email","appUserKeyCel":"account.email"}]}`
+(`subject` is the C1.ai user, `account` the app user); the server rejects bad
+CEL with a 400 (exit `2`). `mappingCases` must be non-empty: the server
+accepts an empty mapper with exit `0` but keeps the old one, and the API has
+no way to remove a mapper.
 
 `apps delete` is a soft delete: the app is marked with `deletedAt` rather than
 erased, which is why `apps list` rows carry a `deleted_at` field. Both commands

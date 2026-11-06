@@ -18,6 +18,12 @@ The caller is auto-assigned as an owner of the new app, appearing in
 "apps add-owner"/"apps remove-owner", or "apps set-owners", which replaces
 the whole list -- including you.
 
+--grant-policy-id, --revoke-policy-id and --certify-policy-id bind policies
+at creation. Omitted, the server assigns its default grant and revoke
+policies and no certify policy. As with "apps update", the server does not
+check these ids: a nonexistent or wrong-type policy is stored as given.
+--identity-matching takes the same values as on "apps update".
+
 The created app is returned as pretty JSON under an "app" key (--fields is not
 applied to mutation output, so parse the id from the full object).
 
@@ -29,12 +35,15 @@ Example:
 			return err
 		}
 
+		body, err := buildAppCreateBody(cmd)
+		if err != nil {
+			return &usageError{err}
+		}
+
 		baseURL, err := GetBaseURL()
 		if err != nil {
 			return err
 		}
-
-		body := buildAppCreateBody(cmd)
 
 		if dryRunActive() {
 			return printDryRun(cmd, "POST", "/api/v1/apps", body)
@@ -57,18 +66,31 @@ Example:
 // network / auth) so the dry-run preview and unit tests exercise the same body
 // the live request sends. Optional fields are omitted when empty rather than
 // sent as empty strings/arrays.
-func buildAppCreateBody(cmd *cobra.Command) map[string]any {
+func buildAppCreateBody(cmd *cobra.Command) (map[string]any, error) {
 	displayName, _ := cmd.Flags().GetString("display-name")
 	body := map[string]any{"displayName": displayName}
-	if v, _ := cmd.Flags().GetString("description"); v != "" {
-		body["description"] = v
+	for _, sf := range appStringFields[1:] { // [0] is displayName, set above
+		if v, _ := cmd.Flags().GetString(sf.flag); v != "" {
+			body[sf.key] = v
+		}
 	}
-	return body
+	if v, _ := cmd.Flags().GetString("identity-matching"); v != "" {
+		api, err := mapIdentityMatching(v)
+		if err != nil {
+			return nil, err
+		}
+		body["identityMatching"] = api
+	}
+	return body, nil
 }
 
 func init() {
 	appsCreateCmd.Flags().String("display-name", "", "Display name for the new app")
 	appsCreateCmd.Flags().String("description", "", "Description for the new app")
+	appsCreateCmd.Flags().String("grant-policy-id", "", "ID of the grant policy for the new app's entitlements")
+	appsCreateCmd.Flags().String("revoke-policy-id", "", "ID of the revoke policy for the new app's entitlements")
+	appsCreateCmd.Flags().String("certify-policy-id", "", "ID of the certify policy for the new app's entitlements")
+	appsCreateCmd.Flags().String("identity-matching", "", "How app users are matched to C1.ai users: strict, display-name, custom, or a full APP_USER_IDENTITY_MATCHING_* value")
 	markRequired(appsCreateCmd, "display-name")
 	appsCmd.AddCommand(appsCreateCmd)
 }

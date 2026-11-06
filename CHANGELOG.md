@@ -24,6 +24,11 @@ credentials fails instead of using the working directory. With a relative
   `--origin all` lists every user, including the local-origin and system users
   the default omits. Rows now carry `origin` when
   the server reports one.
+- `apps update <app-id>` changes an app's display name, description,
+  grant/revoke/certify policy, identity matching
+  (`--identity-matching strict|display-name|custom`) and user mapper
+  (`--app-user-mapper-file`). `apps create` takes the same policy and
+  identity-matching flags, so a policy can be bound at creation.
 
 ### Changed
 

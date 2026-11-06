@@ -381,6 +381,11 @@ resource with `--resource-id` likewise means you drop
   evidence an app has no owners. Use `apps set-owners --wait` when the write
   must converge before the next step. A wait timeout does not mean the write
   failed — re-check before writing again.
+- `apps update`/`apps create` `--grant-policy-id`, `--revoke-policy-id` and
+  `--certify-policy-id` are not checked by the server: a nonexistent or
+  wrong-type policy id is stored with exit `0`. Confirm the id and its
+  `policyType` with `policies get` before binding it. An app user mapper set
+  with `apps update --app-user-mapper-file` can be replaced but not removed.
 - `grants list --wait` can report success with zero rows. An empty result is
   stable, so a filter matching nothing settles in ~10s and exits `0` -- which
   looks identical to "the grant did not happen" but usually means "not yet".
