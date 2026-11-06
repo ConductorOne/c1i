@@ -340,12 +340,13 @@ func TestOtherInputFilesBadInputIsUsage(t *testing.T) {
 		})
 	}
 	t.Run("api --body-file missing", func(t *testing.T) {
+		t.Setenv("C1I_URL", "https://example.invalid")
 		resetCmdFlags(t, apiCmd)
 		_ = apiCmd.Flags().Set("path", "/api/v1/apps")
 		_ = apiCmd.Flags().Set("body-file", missing)
 		apiCmd.SetContext(context.Background())
 		err := apiCmd.RunE(apiCmd, nil)
-		if exitCode(err) != exitUsage {
+		if exitCode(err) != exitUsage || err == nil || !strings.Contains(err.Error(), "reading --body-file") {
 			t.Errorf("err = %v (exit %d), want exit %d", err, exitCode(err), exitUsage)
 		}
 	})
