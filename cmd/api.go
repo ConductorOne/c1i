@@ -169,6 +169,7 @@ an intended non-GET REST write.`,
 
 		enc := newEmitter(cmd)
 		guard := newPaginationCursorGuard()
+		var held []json.RawMessage
 		pageToken := ""
 		route := fmt.Sprintf("%s %s", method, path)
 
@@ -259,11 +260,19 @@ an intended non-GET REST write.`,
 			for i, item := range items {
 				ids[i] = itemIdentity(item)
 			}
-			keep, err := guard.checkPage(cmd, route, ids)
-			if err != nil {
+			// Every item has an identity, so a page is either kept whole or
+			// stale. A stale page is held, not dropped: a raw passthrough prints
+			// an isolated repeat once a later page brings something new or the
+			// list ends, while a stuck run errors out before either.
+			if _, err := guard.checkPage(cmd, route, ids); err != nil {
 				return err
 			}
-			items = keepRows(items, keep)
+			if guard.inStaleRun() && nextToken != "" {
+				held = append(held, items...)
+				items = nil
+			} else {
+				items, held = append(held, items...), nil
+			}
 
 			for _, item := range items {
 				// Encode the raw item, not a decoded any: decoding to any turns

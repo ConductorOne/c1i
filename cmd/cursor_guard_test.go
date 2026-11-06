@@ -146,6 +146,95 @@ func TestEveryCursorLoopIsGuarded(t *testing.T) {
 	}
 }
 
+// TestCompositeGuardIDsUseCompositeGuard fails when a guarded loop keys rows
+// on a multi-part id (scopedRowID with several parts, or a helper that builds
+// one) without withCompositeIDs, which would turn a row missing one part
+// into a false unrecognized-shape exit 6.
+func TestCompositeGuardIDsUseCompositeGuard(t *testing.T) {
+	paths, err := filepath.Glob("*.go")
+	if err != nil {
+		t.Fatalf("globbing cmd/*.go: %v", err)
+	}
+	isComposite := func(c *ast.CallExpr) bool {
+		id, ok := c.Fun.(*ast.Ident)
+		return ok && id.Name == "scopedRowID" && (len(c.Args) > 1 || c.Ellipsis.IsValid())
+	}
+	type scope struct {
+		name                     string
+		guard, composite, marked bool
+		calls                    map[string]bool
+	}
+	producers := map[string]bool{}
+	var scopes []*scope
+	for _, path := range paths {
+		if strings.HasSuffix(path, "_test.go") {
+			continue
+		}
+		file, err := parser.ParseFile(token.NewFileSet(), path, nil, 0)
+		if err != nil {
+			t.Fatalf("parsing %s: %v", path, err)
+		}
+		ast.Inspect(file, func(n ast.Node) bool {
+			var body *ast.BlockStmt
+			name := path
+			switch f := n.(type) {
+			case *ast.FuncDecl:
+				body, name = f.Body, path+":"+f.Name.Name
+			case *ast.FuncLit:
+				body = f.Body
+			}
+			if body == nil {
+				return true
+			}
+			s := &scope{name: name, calls: map[string]bool{}}
+			scopes = append(scopes, s)
+			ast.Inspect(body, func(m ast.Node) bool {
+				if _, ok := m.(*ast.FuncLit); ok {
+					return false
+				}
+				c, ok := m.(*ast.CallExpr)
+				if !ok {
+					return true
+				}
+				s.composite = s.composite || isComposite(c)
+				switch fn := c.Fun.(type) {
+				case *ast.Ident:
+					s.calls[fn.Name] = true
+					s.guard = s.guard || fn.Name == "newPaginationCursorGuard"
+				case *ast.SelectorExpr:
+					s.marked = s.marked || fn.Sel.Name == "withCompositeIDs"
+				}
+				return true
+			})
+			if fd, ok := n.(*ast.FuncDecl); ok && s.composite && fd.Recv == nil {
+				producers[fd.Name.Name] = true
+			}
+			return true
+		})
+	}
+	delete(producers, "scopedRowID")
+	if !producers["grantGuardID"] || !producers["rowGuardID"] {
+		t.Fatalf("composite id producers = %v, want grantGuardID and rowGuardID among them", producers)
+	}
+	var checked int
+	for _, s := range scopes {
+		uses := s.composite
+		for p := range producers {
+			uses = uses || s.calls[p]
+		}
+		if !uses || !s.guard {
+			continue
+		}
+		checked++
+		if !s.marked {
+			t.Errorf("%s keys its cursor guard on a composite id without withCompositeIDs()", s.name)
+		}
+	}
+	if checked < 5 {
+		t.Fatalf("checked only %d guarded loops with composite ids, want at least 5", checked)
+	}
+}
+
 // The cap counts pages since the last new id, not requests: a long healthy
 // list at a tiny page size must never reach it.
 func TestPaginationCursorGuardIdleCap(t *testing.T) {
@@ -671,8 +760,8 @@ func TestCompositeIDListCommandsEmitRowsWithoutID(t *testing.T) {
 			}
 		})
 	}
-	if n != 5 {
-		t.Fatalf("found %d compositeID cases, want 5", n)
+	if n != 6 {
+		t.Fatalf("found %d compositeID cases, want 6", n)
 	}
 }
 
@@ -740,9 +829,9 @@ func TestExportEventsIgnoresEmptyPageRun(t *testing.T) {
 	}
 }
 
-// An executions page whose items lack the automationExecution wrapper must
-// fail, not print nothing at exit 0.
-func TestAutomationsExecutionsListRejectsMissingWrapper(t *testing.T) {
+// The spec types the automationExecution wrapper as nullable, so a page of
+// only null wrappers is skipped, not an error.
+func TestAutomationsExecutionsListSkipsNullWrappers(t *testing.T) {
 	var tc listPaginationCase
 	for _, c := range listPaginationCases() {
 		if c.name == "automations executions list" {
@@ -751,13 +840,20 @@ func TestAutomationsExecutionsListRejectsMissingWrapper(t *testing.T) {
 	}
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = fmt.Fprint(w, `{"list":[{"execution":{"id":"x1"}},{"execution":{"id":"x2"}}],"nextPageToken":""}`)
+		if extractPageToken(t, tc.method, r) == "" {
+			_, _ = fmt.Fprint(w, `{"list":[{"automationExecution":{"id":"x1"}}],"nextPageToken":"tok1"}`)
+			return
+		}
+		_, _ = fmt.Fprint(w, `{"list":[{"automationExecution":null},{"automationExecution":null}],"nextPageToken":""}`)
 	}))
 	defer srv.Close()
 
-	out, _, err := runListPaginationCase(t, tc, srv)
-	if exitCode(err) != exitServer {
-		t.Fatalf("exit %d (err %v, stdout %q), want exit 6", exitCode(err), err, out)
+	out, errOut, err := runListPaginationCase(t, tc, srv)
+	if err != nil {
+		t.Fatalf("RunE: %v (stderr %q)", err, errOut)
+	}
+	if rows := decodeNDJSONRows(t, out); len(rows) != 1 || rows[0]["id"] != "x1" {
+		t.Errorf("rows = %v, want just x1", rows)
 	}
 }
 

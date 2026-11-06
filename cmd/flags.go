@@ -344,6 +344,11 @@ func (g *paginationCursorGuard) checkPage(cmd *cobra.Command, route string, ids 
 	return keep, nil
 }
 
+// inStaleRun reports whether no page since the last new id brought one.
+func (g *paginationCursorGuard) inStaleRun() bool {
+	return g.stale > 0
+}
+
 // shapeError is the exit-6 error for a page with rows but no ids; past the
 // first page it also reports the result as incomplete.
 func (g *paginationCursorGuard) shapeError(cmd *cobra.Command, route string, rows int) error {

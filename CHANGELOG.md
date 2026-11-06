@@ -37,12 +37,13 @@ credentials fails instead of using the working directory. With a relative
   page of rows already printed is now skipped even when it also holds a row
   without an id (only that row is printed), and 100 empty pages in a row end
   a list with exit `6` (`export events` excepted). A page whose rows all lack
-  the id the command reads, including an `automations executions list` page
-  with no `automationExecution` item, now exits `6` instead of printing
-  unchecked rows or nothing; `grants list` and the entitlement lists, keyed
-  on several fields, still print such rows. `grants list` now reads a grant's
-  account and entitlement ids from the binding when the expanded objects are
-  missing.
+  the id the command reads now exits `6` instead of printing unchecked rows;
+  `grants list`, the entitlement lists and `automations executions list`,
+  whose ids can legitimately be missing, still print such rows. `grants list`
+  now reads a grant's account and entitlement ids from the binding when the
+  expanded objects are missing. `api --paginate` no longer drops an isolated
+  page of items it has already seen; it prints it once a later page brings a
+  new item or the list ends.
 
 - **`role-mining suggestions|runs|custom-analysis list` and
   `findings routing-rules|transformation-rules list` would drop a page

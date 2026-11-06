@@ -69,7 +69,7 @@ Combine with --limit to bound the work.`,
 		clientFilter := stateFilter != "" || templateID != ""
 
 		enc := newEmitter(cmd)
-		guard := newPaginationCursorGuard()
+		guard := newPaginationCursorGuard().withCompositeIDs() // the wrapper may be null
 		for !limitReached(enc.Written(), limit) {
 			if guard.tokenAlreadyUsed(pageToken) {
 				return guard.warnStuck(cmd, "POST /api/v1/search/automation_executions")
@@ -100,8 +100,8 @@ Combine with --limit to bound the work.`,
 			if err := json.Unmarshal(data, &page); err != nil {
 				return fmt.Errorf("failed to parse response: %w", err)
 			}
-			// A missing wrapper counts as an id-less row, so a page of only
-			// those fails as an unrecognized shape instead of printing nothing.
+			// The spec allows a null wrapper; such an item is an id-less row to
+			// the guard and is skipped below.
 			ids := make([]string, len(page.List))
 			for i, item := range page.List {
 				if item.AutomationExecution != nil {

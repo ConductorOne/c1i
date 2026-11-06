@@ -887,6 +887,50 @@ func TestAPIPaginateKeepsItemsSharingAnIdentity(t *testing.T) {
 	}
 }
 
+// A page whose identities all collide with earlier ones (an entitlement id
+// reused across apps), or a final page identical to the one before, is real
+// data to a raw passthrough and must be printed.
+func TestAPIPaginatePrintsIsolatedAllSeenPage(t *testing.T) {
+	cases := []struct {
+		name  string
+		pages []string
+		want  int
+	}{
+		{"colliding ids then a new one", []string{`[{"id":"e1","appId":"a1"}]`, `[{"id":"e1","appId":"a2"}]`, `[{"id":"e2"}]`}, 3},
+		{"identical id-less last page", []string{`[{"x":1}]`, `[{"x":1}]`}, 2},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			var requests int
+			srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				requests++
+				next := fmt.Sprintf("tok-%d", requests)
+				if requests == len(tc.pages) {
+					next = ""
+				}
+				w.Header().Set("Content-Type", "application/json")
+				_, _ = fmt.Fprintf(w, `{"list":%s,"nextPageToken":%q}`, tc.pages[requests-1], next)
+			}))
+			defer srv.Close()
+
+			resetAPICmdFlags(t)
+			stubNewAPIClient(t, srv)
+			t.Setenv("C1I_URL", srv.URL)
+
+			var out, errOut bytes.Buffer
+			apiCmd.SetOut(&out)
+			apiCmd.SetErr(&errOut)
+			rootCmd.SetArgs([]string{"api", "--path", "/api/v1/x", "--paginate"})
+			if err := rootCmd.ExecuteContext(context.Background()); err != nil {
+				t.Fatalf("ExecuteContext: %v (stderr %q)", err, errOut.String())
+			}
+			if rows := decodeNDJSONRows(t, out.String()); len(rows) != tc.want {
+				t.Errorf("got %d rows, want %d", len(rows), tc.want)
+			}
+		})
+	}
+}
+
 // The observed defect: a fresh token every call over the same page. The
 // identical page, not the token, must trip the guard.
 func TestAPIPaginateChangingTokenSameRowsReturnsExitServer(t *testing.T) {
@@ -994,7 +1038,8 @@ func TestAPIPaginateStuckCursorWithoutIDFallsBackToCanonicalJSON(t *testing.T) {
 
 // A healthy offset-paginated server that gains exactly one page of rows
 // between requests repeats a page once. That must not be read as a stuck
-// cursor: the repeat is skipped, pagination continues, and the run exits 0.
+// cursor: pagination continues and the run exits 0. api is a raw
+// passthrough, so the repeat is printed rather than dropped.
 func TestAPIPaginateSingleRepeatedPageIsNotStuck(t *testing.T) {
 	var requestCount int
 	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -1030,8 +1075,8 @@ func TestAPIPaginateSingleRepeatedPageIsNotStuck(t *testing.T) {
 	for _, row := range decodeNDJSONRows(t, out.String()) {
 		got = append(got, fmt.Sprint(row["id"]))
 	}
-	if strings.Join(got, ",") != "a,b,c" {
-		t.Fatalf("rows = %v, want [a b c] (the repeated page skipped, not re-emitted)", got)
+	if strings.Join(got, ",") != "a,b,a,b,c" {
+		t.Fatalf("rows = %v, want [a b a b c] (the isolated repeat printed, not dropped)", got)
 	}
 	if requestCount != 3 {
 		t.Fatalf("server received %d requests, want 3", requestCount)

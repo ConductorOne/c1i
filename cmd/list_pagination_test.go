@@ -203,12 +203,13 @@ func listPaginationCases() []listPaginationCase {
 			rowIDs:   idRows("id"),
 		},
 		{
-			name:     "automations executions list",
-			cmd:      automationsExecutionsListCmd,
-			method:   http.MethodPost,
-			wantPath: "/api/v1/search/automation_executions",
-			page:     nestedPage("list", "automationExecution", "id"),
-			rowIDs:   idRows("id"),
+			name:        "automations executions list",
+			compositeID: true, // the automationExecution wrapper may be null
+			cmd:         automationsExecutionsListCmd,
+			method:      http.MethodPost,
+			wantPath:    "/api/v1/search/automation_executions",
+			page:        nestedPage("list", "automationExecution", "id"),
+			rowIDs:      idRows("id"),
 		},
 		{
 			name:     "automations list",
