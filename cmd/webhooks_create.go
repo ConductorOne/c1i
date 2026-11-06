@@ -10,9 +10,14 @@ var webhooksCreateCmd = &cobra.Command{
 	Use:   "create",
 	Short: "Create a webhook",
 	Long: `Create a webhook. --display-name and --destination-url are required.
---destination-url must be an absolute https:// URL; anything else is refused
-with exit 2 before a request is sent, because the server would silently
-rewrite it to https. No secret is returned. Honors --dry-run.`,
+
+Refused with exit 2 before a request is sent:
+  - an empty or whitespace-only --display-name
+  - a --destination-url that is not https, has no host, or uses an IPv6
+    literal host (the server would rewrite another scheme to https, and
+    strips an IPv6 literal's brackets)
+
+No secret is returned. Honors --dry-run.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		body, _, err := webhookFields(cmd)
 		if err != nil {
@@ -41,7 +46,7 @@ rewrite it to https. No secret is returned. Honors --dry-run.`,
 }
 
 func init() {
-	webhookFieldFlags(webhooksCreateCmd, "Webhook")
+	webhookFieldFlags(webhooksCreateCmd, false)
 	markRequired(webhooksCreateCmd, "display-name", "destination-url")
 	webhooksCmd.AddCommand(webhooksCreateCmd)
 }

@@ -11,7 +11,15 @@ var webhooksUpdateCmd = &cobra.Command{
 	Use:   "update <webhook-id>",
 	Short: "Update a webhook's display name, URL, description or callback timeout",
 	Long: `Update a webhook. Only the flags you pass are sent, and each is named in the
-update mask; an empty --description clears it. Updating a soft-deleted webhook exits 0 and changes it; it stays deleted.
+update mask; an empty --description clears it.
+
+Refused with exit 2 before a request is sent:
+  - no field flag at all
+  - an empty or whitespace-only --display-name (the server would store it)
+  - a --destination-url that is not https, has no host, or uses an IPv6
+    literal host
+
+Updating a soft-deleted webhook exits 0 and changes it; it stays deleted.
 Honors --dry-run.`,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
@@ -53,6 +61,6 @@ Honors --dry-run.`,
 }
 
 func init() {
-	webhookFieldFlags(webhooksUpdateCmd, "New")
+	webhookFieldFlags(webhooksUpdateCmd, true)
 	webhooksCmd.AddCommand(webhooksUpdateCmd)
 }

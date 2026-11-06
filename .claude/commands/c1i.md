@@ -15,7 +15,7 @@ against `go run . <cmd> --help` rather than any doc. The command groups are
 `access-profiles`, `access-reviews`, `accounts`, `api`, `apps`, `auth`,
 `automations`, `connectors`, `docs`, `entitlements`, `export`, `findings`,
 `functions`, `grants`, `mcp`, `policies`, `requests`, `role-mining`, `roles`,
-`service-principals`, `tasks`, `upgrade` and `users`; run
+`service-principals`, `tasks`, `upgrade`, `users` and `webhooks`; run
 `go run . <group> --help` for each before reaching for raw `api`.
 
 ## Auth

@@ -40,11 +40,15 @@ func webhookPath(id string) string {
 
 // webhookFieldFlags registers the writable Webhook fields shared by create and
 // update.
-func webhookFieldFlags(cmd *cobra.Command, verb string) {
-	cmd.Flags().String("display-name", "", verb+" display name")
-	cmd.Flags().String("destination-url", "", verb+` destination URL; must be an absolute https:// URL with a host name or IPv4 address (an IPv6 literal later fails "test" with "invalid port ... after host")`)
-	cmd.Flags().String("description", "", verb+" description (an empty value clears it on update)")
-	cmd.Flags().String("callback-timeout", "", verb+` time to wait for an asynchronous callback, as a Go duration (e.g. 10m); 0 to 720h; over that, update returns "callback_timeout must be between 0 and 30 days" (create: "value must be inside range [0s, 720h0m0s]")`)
+func webhookFieldFlags(cmd *cobra.Command, update bool) {
+	verb, keep := "Webhook", ""
+	if update {
+		verb, keep = "New", "omit to leave unchanged; "
+	}
+	cmd.Flags().String("display-name", "", verb+" display name ("+keep+"cannot be empty)")
+	cmd.Flags().String("destination-url", "", verb+" destination URL ("+keep+"https only, with a host; an IPv6 literal host is refused; else exit 2)")
+	cmd.Flags().String("description", "", verb+" description ("+keep+"an empty value clears it)")
+	cmd.Flags().String("callback-timeout", "", verb+` time to wait for an asynchronous callback, as a Go duration (e.g. 10m) (`+keep+`0 to 720h; over that, update returns "callback_timeout must be between 0 and 30 days" and create "value must be inside range [0s, 720h0m0s]")`)
 }
 
 // webhookFields reads the changed field flags into a Webhook body and the
