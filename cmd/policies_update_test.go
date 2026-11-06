@@ -37,29 +37,6 @@ func withRealDryRun(t *testing.T) {
 	t.Cleanup(func() { viper.Set("dry_run", orig) })
 }
 
-// resetPoliciesUpdateCmdFlags restores policiesUpdateCmd's own flags to their
-// zero values AND clears pflag's per-flag Changed bit, so tests sharing the
-// package-level singleton command can't leak flag state into each other
-// (mirrors api_test.go's resetAPICmdFlags). Using FlagSet.Set here (instead
-// of the Value directly) would itself flip Changed to true, which would
-// break every test that branches on cmd.Flags().Changed(...) — so this
-// clears Changed explicitly after resetting the value.
-func resetPoliciesUpdateCmdFlags(t *testing.T) {
-	t.Helper()
-	reset := func() {
-		for _, name := range []string{"display-name", "description", "policy-type", "steps-file", "rules-file", "body-file", "update-mask"} {
-			f := policiesUpdateCmd.Flags().Lookup(name)
-			_ = f.Value.Set("")
-			f.Changed = false
-		}
-		f := policiesUpdateCmd.Flags().Lookup("allow-deny-all")
-		_ = f.Value.Set("false")
-		f.Changed = false
-	}
-	reset()
-	t.Cleanup(reset)
-}
-
 // TestPoliciesUpdateSendsWrappedBody is the load-bearing proof that "update"
 // wraps the request as {"policy": {...}, "updateMask": "..."} — a flat body
 // 400s server-side (protojson rejects the top-level keys as unknown fields
@@ -85,7 +62,7 @@ func TestPoliciesUpdateSendsWrappedBody(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	resetPoliciesUpdateCmdFlags(t)
+	resetCmdFlags(t, policiesUpdateCmd)
 	stubPoliciesClient(t, srv)
 	withRealDryRun(t)
 	t.Setenv("C1I_URL", "https://example.invalid")
@@ -135,7 +112,7 @@ func TestPoliciesUpdateDryRunPreviewsWrappedBodyWithoutSending(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	resetPoliciesUpdateCmdFlags(t)
+	resetCmdFlags(t, policiesUpdateCmd)
 	stubPoliciesClient(t, srv)
 	t.Setenv("C1I_URL", "https://example.invalid")
 	orig := viper.GetBool("dry_run")
@@ -168,7 +145,7 @@ func TestPoliciesUpdateNullBodyFileExitsUsage(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	resetPoliciesUpdateCmdFlags(t)
+	resetCmdFlags(t, policiesUpdateCmd)
 	stubPoliciesClient(t, srv)
 	withRealDryRun(t)
 	t.Setenv("C1I_URL", "https://example.invalid")
@@ -192,7 +169,7 @@ func TestPoliciesUpdateGuardFiresOnEmptyStepsFile(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	resetPoliciesUpdateCmdFlags(t)
+	resetCmdFlags(t, policiesUpdateCmd)
 	stubPoliciesClient(t, srv)
 	withRealDryRun(t)
 	t.Setenv("C1I_URL", "https://example.invalid")
@@ -230,7 +207,7 @@ func TestPoliciesUpdateAllowDenyAllBypassesGuardAndSendsRequest(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	resetPoliciesUpdateCmdFlags(t)
+	resetCmdFlags(t, policiesUpdateCmd)
 	stubPoliciesClient(t, srv)
 	withRealDryRun(t)
 	t.Setenv("C1I_URL", "https://example.invalid")
@@ -270,7 +247,7 @@ func TestPoliciesUpdateWithoutAllowDenyAllIsRefused(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	resetPoliciesUpdateCmdFlags(t)
+	resetCmdFlags(t, policiesUpdateCmd)
 	stubPoliciesClient(t, srv)
 	withRealDryRun(t)
 	t.Setenv("C1I_URL", "https://example.invalid")
@@ -300,7 +277,7 @@ func TestPoliciesUpdateWithoutAllowDenyAllIsRefused(t *testing.T) {
 // TestPoliciesUpdateBodyFileRequiresUpdateMask pins that --body-file without
 // --update-mask is refused: nothing would tell the server what changed.
 func TestPoliciesUpdateBodyFileRequiresUpdateMask(t *testing.T) {
-	resetPoliciesUpdateCmdFlags(t)
+	resetCmdFlags(t, policiesUpdateCmd)
 	bodyPath := writeTempJSON(t, "body.json", `{"displayName":"x"}`)
 	cmd := newPoliciesCreateFlagCmd(t) // reuse: same flag names needed here
 	cmd.Flags().String("update-mask", "", "")
@@ -341,7 +318,7 @@ func TestPoliciesUpdateBodyFileResolvesPolicyTypeForAgentStepGuard(t *testing.T)
 	}))
 	defer srv.Close()
 
-	resetPoliciesUpdateCmdFlags(t)
+	resetCmdFlags(t, policiesUpdateCmd)
 	stubPoliciesClient(t, srv)
 	withRealDryRun(t)
 	t.Setenv("C1I_URL", "https://example.invalid")
@@ -391,7 +368,7 @@ func TestPoliciesUpdateBodyFileWithoutPolicyStepsNeverFetchesPolicyType(t *testi
 	}))
 	defer srv.Close()
 
-	resetPoliciesUpdateCmdFlags(t)
+	resetCmdFlags(t, policiesUpdateCmd)
 	stubPoliciesClient(t, srv)
 	withRealDryRun(t)
 	t.Setenv("C1I_URL", "https://example.invalid")

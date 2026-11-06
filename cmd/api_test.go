@@ -162,16 +162,6 @@ func TestExtractListAndTokenMultiArrayDeterministic(t *testing.T) {
 // that performs a genuine HTTP round trip against an httptest.Server,
 // bypassing newClient's real OAuth mint, so the wire assertions are real.
 
-// resetAPICmdFlags restores apiCmd's flags -- including the persistent ones
-// cobra merges in -- to their defaults before and after a test, so tests
-// sharing the package-level singleton cannot leak flag state.
-func resetAPICmdFlags(t *testing.T) {
-	t.Helper()
-	// Shared so the two traps are handled in one place: Set appends on a
-	// StringArray, and a cleared-but-Changed flag reads as "set to nothing".
-	resetCmdFlags(t, apiCmd)
-}
-
 // fakeWireRequester implements apiRequester by making a real HTTP request to
 // an httptest.Server, so a test asserting on what the server received is
 // asserting on an actual wire round trip, not an in-memory call record.
@@ -221,7 +211,7 @@ func stubNewAPIClient(t *testing.T, srv *httptest.Server) {
 // so exitError (1) was never the "correct" code — it was a pre-existing gap.
 // See TestAPIGetBodyRefused for the GET-with-body twin.
 func TestAPIDeleteBodyRefusedByDefault(t *testing.T) {
-	resetAPICmdFlags(t)
+	resetCmdFlags(t, apiCmd)
 	t.Setenv("C1I_URL", "https://example.invalid")
 
 	var out bytes.Buffer
@@ -254,7 +244,7 @@ func TestAPIDeleteBodyRefusedByDefault(t *testing.T) {
 // refusal must classify as exitUsage (2), not the generic exitError (1) it
 // returned before this guard was wrapped in usageError.
 func TestAPIGetBodyRefused(t *testing.T) {
-	resetAPICmdFlags(t)
+	resetCmdFlags(t, apiCmd)
 	t.Setenv("C1I_URL", "https://example.invalid")
 
 	var out bytes.Buffer
@@ -299,7 +289,7 @@ func TestAPIDeleteBodyOptInSendsBodyOnWire(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	resetAPICmdFlags(t)
+	resetCmdFlags(t, apiCmd)
 	stubNewAPIClient(t, srv)
 	t.Setenv("C1I_URL", srv.URL)
 
@@ -339,7 +329,7 @@ func TestAPIDeleteBodyOptInDryRunPreviewsWithoutSending(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	resetAPICmdFlags(t)
+	resetCmdFlags(t, apiCmd)
 	stubNewAPIClient(t, srv)
 	// srv is a plain-http httptest.Server, but stubNewAPIClient bypasses
 	// GetBaseURL's return value entirely (it points the real client straight
@@ -424,7 +414,7 @@ func TestAPIPaginateFieldsZeroMatchAcrossAllPagesErrors(t *testing.T) {
 	srv := twoPageFixtureServer(`{"name":"page1-item"}`, `{"name":"page2-item"}`)
 	defer srv.Close()
 
-	resetAPICmdFlags(t)
+	resetCmdFlags(t, apiCmd)
 	stubNewAPIClient(t, srv)
 	t.Setenv("C1I_URL", srv.URL)
 	viper.Set("fields", "id")
@@ -468,7 +458,7 @@ func TestAPIPaginateFieldsPartialMatchAcrossPagesSucceeds(t *testing.T) {
 	srv := twoPageFixtureServer(`{"name":"page1-item"}`, `{"id":"only-on-page-2"}`)
 	defer srv.Close()
 
-	resetAPICmdFlags(t)
+	resetCmdFlags(t, apiCmd)
 	stubNewAPIClient(t, srv)
 	t.Setenv("C1I_URL", srv.URL)
 	viper.Set("fields", "id")
@@ -527,7 +517,7 @@ func TestAPIPaginateLimitWithSparseFieldsContinuesPastFilteredPage(t *testing.T)
 	}))
 	defer srv.Close()
 
-	resetAPICmdFlags(t)
+	resetCmdFlags(t, apiCmd)
 	stubNewAPIClient(t, srv)
 	t.Setenv("C1I_URL", srv.URL)
 	viper.Set("fields", "id")
@@ -565,7 +555,7 @@ func TestAPIPaginateLimitWithSparseFieldsContinuesPastFilteredPage(t *testing.T)
 // surfacing as an opaque "no such host" error that never named the real
 // problem. It must now fail fast as a usage error naming --path itself.
 func TestAPIPathWithoutLeadingSlashIsUsageError(t *testing.T) {
-	resetAPICmdFlags(t)
+	resetCmdFlags(t, apiCmd)
 	t.Setenv("C1I_URL", "https://example.invalid")
 
 	var out bytes.Buffer
@@ -597,7 +587,7 @@ func TestAPIPathWithLeadingSlashStillWorks(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	resetAPICmdFlags(t)
+	resetCmdFlags(t, apiCmd)
 	stubNewAPIClient(t, srv)
 	t.Setenv("C1I_URL", srv.URL)
 
@@ -630,7 +620,7 @@ func TestAPINonJSON200BodyIsError(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	resetAPICmdFlags(t)
+	resetCmdFlags(t, apiCmd)
 	stubNewAPIClient(t, srv)
 	t.Setenv("C1I_URL", srv.URL)
 
@@ -660,7 +650,7 @@ func TestAPIEmpty200BodySucceeds(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	resetAPICmdFlags(t)
+	resetCmdFlags(t, apiCmd)
 	stubNewAPIClient(t, srv)
 	t.Setenv("C1I_URL", srv.URL)
 
@@ -686,7 +676,7 @@ func TestAPINormalJSONBodyStillWorks(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	resetAPICmdFlags(t)
+	resetCmdFlags(t, apiCmd)
 	stubNewAPIClient(t, srv)
 	t.Setenv("C1I_URL", srv.URL)
 
@@ -738,7 +728,7 @@ func TestAPITruncatedPageWarns(t *testing.T) {
 			}))
 			defer srv.Close()
 
-			resetAPICmdFlags(t)
+			resetCmdFlags(t, apiCmd)
 			stubNewAPIClient(t, srv)
 			t.Setenv("C1I_URL", srv.URL)
 
@@ -789,7 +779,7 @@ func TestAPIPaginateDrainsCursorWithoutWarning(t *testing.T) {
 	srv := getTwoPageFixtureServer()
 	defer srv.Close()
 
-	resetAPICmdFlags(t)
+	resetCmdFlags(t, apiCmd)
 	stubNewAPIClient(t, srv)
 	t.Setenv("C1I_URL", srv.URL)
 
@@ -830,7 +820,7 @@ func TestAPIPaginateSameTokenTwiceReturnsExitServer(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	resetAPICmdFlags(t)
+	resetCmdFlags(t, apiCmd)
 	stubNewAPIClient(t, srv)
 	t.Setenv("C1I_URL", srv.URL)
 
@@ -872,7 +862,7 @@ func TestAPIPaginateKeepsItemsSharingAnIdentity(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	resetAPICmdFlags(t)
+	resetCmdFlags(t, apiCmd)
 	stubNewAPIClient(t, srv)
 	t.Setenv("C1I_URL", srv.URL)
 
@@ -914,7 +904,7 @@ func TestAPIPaginatePrintsIsolatedAllSeenPage(t *testing.T) {
 			}))
 			defer srv.Close()
 
-			resetAPICmdFlags(t)
+			resetCmdFlags(t, apiCmd)
 			stubNewAPIClient(t, srv)
 			t.Setenv("C1I_URL", srv.URL)
 
@@ -957,7 +947,7 @@ func TestAPIPaginateChangingTokenSameRowsReturnsExitServer(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	resetAPICmdFlags(t)
+	resetCmdFlags(t, apiCmd)
 	stubNewAPIClient(t, srv)
 	t.Setenv("C1I_URL", srv.URL)
 
@@ -1012,7 +1002,7 @@ func TestAPIPaginateStuckCursorWithoutIDFallsBackToCanonicalJSON(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	resetAPICmdFlags(t)
+	resetCmdFlags(t, apiCmd)
 	stubNewAPIClient(t, srv)
 	t.Setenv("C1I_URL", srv.URL)
 
@@ -1060,7 +1050,7 @@ func TestAPIPaginateSingleRepeatedPageIsNotStuck(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	resetAPICmdFlags(t)
+	resetCmdFlags(t, apiCmd)
 	stubNewAPIClient(t, srv)
 	t.Setenv("C1I_URL", srv.URL)
 
@@ -1127,7 +1117,7 @@ func TestAPIPaginateStuckCycleShapesReturnExitServer(t *testing.T) {
 			}))
 			defer srv.Close()
 
-			resetAPICmdFlags(t)
+			resetCmdFlags(t, apiCmd)
 			stubNewAPIClient(t, srv)
 			t.Setenv("C1I_URL", srv.URL)
 
@@ -1174,7 +1164,7 @@ func TestAPIPaginateListKeyAbsent(t *testing.T) {
 			}))
 			defer srv.Close()
 
-			resetAPICmdFlags(t)
+			resetCmdFlags(t, apiCmd)
 			stubNewAPIClient(t, srv)
 			t.Setenv("C1I_URL", srv.URL)
 
@@ -1219,7 +1209,7 @@ func TestAPIPaginateListKeyOmittedOnLaterPage(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	resetAPICmdFlags(t)
+	resetCmdFlags(t, apiCmd)
 	stubNewAPIClient(t, srv)
 	t.Setenv("C1I_URL", srv.URL)
 
@@ -1317,7 +1307,7 @@ func runAPIHeldPageThenFail(t *testing.T, out io.Writer, fail func(http.Response
 	}))
 	t.Cleanup(srv.Close)
 
-	resetAPICmdFlags(t)
+	resetCmdFlags(t, apiCmd)
 	orig := newAPIClient
 	newAPIClient = func(_ *cobra.Command, _ string) (apiRequester, error) {
 		return client.NewForTesting(srv.URL, srv.Client(), client.WithMaxRetries(0)), nil
@@ -1363,7 +1353,7 @@ func TestAPIPaginateNonJSONFirstPageIsExitServer(t *testing.T) {
 			}))
 			defer srv.Close()
 
-			resetAPICmdFlags(t)
+			resetCmdFlags(t, apiCmd)
 			orig := newAPIClient
 			newAPIClient = func(_ *cobra.Command, _ string) (apiRequester, error) {
 				return client.NewForTesting(srv.URL, srv.Client(), client.WithMaxRetries(0)), nil
@@ -1396,7 +1386,7 @@ func TestAPIPaginateListKeyNotArrayIsUsageError(t *testing.T) {
 			}))
 			defer srv.Close()
 
-			resetAPICmdFlags(t)
+			resetCmdFlags(t, apiCmd)
 			orig := newAPIClient
 			newAPIClient = func(_ *cobra.Command, _ string) (apiRequester, error) {
 				return client.NewForTesting(srv.URL, srv.Client(), client.WithMaxRetries(0)), nil
@@ -1436,7 +1426,7 @@ func TestAPINullBodyIsUsageError(t *testing.T) {
 	defer srv.Close()
 	for _, extra := range [][]string{{"--paginate"}, {}, {"--dry-run"}} {
 		t.Run(strings.Join(append([]string{"POST"}, extra...), " "), func(t *testing.T) {
-			resetAPICmdFlags(t)
+			resetCmdFlags(t, apiCmd)
 			stubNewAPIClient(t, srv)
 			t.Setenv("C1I_URL", srv.URL)
 			var out, errOut bytes.Buffer

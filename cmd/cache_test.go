@@ -368,13 +368,7 @@ func TestFormatAgeClampsFutureMtime(t *testing.T) {
 func runDocsOpenapiRoot(t *testing.T, rt http.RoundTripper, args ...string) (string, error) {
 	t.Helper()
 	stubOpenAPIBase(t, rt)
-	for _, name := range []string{"debug", "max-retries"} {
-		f := rootCmd.PersistentFlags().Lookup(name)
-		t.Cleanup(func() {
-			_ = f.Value.Set(f.DefValue)
-			f.Changed = false
-		})
-	}
+	resetCmdFlags(t, rootCmd)
 	var out bytes.Buffer
 	rootCmd.SetOut(&out)
 	rootCmd.SetErr(&out)

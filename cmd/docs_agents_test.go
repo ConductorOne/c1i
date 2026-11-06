@@ -21,9 +21,7 @@ func runDocsAgents(t *testing.T, args []string) (stdout, stderr string) {
 	errBuf := &bytes.Buffer{}
 	cmd.SetOut(outBuf)
 	cmd.SetErr(errBuf)
-	if err := cmd.Flags().Set("output", ""); err != nil {
-		t.Fatalf("failed to reset --output: %v", err)
-	}
+	resetCmdFlags(t, cmd)
 
 	if err := cmd.ParseFlags(args); err != nil {
 		t.Fatalf("ParseFlags failed: %v", err)
@@ -80,12 +78,10 @@ func TestDocsAgentsOutputFileMatchesStdout(t *testing.T) {
 	errBuf := &bytes.Buffer{}
 	cmd.SetOut(outBuf)
 	cmd.SetErr(errBuf)
+	resetCmdFlags(t, cmd)
 	if err := cmd.Flags().Set("output", outPath); err != nil {
 		t.Fatalf("failed to set --output: %v", err)
 	}
-	t.Cleanup(func() {
-		_ = cmd.Flags().Set("output", "")
-	})
 	if err := cmd.RunE(cmd, nil); err != nil {
 		t.Fatalf("RunE with --output returned unexpected error: %v", err)
 	}

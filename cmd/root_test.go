@@ -142,21 +142,8 @@ func TestValidUTF8PositionalArgUnaffected(t *testing.T) {
 // "mcp servers get someid --app-id $'\xff\xfe'" returned a bare 500 (exit
 // 6) before this fix, the same failure class already closed for positionals.
 
-// resetMcpServersGetCmdAppIDFlag restores mcpServersGetCmd's --app-id flag to
-// unset after a test drives it through the package-level singleton, so
-// state can't leak into another test.
-func resetMcpServersGetCmdAppIDFlag(t *testing.T) {
-	t.Helper()
-	reset := func() {
-		f := mcpServersGetCmd.Flags().Lookup("app-id")
-		_ = f.Value.Set("")
-		f.Changed = false
-	}
-	t.Cleanup(reset)
-}
-
 func TestNonUTF8FlagValueIsUsageError(t *testing.T) {
-	resetMcpServersGetCmdAppIDFlag(t)
+	resetCmdFlags(t, mcpServersGetCmd)
 	t.Setenv("C1I_URL", "https://example.invalid")
 
 	var out bytes.Buffer
@@ -182,7 +169,7 @@ func TestNonUTF8FlagValueIsUsageError(t *testing.T) {
 // TestValidUTF8FlagValueUnaffected is the regression guard: an ordinary flag
 // value must not be rejected -- it should reach as far as authentication.
 func TestValidUTF8FlagValueUnaffected(t *testing.T) {
-	resetMcpServersGetCmdAppIDFlag(t)
+	resetCmdFlags(t, mcpServersGetCmd)
 	t.Setenv("C1I_URL", "https://example.invalid")
 	t.Setenv("C1I_CLIENT_ID", "")
 	t.Setenv("C1I_CLIENT_SECRET", "")

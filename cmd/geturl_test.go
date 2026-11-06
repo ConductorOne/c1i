@@ -11,21 +11,6 @@ import (
 	"github.com/spf13/viper"
 )
 
-// resetRootURLFlag restores rootCmd's persistent --url flag to unset after a
-// test drives it, so state can't leak into another test the way
-// resetMcpServersGetCmdAppIDFlag (cmd/root_test.go) already does for
-// --app-id.
-func resetRootURLFlag(t *testing.T) {
-	t.Helper()
-	f := rootCmd.PersistentFlags().Lookup("url")
-	origValue := f.Value.String()
-	origChanged := f.Changed
-	t.Cleanup(func() {
-		_ = f.Value.Set(origValue)
-		f.Changed = origChanged
-	})
-}
-
 // runRootWithArgs executes rootCmd with args and returns the resulting
 // error, mirroring the pattern already established in cmd/root_test.go
 // (TestNonUTF8PositionalArgIsUsageError et al).
@@ -41,7 +26,7 @@ func runRootWithArgs(t *testing.T, args []string) error {
 // --- A bare token is refused, one test per source ---
 
 func TestGetBaseURLBareTokenFromFlagNamesFlag(t *testing.T) {
-	resetRootURLFlag(t)
+	resetCmdFlags(t, rootCmd)
 	t.Setenv("C1I_URL", "")
 
 	err := runRootWithArgs(t, []string{"users", "get", "someid", "--url", "acme"})
@@ -60,7 +45,7 @@ func TestGetBaseURLBareTokenFromFlagNamesFlag(t *testing.T) {
 }
 
 func TestGetBaseURLBareTokenFromEnvNamesEnvVar(t *testing.T) {
-	resetRootURLFlag(t)
+	resetCmdFlags(t, rootCmd)
 	t.Setenv("C1I_URL", "acme")
 
 	err := runRootWithArgs(t, []string{"users", "get", "someid"})
@@ -83,7 +68,7 @@ func TestGetBaseURLBareTokenFromEnvNamesEnvVar(t *testing.T) {
 // ~/.c1i.yaml. The live-verification section separately drives this through
 // an actual temporary config file end to end.
 func TestGetBaseURLBareTokenFromConfigNamesConfigFile(t *testing.T) {
-	resetRootURLFlag(t)
+	resetCmdFlags(t, rootCmd)
 	t.Setenv("C1I_URL", "")
 	orig := viper.GetString("url")
 	viper.Set("url", "acme")
@@ -106,7 +91,7 @@ func TestGetBaseURLBareTokenFromConfigNamesConfigFile(t *testing.T) {
 // GetBaseURL used to return a bare fmt.Errorf here, which cmd/errors.go
 // collapses to exitError (1) instead of exitUsage (2).
 func TestGetBaseURLNoSourceIsUsageError(t *testing.T) {
-	resetRootURLFlag(t)
+	resetCmdFlags(t, rootCmd)
 	t.Setenv("C1I_URL", "")
 	orig := viper.GetString("url")
 	viper.Set("url", "")
@@ -180,7 +165,7 @@ func TestAuthLoginPromptDoesNotAdvertiseShortcut(t *testing.T) {
 // --- localhost is refused both bare and with a non-https scheme ---
 
 func TestGetBaseURLLocalhostBareIsUsageError(t *testing.T) {
-	resetRootURLFlag(t)
+	resetCmdFlags(t, rootCmd)
 	t.Setenv("C1I_URL", "")
 
 	err := runRootWithArgs(t, []string{"users", "get", "someid", "--url", "localhost"})
@@ -196,7 +181,7 @@ func TestGetBaseURLLocalhostBareIsUsageError(t *testing.T) {
 }
 
 func TestGetBaseURLLocalhostWithPortBareIsUsageError(t *testing.T) {
-	resetRootURLFlag(t)
+	resetCmdFlags(t, rootCmd)
 	t.Setenv("C1I_URL", "")
 
 	err := runRootWithArgs(t, []string{"users", "get", "someid", "--url", "localhost:8080"})
@@ -214,7 +199,7 @@ func TestGetBaseURLLocalhostWithPortBareIsUsageError(t *testing.T) {
 // loopback/local exception. This must fail URL parsing itself (exit 2), not
 // merely fail later for lack of credentials.
 func TestGetBaseURLHTTPSchemeIsRejected(t *testing.T) {
-	resetRootURLFlag(t)
+	resetCmdFlags(t, rootCmd)
 	t.Setenv("C1I_URL", "")
 	t.Setenv("C1I_CLIENT_ID", "")
 	t.Setenv("C1I_CLIENT_SECRET", "")
@@ -245,7 +230,7 @@ func TestGetBaseURLFullHostsUnaffected(t *testing.T) {
 	}
 	for _, in := range cases {
 		t.Run(in, func(t *testing.T) {
-			resetRootURLFlag(t)
+			resetCmdFlags(t, rootCmd)
 			t.Setenv("C1I_URL", "")
 			t.Setenv("C1I_CLIENT_ID", "")
 			t.Setenv("C1I_CLIENT_SECRET", "")

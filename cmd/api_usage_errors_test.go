@@ -63,7 +63,7 @@ func TestAPIGuardsExitUsage(t *testing.T) {
 	for _, tc := range cases {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
-			resetAPICmdFlags(t)
+			resetCmdFlags(t, apiCmd)
 			t.Setenv("C1I_URL", "https://example.invalid")
 
 			var out bytes.Buffer
@@ -90,7 +90,7 @@ func TestAPIGuardsExitUsage(t *testing.T) {
 // three must classify as exitUsage too, not exitError.
 func TestAPIInvalidJSONBodyExitsUsage(t *testing.T) {
 	t.Run("dry-run preview", func(t *testing.T) {
-		resetAPICmdFlags(t)
+		resetCmdFlags(t, apiCmd)
 		t.Setenv("C1I_URL", "https://example.invalid")
 
 		origDryRun := viper.GetBool("dry_run")
@@ -118,7 +118,7 @@ func TestAPIInvalidJSONBodyExitsUsage(t *testing.T) {
 		}))
 		defer srv.Close()
 
-		resetAPICmdFlags(t)
+		resetCmdFlags(t, apiCmd)
 		t.Setenv("C1I_URL", "https://example.invalid")
 		stubNewAPIClient(t, srv)
 
@@ -143,7 +143,7 @@ func TestAPIInvalidJSONBodyExitsUsage(t *testing.T) {
 		}))
 		defer srv.Close()
 
-		resetAPICmdFlags(t)
+		resetCmdFlags(t, apiCmd)
 		t.Setenv("C1I_URL", "https://example.invalid")
 		stubNewAPIClient(t, srv)
 

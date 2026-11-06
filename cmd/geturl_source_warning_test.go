@@ -82,7 +82,7 @@ func TestWarnAboutURLSourceConfigWarns(t *testing.T) {
 // warnAboutURLSource directly) so a future refactor of GetBaseURLWithSource
 // can't reintroduce it by skipping the source check.
 func TestGetBaseURLWithSourceSilentForExplicitFlag(t *testing.T) {
-	resetRootURLFlag(t)
+	resetCmdFlags(t, rootCmd)
 	t.Setenv("C1I_URL", "")
 
 	var stdout bytes.Buffer
@@ -103,7 +103,7 @@ func TestGetBaseURLWithSourceSilentForExplicitFlag(t *testing.T) {
 // tenant-source warning through a real command invocation either, not just
 // via warnAboutURLSource directly.
 func TestGetBaseURLWithSourceSilentForEnvSource(t *testing.T) {
-	resetRootURLFlag(t)
+	resetCmdFlags(t, rootCmd)
 	t.Setenv("C1I_URL", "acme.conductor.one")
 
 	var stdout bytes.Buffer
@@ -128,7 +128,7 @@ func TestGetBaseURLWithSourceSilentForEnvSource(t *testing.T) {
 // comment on why). The live verification separately drives an actual
 // temporary config file end to end.
 func TestGetBaseURLWithSourceWarnsForConfigSource(t *testing.T) {
-	resetRootURLFlag(t)
+	resetCmdFlags(t, rootCmd)
 	t.Setenv("C1I_URL", "")
 	orig := viper.GetString("url")
 	viper.Set("url", "acme.conductor.one")
@@ -161,7 +161,7 @@ func TestGetBaseURLWithSourceWarnsForConfigSource(t *testing.T) {
 // drives the same single-call code path apps_list.go relies on and asserts
 // on invocation count instead.
 func TestGetBaseURLWithSourceWarnsOnceForPaginatedList(t *testing.T) {
-	resetRootURLFlag(t)
+	resetCmdFlags(t, rootCmd)
 	t.Setenv("C1I_URL", "")
 	orig := viper.GetString("url")
 	viper.Set("url", "acme.conductor.one")

@@ -246,11 +246,7 @@ func TestPageSizeFlagEnforcesTheMaxItAdvertises(t *testing.T) {
 		}
 		checked++
 
-		orig, origChanged := f.Value.String(), f.Changed
-		t.Cleanup(func() {
-			_ = f.Value.Set(orig)
-			f.Changed = origChanged
-		})
+		resetCmdFlags(t, c)
 
 		if err := f.Value.Set(strconv.Itoa(advertised + 1)); err != nil {
 			t.Fatalf("%s: setting --page-size: %v", c.CommandPath(), err)
@@ -313,13 +309,10 @@ func TestHistoryCommandsKeepTheir200Ceiling(t *testing.T) {
 		if got := f.Annotations[pageSizeMaxAnnotation]; len(got) != 1 || got[0] != "200" {
 			t.Errorf("%s: --page-size max is %v, want [200] — this endpoint accepts 200 and 100 would halve its batch size", path, got)
 		}
+		resetCmdFlags(t, c)
 		if err := f.Value.Set("200"); err != nil {
 			t.Fatalf("%s: setting --page-size: %v", path, err)
 		}
-		t.Cleanup(func() {
-			_ = f.Value.Set(f.DefValue)
-			f.Changed = false
-		})
 		if got := pageSizeFlag(c); got != 200 {
 			t.Errorf("%s: --page-size 200 was cut to %d", path, got)
 		}
@@ -484,16 +477,10 @@ func TestNegativeCountFlagsAreRejectedThroughTheRealTree(t *testing.T) {
 		{"limit", "--limit=-1", "--limit cannot be negative"},
 		{"page-size", "--page-size=-1", "--page-size cannot be negative"},
 	} {
-		// rootCmd and its subcommands are package globals; restore what this
-		// leaves behind so a later test does not inherit it.
-		f := appsListCmd.Flags().Lookup(tc.flag)
-		if f == nil {
-			t.Fatalf("apps list has no --%s flag", tc.flag)
-		}
-		orig, origChanged := f.Value.String(), f.Changed
+		// Reset per iteration: a leaked --limit=-1 would fail the next case
+		// on the wrong flag.
+		resetCmdFlags(t, appsListCmd)
 		err := runRootWithArgs(t, []string{"apps", "list", tc.arg})
-		_ = f.Value.Set(orig)
-		f.Changed = origChanged
 		rootCmd.SetArgs(nil)
 
 		if err == nil || !strings.Contains(err.Error(), tc.want) {

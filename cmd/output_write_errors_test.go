@@ -148,8 +148,7 @@ func TestTextOutputFailsOnOutputWriteError(t *testing.T) {
 			}))
 			defer srv.Close()
 			stubGetClient(t, srv)
-			resetRootURLFlag(t)
-			resetRootDryRunFlag(t)
+			resetCmdFlags(t, rootCmd)
 			resetCmds(t, tc.reset...)
 			t.Cleanup(func() { resetCmds(t, tc.reset...) })
 			if slices.Contains(tc.args, "--dry-run") {
@@ -184,7 +183,7 @@ func TestTextOutputFailsOnOutputWriteError(t *testing.T) {
 func runUpgradeToDeadStdout(t *testing.T, args ...string) error {
 	t.Helper()
 	resetCmds(t, upgradeCmd)
-	resetRootDryRunFlag(t)
+	resetCmdFlags(t, rootCmd)
 	var errOut bytes.Buffer
 	rootCmd.SetOut(failingWriter{})
 	rootCmd.SetErr(&errOut)
@@ -237,8 +236,7 @@ func TestMcpToolsApproveOutputFailureKeepsSummary(t *testing.T) {
 	}))
 	defer srv.Close()
 	stubGetClient(t, srv)
-	resetRootURLFlag(t)
-	resetRootDryRunFlag(t)
+	resetCmdFlags(t, rootCmd)
 	resetCmds(t, mcpToolsApproveCmd)
 	t.Cleanup(func() { resetCmds(t, mcpToolsApproveCmd) })
 	t.Setenv("C1I_URL", "https://example.invalid")

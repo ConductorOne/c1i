@@ -469,7 +469,7 @@ func TestPoliciesListEmitsStepKindsEndToEnd(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	resetPoliciesListCmdFlags(t)
+	resetCmdFlags(t, policiesListCmd)
 	out, err := runPoliciesListCmd(t, srv)
 	if err != nil {
 		t.Fatalf("RunE: %v", err)
@@ -508,7 +508,7 @@ func TestPoliciesSearchEmitsStepKindsEndToEnd(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	resetPoliciesSearchCmdFlags(t)
+	resetCmdFlags(t, policiesSearchCmd)
 	out, err := runPoliciesSearchCmd(t, srv)
 	if err != nil {
 		t.Fatalf("RunE: %v", err)
