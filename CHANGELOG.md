@@ -101,10 +101,6 @@ credentials fails instead of using the working directory. With a relative
   `--resource-type-id`/`--resource-id` (`entitlements create`), `--policy-id`
   (`findings create-task`) and `--duration` (`tasks update-grant-duration`)
   with exit 2.
-- An id of `.` or `..` (or a raw `api --path` segment such as `%2E`) now
-  exits `2` and sends nothing, for every method. The API resolves such a
-  segment to the parent or collection, and a write could reach the wrong
-  handler with no redirect for the client to refuse.
 - An id of `.` or `..`, including with a `;` suffix (`..;x`) or as a raw
   `api --path` segment such as `%2E`, now exits `2` and sends nothing, for
   every method. The API resolves such a segment to the parent or collection,
