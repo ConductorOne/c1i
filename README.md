@@ -1027,6 +1027,8 @@ branch on without parsing text:
 | `7` | `mcp gateway call` completed, but the tool itself reported an error (`isError: true` in its result) |
 | `8` | a system beyond C1, or the MCP protocol layer, failed — an upstream connector was unreachable or errored, the gateway itself was unreachable (DNS failure, refused connection), or the gateway returned a protocol-level JSON-RPC error |
 
+Exit `1` with `writing output:` means stdout failed (e.g. a full disk), and the request may already have succeeded server-side: verify before retrying a mutation.
+
 `6` and `8` are both "something remote broke," but they call for different
 responses. `6` means C1 itself is failing, so retrying later is reasonable and
 there is nothing to fix at your end. `8` means C1 answered fine and something

@@ -288,6 +288,8 @@ APP_ID=$(c1i apps create --display-name "Example" | jq -r '.app.id')
 | 7 | `mcp gateway call` succeeded but the tool reported `isError: true` | inspect the printed result, not just the code |
 | 8 | a system beyond C1, or the protocol layer, failed — including a gateway that is unreachable (DNS failure, refused connection) | retrying the same call usually repeats it. For a connector failure, check the server with `mcp servers get <connector-id> --app-id <id>` and `mcp servers test-connection`; the upstream may be unreachable or its credentials expired. For a protocol error, it's a version mismatch or a c1i bug — report it, don't work around it |
 
+Exit 1 with `writing output:` means stdout failed (e.g. a full disk), and the request may already have succeeded server-side: verify before retrying a mutation.
+
 Branch on the exit code, not stderr text. An empty id argument is a usage error
 (`c1i users get ""` exits 2 without sending anything) — worth knowing if you
 build ids programmatically, because it used to return the whole collection with

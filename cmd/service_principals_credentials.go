@@ -310,7 +310,9 @@ var spCredentialsRevokeCmd = &cobra.Command{
 		if _, err := c.Delete(cmd.Context(), path); err != nil {
 			return fmt.Errorf("API error: %w", err)
 		}
-		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Revoked credential: id=%s service_principal_id=%s\n", args[0], spID)
+		if _, err := fmt.Fprintf(cmd.OutOrStdout(), "Revoked credential: id=%s service_principal_id=%s\n", args[0], spID); err != nil {
+			return wrapOutputErr(err)
+		}
 		return nil
 	},
 }

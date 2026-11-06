@@ -135,14 +135,14 @@ named exactly as the function has them — usually main.ts and main.test.ts).`,
 				_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "wrote %s (%d bytes)\n", path, len(decoded))
 			} else {
 				if _, err := fmt.Fprintf(out, "// ===== %s =====\n", name); err != nil {
-					return outputError(err)
+					return wrapOutputErr(err)
 				}
 				if _, err := out.Write(decoded); err != nil {
-					return outputError(err)
+					return wrapOutputErr(err)
 				}
 				if len(decoded) > 0 && decoded[len(decoded)-1] != '\n' {
 					if _, err := out.Write([]byte("\n")); err != nil {
-						return outputError(err)
+						return wrapOutputErr(err)
 					}
 				}
 			}

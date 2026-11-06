@@ -461,16 +461,17 @@ func (e *emitter) Encode(v any) error {
 // counts a row the caller didn't get.
 func (e *emitter) write(v any) error {
 	if err := e.enc.Encode(v); err != nil {
-		return outputError(err)
+		return wrapOutputErr(err)
 	}
 	e.written++
 	return nil
 }
 
-// outputError wraps a failed stdout write (ENOSPC, EIO, ...). It exits 1
+// wrapOutputErr wraps a failed stdout write (ENOSPC, EIO, ...). It exits 1
 // (generic): a local I/O failure is neither C1's fault nor a usage error.
-// EPIPE never gets here; Go's SIGPIPE default kills the process first.
-func outputError(err error) error {
+// On Unix, EPIPE never gets here (Go's SIGPIPE default kills the process
+// first); on Windows a closed pipe is an ordinary error and exits 1.
+func wrapOutputErr(err error) error {
 	if err == nil {
 		return nil
 	}
@@ -519,7 +520,7 @@ func writeObject(cmd *cobra.Command, data []byte) error {
 			}
 			if b, err := json.MarshalIndent(projected, "", "  "); err == nil {
 				_, err := cmd.OutOrStdout().Write(append(b, '\n'))
-				return outputError(err)
+				return wrapOutputErr(err)
 			}
 		}
 	}
@@ -571,5 +572,5 @@ func writeRawObject(cmd *cobra.Command, data []byte) error {
 	}
 	pretty.WriteByte('\n')
 	_, err := out.Write(pretty.Bytes())
-	return outputError(err)
+	return wrapOutputErr(err)
 }

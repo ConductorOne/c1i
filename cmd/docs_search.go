@@ -149,7 +149,7 @@ Examples:
 		}
 
 		_, err = fmt.Fprintln(cmd.OutOrStdout(), page.Content)
-		return outputError(err)
+		return wrapOutputErr(err)
 	},
 }
 

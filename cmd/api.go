@@ -273,7 +273,7 @@ an intended non-GET REST write.`,
 				// emitter handles json.RawMessage directly (and projects it with
 				// UseNumber when --fields is set), preserving precision.
 				if err := enc.Encode(item); err != nil {
-					return fmt.Errorf("failed to write output: %w", err)
+					return err
 				}
 				if limitReached(enc.Written(), limit) {
 					return nil

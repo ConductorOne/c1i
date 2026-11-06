@@ -383,9 +383,11 @@ func (p *entitlementCreatePlan) previewRequests(cmd *cobra.Command) error {
 		if len(used) > 1 {
 			subject = "stand in for ids"
 		}
-		_, _ = fmt.Fprintf(cmd.OutOrStdout(),
+		if _, err := fmt.Fprintf(cmd.OutOrStdout(),
 			"[dry-run] requests are sent in order; %s %s the preceding response returns\n",
-			strings.Join(used, "/"), subject)
+			strings.Join(used, "/"), subject); err != nil {
+			return wrapOutputErr(err)
+		}
 	}
 
 	if p.resourceTypeBody != nil {

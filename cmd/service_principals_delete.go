@@ -28,7 +28,9 @@ var servicePrincipalsDeleteCmd = &cobra.Command{
 		if _, err := c.Delete(cmd.Context(), path); err != nil {
 			return fmt.Errorf("API error: %w", err)
 		}
-		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Deleted service principal: id=%s\n", args[0])
+		if _, err := fmt.Fprintf(cmd.OutOrStdout(), "Deleted service principal: id=%s\n", args[0]); err != nil {
+			return wrapOutputErr(err)
+		}
 		return nil
 	},
 }

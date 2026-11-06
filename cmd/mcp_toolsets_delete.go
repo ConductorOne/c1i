@@ -38,7 +38,9 @@ var mcpToolsetsDeleteCmd = &cobra.Command{
 			return fmt.Errorf("API error: %w", err)
 		}
 
-		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Deleted toolset: id=%s\n", id)
+		if _, err := fmt.Fprintf(cmd.OutOrStdout(), "Deleted toolset: id=%s\n", id); err != nil {
+			return wrapOutputErr(err)
+		}
 		return nil
 	},
 }

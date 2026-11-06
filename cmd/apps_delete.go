@@ -36,7 +36,9 @@ app) can be cleaned up without dropping to the raw "api" escape hatch.`,
 			return fmt.Errorf("API error: %w", err)
 		}
 
-		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Deleted app: id=%s\n", args[0])
+		if _, err := fmt.Fprintf(cmd.OutOrStdout(), "Deleted app: id=%s\n", args[0]); err != nil {
+			return wrapOutputErr(err)
+		}
 		return nil
 	},
 }

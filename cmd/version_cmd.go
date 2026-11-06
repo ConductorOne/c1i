@@ -9,8 +9,9 @@ import (
 var versionCmd = &cobra.Command{
 	Use:   "version",
 	Short: "Print the c1i version",
-	Run: func(cmd *cobra.Command, args []string) {
-		_, _ = fmt.Fprintln(cmd.OutOrStdout(), Version)
+	RunE: func(cmd *cobra.Command, args []string) error {
+		_, err := fmt.Fprintln(cmd.OutOrStdout(), Version)
+		return wrapOutputErr(err)
 	},
 }
 

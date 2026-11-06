@@ -849,11 +849,17 @@ Examples:
 	ValidArgsFunction: completeGuideNames,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		if len(args) == 0 {
-			_, _ = fmt.Fprintln(cmd.OutOrStdout(), "Available guides:")
-			for _, name := range guideNames() {
-				_, _ = fmt.Fprintf(cmd.OutOrStdout(), "  %-34s %s\n", name, guideSummaries[name])
+			if _, err := fmt.Fprintln(cmd.OutOrStdout(), "Available guides:"); err != nil {
+				return wrapOutputErr(err)
 			}
-			_, _ = fmt.Fprintln(cmd.OutOrStdout(), "\nRun \"c1i docs guide <name>\" to print one.")
+			for _, name := range guideNames() {
+				if _, err := fmt.Fprintf(cmd.OutOrStdout(), "  %-34s %s\n", name, guideSummaries[name]); err != nil {
+					return wrapOutputErr(err)
+				}
+			}
+			if _, err := fmt.Fprintln(cmd.OutOrStdout(), "\nRun \"c1i docs guide <name>\" to print one."); err != nil {
+				return wrapOutputErr(err)
+			}
 			return nil
 		}
 
@@ -864,7 +870,7 @@ Examples:
 		}
 
 		_, err := fmt.Fprint(cmd.OutOrStdout(), content)
-		return outputError(err)
+		return wrapOutputErr(err)
 	},
 }
 

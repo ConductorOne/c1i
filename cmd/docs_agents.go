@@ -43,7 +43,7 @@ plain Markdown.
 		}
 
 		_, err := fmt.Fprint(cmd.OutOrStdout(), content)
-		return outputError(err)
+		return wrapOutputErr(err)
 	},
 }
 

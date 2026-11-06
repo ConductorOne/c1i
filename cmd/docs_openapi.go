@@ -39,7 +39,7 @@ var docsOpenapiCmd = &cobra.Command{
 			return err
 		}
 		_, err = cmd.OutOrStdout().Write(data)
-		return outputError(err)
+		return wrapOutputErr(err)
 	},
 }
 
@@ -165,7 +165,7 @@ Examples:
 			return err
 		}
 		_, err = fmt.Fprintln(cmd.OutOrStdout(), string(out))
-		return outputError(err)
+		return wrapOutputErr(err)
 	},
 }
 

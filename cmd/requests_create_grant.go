@@ -116,7 +116,9 @@ suffix, e.g. 86400s. "24h" and "7d" are refused by the server with:
 			return fmt.Errorf("failed to parse response: %w", err)
 		}
 
-		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Created grant request: task_id=%s state=%s\n", resp.TaskView.Task.ID, resp.TaskView.Task.State)
+		if _, err := fmt.Fprintf(cmd.OutOrStdout(), "Created grant request: task_id=%s state=%s\n", resp.TaskView.Task.ID, resp.TaskView.Task.State); err != nil {
+			return wrapOutputErr(err)
+		}
 		return nil
 	},
 }

@@ -44,7 +44,9 @@ sync when they disappear from the upstream MCP server. Use "mcp tools approve
 			return fmt.Errorf("API error: %w", err)
 		}
 
-		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Deleted tool: id=%s\n", id)
+		if _, err := fmt.Fprintf(cmd.OutOrStdout(), "Deleted tool: id=%s\n", id); err != nil {
+			return wrapOutputErr(err)
+		}
 		return nil
 	},
 }
