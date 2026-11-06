@@ -516,7 +516,7 @@ func repeatableStringFlagError(name string) error {
 // `--x ""` reads back as an EMPTY slice: GetStringArray round-trips the value
 // through a CSV string, and a single empty element serializes to "" which
 // parses back as no elements at all. Only Changed distinguishes that from
-// "flag never passed". Both shapes measured against pflag v1.0.10.
+// "flag never passed". Both shapes hold on pflag v1.0.10 and v1.1.0.
 //
 // Not passing the flag at all is not an error here: whether the flag is
 // required is the command's business, and several callers treat it as optional.
