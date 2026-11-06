@@ -1163,7 +1163,9 @@ retried depends on the request, to avoid duplicating side effects:
 - **`429 Too Many Requests`** — retried for every command (the request is
   rejected before the server processes it, so a retry is always safe).
 - **Transient `5xx` (500, 502, 503, 504) and network errors** — retried only for
-  idempotent reads and updates (GET/PUT/DELETE). Non-idempotent `POST` mutations
+  idempotent reads and updates (GET/PUT/DELETE) and for the read-only search and
+  list `POST`s behind list commands (`/api/v1/search/*`, and any `/api/v1/` path
+  ending in `/search` or `/list`). Other `POST` mutations
   (e.g. `requests create`, `tasks approve`) are **not** retried on these, since
   the server may have already applied the change before the failure.
   Non-transient 5xx (501 Not Implemented, 505, 511) are never retried.

@@ -29,6 +29,13 @@ credentials fails instead of using the working directory. With a relative
   ignored `nextPageToken`. They now warn on stderr when one is returned.
   None of these routes paginate today.
 
+- **List and search commands that read via `POST` were never retried on a
+  transient 5xx or network error**, unlike GET-based lists: `users`, `grants`,
+  `entitlements`, `tasks`, `policies`, `findings` and `mcp` searches among
+  them. A `POST` to `/api/v1/search/*`, or to an `/api/v1/` path ending in
+  `/search` or `/list`, is now retried like a GET; every such route is a
+  read. Other `POST`s are still retried only on 429.
+
 - **`automations list`, `automations executions list`, `functions list`,
   `functions commits`, `functions usage`, and `api --paginate` could loop
   forever**, re-printing the same rows: on a large enough result set,
