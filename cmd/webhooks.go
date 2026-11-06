@@ -59,7 +59,7 @@ func webhookFields(cmd *cobra.Command) (map[string]any, []string, error) {
 			return nil, nil, err
 		}
 		// Update stores any length, so the create-side rule is applied to both.
-		if n := utf8.RuneCountInString(strings.TrimSpace(v)); n < 3 || n > 100 {
+		if n := utf8.RuneCountInString(v); utf8.RuneCountInString(strings.TrimSpace(v)) < 3 || n > 100 {
 			return nil, nil, &usageError{fmt.Errorf("--display-name must be 3-100 characters, got %d (the server's create rule: \"value length must be between 3 and 100 runes, inclusive\")", n)}
 		}
 		fields["displayName"] = v
