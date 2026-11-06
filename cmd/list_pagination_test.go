@@ -211,6 +211,16 @@ func listPaginationCases() []listPaginationCase {
 			rowIDs:   idRows("id"),
 		},
 		{
+			name:       "entitlements owners",
+			cmd:        entitlementsOwnersCmd,
+			method:     http.MethodGet,
+			wantPath:   "/api/v1/apps/app1/entitlements/ent1/owners",
+			args:       []string{"ent1"},
+			extraFlags: map[string]string{"app-id": "app1"},
+			page:       flatPage("list", "id"),
+			rowIDs:     idRows("id"),
+		},
+		{
 			name:        "automations executions list",
 			compositeID: true, // the automationExecution wrapper may be null
 			cmd:         automationsExecutionsListCmd,

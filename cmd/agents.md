@@ -379,7 +379,12 @@ resource with `--resource-id` likewise means you drop
   write can look like a no-op. Verify app owners with `c1i apps owners
   <app-id>`, not `apps get`'s `appOwners` field; an empty `appOwners` is not
   evidence an app has no owners. Use `apps set-owners --wait` when the write
-  must converge before the next step. A wait timeout does not mean the write
+  must converge before the next step. Entitlement owners work the same way:
+  read with `c1i entitlements owners <entitlement-id> --app-id <app-id>`,
+  write with `entitlements add-owner`/`remove-owner <user-id> --app-id
+  --entitlement-id` or `entitlements set-owners <entitlement-id> --app-id
+  --user-id ...` (replaces the list; at least one `--user-id`), and pass
+  `--wait` on `add-owner`/`set-owners` to converge. A wait timeout does not mean the write
   failed — re-check before writing again.
 - `apps update`/`apps create` `--grant-policy-id`, `--revoke-policy-id` and
   `--certify-policy-id` are checked by c1i (exists, not deleted, right

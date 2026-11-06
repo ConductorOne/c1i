@@ -139,6 +139,10 @@ c1i accounts set-owner <app-user-id> --app-id <id> --user-id <id>
 ```sh
 c1i entitlements list [--app-id <id>] [--query <text>] [--page-size N] [--page-token TOKEN] [--limit N]
 c1i entitlements get <entitlement-id> --app-id <id>
+c1i entitlements owners <entitlement-id> --app-id <id> [--page-size N] [--page-token TOKEN] [--limit N]
+c1i entitlements add-owner <user-id> --app-id <id> --entitlement-id <id> [--wait] [--wait-timeout 4m]
+c1i entitlements remove-owner <user-id> --app-id <id> --entitlement-id <id>
+c1i entitlements set-owners <entitlement-id> --app-id <id> --user-id <id> [--user-id <id> ...] [--wait] [--wait-timeout 4m]
 
 # Directional entitlement-to-entitlement proxy binding
 c1i entitlements proxy-bindings get \
@@ -226,6 +230,20 @@ created entitlement comes back as pretty JSON under `appEntitlementView`
 (`--fields` is never applied to mutation output); it echoes
 `appResourceTypeId`/`appResourceId` and expands both objects, so every id the
 command touched is in that one payload.
+
+`entitlements owners` lists an entitlement's owners (same row shape as
+`apps owners`) and is the read that reflects `entitlements add-owner`,
+`remove-owner` and `set-owners`. Owner provisioning is asynchronous: writes
+showed up anywhere from about 1s to 100s after being accepted. `--wait` on
+`add-owner` and `set-owners` polls `GET .../ownerids` until the requested
+owners appear, or `--wait-timeout` (default `4m`) elapses (exit `1`, though
+the write was accepted); its progress lines go to stderr, so stdout stays the
+write's JSON response. `set-owners` replaces the whole list and needs at least
+one `--user-id`, since the API takes an empty list as "remove every owner".
+The API accepts a `set-owners` user id that matches no user at exit `0` and
+drops it, so a set naming only unknown ids leaves no owners; `add-owner` and
+`remove-owner` exit `4` on one. `owners` returns zero rows at
+exit `0` for a nonexistent entitlement or app.
 
 `entitlements proxy-bindings` manages directional entitlement-to-entitlement
 visibility and tracking links. Source and destination are each identified by

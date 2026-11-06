@@ -283,6 +283,11 @@ func TestValidationGuardsExitUsage(t *testing.T) {
 			cmds: []*cobra.Command{appsSetOwnersCmd},
 		},
 		{
+			name: "entitlements set-owners: --user-id empty alongside a real one",
+			args: []string{"entitlements", "set-owners", "ent-1", "--app-id", "app-1", "--user-id", "", "--user-id", "user-b"},
+			cmds: []*cobra.Command{entitlementsSetOwnersCmd},
+		},
+		{
 			name: "mcp bindings create: --tool-id empty alongside a real one",
 			args: []string{"mcp", "bindings", "create", "--app-id", "a", "--connector-id", "c", "--toolset-id", "t", "--tool-id", "", "--tool-id", "tool-b"},
 			cmds: []*cobra.Command{mcpBindingsCreateCmd},
