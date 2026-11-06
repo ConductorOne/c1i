@@ -106,7 +106,7 @@ var accountsListCmd = &cobra.Command{
 				if unmappedOnly && a.IdentityUserID != "" {
 					continue
 				}
-				_ = enc.Encode(map[string]string{
+				if err := enc.Encode(map[string]string{
 					"id":               a.ID,
 					"app_id":           a.AppID,
 					"display_name":     a.DisplayName,
@@ -115,7 +115,9 @@ var accountsListCmd = &cobra.Command{
 					"identity_user_id": a.IdentityUserID,
 					"app_user_type":    a.AppUserType,
 					"status":           a.Status.Status,
-				})
+				}); err != nil {
+					return err
+				}
 				if limitReached(enc.Written(), limit) {
 					return nil
 				}

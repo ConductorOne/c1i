@@ -863,8 +863,8 @@ Examples:
 			return &usageError{fmt.Errorf("unknown guide %q; available guides: %s", name, strings.Join(guideNames(), ", "))}
 		}
 
-		_, _ = fmt.Fprint(cmd.OutOrStdout(), content)
-		return nil
+		_, err := fmt.Fprint(cmd.OutOrStdout(), content)
+		return outputError(err)
 	},
 }
 

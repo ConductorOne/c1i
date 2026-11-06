@@ -69,10 +69,12 @@ no bindings are still emitted with an empty toolsets array.`,
 			for _, p := range group.AccessProfiles {
 				toolsets = append(toolsets, toolsetRow(p))
 			}
-			_ = enc.Encode(map[string]any{
+			if err := enc.Encode(map[string]any{
 				"mcp_tool_id": group.MCPToolID,
 				"toolsets":    toolsets,
-			})
+			}); err != nil {
+				return err
+			}
 		}
 		return nil
 	},

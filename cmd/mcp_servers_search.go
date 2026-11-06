@@ -108,7 +108,9 @@ TSDB read each) so you can spot idle servers.`,
 					tc := int64(r.ToolCount)
 					toolCount = &tc
 				}
-				_ = enc.Encode(serverCountRow(r.MCPServer, toolCount))
+				if err := enc.Encode(serverCountRow(r.MCPServer, toolCount)); err != nil {
+					return err
+				}
 				if limitReached(enc.Written(), limit) {
 					return nil
 				}

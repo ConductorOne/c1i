@@ -153,7 +153,9 @@ var spBindingsListCmd = &cobra.Command{
 			}
 
 			for _, b := range resp.Bindings {
-				_ = enc.Encode(spBindingRow(b))
+				if err := enc.Encode(spBindingRow(b)); err != nil {
+					return err
+				}
 				if limitReached(enc.Written(), limit) {
 					return nil
 				}

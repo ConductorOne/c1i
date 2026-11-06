@@ -127,7 +127,9 @@ Combine with --limit to bound the work.`,
 				if templateID != "" && e.AutomationTemplateID != templateID {
 					continue
 				}
-				_ = enc.Encode(executionRow(e))
+				if err := enc.Encode(executionRow(e)); err != nil {
+					return err
+				}
 				if limitReached(enc.Written(), limit) {
 					return nil
 				}

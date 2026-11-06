@@ -127,7 +127,9 @@ var functionsListCmd = &cobra.Command{
 				if draftOnly && published {
 					continue
 				}
-				_ = enc.Encode(functionRow(f))
+				if err := enc.Encode(functionRow(f)); err != nil {
+					return err
+				}
 				if limitReached(enc.Written(), limit) {
 					return nil
 				}

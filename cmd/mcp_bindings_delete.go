@@ -61,8 +61,7 @@ in the request body; HTTP DELETE doesn't reliably support that.`,
 			"toolset_id": toolsetID,
 			"tool_ids":   toolIDs,
 		}
-		_ = json.NewEncoder(cmd.OutOrStdout()).Encode(out)
-		return nil
+		return outputError(json.NewEncoder(cmd.OutOrStdout()).Encode(out))
 	},
 }
 

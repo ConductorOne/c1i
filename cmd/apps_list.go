@@ -93,7 +93,9 @@ var appsListCmd = &cobra.Command{
 				resp.List = nil
 			}
 			for _, a := range resp.List {
-				_ = enc.Encode(appRow(a))
+				if err := enc.Encode(appRow(a)); err != nil {
+					return err
+				}
 				if limitReached(enc.Written(), limit) {
 					return nil
 				}

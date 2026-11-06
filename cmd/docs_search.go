@@ -83,12 +83,14 @@ Examples:
 
 		enc := newEmitter(cmd)
 		for _, r := range results {
-			_ = enc.Encode(map[string]string{
+			if err := enc.Encode(map[string]string{
 				"title":   r.Metadata.Title,
 				"path":    r.Path,
 				"url":     docsBaseURL + r.Path,
 				"content": r.Content,
-			})
+			}); err != nil {
+				return err
+			}
 		}
 
 		return nil
@@ -146,8 +148,8 @@ Examples:
 			return fmt.Errorf("failed to parse response: %w", err)
 		}
 
-		_, _ = fmt.Fprintln(cmd.OutOrStdout(), page.Content)
-		return nil
+		_, err = fmt.Fprintln(cmd.OutOrStdout(), page.Content)
+		return outputError(err)
 	},
 }
 

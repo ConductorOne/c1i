@@ -51,15 +51,15 @@ The token is not written to disk; a new one is minted on each invocation.`,
 		if asJSON, _ := cmd.Flags().GetBool("json"); asJSON {
 			enc := json.NewEncoder(out)
 			enc.SetIndent("", "  ")
-			return enc.Encode(map[string]string{
+			return outputError(enc.Encode(map[string]string{
 				"access_token": tok.AccessToken,
 				"token_type":   tok.TokenType,
 				"expires_at":   tok.Expiry.UTC().Format("2006-01-02T15:04:05Z07:00"),
-			})
+			}))
 		}
 
-		_, _ = fmt.Fprintln(out, tok.AccessToken)
-		return nil
+		_, err = fmt.Fprintln(out, tok.AccessToken)
+		return outputError(err)
 	},
 }
 

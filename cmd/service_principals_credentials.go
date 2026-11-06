@@ -108,7 +108,9 @@ var spCredentialsListCmd = &cobra.Command{
 				resp.List = nil
 			}
 			for _, cred := range resp.List {
-				_ = enc.Encode(spCredentialRow(cred))
+				if err := enc.Encode(spCredentialRow(cred)); err != nil {
+					return err
+				}
 				if limitReached(enc.Written(), limit) {
 					return nil
 				}

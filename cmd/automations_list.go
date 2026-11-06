@@ -150,7 +150,9 @@ var automationsListCmd = &cobra.Command{
 					continue
 				}
 
-				_ = enc.Encode(automationRow(a))
+				if err := enc.Encode(automationRow(a)); err != nil {
+					return err
+				}
 				if limitReached(enc.Written(), limit) {
 					return nil
 				}

@@ -60,7 +60,9 @@ var mcpServersConnectionsListCmd = &cobra.Command{
 			}
 
 			for _, v := range resp.List {
-				_ = enc.Encode(connectionRow(v))
+				if err := enc.Encode(connectionRow(v)); err != nil {
+					return err
+				}
 				if limitReached(enc.Written(), limit) {
 					return nil
 				}

@@ -91,7 +91,9 @@ var servicePrincipalsListCmd = &cobra.Command{
 				resp.List = nil
 			}
 			for _, sp := range resp.List {
-				_ = enc.Encode(spRow(sp))
+				if err := enc.Encode(spRow(sp)); err != nil {
+					return err
+				}
 				if limitReached(enc.Written(), limit) {
 					return nil
 				}

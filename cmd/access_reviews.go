@@ -197,7 +197,9 @@ func newAccessReviewListCmd(use, short, pathTemplate string, requiresID bool) *c
 					rows = nil
 				}
 				for _, row := range rows {
-					_ = enc.Encode(row)
+					if err := enc.Encode(row); err != nil {
+						return err
+					}
 					if limitReached(enc.Written(), limit) {
 						return nil
 					}

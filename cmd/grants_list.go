@@ -194,7 +194,9 @@ set that keeps changing, --wait times out rather than printing anything.`,
 			}
 			enc := newEmitter(cmd)
 			for _, item := range settled {
-				_ = enc.Encode(grantRow(item))
+				if err := enc.Encode(grantRow(item)); err != nil {
+					return err
+				}
 				if limitReached(enc.Written(), limit) {
 					break
 				}
@@ -240,7 +242,9 @@ set that keeps changing, --wait times out rather than printing anything.`,
 				resp.List = nil
 			}
 			for _, item := range resp.List {
-				_ = enc.Encode(grantRow(item))
+				if err := enc.Encode(grantRow(item)); err != nil {
+					return err
+				}
 				if limitReached(enc.Written(), limit) {
 					return nil
 				}

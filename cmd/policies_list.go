@@ -112,7 +112,9 @@ recipe above reads.`,
 				resp.List = nil
 			}
 			for _, p := range resp.List {
-				_ = enc.Encode(policyRow(p))
+				if err := enc.Encode(policyRow(p)); err != nil {
+					return err
+				}
 				if limitReached(enc.Written(), limit) {
 					return nil
 				}

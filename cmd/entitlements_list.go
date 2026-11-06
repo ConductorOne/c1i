@@ -108,7 +108,9 @@ var entitlementsListCmd = &cobra.Command{
 				resp.List = nil
 			}
 			for _, item := range resp.List {
-				_ = enc.Encode(entitlementRow(item))
+				if err := enc.Encode(entitlementRow(item)); err != nil {
+					return err
+				}
 				if limitReached(enc.Written(), limit) {
 					return nil
 				}

@@ -84,7 +84,9 @@ scope tiering (see "catalog get" for details and caveats).`,
 				resp.List = nil
 			}
 			for _, e := range resp.List {
-				_ = enc.Encode(catalogEntryRow(e))
+				if err := enc.Encode(catalogEntryRow(e)); err != nil {
+					return err
+				}
 				if limitReached(enc.Written(), limit) {
 					return nil
 				}
