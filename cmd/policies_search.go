@@ -57,7 +57,12 @@ it only ignores case, and the names differ by more than that between tenants
 		limit := getIntFlag(cmd, "limit")
 
 		enc := newEmitter(cmd)
+		guard := newPaginationCursorGuard()
+		route := "POST /api/v1/search/policies"
 		for !limitReached(enc.Written(), limit) {
+			if guard.tokenAlreadyUsed(pageToken) {
+				return guard.warnStuck(cmd, route)
+			}
 			pageSize := requestedPageSize
 			if !enc.Filtered() {
 				pageSize = effectivePageSize(requestedPageSize, limit, enc.Written())
@@ -101,6 +106,17 @@ it only ignores case, and the names differ by more than that between tenants
 				return fmt.Errorf("failed to parse response: %w", err)
 			}
 
+			ids := make([]string, len(resp.List))
+			for i, it := range resp.List {
+				ids[i] = it.ID
+			}
+			emit, stuck := guard.checkPage(ids)
+			if stuck {
+				return guard.warnStuck(cmd, route)
+			}
+			if !emit {
+				resp.List = nil
+			}
 			for _, p := range resp.List {
 				_ = enc.Encode(policyRow(p))
 				if limitReached(enc.Written(), limit) {
@@ -111,6 +127,7 @@ it only ignores case, and the names differ by more than that between tenants
 			if resp.NextPageToken == "" || manualPaging {
 				break
 			}
+			guard.markTokenUsed(pageToken)
 			pageToken = resp.NextPageToken
 		}
 

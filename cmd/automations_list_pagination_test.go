@@ -100,6 +100,11 @@ func TestAutomationsListStuckCursorSameTokenTerminates(t *testing.T) {
 // A fresh token every call over an unchanged page: the repeated page, not the
 // token, must trip the guard.
 func TestAutomationsListStuckCursorChangingTokenTerminates(t *testing.T) {
+	// Enough rows that two stale pages meet stuckStaleRows.
+	var staleIDs []string
+	for i := 0; i < stuckStaleRows; i++ {
+		staleIDs = append(staleIDs, fmt.Sprintf("auto-%d", i))
+	}
 	var requestCount int
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		requestCount++
@@ -112,10 +117,10 @@ func TestAutomationsListStuckCursorChangingTokenTerminates(t *testing.T) {
 		w.Header().Set("Content-Type", "application/json")
 		switch tok {
 		case "":
-			_, _ = fmt.Fprint(w, automationPage([]string{"auto-a", "auto-b"}, "tok-v1"))
+			_, _ = fmt.Fprint(w, automationPage(staleIDs, "tok-v1"))
 		case "tok-v1", "tok-v2":
 			// Same rows again, but a freshly minted, never-before-seen token.
-			_, _ = fmt.Fprint(w, automationPage([]string{"auto-a", "auto-b"}, fmt.Sprintf("tok-v%d", requestCount)))
+			_, _ = fmt.Fprint(w, automationPage(staleIDs, fmt.Sprintf("tok-v%d", requestCount)))
 		default:
 			t.Errorf("unexpected pageToken: %q", tok)
 			w.WriteHeader(http.StatusInternalServerError)
@@ -133,8 +138,8 @@ func TestAutomationsListStuckCursorChangingTokenTerminates(t *testing.T) {
 	}
 
 	rows := decodeNDJSONRows(t, out)
-	if len(rows) != 2 || rows[0]["id"] != "auto-a" || rows[1]["id"] != "auto-b" {
-		t.Fatalf("got rows %v, want exactly one occurrence each of auto-a, auto-b", rows)
+	if len(rows) != stuckStaleRows || rows[0]["id"] != "auto-0" {
+		t.Fatalf("got %d rows, want the page's %d rows once each", len(rows), stuckStaleRows)
 	}
 	if requestCount != 3 {
 		t.Fatalf("server received %d requests, want exactly 3 (the page must repeat twice before the cursor counts as stuck)", requestCount)

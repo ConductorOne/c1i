@@ -564,6 +564,10 @@ func TestListToolsRepeatedCursorTerminates(t *testing.T) {
 	if calls > 3 {
 		t.Errorf("tools/list was called %d times, want termination within a couple of pages on a repeated cursor", calls)
 	}
+	var pagErr *PaginationError
+	if !errors.As(err, &pagErr) {
+		t.Errorf("err = %T %v, want *PaginationError so cmd can classify it", err, err)
+	}
 	t.Logf("ListTools terminated after %d tools/list call(s) with error: %v", calls, err)
 }
 
@@ -598,6 +602,10 @@ func TestListToolsMaxPagesBackstop(t *testing.T) {
 	}
 	if calls > maxToolsListPages+1 {
 		t.Errorf("tools/list was called %d times, want termination at or shortly after maxToolsListPages=%d", calls, maxToolsListPages)
+	}
+	var pagErr *PaginationError
+	if !errors.As(err, &pagErr) {
+		t.Errorf("err = %T %v, want *PaginationError so cmd can classify it", err, err)
 	}
 	t.Logf("ListTools terminated after %d tools/list call(s) with error: %v", calls, err)
 }

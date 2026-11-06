@@ -252,9 +252,14 @@ func readRoles(ctx context.Context, c *client.Client) ([]menuRole, error) {
 		held[id] = true
 	}
 
+	const route = "GET /api/v1/iam/roles"
 	var catalog []roleListItem
 	params := map[string]string{"page_size": "100"}
+	guard := newPaginationCursorGuard()
 	for {
+		if guard.tokenAlreadyUsed(params["page_token"]) {
+			return nil, guard.stuckError(route)
+		}
 		data, err := c.Get(ctx, "/api/v1/iam/roles", params)
 		if err != nil {
 			return nil, err
@@ -266,10 +271,21 @@ func readRoles(ctx context.Context, c *client.Client) ([]menuRole, error) {
 		if err := json.Unmarshal(data, &page); err != nil {
 			return nil, &nonJSONResponseError{fmt.Errorf("parsing roles response: %w", err)}
 		}
-		catalog = append(catalog, page.List...)
+		ids := make([]string, len(page.List))
+		for i, r := range page.List {
+			ids[i] = r.ID
+		}
+		emit, stuck := guard.checkPage(ids)
+		if stuck {
+			return nil, guard.stuckError(route)
+		}
+		if emit {
+			catalog = append(catalog, page.List...)
+		}
 		if page.NextPageToken == "" {
 			break
 		}
+		guard.markTokenUsed(params["page_token"])
 		params["page_token"] = page.NextPageToken
 	}
 	return filterDelegable(catalog, held), nil

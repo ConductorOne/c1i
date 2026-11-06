@@ -63,7 +63,12 @@ var accessProfilesListCmd = &cobra.Command{
 		limit := getIntFlag(cmd, "limit")
 
 		enc := newEmitter(cmd)
+		guard := newPaginationCursorGuard()
+		route := "GET /api/v1/catalogs"
 		for !limitReached(enc.Written(), limit) {
+			if guard.tokenAlreadyUsed(pageToken) {
+				return guard.warnStuck(cmd, route)
+			}
 			pageSize := requestedPageSize
 			if !enc.Filtered() {
 				pageSize = effectivePageSize(requestedPageSize, limit, enc.Written())
@@ -88,6 +93,17 @@ var accessProfilesListCmd = &cobra.Command{
 				return fmt.Errorf("failed to parse response: %w", err)
 			}
 
+			ids := make([]string, len(resp.List))
+			for i, it := range resp.List {
+				ids[i] = it.RequestCatalog.ID
+			}
+			emit, stuck := guard.checkPage(ids)
+			if stuck {
+				return guard.warnStuck(cmd, route)
+			}
+			if !emit {
+				resp.List = nil
+			}
 			for _, item := range resp.List {
 				_ = enc.Encode(catalogRow(item))
 				if limitReached(enc.Written(), limit) {
@@ -98,6 +114,7 @@ var accessProfilesListCmd = &cobra.Command{
 			if resp.NextPageToken == "" || manualPaging {
 				break
 			}
+			guard.markTokenUsed(pageToken)
 			pageToken = resp.NextPageToken
 		}
 

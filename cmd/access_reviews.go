@@ -154,7 +154,16 @@ func newAccessReviewListCmd(use, short, pathTemplate string, requiresID bool) *c
 			manualPaging := cmd.Flags().Changed("page-token")
 			limit := getIntFlag(cmd, "limit")
 			enc := newEmitter(cmd)
+			path := pathTemplate
+			if len(args) == 1 {
+				path = client.Path(pathTemplate, args[0])
+			}
+			guard := newPaginationCursorGuard()
+			route := "GET " + path
 			for !limitReached(enc.Written(), limit) {
+				if guard.tokenAlreadyUsed(pageToken) {
+					return guard.warnStuck(cmd, route)
+				}
 				pageSize := requestedPageSize
 				if !enc.Filtered() {
 					pageSize = effectivePageSize(requestedPageSize, limit, enc.Written())
@@ -162,10 +171,6 @@ func newAccessReviewListCmd(use, short, pathTemplate string, requiresID bool) *c
 				params := map[string]string{"page_size": strconv.Itoa(pageSize)}
 				if pageToken != "" {
 					params["page_token"] = pageToken
-				}
-				path := pathTemplate
-				if len(args) == 1 {
-					path = client.Path(pathTemplate, args[0])
 				}
 				data, err := c.Get(cmd.Context(), path, params)
 				if err != nil {
@@ -178,8 +183,21 @@ func newAccessReviewListCmd(use, short, pathTemplate string, requiresID bool) *c
 				if err := json.Unmarshal(data, &response); err != nil {
 					return fmt.Errorf("failed to parse response: %w", err)
 				}
-				for _, item := range response.List {
-					_ = enc.Encode(json.RawMessage(unwrapEnvelope(item, "id")))
+				rows := make([]json.RawMessage, len(response.List))
+				ids := make([]string, len(response.List))
+				for i, item := range response.List {
+					rows[i] = unwrapEnvelope(item, "id")
+					ids[i] = rawItemID(rows[i])
+				}
+				emit, stuck := guard.checkPage(ids)
+				if stuck {
+					return guard.warnStuck(cmd, route)
+				}
+				if !emit {
+					rows = nil
+				}
+				for _, row := range rows {
+					_ = enc.Encode(row)
 					if limitReached(enc.Written(), limit) {
 						return nil
 					}
@@ -187,6 +205,7 @@ func newAccessReviewListCmd(use, short, pathTemplate string, requiresID bool) *c
 				if response.NextPageToken == "" || manualPaging {
 					break
 				}
+				guard.markTokenUsed(pageToken)
 				pageToken = response.NextPageToken
 			}
 			return nil

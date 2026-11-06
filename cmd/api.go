@@ -174,7 +174,7 @@ an intended non-GET REST write.`,
 
 		for !limitReached(enc.Written(), limit) {
 			if guard.tokenAlreadyUsed(pageToken) {
-				return warnStuckCursor(cmd, route)
+				return guard.warnStuck(cmd, route)
 			}
 			reqPath := path
 			var bodyBytes []byte
@@ -261,7 +261,7 @@ an intended non-GET REST write.`,
 			}
 			emit, stuck := guard.checkPage(ids)
 			if stuck {
-				return warnStuckCursor(cmd, route)
+				return guard.warnStuck(cmd, route)
 			}
 			if !emit {
 				items = nil
@@ -431,11 +431,8 @@ func extractListAndToken(data []byte, listKey string) ([]json.RawMessage, string
 // "id" when present, else its canonical JSON (re-marshaling sorts keys;
 // UseNumber keeps large integers distinct).
 func itemIdentity(item json.RawMessage) string {
-	var withID struct {
-		ID string `json:"id"`
-	}
-	if err := json.Unmarshal(item, &withID); err == nil && withID.ID != "" {
-		return withID.ID
+	if id := rawItemID(item); id != "" {
+		return id
 	}
 	dec := json.NewDecoder(bytes.NewReader(item))
 	dec.UseNumber()

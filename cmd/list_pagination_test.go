@@ -18,8 +18,8 @@ import (
 
 // listPaginationCase describes one auto-paginating command. Adding a new one
 // to this table is one entry, not a bespoke test file; cmd/policies_list.go
-// and cmd/policies_search.go keep their own pre-existing bespoke tests
-// (cmd/policies_pagination_test.go) rather than being duplicated here.
+// and cmd/policies_search.go also keep their pre-existing bespoke tests
+// (cmd/policies_pagination_test.go) as well.
 type listPaginationCase struct {
 	name   string
 	cmd    *cobra.Command
@@ -40,10 +40,9 @@ type listPaginationCase struct {
 	// rowIDs extracts, in emission order, the identifying value each item()
 	// call varied per row from the command's decoded NDJSON output.
 	rowIDs func(rows []map[string]any) []string
-	// stuckCursorRoute ("METHOD /path") opts a case into
-	// TestListCommandsStuckCursorReturnsExitServer; set it only for commands
-	// that use paginationCursorGuard.
-	stuckCursorRoute string
+	// noRowID marks rows with no id of their own, so the cursor guard can
+	// only catch a repeated token, not fresh tokens over the same rows.
+	noRowID bool
 }
 
 // Every case's command is a package-level singleton shared by the whole test
@@ -92,11 +91,12 @@ func extractPageToken(t *testing.T, method string, r *http.Request) string {
 
 func runListPaginationCase(t *testing.T, tc listPaginationCase, srv *httptest.Server) (stdout, stderr string, err error) {
 	t.Helper()
-	orig := newListClient
-	newListClient = func(_ *cobra.Command, _ string) (*client.Client, error) {
+	orig, origPolicies := newListClient, newPoliciesClient
+	stub := func(_ *cobra.Command, _ string) (*client.Client, error) {
 		return client.NewForTesting(srv.URL, srv.Client()), nil
 	}
-	t.Cleanup(func() { newListClient = orig })
+	newListClient, newPoliciesClient = stub, stub
+	t.Cleanup(func() { newListClient, newPoliciesClient = orig, origPolicies })
 	t.Setenv("C1I_URL", "https://example.invalid")
 
 	resetCmdFlags(t, tc.cmd)
@@ -154,6 +154,16 @@ func listPaginationCases() []listPaginationCase {
 		}
 	}
 
+	// entitlementPage scopes each entitlement to one app, since the guard keys
+	// entitlements on app and id.
+	entitlementPage := func(ids []string, next string) string {
+		items := make([]string, 0, len(ids))
+		for _, id := range ids {
+			items = append(items, fmt.Sprintf(`{"appEntitlement":{"id":%s,"appId":"app1"}}`, jstr(id)))
+		}
+		return fmt.Sprintf(`{"list":[%s],"nextPageToken":%s}`, strings.Join(items, ","), jstr(next))
+	}
+
 	return []listPaginationCase{
 		{
 			name:       "accounts list",
@@ -190,13 +200,12 @@ func listPaginationCases() []listPaginationCase {
 			rowIDs:   idRows("id"),
 		},
 		{
-			name:             "automations executions list",
-			cmd:              automationsExecutionsListCmd,
-			method:           http.MethodPost,
-			wantPath:         "/api/v1/search/automation_executions",
-			page:             nestedPage("list", "automationExecution", "id"),
-			rowIDs:           idRows("id"),
-			stuckCursorRoute: "POST /api/v1/search/automation_executions",
+			name:     "automations executions list",
+			cmd:      automationsExecutionsListCmd,
+			method:   http.MethodPost,
+			wantPath: "/api/v1/search/automation_executions",
+			page:     nestedPage("list", "automationExecution", "id"),
+			rowIDs:   idRows("id"),
 		},
 		{
 			name:     "automations list",
@@ -228,11 +237,12 @@ func listPaginationCases() []listPaginationCase {
 			cmd:      entitlementsListCmd,
 			method:   http.MethodPost,
 			wantPath: "/api/v1/search/entitlements",
-			page:     nestedPage("list", "appEntitlement", "id"),
+			page:     entitlementPage,
 			rowIDs:   idRows("id"),
 		},
 		{
 			name:     "export events",
+			noRowID:  true,
 			cmd:      exportEventsCmd,
 			method:   http.MethodPost,
 			wantPath: "/api/v1/systemlog/events",
@@ -240,23 +250,21 @@ func listPaginationCases() []listPaginationCase {
 			rowIDs:   idRows("id"),
 		},
 		{
-			name:             "functions commits",
-			cmd:              functionsCommitsCmd,
-			method:           http.MethodGet,
-			wantPath:         "/api/v1/functions/func1/commits",
-			args:             []string{"func1"},
-			page:             flatPage("list", "id"),
-			rowIDs:           idRows("id"),
-			stuckCursorRoute: "GET /api/v1/functions/func1/commits",
+			name:     "functions commits",
+			cmd:      functionsCommitsCmd,
+			method:   http.MethodGet,
+			wantPath: "/api/v1/functions/func1/commits",
+			args:     []string{"func1"},
+			page:     flatPage("list", "id"),
+			rowIDs:   idRows("id"),
 		},
 		{
-			name:             "functions list",
-			cmd:              functionsListCmd,
-			method:           http.MethodGet,
-			wantPath:         "/api/v1/functions",
-			page:             flatPage("list", "id"),
-			rowIDs:           idRows("id"),
-			stuckCursorRoute: "GET /api/v1/functions",
+			name:     "functions list",
+			cmd:      functionsListCmd,
+			method:   http.MethodGet,
+			wantPath: "/api/v1/functions",
+			page:     flatPage("list", "id"),
+			rowIDs:   idRows("id"),
 		},
 		{
 			name:     "functions usage",
@@ -275,8 +283,7 @@ func listPaginationCases() []listPaginationCase {
 				}
 				return fmt.Sprintf(`{"list":[%s],"nextPageToken":%s}`, strings.Join(items, ","), jstr(next))
 			},
-			rowIDs:           idRows("automation_id"),
-			stuckCursorRoute: "POST /api/v1/search/automations",
+			rowIDs: idRows("automation_id"),
 		},
 		{
 			name:       "grants list",
@@ -288,7 +295,7 @@ func listPaginationCases() []listPaginationCase {
 				items := make([]string, 0, len(ids))
 				for _, id := range ids {
 					items = append(items, fmt.Sprintf(
-						`{"appEntitlementUserBinding":{"appUser":{"appUser":{"id":%s}}},"entitlement":{"appEntitlement":{"id":"ent1"}}}`,
+						`{"appEntitlementUserBinding":{"appUser":{"appUser":{"id":%s}}},"entitlement":{"appEntitlement":{"id":"ent1","appId":"app1"}}}`,
 						jstr(id)))
 				}
 				return fmt.Sprintf(`{"list":[%s],"nextPageToken":%s}`, strings.Join(items, ","), jstr(next))
@@ -297,6 +304,7 @@ func listPaginationCases() []listPaginationCase {
 		},
 		{
 			name:     "mcp bindings history",
+			noRowID:  true, // entries are {items, metadata}; the fixture's id is ignored
 			cmd:      mcpBindingsHistoryCmd,
 			method:   http.MethodGet,
 			wantPath: "/api/v1/apps/app1/connectors/conn1/mcp_toolsets/ts1/tool_bindings/history",
@@ -308,6 +316,7 @@ func listPaginationCases() []listPaginationCase {
 		},
 		{
 			name:     "mcp bindings list",
+			noRowID:  true,
 			cmd:      mcpBindingsListCmd,
 			method:   http.MethodGet,
 			wantPath: "/api/v1/apps/app1/connectors/conn1/mcp_toolsets/ts1/tool_bindings",
@@ -327,6 +336,7 @@ func listPaginationCases() []listPaginationCase {
 		},
 		{
 			name:     "mcp servers connections list",
+			noRowID:  true,
 			cmd:      mcpServersConnectionsListCmd,
 			method:   http.MethodGet,
 			wantPath: "/api/v1/mcp_server_connections",
@@ -353,6 +363,7 @@ func listPaginationCases() []listPaginationCase {
 		},
 		{
 			name:     "mcp tools history",
+			noRowID:  true, // entries are {metadata, snapshot}; the fixture's id is ignored
 			cmd:      mcpToolsHistoryCmd,
 			method:   http.MethodGet,
 			wantPath: "/api/v1/apps/app1/connectors/conn1/mcp_tools/tool1/history",
@@ -395,6 +406,147 @@ func listPaginationCases() []listPaginationCase {
 			},
 			page:   flatPage("profiles", "id"),
 			rowIDs: idRows("id"),
+		},
+		{
+			name:     "access-profiles requestable-entitlements list",
+			cmd:      accessProfilesRequestableEntitlementsListCmd,
+			method:   http.MethodGet,
+			wantPath: "/api/v1/catalogs/ap1/requestable_entitlements",
+			args:     []string{"ap1"},
+			page:     entitlementPage,
+			rowIDs:   idRows("id"),
+		},
+		{
+			name:     "access-profiles visibility-entitlements list",
+			cmd:      accessProfilesVisibilityEntitlementsListCmd,
+			method:   http.MethodGet,
+			wantPath: "/api/v1/catalogs/ap1/visibility_entitlements",
+			args:     []string{"ap1"},
+			page:     entitlementPage,
+			rowIDs:   idRows("id"),
+		},
+		{
+			name:     "access-reviews list",
+			cmd:      accessReviewsListCmd,
+			method:   http.MethodGet,
+			wantPath: "/api/v1/access_reviews",
+			page:     nestedPage("list", "accessReview", "id"),
+			rowIDs:   idRows("id"),
+		},
+		{
+			name:     "access-reviews reports list",
+			cmd:      accessReviewReportsListCmd,
+			method:   http.MethodGet,
+			wantPath: "/api/v1/access_review/camp1/report",
+			args:     []string{"camp1"},
+			page:     flatPage("list", "id"),
+			rowIDs:   idRows("id"),
+		},
+		{
+			name:     "findings search",
+			cmd:      findingsSearchCmd,
+			method:   http.MethodPost,
+			wantPath: "/api/v1/findings/search",
+			page:     flatPage("list", "id"),
+			rowIDs:   idRows("id"),
+		},
+		{
+			name:     "findings audits search",
+			cmd:      findingsAuditsSearchCmd,
+			method:   http.MethodPost,
+			wantPath: "/api/v1/search/finding_audits",
+			page: func(ids []string, next string) string {
+				items := make([]string, 0, len(ids))
+				for _, id := range ids {
+					items = append(items, fmt.Sprintf(`{"findingId":"f1","eventId":%s}`, jstr(id)))
+				}
+				return fmt.Sprintf(`{"list":[%s],"nextPageToken":%s}`, strings.Join(items, ","), jstr(next))
+			},
+			rowIDs: idRows("event_id"),
+		},
+		{
+			name:     "mcp classifiers list",
+			cmd:      mcpClassifiersListCmd,
+			method:   http.MethodGet,
+			wantPath: "/api/v1/classifiers",
+			page:     flatPage("classifiers", "id"),
+			rowIDs:   idRows("id"),
+		},
+		{
+			name:     "mcp classifiers bindings list",
+			cmd:      mcpClassifierBindingsListCmd,
+			method:   http.MethodGet,
+			wantPath: "/api/v1/classifier_bindings",
+			page:     flatPage("bindings", "id"),
+			rowIDs:   idRows("id"),
+		},
+		{
+			name:     "mcp classifiers templates list",
+			cmd:      mcpClassifierTemplatesListCmd,
+			method:   http.MethodPost,
+			wantPath: "/api/v1/classifier_templates/list",
+			page:     flatPage("templates", "id"),
+			rowIDs:   idRows("id"),
+			noRowID:  true,
+		},
+		{
+			name:     "mcp classifiers tool-gates list",
+			cmd:      mcpClassifierToolGatesListCmd,
+			method:   http.MethodGet,
+			wantPath: "/api/v1/tool_gates",
+			page:     flatPage("list", "id"),
+			rowIDs:   idRows("id"),
+		},
+		{
+			name:     "mcp classifiers tool-gates search",
+			cmd:      mcpClassifierToolGatesSearchCmd,
+			method:   http.MethodPost,
+			wantPath: "/api/v1/search/tool_gates",
+			page:     flatPage("list", "id"),
+			rowIDs:   idRows("id"),
+		},
+		{
+			name:     "policies list",
+			cmd:      policiesListCmd,
+			method:   http.MethodGet,
+			wantPath: "/api/v1/policies",
+			page:     flatPage("list", "id"),
+			rowIDs:   idRows("id"),
+		},
+		{
+			name:     "policies search",
+			cmd:      policiesSearchCmd,
+			method:   http.MethodPost,
+			wantPath: "/api/v1/search/policies",
+			page:     flatPage("list", "id"),
+			rowIDs:   idRows("id"),
+		},
+		{
+			name:     "service-principals list",
+			cmd:      servicePrincipalsListCmd,
+			method:   http.MethodGet,
+			wantPath: "/api/v1/service_principals",
+			page:     flatPage("list", "id"),
+			rowIDs:   idRows("id"),
+		},
+		{
+			name:     "service-principals credentials list",
+			cmd:      spCredentialsListCmd,
+			method:   http.MethodGet,
+			wantPath: "/api/v1/service_principals/sp1/credentials",
+			args:     []string{"sp1"},
+			page:     flatPage("list", "id"),
+			rowIDs:   idRows("id"),
+		},
+		{
+			name:       "service-principals bindings list",
+			cmd:        spBindingsListCmd,
+			method:     http.MethodPost,
+			wantPath:   "/api/v1/service_principals/bindings/list",
+			extraFlags: map[string]string{"function-id": "fn1"},
+			page:       flatPage("bindings", "servicePrincipalId"),
+			rowIDs:     idRows("service_principal_id"),
+			noRowID:    true,
 		},
 		{
 			name:     "requests list",
@@ -550,54 +702,77 @@ func TestListCommandsExplicitPageTokenDisablesAutoPagination(t *testing.T) {
 	}
 }
 
-// Every guarded command, against a server that reseals a fresh token over the
-// same page: stop, emit the row once, warn naming the route, exit 6.
+// Every list command, against a server whose cursor stops advancing: stop,
+// warn naming the route, exit 6. Two shapes: the same token re-issued, and
+// fresh tokens over the same rows (detectable only when rows carry an id).
+// The request cap fails an unguarded loop promptly instead of hanging.
 func TestListCommandsStuckCursorReturnsExitServer(t *testing.T) {
+	// Enough rows that two stale pages meet stuckStaleRows.
+	var stuckIDs []string
+	for i := 0; i < stuckStaleRows; i++ {
+		stuckIDs = append(stuckIDs, fmt.Sprintf("stuck-item-%d", i))
+	}
 	for _, tc := range listPaginationCases() {
-		if tc.stuckCursorRoute == "" {
-			continue
-		}
-		t.Run(tc.name, func(t *testing.T) {
-			var requestCount int
-			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				requestCount++
-				if requestCount > 4 {
-					t.Errorf("server received a 5th request; auto-pagination did not terminate")
-					w.WriteHeader(http.StatusBadRequest)
-					return
-				}
-				tok := extractPageToken(t, tc.method, r)
-				w.Header().Set("Content-Type", "application/json")
-				switch tok {
-				case "":
-					_, _ = fmt.Fprint(w, tc.page([]string{"stuck-item"}, "tok-v1"))
-				case "tok-v1", "tok-v2":
-					_, _ = fmt.Fprint(w, tc.page([]string{"stuck-item"}, fmt.Sprintf("tok-v%d", requestCount)))
-				default:
-					t.Errorf("unexpected page token: %q", tok)
-					w.WriteHeader(http.StatusInternalServerError)
-				}
-			}))
-			defer srv.Close()
+		route := tc.method + " " + tc.wantPath
+		for _, freshTokens := range []bool{false, true} {
+			if freshTokens && tc.noRowID {
+				continue
+			}
+			name := tc.name + "/repeated token"
+			if freshTokens {
+				name = tc.name + "/fresh tokens"
+			}
+			t.Run(name, func(t *testing.T) {
+				var requestCount int
+				srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					requestCount++
+					if requestCount > 4 {
+						t.Errorf("server received a 5th request; auto-pagination did not terminate")
+						w.WriteHeader(http.StatusBadRequest)
+						return
+					}
+					tok := extractPageToken(t, tc.method, r)
+					next := "tok-same"
+					if freshTokens {
+						next = fmt.Sprintf("tok-v%d", requestCount)
+					}
+					w.Header().Set("Content-Type", "application/json")
+					switch tok {
+					case "", "tok-same", "tok-v1", "tok-v2":
+						_, _ = fmt.Fprint(w, tc.page(stuckIDs, next))
+					default:
+						t.Errorf("unexpected page token: %q", tok)
+						w.WriteHeader(http.StatusInternalServerError)
+					}
+				}))
+				defer srv.Close()
 
-			out, errOut, err := runListPaginationCase(t, tc, srv)
-			if err == nil {
-				t.Fatalf("RunE: want an error (stuck cursor -> exit 6), got nil; stdout=%q stderr=%q", out, errOut)
-			}
-			if got, want := exitCode(err), exitServer; got != want {
-				t.Errorf("exitCode(err) = %d, want %d (exitServer, \"C1 failed\"); err=%v", got, want, err)
-			}
-			if requestCount != 3 {
-				t.Fatalf("server received %d requests, want exactly 3 (the page must repeat twice before the cursor counts as stuck)", requestCount)
-			}
-			rows := decodeNDJSONRows(t, out)
-			ids := tc.rowIDs(rows)
-			if len(ids) != 1 || ids[0] != "stuck-item" {
-				t.Fatalf("got ids %v, want exactly one occurrence of stuck-item (a stuck cursor must not re-emit it)", ids)
-			}
-			if !strings.Contains(errOut, "INCOMPLETE") || !strings.Contains(errOut, tc.stuckCursorRoute) {
-				t.Errorf("stderr warning = %q, want it to say results are INCOMPLETE and name %s", errOut, tc.stuckCursorRoute)
-			}
-		})
+				out, errOut, err := runListPaginationCase(t, tc, srv)
+				if err == nil {
+					t.Fatalf("RunE: want an error (stuck cursor -> exit 6), got nil; stdout=%q stderr=%q", out, errOut)
+				}
+				if got, want := exitCode(err), exitServer; got != want {
+					t.Errorf("exitCode(err) = %d, want %d (exitServer, \"C1 failed\"); err=%v", got, want, err)
+				}
+				// A repeated token is caught before re-sending it; fresh tokens
+				// need the page to repeat twice before the cursor counts as stuck.
+				wantRequests, wantRows := 2, len(stuckIDs)
+				if freshTokens {
+					wantRequests = 3
+				} else if tc.noRowID {
+					wantRows = 2 * len(stuckIDs) // no id, so the repeated page can't be recognized
+				}
+				if requestCount != wantRequests {
+					t.Fatalf("server received %d requests, want exactly %d", requestCount, wantRequests)
+				}
+				ids := tc.rowIDs(decodeNDJSONRows(t, out))
+				if len(ids) != wantRows {
+					t.Fatalf("got %d rows, want %d (a stale page must not be re-emitted)", len(ids), wantRows)
+				}
+				if !strings.Contains(errOut, "INCOMPLETE") || !strings.Contains(errOut, route) {
+					t.Errorf("stderr warning = %q, want it to say results are INCOMPLETE and name %s", errOut, route)
+				}
+			})
+		}
 	}
 }

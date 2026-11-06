@@ -107,7 +107,14 @@ them to an external system.
 		limit := getIntFlag(cmd, "limit")
 
 		enc := newEmitter(cmd)
+		// Rows carry no id of their own, so only the repeated-token check
+		// applies: the audit log is unbounded, so --limit bounds it, not a cap.
+		guard := newUncappedPaginationCursorGuard()
+		route := "POST /api/v1/systemlog/events"
 		for !limitReached(enc.Written(), limit) {
+			if guard.tokenAlreadyUsed(pageToken) {
+				return guard.warnStuck(cmd, route)
+			}
 			pageSize := requestedPageSize
 			if !enc.Filtered() {
 				pageSize = effectivePageSize(requestedPageSize, limit, enc.Written())
@@ -145,6 +152,7 @@ them to an external system.
 			if resp.NextPageToken == "" || manualPaging {
 				break
 			}
+			guard.markTokenUsed(pageToken)
 			pageToken = resp.NextPageToken
 		}
 

@@ -35,7 +35,12 @@ var mcpToolsListCmd = &cobra.Command{
 		limit := getIntFlag(cmd, "limit")
 
 		enc := newEmitter(cmd)
+		guard := newPaginationCursorGuard()
+		route := "GET " + client.Path("/api/v1/apps/%s/connectors/%s/mcp_tools", appID, connectorID)
 		for !limitReached(enc.Written(), limit) {
+			if guard.tokenAlreadyUsed(pageToken) {
+				return guard.warnStuck(cmd, route)
+			}
 			pageSize := requestedPageSize
 			if !enc.Filtered() {
 				pageSize = effectivePageSize(requestedPageSize, limit, enc.Written())
@@ -61,6 +66,17 @@ var mcpToolsListCmd = &cobra.Command{
 				return fmt.Errorf("failed to parse response: %w", err)
 			}
 
+			ids := make([]string, len(resp.Tools))
+			for i, it := range resp.Tools {
+				ids[i] = it.ID
+			}
+			emit, stuck := guard.checkPage(ids)
+			if stuck {
+				return guard.warnStuck(cmd, route)
+			}
+			if !emit {
+				resp.Tools = nil
+			}
 			for _, t := range resp.Tools {
 				_ = enc.Encode(toolRow(t))
 				if limitReached(enc.Written(), limit) {
@@ -71,6 +87,7 @@ var mcpToolsListCmd = &cobra.Command{
 			if resp.NextPageToken == "" || manualPaging {
 				break
 			}
+			guard.markTokenUsed(pageToken)
 			pageToken = resp.NextPageToken
 		}
 

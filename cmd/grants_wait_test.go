@@ -374,7 +374,7 @@ func TestGrantsListWaitEndToEnd(t *testing.T) {
 	}
 }
 
-// TestFetchAllGrantsRejectsAStuckCursor pins the same-token guard: without it a
+// TestFetchAllGrantsRejectsAStuckCursor pins the cursor guard: without it a
 // server re-issuing one cursor turns every poll into a request storm bounded
 // only by --wait-timeout.
 func TestFetchAllGrantsRejectsAStuckCursor(t *testing.T) {
@@ -396,11 +396,45 @@ func TestFetchAllGrantsRejectsAStuckCursor(t *testing.T) {
 	if err == nil {
 		t.Fatal("fetchAllGrants returned nil; a stuck cursor must be an error, not a loop")
 	}
-	if !strings.Contains(err.Error(), "same nextPageToken twice in a row") {
+	if !strings.Contains(err.Error(), "results from POST /api/v1/search/grants are INCOMPLETE: pagination cursor stopped advancing") {
 		t.Errorf("err = %q, want it to name the stuck cursor", err.Error())
+	}
+	if got := exitCode(err); got != exitServer {
+		t.Errorf("exitCode(err) = %d, want %d (exitServer)", got, exitServer)
 	}
 	if got := atomic.LoadInt32(&requests); got != 2 {
 		t.Errorf("made %d requests before giving up, want 2", got)
+	}
+}
+
+// Grants now carry a (app, entitlement, account) identity, so fresh tokens
+// over the same grants are caught as stale pages, not paged until the cap.
+func TestFetchAllGrantsRejectsFreshTokensOverSameGrants(t *testing.T) {
+	var requests int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		n := atomic.AddInt32(&requests, 1)
+		if n > 4 {
+			t.Errorf("request %d; the stale pages were not caught", n)
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		items := make([]string, stuckStaleRows)
+		for i := range items {
+			items[i] = fmt.Sprintf(`{"appEntitlementUserBinding":{"appUser":{"appUser":{"id":"u%d"}}},"entitlement":{"appEntitlement":{"id":"ent1","appId":"app1"}}}`, i)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = fmt.Fprintf(w, `{"list":[%s],"nextPageToken":"tok-%d"}`, strings.Join(items, ","), n)
+	}))
+	t.Cleanup(srv.Close)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	_, err := fetchAllGrants(ctx, client.NewForTesting(srv.URL, srv.Client()), grantsQuery{appID: "app1"}, 50)
+	if got := exitCode(err); got != exitServer {
+		t.Fatalf("exitCode = %d, want exitServer (%d); err: %v", got, exitServer, err)
+	}
+	if got := atomic.LoadInt32(&requests); got != 3 {
+		t.Errorf("made %d requests, want 3", got)
 	}
 }
 

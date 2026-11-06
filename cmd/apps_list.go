@@ -51,7 +51,12 @@ var appsListCmd = &cobra.Command{
 		limit := getIntFlag(cmd, "limit")
 
 		enc := newEmitter(cmd)
+		guard := newPaginationCursorGuard()
+		route := "GET /api/v1/apps"
 		for !limitReached(enc.Written(), limit) {
+			if guard.tokenAlreadyUsed(pageToken) {
+				return guard.warnStuck(cmd, route)
+			}
 			pageSize := requestedPageSize
 			if !enc.Filtered() {
 				pageSize = effectivePageSize(requestedPageSize, limit, enc.Written())
@@ -76,6 +81,17 @@ var appsListCmd = &cobra.Command{
 				return fmt.Errorf("failed to parse response: %w", err)
 			}
 
+			ids := make([]string, len(resp.List))
+			for i, it := range resp.List {
+				ids[i] = it.ID
+			}
+			emit, stuck := guard.checkPage(ids)
+			if stuck {
+				return guard.warnStuck(cmd, route)
+			}
+			if !emit {
+				resp.List = nil
+			}
 			for _, a := range resp.List {
 				_ = enc.Encode(appRow(a))
 				if limitReached(enc.Written(), limit) {
@@ -86,6 +102,7 @@ var appsListCmd = &cobra.Command{
 			if resp.NextPageToken == "" || manualPaging {
 				break
 			}
+			guard.markTokenUsed(pageToken)
 			pageToken = resp.NextPageToken
 		}
 

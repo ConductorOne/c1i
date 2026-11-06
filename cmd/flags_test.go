@@ -156,3 +156,13 @@ func TestPaginationCursorGuardIgnoresEmptyIDs(t *testing.T) {
 		}
 	}
 }
+
+// A row with no id on an otherwise-seen page might be new, so the page must
+// still be emitted rather than skipped as stale.
+func TestPaginationCursorGuardKeepsPageWithIDlessRow(t *testing.T) {
+	g := newPaginationCursorGuard()
+	g.checkPage([]string{"a", "b"})
+	if emit, stuck := g.checkPage([]string{"", "a"}); !emit || stuck {
+		t.Fatalf("page with an id-less row and a seen id: emit=%v stuck=%v, want emit=true stuck=false", emit, stuck)
+	}
+}

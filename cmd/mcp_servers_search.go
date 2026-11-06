@@ -47,7 +47,12 @@ TSDB read each) so you can spot idle servers.`,
 		limit := getIntFlag(cmd, "limit")
 
 		enc := newEmitter(cmd)
+		guard := newPaginationCursorGuard()
+		route := "POST " + client.Path("/api/v1/apps/%s/mcp_servers/search", appID)
 		for !limitReached(enc.Written(), limit) {
+			if guard.tokenAlreadyUsed(pageToken) {
+				return guard.warnStuck(cmd, route)
+			}
 			pageSize := requestedPageSize
 			if !enc.Filtered() {
 				pageSize = effectivePageSize(requestedPageSize, limit, enc.Written())
@@ -86,6 +91,17 @@ TSDB read each) so you can spot idle servers.`,
 				return fmt.Errorf("failed to parse response: %w", err)
 			}
 
+			ids := make([]string, len(resp.List))
+			for i, it := range resp.List {
+				ids[i] = it.MCPServer.ConnectorID
+			}
+			emit, stuck := guard.checkPage(ids)
+			if stuck {
+				return guard.warnStuck(cmd, route)
+			}
+			if !emit {
+				resp.List = nil
+			}
 			for _, r := range resp.List {
 				var toolCount *int64
 				if toolState != "" {
@@ -101,6 +117,7 @@ TSDB read each) so you can spot idle servers.`,
 			if resp.NextPageToken == "" || manualPaging {
 				break
 			}
+			guard.markTokenUsed(pageToken)
 			pageToken = resp.NextPageToken
 		}
 

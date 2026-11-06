@@ -872,9 +872,9 @@ func TestAPIPaginateChangingTokenSameRowsReturnsExitServer(t *testing.T) {
 		w.Header().Set("Content-Type", "application/json")
 		switch tok {
 		case "":
-			_, _ = fmt.Fprint(w, `{"list":[{"id":"a"}],"nextPageToken":"tok-v1"}`)
+			_, _ = fmt.Fprintf(w, `{"list":%s,"nextPageToken":"tok-v1"}`, stalePageItems(`{"id":"a%d"}`))
 		case "tok-v1", "tok-v2":
-			_, _ = fmt.Fprintf(w, `{"list":[{"id":"a"}],"nextPageToken":"tok-v%d"}`, requestCount)
+			_, _ = fmt.Fprintf(w, `{"list":%s,"nextPageToken":"tok-v%d"}`, stalePageItems(`{"id":"a%d"}`), requestCount)
 		default:
 			t.Errorf("unexpected page_token: %q", tok)
 			w.WriteHeader(http.StatusInternalServerError)
@@ -902,8 +902,8 @@ func TestAPIPaginateChangingTokenSameRowsReturnsExitServer(t *testing.T) {
 		t.Fatalf("server received %d requests, want exactly 3 (the page must repeat twice before the cursor counts as stuck)", requestCount)
 	}
 	rows := decodeNDJSONRows(t, out.String())
-	if len(rows) != 1 || rows[0]["id"] != "a" {
-		t.Fatalf("got rows %v, want exactly one occurrence of id=a (no duplicate emission)", rows)
+	if len(rows) != stuckStaleRows || rows[0]["id"] != "a0" {
+		t.Fatalf("got %d rows, want the page's %d rows once each (no duplicate emission)", len(rows), stuckStaleRows)
 	}
 	if !strings.Contains(errOut.String(), "INCOMPLETE") || !strings.Contains(errOut.String(), "GET /api/v1/automations") {
 		t.Errorf("stderr = %q, want it to say results are INCOMPLETE and name GET /api/v1/automations", errOut.String())
@@ -925,11 +925,11 @@ func TestAPIPaginateStuckCursorWithoutIDFallsBackToCanonicalJSON(t *testing.T) {
 		w.Header().Set("Content-Type", "application/json")
 		switch tok {
 		case "":
-			_, _ = fmt.Fprint(w, `{"list":[{"name":"n1","value":1}],"nextPageToken":"tok-v1"}`)
+			_, _ = fmt.Fprintf(w, `{"list":%s,"nextPageToken":"tok-v1"}`, stalePageItems(`{"name":"n1","value":%d}`))
 		case "tok-v1", "tok-v2":
-			// Same logical item, same key order even -- a changing token is
+			// Same logical items, same key order even -- a changing token is
 			// the only thing that looks different.
-			_, _ = fmt.Fprintf(w, `{"list":[{"name":"n1","value":1}],"nextPageToken":"tok-v%d"}`, requestCount)
+			_, _ = fmt.Fprintf(w, `{"list":%s,"nextPageToken":"tok-v%d"}`, stalePageItems(`{"name":"n1","value":%d}`), requestCount)
 		default:
 			t.Errorf("unexpected page_token: %q", tok)
 			w.WriteHeader(http.StatusInternalServerError)
@@ -957,8 +957,8 @@ func TestAPIPaginateStuckCursorWithoutIDFallsBackToCanonicalJSON(t *testing.T) {
 		t.Fatalf("server received %d requests, want exactly 3 (the page must repeat twice before the cursor counts as stuck)", requestCount)
 	}
 	rows := decodeNDJSONRows(t, out.String())
-	if len(rows) != 1 || rows[0]["name"] != "n1" {
-		t.Fatalf("got rows %v, want exactly one occurrence of name=n1 (no duplicate emission)", rows)
+	if len(rows) != stuckStaleRows || rows[0]["name"] != "n1" {
+		t.Fatalf("got %d rows, want the page's %d rows once each (no duplicate emission)", len(rows), stuckStaleRows)
 	}
 }
 
@@ -1022,7 +1022,8 @@ func TestItemIdentityKeepsLargeIntegersDistinct(t *testing.T) {
 }
 
 // Stuck shapes that are not a single page repeated: each must stop with exit
-// 6 and print every row once, never cycle (within --limit or without).
+// 6 and print every row once, never cycle (within --limit or without). With
+// one-row pages the stale run needs stuckStaleRows pages, hence the high cap.
 func TestAPIPaginateStuckCycleShapesReturnExitServer(t *testing.T) {
 	cases := []struct {
 		name  string
@@ -1040,8 +1041,8 @@ func TestAPIPaginateStuckCycleShapesReturnExitServer(t *testing.T) {
 			var requestCount int
 			srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				requestCount++
-				if requestCount > 10 {
-					t.Errorf("server received an 11th request; --paginate did not terminate")
+				if requestCount > 100 {
+					t.Errorf("server received a 101st request; --paginate did not terminate")
 					w.WriteHeader(http.StatusBadRequest)
 					return
 				}

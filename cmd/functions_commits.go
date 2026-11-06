@@ -35,7 +35,7 @@ var functionsCommitsCmd = &cobra.Command{
 		route := fmt.Sprintf("GET /api/v1/functions/%s/commits", functionID)
 		for !limitReached(enc.Written(), limit) {
 			if guard.tokenAlreadyUsed(pageToken) {
-				return warnStuckCursor(cmd, route)
+				return guard.warnStuck(cmd, route)
 			}
 
 			pageSize := requestedPageSize
@@ -74,7 +74,7 @@ var functionsCommitsCmd = &cobra.Command{
 			}
 			emit, stuck := guard.checkPage(ids)
 			if stuck {
-				return warnStuckCursor(cmd, route)
+				return guard.warnStuck(cmd, route)
 			}
 			if !emit {
 				resp.List = nil

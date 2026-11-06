@@ -64,7 +64,13 @@ transaction.`,
 		}
 
 		enc := newEmitter(cmd)
+		// Rows carry no id of their own, so only the token and idle-page checks apply.
+		guard := newPaginationCursorGuard()
+		route := "GET " + basePath
 		for !limitReached(enc.Written(), limit) {
+			if guard.tokenAlreadyUsed(pageToken) {
+				return guard.warnStuck(cmd, route)
+			}
 			pageSize := requestedPageSize
 			if !enc.Filtered() {
 				pageSize = effectivePageSize(requestedPageSize, limit, enc.Written())
@@ -99,6 +105,7 @@ transaction.`,
 			if resp.NextPageToken == "" || manualPaging {
 				break
 			}
+			guard.markTokenUsed(pageToken)
 			pageToken = resp.NextPageToken
 		}
 

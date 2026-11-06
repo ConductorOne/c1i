@@ -611,3 +611,38 @@ func TestGatewayUnreadableBodyExitCodes(t *testing.T) {
 		})
 	}
 }
+
+// TestGatewayListToolsStuckCursorExitsUpstream: a tools/list cursor that
+// never advances is a gateway protocol failure, so exit 8 rather than 1.
+func TestGatewayListToolsStuckCursorExitsUpstream(t *testing.T) {
+	reqN := 0
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		reqN++
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case reqN == 1: // initialize
+			_, _ = fmt.Fprint(w, `{"jsonrpc":"2.0","id":1,"result":{}}`)
+		case reqN == 2: // notifications/initialized
+			w.WriteHeader(http.StatusAccepted)
+		case reqN > 6:
+			t.Errorf("tools/list request %d; the repeated cursor was not caught", reqN-2)
+			w.WriteHeader(http.StatusBadRequest)
+		default:
+			_, _ = fmt.Fprint(w, `{"jsonrpc":"2.0","id":2,"result":{"tools":[],"nextCursor":"stuck"}}`)
+		}
+	}))
+	defer srv.Close()
+
+	gc := mcpgateway.New(srv.URL, "test-token", srv.Client())
+	if err := gc.Initialize(context.Background()); err != nil {
+		t.Fatalf("unexpected Initialize failure: %v", err)
+	}
+	_, listErr := gc.ListTools(context.Background())
+	if listErr == nil {
+		t.Fatal("expected ListTools to fail on a repeated cursor")
+	}
+	wrapped := fmt.Errorf("tools/list failed: %w", classifyGatewayError(listErr))
+	if got := exitCode(wrapped); got != exitUpstream {
+		t.Errorf("exitCode = %d, want exitUpstream (%d); err: %v", got, exitUpstream, wrapped)
+	}
+}

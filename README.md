@@ -308,8 +308,8 @@ c1i functions usage <function-id> [--page-size N] [--page-token TOKEN] [--limit 
 `functions source` auto-resolves the function's published commit (falling back to its head/latest draft) and base64-decodes the source files. Without `--out-dir`, each file is printed to stdout with a `// ===== <name> =====` delimiter; with `--out-dir`, files are written to disk. Fetched source is developer-authored code that commonly inlines credentials, so files are written `0600` and the directory is created — or, if it already exists, tightened, never widened — to at most `0700` (owner-only; group access to the directory would buy nothing since the files inside are already unreadable to group/other, and a filename alone can be informative). Any setuid/setgid/sticky bit on the directory is stripped outright, since none of them mean anything once there is no group or other access left. A tightened pre-existing directory prints a warning to stderr naming its old mode. `functions usage` scans every automation and emits one row per step that calls the given function — useful before deleting a draft.
 
 `functions list` and `functions commits` stop if the server's pagination
-cursor stops advancing — a repeated `nextPageToken`, or two pages in a row
-holding only rows already seen, which these routes can do on large result
+cursor stops advancing — a repeated `nextPageToken`, or two or more pages in
+a row (at least 25 rows) holding only rows already seen, which these routes can do on large result
 sets. The command keeps the rows already printed, warns on stderr that
 results are INCOMPLETE and names the route, and exits `6`. `functions usage`
 reads `POST /api/v1/search/automations`, which pages correctly, and keeps the
@@ -856,7 +856,7 @@ file, or `-` for stdin) — the two are mutually exclusive. GET and DELETE refus
 a body by default (a body on either is more likely a mistake than intent); pass
 `--allow-delete-body` to lift that for DELETE specifically, for the handful of
 C1 endpoints that require one. `--query key=value` and
-`--header key=value` are both repeatable. When `--paginate` is used, each page's first array-valued field is unwrapped and each item is emitted as a single line of NDJSON — the same format used by list commands. This covers both the canonical `list` key and typed keys like `automationExecutions`; use `--list-key <field>` to force a specific field. If the cursor stops advancing — the same `nextPageToken` sent twice, or two pages in a row holding only items already seen (compared by item `id`, else the item's canonical JSON) — `c1i` stops instead of looping, keeps the rows already printed (a single such page is skipped, not re-emitted; id-less items that legitimately repeat across pages can trip this), warns on stderr that results are INCOMPLETE and names the route, and exits `6`. Without `--paginate`, the full JSON response is pretty-printed — and if that response carries a non-empty `nextPageToken`, `c1i` warns on stderr that the result is partial and names `--paginate`, since a truncated page is otherwise indistinguishable from a complete one at exit 0. stdout is unchanged either way.
+`--header key=value` are both repeatable. When `--paginate` is used, each page's first array-valued field is unwrapped and each item is emitted as a single line of NDJSON — the same format used by list commands. This covers both the canonical `list` key and typed keys like `automationExecutions`; use `--list-key <field>` to force a specific field. If the cursor stops advancing — the same `nextPageToken` sent twice, or two or more pages in a row, at least 25 items in all, holding only items already seen (compared by item `id`, else the item's canonical JSON) — `c1i` stops instead of looping, keeps the rows already printed (such pages are skipped, not re-emitted; id-less items that legitimately repeat across pages can trip this), warns on stderr that results are INCOMPLETE and names the route, and exits `6`. Without `--paginate`, the full JSON response is pretty-printed — and if that response carries a non-empty `nextPageToken`, `c1i` warns on stderr that the result is partial and names `--paginate`, since a truncated page is otherwise indistinguishable from a complete one at exit 0. stdout is unchanged either way.
 
 ### API Discovery & Documentation
 
@@ -903,7 +903,7 @@ both print identical output.
 - **List commands** (`users list`, `apps list`, etc.) output NDJSON (one JSON object per line).
 - **`api`** outputs pretty-printed JSON. With `--paginate`, outputs NDJSON (one list item per line). A `200` whose body is not JSON is an error (exit `6`), not a silent pass-through — a `--path` that escapes the API prefix can reach the web app and return HTML, which used to print as though it had succeeded. An empty body still succeeds, since some endpoints answer a write with nothing.
 - **`docs`** commands output NDJSON (`search`, `endpoints`), pretty JSON (`endpoint`, `openapi` is YAML), or plain text (`page`).
-- List commands auto-paginate by default. Pass `--page-token` to fetch a single page manually.
+- List commands auto-paginate by default. Pass `--page-token` to fetch a single page manually. If the server's cursor stops advancing, the command keeps the rows already printed, warns that results are INCOMPLETE, and exits `6`.
 - `--page-size` **requests** a per-call batch size (max 100; `mcp tools history` and `mcp bindings history` allow 200). It is not a guarantee: a page can contain more rows than you asked for, by an amount that varies per endpoint and per size — `apps list --page-size 10` returned 23 rows, `policies list` 12, `users list` exactly 10. A positive value below 5 usually returns 5, though `policies list` floors at 6 and `mcp servers catalog list` has no floor. `--page-size 0` means the server's default of 25, not "none". A value over the max is clamped by c1i rather than rejected. A negative `--page-size` or `--limit` is a usage error (exit 2), rejected before any request. Use `--limit N` for an exact total: it is enforced client-side, so it holds even when a page overshoots, and it stops auto-pagination once reached.
 
 ### Repeatable flags
@@ -1023,7 +1023,7 @@ branch on without parsing text:
 | `3` | not authenticated, or API returned `401`/`403` |
 | `4` | API returned `404` (not found) |
 | `5` | API returned `429` (rate limited — back off and retry) |
-| `6` | C1 failed: the API returned `5xx`, a redirect chain never settled, it answered `200` with a body that isn't JSON, or a guarded list command's pagination cursor stopped advancing |
+| `6` | C1 failed: the API returned `5xx`, a redirect chain never settled, it answered `200` with a body that isn't JSON, or a list command's pagination cursor stopped advancing |
 | `7` | `mcp gateway call` completed, but the tool itself reported an error (`isError: true` in its result) |
 | `8` | a system beyond C1, or the MCP protocol layer, failed — an upstream connector was unreachable or errored, the gateway itself was unreachable (DNS failure, refused connection), or the gateway returned a protocol-level JSON-RPC error |
 

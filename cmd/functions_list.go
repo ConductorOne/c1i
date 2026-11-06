@@ -80,7 +80,7 @@ var functionsListCmd = &cobra.Command{
 		guard := newPaginationCursorGuard()
 		for !limitReached(enc.Written(), limit) {
 			if guard.tokenAlreadyUsed(pageToken) {
-				return warnStuckCursor(cmd, "GET /api/v1/functions")
+				return guard.warnStuck(cmd, "GET /api/v1/functions")
 			}
 
 			pageSize := requestedPageSize
@@ -113,7 +113,7 @@ var functionsListCmd = &cobra.Command{
 			}
 			emit, stuck := guard.checkPage(ids)
 			if stuck {
-				return warnStuckCursor(cmd, "GET /api/v1/functions")
+				return guard.warnStuck(cmd, "GET /api/v1/functions")
 			}
 			if !emit {
 				resp.List = nil

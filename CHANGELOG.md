@@ -23,6 +23,16 @@ credentials fails instead of using the working directory. With a relative
 
 ### Fixed
 
+- **Every auto-paginating command now stops on a stuck cursor** instead of
+  looping forever, exiting `6`: on a repeated `nextPageToken`; for rows with
+  an id, on repeated pages of rows already seen; and (except `export events`)
+  after 100,000 pages in a row bring no new row, which for id-less rows such
+  as the MCP history lists means any 100,000 pages. This covers every list
+  command, `grants list --wait`, and the `auth login` role menu; previously
+  only `automations`/`functions` lists and `api --paginate` had the guard. A
+  `mcp gateway list-tools` cursor that never ends now exits `8` rather than
+  `1`.
+
 - **`role-mining suggestions|runs|custom-analysis list` and
   `findings routing-rules|transformation-rules list` would drop a page
   silently** if the server ever paginated them: they made one request and

@@ -103,7 +103,7 @@ var automationsListCmd = &cobra.Command{
 		guard := newPaginationCursorGuard()
 		for !limitReached(enc.Written(), limit) {
 			if guard.tokenAlreadyUsed(pageToken) {
-				return warnStuckCursor(cmd, "POST /api/v1/search/automations")
+				return guard.warnStuck(cmd, "POST /api/v1/search/automations")
 			}
 
 			pageSize := requestedPageSize
@@ -136,7 +136,7 @@ var automationsListCmd = &cobra.Command{
 			}
 			emit, stuck := guard.checkPage(ids)
 			if stuck {
-				return warnStuckCursor(cmd, "POST /api/v1/search/automations")
+				return guard.warnStuck(cmd, "POST /api/v1/search/automations")
 			}
 			if !emit {
 				resp.List = nil

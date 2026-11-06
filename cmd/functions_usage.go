@@ -57,7 +57,7 @@ last_executed_at, args.`,
 		guard := newPaginationCursorGuard()
 		for !limitReached(enc.Written(), limit) {
 			if guard.tokenAlreadyUsed(pageToken) {
-				return warnStuckCursor(cmd, "POST /api/v1/search/automations")
+				return guard.warnStuck(cmd, "POST /api/v1/search/automations")
 			}
 
 			body := map[string]any{"pageSize": pageSize}
@@ -96,7 +96,7 @@ last_executed_at, args.`,
 			}
 			emit, stuck := guard.checkPage(ids)
 			if stuck {
-				return warnStuckCursor(cmd, "POST /api/v1/search/automations")
+				return guard.warnStuck(cmd, "POST /api/v1/search/automations")
 			}
 			if !emit {
 				resp.List = nil
