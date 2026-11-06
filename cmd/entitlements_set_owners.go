@@ -31,8 +31,8 @@ the request is accepted, and the change showed up anywhere from about 1s to
 
 Pass --wait to block and poll GET .../ownerids until the owner set equals
 the requested ids -- additions landed and replaced owners gone -- or
---wait-timeout elapses. Prints the API's JSON response; --wait's progress
-lines go to stderr.
+--wait-timeout elapses; a timeout exits 1, though the write was accepted.
+Prints the API's JSON response; --wait's progress lines go to stderr.
 
 Honors --dry-run (with --wait, dry-run still only previews the PUT; it never
 polls).`,
@@ -94,6 +94,6 @@ func init() {
 	entitlementsSetOwnersCmd.Flags().String("app-id", "", "Application ID the entitlement belongs to")
 	addRepeatableStringFlag(entitlementsSetOwnersCmd, "user-id", "C1 user ID to set as owner (repeatable; replaces the full owner list)")
 	markRequired(entitlementsSetOwnersCmd, "app-id", "user-id")
-	addWaitFlags(entitlementsSetOwnersCmd, "GET .../ownerids until the owner set equals the requested ids (removals included)", 4*time.Minute)
+	addWaitFlags(entitlementsSetOwnersCmd, "GET .../ownerids until the owner set equals the requested ids (removals included; a timeout exits 1, though the write was accepted)", 4*time.Minute)
 	entitlementsCmd.AddCommand(entitlementsSetOwnersCmd)
 }

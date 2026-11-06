@@ -16,15 +16,14 @@ Unlike "entitlements set-owners", which replaces the whole list with exactly
 the ids you pass, this adds one owner without touching the rest of the list.
 Adding a user who is already an owner exits 0.
 
-A user id that does not exist exits 4, as does an entitlement or app that
-does not exist.
+An unknown user, entitlement or app exits 4.
 
 Owner changes are provisioned ASYNCHRONOUSLY: this call returns as soon as
 the request is accepted, and the new owner showed up anywhere from about 1s
 to 135s later. Verify with "c1i entitlements owners <entitlement-id> --app-id
 <app-id>", or pass --wait to poll GET .../ownerids until the owner appears
-(or --wait-timeout elapses). Prints the API's JSON response; --wait's
-progress lines go to stderr.
+(or --wait-timeout elapses; a timeout exits 1, though the write was accepted).
+Prints the API's JSON response; --wait's progress lines go to stderr.
 
 Honors --dry-run (with --wait, dry-run still only previews the POST; it never
 polls).`,
@@ -76,6 +75,6 @@ func init() {
 	entitlementsAddOwnerCmd.Flags().String("app-id", "", "Application ID the entitlement belongs to")
 	entitlementsAddOwnerCmd.Flags().String("entitlement-id", "", "Entitlement ID to add the owner to")
 	markRequired(entitlementsAddOwnerCmd, "app-id", "entitlement-id")
-	addWaitFlags(entitlementsAddOwnerCmd, "GET .../ownerids until the owner appears", 4*time.Minute)
+	addWaitFlags(entitlementsAddOwnerCmd, "GET .../ownerids until the owner appears (a timeout exits 1, though the write was accepted)", 4*time.Minute)
 	entitlementsCmd.AddCommand(entitlementsAddOwnerCmd)
 }

@@ -236,10 +236,10 @@ command touched is in that one payload.
 `remove-owner` and `set-owners`. Owner provisioning is asynchronous: writes
 showed up anywhere from about 1s to 135s after being accepted. `--wait`
 polls `GET .../ownerids` until the change lands, or `--wait-timeout`
-(default `4m`) elapses (exit `1`, though the write was accepted): on
-`add-owner` until the owner appears, on `set-owners` until the owner set
-equals the requested ids, removals included. Its progress lines go to
-stderr, so stdout stays the write's JSON response.
+(default `4m`) elapses: on `add-owner` until the owner appears, on
+`set-owners` until the owner set equals the requested ids, removals
+included. A timeout exits `1`, though the write was accepted. Its progress
+lines go to stderr, so stdout stays the write's JSON response.
 
 `set-owners` replaces the whole list and needs at least one `--user-id`,
 since the API takes an empty list as "remove every owner"; `remove-owner`
@@ -248,7 +248,8 @@ matches no user at exit `0` and drops it, so a set naming only unknown ids
 leaves no owners; `set-owners` therefore looks up each distinct `--user-id`
 first and exits `2` naming an unknown one, sending nothing (`--dry-run` skips
 the lookups). A repeated `--user-id` is sent once, since the API answers a
-duplicate with a 500. `add-owner` exits `4` on an unknown user.
+duplicate with a 500. An unknown user, entitlement or app exits `4` on
+`add-owner`.
 `remove-owner` exits `4` on a user who was never an owner as well as on an
 unknown one, so `4` cannot tell those apart; a user who was an owner and is
 already removed exits `0`. `owners` returns zero rows at exit `0` for a

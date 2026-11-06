@@ -388,10 +388,11 @@ resource with `--resource-id` likewise means you drop
   would silently drop it and could leave no owners. `remove-owner` exits 4
   both for an unknown user and for one who was never an owner. Pass `--wait`
   on `add-owner` (waits until the owner appears) or `set-owners` (waits until
-  the owner set equals the request, removals included). A wait timeout does
-  not mean the write failed — re-check before writing again. `set-owners`
-  sends a repeated `--user-id` once, since the API answers a duplicate with a
-  500. `entitlements owners` returns zero rows at exit 0 for a nonexistent
+  the owner set equals the request, removals included). A timeout exits 1,
+  though the write was accepted — re-check before writing again. An unknown
+  user, entitlement or app exits 4 on `add-owner`. `set-owners` sends a
+  repeated `--user-id` once, since the API answers a duplicate with a 500.
+  `entitlements owners` returns zero rows at exit 0 for a nonexistent
   entitlement or app, so an empty result can also mean "wrong id".
 - `apps update`/`apps create` `--grant-policy-id`, `--revoke-policy-id` and
   `--certify-policy-id` are checked by c1i (exists, not deleted, right
