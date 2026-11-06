@@ -507,9 +507,8 @@ resource with `--resource-id` likewise means you drop
   not a `404`.
 - `webhooks create` and `webhooks update` take the endpoint as
   `--destination-url` (`--url` is the global tenant flag), and it must be an
-  absolute `https://` URL with a host name or IPv4 address, and
-  `--display-name` must be 3–100 characters, or the command exits `2` before
-  sending. `webhooks test <webhook-id>` only queues a delivery: it exits `0`
+  absolute `https://` URL with a host name or IPv4 address, or the command
+  exits `2` before sending. `webhooks test <webhook-id>` only queues a delivery: it exits `0`
   with `"state": "WEBHOOK_STATE_PENDING"` whether or not the URL is reachable.
   `webhooks delete` is soft: `webhooks get` still returns the webhook at exit
   `0` with `deletedAt` set, and `webhooks list` omits it. `webhooks update` on

@@ -878,10 +878,7 @@ is refused because the server strips its brackets, and `webhooks test` then
 fails with `invalid port ":db8::1" after host`. A host the server will not call
 is a `400`, `invalid url: restricted destination` (exit `2`).
 
-`--display-name` must be 3–100 characters (runes) on both create and update,
-or the command exits `2`. The server enforces that only on create
-(`value length must be between 3 and 100 runes, inclusive`) and would store any
-length on update. `--callback-timeout` takes a Go duration up to `720h`; over
+`--callback-timeout` takes a Go duration up to `720h`; over
 that, update returns `callback_timeout must be between 0 and 30 days`. `update`
 sends only the flags you pass and masks exactly those; an empty `--description`
 clears it. Updating a soft-deleted webhook exits `0` and changes it, and it
