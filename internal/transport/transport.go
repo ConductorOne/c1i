@@ -245,9 +245,10 @@ func New(base http.RoundTripper, opts ...Option) *Client {
 // 429 is retried for any method, since the request was rejected before
 // processing; 5xx and transport errors are retried only for idempotent
 // methods and read-only search/list POSTs, so a POST/PATCH that may have
-// committed server-side before the failure is not silently re-applied. The request body is replayed from
-// req.GetBody on each attempt (http.NewRequestWithContext sets GetBody for
-// the bytes.Reader/strings.Reader bodies this CLI uses).
+// committed server-side before the failure is not silently re-applied. The
+// request body is replayed from req.GetBody on each attempt
+// (http.NewRequestWithContext sets GetBody for the bytes.Reader/strings.Reader
+// bodies this CLI uses).
 func (c *Client) Do(req *http.Request) (*Response, error) {
 	if p := req.URL.EscapedPath(); pathHasEmptySegment(p) {
 		return nil, &PathError{Method: req.Method, Path: p}
@@ -286,7 +287,7 @@ func (c *Client) sendWithRetry(req *http.Request) (*Response, error) {
 			// Transport-level failure (connection reset, timeout, ...). We
 			// can't tell whether the server processed the request, so only
 			// retry idempotent methods.
-			if retrySafe(req.Method, req.URL.Path) && attempt < c.maxRetries {
+			if retrySafe(req.Method, req.URL.EscapedPath()) && attempt < c.maxRetries {
 				if serr := sleepFn(ctx, nextBackoff(attempt, nil)); serr != nil {
 					return nil, serr
 				}
@@ -298,7 +299,7 @@ func (c *Client) sendWithRetry(req *http.Request) (*Response, error) {
 		body, readErr := c.readBody(resp.Body)
 		_ = resp.Body.Close()
 
-		if isRetryableStatus(req.Method, req.URL.Path, resp.StatusCode) && attempt < c.maxRetries {
+		if isRetryableStatus(req.Method, req.URL.EscapedPath(), resp.StatusCode) && attempt < c.maxRetries {
 			if serr := sleepFn(ctx, nextBackoff(attempt, resp)); serr != nil {
 				return nil, serr
 			}

@@ -242,7 +242,7 @@ func TestIsRetryableStatus(t *testing.T) {
 			t.Errorf("isRetryableStatus(%s, 429) = false, want true", m)
 		}
 	}
-	// 5xx is retryable only for idempotent methods.
+	// 5xx is retryable only for retry-safe requests (see retrySafe).
 	for _, c := range []int{500, 502, 503, 504} {
 		if !isRetryableStatus(http.MethodGet, "/x", c) {
 			t.Errorf("isRetryableStatus(GET, %d) = false, want true", c)
@@ -628,5 +628,20 @@ func TestAPIErrorWithoutBody(t *testing.T) {
 		if got := (&APIError{Method: "GET", Path: "/x", StatusCode: 403, Body: body}).Error(); got != want {
 			t.Errorf("body %q: %q, want %q", body, got, want)
 		}
+	}
+}
+
+// An id containing an escaped "/" must not make a mutation look like a
+// search: matching uses the escaped path, not the decoded one.
+func TestDo_EscapedSlashInIDNotRetried(t *testing.T) {
+	deterministicBackoff(t)
+	srv, bodies := recordingServer(t, 1)
+
+	resp, err := post(t, newTestClient(srv, 3), srv.URL+"/api/v1/classifiers/x%2Fsearch", "{}")
+	if err != nil {
+		t.Fatalf("Do: %v", err)
+	}
+	if resp.StatusCode != http.StatusServiceUnavailable || len(*bodies) != 1 {
+		t.Fatalf("status = %d, calls = %d; want 503 and 1 (update must not be re-sent)", resp.StatusCode, len(*bodies))
 	}
 }
