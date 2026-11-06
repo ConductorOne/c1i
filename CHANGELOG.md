@@ -64,9 +64,11 @@ credentials fails instead of using the working directory. With a relative
 
 ### Fixed
 
-- A `--body-file` or MCP server `--*-config-file` that is missing, malformed,
-  `null` or not a JSON object now exits `2` and names the flag; some commands
-  exited `1`, and a `null` body file could panic.
+- An input file that is missing, malformed or the wrong JSON shape now exits
+  `2` (usage) instead of `1`: every `--body-file` (including `api`'s), the
+  MCP server `--*-config-file` flags, and `--steps-file`, `--rules-file` and
+  `--refs-file`. A `null` body file, which could panic, is refused the same
+  way, and the error names the flag.
 - A `--body-file` containing a top-level JSON `null` panicked `policies
   update`; every `--body-file` and config-file flag now rejects it with
   exit 2.

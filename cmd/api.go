@@ -95,7 +95,7 @@ an intended non-GET REST write.`,
 				raw, err = os.ReadFile(bodyFile) // #nosec G304 -- user-supplied --body-file path is intentional
 			}
 			if err != nil {
-				return fmt.Errorf("reading --body-file: %w", err)
+				return &usageError{fmt.Errorf("reading --body-file: %w", err)}
 			}
 			body = string(raw)
 		}

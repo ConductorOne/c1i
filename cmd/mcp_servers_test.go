@@ -323,6 +323,34 @@ func TestReadConfigFileBadInputIsUsage(t *testing.T) {
 	}
 }
 
+// The array-file reader behind --steps-file/--rules-file/--refs-file, and
+// api's own --body-file read, treat bad input the same way: exit 2.
+func TestOtherInputFilesBadInputIsUsage(t *testing.T) {
+	missing := filepath.Join(t.TempDir(), "absent.json")
+	for name, path := range map[string]string{
+		"invalid JSON": writeTempJSON(t, "bad.json", `[nope`),
+		"object":       writeTempJSON(t, "obj.json", `{}`),
+		"missing file": missing,
+	} {
+		t.Run("array file/"+name, func(t *testing.T) {
+			_, err := readJSONArrayFile(&cobra.Command{}, path)
+			if exitCode(err) != exitUsage {
+				t.Errorf("err = %v (exit %d), want exit %d", err, exitCode(err), exitUsage)
+			}
+		})
+	}
+	t.Run("api --body-file missing", func(t *testing.T) {
+		resetCmdFlags(t, apiCmd)
+		_ = apiCmd.Flags().Set("path", "/api/v1/apps")
+		_ = apiCmd.Flags().Set("body-file", missing)
+		apiCmd.SetContext(context.Background())
+		err := apiCmd.RunE(apiCmd, nil)
+		if exitCode(err) != exitUsage {
+			t.Errorf("err = %v (exit %d), want exit %d", err, exitCode(err), exitUsage)
+		}
+	})
+}
+
 // TestBuildExternalConfigFileExclusive pins the same for external configs.
 func TestBuildExternalConfigFileExclusive(t *testing.T) {
 	cmd := newServerFlagCmd()
