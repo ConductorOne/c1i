@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/url"
@@ -173,6 +174,19 @@ an intended non-GET REST write.`,
 		pageToken := ""
 		route := fmt.Sprintf("%s %s", method, path)
 		listKeySeen := listKey == ""
+		// failWith prints held rows before a failure that isn't the guard's:
+		// they were deferred only until the run proved it wasn't stuck.
+		failWith := func(err error) error {
+			for _, item := range held {
+				if limitReached(enc.Written(), limit) {
+					break
+				}
+				if wErr := enc.Encode(item); wErr != nil {
+					return errors.Join(err, wErr)
+				}
+			}
+			return err
+		}
 
 		for !limitReached(enc.Written(), limit) {
 			if guard.tokenAlreadyUsed(pageToken) {
@@ -228,9 +242,9 @@ an intended non-GET REST write.`,
 			data, reqErr := c.Request(cmd.Context(), method, reqPath, bodyBytes, headers)
 			if reqErr != nil {
 				if method == "GET" && looksLikePOSTOnly(reqErr.Error(), reqPath) {
-					return fmt.Errorf("API error: %w\n\nHint: this looks like a POST-only endpoint (e.g. /search/* paths). Try '--body \"{}\"' (which switches to POST) or '--method=POST'", reqErr)
+					return failWith(fmt.Errorf("API error: %w\n\nHint: this looks like a POST-only endpoint (e.g. /search/* paths). Try '--body \"{}\"' (which switches to POST) or '--method=POST'", reqErr))
 				}
-				return fmt.Errorf("API error: %w", reqErr)
+				return failWith(fmt.Errorf("API error: %w", reqErr))
 			}
 
 			if !paginate {
@@ -253,12 +267,15 @@ an intended non-GET REST write.`,
 			}
 
 			items, nextToken, err := extractListAndToken(data, listKey)
+			if notArray := (*listKeyNotArrayError)(nil); errors.As(err, &notArray) {
+				return failWith(&usageError{fmt.Errorf("--list-key %q is not an array in the response: %w", listKey, notArray.err)})
+			}
 			if err != nil {
-				return fmt.Errorf("failed to parse response: %w", err)
+				return failWith(&nonJSONResponseError{fmt.Errorf("failed to parse response: %w", err)})
 			}
 			if !listKeySeen {
 				if listKeySeen, err = checkListKeyPresent(data, listKey); err != nil {
-					return err
+					return failWith(err)
 				}
 			}
 
@@ -381,6 +398,20 @@ func nextPageTokenFromMap(raw map[string]json.RawMessage) string {
 	return tok
 }
 
+// listKeyNotArrayError is a named list key holding a non-array. Only `api`
+// makes it a usage error: other callers' keys are fixed, so there it is the
+// server's shape.
+type listKeyNotArrayError struct {
+	key string
+	err error
+}
+
+func (e *listKeyNotArrayError) Error() string {
+	return fmt.Sprintf("field %q is not an array: %v", e.key, e.err)
+}
+
+func (e *listKeyNotArrayError) Unwrap() error { return e.err }
+
 // extractListAndToken finds the array-valued field in a paginated response and
 // the nextPageToken. Most C1 list endpoints wrap items under "list", but some
 // use typed keys ("automationExecutions", "automationVersions", etc.) — for
@@ -404,7 +435,7 @@ func extractListAndToken(data []byte, listKey string) ([]json.RawMessage, string
 		}
 		var items []json.RawMessage
 		if err := json.Unmarshal(v, &items); err != nil {
-			return nil, nextPageToken, fmt.Errorf("field %q is not an array: %w", listKey, err)
+			return nil, nextPageToken, &listKeyNotArrayError{key: listKey, err: err}
 		}
 		return items, nextPageToken, nil
 	}

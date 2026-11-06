@@ -13,6 +13,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/ConductorOne/c1i/internal/client"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
@@ -1233,5 +1234,197 @@ func TestAPIPaginateListKeyOmittedOnLaterPage(t *testing.T) {
 	rows := decodeNDJSONRows(t, out.String())
 	if len(rows) != 1 || rows[0]["id"] != "a" {
 		t.Fatalf("rows = %v, want only page 1's a", rows)
+	}
+}
+
+// A held all-seen page is printed when a later request fails for a reason other
+// than a stuck cursor; the exit code stays the failure's.
+func TestAPIPaginateFlushesHeldPageOnLaterError(t *testing.T) {
+	cases := []struct {
+		name     string
+		fail     func(w http.ResponseWriter)
+		wantExit int
+	}{
+		{"api error", func(w http.ResponseWriter) { w.WriteHeader(http.StatusNotFound) }, exitNotFound},
+		{"unparseable page", func(w http.ResponseWriter) { _, _ = fmt.Fprint(w, `{"list":[`) }, exitServer},
+		{"transport error", func(w http.ResponseWriter) {
+			conn, _, err := w.(http.Hijacker).Hijack()
+			if err == nil {
+				_ = conn.Close()
+			}
+		}, exitError},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			var out bytes.Buffer
+			err := runAPIHeldPageThenFail(t, &out, tc.fail)
+			if err == nil {
+				t.Fatalf("want an error, got nil; stdout=%q", out.String())
+			}
+			if got := exitCode(err); got != tc.wantExit {
+				t.Errorf("exitCode = %d, want %d; err=%v", got, tc.wantExit, err)
+			}
+			var got []string
+			for _, row := range decodeNDJSONRows(t, out.String()) {
+				got = append(got, fmt.Sprint(row["id"]))
+			}
+			if strings.Join(got, ",") != "a,b,a,b" {
+				t.Fatalf("rows = %v, want [a b a b] (the held page printed before the error)", got)
+			}
+		})
+	}
+}
+
+// A write error while flushing held rows is returned alongside the failure.
+func TestAPIPaginateHeldFlushWriteErrorIsReturned(t *testing.T) {
+	out := &failAfterWriter{ok: 2}
+	err := runAPIHeldPageThenFail(t, out, func(w http.ResponseWriter) { w.WriteHeader(http.StatusNotFound) })
+	if !errors.Is(err, errStdoutFull) {
+		t.Fatalf("err = %v, want it to wrap the write error", err)
+	}
+	if got := exitCode(err); got != exitNotFound {
+		t.Errorf("exitCode = %d, want %d (the request failure's); err=%v", got, exitNotFound, err)
+	}
+}
+
+// failAfterWriter accepts ok writes, then fails like a full disk.
+type failAfterWriter struct{ ok int }
+
+func (w *failAfterWriter) Write(p []byte) (int, error) {
+	if w.ok == 0 {
+		return 0, errStdoutFull
+	}
+	w.ok--
+	return len(p), nil
+}
+
+// runAPIHeldPageThenFail runs `api --paginate` over a page, the same page
+// again (held), then a request answered by fail.
+func runAPIHeldPageThenFail(t *testing.T, out io.Writer, fail func(http.ResponseWriter), extraArgs ...string) error {
+	t.Helper()
+	var requests int
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests++
+		w.Header().Set("Content-Type", "application/json")
+		switch requests {
+		case 1:
+			_, _ = fmt.Fprint(w, `{"list":[{"id":"a"},{"id":"b"}],"nextPageToken":"t1"}`)
+		case 2:
+			_, _ = fmt.Fprint(w, `{"list":[{"id":"a"},{"id":"b"}],"nextPageToken":"t2"}`)
+		default:
+			fail(w)
+		}
+	}))
+	t.Cleanup(srv.Close)
+
+	resetAPICmdFlags(t)
+	orig := newAPIClient
+	newAPIClient = func(_ *cobra.Command, _ string) (apiRequester, error) {
+		return client.NewForTesting(srv.URL, srv.Client(), client.WithMaxRetries(0)), nil
+	}
+	t.Cleanup(func() { newAPIClient = orig })
+	t.Setenv("C1I_URL", srv.URL)
+
+	var errOut bytes.Buffer
+	apiCmd.SetOut(out)
+	apiCmd.SetErr(&errOut)
+	rootCmd.SetArgs(append([]string{"api", "--path", "/api/v1/things", "--paginate"}, extraArgs...))
+	return rootCmd.ExecuteContext(context.Background())
+}
+
+// --limit still caps rows written while held rows are flushed.
+func TestAPIPaginateHeldFlushHonorsLimit(t *testing.T) {
+	var out bytes.Buffer
+	err := runAPIHeldPageThenFail(t, &out, func(w http.ResponseWriter) { w.WriteHeader(http.StatusNotFound) }, "--limit", "3")
+	if got := exitCode(err); got != exitNotFound {
+		t.Errorf("exitCode = %d, want %d; err=%v", got, exitNotFound, err)
+	}
+	var got []string
+	for _, row := range decodeNDJSONRows(t, out.String()) {
+		got = append(got, fmt.Sprint(row["id"]))
+	}
+	if strings.Join(got, ",") != "a,b,a" {
+		t.Fatalf("rows = %v, want [a b a]", got)
+	}
+}
+
+// A 200 page that isn't a JSON object is C1 failing (exit 6), on the first
+// page as on a later one.
+func TestAPIPaginateNonJSONFirstPageIsExitServer(t *testing.T) {
+	for name, body := range map[string]string{
+		"html":       "<!doctype html><html></html>",
+		"bare array": "[1,2]",
+		"empty":      "",
+		"truncated":  `{"list":[`,
+	} {
+		t.Run(name, func(t *testing.T) {
+			srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				_, _ = fmt.Fprint(w, body)
+			}))
+			defer srv.Close()
+
+			resetAPICmdFlags(t)
+			orig := newAPIClient
+			newAPIClient = func(_ *cobra.Command, _ string) (apiRequester, error) {
+				return client.NewForTesting(srv.URL, srv.Client(), client.WithMaxRetries(0)), nil
+			}
+			t.Cleanup(func() { newAPIClient = orig })
+			t.Setenv("C1I_URL", srv.URL)
+
+			var out, errOut bytes.Buffer
+			apiCmd.SetOut(&out)
+			apiCmd.SetErr(&errOut)
+			rootCmd.SetArgs([]string{"api", "--path", "/api/v1/things", "--paginate"})
+			err := rootCmd.ExecuteContext(context.Background())
+			if got := exitCode(err); got != exitServer {
+				t.Errorf("exitCode = %d, want %d; err=%v", got, exitServer, err)
+			}
+			if out.Len() != 0 {
+				t.Errorf("stdout = %q, want nothing", out.String())
+			}
+		})
+	}
+}
+
+// A --list-key naming a field that is present but not an array is the caller's
+// mistake (exit 2), not C1 failing.
+func TestAPIPaginateListKeyNotArrayIsUsageError(t *testing.T) {
+	for name, value := range map[string]string{"string": `"bar"`, "object": `{"a":1}`} {
+		t.Run(name, func(t *testing.T) {
+			srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				_, _ = fmt.Fprintf(w, `{"foo":%s,"list":[{"id":"a"}],"nextPageToken":""}`, value)
+			}))
+			defer srv.Close()
+
+			resetAPICmdFlags(t)
+			orig := newAPIClient
+			newAPIClient = func(_ *cobra.Command, _ string) (apiRequester, error) {
+				return client.NewForTesting(srv.URL, srv.Client(), client.WithMaxRetries(0)), nil
+			}
+			t.Cleanup(func() { newAPIClient = orig })
+			t.Setenv("C1I_URL", srv.URL)
+
+			var out, errOut bytes.Buffer
+			apiCmd.SetOut(&out)
+			apiCmd.SetErr(&errOut)
+			rootCmd.SetArgs([]string{"api", "--path", "/api/v1/things", "--paginate", "--list-key", "foo"})
+			err := rootCmd.ExecuteContext(context.Background())
+			if got := exitCode(err); got != exitUsage {
+				t.Errorf("exitCode = %d, want %d; err=%v", got, exitUsage, err)
+			}
+			if err == nil || !strings.Contains(err.Error(), "--list-key") {
+				t.Errorf("err = %v, want it to name --list-key", err)
+			}
+		})
+	}
+}
+
+// A hardcoded list key holding a non-array is the server's shape, not a usage
+// error, so extractListAndToken itself must not return a usageError.
+func TestExtractListAndTokenNotArrayIsNotUsageError(t *testing.T) {
+	_, _, err := extractListAndToken([]byte(`{"list":"x"}`), "list")
+	var ue *usageError
+	if err == nil || errors.As(err, &ue) {
+		t.Fatalf("err = %v, want a non-usage error", err)
 	}
 }

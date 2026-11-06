@@ -64,7 +64,10 @@ credentials fails instead of using the working directory. With a relative
   now reads a grant's account and entitlement ids from the binding when the
   expanded objects are missing. `api --paginate` no longer drops an isolated
   page of items it has already seen; it prints it once a later page brings a
-  new item or the list ends.
+  new item, the list ends, or a later request fails (the exit code stays the
+  failure's). A `200` page whose body is HTML, an array, empty or truncated
+  now exits `6`, not `1`, and a `--list-key` field that isn't an array exits
+  `2`.
 
 - **`role-mining suggestions|runs|custom-analysis list` and
   `findings routing-rules|transformation-rules list` would drop a page
