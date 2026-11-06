@@ -29,6 +29,15 @@ func TestPathHasBadSegment(t *testing.T) {
 		{"trailing dot segment", "/api/v1/apps/abc123/.", true},
 		{"dot segment with query", "/api/v1/users/.?x=1", true},
 
+		// Matrix params: the server strips ";..." before resolving dots.
+		{"dot-dot matrix", "/api/v1/users/x/..;/abc", true},
+		{"dot-dot matrix value", "/api/v1/users/x/..;x/abc", true},
+		{"dot matrix", "/api/v1/users/.;", true},
+		{"encoded dot-dot matrix", "/api/v1/users/%2E%2E;", true},
+		{"dot-dot encoded semicolon", "/api/v1/users/..%3B", true},
+		{"triple dot matrix id", "/api/v1/users/...;", false},
+		{"semicolon id", "/api/v1/users/a;b", false},
+
 		// Ids that merely contain dots are legitimate.
 		{"dotted id", "/api/v1/users/a.b", false},
 		{"leading dot-dot id", "/api/v1/users/..a", false},

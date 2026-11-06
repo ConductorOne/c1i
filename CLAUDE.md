@@ -136,7 +136,7 @@ tracked root file outside its allowlist. Stage explicit paths rather than `-A`.
     used to reach the collection endpoint and print the whole list with exit
     0. The **shared REST client** now closes this two ways: it refuses any
     request whose path has an empty, `.`, or `..` segment (percent-decoded,
-    so `%2E` counts) up front, for every method (`client.PathError` → exit
+    ignoring a `;params` suffix, so `%2E` and `..;x` count) up front, for every method (`client.PathError` → exit
     2, catches `""`/`"."`/`".."`; a non-GET dot path is routed with no
     redirect), and it refuses to follow a 3xx whose target path differs
     from the request's (`client.RedirectError` → exit 2, catches `"/"`,

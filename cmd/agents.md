@@ -280,7 +280,7 @@ APP_ID=$(c1i apps create --display-name "Example" | jq -r '.app.id')
 |---|---|---|
 | 0 | success | — |
 | 1 | generic / unclassified error | inspect the message |
-| 2 | usage error (bad flags/args, an empty id, a refused redirect, or any API `4xx` other than `401`/`403`/`404`/`408`/`429`/`499`) | fix the invocation, don't retry as-is — but read the message first: an API `4xx` can also be a state rejection (e.g. `task is closed`) rather than a bad argument |
+| 2 | usage error (bad flags/args, an empty, `.` or `..` id, a refused redirect, or any API `4xx` other than `401`/`403`/`404`/`408`/`429`/`499`) | fix the invocation, don't retry as-is — but read the message first: an API `4xx` can also be a state rejection (e.g. `task is closed`) rather than a bad argument |
 | 3 | not authenticated, or API `401`/`403` | re-authenticate (`c1i auth login`); a scoped credential needs a role that covers the call |
 | 4 | API `404` | stop — the resource/path doesn't exist |
 | 5 | API `429` | back off and retry |
@@ -293,7 +293,9 @@ Exit 1 with `writing output:` means stdout failed (e.g. a full disk), and the re
 Branch on the exit code, not stderr text. An empty id argument is a usage error
 (`c1i users get ""` exits 2 without sending anything) — worth knowing if you
 build ids programmatically, because it used to return the whole collection with
-exit 0. An id of `/` or `.` is refused the same way: those escape to a path the
+exit 0. An id of `.` or `..` (also with a `;` suffix, such as `..;x`, or
+percent-encoded as `%2E`) is refused before sending too, since the API resolves
+it to the parent or collection. An id of `/` escapes to a path the
 API redirects to the collection, and the REST client refuses a redirect that
 changes the path, so you get exit 2 instead of a full listing that looks like a
 successful read. It also refuses a same-path redirect to an unrelated host or

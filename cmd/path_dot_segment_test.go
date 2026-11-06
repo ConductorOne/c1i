@@ -21,6 +21,8 @@ func TestDotSegmentIDIsUsageErrorAndSendsNothing(t *testing.T) {
 		{"users get dot", []string{"users", "get", "."}},
 		{"users get dot-dot", []string{"users", "get", ".."}},
 		{"apps get dot-dot", []string{"apps", "get", ".."}},
+		{"users get dot-dot matrix", []string{"users", "get", "..;"}},
+		{"api dot-dot matrix", []string{"api", "--path", "/api/v1/users/x/..;/abc"}},
 		{"api encoded dot", []string{"api", "--path", "/api/v1/users/%2E"}},
 		{"api interior dot POST", []string{"api", "--method", "POST", "--path", "/api/v1/webhooks/./test", "--body", "{}"}},
 	}
