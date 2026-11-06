@@ -60,11 +60,11 @@ c1i docs endpoints --filter task
 ### Users
 
 ```sh
-c1i users list [--query <text>] [--email <email>] [--status enabled|disabled|deleted] [--page-size N] [--page-token TOKEN] [--limit N]
+c1i users list [--query <text>] [--email <email>] [--status enabled|disabled|deleted] [--origin directory|local|system|all]... [--page-size N] [--page-token TOKEN] [--limit N]
 c1i users get <user-id>
 ```
 
-`users list` reads `POST /api/v1/search/users`, which with no `origins` filter returns only directory-origin users: local-origin (service) users and system users are excluded. The search's `origins` filter includes them: `c1i api --method POST --path /api/v1/search/users --paginate --body '{"origins":["USER_ORIGIN_DIRECTORY","USER_ORIGIN_LOCAL","USER_ORIGIN_SYSTEM"]}'`.
+`users list` reads `POST /api/v1/search/users`, which with no `--origin` returns only directory-origin users: local-origin (service) users and system users are excluded. `--origin all` lists every user; repeat `--origin` with `directory`, `local` or `system` to pick origins (an unknown value is a usage error, exit `2`). Each row carries `origin` (e.g. `USER_ORIGIN_LOCAL`) when the server reports one.
 
 ### Apps
 

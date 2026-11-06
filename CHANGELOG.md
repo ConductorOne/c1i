@@ -17,6 +17,13 @@ attempt. When the config directory resolves to a relative path (a relative
 credentials fails instead of using the working directory. With a relative
 `HOME`, `~/.c1i.yaml` is ignored.
 
+### Added
+
+- `users list --origin directory|local|system|all` (repeatable) filters by
+  user origin; `--origin all` lists every user, including the local-origin
+  (service) and system users the default omits. Rows now carry `origin` when
+  the server reports one.
+
 ### Changed
 
 - `golang.org/x/term` moves to 0.47.0 and `golang.org/x/sys` to 0.49.0.
@@ -133,7 +140,7 @@ credentials fails instead of using the working directory. With a relative
 
 - `users list` help and the README now say its search route returns only
   directory-origin users by default, omitting local-origin (service) and
-  system users, and how to include them with `api`.
+  system users.
 
 ## [0.9.1] - 2026-10-09
 

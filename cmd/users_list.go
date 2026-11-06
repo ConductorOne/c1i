@@ -13,12 +13,10 @@ var usersListCmd = &cobra.Command{
 	Short: "Search and list C1 users (NDJSON output)",
 	Long: `Search and list C1 users (NDJSON output).
 
-Reads POST /api/v1/search/users, which with no origins filter returns only
+Reads POST /api/v1/search/users, which with no --origin returns only
 directory-origin users: local-origin (service) users and system users are
-excluded. The search's origins filter includes them:
-
-  c1i api --method POST --path /api/v1/search/users --paginate \
-    --body '{"origins":["USER_ORIGIN_DIRECTORY","USER_ORIGIN_LOCAL","USER_ORIGIN_SYSTEM"]}'`,
+excluded. Pass --origin all to list every user, or repeat --origin with
+directory, local, or system to pick origins.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		baseURL, err := GetBaseURL()
 		if err != nil {
@@ -37,6 +35,10 @@ excluded. The search's origins filter includes them:
 		pageToken, _ := cmd.Flags().GetString("page-token")
 		manualPaging := cmd.Flags().Changed("page-token")
 		limit := getIntFlag(cmd, "limit")
+		origins, err := userOrigins(cmd)
+		if err != nil {
+			return err
+		}
 
 		enc := newEmitter(cmd)
 		guard := newPaginationCursorGuard()
@@ -64,6 +66,9 @@ excluded. The search's origins filter includes them:
 			if status != "" {
 				body["userStatuses"] = []string{mapUserStatus(status)}
 			}
+			if len(origins) > 0 {
+				body["origins"] = origins
+			}
 
 			data, err := c.Post(cmd.Context(), "/api/v1/search/users", body)
 			if err != nil {
@@ -79,6 +84,7 @@ excluded. The search's origins filter includes them:
 						Department  string `json:"department"`
 						JobTitle    string `json:"jobTitle"`
 						Status      string `json:"status"`
+						Origin      string `json:"origin"`
 					} `json:"user"`
 				} `json:"list"`
 				NextPageToken string `json:"nextPageToken"`
@@ -98,14 +104,18 @@ excluded. The search's origins filter includes them:
 			resp.List = keepRows(resp.List, keep)
 			for _, item := range resp.List {
 				u := item.User
-				if err := enc.Encode(map[string]string{
+				row := map[string]string{
 					"id":           u.ID,
 					"display_name": u.DisplayName,
 					"email":        u.Email,
 					"department":   u.Department,
 					"job_title":    u.JobTitle,
 					"status":       u.Status,
-				}); err != nil {
+				}
+				if u.Origin != "" {
+					row["origin"] = u.Origin
+				}
+				if err := enc.Encode(row); err != nil {
 					return err
 				}
 				if limitReached(enc.Written(), limit) {
@@ -128,6 +138,7 @@ func init() {
 	usersListCmd.Flags().String("query", "", "Fuzzy search on name or email")
 	usersListCmd.Flags().String("email", "", "Exact email match")
 	usersListCmd.Flags().String("status", "", "Filter by status: enabled, disabled, deleted")
+	addRepeatableStringFlag(usersListCmd, "origin", "Filter by origin: directory, local, system, or all (repeatable; default: the server's, directory only)")
 	addPaginationFlags(usersListCmd)
 	usersCmd.AddCommand(usersListCmd)
 }
@@ -147,4 +158,42 @@ func mapUserStatus(s string) string {
 	default:
 		return s
 	}
+}
+
+// userOriginValues maps --origin values to the search API's enum, in the
+// order "all" expands to.
+var userOriginValues = []struct{ flag, api string }{
+	{"directory", "USER_ORIGIN_DIRECTORY"},
+	{"local", "USER_ORIGIN_LOCAL"},
+	{"system", "USER_ORIGIN_SYSTEM"},
+}
+
+// userOrigins reads --origin (case-insensitive) into the API enum, deduped and
+// in a stable order; nil when unset, so the server's default applies.
+func userOrigins(cmd *cobra.Command) ([]string, error) {
+	values, err := repeatableStringFlag(cmd, "origin")
+	if err != nil || len(values) == 0 {
+		return nil, err
+	}
+	want := map[string]bool{}
+	for _, v := range values {
+		v = strings.ToLower(strings.TrimSpace(v))
+		known := v == "all"
+		for _, o := range userOriginValues {
+			if v == "all" || v == o.flag {
+				want[o.api] = true
+				known = true
+			}
+		}
+		if !known {
+			return nil, &usageError{fmt.Errorf("invalid --origin %q: want directory, local, system, all", v)}
+		}
+	}
+	var out []string
+	for _, o := range userOriginValues {
+		if want[o.api] {
+			out = append(out, o.api)
+		}
+	}
+	return out, nil
 }

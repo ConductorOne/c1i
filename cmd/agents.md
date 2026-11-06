@@ -475,6 +475,10 @@ resource with `--resource-id` likewise means you drop
   field marking it (the principal's `user.status` stays `ENABLED`). Only the
   lists omit them; `users get <sp-id>` shows `"status": "DELETED"` and
   `deletedAt`.
+- `users list` with no `--origin` returns directory-origin users only, so
+  service principals and system users are missing. Pass `--origin all` for
+  every user, or `--origin local` for service principals; each row's `origin`
+  says which it is.
 
 ## Upgrading c1i
 
