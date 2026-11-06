@@ -1153,7 +1153,7 @@ branch on without parsing text:
 |------|---------|
 | `0` | success |
 | `1` | generic / unclassified error |
-| `2` | usage error (bad flags or arguments, an empty id, a refused redirect, or the API returned any `4xx` other than `401`/`403`/`404`/`408`/`429`/`499`) |
+| `2` | usage error (bad flags or arguments, an empty, `.` or `..` id, a refused redirect, or the API returned any `4xx` other than `401`/`403`/`404`/`408`/`429`/`499`) |
 | `3` | not authenticated, or API returned `401`/`403` |
 | `4` | API returned `404` (not found) |
 | `5` | API returned `429` (rate limited — back off and retry) |
@@ -1177,8 +1177,11 @@ indistinguishable from "the Slack connector is down."
 An **empty id argument** is a usage error, not a lookup: `c1i policies get ""`
 exits `2` and sends nothing. Without that guard an empty id renders a trailing
 empty path segment, which the API redirects to the collection endpoint — so the
-command used to print the entire list and exit `0`. The same check applies to a
-raw `api --path` ending in `/`.
+command used to print the entire list and exit `0`. An id of `.` or `..` is
+refused the same way, since the API resolves it to the parent or collection,
+as is one with a `;` suffix (`..;x`), which the API treats as `..`. The same
+check applies to a raw `api --path` ending in `/` or containing such a segment,
+percent-encoded (`%2E`) or not.
 
 Relatedly, the REST client is **selective about HTTP redirects**. It follows one
 only when both hold: the target path is identical to what was requested (a

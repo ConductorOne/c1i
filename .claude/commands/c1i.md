@@ -78,7 +78,7 @@ request was sent.
 |---|---|
 | 0 | success |
 | 1 | generic / unclassified error |
-| 2 | usage error (bad flags/args, unknown command, an empty id argument, a refused redirect, or any API `4xx` other than `401`/`403`/`404`/`408`/`429`/`499`) |
+| 2 | usage error (bad flags/args, unknown command, an empty, `.` or `..` id, a refused redirect, or any API `4xx` other than `401`/`403`/`404`/`408`/`429`/`499`) |
 | 3 | not authenticated, or API `401`/`403` |
 | 4 | API `404` (not found) |
 | 5 | API `429` (rate limited) |
