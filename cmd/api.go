@@ -268,7 +268,7 @@ an intended non-GET REST write.`,
 
 			items, nextToken, err := extractListAndToken(data, listKey)
 			if err != nil {
-				return failWith(fmt.Errorf("failed to parse response: %w", err))
+				return failWith(&nonJSONResponseError{fmt.Errorf("failed to parse response: %w", err)})
 			}
 			if !listKeySeen {
 				if listKeySeen, err = checkListKeyPresent(data, listKey); err != nil {

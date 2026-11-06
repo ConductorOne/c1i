@@ -1246,7 +1246,7 @@ func TestAPIPaginateFlushesHeldPageOnLaterError(t *testing.T) {
 		wantExit int
 	}{
 		{"api error", func(w http.ResponseWriter) { w.WriteHeader(http.StatusNotFound) }, exitNotFound},
-		{"unparseable page", func(w http.ResponseWriter) { _, _ = fmt.Fprint(w, `{"list":[`) }, exitError},
+		{"unparseable page", func(w http.ResponseWriter) { _, _ = fmt.Fprint(w, `{"list":[`) }, exitServer},
 		{"transport error", func(w http.ResponseWriter) {
 			conn, _, err := w.(http.Hijacker).Hijack()
 			if err == nil {
@@ -1300,7 +1300,7 @@ func (w *failAfterWriter) Write(p []byte) (int, error) {
 
 // runAPIHeldPageThenFail runs `api --paginate` over a page, the same page
 // again (held), then a request answered by fail.
-func runAPIHeldPageThenFail(t *testing.T, out io.Writer, fail func(http.ResponseWriter)) error {
+func runAPIHeldPageThenFail(t *testing.T, out io.Writer, fail func(http.ResponseWriter), extraArgs ...string) error {
 	t.Helper()
 	var requests int
 	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -1328,6 +1328,60 @@ func runAPIHeldPageThenFail(t *testing.T, out io.Writer, fail func(http.Response
 	var errOut bytes.Buffer
 	apiCmd.SetOut(out)
 	apiCmd.SetErr(&errOut)
-	rootCmd.SetArgs([]string{"api", "--path", "/api/v1/things", "--paginate"})
+	rootCmd.SetArgs(append([]string{"api", "--path", "/api/v1/things", "--paginate"}, extraArgs...))
 	return rootCmd.ExecuteContext(context.Background())
+}
+
+// --limit still caps rows written while held rows are flushed.
+func TestAPIPaginateHeldFlushHonorsLimit(t *testing.T) {
+	var out bytes.Buffer
+	err := runAPIHeldPageThenFail(t, &out, func(w http.ResponseWriter) { w.WriteHeader(http.StatusNotFound) }, "--limit", "3")
+	if got := exitCode(err); got != exitNotFound {
+		t.Errorf("exitCode = %d, want %d; err=%v", got, exitNotFound, err)
+	}
+	var got []string
+	for _, row := range decodeNDJSONRows(t, out.String()) {
+		got = append(got, fmt.Sprint(row["id"]))
+	}
+	if strings.Join(got, ",") != "a,b,a" {
+		t.Fatalf("rows = %v, want [a b a]", got)
+	}
+}
+
+// A 200 page that isn't a JSON object is C1 failing (exit 6), on the first
+// page as on a later one.
+func TestAPIPaginateNonJSONFirstPageIsExitServer(t *testing.T) {
+	for name, body := range map[string]string{
+		"html":       "<!doctype html><html></html>",
+		"bare array": "[1,2]",
+		"empty":      "",
+		"truncated":  `{"list":[`,
+	} {
+		t.Run(name, func(t *testing.T) {
+			srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				_, _ = fmt.Fprint(w, body)
+			}))
+			defer srv.Close()
+
+			resetAPICmdFlags(t)
+			orig := newAPIClient
+			newAPIClient = func(_ *cobra.Command, _ string) (apiRequester, error) {
+				return client.NewForTesting(srv.URL, srv.Client(), client.WithMaxRetries(0)), nil
+			}
+			t.Cleanup(func() { newAPIClient = orig })
+			t.Setenv("C1I_URL", srv.URL)
+
+			var out, errOut bytes.Buffer
+			apiCmd.SetOut(&out)
+			apiCmd.SetErr(&errOut)
+			rootCmd.SetArgs([]string{"api", "--path", "/api/v1/things", "--paginate"})
+			err := rootCmd.ExecuteContext(context.Background())
+			if got := exitCode(err); got != exitServer {
+				t.Errorf("exitCode = %d, want %d; err=%v", got, exitServer, err)
+			}
+			if out.Len() != 0 {
+				t.Errorf("stdout = %q, want nothing", out.String())
+			}
+		})
+	}
 }
