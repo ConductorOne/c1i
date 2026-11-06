@@ -47,12 +47,10 @@ func runDocsEndpoints(t *testing.T, filter string) (stdout, stderr string) {
 	errBuf := &bytes.Buffer{}
 	cmd.SetOut(outBuf)
 	cmd.SetErr(errBuf)
+	resetCmdFlags(t, cmd)
 	if err := cmd.Flags().Set("filter", filter); err != nil {
 		t.Fatalf("failed to set --filter: %v", err)
 	}
-	t.Cleanup(func() {
-		_ = cmd.Flags().Set("filter", "")
-	})
 
 	if err := cmd.RunE(cmd, nil); err != nil {
 		t.Fatalf("RunE returned unexpected error: %v", err)

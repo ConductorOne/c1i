@@ -10,64 +10,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
-
-	"github.com/spf13/pflag"
 )
-
-// resetPoliciesListCmdFlags restores policiesListCmd's own flags to their
-// zero values and clears pflag's per-flag Changed bit, so tests sharing the
-// package-level singleton command can't leak flag state into each other.
-// Mirrors resetPoliciesUpdateCmdFlags in cmd/policies_update_test.go.
-func resetPoliciesListCmdFlags(t *testing.T) {
-	t.Helper()
-	reset := func() {
-		f := policiesListCmd.Flags().Lookup("page-size")
-		_ = f.Value.Set("50")
-		f.Changed = false
-		f = policiesListCmd.Flags().Lookup("page-token")
-		_ = f.Value.Set("")
-		f.Changed = false
-		f = policiesListCmd.Flags().Lookup("limit")
-		_ = f.Value.Set("0")
-		f.Changed = false
-	}
-	reset()
-	t.Cleanup(reset)
-}
-
-// resetPoliciesSearchCmdFlags is the search-command counterpart. StringSlice
-// flags (policy-type, exclude-policy-id) track their own internal "changed"
-// bit independent of pflag.Flag.Changed, so a plain Value.Set("") after the
-// flag has ever been set once would APPEND instead of clearing it; Replace(nil)
-// via the SliceValue interface clears them unconditionally.
-func resetPoliciesSearchCmdFlags(t *testing.T) {
-	t.Helper()
-	reset := func() {
-		for _, name := range []string{"query", "display-name", "page-token"} {
-			f := policiesSearchCmd.Flags().Lookup(name)
-			_ = f.Value.Set("")
-			f.Changed = false
-		}
-		f := policiesSearchCmd.Flags().Lookup("include-deleted")
-		_ = f.Value.Set("false")
-		f.Changed = false
-		for _, name := range []string{"policy-type", "exclude-policy-id"} {
-			f := policiesSearchCmd.Flags().Lookup(name)
-			if sv, ok := f.Value.(pflag.SliceValue); ok {
-				_ = sv.Replace(nil)
-			}
-			f.Changed = false
-		}
-		f = policiesSearchCmd.Flags().Lookup("page-size")
-		_ = f.Value.Set("25")
-		f.Changed = false
-		f = policiesSearchCmd.Flags().Lookup("limit")
-		_ = f.Value.Set("0")
-		f.Changed = false
-	}
-	reset()
-	t.Cleanup(reset)
-}
 
 // decodeNDJSONRows splits an emitter's NDJSON output back into rows, in
 // emission order, so tests can assert both count and order.
@@ -138,7 +81,7 @@ func TestPoliciesListPaginatesAcrossTwoPages(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	resetPoliciesListCmdFlags(t)
+	resetCmdFlags(t, policiesListCmd)
 	out, err := runPoliciesListCmd(t, srv)
 	if err != nil {
 		t.Fatalf("RunE: %v", err)
@@ -184,7 +127,7 @@ func TestPoliciesListPaginatesAcrossThreePages(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	resetPoliciesListCmdFlags(t)
+	resetCmdFlags(t, policiesListCmd)
 	out, err := runPoliciesListCmd(t, srv)
 	if err != nil {
 		t.Fatalf("RunE: %v", err)
@@ -226,7 +169,7 @@ func TestPoliciesListEmptyPageWithTokenDoesNotStopEarly(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	resetPoliciesListCmdFlags(t)
+	resetCmdFlags(t, policiesListCmd)
 	out, err := runPoliciesListCmd(t, srv)
 	if err != nil {
 		t.Fatalf("RunE: %v", err)
@@ -257,7 +200,7 @@ func TestPoliciesListExplicitPageTokenDisablesAutoPagination(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	resetPoliciesListCmdFlags(t)
+	resetCmdFlags(t, policiesListCmd)
 	_ = policiesListCmd.Flags().Set("page-token", "manual-tok")
 	out, err := runPoliciesListCmd(t, srv)
 	if err != nil {
@@ -293,7 +236,7 @@ func TestPoliciesListLimitStopsEarly(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	resetPoliciesListCmdFlags(t)
+	resetCmdFlags(t, policiesListCmd)
 	_ = policiesListCmd.Flags().Set("limit", "3")
 	out, err := runPoliciesListCmd(t, srv)
 	if err != nil {
@@ -357,7 +300,7 @@ func TestPoliciesSearchPaginatesAcrossTwoPages(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	resetPoliciesSearchCmdFlags(t)
+	resetCmdFlags(t, policiesSearchCmd)
 	out, err := runPoliciesSearchCmd(t, srv)
 	if err != nil {
 		t.Fatalf("RunE: %v", err)
@@ -404,7 +347,7 @@ func TestPoliciesSearchPaginatesAcrossThreePages(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	resetPoliciesSearchCmdFlags(t)
+	resetCmdFlags(t, policiesSearchCmd)
 	out, err := runPoliciesSearchCmd(t, srv)
 	if err != nil {
 		t.Fatalf("RunE: %v", err)
@@ -446,7 +389,7 @@ func TestPoliciesSearchEmptyPageWithTokenDoesNotStopEarly(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	resetPoliciesSearchCmdFlags(t)
+	resetCmdFlags(t, policiesSearchCmd)
 	out, err := runPoliciesSearchCmd(t, srv)
 	if err != nil {
 		t.Fatalf("RunE: %v", err)
@@ -476,7 +419,7 @@ func TestPoliciesSearchExplicitPageTokenDisablesAutoPagination(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	resetPoliciesSearchCmdFlags(t)
+	resetCmdFlags(t, policiesSearchCmd)
 	_ = policiesSearchCmd.Flags().Set("page-token", "manual-tok")
 	out, err := runPoliciesSearchCmd(t, srv)
 	if err != nil {
@@ -513,7 +456,7 @@ func TestPoliciesSearchLimitStopsEarly(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	resetPoliciesSearchCmdFlags(t)
+	resetCmdFlags(t, policiesSearchCmd)
 	_ = policiesSearchCmd.Flags().Set("limit", "3")
 	out, err := runPoliciesSearchCmd(t, srv)
 	if err != nil {

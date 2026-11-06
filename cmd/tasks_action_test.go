@@ -368,8 +368,8 @@ func TestTaskActionsDryRunStillResolvesTheURL(t *testing.T) {
 	// Both modes: the runner resolves the URL once, before either path.
 	for _, name := range []string{"close", "restart"} {
 		t.Run(name, func(t *testing.T) {
-			resetRootURLFlag(t)
-			resetRootDryRunFlag(t)
+			resetCmdFlags(t, rootCmd)
+			resetCmdFlags(t, rootCmd)
 			t.Setenv("C1I_URL", "")
 			withDryRun(t)
 
@@ -398,23 +398,6 @@ func withDryRun(t *testing.T) {
 	orig := viper.GetBool("dry_run")
 	viper.Set("dry_run", true)
 	t.Cleanup(func() { viper.Set("dry_run", orig) })
-}
-
-// resetRootDryRunFlag clears the persistent flag and its Changed bit, so a
-// test passing it through rootCmd cannot leak it.
-func resetRootDryRunFlag(t *testing.T) {
-	t.Helper()
-	f := rootCmd.PersistentFlags().Lookup("dry-run")
-	if f == nil {
-		t.Fatal("rootCmd has no --dry-run flag; this reset is not doing what it thinks")
-	}
-	orig, changed := f.Value.String(), f.Changed
-	t.Cleanup(func() {
-		_ = f.Value.Set(orig)
-		f.Changed = changed
-	})
-	_ = f.Value.Set("false")
-	f.Changed = false
 }
 
 // TestStepUnusedActionsPreviewWithoutCredentials: an action needing no step

@@ -77,24 +77,6 @@ func TestBuildGrantTaskBodyOmitsEmpty(t *testing.T) {
 	}
 }
 
-// resetGrantCmdFlags restores requestsCreateGrantCmd's own flags to their
-// zero values, so tests sharing the package-level singleton can't leak flag
-// state into each other or into other test files (mirrors api_test.go's
-// resetAPICmdFlags).
-func resetGrantCmdFlags(t *testing.T) {
-	t.Helper()
-	reset := func() {
-		_ = requestsCreateGrantCmd.Flags().Set("app-id", "")
-		_ = requestsCreateGrantCmd.Flags().Set("entitlement-id", "")
-		_ = requestsCreateGrantCmd.Flags().Set("user-id", "")
-		_ = requestsCreateGrantCmd.Flags().Set("duration", "")
-		_ = requestsCreateGrantCmd.Flags().Set("description", "")
-		_ = requestsCreateGrantCmd.Flags().Set("emergency", "false")
-	}
-	reset()
-	t.Cleanup(reset)
-}
-
 // stubNewGrantClient swaps newGrantClient to return a *client.Client wired
 // (via client.NewForTesting) to a real httptest.Server, bypassing newClient's
 // OAuth mint, restoring the original when the test ends.
@@ -144,7 +126,7 @@ func TestRequestsCreateGrantDefaultsUserIDToSelf(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	resetGrantCmdFlags(t)
+	resetCmdFlags(t, requestsCreateGrantCmd)
 	stubNewGrantClient(t, srv)
 	t.Setenv("C1I_URL", "https://example.invalid")
 
@@ -199,7 +181,7 @@ func TestRequestsCreateGrantExplicitUserIDSkipsSelfResolution(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	resetGrantCmdFlags(t)
+	resetCmdFlags(t, requestsCreateGrantCmd)
 	stubNewGrantClient(t, srv)
 	t.Setenv("C1I_URL", "https://example.invalid")
 
@@ -256,7 +238,7 @@ func TestRequestsCreateGrantDryRunPreviewsResolvedSelf(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	resetGrantCmdFlags(t)
+	resetCmdFlags(t, requestsCreateGrantCmd)
 	stubNewGrantClient(t, srv)
 	t.Setenv("C1I_URL", "https://example.invalid")
 
@@ -308,7 +290,7 @@ func TestRequestsCreateGrantDryRunExplicitUserIDSkipsSelfResolution(t *testing.T
 	}))
 	defer srv.Close()
 
-	resetGrantCmdFlags(t)
+	resetCmdFlags(t, requestsCreateGrantCmd)
 	stubNewGrantClient(t, srv)
 	t.Setenv("C1I_URL", "https://example.invalid")
 
@@ -343,7 +325,7 @@ func TestRequestsCreateGrantDryRunExplicitUserIDSkipsSelfResolution(t *testing.T
 // identical authenticate-before-dry-run already does -- a wrapped
 // *client.AuthError (exit 3), not a panic or a bare unclassified error.
 func TestRequestsCreateGrantDryRunUnauthenticatedFailsLegibly(t *testing.T) {
-	resetGrantCmdFlags(t)
+	resetCmdFlags(t, requestsCreateGrantCmd)
 
 	origNewGrantClient := newGrantClient
 	newGrantClient = func(_ *cobra.Command, _ string) (*client.Client, error) {
@@ -400,7 +382,7 @@ func TestRequestsCreateGrantDryRunIntrospectServerFailureClassifies(t *testing.T
 	}))
 	defer srv.Close()
 
-	resetGrantCmdFlags(t)
+	resetCmdFlags(t, requestsCreateGrantCmd)
 	origNewGrantClient := newGrantClient
 	// WithMaxRetries(0): a 500 is otherwise retried (idempotent GET), which
 	// would make this legitimately slow (multi-second real backoff) for no
@@ -452,7 +434,7 @@ func TestRequestsCreateGrantDryRunIntrospectNetworkFailureExitsGenerically(t *te
 	deadURL := srv.URL
 	srv.Close()
 
-	resetGrantCmdFlags(t)
+	resetCmdFlags(t, requestsCreateGrantCmd)
 	origNewGrantClient := newGrantClient
 	newGrantClient = func(_ *cobra.Command, _ string) (*client.Client, error) {
 		return client.NewForTesting(deadURL, http.DefaultClient), nil
@@ -534,20 +516,6 @@ func TestBuildRevokeTaskBodyOmitsEmpty(t *testing.T) {
 	}
 }
 
-// resetRevokeCmdFlags mirrors resetGrantCmdFlags for requestsCreateRevokeCmd's
-// own flags.
-func resetRevokeCmdFlags(t *testing.T) {
-	t.Helper()
-	reset := func() {
-		_ = requestsCreateRevokeCmd.Flags().Set("app-id", "")
-		_ = requestsCreateRevokeCmd.Flags().Set("entitlement-id", "")
-		_ = requestsCreateRevokeCmd.Flags().Set("user-id", "")
-		_ = requestsCreateRevokeCmd.Flags().Set("description", "")
-	}
-	reset()
-	t.Cleanup(reset)
-}
-
 // stubNewRevokeClient mirrors stubNewGrantClient for newRevokeClient.
 func stubNewRevokeClient(t *testing.T, srv *httptest.Server) {
 	t.Helper()
@@ -589,7 +557,7 @@ func TestRequestsCreateRevokeDefaultsUserIDToSelf(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	resetRevokeCmdFlags(t)
+	resetCmdFlags(t, requestsCreateRevokeCmd)
 	stubNewRevokeClient(t, srv)
 	t.Setenv("C1I_URL", "https://example.invalid")
 
@@ -644,7 +612,7 @@ func TestRequestsCreateRevokeExplicitUserIDSkipsSelfResolution(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	resetRevokeCmdFlags(t)
+	resetCmdFlags(t, requestsCreateRevokeCmd)
 	stubNewRevokeClient(t, srv)
 	t.Setenv("C1I_URL", "https://example.invalid")
 
@@ -694,7 +662,7 @@ func TestRequestsCreateRevokeDryRunPreviewsResolvedSelf(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	resetRevokeCmdFlags(t)
+	resetCmdFlags(t, requestsCreateRevokeCmd)
 	stubNewRevokeClient(t, srv)
 	t.Setenv("C1I_URL", "https://example.invalid")
 
@@ -744,7 +712,7 @@ func TestRequestsCreateRevokeDryRunExplicitUserIDSkipsSelfResolution(t *testing.
 	}))
 	defer srv.Close()
 
-	resetRevokeCmdFlags(t)
+	resetCmdFlags(t, requestsCreateRevokeCmd)
 	stubNewRevokeClient(t, srv)
 	t.Setenv("C1I_URL", "https://example.invalid")
 
@@ -775,7 +743,7 @@ func TestRequestsCreateRevokeDryRunExplicitUserIDSkipsSelfResolution(t *testing.
 // TestRequestsCreateRevokeDryRunUnauthenticatedFailsLegibly mirrors
 // TestRequestsCreateGrantDryRunUnauthenticatedFailsLegibly for revoke.
 func TestRequestsCreateRevokeDryRunUnauthenticatedFailsLegibly(t *testing.T) {
-	resetRevokeCmdFlags(t)
+	resetCmdFlags(t, requestsCreateRevokeCmd)
 
 	origNewRevokeClient := newRevokeClient
 	newRevokeClient = func(_ *cobra.Command, _ string) (*client.Client, error) {
@@ -826,7 +794,7 @@ func TestRequestsCreateRevokeDryRunIntrospectServerFailureClassifies(t *testing.
 	}))
 	defer srv.Close()
 
-	resetRevokeCmdFlags(t)
+	resetCmdFlags(t, requestsCreateRevokeCmd)
 	origNewRevokeClient := newRevokeClient
 	newRevokeClient = func(_ *cobra.Command, _ string) (*client.Client, error) {
 		return client.NewForTesting(srv.URL, srv.Client(), client.WithMaxRetries(0)), nil
@@ -865,7 +833,7 @@ func TestRequestsCreateRevokeDryRunIntrospectNetworkFailureExitsGenerically(t *t
 	deadURL := srv.URL
 	srv.Close()
 
-	resetRevokeCmdFlags(t)
+	resetCmdFlags(t, requestsCreateRevokeCmd)
 	origNewRevokeClient := newRevokeClient
 	newRevokeClient = func(_ *cobra.Command, _ string) (*client.Client, error) {
 		return client.NewForTesting(deadURL, http.DefaultClient), nil

@@ -52,7 +52,7 @@ func TestAuthLoginRejectsDryRun(t *testing.T) {
 			t.Cleanup(func() { newCredentialClient = origCred })
 
 			resetCmds(t, authLoginCmd)
-			resetRootDryRunFlag(t)
+			resetCmdFlags(t, rootCmd)
 			// Other tests leave a viper.Set override, which beats the flag and
 			// env; a nil override falls through to them.
 			viper.Set("dry_run", nil)

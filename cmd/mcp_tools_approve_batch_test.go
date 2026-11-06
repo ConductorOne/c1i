@@ -10,8 +10,8 @@ import (
 // more tool ids and sends one request per id (the API has no batch approve).
 // Before the fix, ExactArgs(1) rejected a second id outright.
 func TestMcpToolsApproveBatchesOnePostPerId(t *testing.T) {
-	resetRootURLFlag(t)
-	resetRootDryRunFlag(t)
+	resetCmdFlags(t, rootCmd)
+	resetCmdFlags(t, rootCmd)
 	// approve's own --app-id/--connector-id live on the shared command object;
 	// clear them before and after so this test neither inherits nor leaks a
 	// Changed flag (the C182 order-dependence class).

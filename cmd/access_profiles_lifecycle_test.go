@@ -30,26 +30,6 @@ func newCatalogLifecycleFlagCmd() *cobra.Command {
 	return cmd
 }
 
-func resetCatalogLifecycleFlags(t *testing.T, cmd *cobra.Command) {
-	t.Helper()
-	reset := func() {
-		for _, name := range []string{
-			"display-name", "description", "enrollment-behavior", "unenrollment-behavior", "unenrollment-entitlement-behavior",
-		} {
-			f := cmd.Flags().Lookup(name)
-			_ = f.Value.Set("")
-			f.Changed = false
-		}
-		for _, name := range []string{"published", "visible-to-everyone", "request-bundle"} {
-			f := cmd.Flags().Lookup(name)
-			_ = f.Value.Set("false")
-			f.Changed = false
-		}
-	}
-	reset()
-	t.Cleanup(reset)
-}
-
 func stubCatalogClient(t *testing.T, srv *httptest.Server) {
 	t.Helper()
 	orig := newClient
@@ -156,7 +136,7 @@ func TestAccessProfilesUpdateSendsEscapedWrappedPatch(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	resetCatalogLifecycleFlags(t, accessProfilesUpdateCmd)
+	resetCmdFlags(t, accessProfilesUpdateCmd)
 	stubCatalogClient(t, srv)
 	withCatalogDryRun(t, false)
 	t.Setenv("C1I_URL", "https://example.invalid")

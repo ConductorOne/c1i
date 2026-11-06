@@ -56,7 +56,7 @@ func stubWhoamiServerBody(t *testing.T, status int, introspectBody string) {
 // command error, isolating the flag state each case sets up.
 func runWhoami(t *testing.T, args []string) (string, error) {
 	t.Helper()
-	resetRootURLFlag(t)
+	resetCmdFlags(t, rootCmd)
 	resetCmdFlags(t, authWhoamiCmd)
 
 	var out bytes.Buffer

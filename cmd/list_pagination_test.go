@@ -49,21 +49,65 @@ type listPaginationCase struct {
 }
 
 // Every case's command is a package-level singleton shared by the whole test
-// binary, so its flags must be reset to defaults between cases.
+// binary, so its flags must be reset to defaults between cases. Values are
+// set directly, never via FlagSet.Set, which would leave Changed true.
+// PersistentFlags is visited too: rootCmd.Flags() lacks --url etc. until
+// cobra merges them on first parse.
 func resetCmdFlags(t *testing.T, cmd *cobra.Command) {
 	t.Helper()
+	resetFlag := func(f *pflag.Flag) {
+		if sv, ok := f.Value.(pflag.SliceValue); ok {
+			_ = sv.Replace(nil)
+		} else {
+			_ = f.Value.Set(f.DefValue)
+		}
+		f.Changed = false
+	}
 	reset := func() {
-		cmd.Flags().VisitAll(func(f *pflag.Flag) {
-			if sv, ok := f.Value.(pflag.SliceValue); ok {
-				_ = sv.Replace(nil)
-			} else {
-				_ = f.Value.Set(f.DefValue)
-			}
-			f.Changed = false
-		})
+		cmd.Flags().VisitAll(resetFlag)
+		cmd.PersistentFlags().VisitAll(resetFlag)
 	}
 	reset()
 	t.Cleanup(reset)
+}
+
+// A reset that leaves Changed true (or misses rootCmd's persistent flags)
+// leaks into whichever test the shuffle runs next.
+func TestResetCmdFlagsLeavesFlagsUnchangedAfterCleanup(t *testing.T) {
+	cases := []struct {
+		cmd  *cobra.Command
+		flag string
+	}{
+		{requestsCreateGrantCmd, "user-id"},
+		{requestsCreateGrantCmd, "emergency"},
+		{policiesSearchCmd, "policy-type"},
+		{rootCmd, "url"},
+		{rootCmd, "dry-run"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.cmd.Name()+"/"+tc.flag, func(t *testing.T) {
+			lookup := func() *pflag.Flag {
+				if f := tc.cmd.Flags().Lookup(tc.flag); f != nil {
+					return f
+				}
+				return tc.cmd.PersistentFlags().Lookup(tc.flag)
+			}
+			t.Run("set", func(t *testing.T) {
+				resetCmdFlags(t, tc.cmd)
+				if err := lookup().Value.Set("true"); err != nil {
+					t.Fatal(err)
+				}
+				lookup().Changed = true
+			})
+			f := lookup()
+			if f.Changed {
+				t.Errorf("--%s Changed=true after cleanup", tc.flag)
+			}
+			if f.Value.String() != f.DefValue && f.Value.String() != "[]" {
+				t.Errorf("--%s = %q after cleanup, want default %q", tc.flag, f.Value.String(), f.DefValue)
+			}
+		})
+	}
 }
 
 func decodeJSONBody(t *testing.T, r *http.Request) map[string]any {

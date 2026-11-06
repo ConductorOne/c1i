@@ -427,7 +427,7 @@ func emptyUserIDIntrospectServer(t *testing.T) *httptest.Server {
 
 func TestRequestsCreateGrantUnresolvableUserExitsUsage(t *testing.T) {
 	srv := emptyUserIDIntrospectServer(t)
-	resetGrantCmdFlags(t)
+	resetCmdFlags(t, requestsCreateGrantCmd)
 	stubNewGrantClient(t, srv)
 	t.Setenv("C1I_URL", "https://example.invalid")
 
