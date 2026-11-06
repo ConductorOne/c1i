@@ -255,6 +255,9 @@ an intended non-GET REST write.`,
 			if err != nil {
 				return fmt.Errorf("failed to parse response: %w", err)
 			}
+			if err := checkListKeyPresent(data, listKey); err != nil {
+				return err
+			}
 
 			ids := make([]string, len(items))
 			for i, item := range items {
@@ -432,6 +435,33 @@ func extractListAndToken(data []byte, listKey string) ([]json.RawMessage, string
 	}
 
 	return nil, nextPageToken, nil
+}
+
+// checkListKeyPresent rejects a --list-key absent from a page that has other
+// array fields: draining it would print 0 rows at exit 0. A page with no
+// arrays at all is fine, since protojson omits an empty repeated field.
+func checkListKeyPresent(data []byte, listKey string) error {
+	if listKey == "" {
+		return nil
+	}
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return nil // extractListAndToken already parsed it
+	}
+	if _, ok := raw[listKey]; ok {
+		return nil
+	}
+	var arrays []string
+	for k, v := range raw {
+		if bytes.HasPrefix(bytes.TrimSpace(v), []byte("[")) {
+			arrays = append(arrays, k)
+		}
+	}
+	if len(arrays) == 0 {
+		return nil
+	}
+	sort.Strings(arrays)
+	return &usageError{fmt.Errorf("--list-key %q is not in the response; its array fields are: %s", listKey, strings.Join(arrays, ", "))}
 }
 
 // itemIdentity identifies a list item for the stuck-cursor guard: its string

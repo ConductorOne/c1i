@@ -122,6 +122,11 @@ credentials fails instead of using the working directory. With a relative
   result with no `task` object. Such a result is now skipped, as
   `automations executions list` already does.
 
+- **`api --paginate --list-key` with a misspelled key printed nothing and
+  exited 0.** A key missing from a page that has other array fields is now a
+  usage error (exit `2`) naming them. A page with no array fields is still an
+  empty result.
+
 ## [0.9.1] - 2026-10-09
 
 ### Security
