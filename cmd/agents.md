@@ -505,6 +505,14 @@ resource with `--resource-id` likewise means you drop
   one is a `400`, `FieldMask.paths contains invalid path`. A malformed id is a
   `400` (`value does not match regex pattern "^[a-zA-Z0-9]{27}$"`, exit `2`),
   not a `404`.
+- `webhooks create` and `webhooks update` take the endpoint as
+  `--destination-url` (`--url` is the global tenant flag), and it must be an
+  absolute `https://` URL or the command exits `2` before sending. `webhooks
+  test <webhook-id>` only queues a delivery: it exits `0` with
+  `"state": "WEBHOOK_STATE_PENDING"` whether or not the URL is reachable.
+  `webhooks delete` is soft: `webhooks get` still returns the webhook at exit
+  `0` with `deletedAt` set, and `webhooks list` omits it. `--callback-timeout`
+  takes a Go duration. A webhook has no signing secret.
 - `automations delete <automation-id>` is soft: the automation leaves
   `automations list`, but `automations get` still returns it at exit `0` with
   no field marking it deleted.

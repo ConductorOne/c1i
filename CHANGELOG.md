@@ -48,6 +48,12 @@ credentials fails instead of using the working directory. With a relative
   `--display-name`, `--description` or `--enabled` state; `--body-file` with
   `--update-mask` updates any other field (triggers, steps, draft fields).
 - `automations delete <automation-id>` soft-deletes an automation.
+- `webhooks list|get|create|update|delete|test` manage outbound webhooks.
+  `create` and `update` take `--display-name`, `--destination-url`,
+  `--description` and `--callback-timeout`. A `--destination-url` that is not an
+  absolute `https://` URL, or an empty `--display-name`, exits `2` before
+  anything is sent. `test` queues a delivery and returns it pending; it does
+  not report whether the endpoint answered.
 
 ### Changed
 
