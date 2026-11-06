@@ -130,6 +130,10 @@ credentials fails instead of using the working directory. With a relative
 - The docs no longer say every list command auto-paginates; they name the
   single-request ones and their stderr `partial result` warning.
 
+- `users list` help and the README now say its search route returns only
+  directory-origin users by default, omitting local-origin (service) and
+  system users, and how to include them with `api`.
+
 ## [0.9.1] - 2026-10-09
 
 ### Security
