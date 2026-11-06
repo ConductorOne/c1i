@@ -28,6 +28,15 @@ credentials fails instead of using the working directory. With a relative
 ### Changed
 
 - `golang.org/x/term` moves to 0.47.0 and `golang.org/x/sys` to 0.49.0.
+- `golang.org/x/crypto` is pinned to the untagged
+  `v0.58.1-0.20261009181718-2f1f834330b2`, which fixes GO-2026-5932; c1i does
+  not call the affected code, and no tagged release has the fix yet.
+- `github.com/spf13/pflag` moves to 1.1.0: `--help` shows boolean flags as
+  `--debug[=true|false]`, and a bad integer, boolean or duration value reads
+  `must be an integer`, `must be true or false` or `must be a duration like
+  "30s" or "5m"` instead of a Go parse error. Exit codes are unchanged.
+- `github.com/go-jose/go-jose/v4` moves to 4.1.9 and
+  `github.com/sigstore/sigstore` to 1.11.3.
 
 ### Fixed
 
