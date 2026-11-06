@@ -881,10 +881,11 @@ is a `400`, `invalid url: restricted destination` (exit `2`).
 A blank `--display-name` exits `2` on create and update, as described under
 [Display names](#display-names); the server would store one on update.
 
-`--callback-timeout` takes a Go duration up to `720h`; over
-that, update returns `callback_timeout must be between 0 and 30 days`. `update`
-sends only the flags you pass and masks exactly those; an empty `--description`
-clears it. Updating a soft-deleted webhook exits `0` and changes it, and it
+`--callback-timeout` takes a Go duration from `0` to `720h`. A negative one
+exits `2` before a request is sent; over `720h`, update returns
+`callback_timeout must be between 0 and 30 days`. `update` sends only the flags
+you pass and masks exactly those, and with no field flag it exits `2`; an empty
+`--description` clears it. Updating a soft-deleted webhook exits `0` and changes it, and it
 stays deleted. A webhook has no signing secret, so create returns nothing that
 can't be read again with `get`.
 

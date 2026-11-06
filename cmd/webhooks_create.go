@@ -16,6 +16,7 @@ Refused with exit 2 before a request is sent:
   - a --destination-url that is not https, has no host, or uses an IPv6
     literal host (the server would rewrite another scheme to https, and
     strips an IPv6 literal's brackets)
+  - a negative --callback-timeout
 
 No secret is returned. Honors --dry-run.`,
 	RunE: func(cmd *cobra.Command, args []string) error {

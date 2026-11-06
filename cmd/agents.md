@@ -516,10 +516,11 @@ resource with `--resource-id` likewise means you drop
   `0` with `deletedAt` set, and `webhooks list` omits it. `webhooks update` on
   a deleted webhook exits `0` and changes it, and it stays deleted.
   `webhooks list` pages exceed `--page-size` (a size below 5 is raised to 5,
-  plus one row), so use `--limit` for an exact count. `--callback-timeout`
-  takes a Go duration; over `720h`, update returns
-  `callback_timeout must be between 0 and 30 days`. A webhook has no signing
-  secret.
+  plus one row), so use `--limit` for an exact count. `webhooks update` with
+  no field flag exits `2`. `--callback-timeout` takes a Go duration from `0`
+  to `720h`: a negative one exits `2` before sending, and over `720h` update
+  returns `callback_timeout must be between 0 and 30 days`. A webhook has no
+  signing secret.
 - `automations delete <automation-id>` is soft: the automation leaves
   `automations list`, but `automations get` still returns it at exit `0` with
   no field marking it deleted.
