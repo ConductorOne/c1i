@@ -178,7 +178,7 @@ func newAccessProfileEntitlementListCmd(short, endpoint string) *cobra.Command {
 			route := "GET " + path
 			for !limitReached(enc.Written(), limit) {
 				if guard.tokenAlreadyUsed(pageToken) {
-					return warnStuckCursor(cmd, route)
+					return guard.warnStuck(cmd, route)
 				}
 				pageSize := requestedPageSize
 				if !enc.Filtered() {
@@ -206,7 +206,7 @@ func newAccessProfileEntitlementListCmd(short, endpoint string) *cobra.Command {
 				}
 				emit, stuck := guard.checkPage(ids)
 				if stuck {
-					return warnStuckCursor(cmd, route)
+					return guard.warnStuck(cmd, route)
 				}
 				if !emit {
 					resp.List = nil

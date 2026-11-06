@@ -68,9 +68,15 @@ func (e *nonJSONResponseError) Unwrap() error { return e.err }
 // stuckPaginationCursorError: auto-pagination stopped because the cursor
 // stopped advancing (see paginationCursorGuard). Rows already printed stand;
 // the result is incomplete, so it maps to exitServer.
-type stuckPaginationCursorError struct{ route string }
+type stuckPaginationCursorError struct {
+	route     string
+	idlePages bool // the no-new-rows cap tripped, not a repeat
+}
 
 func (e *stuckPaginationCursorError) Error() string {
+	if e.idlePages {
+		return fmt.Sprintf("results from %s are INCOMPLETE: no new rows in %d pages", e.route, maxIdlePages)
+	}
 	return fmt.Sprintf("results from %s are INCOMPLETE: pagination cursor stopped advancing", e.route)
 }
 

@@ -258,7 +258,7 @@ func readRoles(ctx context.Context, c *client.Client) ([]menuRole, error) {
 	guard := newPaginationCursorGuard()
 	for {
 		if guard.tokenAlreadyUsed(params["page_token"]) {
-			return nil, &stuckPaginationCursorError{route: route}
+			return nil, guard.stuckError(route)
 		}
 		data, err := c.Get(ctx, "/api/v1/iam/roles", params)
 		if err != nil {
@@ -277,7 +277,7 @@ func readRoles(ctx context.Context, c *client.Client) ([]menuRole, error) {
 		}
 		emit, stuck := guard.checkPage(ids)
 		if stuck {
-			return nil, &stuckPaginationCursorError{route: route}
+			return nil, guard.stuckError(route)
 		}
 		if emit {
 			catalog = append(catalog, page.List...)

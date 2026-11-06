@@ -29,7 +29,7 @@ var rolesListCmd = &cobra.Command{
 	Use:   "list",
 	Short: "List IAM roles (NDJSON output)",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		return listJSONPages(cmd, "GET /api/v1/iam/roles", "id", roleRow, func(c *client.Client, size int, token string) ([]byte, error) {
+		return listJSONPages(cmd, "GET /api/v1/iam/roles", []string{"id"}, roleRow, func(c *client.Client, size int, token string) ([]byte, error) {
 			params := map[string]string{"page_size": strconv.Itoa(size)}
 			if token != "" {
 				params["page_token"] = token

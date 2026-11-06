@@ -47,7 +47,7 @@ var mcpToolsSearchCmd = &cobra.Command{
 		route := "POST " + client.Path("/api/v1/apps/%s/connectors/%s/mcp_tools/search", appID, connectorID)
 		for !limitReached(enc.Written(), limit) {
 			if guard.tokenAlreadyUsed(pageToken) {
-				return warnStuckCursor(cmd, route)
+				return guard.warnStuck(cmd, route)
 			}
 			pageSize := requestedPageSize
 			if !enc.Filtered() {
@@ -107,7 +107,7 @@ var mcpToolsSearchCmd = &cobra.Command{
 			}
 			emit, stuck := guard.checkPage(ids)
 			if stuck {
-				return warnStuckCursor(cmd, route)
+				return guard.warnStuck(cmd, route)
 			}
 			if !emit {
 				items = nil

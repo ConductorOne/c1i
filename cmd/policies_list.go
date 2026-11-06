@@ -70,7 +70,7 @@ recipe above reads.`,
 		route := "GET /api/v1/policies"
 		for !limitReached(enc.Written(), limit) {
 			if guard.tokenAlreadyUsed(pageToken) {
-				return warnStuckCursor(cmd, route)
+				return guard.warnStuck(cmd, route)
 			}
 			pageSize := requestedPageSize
 			if !enc.Filtered() {
@@ -106,7 +106,7 @@ recipe above reads.`,
 			}
 			emit, stuck := guard.checkPage(ids)
 			if stuck {
-				return warnStuckCursor(cmd, route)
+				return guard.warnStuck(cmd, route)
 			}
 			if !emit {
 				resp.List = nil

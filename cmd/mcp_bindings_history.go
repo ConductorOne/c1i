@@ -64,11 +64,12 @@ transaction.`,
 		}
 
 		enc := newEmitter(cmd)
+		// Rows carry no id of their own, so only the token and idle-page checks apply.
 		guard := newPaginationCursorGuard()
 		route := "GET " + basePath
 		for !limitReached(enc.Written(), limit) {
 			if guard.tokenAlreadyUsed(pageToken) {
-				return warnStuckCursor(cmd, route)
+				return guard.warnStuck(cmd, route)
 			}
 			pageSize := requestedPageSize
 			if !enc.Filtered() {
@@ -94,17 +95,6 @@ transaction.`,
 				return fmt.Errorf("failed to parse response: %w", err)
 			}
 
-			ids := make([]string, len(resp.List))
-			for i, it := range resp.List {
-				ids[i] = rawItemID(it)
-			}
-			emit, stuck := guard.checkPage(ids)
-			if stuck {
-				return warnStuckCursor(cmd, route)
-			}
-			if !emit {
-				resp.List = nil
-			}
 			for _, entry := range resp.List {
 				_ = enc.Encode(json.RawMessage(entry))
 				if limitReached(enc.Written(), limit) {

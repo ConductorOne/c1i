@@ -64,7 +64,7 @@ var entitlementsListCmd = &cobra.Command{
 		route := "POST /api/v1/search/entitlements"
 		for !limitReached(enc.Written(), limit) {
 			if guard.tokenAlreadyUsed(pageToken) {
-				return warnStuckCursor(cmd, route)
+				return guard.warnStuck(cmd, route)
 			}
 			pageSize := requestedPageSize
 			if !enc.Filtered() {
@@ -102,7 +102,7 @@ var entitlementsListCmd = &cobra.Command{
 			}
 			emit, stuck := guard.checkPage(ids)
 			if stuck {
-				return warnStuckCursor(cmd, route)
+				return guard.warnStuck(cmd, route)
 			}
 			if !emit {
 				resp.List = nil

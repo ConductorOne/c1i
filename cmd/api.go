@@ -174,7 +174,7 @@ an intended non-GET REST write.`,
 
 		for !limitReached(enc.Written(), limit) {
 			if guard.tokenAlreadyUsed(pageToken) {
-				return warnStuckCursor(cmd, route)
+				return guard.warnStuck(cmd, route)
 			}
 			reqPath := path
 			var bodyBytes []byte
@@ -261,7 +261,7 @@ an intended non-GET REST write.`,
 			}
 			emit, stuck := guard.checkPage(ids)
 			if stuck {
-				return warnStuckCursor(cmd, route)
+				return guard.warnStuck(cmd, route)
 			}
 			if !emit {
 				items = nil

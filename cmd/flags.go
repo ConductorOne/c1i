@@ -216,34 +216,39 @@ func pageSizeFlag(cmd *cobra.Command) int {
 	return maxSize
 }
 
-// stuckPageRepeats is how many consecutive stale pages (every item already
-// seen) mark a cursor as stuck. One can be a healthy offset-paginated server
-// that gained exactly a page of rows between requests; two in a row is
-// unlikely unless rows arrive faster than a page per request (tiny
-// --page-size on a busy feed).
-const stuckPageRepeats = 2
+// stuckPageRepeats and stuckStaleRows together mark a cursor as stuck: that
+// many consecutive stale pages (every item already seen) holding at least
+// that many rows in all. One stale page can be a healthy offset-paginated
+// server that gained a page of rows between requests; the row floor keeps a
+// tiny --page-size on a busy newest-first feed from tripping on a few inserts.
+const (
+	stuckPageRepeats = 2
+	stuckStaleRows   = 25
+)
 
-// maxCursorPages backstops a cursor that changes every call over ever-new
-// rows, which neither check below catches. 100k pages is 2.5M rows even at
-// the 25-row pages some routes return for a 50-row request; the largest list
-// seen live (entitlements, ~100k rows) is a few thousand pages. The audit log
-// is unbounded, so it opts out (newUncappedPaginationCursorGuard).
-const maxCursorPages = 100_000
+// maxIdlePages backstops a cursor that keeps changing without bringing a new
+// row (or, for id-less rows, any cursor that never ends): it counts requests
+// since the last page with an unseen id. No healthy list sends 100k pages
+// without one; the audit log, whose rows carry no id, opts out
+// (newUncappedPaginationCursorGuard).
+const maxIdlePages = 100_000
 
 // paginationCursorGuard detects auto-pagination that stopped making progress:
-// a page_token sent twice, stuckPageRepeats stale pages in a row under
-// fresh-looking tokens, or more than maxPages requests. Construct with
+// a page_token sent twice, a run of stale pages under fresh-looking tokens,
+// or maxPages requests without a new id. Construct with
 // newPaginationCursorGuard.
 type paginationCursorGuard struct {
 	seenTokens map[string]bool
 	seenIDs    map[string]bool
 	stale      int
-	pages      int
+	staleRows  int
+	idle       int
 	maxPages   int // 0 = no cap
+	capped     bool
 }
 
 func newPaginationCursorGuard() *paginationCursorGuard {
-	return &paginationCursorGuard{seenTokens: map[string]bool{}, seenIDs: map[string]bool{}, maxPages: maxCursorPages}
+	return &paginationCursorGuard{seenTokens: map[string]bool{}, seenIDs: map[string]bool{}, maxPages: maxIdlePages}
 }
 
 // newUncappedPaginationCursorGuard is for a stream with no natural size bound
@@ -254,12 +259,13 @@ func newUncappedPaginationCursorGuard() *paginationCursorGuard {
 	return g
 }
 
-// tokenAlreadyUsed reports whether token was already sent, or the page cap
-// is spent. Call it once before each request, so a repeat is caught without
-// re-fetching the page.
+// tokenAlreadyUsed reports whether token was already sent, or the idle-page
+// cap is spent. Call it once before each request, so a repeat is caught
+// without re-fetching the page.
 func (g *paginationCursorGuard) tokenAlreadyUsed(token string) bool {
-	g.pages++
-	if g.maxPages > 0 && g.pages > g.maxPages {
+	g.idle++
+	if g.maxPages > 0 && g.idle > g.maxPages {
+		g.capped = true
 		return true
 	}
 	return token != "" && g.seenTokens[token]
@@ -273,31 +279,49 @@ func (g *paginationCursorGuard) markTokenUsed(token string) {
 }
 
 // checkPage classifies a fetched page by its item ids. A stale page is not
-// emitted (it holds nothing new); stuck is true once stuckPageRepeats stale
-// pages arrive in a row. Empty pages, and pages with no non-empty id, neither
-// count nor reset the run: a live token may precede one, and a missing id is
-// no evidence of a repeat.
+// emitted (it holds nothing new); stuck is true once a run of stale pages
+// meets both stuckPageRepeats and stuckStaleRows. Empty pages, and pages with
+// no non-empty id, neither count nor reset the run: a live token may precede
+// one, and a missing id is no evidence of a repeat.
 func (g *paginationCursorGuard) checkPage(ids []string) (emit, stuck bool) {
-	fresh, known := false, false
+	fresh, known := false, 0
 	for _, id := range ids {
 		if id == "" {
 			continue
 		}
-		known = true
+		known++
 		if !g.seenIDs[id] {
 			fresh = true
 			g.seenIDs[id] = true
 		}
 	}
-	if !known {
+	if known == 0 {
 		return true, false
 	}
 	if !fresh {
 		g.stale++
-		return false, g.stale >= stuckPageRepeats
+		g.staleRows += known
+		return false, g.stale >= stuckPageRepeats && g.staleRows >= stuckStaleRows
 	}
-	g.stale = 0
+	g.stale, g.staleRows, g.idle = 0, 0, 0
 	return true, false
+}
+
+// stuckError is the exit-6 error for this guard's stop, naming the cap when
+// that is what tripped.
+func (g *paginationCursorGuard) stuckError(route string) error {
+	return &stuckPaginationCursorError{route: route, idlePages: g.capped}
+}
+
+// warnStuck prints the stuck-cursor warning and returns stuckError.
+func (g *paginationCursorGuard) warnStuck(cmd *cobra.Command, route string) error {
+	reason := "the server's pagination cursor stopped advancing (a repeated nextPageToken, or repeated pages of rows already seen)"
+	if g.capped {
+		reason = fmt.Sprintf("no new rows in %d pages", g.maxPages)
+	}
+	_, _ = fmt.Fprintf(cmd.ErrOrStderr(),
+		"Warning: results from %s are INCOMPLETE: %s. Rows already printed are kept.\n", route, reason)
+	return g.stuckError(route)
 }
 
 // rawItemID returns a raw JSON row's top-level string "id", or "" (which
@@ -310,21 +334,15 @@ func rawItemID(item []byte) string {
 	return withID.ID
 }
 
-// scopedRowID keys a row whose id is unique only within scope. An empty id
-// stays "" so checkPage still ignores it.
-func scopedRowID(scope, id string) string {
-	if id == "" {
-		return ""
+// scopedRowID keys a row whose id is unique only in combination: the parts
+// joined by NUL, or "" (which checkPage ignores) if any part is empty.
+func scopedRowID(parts ...string) string {
+	for _, p := range parts {
+		if p == "" {
+			return ""
+		}
 	}
-	return scope + "\x00" + id
-}
-
-// warnStuckCursor prints the stuck-cursor warning and returns the error that
-// maps to exit 6. route is "METHOD /path", for the user to report.
-func warnStuckCursor(cmd *cobra.Command, route string) error {
-	_, _ = fmt.Fprintf(cmd.ErrOrStderr(),
-		"Warning: results from %s are INCOMPLETE: the server's pagination cursor stopped advancing (a repeated nextPageToken, or repeated pages of rows already seen). Rows already printed are kept.\n", route)
-	return &stuckPaginationCursorError{route: route}
+	return strings.Join(parts, "\x00")
 }
 
 // requireNonEmpty errors when any of the named string flags has an empty

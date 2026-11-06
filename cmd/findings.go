@@ -170,7 +170,7 @@ var findingsAuditsSearchCmd = &cobra.Command{Use: "search", Short: "Search findi
 	if err != nil {
 		return err
 	}
-	return postFindingsList(cmd, "/api/v1/search/finding_audits", body, findingAuditRow, "event_id")
+	return postFindingsList(cmd, "/api/v1/search/finding_audits", body, findingAuditRow, "finding_id", "event_id")
 }}
 
 var findingsShadowMCPOccurrencesCmd = &cobra.Command{Use: "shadow-mcp-occurrences", Short: "Search occurrences behind shadow MCP findings"}
@@ -179,13 +179,13 @@ var findingsShadowMCPOccurrencesSearchCmd = &cobra.Command{Use: "search", Short:
 	if err != nil {
 		return err
 	}
-	return postFindingsList(cmd, "/api/v1/search/shadow_mcp_occurrences", body, shadowMCPOccurrenceRow, "")
+	return postFindingsList(cmd, "/api/v1/search/shadow_mcp_occurrences", body, shadowMCPOccurrenceRow)
 }}
 
 type listRowFn func(map[string]any) map[string]any
 
-func postFindingsList(cmd *cobra.Command, path string, request map[string]any, row listRowFn, idKey string) error {
-	return listJSONPages(cmd, "POST "+path, idKey, row, func(c *client.Client, size int, token string) ([]byte, error) {
+func postFindingsList(cmd *cobra.Command, path string, request map[string]any, row listRowFn, idKeys ...string) error {
+	return listJSONPages(cmd, "POST "+path, idKeys, row, func(c *client.Client, size int, token string) ([]byte, error) {
 		body := cloneJSONObject(request)
 		body["pageSize"] = size
 		if token != "" {
@@ -235,9 +235,9 @@ func getFixedList(cmd *cobra.Command, path string, row listRowFn) error {
 	return nil
 }
 
-// listJSONPages auto-paginates fetch. idKey names the output row's own id
-// for the stuck-cursor guard; "" when rows have none.
-func listJSONPages(cmd *cobra.Command, route, idKey string, row listRowFn, fetch func(*client.Client, int, string) ([]byte, error)) error {
+// listJSONPages auto-paginates fetch. idKeys name the output row fields that
+// together identify it for the stuck-cursor guard; none when rows have no id.
+func listJSONPages(cmd *cobra.Command, route string, idKeys []string, row listRowFn, fetch func(*client.Client, int, string) ([]byte, error)) error {
 	baseURL, err := GetBaseURL()
 	if err != nil {
 		return err
@@ -254,7 +254,7 @@ func listJSONPages(cmd *cobra.Command, route, idKey string, row listRowFn, fetch
 	guard := newPaginationCursorGuard()
 	for !limitReached(enc.Written(), limit) {
 		if guard.tokenAlreadyUsed(token) {
-			return warnStuckCursor(cmd, route)
+			return guard.warnStuck(cmd, route)
 		}
 		size := requested
 		if !enc.Filtered() {
@@ -276,11 +276,11 @@ func listJSONPages(cmd *cobra.Command, route, idKey string, row listRowFn, fetch
 				return fmt.Errorf("failed to parse response item: %w", err)
 			}
 			rows[i] = row(item)
-			ids[i], _ = rows[i][idKey].(string)
+			ids[i] = rowGuardID(rows[i], idKeys)
 		}
 		emit, stuck := guard.checkPage(ids)
 		if stuck {
-			return warnStuckCursor(cmd, route)
+			return guard.warnStuck(cmd, route)
 		}
 		if !emit {
 			rows = nil
@@ -300,6 +300,19 @@ func listJSONPages(cmd *cobra.Command, route, idKey string, row listRowFn, fetch
 		token = next
 	}
 	return nil
+}
+
+// rowGuardID joins a row's idKeys values with scopedRowID; "" if any is
+// missing or there are none.
+func rowGuardID(row map[string]any, idKeys []string) string {
+	if len(idKeys) == 0 {
+		return ""
+	}
+	parts := make([]string, len(idKeys))
+	for i, k := range idKeys {
+		parts[i], _ = row[k].(string)
+	}
+	return scopedRowID(parts...)
 }
 
 func getFindingResource(cmd *cobra.Command, path, idKey string) error {

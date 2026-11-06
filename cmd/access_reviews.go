@@ -162,7 +162,7 @@ func newAccessReviewListCmd(use, short, pathTemplate string, requiresID bool) *c
 			route := "GET " + path
 			for !limitReached(enc.Written(), limit) {
 				if guard.tokenAlreadyUsed(pageToken) {
-					return warnStuckCursor(cmd, route)
+					return guard.warnStuck(cmd, route)
 				}
 				pageSize := requestedPageSize
 				if !enc.Filtered() {
@@ -191,7 +191,7 @@ func newAccessReviewListCmd(use, short, pathTemplate string, requiresID bool) *c
 				}
 				emit, stuck := guard.checkPage(ids)
 				if stuck {
-					return warnStuckCursor(cmd, route)
+					return guard.warnStuck(cmd, route)
 				}
 				if !emit {
 					rows = nil

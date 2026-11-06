@@ -407,6 +407,37 @@ func TestFetchAllGrantsRejectsAStuckCursor(t *testing.T) {
 	}
 }
 
+// Grants now carry a (app, entitlement, account) identity, so fresh tokens
+// over the same grants are caught as stale pages, not paged until the cap.
+func TestFetchAllGrantsRejectsFreshTokensOverSameGrants(t *testing.T) {
+	var requests int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		n := atomic.AddInt32(&requests, 1)
+		if n > 4 {
+			t.Errorf("request %d; the stale pages were not caught", n)
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		items := make([]string, stuckStaleRows)
+		for i := range items {
+			items[i] = fmt.Sprintf(`{"appEntitlementUserBinding":{"appUser":{"appUser":{"id":"u%d"}}},"entitlement":{"appEntitlement":{"id":"ent1","appId":"app1"}}}`, i)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = fmt.Fprintf(w, `{"list":[%s],"nextPageToken":"tok-%d"}`, strings.Join(items, ","), n)
+	}))
+	t.Cleanup(srv.Close)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	_, err := fetchAllGrants(ctx, client.NewForTesting(srv.URL, srv.Client()), grantsQuery{appID: "app1"}, 50)
+	if got := exitCode(err); got != exitServer {
+		t.Fatalf("exitCode = %d, want exitServer (%d); err: %v", got, exitServer, err)
+	}
+	if got := atomic.LoadInt32(&requests); got != 3 {
+		t.Errorf("made %d requests, want 3", got)
+	}
+}
+
 // TestGrantsListWaitUsageErrors pins the combinations --wait rejects, all as
 // exit-2 usage errors.
 func TestGrantsListWaitUsageErrors(t *testing.T) {

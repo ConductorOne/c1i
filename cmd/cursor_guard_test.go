@@ -9,11 +9,22 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 
 	"github.com/ConductorOne/c1i/internal/client"
 )
+
+// stalePageItems renders stuckStaleRows JSON items from format (one %d), so
+// two repeats of the page meet the guard's stale-row floor.
+func stalePageItems(format string) string {
+	items := make([]string, stuckStaleRows)
+	for i := range items {
+		items[i] = fmt.Sprintf(format, i)
+	}
+	return "[" + strings.Join(items, ",") + "]"
+}
 
 // cursorGuardExemptions lists functions ("file:func") that read a pagination
 // cursor without following it, so they need no paginationCursorGuard.
@@ -133,25 +144,58 @@ func TestEveryCursorLoopIsGuarded(t *testing.T) {
 	}
 }
 
-func TestPaginationCursorGuardPageCap(t *testing.T) {
+// The cap counts pages since the last new id, not requests: a long healthy
+// list at a tiny page size must never reach it.
+func TestPaginationCursorGuardIdleCap(t *testing.T) {
 	g := newPaginationCursorGuard()
 	g.maxPages = 3
-	for i := 1; i <= 3; i++ {
+	for i := 1; i <= 10; i++ {
 		tok := fmt.Sprintf("tok-%d", i)
 		if g.tokenAlreadyUsed(tok) {
-			t.Fatalf("request %d stopped under a cap of 3", i)
+			t.Fatalf("request %d stopped although every page brought a new id", i)
+		}
+		if _, stuck := g.checkPage([]string{tok}); stuck {
+			t.Fatalf("page %d reported stuck", i)
 		}
 		g.markTokenUsed(tok)
 	}
+
+	g = newPaginationCursorGuard()
+	g.maxPages = 3
+	for i := 1; i <= 3; i++ {
+		if g.tokenAlreadyUsed(fmt.Sprintf("tok-%d", i)) {
+			t.Fatalf("request %d stopped under a cap of 3 idle pages", i)
+		}
+		g.checkPage([]string{""})
+	}
 	if !g.tokenAlreadyUsed("tok-4") {
-		t.Error("request 4 with a fresh token went through a cap of 3")
+		t.Fatal("a 4th page with no new id went through a cap of 3")
+	}
+	if msg := g.stuckError("GET /x").Error(); !strings.Contains(msg, "no new rows in") {
+		t.Errorf("cap error = %q, want it to say no new rows arrived", msg)
 	}
 
 	u := newUncappedPaginationCursorGuard()
-	for i := 0; i < maxCursorPages+1; i++ {
+	for i := 0; i < maxIdlePages+1; i++ {
 		if u.tokenAlreadyUsed("") {
 			t.Fatalf("uncapped guard stopped at request %d", i+1)
 		}
+	}
+}
+
+// A newest-first offset feed at --page-size 1 re-serves a row or two when
+// rows are inserted between requests; that is not a stuck cursor until the
+// stale run also covers stuckStaleRows rows.
+func TestPaginationCursorGuardStaleRunNeedsRowFloor(t *testing.T) {
+	g := newPaginationCursorGuard()
+	g.checkPage([]string{"a"})
+	for i := 0; i < stuckStaleRows-1; i++ {
+		if emit, stuck := g.checkPage([]string{"a"}); emit || stuck {
+			t.Fatalf("stale page %d: emit=%v stuck=%v, want skipped but not stuck", i+1, emit, stuck)
+		}
+	}
+	if _, stuck := g.checkPage([]string{"a"}); !stuck {
+		t.Errorf("stale run of %d rows over %d pages not reported stuck", stuckStaleRows, stuckStaleRows)
 	}
 }
 
@@ -249,9 +293,99 @@ func TestEntitlementListsIgnoreRowsWithoutID(t *testing.T) {
 	}
 }
 
+// A newest-first offset feed at --page-size 1 that gains rows between
+// requests re-serves the same row a few times. That is not a stuck cursor:
+// the command must skip the repeats and finish with exit 0.
+func TestTinyPageSizeOffsetFeedIsNotStuck(t *testing.T) {
+	for _, name := range []string{"tasks list", "requests list"} {
+		var tc listPaginationCase
+		for _, c := range listPaginationCases() {
+			if c.name == name {
+				tc = c
+			}
+		}
+		t.Run(name, func(t *testing.T) {
+			feed := []string{"t3", "t2", "t1"}
+			var requests int
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				requests++
+				if requests > 10 {
+					t.Errorf("request %d; pagination did not terminate", requests)
+					w.WriteHeader(http.StatusBadRequest)
+					return
+				}
+				offset := 0
+				if tok := extractPageToken(t, tc.method, r); tok != "" {
+					offset, _ = strconv.Atoi(tok)
+				}
+				next := ""
+				if offset+1 < len(feed) {
+					next = strconv.Itoa(offset + 1)
+				}
+				w.Header().Set("Content-Type", "application/json")
+				_, _ = fmt.Fprint(w, tc.page(feed[offset:offset+1], next))
+				// Two inserts at the head, so the next two pages repeat t3.
+				if requests <= 2 {
+					feed = append([]string{fmt.Sprintf("new%d", requests)}, feed...)
+				}
+			}))
+			defer srv.Close()
+
+			tc.extraFlags = map[string]string{"page-size": "1"}
+			if name == "requests list" {
+				tc.extraFlags["all"] = "true"
+			}
+			out, errOut, err := runListPaginationCase(t, tc, srv)
+			if err != nil {
+				t.Fatalf("RunE: %v (exit %d); stderr=%q", err, exitCode(err), errOut)
+			}
+			if ids := tc.rowIDs(decodeNDJSONRows(t, out)); strings.Join(ids, ",") != "t3,t2,t1" {
+				t.Errorf("rows = %v, want t3,t2,t1 (repeats skipped)", ids)
+			}
+		})
+	}
+}
+
+// A finding audit's event id is unique only within its finding, so the same
+// event id under another finding is a new row.
+func TestFindingsAuditsKeyGuardOnFindingAndEvent(t *testing.T) {
+	var tc listPaginationCase
+	for _, c := range listPaginationCases() {
+		if c.name == "findings audits search" {
+			tc = c
+		}
+	}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch extractPageToken(t, tc.method, r) {
+		case "":
+			_, _ = fmt.Fprint(w, `{"list":[{"findingId":"f1","eventId":"e1"}],"nextPageToken":"tok1"}`)
+		case "tok1":
+			_, _ = fmt.Fprint(w, `{"list":[{"findingId":"f2","eventId":"e1"}],"nextPageToken":"tok2"}`)
+		default:
+			_, _ = fmt.Fprint(w, `{"list":[{"findingId":"f3","eventId":"e1"}],"nextPageToken":""}`)
+		}
+	}))
+	defer srv.Close()
+
+	out, errOut, err := runListPaginationCase(t, tc, srv)
+	if err != nil {
+		t.Fatalf("RunE: %v (stderr %q)", err, errOut)
+	}
+	if rows := decodeNDJSONRows(t, out); len(rows) != 3 {
+		t.Errorf("got %d rows, want 3 (one per finding)", len(rows))
+	}
+}
+
 // readRoles (auth login's scope menu) follows the role catalog's cursor and
 // accumulates in memory, so a stuck cursor must end it with exit 6.
 func TestReadRolesStuckCursorReturnsExitServer(t *testing.T) {
+	// Enough rows that two stale pages meet stuckStaleRows.
+	var roles []string
+	for i := 0; i < stuckStaleRows; i++ {
+		roles = append(roles, fmt.Sprintf(`{"id":"r%d","name":"system:user"}`, i))
+	}
+	rolesPage := "[" + strings.Join(roles, ",") + "]"
 	for _, freshTokens := range []bool{false, true} {
 		t.Run(fmt.Sprintf("freshTokens=%v", freshTokens), func(t *testing.T) {
 			var roleRequests int
@@ -273,7 +407,7 @@ func TestReadRolesStuckCursorReturnsExitServer(t *testing.T) {
 					if freshTokens {
 						next = fmt.Sprintf("tok-v%d", roleRequests)
 					}
-					_, _ = fmt.Fprintf(w, `{"list":[{"id":"r1","name":"system:user"}],"nextPageToken":%q}`, next)
+					_, _ = fmt.Fprintf(w, `{"list":%s,"nextPageToken":%q}`, rolesPage, next)
 				default:
 					t.Errorf("unexpected request %s", r.URL.Path)
 					w.WriteHeader(http.StatusNotFound)

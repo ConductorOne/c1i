@@ -51,7 +51,7 @@ var tasksListCmd = &cobra.Command{
 		route := "POST /api/v1/search/tasks"
 		for !limitReached(enc.Written(), limit) {
 			if guard.tokenAlreadyUsed(pageToken) {
-				return warnStuckCursor(cmd, route)
+				return guard.warnStuck(cmd, route)
 			}
 			pageSize := requestedPageSize
 			if !enc.Filtered() {
@@ -89,7 +89,7 @@ var tasksListCmd = &cobra.Command{
 			}
 			emit, stuck := guard.checkPage(ids)
 			if stuck {
-				return warnStuckCursor(cmd, route)
+				return guard.warnStuck(cmd, route)
 			}
 			if !emit {
 				resp.List = nil

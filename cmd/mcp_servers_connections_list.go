@@ -28,12 +28,12 @@ var mcpServersConnectionsListCmd = &cobra.Command{
 		limit := getIntFlag(cmd, "limit")
 
 		enc := newEmitter(cmd)
-		// Rows carry no id of their own, so only the token checks apply.
+		// Rows carry no id of their own, so only the token and idle-page checks apply.
 		guard := newPaginationCursorGuard()
 		route := "GET /api/v1/mcp_server_connections"
 		for !limitReached(enc.Written(), limit) {
 			if guard.tokenAlreadyUsed(pageToken) {
-				return warnStuckCursor(cmd, route)
+				return guard.warnStuck(cmd, route)
 			}
 			pageSize := requestedPageSize
 			if !enc.Filtered() {

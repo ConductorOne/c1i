@@ -48,16 +48,26 @@ type grantListItem struct {
 }
 
 // grantRow flattens a grant into the NDJSON output row.
+// grantAppID is the entitlement's app id, falling back to the account's if
+// the entitlement wasn't expanded for some reason.
+func grantAppID(item grantListItem) string {
+	if id := item.Entitlement.AppEntitlement.AppID; id != "" {
+		return id
+	}
+	return item.AppEntitlementUserBinding.AppUser.AppUser.AppID
+}
+
+// grantGuardID identifies a grant for the cursor guard: it has no id of its
+// own, but (app, entitlement, account) is unique.
+func grantGuardID(item grantListItem) string {
+	return scopedRowID(grantAppID(item), item.Entitlement.AppEntitlement.ID, item.AppEntitlementUserBinding.AppUser.AppUser.ID)
+}
+
 func grantRow(item grantListItem) map[string]any {
 	b := item.AppEntitlementUserBinding
 	e := item.Entitlement.AppEntitlement
 	au := b.AppUser.AppUser
-	// The entitlement view carries the app id; fall back to the account's app id
-	// if the entitlement wasn't expanded for some reason.
-	appID := e.AppID
-	if appID == "" {
-		appID = au.AppID
-	}
+	appID := grantAppID(item)
 	return map[string]any{
 		"app_id":                   appID,
 		"entitlement_id":           e.ID,
@@ -193,12 +203,11 @@ set that keeps changing, --wait times out rather than printing anything.`,
 		}
 
 		enc := newEmitter(cmd)
-		// Rows carry no id of their own, so only the token checks apply.
 		guard := newPaginationCursorGuard()
 		route := "POST /api/v1/search/grants"
 		for !limitReached(enc.Written(), limit) {
 			if guard.tokenAlreadyUsed(pageToken) {
-				return warnStuckCursor(cmd, route)
+				return guard.warnStuck(cmd, route)
 			}
 			pageSize := requestedPageSize
 			if !enc.Filtered() {
@@ -219,6 +228,17 @@ set that keeps changing, --wait times out rather than printing anything.`,
 				return fmt.Errorf("failed to parse response: %w", err)
 			}
 
+			ids := make([]string, len(resp.List))
+			for i, it := range resp.List {
+				ids[i] = grantGuardID(it)
+			}
+			emit, stuck := guard.checkPage(ids)
+			if stuck {
+				return guard.warnStuck(cmd, route)
+			}
+			if !emit {
+				resp.List = nil
+			}
 			for _, item := range resp.List {
 				_ = enc.Encode(grantRow(item))
 				if limitReached(enc.Written(), limit) {
@@ -299,12 +319,11 @@ func fetchAllGrants(ctx context.Context, c *client.Client, q grantsQuery, pageSi
 	var all []grantListItem
 	pageToken := ""
 	// A stuck cursor would otherwise turn each poll into a request storm
-	// bounded only by --wait-timeout, then blame provisioning for it. Grants
-	// carry no id of their own, so only the token checks apply.
+	// bounded only by --wait-timeout, then blame provisioning for it.
 	guard := newPaginationCursorGuard()
 	for {
 		if guard.tokenAlreadyUsed(pageToken) {
-			return nil, &stuckPaginationCursorError{route: route}
+			return nil, guard.stuckError(route)
 		}
 		data, err := c.Post(ctx, "/api/v1/search/grants", q.searchBody(pageSize, pageToken))
 		if err != nil {
@@ -317,7 +336,17 @@ func fetchAllGrants(ctx context.Context, c *client.Client, q grantsQuery, pageSi
 		if err := json.Unmarshal(data, &resp); err != nil {
 			return nil, fmt.Errorf("failed to parse response: %w", err)
 		}
-		all = append(all, resp.List...)
+		ids := make([]string, len(resp.List))
+		for i, it := range resp.List {
+			ids[i] = grantGuardID(it)
+		}
+		emit, stuck := guard.checkPage(ids)
+		if stuck {
+			return nil, guard.stuckError(route)
+		}
+		if emit {
+			all = append(all, resp.List...)
+		}
 		if resp.NextPageToken == "" {
 			return all, nil
 		}

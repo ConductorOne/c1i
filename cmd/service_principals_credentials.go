@@ -72,7 +72,7 @@ var spCredentialsListCmd = &cobra.Command{
 		route := "GET " + spCredentialsPath(args[0])
 		for !limitReached(enc.Written(), limit) {
 			if guard.tokenAlreadyUsed(pageToken) {
-				return warnStuckCursor(cmd, route)
+				return guard.warnStuck(cmd, route)
 			}
 			pageSize := requestedPageSize
 			if !enc.Filtered() {
@@ -102,7 +102,7 @@ var spCredentialsListCmd = &cobra.Command{
 			}
 			emit, stuck := guard.checkPage(ids)
 			if stuck {
-				return warnStuckCursor(cmd, route)
+				return guard.warnStuck(cmd, route)
 			}
 			if !emit {
 				resp.List = nil
