@@ -268,7 +268,7 @@ func fetchPolicyMeta(ctx context.Context, c *client.Client, id string) (policyMe
 		} `json:"policy"`
 	}
 	if err := json.Unmarshal(data, &resp); err != nil {
-		return policyMeta{}, fmt.Errorf("parsing policy response: %w", err)
+		return policyMeta{}, &nonJSONResponseError{fmt.Errorf("parsing policy response: %w", err)}
 	}
 	if resp.Policy == nil {
 		return policyMeta{}, nil

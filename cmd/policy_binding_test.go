@@ -34,6 +34,10 @@ func policyBindingServer(t *testing.T, policies map[string]string) (*httptest.Se
 				_, _ = fmt.Fprint(w, `{}`)
 				return
 			}
+			if typ == "badjson" {
+				_, _ = fmt.Fprint(w, `{"policy":`)
+				return
+			}
 			deleted := "null"
 			if rest, isDel := strings.CutPrefix(typ, "deleted:"); isDel {
 				typ, deleted = rest, `"2026-01-01T00:00:00Z"`
@@ -66,7 +70,7 @@ func countRequests(reqs []string, prefix string) int {
 func TestPolicyBindingValidation(t *testing.T) {
 	policies := map[string]string{
 		"gp": "POLICY_TYPE_GRANT", "rp": "POLICY_TYPE_REVOKE", "cp": "POLICY_TYPE_CERTIFY",
-		"del": "deleted:POLICY_TYPE_GRANT", "np": "nopolicy",
+		"del": "deleted:POLICY_TYPE_GRANT", "np": "nopolicy", "bj": "badjson",
 	}
 	cases := []struct {
 		name        string
@@ -92,6 +96,8 @@ func TestPolicyBindingValidation(t *testing.T) {
 			wantErr: `--revoke-policy-id "gp" is a POLICY_TYPE_GRANT policy`, wantLookups: 1},
 		{name: "update 200 without policy is a C1 fault", args: []string{"apps", "update", "app-1", "--grant-policy-id", "np"},
 			wantErr: "no policy", wantExit: exitServer, wantLookups: 1},
+		{name: "update 200 with invalid JSON is a C1 fault", args: []string{"apps", "update", "app-1", "--grant-policy-id", "bj"},
+			wantErr: "parsing policy response", wantExit: exitServer, wantLookups: 1},
 		{name: "update trims policy id", args: []string{"apps", "update", "app-1", "--grant-policy-id", " gp "},
 			wantLookups: 1, wantPosts: 1, wantReq: `"grantPolicyId":"gp"`},
 		{name: "create trims policy id", args: []string{"apps", "create", "--display-name", "a", "--grant-policy-id", "\tgp\n"},

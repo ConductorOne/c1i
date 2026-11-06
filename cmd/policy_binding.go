@@ -153,6 +153,7 @@ func fetchBoundPolicyType(ctx context.Context, c *client.Client, flag, id string
 	if !meta.found || meta.policyType == "" {
 		return "", &nonJSONResponseError{fmt.Errorf("checking --%s %q: the response held no policy with a policyType", flag, id)}
 	}
+	// GET still returns a soft-deleted policy.
 	if meta.deleted {
 		return "", &usageError{fmt.Errorf("--%s %q: policy is deleted", flag, id)}
 	}
