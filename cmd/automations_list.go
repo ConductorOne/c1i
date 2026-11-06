@@ -101,7 +101,12 @@ var automationsListCmd = &cobra.Command{
 		clientFilter := enabledOnly || callsFunction != ""
 
 		enc := newEmitter(cmd)
+		guard := newPaginationCursorGuard()
 		for !limitReached(enc.Written(), limit) {
+			if guard.tokenAlreadyUsed(pageToken) {
+				return warnStuckCursor(cmd, "GET /api/v1/automations")
+			}
+
 			pageSize := requestedPageSize
 			if !clientFilter && !enc.Filtered() {
 				pageSize = effectivePageSize(requestedPageSize, limit, enc.Written())
@@ -126,6 +131,18 @@ var automationsListCmd = &cobra.Command{
 				return fmt.Errorf("failed to parse response: %w", err)
 			}
 
+			ids := make([]string, len(resp.List))
+			for i, a := range resp.List {
+				ids[i] = a.ID
+			}
+			emit, stuck := guard.checkPage(ids)
+			if stuck {
+				return warnStuckCursor(cmd, "GET /api/v1/automations")
+			}
+			if !emit {
+				resp.List = nil
+			}
+
 			for _, a := range resp.List {
 				if enabledOnly && !a.Enabled {
 					continue
@@ -143,6 +160,7 @@ var automationsListCmd = &cobra.Command{
 			if resp.NextPageToken == "" || manualPaging {
 				break
 			}
+			guard.markTokenUsed(pageToken)
 			pageToken = resp.NextPageToken
 		}
 

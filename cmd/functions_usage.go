@@ -55,7 +55,12 @@ last_executed_at, args.`,
 		// (see emitter.Filtered), so emitted alone would overcount rows
 		// actually written to stdout.
 		emitted := 0
+		guard := newPaginationCursorGuard()
 		for !limitReached(enc.Written(), limit) {
+			if guard.tokenAlreadyUsed(pageToken) {
+				return warnStuckCursor(cmd, "GET /api/v1/automations")
+			}
+
 			params := map[string]string{"page_size": strconv.Itoa(pageSize)}
 			if pageToken != "" {
 				params["page_token"] = pageToken
@@ -86,6 +91,18 @@ last_executed_at, args.`,
 				return fmt.Errorf("failed to parse response: %w", err)
 			}
 
+			ids := make([]string, len(resp.List))
+			for i, a := range resp.List {
+				ids[i] = a.ID
+			}
+			emit, stuck := guard.checkPage(ids)
+			if stuck {
+				return warnStuckCursor(cmd, "GET /api/v1/automations")
+			}
+			if !emit {
+				resp.List = nil
+			}
+
 			for _, a := range resp.List {
 				for _, step := range a.AutomationSteps {
 					if step.CallFunction == nil || step.CallFunction.FunctionID != functionID {
@@ -113,6 +130,7 @@ last_executed_at, args.`,
 			if resp.NextPageToken == "" || manualPaging {
 				break
 			}
+			guard.markTokenUsed(pageToken)
 			pageToken = resp.NextPageToken
 		}
 

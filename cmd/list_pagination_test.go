@@ -40,6 +40,10 @@ type listPaginationCase struct {
 	// rowIDs extracts, in emission order, the identifying value each item()
 	// call varied per row from the command's decoded NDJSON output.
 	rowIDs func(rows []map[string]any) []string
+	// stuckCursorRoute ("METHOD /path") opts a case into
+	// TestListCommandsStuckCursorReturnsExitServer; set it only for commands
+	// that use paginationCursorGuard.
+	stuckCursorRoute string
 }
 
 // Every case's command is a package-level singleton shared by the whole test
@@ -86,7 +90,7 @@ func extractPageToken(t *testing.T, method string, r *http.Request) string {
 	return tok
 }
 
-func runListPaginationCase(t *testing.T, tc listPaginationCase, srv *httptest.Server) (string, error) {
+func runListPaginationCase(t *testing.T, tc listPaginationCase, srv *httptest.Server) (stdout, stderr string, err error) {
 	t.Helper()
 	orig := newListClient
 	newListClient = func(_ *cobra.Command, _ string) (*client.Client, error) {
@@ -97,16 +101,17 @@ func runListPaginationCase(t *testing.T, tc listPaginationCase, srv *httptest.Se
 
 	resetCmdFlags(t, tc.cmd)
 	for name, val := range tc.extraFlags {
-		if err := tc.cmd.Flags().Set(name, val); err != nil {
-			t.Fatalf("setting --%s=%s: %v", name, val, err)
+		if setErr := tc.cmd.Flags().Set(name, val); setErr != nil {
+			t.Fatalf("setting --%s=%s: %v", name, val, setErr)
 		}
 	}
 
-	var out bytes.Buffer
+	var out, errOut bytes.Buffer
 	tc.cmd.SetOut(&out)
+	tc.cmd.SetErr(&errOut)
 	tc.cmd.SetContext(context.Background())
-	err := tc.cmd.RunE(tc.cmd, tc.args)
-	return out.String(), err
+	runErr := tc.cmd.RunE(tc.cmd, tc.args)
+	return out.String(), errOut.String(), runErr
 }
 
 // jstr renders a Go string as a JSON string literal for hand-built fixture
@@ -185,12 +190,13 @@ func listPaginationCases() []listPaginationCase {
 			rowIDs:   idRows("id"),
 		},
 		{
-			name:     "automations executions list",
-			cmd:      automationsExecutionsListCmd,
-			method:   http.MethodGet,
-			wantPath: "/api/v1/automation_executions",
-			page:     flatPage("automationExecutions", "id"),
-			rowIDs:   idRows("id"),
+			name:             "automations executions list",
+			cmd:              automationsExecutionsListCmd,
+			method:           http.MethodGet,
+			wantPath:         "/api/v1/automation_executions",
+			page:             flatPage("automationExecutions", "id"),
+			rowIDs:           idRows("id"),
+			stuckCursorRoute: "GET /api/v1/automation_executions",
 		},
 		{
 			name:     "automations list",
@@ -234,21 +240,23 @@ func listPaginationCases() []listPaginationCase {
 			rowIDs:   idRows("id"),
 		},
 		{
-			name:     "functions commits",
-			cmd:      functionsCommitsCmd,
-			method:   http.MethodGet,
-			wantPath: "/api/v1/functions/func1/commits",
-			args:     []string{"func1"},
-			page:     flatPage("list", "id"),
-			rowIDs:   idRows("id"),
+			name:             "functions commits",
+			cmd:              functionsCommitsCmd,
+			method:           http.MethodGet,
+			wantPath:         "/api/v1/functions/func1/commits",
+			args:             []string{"func1"},
+			page:             flatPage("list", "id"),
+			rowIDs:           idRows("id"),
+			stuckCursorRoute: "GET /api/v1/functions/func1/commits",
 		},
 		{
-			name:     "functions list",
-			cmd:      functionsListCmd,
-			method:   http.MethodGet,
-			wantPath: "/api/v1/functions",
-			page:     flatPage("list", "id"),
-			rowIDs:   idRows("id"),
+			name:             "functions list",
+			cmd:              functionsListCmd,
+			method:           http.MethodGet,
+			wantPath:         "/api/v1/functions",
+			page:             flatPage("list", "id"),
+			rowIDs:           idRows("id"),
+			stuckCursorRoute: "GET /api/v1/functions",
 		},
 		{
 			name:     "functions usage",
@@ -267,7 +275,8 @@ func listPaginationCases() []listPaginationCase {
 				}
 				return fmt.Sprintf(`{"list":[%s],"nextPageToken":%s}`, strings.Join(items, ","), jstr(next))
 			},
-			rowIDs: idRows("automation_id"),
+			rowIDs:           idRows("automation_id"),
+			stuckCursorRoute: "GET /api/v1/automations",
 		},
 		{
 			name:       "grants list",
@@ -443,7 +452,7 @@ func TestListCommandsPaginateAcrossTwoPages(t *testing.T) {
 			}))
 			defer srv.Close()
 
-			out, err := runListPaginationCase(t, tc, srv)
+			out, _, err := runListPaginationCase(t, tc, srv)
 			if err != nil {
 				t.Fatalf("RunE: %v", err)
 			}
@@ -486,7 +495,7 @@ func TestListCommandsEmptyPageWithTokenDoesNotStopEarly(t *testing.T) {
 			}))
 			defer srv.Close()
 
-			out, err := runListPaginationCase(t, tc, srv)
+			out, _, err := runListPaginationCase(t, tc, srv)
 			if err != nil {
 				t.Fatalf("RunE: %v", err)
 			}
@@ -524,7 +533,7 @@ func TestListCommandsExplicitPageTokenDisablesAutoPagination(t *testing.T) {
 				tc.extraFlags = map[string]string{}
 			}
 			tc.extraFlags["page-token"] = "manual-tok"
-			out, err := runListPaginationCase(t, tc, srv)
+			out, _, err := runListPaginationCase(t, tc, srv)
 			if err != nil {
 				t.Fatalf("RunE: %v", err)
 			}
@@ -536,6 +545,58 @@ func TestListCommandsExplicitPageTokenDisablesAutoPagination(t *testing.T) {
 			ids := tc.rowIDs(rows)
 			if len(ids) != 1 || ids[0] != "only-item" {
 				t.Errorf("expected exactly the one page's row, got: %v", ids)
+			}
+		})
+	}
+}
+
+// Every guarded command, against a server that reseals a fresh token over the
+// same page: stop, emit the row once, warn naming the route, exit 6.
+func TestListCommandsStuckCursorReturnsExitServer(t *testing.T) {
+	for _, tc := range listPaginationCases() {
+		if tc.stuckCursorRoute == "" {
+			continue
+		}
+		t.Run(tc.name, func(t *testing.T) {
+			var requestCount int
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				requestCount++
+				if requestCount > 4 {
+					t.Errorf("server received a 5th request; auto-pagination did not terminate")
+					w.WriteHeader(http.StatusBadRequest)
+					return
+				}
+				tok := extractPageToken(t, tc.method, r)
+				w.Header().Set("Content-Type", "application/json")
+				switch tok {
+				case "":
+					_, _ = fmt.Fprint(w, tc.page([]string{"stuck-item"}, "tok-v1"))
+				case "tok-v1", "tok-v2":
+					_, _ = fmt.Fprint(w, tc.page([]string{"stuck-item"}, fmt.Sprintf("tok-v%d", requestCount)))
+				default:
+					t.Errorf("unexpected page token: %q", tok)
+					w.WriteHeader(http.StatusInternalServerError)
+				}
+			}))
+			defer srv.Close()
+
+			out, errOut, err := runListPaginationCase(t, tc, srv)
+			if err == nil {
+				t.Fatalf("RunE: want an error (stuck cursor -> exit 6), got nil; stdout=%q stderr=%q", out, errOut)
+			}
+			if got, want := exitCode(err), exitServer; got != want {
+				t.Errorf("exitCode(err) = %d, want %d (exitServer, \"C1 failed\"); err=%v", got, want, err)
+			}
+			if requestCount != 3 {
+				t.Fatalf("server received %d requests, want exactly 3 (the page must repeat twice before the cursor counts as stuck)", requestCount)
+			}
+			rows := decodeNDJSONRows(t, out)
+			ids := tc.rowIDs(rows)
+			if len(ids) != 1 || ids[0] != "stuck-item" {
+				t.Fatalf("got ids %v, want exactly one occurrence of stuck-item (a stuck cursor must not re-emit it)", ids)
+			}
+			if !strings.Contains(errOut, "INCOMPLETE") || !strings.Contains(errOut, tc.stuckCursorRoute) {
+				t.Errorf("stderr warning = %q, want it to say results are INCOMPLETE and name %s", errOut, tc.stuckCursorRoute)
 			}
 		})
 	}

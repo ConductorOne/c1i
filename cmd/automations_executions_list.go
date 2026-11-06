@@ -71,8 +71,12 @@ the server returns. Combine with --limit to bound the work.`,
 		clientFilter := stateFilter != "" || templateID != ""
 
 		enc := newEmitter(cmd)
-		prevToken := ""
+		guard := newPaginationCursorGuard()
 		for !limitReached(enc.Written(), limit) {
+			if guard.tokenAlreadyUsed(pageToken) {
+				return warnStuckCursor(cmd, "GET /api/v1/automation_executions")
+			}
+
 			pageSize := requestedPageSize
 			if !clientFilter && !enc.Filtered() {
 				pageSize = effectivePageSize(requestedPageSize, limit, enc.Written())
@@ -97,6 +101,18 @@ the server returns. Combine with --limit to bound the work.`,
 				return fmt.Errorf("failed to parse response: %w", err)
 			}
 
+			ids := make([]string, len(resp.AutomationExecutions))
+			for i, e := range resp.AutomationExecutions {
+				ids[i] = e.ID
+			}
+			emit, stuck := guard.checkPage(ids)
+			if stuck {
+				return warnStuckCursor(cmd, "GET /api/v1/automation_executions")
+			}
+			if !emit {
+				resp.AutomationExecutions = nil
+			}
+
 			for _, e := range resp.AutomationExecutions {
 				if stateFilter != "" && e.State != stateFilter {
 					continue
@@ -113,13 +129,7 @@ the server returns. Combine with --limit to bound the work.`,
 			if resp.NextPageToken == "" || manualPaging {
 				break
 			}
-			// Some pagination paths on this endpoint have been seen returning
-			// the same cursor twice. Catch that and abort rather than spin —
-			// the caller can drop --page-token and retry.
-			if resp.NextPageToken == prevToken {
-				return fmt.Errorf("automation_executions returned the same nextPageToken twice in a row; pagination on this endpoint may be flaky for the current cursor — re-run without --page-token or report the issue")
-			}
-			prevToken = resp.NextPageToken
+			guard.markTokenUsed(pageToken)
 			pageToken = resp.NextPageToken
 		}
 

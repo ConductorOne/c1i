@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -167,10 +168,14 @@ an intended non-GET REST write.`,
 		}
 
 		enc := newEmitter(cmd)
+		guard := newPaginationCursorGuard()
 		pageToken := ""
-		prevToken := ""
+		route := fmt.Sprintf("%s %s", method, path)
 
 		for !limitReached(enc.Written(), limit) {
+			if guard.tokenAlreadyUsed(pageToken) {
+				return warnStuckCursor(cmd, route)
+			}
 			reqPath := path
 			var bodyBytes []byte
 			switch method {
@@ -236,7 +241,7 @@ an intended non-GET REST write.`,
 				// Deliberately says "partial" rather than "the first page":
 				// --query page_token=X makes this page N. And --paginate is
 				// offered, not promised — on an endpoint whose cursor never
-				// advances it aborts (see the prevToken guard below), which is
+				// advances it aborts (see paginationCursorGuard), which is
 				// still a clear failure rather than this silent one.
 				if tok := nextPageTokenOf(data); tok != "" {
 					_, _ = fmt.Fprintf(cmd.ErrOrStderr(),
@@ -248,6 +253,18 @@ an intended non-GET REST write.`,
 			items, nextToken, err := extractListAndToken(data, listKey)
 			if err != nil {
 				return fmt.Errorf("failed to parse response: %w", err)
+			}
+
+			ids := make([]string, len(items))
+			for i, item := range items {
+				ids[i] = itemIdentity(item)
+			}
+			emit, stuck := guard.checkPage(ids)
+			if stuck {
+				return warnStuckCursor(cmd, route)
+			}
+			if !emit {
+				items = nil
 			}
 
 			for _, item := range items {
@@ -266,12 +283,7 @@ an intended non-GET REST write.`,
 			if nextToken == "" {
 				break
 			}
-			// Guard against servers that return the same token forever.
-			// Without this, c1i would loop indefinitely emitting no progress.
-			if nextToken == prevToken {
-				return fmt.Errorf("API returned the same nextPageToken twice in a row for %s; the endpoint may not support pagination via the cursor c1i is sending. Drop --paginate and call the endpoint directly, or report this with the path", path)
-			}
-			prevToken = nextToken
+			guard.markTokenUsed(pageToken)
 			pageToken = nextToken
 		}
 
@@ -413,4 +425,27 @@ func extractListAndToken(data []byte, listKey string) ([]json.RawMessage, string
 	}
 
 	return nil, nextPageToken, nil
+}
+
+// itemIdentity identifies a list item for the stuck-cursor guard: its string
+// "id" when present, else its canonical JSON (re-marshaling sorts keys;
+// UseNumber keeps large integers distinct).
+func itemIdentity(item json.RawMessage) string {
+	var withID struct {
+		ID string `json:"id"`
+	}
+	if err := json.Unmarshal(item, &withID); err == nil && withID.ID != "" {
+		return withID.ID
+	}
+	dec := json.NewDecoder(bytes.NewReader(item))
+	dec.UseNumber()
+	var decoded any
+	if err := dec.Decode(&decoded); err != nil {
+		return string(item)
+	}
+	canon, err := json.Marshal(decoded)
+	if err != nil {
+		return string(item)
+	}
+	return string(canon)
 }

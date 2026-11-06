@@ -215,6 +215,75 @@ func pageSizeFlag(cmd *cobra.Command) int {
 	return maxSize
 }
 
+// stuckPageRepeats is how many consecutive stale pages (every item already
+// seen) mark a cursor as stuck. One can be a healthy offset-paginated server
+// that gained exactly a page of rows between requests; two in a row is
+// unlikely unless rows arrive faster than a page per request (tiny
+// --page-size on a busy feed).
+const stuckPageRepeats = 2
+
+// paginationCursorGuard detects auto-pagination that stopped making progress:
+// a page_token sent twice, or stuckPageRepeats stale pages in a row under
+// fresh-looking tokens. Construct with newPaginationCursorGuard.
+type paginationCursorGuard struct {
+	seenTokens map[string]bool
+	seenIDs    map[string]bool
+	stale      int
+}
+
+func newPaginationCursorGuard() *paginationCursorGuard {
+	return &paginationCursorGuard{seenTokens: map[string]bool{}, seenIDs: map[string]bool{}}
+}
+
+// tokenAlreadyUsed reports whether token was already sent. Check it before
+// the request so the repeat is caught without re-fetching the page.
+func (g *paginationCursorGuard) tokenAlreadyUsed(token string) bool {
+	return token != "" && g.seenTokens[token]
+}
+
+// markTokenUsed records the token the request just sent.
+func (g *paginationCursorGuard) markTokenUsed(token string) {
+	if token != "" {
+		g.seenTokens[token] = true
+	}
+}
+
+// checkPage classifies a fetched page by its item ids. A stale page is not
+// emitted (it holds nothing new); stuck is true once stuckPageRepeats stale
+// pages arrive in a row. Empty pages, and pages with no non-empty id, neither
+// count nor reset the run: a live token may precede one, and a missing id is
+// no evidence of a repeat.
+func (g *paginationCursorGuard) checkPage(ids []string) (emit, stuck bool) {
+	fresh, known := false, false
+	for _, id := range ids {
+		if id == "" {
+			continue
+		}
+		known = true
+		if !g.seenIDs[id] {
+			fresh = true
+			g.seenIDs[id] = true
+		}
+	}
+	if !known {
+		return true, false
+	}
+	if !fresh {
+		g.stale++
+		return false, g.stale >= stuckPageRepeats
+	}
+	g.stale = 0
+	return true, false
+}
+
+// warnStuckCursor prints the stuck-cursor warning and returns the error that
+// maps to exit 6. route is "METHOD /path", for the user to report.
+func warnStuckCursor(cmd *cobra.Command, route string) error {
+	_, _ = fmt.Fprintf(cmd.ErrOrStderr(),
+		"Warning: results from %s are INCOMPLETE: the server's pagination cursor stopped advancing (a repeated nextPageToken, or repeated pages of rows already seen). Rows already printed are kept.\n", route)
+	return &stuckPaginationCursorError{route: route}
+}
+
 // requireNonEmpty errors when any of the named string flags has an empty
 // value. Cobra's required-flag enforcement only checks that the flag was
 // set, not that the value is non-empty — so `--app-id ""` silently passes.

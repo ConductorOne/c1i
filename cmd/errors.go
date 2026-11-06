@@ -26,7 +26,7 @@ const (
 	exitAuth        = 3 // not authenticated, or API returned 401/403
 	exitNotFound    = 4 // API returned 404
 	exitRateLimited = 5 // API returned 429
-	exitServer      = 6 // C1 failed: 5xx, a redirect loop, or a 200 with a non-JSON body
+	exitServer      = 6 // C1 failed: 5xx, a redirect loop, a 200 with a non-JSON body, or a stuck pagination cursor
 	exitToolError   = 7 // an MCP tool call completed (transport/protocol succeeded) but the tool itself reported isError
 	exitUpstream    = 8 // an upstream system, or the protocol layer itself, failed -- distinct from the C1 API failing (e.g. an unreachable MCP connector, or a JSON-RPC protocol-level error)
 )
@@ -64,6 +64,15 @@ type nonJSONResponseError struct{ err error }
 
 func (e *nonJSONResponseError) Error() string { return e.err.Error() }
 func (e *nonJSONResponseError) Unwrap() error { return e.err }
+
+// stuckPaginationCursorError: auto-pagination stopped because the cursor
+// stopped advancing (see paginationCursorGuard). Rows already printed stand;
+// the result is incomplete, so it maps to exitServer.
+type stuckPaginationCursorError struct{ route string }
+
+func (e *stuckPaginationCursorError) Error() string {
+	return fmt.Sprintf("results from %s are INCOMPLETE: pagination cursor stopped advancing", e.route)
+}
 
 // upstreamError marks a failure beyond C1, or in the protocol layer, that did
 // not arrive as a classifiable HTTP status — an upstream connector failing, or
@@ -207,6 +216,10 @@ func exitCode(err error) int {
 	var upstreamErr *upstreamError
 	if errors.As(err, &upstreamErr) {
 		return exitUpstream
+	}
+	var stuckErr *stuckPaginationCursorError
+	if errors.As(err, &stuckErr) {
+		return exitServer
 	}
 	var nonJSONErr *nonJSONResponseError
 	if errors.As(err, &nonJSONErr) {

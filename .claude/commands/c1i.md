@@ -82,7 +82,7 @@ request was sent.
 | 3 | not authenticated, or API `401`/`403` |
 | 4 | API `404` (not found) |
 | 5 | API `429` (rate limited) |
-| 6 | C1 failed: API `5xx`, a `200` with a body that isn't JSON, or a redirect loop (`RedirectLoopError`) |
+| 6 | C1 failed: API `5xx`, a `200` with a body that isn't JSON, a redirect loop (`RedirectLoopError`), or a stuck pagination cursor (`automations`/`functions` lists, `api --paginate`) |
 | 7 | MCP tool call completed but the tool itself reported `isError: true` |
 | 8 | a system beyond C1, or the MCP protocol layer, failed (includes an unreachable gateway) |
 
@@ -90,7 +90,8 @@ Typed internally and classified in one place, `cmd/errors.go`: from the client,
 `APIError`, `AuthError`, `PathError`, `RedirectError`, `RedirectLoopError`; from
 the gateway, `mcpgateway.TransportError` (unreachable); plus package-`cmd`
 wrappers `usageError`, `toolExecutionError`, `nonJSONResponseError`,
-`upstreamError`, and `helperLeftError`.
+`stuckPaginationCursorError` (a guarded list's cursor stopped
+advancing), `upstreamError`, and `helperLeftError`.
 
 ## Documentation
 

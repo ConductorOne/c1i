@@ -23,6 +23,17 @@ credentials fails instead of using the working directory. With a relative
 
 ### Fixed
 
+- **`automations list`, `automations executions list`, `functions list`,
+  `functions commits`, `functions usage`, and `api --paginate` could loop
+  forever**, re-printing the same rows: on a large enough result set,
+  `/api/v1/automations`, `/api/v1/automation_executions`,
+  `/api/v1/functions`, and `/api/v1/functions/{id}/commits` ignore
+  `page_size`/`page_token` and return the first page under a fresh
+  `nextPageToken` every time. These commands now stop when the cursor stops
+  advancing (the same token twice, or two pages in a row of rows already
+  seen), keep the rows already printed, warn on stderr that results are
+  INCOMPLETE, and exit `6`.
+
 - **`--debug` and `--max-retries` did nothing on `docs openapi`,
   `docs endpoints` and `docs endpoint`.** The spec fetch now uses the shared
   transport, so it traces, refuses a redirect to a different path or host, and
