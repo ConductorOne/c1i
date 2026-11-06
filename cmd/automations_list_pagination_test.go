@@ -31,7 +31,18 @@ func runAutomationsListCmd(t *testing.T, srv *httptest.Server) (stdout, stderr s
 	return out.String(), errOut.String(), runErr
 }
 
-// automationPage builds a GET /api/v1/automations response body.
+// searchAutomationsToken asserts r targets POST /api/v1/search/automations and
+// returns its body's pageToken.
+func searchAutomationsToken(t *testing.T, r *http.Request) string {
+	t.Helper()
+	if r.Method != http.MethodPost || r.URL.Path != "/api/v1/search/automations" {
+		t.Errorf("unexpected request: %s %s (want POST /api/v1/search/automations)", r.Method, r.URL.Path)
+	}
+	tok, _ := decodeJSONBody(t, r)["pageToken"].(string)
+	return tok
+}
+
+// automationPage builds a POST /api/v1/search/automations response body.
 func automationPage(ids []string, nextToken string) string {
 	items := make([]string, 0, len(ids))
 	for _, id := range ids {
@@ -50,7 +61,7 @@ func TestAutomationsListStuckCursorSameTokenTerminates(t *testing.T) {
 			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
-		tok := r.URL.Query().Get("page_token")
+		tok := searchAutomationsToken(t, r)
 		w.Header().Set("Content-Type", "application/json")
 		switch tok {
 		case "":
@@ -59,7 +70,7 @@ func TestAutomationsListStuckCursorSameTokenTerminates(t *testing.T) {
 			// The final page: same rows, same cursor, forever.
 			_, _ = fmt.Fprint(w, automationPage([]string{"auto-a", "auto-b"}, "stuck-tok"))
 		default:
-			t.Errorf("unexpected page_token: %q", tok)
+			t.Errorf("unexpected pageToken: %q", tok)
 			w.WriteHeader(http.StatusInternalServerError)
 		}
 	}))
@@ -81,8 +92,8 @@ func TestAutomationsListStuckCursorSameTokenTerminates(t *testing.T) {
 	if requestCount != 2 {
 		t.Fatalf("server received %d requests, want exactly 2 (one to discover the stuck page, one to confirm it repeats)", requestCount)
 	}
-	if !strings.Contains(errOut, "INCOMPLETE") || !strings.Contains(errOut, "GET /api/v1/automations") {
-		t.Errorf("stderr warning = %q, want it to say results are INCOMPLETE and name GET /api/v1/automations", errOut)
+	if !strings.Contains(errOut, "INCOMPLETE") || !strings.Contains(errOut, "POST /api/v1/search/automations") {
+		t.Errorf("stderr warning = %q, want it to say results are INCOMPLETE and name POST /api/v1/search/automations", errOut)
 	}
 }
 
@@ -97,7 +108,7 @@ func TestAutomationsListStuckCursorChangingTokenTerminates(t *testing.T) {
 			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
-		tok := r.URL.Query().Get("page_token")
+		tok := searchAutomationsToken(t, r)
 		w.Header().Set("Content-Type", "application/json")
 		switch tok {
 		case "":
@@ -106,7 +117,7 @@ func TestAutomationsListStuckCursorChangingTokenTerminates(t *testing.T) {
 			// Same rows again, but a freshly minted, never-before-seen token.
 			_, _ = fmt.Fprint(w, automationPage([]string{"auto-a", "auto-b"}, fmt.Sprintf("tok-v%d", requestCount)))
 		default:
-			t.Errorf("unexpected page_token: %q", tok)
+			t.Errorf("unexpected pageToken: %q", tok)
 			w.WriteHeader(http.StatusInternalServerError)
 		}
 	}))
@@ -128,8 +139,8 @@ func TestAutomationsListStuckCursorChangingTokenTerminates(t *testing.T) {
 	if requestCount != 3 {
 		t.Fatalf("server received %d requests, want exactly 3 (the page must repeat twice before the cursor counts as stuck)", requestCount)
 	}
-	if !strings.Contains(errOut, "INCOMPLETE") || !strings.Contains(errOut, "GET /api/v1/automations") {
-		t.Errorf("stderr warning = %q, want it to say results are INCOMPLETE and name GET /api/v1/automations", errOut)
+	if !strings.Contains(errOut, "INCOMPLETE") || !strings.Contains(errOut, "POST /api/v1/search/automations") {
+		t.Errorf("stderr warning = %q, want it to say results are INCOMPLETE and name POST /api/v1/search/automations", errOut)
 	}
 }
 
@@ -144,6 +155,7 @@ func TestAutomationsListStuckCursorEmptyPagesTerminates(t *testing.T) {
 			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
+		_ = searchAutomationsToken(t, r)
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = fmt.Fprint(w, automationPage(nil, "forever-tok"))
 	}))
@@ -165,7 +177,7 @@ func TestAutomationsListStuckCursorEmptyPagesTerminates(t *testing.T) {
 	if requestCount != 2 {
 		t.Fatalf("server received %d requests, want exactly 2 (the token repeats on the 2nd response, caught before a 3rd request)", requestCount)
 	}
-	if !strings.Contains(errOut, "INCOMPLETE") || !strings.Contains(errOut, "GET /api/v1/automations") {
-		t.Errorf("stderr warning = %q, want it to say results are INCOMPLETE and name GET /api/v1/automations", errOut)
+	if !strings.Contains(errOut, "INCOMPLETE") || !strings.Contains(errOut, "POST /api/v1/search/automations") {
+		t.Errorf("stderr warning = %q, want it to say results are INCOMPLETE and name POST /api/v1/search/automations", errOut)
 	}
 }

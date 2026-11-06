@@ -192,17 +192,17 @@ func listPaginationCases() []listPaginationCase {
 		{
 			name:             "automations executions list",
 			cmd:              automationsExecutionsListCmd,
-			method:           http.MethodGet,
-			wantPath:         "/api/v1/automation_executions",
-			page:             flatPage("automationExecutions", "id"),
+			method:           http.MethodPost,
+			wantPath:         "/api/v1/search/automation_executions",
+			page:             nestedPage("list", "automationExecution", "id"),
 			rowIDs:           idRows("id"),
-			stuckCursorRoute: "GET /api/v1/automation_executions",
+			stuckCursorRoute: "POST /api/v1/search/automation_executions",
 		},
 		{
 			name:     "automations list",
 			cmd:      automationsListCmd,
-			method:   http.MethodGet,
-			wantPath: "/api/v1/automations",
+			method:   http.MethodPost,
+			wantPath: "/api/v1/search/automations",
 			page:     flatPage("list", "id"),
 			rowIDs:   idRows("id"),
 		},
@@ -261,8 +261,8 @@ func listPaginationCases() []listPaginationCase {
 		{
 			name:     "functions usage",
 			cmd:      functionsUsageCmd,
-			method:   http.MethodGet,
-			wantPath: "/api/v1/automations",
+			method:   http.MethodPost,
+			wantPath: "/api/v1/search/automations",
 			args:     []string{"func1"},
 			// functions_usage filters automations client-side by
 			// callFunction.functionId, so each row must embed a matching step.
@@ -276,7 +276,7 @@ func listPaginationCases() []listPaginationCase {
 				return fmt.Sprintf(`{"list":[%s],"nextPageToken":%s}`, strings.Join(items, ","), jstr(next))
 			},
 			rowIDs:           idRows("automation_id"),
-			stuckCursorRoute: "GET /api/v1/automations",
+			stuckCursorRoute: "POST /api/v1/search/automations",
 		},
 		{
 			name:       "grants list",

@@ -3,13 +3,12 @@ package cmd
 import (
 	"encoding/json"
 	"fmt"
-	"strconv"
 	"strings"
 
 	"github.com/spf13/cobra"
 )
 
-// executionListItem is one row of GET /api/v1/automation_executions.
+// executionListItem is one row of POST /api/v1/search/automation_executions.
 type executionListItem struct {
 	ID                   string `json:"id"`
 	AutomationTemplateID string `json:"automationTemplateId"`
@@ -41,9 +40,8 @@ var automationsExecutionsListCmd = &cobra.Command{
 	Long: `Stream automation execution history.
 
 Filters --state and --template-id are applied client-side after fetching
-each page. The /api/v1/automation_executions endpoint does not currently
-support server-side filtering, so a narrow filter still scans every page
-the server returns. Combine with --limit to bound the work.`,
+each page, so a narrow filter still scans every page the server returns.
+Combine with --limit to bound the work.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		baseURL, err := GetBaseURL()
 		if err != nil {
@@ -74,46 +72,55 @@ the server returns. Combine with --limit to bound the work.`,
 		guard := newPaginationCursorGuard()
 		for !limitReached(enc.Written(), limit) {
 			if guard.tokenAlreadyUsed(pageToken) {
-				return warnStuckCursor(cmd, "GET /api/v1/automation_executions")
+				return warnStuckCursor(cmd, "POST /api/v1/search/automation_executions")
 			}
 
 			pageSize := requestedPageSize
 			if !clientFilter && !enc.Filtered() {
 				pageSize = effectivePageSize(requestedPageSize, limit, enc.Written())
 			}
-			params := map[string]string{
-				"page_size": strconv.Itoa(pageSize),
-			}
+			body := map[string]any{"pageSize": pageSize}
 			if pageToken != "" {
-				params["page_token"] = pageToken
+				body["pageToken"] = pageToken
 			}
 
-			data, err := c.Get(cmd.Context(), "/api/v1/automation_executions", params)
+			// The search route, not GET /api/v1/automation_executions: the GET
+			// ignores page_size/page_token and serves page 1 forever.
+			data, err := c.Post(cmd.Context(), "/api/v1/search/automation_executions", body)
 			if err != nil {
 				return fmt.Errorf("API error: %w", err)
 			}
 
-			var resp struct {
-				AutomationExecutions []executionListItem `json:"automationExecutions"`
-				NextPageToken        string              `json:"nextPageToken"`
+			var page struct {
+				List []struct {
+					AutomationExecution *executionListItem `json:"automationExecution"`
+				} `json:"list"`
+				NextPageToken string `json:"nextPageToken"`
 			}
-			if err := json.Unmarshal(data, &resp); err != nil {
+			if err := json.Unmarshal(data, &page); err != nil {
 				return fmt.Errorf("failed to parse response: %w", err)
 			}
+			// A missing wrapper is skipped rather than emitted as an all-"" row.
+			execs := make([]executionListItem, 0, len(page.List))
+			for _, item := range page.List {
+				if item.AutomationExecution != nil {
+					execs = append(execs, *item.AutomationExecution)
+				}
+			}
 
-			ids := make([]string, len(resp.AutomationExecutions))
-			for i, e := range resp.AutomationExecutions {
+			ids := make([]string, len(execs))
+			for i, e := range execs {
 				ids[i] = e.ID
 			}
 			emit, stuck := guard.checkPage(ids)
 			if stuck {
-				return warnStuckCursor(cmd, "GET /api/v1/automation_executions")
+				return warnStuckCursor(cmd, "POST /api/v1/search/automation_executions")
 			}
 			if !emit {
-				resp.AutomationExecutions = nil
+				execs = nil
 			}
 
-			for _, e := range resp.AutomationExecutions {
+			for _, e := range execs {
 				if stateFilter != "" && e.State != stateFilter {
 					continue
 				}
@@ -126,11 +133,11 @@ the server returns. Combine with --limit to bound the work.`,
 				}
 			}
 
-			if resp.NextPageToken == "" || manualPaging {
+			if page.NextPageToken == "" || manualPaging {
 				break
 			}
 			guard.markTokenUsed(pageToken)
-			pageToken = resp.NextPageToken
+			pageToken = page.NextPageToken
 		}
 
 		return nil

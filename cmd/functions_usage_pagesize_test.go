@@ -32,8 +32,12 @@ func TestFunctionsUsagePageSizeStaysFixedUnderLimit(t *testing.T) {
 	}
 	var gotPageSizes []string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		gotPageSizes = append(gotPageSizes, r.URL.Query().Get("page_size"))
-		tok := r.URL.Query().Get("page_token")
+		if r.Method != http.MethodPost || r.URL.Path != "/api/v1/search/automations" {
+			t.Errorf("unexpected request: %s %s (want POST /api/v1/search/automations)", r.Method, r.URL.Path)
+		}
+		body := decodeJSONBody(t, r)
+		gotPageSizes = append(gotPageSizes, fmt.Sprint(body["pageSize"]))
+		tok, _ := body["pageToken"].(string)
 		var idx int
 		for i := range pages {
 			if (i == 0 && tok == "") || (i > 0 && tok == pages[i-1].next) {
@@ -78,7 +82,7 @@ func TestFunctionsUsagePageSizeStaysFixedUnderLimit(t *testing.T) {
 	}
 	for i, ps := range gotPageSizes {
 		if ps != "20" {
-			t.Errorf("request %d: page_size = %q, want %q (a --limit-driven shrink would send %q here)", i, ps, "20", "1")
+			t.Errorf("request %d: pageSize = %q, want %q (a --limit-driven shrink would send %q here)", i, ps, "20", "1")
 		}
 	}
 
