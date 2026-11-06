@@ -37,8 +37,8 @@ func TestDotSegmentIDIsUsageErrorAndSendsNothing(t *testing.T) {
 				return client.NewForTesting(baseURL, srv.Client(), client.WithMaxRetries(0)), nil
 			}
 			t.Cleanup(func() { newClient = orig })
-			resetRootURLFlag(t)
-			resetAPICmdFlags(t)
+			resetCmdFlags(t, rootCmd)
+			resetCmdFlags(t, apiCmd)
 			t.Setenv("C1I_URL", srv.URL)
 
 			err := runRootWithArgs(t, tc.args)
