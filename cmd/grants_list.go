@@ -232,13 +232,11 @@ set that keeps changing, --wait times out rather than printing anything.`,
 			for i, it := range resp.List {
 				ids[i] = grantGuardID(it)
 			}
-			emit, stuck := guard.checkPage(ids)
-			if stuck {
-				return guard.warnStuck(cmd, route)
+			keep, err := guard.checkPage(cmd, route, ids)
+			if err != nil {
+				return err
 			}
-			if !emit {
-				resp.List = nil
-			}
+			resp.List = keepRows(resp.List, keep)
 			for _, item := range resp.List {
 				_ = enc.Encode(grantRow(item))
 				if limitReached(enc.Written(), limit) {
@@ -340,13 +338,11 @@ func fetchAllGrants(ctx context.Context, c *client.Client, q grantsQuery, pageSi
 		for i, it := range resp.List {
 			ids[i] = grantGuardID(it)
 		}
-		emit, stuck := guard.checkPage(ids)
-		if stuck {
-			return nil, guard.stuckError(route)
+		keep, err := guard.checkPage(nil, route, ids)
+		if err != nil {
+			return nil, err
 		}
-		if emit {
-			all = append(all, resp.List...)
-		}
+		all = append(all, keepRows(resp.List, keep)...)
 		if resp.NextPageToken == "" {
 			return all, nil
 		}

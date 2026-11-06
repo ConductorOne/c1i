@@ -33,6 +33,13 @@ credentials fails instead of using the working directory. With a relative
   `mcp gateway list-tools` cursor that never ends now exits `8` rather than
   `1`.
 
+- **A stuck cursor could still re-print rows or run for 100,000 pages.** A
+  row already printed is now skipped even on a page that also holds a row
+  without an id, and 100 empty pages in a row end a list with exit `6`. A
+  page whose rows all lack the id the command reads, including an
+  `automations executions list` page with no `automationExecution` item, now
+  exits `6` instead of printing unchecked rows or nothing.
+
 - **`role-mining suggestions|runs|custom-analysis list` and
   `findings routing-rules|transformation-rules list` would drop a page
   silently** if the server ever paginated them: they made one request and

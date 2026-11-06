@@ -367,12 +367,16 @@ func listClassifierPages(cmd *cobra.Command, route, listKey, idKey string, row c
 			rows[i] = row(item)
 			ids[i], _ = rows[i][idKey].(string)
 		}
-		emit, stuck := guard.checkPage(ids)
-		if stuck {
-			return guard.warnStuck(cmd, route)
-		}
-		if !emit {
-			rows = nil
+		if idKey == "" {
+			if err := guard.checkIDlessPage(cmd, route, len(rows)); err != nil {
+				return err
+			}
+		} else {
+			keep, err := guard.checkPage(cmd, route, ids)
+			if err != nil {
+				return err
+			}
+			rows = keepRows(rows, keep)
 		}
 		for _, r := range rows {
 			if err := enc.Encode(r); err != nil {

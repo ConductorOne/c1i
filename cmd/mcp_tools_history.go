@@ -72,6 +72,9 @@ created_at, trace_id, syslog_event_id, annotations).`,
 			if err := json.Unmarshal(data, &resp); err != nil {
 				return fmt.Errorf("failed to parse response: %w", err)
 			}
+			if err := guard.checkIDlessPage(cmd, route, len(resp.List)); err != nil {
+				return err
+			}
 
 			for _, entry := range resp.List {
 				_ = enc.Encode(json.RawMessage(entry))

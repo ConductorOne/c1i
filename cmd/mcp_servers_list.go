@@ -69,13 +69,11 @@ var mcpServersListCmd = &cobra.Command{
 			for i, it := range resp.List {
 				ids[i] = it.ConnectorID
 			}
-			emit, stuck := guard.checkPage(ids)
-			if stuck {
-				return guard.warnStuck(cmd, route)
+			keep, err := guard.checkPage(cmd, route, ids)
+			if err != nil {
+				return err
 			}
-			if !emit {
-				resp.List = nil
-			}
+			resp.List = keepRows(resp.List, keep)
 			for _, s := range resp.List {
 				_ = enc.Encode(serverRow(s))
 				if limitReached(enc.Written(), limit) {

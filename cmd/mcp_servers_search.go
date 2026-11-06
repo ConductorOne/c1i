@@ -95,13 +95,11 @@ TSDB read each) so you can spot idle servers.`,
 			for i, it := range resp.List {
 				ids[i] = it.MCPServer.ConnectorID
 			}
-			emit, stuck := guard.checkPage(ids)
-			if stuck {
-				return guard.warnStuck(cmd, route)
+			keep, err := guard.checkPage(cmd, route, ids)
+			if err != nil {
+				return err
 			}
-			if !emit {
-				resp.List = nil
-			}
+			resp.List = keepRows(resp.List, keep)
 			for _, r := range resp.List {
 				var toolCount *int64
 				if toolState != "" {

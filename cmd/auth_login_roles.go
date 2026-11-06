@@ -275,13 +275,11 @@ func readRoles(ctx context.Context, c *client.Client) ([]menuRole, error) {
 		for i, r := range page.List {
 			ids[i] = r.ID
 		}
-		emit, stuck := guard.checkPage(ids)
-		if stuck {
-			return nil, guard.stuckError(route)
+		keep, err := guard.checkPage(nil, route, ids)
+		if err != nil {
+			return nil, err
 		}
-		if emit {
-			catalog = append(catalog, page.List...)
-		}
+		catalog = append(catalog, keepRows(page.List, keep)...)
 		if page.NextPageToken == "" {
 			break
 		}

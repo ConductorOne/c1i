@@ -259,13 +259,11 @@ an intended non-GET REST write.`,
 			for i, item := range items {
 				ids[i] = itemIdentity(item)
 			}
-			emit, stuck := guard.checkPage(ids)
-			if stuck {
-				return guard.warnStuck(cmd, route)
+			keep, err := guard.checkPage(cmd, route, ids)
+			if err != nil {
+				return err
 			}
-			if !emit {
-				items = nil
-			}
+			items = keepRows(items, keep)
 
 			for _, item := range items {
 				// Encode the raw item, not a decoded any: decoding to any turns

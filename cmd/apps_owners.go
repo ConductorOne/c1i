@@ -111,13 +111,11 @@ same id exit 4 and can tell you which.`,
 			for i, it := range resp.List {
 				ids[i] = it.ID
 			}
-			emit, stuck := guard.checkPage(ids)
-			if stuck {
-				return guard.warnStuck(cmd, route)
+			keep, err := guard.checkPage(cmd, route, ids)
+			if err != nil {
+				return err
 			}
-			if !emit {
-				resp.List = nil
-			}
+			resp.List = keepRows(resp.List, keep)
 			for _, o := range resp.List {
 				_ = enc.Encode(appOwnerRow(o))
 				if limitReached(enc.Written(), limit) {

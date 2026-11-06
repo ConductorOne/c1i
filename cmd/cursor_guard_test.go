@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"go/ast"
 	"go/parser"
@@ -50,9 +51,9 @@ func TestEveryCursorLoopIsGuarded(t *testing.T) {
 		t.Fatalf("globbing cmd/*.go: %v", err)
 	}
 	type scope struct {
-		key                         string
-		line                        int
-		reads, guard, check, marked bool
+		key                                string
+		line                               int
+		reads, guard, check, marked, paged bool
 	}
 	var scopes []*scope
 	for _, path := range paths {
@@ -107,6 +108,7 @@ func TestEveryCursorLoopIsGuarded(t *testing.T) {
 						case *ast.SelectorExpr:
 							s.check = s.check || fn.Sel.Name == "tokenAlreadyUsed"
 							s.marked = s.marked || fn.Sel.Name == "markTokenUsed"
+							s.paged = s.paged || fn.Sel.Name == "checkPage" || fn.Sel.Name == "checkIDlessPage"
 						}
 					}
 					return true
@@ -125,9 +127,9 @@ func TestEveryCursorLoopIsGuarded(t *testing.T) {
 		if _, ok := cursorGuardExemptions[s.key]; ok {
 			continue
 		}
-		if !s.guard || !s.check || !s.marked {
-			t.Errorf("%s (line %d) reads a next-page cursor without newPaginationCursorGuard + tokenAlreadyUsed + markTokenUsed (guard=%v check=%v mark=%v); guard the loop or add a reasoned cursorGuardExemptions entry",
-				s.key, s.line, s.guard, s.check, s.marked)
+		if !s.guard || !s.check || !s.marked || !s.paged {
+			t.Errorf("%s (line %d) reads a next-page cursor without newPaginationCursorGuard + tokenAlreadyUsed + checkPage or checkIDlessPage + markTokenUsed (guard=%v check=%v page=%v mark=%v); guard the loop or add a reasoned cursorGuardExemptions entry",
+				s.key, s.line, s.guard, s.check, s.paged, s.marked)
 		}
 	}
 	if reads < 30 {
@@ -154,7 +156,7 @@ func TestPaginationCursorGuardIdleCap(t *testing.T) {
 		if g.tokenAlreadyUsed(tok) {
 			t.Fatalf("request %d stopped although every page brought a new id", i)
 		}
-		if _, stuck := g.checkPage([]string{tok}); stuck {
+		if _, err := g.checkPage(nil, "GET /x", []string{tok}); err != nil {
 			t.Fatalf("page %d reported stuck", i)
 		}
 		g.markTokenUsed(tok)
@@ -166,7 +168,9 @@ func TestPaginationCursorGuardIdleCap(t *testing.T) {
 		if g.tokenAlreadyUsed(fmt.Sprintf("tok-%d", i)) {
 			t.Fatalf("request %d stopped under a cap of 3 idle pages", i)
 		}
-		g.checkPage([]string{""})
+		if err := g.checkIDlessPage(nil, "GET /x", 1); err != nil {
+			t.Fatalf("id-less page %d: %v", i, err)
+		}
 	}
 	if !g.tokenAlreadyUsed("tok-4") {
 		t.Fatal("a 4th page with no new id went through a cap of 3")
@@ -188,14 +192,100 @@ func TestPaginationCursorGuardIdleCap(t *testing.T) {
 // stale run also covers stuckStaleRows rows.
 func TestPaginationCursorGuardStaleRunNeedsRowFloor(t *testing.T) {
 	g := newPaginationCursorGuard()
-	g.checkPage([]string{"a"})
+	_, _ = g.checkPage(nil, "GET /x", []string{"a"})
 	for i := 0; i < stuckStaleRows-1; i++ {
-		if emit, stuck := g.checkPage([]string{"a"}); emit || stuck {
-			t.Fatalf("stale page %d: emit=%v stuck=%v, want skipped but not stuck", i+1, emit, stuck)
+		if keep, err := g.checkPage(nil, "GET /x", []string{"a"}); keep[0] || err != nil {
+			t.Fatalf("stale page %d: keep=%v err=%v, want skipped but not stuck", i+1, keep, err)
 		}
 	}
-	if _, stuck := g.checkPage([]string{"a"}); !stuck {
-		t.Errorf("stale run of %d rows over %d pages not reported stuck", stuckStaleRows, stuckStaleRows)
+	if _, err := g.checkPage(nil, "GET /x", []string{"a"}); exitCode(err) != exitServer {
+		t.Errorf("stale run of %d rows over %d pages: err=%v, want a stuck-cursor exit 6", stuckStaleRows, stuckStaleRows, err)
+	}
+}
+
+// A stuck server that adds an id-less row to every repeat of a seen page:
+// only the id-less row is emitted, and the stale run still ends it well before
+// the idle cap.
+func TestPaginationCursorGuardStuckDespiteIDlessRow(t *testing.T) {
+	g := newPaginationCursorGuard()
+	g.maxPages = 50
+	page := make([]string, stuckStaleRows)
+	for i := range page {
+		page[i] = fmt.Sprintf("r%d", i)
+	}
+	emitted := 0
+	var err error
+	for i := 0; err == nil && i < 1000; i++ {
+		tok := fmt.Sprintf("tok-%d", i)
+		if g.tokenAlreadyUsed(tok) {
+			err = g.stuckError("GET /x")
+			break
+		}
+		ids := page
+		if i > 0 {
+			ids = append(append([]string{}, page...), "")
+		}
+		var keep []bool
+		if keep, err = g.checkPage(nil, "GET /x", ids); err == nil {
+			emitted += len(keepRows(ids, keep))
+		}
+		g.markTokenUsed(tok)
+	}
+	if exitCode(err) != exitServer {
+		t.Fatalf("err = %v (exit %d), want exit 6", err, exitCode(err))
+	}
+	if g.stopReason != "" {
+		t.Errorf("stopped by %q, want the stale run to stop it before the cap", g.stopReason)
+	}
+	if want := stuckStaleRows + 1; emitted != want {
+		t.Errorf("emitted %d rows, want %d (the page once, then only the id-less row)", emitted, want)
+	}
+}
+
+// A run of empty pages under fresh tokens stops after maxEmptyPages; any
+// page with rows resets the run.
+func TestPaginationCursorGuardEmptyPageRun(t *testing.T) {
+	for _, idless := range []bool{false, true} {
+		g := newPaginationCursorGuard()
+		check := func(rows int) error {
+			if idless {
+				return g.checkIDlessPage(nil, "GET /x", rows)
+			}
+			ids := make([]string, rows)
+			for i := range ids {
+				ids[i] = fmt.Sprintf("id-%d-%d", len(g.seenIDs), i)
+			}
+			_, err := g.checkPage(nil, "GET /x", ids)
+			return err
+		}
+		for i := 0; i < 3*maxEmptyPages; i++ {
+			rows := 0
+			if i%(maxEmptyPages-1) == 0 {
+				rows = 1
+			}
+			if err := check(rows); err != nil {
+				t.Fatalf("idless=%v page %d: %v (empty runs never reached %d)", idless, i, err, maxEmptyPages)
+			}
+		}
+		_ = check(1)
+		var err error
+		for i := 0; i < maxEmptyPages && err == nil; i++ {
+			err = check(0)
+		}
+		if exitCode(err) != exitServer || !strings.Contains(err.Error(), "empty pages") {
+			t.Errorf("idless=%v: %d empty pages in a row: err=%v, want exit 6 naming empty pages", idless, maxEmptyPages, err)
+		}
+	}
+}
+
+// A non-empty page where no row carries the id the command reads means the
+// response shape changed; printing it would repeat rows with no check.
+func TestPaginationCursorGuardRejectsPageWithNoIDs(t *testing.T) {
+	g := newPaginationCursorGuard()
+	_, err := g.checkPage(nil, "GET /x", []string{"", ""})
+	var shapeErr *nonJSONResponseError
+	if !errors.As(err, &shapeErr) || exitCode(err) != exitServer {
+		t.Errorf("err = %v, want a *nonJSONResponseError (exit 6)", err)
 	}
 }
 
@@ -253,8 +343,8 @@ func TestEntitlementListsKeyGuardOnAppAndID(t *testing.T) {
 	}
 }
 
-// Rows with no entitlement id carry no evidence of a repeat, so pages of them
-// under fresh tokens must not trip the guard.
+// Rows with no entitlement id carry no evidence of a repeat, so they are
+// emitted beside rows that have one and never trip the guard.
 func TestEntitlementListsIgnoreRowsWithoutID(t *testing.T) {
 	var cases []listPaginationCase
 	for _, tc := range listPaginationCases() {
@@ -278,7 +368,7 @@ func TestEntitlementListsIgnoreRowsWithoutID(t *testing.T) {
 				}
 				next := map[string]string{"": "tok1", "tok1": "tok2"}[extractPageToken(t, c.method, r)]
 				w.Header().Set("Content-Type", "application/json")
-				_, _ = fmt.Fprintf(w, `{"list":[{}],"nextPageToken":%q}`, next)
+				_, _ = fmt.Fprintf(w, `{"list":[{},{"appEntitlement":{"id":"e%d","appId":"app1"}}],"nextPageToken":%q}`, requests, next)
 			}))
 			defer srv.Close()
 
@@ -286,8 +376,8 @@ func TestEntitlementListsIgnoreRowsWithoutID(t *testing.T) {
 			if err != nil {
 				t.Fatalf("RunE: %v (stderr %q)", err, errOut)
 			}
-			if rows := decodeNDJSONRows(t, out); len(rows) != 3 || requests != 3 {
-				t.Errorf("got %d rows over %d requests, want 3 over 3", len(rows), requests)
+			if rows := decodeNDJSONRows(t, out); len(rows) != 6 || requests != 3 {
+				t.Errorf("got %d rows over %d requests, want 6 over 3", len(rows), requests)
 			}
 		})
 	}
@@ -431,6 +521,162 @@ func TestReadRolesStuckCursorReturnsExitServer(t *testing.T) {
 			}
 			if roleRequests != want {
 				t.Errorf("roles requests = %d, want %d", roleRequests, want)
+			}
+		})
+	}
+}
+
+// Every list command, against a server that answers empty pages under fresh
+// tokens: stop after maxEmptyPages with exit 6, not after the idle cap. The
+// server ends the list soon after, so an unbounded loop fails here instead of
+// hanging.
+func TestListCommandsStopOnEmptyPageRun(t *testing.T) {
+	for _, tc := range listPaginationCases() {
+		t.Run(tc.name, func(t *testing.T) {
+			var requests int
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				requests++
+				w.Header().Set("Content-Type", "application/json")
+				if requests > maxEmptyPages+10 {
+					_, _ = fmt.Fprint(w, tc.page([]string{"last"}, ""))
+					return
+				}
+				_, _ = fmt.Fprint(w, tc.page(nil, fmt.Sprintf("tok-%d", requests)))
+			}))
+			defer srv.Close()
+
+			_, errOut, err := runListPaginationCase(t, tc, srv)
+			if exitCode(err) != exitServer || requests != maxEmptyPages {
+				t.Fatalf("exit %d after %d requests (err %v), want exit 6 after %d", exitCode(err), requests, err, maxEmptyPages)
+			}
+			if !strings.Contains(errOut, "empty pages") {
+				t.Errorf("stderr = %q, want it to name the empty-page run", errOut)
+			}
+		})
+	}
+}
+
+// Every list command with row ids, against a stuck server that adds an
+// id-less row to each repeat of a seen page: the seen rows are not printed
+// again, and the stale run ends it with exit 6.
+func TestListCommandsSkipSeenRowsBesideIDlessRow(t *testing.T) {
+	var seen []string
+	for i := 0; i < stuckStaleRows; i++ {
+		seen = append(seen, fmt.Sprintf("item-%d", i))
+	}
+	for _, tc := range listPaginationCases() {
+		if tc.noRowID {
+			continue
+		}
+		t.Run(tc.name, func(t *testing.T) {
+			var requests int
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				requests++
+				w.Header().Set("Content-Type", "application/json")
+				switch {
+				case requests == 1:
+					_, _ = fmt.Fprint(w, tc.page(seen, "tok-1"))
+				case requests > 10:
+					_, _ = fmt.Fprint(w, tc.page(nil, ""))
+				default:
+					_, _ = fmt.Fprint(w, tc.page(append(append([]string{}, seen...), ""), fmt.Sprintf("tok-%d", requests)))
+				}
+			}))
+			defer srv.Close()
+
+			out, _, err := runListPaginationCase(t, tc, srv)
+			if exitCode(err) != exitServer || requests != 3 {
+				t.Fatalf("exit %d after %d requests (err %v), want exit 6 after 3", exitCode(err), requests, err)
+			}
+			if rows := decodeNDJSONRows(t, out); len(rows) != len(seen)+1 {
+				t.Errorf("got %d rows, want %d (the page once, then only the id-less row)", len(rows), len(seen)+1)
+			}
+		})
+	}
+}
+
+// Every list command with row ids, against a response whose rows all lack the
+// id it reads (a renamed or missing key): fail as an unrecognized shape
+// rather than print rows the guard can't check.
+func TestListCommandsRejectRowsWithoutID(t *testing.T) {
+	for _, tc := range listPaginationCases() {
+		if tc.noRowID {
+			continue
+		}
+		t.Run(tc.name, func(t *testing.T) {
+			var requests int
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				requests++
+				next := fmt.Sprintf("tok-%d", requests)
+				if requests > 10 {
+					next = ""
+				}
+				w.Header().Set("Content-Type", "application/json")
+				_, _ = fmt.Fprint(w, tc.page([]string{"", ""}, next))
+			}))
+			defer srv.Close()
+
+			_, _, err := runListPaginationCase(t, tc, srv)
+			var shapeErr *nonJSONResponseError
+			if !errors.As(err, &shapeErr) || exitCode(err) != exitServer || requests != 1 {
+				t.Fatalf("err %v (exit %d) after %d requests, want an unrecognized-shape exit 6 after 1", err, exitCode(err), requests)
+			}
+		})
+	}
+}
+
+// An executions page whose items lack the automationExecution wrapper must
+// fail, not print nothing at exit 0.
+func TestAutomationsExecutionsListRejectsMissingWrapper(t *testing.T) {
+	var tc listPaginationCase
+	for _, c := range listPaginationCases() {
+		if c.name == "automations executions list" {
+			tc = c
+		}
+	}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = fmt.Fprint(w, `{"list":[{"execution":{"id":"x1"}},{"execution":{"id":"x2"}}],"nextPageToken":""}`)
+	}))
+	defer srv.Close()
+
+	out, _, err := runListPaginationCase(t, tc, srv)
+	if exitCode(err) != exitServer {
+		t.Fatalf("exit %d (err %v, stdout %q), want exit 6", exitCode(err), err, out)
+	}
+}
+
+// Commands whose rows carry no id must not trip on a long run of non-empty
+// pages, nor on empty pages that never run maxEmptyPages long.
+func TestIDlessListCommandsFinishLongRuns(t *testing.T) {
+	for _, tc := range listPaginationCases() {
+		if !tc.noRowID {
+			continue
+		}
+		t.Run(tc.name, func(t *testing.T) {
+			const pages = 2*maxEmptyPages + 5
+			var requests int
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				requests++
+				next := fmt.Sprintf("tok-%d", requests)
+				if requests == pages {
+					next = ""
+				}
+				var ids []string
+				if requests%2 == 0 {
+					ids = []string{fmt.Sprintf("row-%d", requests)}
+				}
+				w.Header().Set("Content-Type", "application/json")
+				_, _ = fmt.Fprint(w, tc.page(ids, next))
+			}))
+			defer srv.Close()
+
+			out, _, err := runListPaginationCase(t, tc, srv)
+			if err != nil || requests != pages {
+				t.Fatalf("err %v after %d requests, want exit 0 after %d", err, requests, pages)
+			}
+			if rows := decodeNDJSONRows(t, out); len(rows) != pages/2 {
+				t.Errorf("got %d rows, want %d", len(rows), pages/2)
 			}
 		})
 	}

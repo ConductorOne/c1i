@@ -76,13 +76,11 @@ scope tiering (see "catalog get" for details and caveats).`,
 			for i, it := range resp.List {
 				ids[i] = it.ID
 			}
-			emit, stuck := guard.checkPage(ids)
-			if stuck {
-				return guard.warnStuck(cmd, route)
+			keep, err := guard.checkPage(cmd, route, ids)
+			if err != nil {
+				return err
 			}
-			if !emit {
-				resp.List = nil
-			}
+			resp.List = keepRows(resp.List, keep)
 			for _, e := range resp.List {
 				_ = enc.Encode(catalogEntryRow(e))
 				if limitReached(enc.Written(), limit) {
