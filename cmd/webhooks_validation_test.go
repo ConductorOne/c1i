@@ -106,3 +106,19 @@ func TestWebhooksDisplayNameLength(t *testing.T) {
 		}
 	}
 }
+
+// The minimum reports the trimmed count, the maximum the raw one.
+func TestWebhooksDisplayNameLengthReportsMeaningfulCount(t *testing.T) {
+	withCatalogDryRun(t, false)
+	for val, want := range map[string]string{"  ab": "got 2", " " + strings.Repeat("a", 100): "got 101"} {
+		for _, tc := range createAndUpdate("display-name", val) {
+			t.Run(tc.name+" "+want, func(t *testing.T) {
+				srv, _ := webhooksServer(t, webhookEnvelope)
+				_, err := runWebhookCmd(t, srv, tc.cmd, tc.args, tc.flags)
+				if err == nil || !strings.Contains(err.Error(), want) {
+					t.Errorf("err = %v, want it to contain %q", err, want)
+				}
+			})
+		}
+	}
+}
