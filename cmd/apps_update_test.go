@@ -50,8 +50,9 @@ func TestBuildAppUpdateBodyExactPatchAndMask(t *testing.T) {
 			wantApp: map[string]any{"revokePolicyId": "rp"}, wantMask: "revokePolicyId"},
 		{name: "certify policy", flags: [][2]string{{"certify-policy-id", "cp"}},
 			wantApp: map[string]any{"certifyPolicyId": "cp"}, wantMask: "certifyPolicyId"},
-		{name: "empty policy id unbinds", flags: [][2]string{{"grant-policy-id", ""}},
+		{name: "unbind policy", flags: [][2]string{{"unbind-policy", "grant"}},
 			wantApp: map[string]any{"grantPolicyId": ""}, wantMask: "grantPolicyId"},
+		{name: "empty policy id is refused", flags: [][2]string{{"grant-policy-id", ""}}, wantError: "--grant-policy-id requires a non-empty value"},
 		{name: "identity matching short", flags: [][2]string{{"identity-matching", "STRICT"}},
 			wantApp: map[string]any{"identityMatching": "APP_USER_IDENTITY_MATCHING_STRICT"}, wantMask: "identityMatching"},
 		{name: "identity matching full enum", flags: [][2]string{{"identity-matching", "app_user_identity_matching_custom"}},
@@ -166,7 +167,7 @@ func TestAppsUpdateWire(t *testing.T) {
 	t.Cleanup(func() { appsUpdateCmd.SetIn(nil) })
 
 	err := runRootWithArgs(t, []string{"apps", "update", appID,
-		"--revoke-policy-id", "", "--identity-matching", "custom", "--app-user-mapper-file", "-"})
+		"--unbind-policy", "revoke", "--identity-matching", "custom", "--app-user-mapper-file", "-"})
 	if err != nil {
 		t.Fatalf("run: %v", err)
 	}
@@ -218,6 +219,11 @@ func TestAppsUpdateDryRunSendsNothing(t *testing.T) {
 func TestAppsCreateWirePolicyFlags(t *testing.T) {
 	var gotBody map[string]any
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if id, ok := strings.CutPrefix(r.URL.Path, "/api/v1/policies/"); ok {
+			typ := map[string]string{"gp": "GRANT", "rp": "REVOKE", "cp": "CERTIFY"}[id]
+			_, _ = fmt.Fprintf(w, `{"policy":{"policyType":"POLICY_TYPE_%s"}}`, typ)
+			return
+		}
 		if r.Method != http.MethodPost || r.URL.Path != "/api/v1/apps" {
 			t.Errorf("request = %s %s", r.Method, r.URL.Path)
 		}

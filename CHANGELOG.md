@@ -28,7 +28,10 @@ credentials fails instead of using the working directory. With a relative
   grant/revoke/certify policy, identity matching
   (`--identity-matching strict|display-name|custom`) and user mapper
   (`--app-user-mapper-file`). `apps create` takes the same policy and
-  identity-matching flags, so a policy can be bound at creation.
+  identity-matching flags, so a policy can be bound at creation. Each policy
+  id is checked first (it must exist, not be deleted, and be of the flag's
+  type; otherwise exit `2` and nothing is sent). An empty policy id is exit
+  `2`; `apps update --unbind-policy grant|revoke|certify` unbinds one.
 
 ### Changed
 

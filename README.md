@@ -72,7 +72,7 @@ c1i users get <user-id>
 c1i apps list [--page-size N] [--page-token TOKEN] [--limit N]
 c1i apps get <app-id>
 c1i apps create --display-name <name> [--description <text>] [--grant-policy-id <id>] [--revoke-policy-id <id>] [--certify-policy-id <id>] [--identity-matching strict|display-name|custom]
-c1i apps update <app-id> [--display-name <name>] [--description <text>] [--grant-policy-id <id>] [--revoke-policy-id <id>] [--certify-policy-id <id>] [--identity-matching strict|display-name|custom] [--app-user-mapper-file <path|->]
+c1i apps update <app-id> [--display-name <name>] [--description <text>] [--grant-policy-id <id>] [--revoke-policy-id <id>] [--certify-policy-id <id>] [--unbind-policy grant|revoke|certify]... [--identity-matching strict|display-name|custom] [--app-user-mapper-file <path|->]
 c1i apps owners <app-id> [--page-size N] [--page-token TOKEN] [--limit N]
 c1i apps add-owner <user-id> --app-id <id>
 c1i apps remove-owner <user-id> --app-id <id>
@@ -91,9 +91,11 @@ new id from `.app.id` on the full object, not `.id`.
 `{"app": ...}`. `--grant-policy-id`, `--revoke-policy-id` and
 `--certify-policy-id` bind policies, on `apps create` too (omitted at create,
 the server assigns its default grant and revoke policies and no certify
-policy); `""` unbinds one on update. The server does not check these ids: a
-nonexistent policy, or a revoke policy passed as `--grant-policy-id`, is
-stored as given with exit `0`, so check the id with `policies get` first.
+policy). Before sending, c1i fetches each policy and refuses (exit `2`,
+nothing sent) an id that doesn't exist, is deleted, or isn't of the flag's
+type; `--dry-run` skips this check. An empty policy id is a usage error, not
+an unbind: unbind with `--unbind-policy grant|revoke|certify` (repeatable),
+which can't be combined with setting the same kind.
 `--identity-matching` takes `strict`, `display-name`, `custom`, or the full
 `APP_USER_IDENTITY_MATCHING_*` name; any other value is a usage error (exit
 `2`). `--app-user-mapper-file` replaces the whole mapper with a JSON object
