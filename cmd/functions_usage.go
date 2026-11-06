@@ -3,7 +3,6 @@ package cmd
 import (
 	"encoding/json"
 	"fmt"
-	"strconv"
 
 	"github.com/spf13/cobra"
 )
@@ -16,7 +15,7 @@ that calls this function. Useful for "is this function still used?"
 audits before deleting a draft, or to find an example automation that
 exercises a published function.
 
-Reads /api/v1/automations and inspects automationSteps[].callFunction.
+Reads POST /api/v1/search/automations and inspects automationSteps[].callFunction.
 NDJSON fields: automation_id, automation_name, step_name, enabled,
 last_executed_at, args.`,
 	Args: cobra.ExactArgs(1),
@@ -58,15 +57,15 @@ last_executed_at, args.`,
 		guard := newPaginationCursorGuard()
 		for !limitReached(enc.Written(), limit) {
 			if guard.tokenAlreadyUsed(pageToken) {
-				return warnStuckCursor(cmd, "GET /api/v1/automations")
+				return warnStuckCursor(cmd, "POST /api/v1/search/automations")
 			}
 
-			params := map[string]string{"page_size": strconv.Itoa(pageSize)}
+			body := map[string]any{"pageSize": pageSize}
 			if pageToken != "" {
-				params["page_token"] = pageToken
+				body["pageToken"] = pageToken
 			}
 
-			data, err := c.Get(cmd.Context(), "/api/v1/automations", params)
+			data, err := c.Post(cmd.Context(), "/api/v1/search/automations", body)
 			if err != nil {
 				return fmt.Errorf("API error: %w", err)
 			}
@@ -97,7 +96,7 @@ last_executed_at, args.`,
 			}
 			emit, stuck := guard.checkPage(ids)
 			if stuck {
-				return warnStuckCursor(cmd, "GET /api/v1/automations")
+				return warnStuckCursor(cmd, "POST /api/v1/search/automations")
 			}
 			if !emit {
 				resp.List = nil

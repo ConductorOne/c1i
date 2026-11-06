@@ -307,11 +307,13 @@ c1i functions usage <function-id> [--page-size N] [--page-token TOKEN] [--limit 
 
 `functions source` auto-resolves the function's published commit (falling back to its head/latest draft) and base64-decodes the source files. Without `--out-dir`, each file is printed to stdout with a `// ===== <name> =====` delimiter; with `--out-dir`, files are written to disk. Fetched source is developer-authored code that commonly inlines credentials, so files are written `0600` and the directory is created — or, if it already exists, tightened, never widened — to at most `0700` (owner-only; group access to the directory would buy nothing since the files inside are already unreadable to group/other, and a filename alone can be informative). Any setuid/setgid/sticky bit on the directory is stripped outright, since none of them mean anything once there is no group or other access left. A tightened pre-existing directory prints a warning to stderr naming its old mode. `functions usage` scans every automation and emits one row per step that calls the given function — useful before deleting a draft.
 
-`functions list`, `functions commits`, and `functions usage` (which reads
-`/api/v1/automations`) stop if the server's pagination cursor stops
-advancing — a repeated `nextPageToken`, or two pages in a row holding only
-rows already seen, which these routes can do on large result sets. The command keeps the rows already printed, warns on stderr that
-results are INCOMPLETE and names the route, and exits `6`.
+`functions list` and `functions commits` stop if the server's pagination
+cursor stops advancing — a repeated `nextPageToken`, or two pages in a row
+holding only rows already seen, which these routes can do on large result
+sets. The command keeps the rows already printed, warns on stderr that
+results are INCOMPLETE and names the route, and exits `6`. `functions usage`
+reads `POST /api/v1/search/automations`, which pages correctly, and keeps the
+same guard as a backstop.
 
 ### Automations
 
@@ -323,8 +325,10 @@ c1i automations executions list [--state done|error|pending|...] [--template-id 
 
 Each `automations list` row includes `function_ids` (every distinct function the automation invokes), so `--calls-function` can answer "which automations call function X?". `executions list --state` accepts the short forms (`done`, `error`, `pending`, ...) or the full `AUTOMATION_EXECUTION_STATE_*` enum; state and template filtering are applied client-side, so pair a narrow filter with `--limit` to bound the work.
 
-`automations list` and `automations executions list` carry the same
-stuck-cursor guard described under Functions above.
+`automations list` and `automations executions list` read
+`POST /api/v1/search/automations` and `POST /api/v1/search/automation_executions`
+(the `GET` routes stop paging on large result sets) and keep the stuck-cursor
+guard described under Functions above as a backstop.
 
 ### Policies
 

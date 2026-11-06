@@ -3,7 +3,6 @@ package cmd
 import (
 	"encoding/json"
 	"fmt"
-	"strconv"
 
 	"github.com/spf13/cobra"
 )
@@ -44,7 +43,7 @@ func uniqueFunctionIDs(steps []automationStep) []string {
 	return ids
 }
 
-// automationListItem is one row of GET /api/v1/automations.
+// automationListItem is one row of POST /api/v1/search/automations.
 type automationListItem struct {
 	ID                 string           `json:"id"`
 	DisplayName        string           `json:"displayName"`
@@ -104,21 +103,21 @@ var automationsListCmd = &cobra.Command{
 		guard := newPaginationCursorGuard()
 		for !limitReached(enc.Written(), limit) {
 			if guard.tokenAlreadyUsed(pageToken) {
-				return warnStuckCursor(cmd, "GET /api/v1/automations")
+				return warnStuckCursor(cmd, "POST /api/v1/search/automations")
 			}
 
 			pageSize := requestedPageSize
 			if !clientFilter && !enc.Filtered() {
 				pageSize = effectivePageSize(requestedPageSize, limit, enc.Written())
 			}
-			params := map[string]string{
-				"page_size": strconv.Itoa(pageSize),
-			}
+			body := map[string]any{"pageSize": pageSize}
 			if pageToken != "" {
-				params["page_token"] = pageToken
+				body["pageToken"] = pageToken
 			}
 
-			data, err := c.Get(cmd.Context(), "/api/v1/automations", params)
+			// The search route, not GET /api/v1/automations: the GET ignores
+			// page_size/page_token and serves page 1 forever past ~60 rows.
+			data, err := c.Post(cmd.Context(), "/api/v1/search/automations", body)
 			if err != nil {
 				return fmt.Errorf("API error: %w", err)
 			}
@@ -137,7 +136,7 @@ var automationsListCmd = &cobra.Command{
 			}
 			emit, stuck := guard.checkPage(ids)
 			if stuck {
-				return warnStuckCursor(cmd, "GET /api/v1/automations")
+				return warnStuckCursor(cmd, "POST /api/v1/search/automations")
 			}
 			if !emit {
 				resp.List = nil
