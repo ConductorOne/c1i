@@ -379,7 +379,7 @@ c1i automations executions list [--state done|error|pending|...] [--template-id 
 
 Each `automations list` row includes `function_ids` (every distinct function the automation invokes), so `--calls-function` can answer "which automations call function X?". `executions list --state` accepts the short forms (`done`, `error`, `pending`, ...) or the full `AUTOMATION_EXECUTION_STATE_*` enum; state and template filtering are applied client-side, so pair a narrow filter with `--limit` to bound the work.
 
-`automations update` sends only the fields you pass (an explicit `--enabled=false` disables; an empty `--display-name` is refused). For triggers, steps, draft or circuit-breaker fields, pass an Automation object with `--body-file` and list the camelCase fields to change in `--update-mask`. Masking `triggers` replaces the published triggers and increments `currentVersion`; `draftTriggers` and `isDraft` are left as they were. `automations delete` is a soft delete: the automation leaves `automations list`, but `automations get` still returns it.
+`automations update` sends only the fields you pass (an explicit `--enabled=false` disables; an empty or whitespace-only `--display-name` is refused). For triggers, steps, draft or circuit-breaker fields, pass an Automation object with `--body-file` and list the camelCase fields to change in `--update-mask`. Masking `triggers` replaces the published triggers and increments `currentVersion`; `draftTriggers` and `isDraft` are left as they were. `automations delete` is a soft delete: the automation leaves `automations list`, but `automations get` still returns it.
 
 `automations list` and `automations executions list` read
 `POST /api/v1/search/automations` and `POST /api/v1/search/automation_executions`

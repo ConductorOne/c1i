@@ -16,6 +16,9 @@ A toolset is an admin-curated grouping of MCP tools bound to a single
 AppEntitlement so users can request/get granted the whole bundle at once.
 After creating, attach tools with "c1i mcp bindings create".`,
 	RunE: func(cmd *cobra.Command, args []string) error {
+		if _, err := requireNonEmptyIfSet(cmd, "display-name"); err != nil {
+			return err
+		}
 		if err := requireNonEmpty(cmd, "app-id", "connector-id", "display-name"); err != nil {
 			return err
 		}

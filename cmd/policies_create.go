@@ -60,6 +60,9 @@ with "c1i policies validate-cel" before using it here (note: that command
 validates the rules[].condition environment, not the different environment
 ExpressionApproval.expressions run in — see its --help).`,
 	RunE: func(cmd *cobra.Command, args []string) error {
+		if _, err := requireNonEmptyIfSet(cmd, "display-name"); err != nil {
+			return err
+		}
 		body, err := buildCreatePolicyBody(cmd)
 		if err != nil {
 			return &usageError{err}

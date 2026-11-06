@@ -58,6 +58,9 @@ requires --app-id. Approve discovered tools afterward with
 			return printConfigTemplate(cmd)
 		}
 
+		if _, err := requireNonEmptyIfSet(cmd, "display-name"); err != nil {
+			return err
+		}
 		if err := requireNonEmpty(cmd, "app-id", "type", "display-name"); err != nil {
 			// Wrap as a usage error so a missing required flag still maps to
 			// exit code 2 (these flags are annotate-only, not cobra-required,

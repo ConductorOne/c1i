@@ -10,8 +10,15 @@ import (
 var servicePrincipalsUpdateCmd = &cobra.Command{
 	Use:   "update <sp-id>",
 	Short: "Update a service principal's display name",
-	Args:  cobra.ExactArgs(1),
+	Long: `Update a service principal's display name.
+
+--display-name cannot be empty or whitespace-only (exit 2, nothing sent):
+the server stores "" as an empty name and keeps "  " verbatim.`,
+	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
+		if _, err := requireNonEmptyIfSet(cmd, "display-name"); err != nil {
+			return err
+		}
 		id := args[0]
 		sp := map[string]any{"id": id}
 		var paths []string
@@ -52,6 +59,6 @@ var servicePrincipalsUpdateCmd = &cobra.Command{
 }
 
 func init() {
-	servicePrincipalsUpdateCmd.Flags().String("display-name", "", "New display name")
+	servicePrincipalsUpdateCmd.Flags().String("display-name", "", "New display name (omit to leave unchanged; cannot be empty or whitespace-only)")
 	servicePrincipalsCmd.AddCommand(servicePrincipalsUpdateCmd)
 }

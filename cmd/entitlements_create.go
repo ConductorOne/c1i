@@ -104,6 +104,9 @@ Example:
     --display-name "Payroll admin" --resource-type-display-name "Payroll role" \
     --slug member --alias payroll_admin`,
 	RunE: func(cmd *cobra.Command, args []string) error {
+		if _, err := requireNonEmptyIfSet(cmd, "display-name"); err != nil {
+			return err
+		}
 		if err := requireNonEmpty(cmd, "app-id", "display-name"); err != nil {
 			return err
 		}

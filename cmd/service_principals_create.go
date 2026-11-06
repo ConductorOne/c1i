@@ -10,6 +10,9 @@ var servicePrincipalsCreateCmd = &cobra.Command{
 	Use:   "create",
 	Short: "Create a service principal",
 	RunE: func(cmd *cobra.Command, args []string) error {
+		if _, err := requireNonEmptyIfSet(cmd, "display-name"); err != nil {
+			return err
+		}
 		if err := requireNonEmpty(cmd, "display-name"); err != nil {
 			return err
 		}

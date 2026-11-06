@@ -16,9 +16,15 @@ which flags you set: pass --display-name to change only the name, and so on.
 
 Updatable fields: display_name, description, data_sensitivity, tool_prefix,
 require_tool_approval. Auth config and URL are NOT updatable here — use
-"c1i mcp servers update-credentials" for those.`,
+"c1i mcp servers update-credentials" for those.
+
+--display-name cannot be empty or whitespace-only (exit 2, nothing sent):
+the server stores "" as an empty name and keeps "  " verbatim.`,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
+		if _, err := requireNonEmptyIfSet(cmd, "display-name"); err != nil {
+			return err
+		}
 		if err := requireNonEmpty(cmd, "app-id"); err != nil {
 			return err
 		}
@@ -96,7 +102,7 @@ require_tool_approval. Auth config and URL are NOT updatable here — use
 
 func init() {
 	mcpServersUpdateCmd.Flags().String("app-id", "", "Application ID")
-	mcpServersUpdateCmd.Flags().String("display-name", "", "New display name")
+	mcpServersUpdateCmd.Flags().String("display-name", "", "New display name (omit to leave unchanged; cannot be empty or whitespace-only)")
 	mcpServersUpdateCmd.Flags().String("description", "", "New description")
 	mcpServersUpdateCmd.Flags().String("data-sensitivity", "", "New data sensitivity: public, internal, confidential, restricted")
 	mcpServersUpdateCmd.Flags().String("tool-prefix", "", "New tool-name prefix")

@@ -18,6 +18,9 @@ The API requires {"app": {"id": "...", ...}, "updateMask": "..."}. The update
 mask is derived exactly from the flags you pass: an omitted flag is left
 alone, while an explicit empty value is a change.
 
+--display-name cannot be empty or whitespace-only (exit 2, nothing sent):
+the server answers "" with exit 0 but keeps the old name, and stores "  ".
+
 --grant-policy-id, --revoke-policy-id and --certify-policy-id bind a policy
 to the app. Before sending, c1i fetches each policy and refuses (exit 2,
 nothing sent) an id that doesn't exist, is deleted, or isn't of the flag's
@@ -43,6 +46,9 @@ accepts an empty mapper with exit 0 but keeps the existing one. This API
 offers no way to remove a mapper.`,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
+		if _, err := requireNonEmptyIfSet(cmd, "display-name"); err != nil {
+			return err
+		}
 		body, err := buildAppUpdateBody(cmd, args[0])
 		if err != nil {
 			return &usageError{err}
@@ -183,7 +189,7 @@ func buildAppUpdateBody(cmd *cobra.Command, id string) (map[string]any, error) {
 
 func init() {
 	f := appsUpdateCmd.Flags()
-	f.String("display-name", "", "New display name (omit to leave unchanged)")
+	f.String("display-name", "", "New display name (omit to leave unchanged; cannot be empty or whitespace-only)")
 	f.String("description", "", "New description; pass an empty value to clear it (omit to leave unchanged)")
 	registerPolicyIDFlags(appsUpdateCmd, appPolicyKinds, " (omit to leave unchanged)")
 	registerUnbindPolicyFlag(appsUpdateCmd, appPolicyKinds)
