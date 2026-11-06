@@ -90,7 +90,7 @@ func applyPolicyUpdates(cmd *cobra.Command, kinds []policyKind, obj map[string]a
 	}
 	unbind := map[string]bool{}
 	for _, r := range raw {
-		v := strings.ToLower(strings.TrimSpace(r))
+		v := strings.ToLower(strings.ReplaceAll(strings.TrimSpace(r), "_", "-"))
 		known := false
 		for _, k := range kinds {
 			known = known || k.kind == v

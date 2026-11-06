@@ -239,7 +239,7 @@ func TestEntitlementsUpdatePrintsRawResponse(t *testing.T) {
 func TestEntitlementPolicyBindingValidation(t *testing.T) {
 	policies := map[string]string{
 		"gp": "POLICY_TYPE_GRANT", "rp": "POLICY_TYPE_REVOKE", "cp": "POLICY_TYPE_CERTIFY",
-		"del": "deleted:POLICY_TYPE_GRANT",
+		"del": "deleted:POLICY_TYPE_GRANT", "np": "nopolicy",
 	}
 	upd := []string{"entitlements", "update", "ent-1", "--app-id", "app-1"}
 	crt := []string{"entitlements", "create", "--app-id", "app-1", "--display-name", "e", "--resource-type-id", "rt-1", "--resource-id", "res-1"}
@@ -249,9 +249,16 @@ func TestEntitlementPolicyBindingValidation(t *testing.T) {
 		args        []string
 		dryRun      bool
 		wantErr     string
+		wantExit    int // when wantErr is set; 0 means exitUsage
 		wantLookups int
 		wantPosts   int
+		wantReq     string // a substring of some request line
 	}{
+		{name: "update 200 without policy is a C1 fault", args: with(upd, "--emergency-grant-policy-id", "np"), wantErr: "no policy", wantExit: exitServer, wantLookups: 1},
+		{name: "create 200 without policy is a C1 fault", args: with(crt, "--emergency-grant-policy-id", "np"), wantErr: "no policy", wantExit: exitServer, wantLookups: 1},
+		{name: "update trims policy id", args: with(upd, "--emergency-grant-policy-id", " gp ", "--emergency-grant-enabled"), wantLookups: 1, wantPosts: 1, wantReq: `"emergencyGrantPolicyId":"gp"`},
+		{name: "create trims policy id", args: with(crt, "--emergency-grant-policy-id", "\tgp\n"), wantLookups: 1, wantPosts: 1, wantReq: `"emergencyGrantPolicyId":"gp"`},
+		{name: "update unbind accepts underscore", args: with(upd, "--unbind-policy", "EMERGENCY_GRANT"), wantPosts: 1, wantReq: `"emergencyGrantPolicyId":""`},
 		{name: "update missing", args: with(upd, "--grant-policy-id", "nope"), wantErr: `--grant-policy-id "nope": no such policy`, wantLookups: 1},
 		{name: "update deleted", args: with(upd, "--certify-policy-id", "del"), wantErr: "policy is deleted", wantLookups: 1},
 		{name: "update wrong grant", args: with(upd, "--grant-policy-id", "rp"), wantErr: "it must be POLICY_TYPE_GRANT", wantLookups: 1},
@@ -284,11 +291,18 @@ func TestEntitlementPolicyBindingValidation(t *testing.T) {
 				if err == nil || !strings.Contains(err.Error(), tc.wantErr) {
 					t.Fatalf("err = %v, want it to contain %q", err, tc.wantErr)
 				}
-				if got := exitCode(err); got != exitUsage {
-					t.Errorf("exit = %d, want %d", got, exitUsage)
+				want := tc.wantExit
+				if want == 0 {
+					want = exitUsage
+				}
+				if got := exitCode(err); got != want {
+					t.Errorf("exit = %d, want %d", got, want)
 				}
 			}
 			reqs := requests()
+			if tc.wantReq != "" && !strings.Contains(strings.Join(reqs, "\n"), tc.wantReq) {
+				t.Errorf("no request contains %s: %v", tc.wantReq, reqs)
+			}
 			if got := countRequests(reqs, "GET /api/v1/policies/"); got != tc.wantLookups {
 				t.Errorf("policy lookups = %d, want %d (%v)", got, tc.wantLookups, reqs)
 			}
