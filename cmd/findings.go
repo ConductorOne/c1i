@@ -226,11 +226,11 @@ func getFixedList(cmd *cobra.Command, path string, row listRowFn) error {
 			return nil
 		}
 	}
-	// These routes document no page_token, so a cursor can't be followed; it
-	// still must not pass as a complete result.
+	// These routes don't paginate today, so a cursor isn't followed; it still
+	// must not pass as a complete result.
 	if next != "" {
 		_, _ = fmt.Fprintf(cmd.ErrOrStderr(),
-			"Warning: GET %s returned a partial result — the server reported more pages, but this endpoint documents no page_token parameter, so c1i cannot fetch them.\n", path)
+			"Warning: GET %s returned a partial result — the server reported more pages, which c1i does not fetch for this command.\n", path)
 	}
 	return nil
 }

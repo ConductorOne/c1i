@@ -79,6 +79,7 @@ func TestFixedListWarnsOnNextPageToken(t *testing.T) {
 				{"absent token silent", `{"list":[{"id":"a"}]}`, nil, 1, false},
 				// --limit satisfied inside the page: the caller got what was asked for.
 				{"limit reached silent", `{"list":[{"id":"a"},{"id":"b"}],"nextPageToken":"more"}`, map[string]string{"limit": "1"}, 1, false},
+				{"limit not reached warns", `{"list":[{"id":"a"},{"id":"b"}],"nextPageToken":"more"}`, map[string]string{"limit": "5"}, 2, true},
 			} {
 				t.Run(tc.label, func(t *testing.T) {
 					out, errOut := runFixedList(t, cmd, tc.body, tc.flags)

@@ -25,7 +25,7 @@ credentials fails instead of using the working directory. With a relative
 
 - **`role-mining suggestions|runs|custom-analysis list` and
   `findings routing-rules|transformation-rules list` would drop a page
-  silently** if the server ever paginated them: they make one request and
+  silently** if the server ever paginated them: they made one request and
   ignored `nextPageToken`. They now warn on stderr when one is returned.
   None of these routes paginate today.
 
