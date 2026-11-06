@@ -158,12 +158,17 @@ func TestPaginationCursorGuardIgnoresEmptyIDs(t *testing.T) {
 }
 
 // A row with no id on an otherwise-seen page might be new, so it is emitted;
-// the seen row beside it is not.
+// the seen row beside it is not. A page with any new id is emitted whole,
+// repeats included, since an id need not be unique.
 func TestPaginationCursorGuardKeepsPageWithIDlessRow(t *testing.T) {
 	g := newPaginationCursorGuard()
 	_, _ = g.checkPage(nil, "GET /x", []string{"a", "b"})
-	keep, err := g.checkPage(nil, "GET /x", []string{"", "a", "c", "c"})
-	if err != nil || !keep[0] || keep[1] || !keep[2] || keep[3] {
-		t.Fatalf("keep=%v err=%v, want [true false true false]", keep, err)
+	keep, err := g.checkPage(nil, "GET /x", []string{"", "a"})
+	if err != nil || !keep[0] || keep[1] {
+		t.Fatalf("stale page: keep=%v err=%v, want [true false]", keep, err)
+	}
+	keep, err = g.checkPage(nil, "GET /x", []string{"", "a", "c", "c"})
+	if err != nil || !keep[0] || !keep[1] || !keep[2] || !keep[3] {
+		t.Fatalf("fresh page: keep=%v err=%v, want all true", keep, err)
 	}
 }

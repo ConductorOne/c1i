@@ -343,8 +343,8 @@ func TestEntitlementListsKeyGuardOnAppAndID(t *testing.T) {
 	}
 }
 
-// Rows with no entitlement id carry no evidence of a repeat, so they are
-// emitted beside rows that have one and never trip the guard.
+// Rows with no entitlement id carry no evidence of a repeat, so pages of them
+// under fresh tokens must not trip the guard.
 func TestEntitlementListsIgnoreRowsWithoutID(t *testing.T) {
 	var cases []listPaginationCase
 	for _, tc := range listPaginationCases() {
@@ -368,7 +368,7 @@ func TestEntitlementListsIgnoreRowsWithoutID(t *testing.T) {
 				}
 				next := map[string]string{"": "tok1", "tok1": "tok2"}[extractPageToken(t, c.method, r)]
 				w.Header().Set("Content-Type", "application/json")
-				_, _ = fmt.Fprintf(w, `{"list":[{},{"appEntitlement":{"id":"e%d","appId":"app1"}}],"nextPageToken":%q}`, requests, next)
+				_, _ = fmt.Fprintf(w, `{"list":[{}],"nextPageToken":%q}`, next)
 			}))
 			defer srv.Close()
 
@@ -376,8 +376,8 @@ func TestEntitlementListsIgnoreRowsWithoutID(t *testing.T) {
 			if err != nil {
 				t.Fatalf("RunE: %v (stderr %q)", err, errOut)
 			}
-			if rows := decodeNDJSONRows(t, out); len(rows) != 6 || requests != 3 {
-				t.Errorf("got %d rows over %d requests, want 6 over 3", len(rows), requests)
+			if rows := decodeNDJSONRows(t, out); len(rows) != 3 || requests != 3 {
+				t.Errorf("got %d rows over %d requests, want 3 over 3", len(rows), requests)
 			}
 		})
 	}
@@ -526,12 +526,15 @@ func TestReadRolesStuckCursorReturnsExitServer(t *testing.T) {
 	}
 }
 
-// Every list command, against a server that answers empty pages under fresh
-// tokens: stop after maxEmptyPages with exit 6, not after the idle cap. The
-// server ends the list soon after, so an unbounded loop fails here instead of
-// hanging.
+// Every list command but the audit log, against a server that answers empty
+// pages under fresh tokens: stop after maxEmptyPages with exit 6, not after
+// the idle cap. The server ends the list soon after, so an unbounded loop
+// fails here instead of hanging.
 func TestListCommandsStopOnEmptyPageRun(t *testing.T) {
 	for _, tc := range listPaginationCases() {
+		if tc.name == "export events" {
+			continue
+		}
 		t.Run(tc.name, func(t *testing.T) {
 			var requests int
 			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -598,17 +601,60 @@ func TestListCommandsSkipSeenRowsBesideIDlessRow(t *testing.T) {
 // Every list command with row ids, against a response whose rows all lack the
 // id it reads (a renamed or missing key): fail as an unrecognized shape
 // rather than print rows the guard can't check.
+// On a later page the earlier rows are already printed, so the error must
+// also say the result is incomplete.
 func TestListCommandsRejectRowsWithoutID(t *testing.T) {
 	for _, tc := range listPaginationCases() {
-		if tc.noRowID {
+		if tc.noRowID || tc.compositeID {
 			continue
 		}
+		for _, badPage := range []int{1, 2} {
+			t.Run(fmt.Sprintf("%s/page %d", tc.name, badPage), func(t *testing.T) {
+				var requests int
+				srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					requests++
+					next := fmt.Sprintf("tok-%d", requests)
+					if requests > 10 {
+						next = ""
+					}
+					w.Header().Set("Content-Type", "application/json")
+					if requests < badPage {
+						_, _ = fmt.Fprint(w, tc.page([]string{"first"}, next))
+						return
+					}
+					_, _ = fmt.Fprint(w, tc.page([]string{"", ""}, next))
+				}))
+				defer srv.Close()
+
+				_, errOut, err := runListPaginationCase(t, tc, srv)
+				var shapeErr *nonJSONResponseError
+				if !errors.As(err, &shapeErr) || exitCode(err) != exitServer || requests != badPage {
+					t.Fatalf("err %v (exit %d) after %d requests, want an unrecognized-shape exit 6 after %d", err, exitCode(err), requests, badPage)
+				}
+				incomplete := strings.Contains(err.Error(), "INCOMPLETE") && strings.Contains(errOut, "INCOMPLETE")
+				if incomplete != (badPage > 1) {
+					t.Errorf("err %q, stderr %q: INCOMPLETE reported = %v, want %v", err, errOut, incomplete, badPage > 1)
+				}
+			})
+		}
+	}
+}
+
+// Composite or expanded ids can legitimately be missing, so a page of rows
+// without one is emitted, not rejected.
+func TestCompositeIDListCommandsEmitRowsWithoutID(t *testing.T) {
+	var n int
+	for _, tc := range listPaginationCases() {
+		if !tc.compositeID {
+			continue
+		}
+		n++
 		t.Run(tc.name, func(t *testing.T) {
 			var requests int
 			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				requests++
 				next := fmt.Sprintf("tok-%d", requests)
-				if requests > 10 {
+				if requests == 3 {
 					next = ""
 				}
 				w.Header().Set("Content-Type", "application/json")
@@ -616,12 +662,81 @@ func TestListCommandsRejectRowsWithoutID(t *testing.T) {
 			}))
 			defer srv.Close()
 
-			_, _, err := runListPaginationCase(t, tc, srv)
-			var shapeErr *nonJSONResponseError
-			if !errors.As(err, &shapeErr) || exitCode(err) != exitServer || requests != 1 {
-				t.Fatalf("err %v (exit %d) after %d requests, want an unrecognized-shape exit 6 after 1", err, exitCode(err), requests)
+			out, errOut, err := runListPaginationCase(t, tc, srv)
+			if err != nil || requests != 3 {
+				t.Fatalf("err %v after %d requests (stderr %q), want exit 0 after 3", err, requests, errOut)
+			}
+			if rows := decodeNDJSONRows(t, out); len(rows) != 6 {
+				t.Errorf("got %d rows, want 6", len(rows))
 			}
 		})
+	}
+	if n != 5 {
+		t.Fatalf("found %d compositeID cases, want 5", n)
+	}
+}
+
+// A grant whose expanded account or entitlement is null still carries the
+// binding's flat ids; they must identify the row and fill its output.
+func TestGrantsListFallsBackToBindingIDs(t *testing.T) {
+	var tc listPaginationCase
+	for _, c := range listPaginationCases() {
+		if c.name == "grants list" {
+			tc = c
+		}
+	}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		next := "tok1"
+		user := "u1"
+		if extractPageToken(t, tc.method, r) == "tok1" {
+			next, user = "", "u2"
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = fmt.Fprintf(w, `{"list":[{"appEntitlementUserBinding":{"appId":"app1","appEntitlementId":"ent1","appUserId":%q,"appUser":null},"entitlement":null}],"nextPageToken":%q}`, user, next)
+	}))
+	defer srv.Close()
+
+	out, errOut, err := runListPaginationCase(t, tc, srv)
+	if err != nil {
+		t.Fatalf("RunE: %v (stderr %q)", err, errOut)
+	}
+	rows := decodeNDJSONRows(t, out)
+	if len(rows) != 2 || rows[0]["app_user_id"] != "u1" || rows[1]["app_user_id"] != "u2" || rows[0]["entitlement_id"] != "ent1" || rows[0]["app_id"] != "app1" {
+		t.Errorf("rows = %v, want u1 and u2 with entitlement ent1 in app1", rows)
+	}
+	if id := grantGuardID(grantListItem{}); id != "" {
+		t.Errorf("grantGuardID of an empty grant = %q, want empty", id)
+	}
+}
+
+// The audit log can page through a long quiet stretch; its uncapped guard
+// must not stop on empty pages.
+func TestExportEventsIgnoresEmptyPageRun(t *testing.T) {
+	var tc listPaginationCase
+	for _, c := range listPaginationCases() {
+		if c.name == "export events" {
+			tc = c
+		}
+	}
+	const pages = maxEmptyPages + 50
+	var requests int
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests++
+		w.Header().Set("Content-Type", "application/json")
+		if requests == pages {
+			_, _ = fmt.Fprint(w, tc.page([]string{"last"}, ""))
+			return
+		}
+		_, _ = fmt.Fprint(w, tc.page(nil, fmt.Sprintf("tok-%d", requests)))
+	}))
+	defer srv.Close()
+
+	out, errOut, err := runListPaginationCase(t, tc, srv)
+	if err != nil || requests != pages {
+		t.Fatalf("err %v after %d requests (stderr %q), want exit 0 after %d", err, requests, errOut, pages)
+	}
+	if rows := decodeNDJSONRows(t, out); len(rows) != 1 {
+		t.Errorf("got %d rows, want 1", len(rows))
 	}
 }
 

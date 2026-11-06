@@ -857,6 +857,36 @@ func TestAPIPaginateSameTokenTwiceReturnsExitServer(t *testing.T) {
 	}
 }
 
+// A bare "id" need not be unique (an entitlement id repeats across apps), and
+// identical id-less items are legitimate, so a page with any new identity is
+// emitted whole.
+func TestAPIPaginateKeepsItemsSharingAnIdentity(t *testing.T) {
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.URL.Query().Get("page_token") == "" {
+			_, _ = fmt.Fprint(w, `{"list":[{"id":"e1","appId":"a1"},{"id":"e1","appId":"a2"},{"x":1},{"x":1}],"nextPageToken":"tok1"}`)
+			return
+		}
+		_, _ = fmt.Fprint(w, `{"list":[{"id":"e1","appId":"a3"},{"id":"e2"}],"nextPageToken":""}`)
+	}))
+	defer srv.Close()
+
+	resetAPICmdFlags(t)
+	stubNewAPIClient(t, srv)
+	t.Setenv("C1I_URL", srv.URL)
+
+	var out, errOut bytes.Buffer
+	apiCmd.SetOut(&out)
+	apiCmd.SetErr(&errOut)
+	rootCmd.SetArgs([]string{"api", "--path", "/api/v1/x", "--paginate"})
+	if err := rootCmd.ExecuteContext(context.Background()); err != nil {
+		t.Fatalf("ExecuteContext: %v (stderr %q)", err, errOut.String())
+	}
+	if rows := decodeNDJSONRows(t, out.String()); len(rows) != 6 {
+		t.Errorf("got %d rows, want all 6", len(rows))
+	}
+}
+
 // The observed defect: a fresh token every call over the same page. The
 // identical page, not the token, must trip the guard.
 func TestAPIPaginateChangingTokenSameRowsReturnsExitServer(t *testing.T) {

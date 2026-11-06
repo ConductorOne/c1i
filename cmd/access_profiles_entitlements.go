@@ -174,7 +174,7 @@ func newAccessProfileEntitlementListCmd(short, endpoint string) *cobra.Command {
 			enc := newEmitter(cmd)
 			path := client.Path("/api/v1/catalogs/%s/"+endpoint, args[0])
 
-			guard := newPaginationCursorGuard()
+			guard := newPaginationCursorGuard().withCompositeIDs()
 			route := "GET " + path
 			for !limitReached(enc.Written(), limit) {
 				if guard.tokenAlreadyUsed(pageToken) {

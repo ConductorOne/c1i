@@ -60,7 +60,7 @@ var entitlementsListCmd = &cobra.Command{
 		limit := getIntFlag(cmd, "limit")
 
 		enc := newEmitter(cmd)
-		guard := newPaginationCursorGuard()
+		guard := newPaginationCursorGuard().withCompositeIDs()
 		route := "POST /api/v1/search/entitlements"
 		for !limitReached(enc.Written(), limit) {
 			if guard.tokenAlreadyUsed(pageToken) {

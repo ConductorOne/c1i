@@ -34,11 +34,15 @@ credentials fails instead of using the working directory. With a relative
   `1`.
 
 - **A stuck cursor could still re-print rows or run for 100,000 pages.** A
-  row already printed is now skipped even on a page that also holds a row
-  without an id, and 100 empty pages in a row end a list with exit `6`. A
-  page whose rows all lack the id the command reads, including an
-  `automations executions list` page with no `automationExecution` item, now
-  exits `6` instead of printing unchecked rows or nothing.
+  page of rows already printed is now skipped even when it also holds a row
+  without an id (only that row is printed), and 100 empty pages in a row end
+  a list with exit `6` (`export events` excepted). A page whose rows all lack
+  the id the command reads, including an `automations executions list` page
+  with no `automationExecution` item, now exits `6` instead of printing
+  unchecked rows or nothing; `grants list` and the entitlement lists, keyed
+  on several fields, still print such rows. `grants list` now reads a grant's
+  account and entitlement ids from the binding when the expanded objects are
+  missing.
 
 - **`role-mining suggestions|runs|custom-analysis list` and
   `findings routing-rules|transformation-rules list` would drop a page

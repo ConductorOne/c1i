@@ -252,6 +252,9 @@ func listJSONPages(cmd *cobra.Command, route string, idKeys []string, row listRo
 	limit := getIntFlag(cmd, "limit")
 	enc := newEmitter(cmd)
 	guard := newPaginationCursorGuard()
+	if len(idKeys) > 1 {
+		guard.withCompositeIDs()
+	}
 	for !limitReached(enc.Written(), limit) {
 		if guard.tokenAlreadyUsed(token) {
 			return guard.warnStuck(cmd, route)

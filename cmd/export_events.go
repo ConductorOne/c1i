@@ -107,9 +107,8 @@ them to an external system.
 		limit := getIntFlag(cmd, "limit")
 
 		enc := newEmitter(cmd)
-		// Rows carry no id of their own, so only the repeated-token and
-		// empty-page checks apply: the audit log is unbounded, so --limit
-		// bounds it, not a cap.
+		// Rows carry no id of their own, so only the repeated-token check
+		// applies: the audit log is unbounded, so --limit bounds it, not a cap.
 		guard := newUncappedPaginationCursorGuard()
 		route := "POST /api/v1/systemlog/events"
 		for !limitReached(enc.Written(), limit) {

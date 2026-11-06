@@ -243,14 +243,16 @@ const maxEmptyPages = 100
 // tokens, or maxPages requests without a new id. Construct with
 // newPaginationCursorGuard.
 type paginationCursorGuard struct {
-	seenTokens map[string]bool
-	seenIDs    map[string]bool
-	stale      int
-	staleRows  int
-	empty      int
-	idle       int
-	maxPages   int    // 0 = no cap
-	stopReason string // the cap that ended the run; "" for a repeat
+	seenTokens   map[string]bool
+	seenIDs      map[string]bool
+	stale        int
+	staleRows    int
+	empty        int
+	idle         int
+	pages        int
+	maxPages     int    // 0 = no idle or empty-page cap
+	compositeIDs bool   // see withCompositeIDs
+	stopReason   string // the cap that ended the run; "" for a repeat
 }
 
 func newPaginationCursorGuard() *paginationCursorGuard {
@@ -258,8 +260,8 @@ func newPaginationCursorGuard() *paginationCursorGuard {
 }
 
 // newUncappedPaginationCursorGuard is for a stream with no natural size bound
-// (the audit log); the repeated-token, stale-page and empty-page checks still
-// apply.
+// (the audit log): only the repeated-token and stale-page checks apply, since
+// a quiet stretch of the log may page through many empty results.
 func newUncappedPaginationCursorGuard() *paginationCursorGuard {
 	g := newPaginationCursorGuard()
 	g.maxPages = 0
@@ -285,14 +287,25 @@ func (g *paginationCursorGuard) markTokenUsed(token string) {
 	}
 }
 
+// withCompositeIDs marks ids built from several fields (or expanded objects),
+// where a row missing one is plausible: a page of only id-less rows is then
+// emitted rather than rejected as an unrecognized shape.
+func (g *paginationCursorGuard) withCompositeIDs() *paginationCursorGuard {
+	g.compositeIDs = true
+	return g
+}
+
 // checkPage takes a page's row ids ("" for a row without one) and returns
-// which rows to emit: those with an unseen id, and id-less ones, which can't
-// be shown to be repeats. A page with no unseen id is stale; the listing ends
-// once a stale run meets stuckPageRepeats and stuckStaleRows, or after
-// maxEmptyPages empty pages in a row. A non-empty page where no row has an id
-// means the command no longer finds the id it reads, so it fails rather than
-// print repeats. A nil cmd skips the stderr warning.
+// which rows to emit. A page with any unseen id is emitted whole, since ids
+// need not be unique. A page whose ids were all seen is stale: only its
+// id-less rows, which can't be shown to be repeats, are emitted. The listing
+// ends once a stale run meets stuckPageRepeats and stuckStaleRows, or after
+// maxEmptyPages empty pages in a row. Unless withCompositeIDs, a non-empty
+// page with no id at all means the command no longer finds the id it reads,
+// so it fails rather than print unchecked rows. A nil cmd skips the stderr
+// warning.
 func (g *paginationCursorGuard) checkPage(cmd *cobra.Command, route string, ids []string) ([]bool, error) {
+	g.pages++
 	keep := make([]bool, len(ids))
 	fresh, known := false, 0
 	for i, id := range ids {
@@ -304,14 +317,16 @@ func (g *paginationCursorGuard) checkPage(cmd *cobra.Command, route string, ids 
 		if !g.seenIDs[id] {
 			fresh = true
 			g.seenIDs[id] = true
-			keep[i] = true
 		}
 	}
-	if known == 0 {
-		if len(ids) > 0 {
-			return nil, &nonJSONResponseError{fmt.Errorf("%s returned %d rows, none with the id c1i reads; the response shape is not one this command recognizes", route, len(ids))}
-		}
+	switch {
+	case len(ids) == 0:
 		return keep, g.countEmpty(cmd, route)
+	case known == 0 && g.compositeIDs:
+		g.empty = 0
+		return keep, nil
+	case known == 0:
+		return nil, g.shapeError(cmd, route, len(ids))
 	}
 	g.empty = 0
 	if !fresh {
@@ -323,7 +338,24 @@ func (g *paginationCursorGuard) checkPage(cmd *cobra.Command, route string, ids 
 		return keep, nil
 	}
 	g.stale, g.staleRows, g.idle = 0, 0, 0
+	for i := range keep {
+		keep[i] = true
+	}
 	return keep, nil
+}
+
+// shapeError is the exit-6 error for a page with rows but no ids; past the
+// first page it also reports the result as incomplete.
+func (g *paginationCursorGuard) shapeError(cmd *cobra.Command, route string, rows int) error {
+	problem := fmt.Sprintf("%d rows came back without the id c1i reads; the response shape is not one this command recognizes", rows)
+	if g.pages == 1 {
+		return &nonJSONResponseError{fmt.Errorf("%s: %s", route, problem)}
+	}
+	if cmd != nil {
+		_, _ = fmt.Fprintf(cmd.ErrOrStderr(),
+			"Warning: results from %s are INCOMPLETE: %s. Rows already printed are kept.\n", route, problem)
+	}
+	return &nonJSONResponseError{fmt.Errorf("results from %s are INCOMPLETE: %s", route, problem)}
 }
 
 // checkIDlessPage is checkPage for a command whose rows carry no id: only the
@@ -338,7 +370,7 @@ func (g *paginationCursorGuard) checkIDlessPage(cmd *cobra.Command, route string
 
 func (g *paginationCursorGuard) countEmpty(cmd *cobra.Command, route string) error {
 	g.empty++
-	if g.empty < maxEmptyPages {
+	if g.maxPages == 0 || g.empty < maxEmptyPages {
 		return nil
 	}
 	g.stopReason = fmt.Sprintf("%d empty pages in a row", g.empty)
