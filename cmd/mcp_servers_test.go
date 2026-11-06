@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
@@ -301,6 +302,24 @@ func TestBuildHostedConfigFileRejectsNullNamingFlag(t *testing.T) {
 	_, err := buildHostedConfig(cmd)
 	if err == nil || exitCode(err) != exitUsage || !strings.Contains(err.Error(), "--hosted-config-file") {
 		t.Errorf("err = %v (exit %d), want exit %d naming --hosted-config-file", err, exitCode(err), exitUsage)
+	}
+}
+
+// A malformed or missing file is the caller's input, so exit 2, not 1.
+func TestReadConfigFileBadInputIsUsage(t *testing.T) {
+	for name, path := range map[string]string{
+		"invalid JSON": writeTempJSON(t, "bad.json", `{nope`),
+		"array":        writeTempJSON(t, "arr.json", `[]`),
+		"missing file": filepath.Join(t.TempDir(), "absent.json"),
+	} {
+		t.Run(name, func(t *testing.T) {
+			cmd := newServerFlagCmd()
+			_ = cmd.Flags().Set("hosted-config-file", path)
+			_, err := buildHostedConfig(cmd)
+			if exitCode(err) != exitUsage || !strings.Contains(err.Error(), "--hosted-config-file") {
+				t.Errorf("err = %v (exit %d), want exit %d naming the flag", err, exitCode(err), exitUsage)
+			}
+		})
 	}
 }
 

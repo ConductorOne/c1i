@@ -220,11 +220,7 @@ func readRequiredJSONObject(cmd *cobra.Command, flag string) (map[string]any, er
 	if file == "" {
 		return nil, &usageError{fmt.Errorf("--%s is required", flag)}
 	}
-	body, err := readConfigFile(cmd, flag, file)
-	if err != nil {
-		return nil, &usageError{err}
-	}
-	return body, nil
+	return readConfigFile(cmd, flag, file)
 }
 
 func validateCampaignOwners(body map[string]any) error {

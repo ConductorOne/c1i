@@ -111,11 +111,11 @@ func readConfigFile(cmd *cobra.Command, flag, path string) (map[string]any, erro
 		data, err = os.ReadFile(path) // #nosec G304 -- user-supplied config-file path is intentional
 	}
 	if err != nil {
-		return nil, fmt.Errorf("reading %s: %w", label, err)
+		return nil, &usageError{fmt.Errorf("reading %s: %w", label, err)}
 	}
 	var cfg map[string]any
 	if err := json.Unmarshal(data, &cfg); err != nil {
-		return nil, fmt.Errorf("parsing %s as JSON object: %w", label, err)
+		return nil, &usageError{fmt.Errorf("parsing %s as JSON object: %w", label, err)}
 	}
 	if cfg == nil {
 		return nil, &usageError{fmt.Errorf("%s must contain a JSON object, not null", label)}
