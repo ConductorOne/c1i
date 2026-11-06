@@ -193,6 +193,12 @@ func TestValidationGuardsExitUsage(t *testing.T) {
 			cmds:    []*cobra.Command{appsCreateCmd},
 		},
 		{
+			name:    "entitlements update: nothing to update",
+			args:    []string{"entitlements", "update", "ent-1", "--app-id", "a"},
+			wantMsg: "nothing to update",
+			cmds:    []*cobra.Command{entitlementsUpdateCmd},
+		},
+		{
 			name: "mcp toolsets update: nothing to update",
 			args: []string{"mcp", "toolsets", "update", "toolset-1", "--app-id", "a", "--connector-id", "c"},
 			cmds: []*cobra.Command{mcpToolsetsUpdateCmd},

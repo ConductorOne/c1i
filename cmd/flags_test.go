@@ -172,3 +172,24 @@ func TestPaginationCursorGuardKeepsPageWithIDlessRow(t *testing.T) {
 		t.Fatalf("fresh page: keep=%v err=%v, want all true", keep, err)
 	}
 }
+
+// TestRequireNonEmptyIfSetRejectsWhitespace pins that a whitespace-only value
+// is refused like "", while an unset flag and a real value pass through.
+func TestRequireNonEmptyIfSetRejectsWhitespace(t *testing.T) {
+	for _, tc := range []struct {
+		set     bool
+		val     string
+		wantErr bool
+	}{{false, "", false}, {true, "x", false}, {true, " x ", false}, {true, "", true}, {true, "  \t\n", true}} {
+		cmd := &cobra.Command{Use: "test"}
+		cmd.Flags().String("a", "", "")
+		if tc.set {
+			_ = cmd.Flags().Set("a", tc.val)
+		}
+		_, err := requireNonEmptyIfSet(cmd, "a")
+		var ue *usageError
+		if tc.wantErr != errors.As(err, &ue) {
+			t.Errorf("set=%v %q: err = %v, wantErr %v", tc.set, tc.val, err, tc.wantErr)
+		}
+	}
+}

@@ -68,9 +68,15 @@ usage error. Likewise, pass --resource-id to reuse a resource and drop
 --resource-display-name.
 
 Omitting --duration-grant leaves the entitlement at standing access
-(durationUnset in the response). It takes a protobuf duration, not a Go one --
-seconds with an "s" suffix, e.g. 3600s. "1h" is refused by the server with:
-  invalid google.protobuf.Duration value "1h"
+(durationUnset in the response). It takes a protobuf duration (3600s) or a Go
+one (8h), sent in seconds since the API parses only that form, and must be
+positive.
+
+Each --<kind>-policy-id is checked before the first create: it must name an
+existing, undeleted policy of the slot's type (a grant policy for
+--emergency-grant-policy-id), or the command exits 2 and creates nothing. An
+empty one is a usage error. Omitting one leaves that policy unset on the
+entitlement. --dry-run skips the check.
 
 Assign owners inline with --owner-id: the create request carries
 appEntitlementOwnerIds, so no follow-up call is needed. An empty --owner-id is
@@ -121,6 +127,10 @@ Example:
 		c, err := newClient(cmd, baseURL)
 		if err != nil {
 			return fmt.Errorf("authentication failed: %w", err)
+		}
+		// Before step 1, so a bad policy leaves no resource type behind.
+		if err := validatePolicyBindings(cmd.Context(), cmd, c, entitlementPolicyKinds); err != nil {
+			return err
 		}
 
 		return plan.run(cmd, c)
@@ -225,14 +235,21 @@ func buildEntitlementCreatePlan(cmd *cobra.Command) (*entitlementCreatePlan, err
 
 	// Flag name -> request field, equal except where the wire key is camelCase.
 	for flag, key := range map[string]string{
-		"description":    "description",
-		"slug":           "slug",
-		"alias":          "alias",
-		"duration-grant": "durationGrant",
+		"description": "description",
+		"slug":        "slug",
+		"alias":       "alias",
 	} {
 		if v, _ := cmd.Flags().GetString(flag); v != "" {
 			p.entitlementBody[key] = v
 		}
+	}
+	if v, ok, err := grantDurationFlag(cmd, "duration-grant"); err != nil {
+		return nil, err
+	} else if ok {
+		p.entitlementBody["durationGrant"] = v
+	}
+	if err := applyPolicyIDs(cmd, entitlementPolicyKinds, p.entitlementBody); err != nil {
+		return nil, err
 	}
 	// An owner id from an unset shell variable would otherwise create the
 	// entitlement with fewer owners than asked for, and owner reads are async,
@@ -436,7 +453,8 @@ func addEntitlementCreateFlags(cmd *cobra.Command) {
 	f.String("description", "", "Description for the new entitlement")
 	f.String("slug", "", "Slug for the new entitlement (e.g. member)")
 	f.String("alias", "", "Alias for the new entitlement; exact-match queryable")
-	f.String("duration-grant", "", "Maximum grant duration as a protobuf duration, e.g. 3600s; omit for standing access")
+	f.String("duration-grant", "", "Maximum grant duration as a protobuf duration, e.g. 3600s; a Go duration such as 8h is converted to seconds; omit for standing access")
+	registerPolicyIDFlags(cmd, entitlementPolicyKinds, " (omit to leave unset)")
 	// StringArray, not StringSlice: the slice parser drops an empty value
 	// outright, so `--owner-id "" --owner-id U` would lose the empty one
 	// before this command could reject it.

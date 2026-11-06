@@ -155,13 +155,42 @@ c1i entitlements proxy-bindings delete \
 c1i entitlements create --app-id <id> --display-name "Payroll admin" \
   [--description <text>] [--slug member] [--alias payroll_admin] [--owner-id <user-id>] \
   [--duration-grant 3600s] [--resource-type CUSTOM] \
-  [--resource-type-display-name "Payroll role"] [--resource-display-name "Payroll admins"]
+  [--resource-type-display-name "Payroll role"] [--resource-display-name "Payroll admins"] \
+  [--grant-policy-id <id>] [--revoke-policy-id <id>] [--certify-policy-id <id>] \
+  [--emergency-grant-policy-id <id>]
 
 # Reuse an existing resource type (or an existing resource) instead of creating one
 c1i entitlements create --app-id <id> --display-name "Payroll viewer" --resource-type-id <id>
 c1i entitlements create --app-id <id> --display-name "Payroll viewer (RO)" \
   --resource-type-id <id> --resource-id <id>
+
+# Update name, description, policies, or max grant duration (only the flags passed)
+c1i entitlements update <entitlement-id> --app-id <id> \
+  [--display-name <name>] [--description <text>] \
+  [--grant-policy-id <id>] [--revoke-policy-id <id>] [--certify-policy-id <id>] \
+  [--emergency-grant-policy-id <id>] [--emergency-grant-enabled[=false]] \
+  [--unbind-policy grant|revoke|certify|emergency-grant] \
+  [--duration-grant 8h | --duration-unset]
 ```
+
+`entitlements update` builds the update mask from exactly the flags you pass.
+Each policy id is checked before anything is sent: it must exist, not be
+deleted, and be of the slot's type, or the command exits `2`.
+`--emergency-grant-policy-id` takes a grant policy; the server enforces that
+only when the same call enables emergency grants (`emergency policy id must
+reference a grant policy`) and otherwise stores any id. An empty policy id is
+exit `2`; unbind with the repeatable `--unbind-policy`.
+`--emergency-grant-enabled` needs `--emergency-grant-policy-id` in the same
+call even when one is already stored (the server's `emergency grant policy id
+must be set if emergency grant is enabled`), so it is refused at exit `2`
+without one, or alongside `--unbind-policy emergency-grant`. Unbinding the
+emergency policy while emergency grants stay enabled is accepted by the server.
+`--duration-grant` takes a Go duration (`8h`, `3600s`) and is sent in seconds;
+it must be positive. `--duration-unset` removes the limit, and the two are
+mutually exclusive. An empty or whitespace-only `--display-name` is refused:
+the server would accept "" and restore the entitlement's original name.
+`entitlements create` checks its policy flags the same way before its first
+`POST`, so a bad policy creates nothing.
 
 An entitlement points at an app resource, which lives under an app resource
 type, so `entitlements create` is up to three `POST`s: the resource type, the
@@ -182,11 +211,11 @@ any other kind fails with a 500 (exit `6`, though retrying never helps) saying
 `--resource-type-id` and drop both `--resource-type` and
 `--resource-type-display-name` — either one alongside the id is a usage error.
 Reusing a resource with `--resource-id` likewise means you drop
-`--resource-display-name`. `--owner-id` is repeatable and goes inline in the create
-request, so no follow-up call is needed; an empty one is a usage error rather
-than an owner quietly dropped. `--duration-grant` takes a protobuf duration —
-seconds with an `s` suffix, e.g. `3600s`; a Go-style `1h` is refused by the
-server. Omit it for standing access.
+`--resource-display-name`. `--owner-id` is repeatable and goes inline in the
+create request, so no follow-up call is needed; an empty one is a usage error
+rather than an owner quietly dropped. `--duration-grant` takes a protobuf
+(`3600s`) or Go (`8h`) duration, sent in seconds, and must be positive; an
+empty one is a usage error. Omit it for standing access.
 
 `--dry-run` previews all three requests, printing
 `NEW_APP_RESOURCE_TYPE_ID`/`NEW_APP_RESOURCE_ID` where an id only exists after
@@ -535,9 +564,8 @@ c1i requests get <request-id>
 
 On `create`, `--user-id` defaults to the authenticated user when omitted.
 `requests create grant --duration` takes a protobuf duration in seconds
-(`86400s`), like `entitlements create --duration-grant` and
-`tasks update-grant-duration --duration`. A Go-style `24h` or `7d` is refused by
-the server with `invalid google.protobuf.Duration value "24h"`.
+(`86400s`), like `tasks update-grant-duration --duration`. A Go-style `24h` or
+`7d` is refused by the server with `invalid google.protobuf.Duration value "24h"`.
 
 `requests list` is the requester lens on access requests (the grant/revoke tasks
 you file): by default it shows requests you opened or are the subject of —

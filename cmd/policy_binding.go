@@ -28,9 +28,16 @@ var appPolicyKinds = []policyKind{
 	newPolicyKind("certify", "certifyPolicyId", "POLICY_TYPE_CERTIFY"),
 }
 
+// entitlementPolicyKinds adds the emergency slot, which takes a grant policy.
+// The server checks that type only when the same request enables emergency
+// grants, so it is checked here on every bind.
+var entitlementPolicyKinds = append(append([]policyKind(nil), appPolicyKinds...),
+	newPolicyKind("emergency-grant", "emergencyGrantPolicyId", "POLICY_TYPE_GRANT"))
+
 func registerPolicyIDFlags(cmd *cobra.Command, kinds []policyKind, suffix string) {
 	for _, k := range kinds {
-		cmd.Flags().String(k.flag, "", fmt.Sprintf("%s policy ID to bind; must exist and be a %s policy%s", strings.ToUpper(k.kind[:1])+k.kind[1:], k.kind, suffix))
+		typ := strings.ToLower(strings.TrimPrefix(k.wantType, "POLICY_TYPE_"))
+		cmd.Flags().String(k.flag, "", fmt.Sprintf("%s policy ID to bind; must exist and be a %s policy%s", strings.ToUpper(k.kind[:1])+k.kind[1:], typ, suffix))
 	}
 }
 
@@ -55,7 +62,11 @@ func policyIDFlag(cmd *cobra.Command, k policyKind) (string, bool, error) {
 	v, _ := cmd.Flags().GetString(k.flag)
 	v = strings.TrimSpace(v)
 	if v == "" {
-		return "", false, &usageError{fmt.Errorf("--%s requires a non-empty value; to unbind, use --unbind-policy %s", k.flag, k.kind)}
+		msg := fmt.Sprintf("--%s requires a non-empty value", k.flag)
+		if cmd.Flags().Lookup("unbind-policy") != nil {
+			msg += "; to unbind, use --unbind-policy " + k.kind
+		}
+		return "", false, &usageError{errors.New(msg)}
 	}
 	return v, true, nil
 }
@@ -83,7 +94,7 @@ func applyPolicyUpdates(cmd *cobra.Command, kinds []policyKind, obj map[string]a
 	}
 	unbind := map[string]bool{}
 	for _, r := range raw {
-		v := strings.ToLower(strings.TrimSpace(r))
+		v := strings.ToLower(strings.ReplaceAll(strings.TrimSpace(r), "_", "-"))
 		known := false
 		for _, k := range kinds {
 			known = known || k.kind == v
