@@ -324,11 +324,22 @@ var stdoutPromptExempt = map[string]bool{
 	"wait.go:runWait":     true,
 }
 
+// writerParamExempt lists functions (file:func) whose io.Writer parameter is
+// not stdout-bound output, with the reason; every other io.Writer parameter is
+// scanned as stdout.
+var writerParamExempt = map[string]string{
+	"errors.go:writeError":             "renders the final error to stderr; there is nowhere left to report a failed write",
+	"functions_source.go:hardenOutDir": "warn is stderr (a permissions notice), not output a caller parses",
+	"upgrade.go:upgradeProgress":       "progress before the result line, whose write fails the run on a dead stdout",
+}
+
 // TestNoDiscardedOutputWriteErrors fails on any `_ = x.Encode(...)`,
 // `_, _ = x.Write(...)`, bare `x.Encode(...)`, or discarded `fmt.Fprint*` to
 // stdout in cmd/: a discarded write error turns a truncated output into
-// exit 0. Stdout means cmd.OutOrStdout(), os.Stdout, or a local assigned
-// from either; stderr notices may discard their error.
+// exit 0. Stdout means cmd.OutOrStdout(), os.Stdout, a local assigned from
+// either, or any io.Writer parameter outside writerParamExempt: checking the
+// callee rather than tracing call sites also covers writers that arrive via a
+// struct field or several hops. Stderr notices may discard their error.
 func TestNoDiscardedOutputWriteErrors(t *testing.T) {
 	paths, err := filepath.Glob("*.go")
 	if err != nil || len(paths) == 0 {
@@ -340,6 +351,15 @@ func TestNoDiscardedOutputWriteErrors(t *testing.T) {
 			t.Errorf("stdoutPromptExempt names %s, which no longer exists", key)
 		}
 	}
+	isWriterType := func(e ast.Expr) bool {
+		sel, ok := e.(*ast.SelectorExpr)
+		if !ok || sel.Sel.Name != "Writer" {
+			return false
+		}
+		pkg, ok := sel.X.(*ast.Ident)
+		return ok && pkg.Name == "io"
+	}
+	writerParamsSeen := map[string]bool{}
 	isWriteCall := func(e ast.Expr) (string, bool) {
 		call, ok := e.(*ast.CallExpr)
 		if !ok {
@@ -406,11 +426,30 @@ func TestNoDiscardedOutputWriteErrors(t *testing.T) {
 		for _, decl := range file.Decls {
 			fn, isFunc := decl.(*ast.FuncDecl)
 			promptOnly := stdoutPromptExempt[path] || (isFunc && stdoutPromptExempt[path+":"+fn.Name.Name])
+			declKey := path
+			if isFunc {
+				declKey = path + ":" + fn.Name.Name
+			}
 			// Locals are collected per top-level decl, so a name reused for
 			// stderr elsewhere in the same decl over-flags (loudly) rather
 			// than under-flags.
 			locals := map[string]bool{}
 			ast.Inspect(decl, func(n ast.Node) bool {
+				// Params of nested func literals count too.
+				if ft, ok := n.(*ast.FuncType); ok && ft.Params != nil {
+					for _, field := range ft.Params.List {
+						if !isWriterType(field.Type) {
+							continue
+						}
+						writerParamsSeen[declKey] = true
+						if _, exempt := writerParamExempt[declKey]; exempt {
+							continue
+						}
+						for _, name := range field.Names {
+							locals[name.Name] = true
+						}
+					}
+				}
 				if as, ok := n.(*ast.AssignStmt); ok && len(as.Lhs) == len(as.Rhs) {
 					for i, r := range as.Rhs {
 						if id, ok := as.Lhs[i].(*ast.Ident); ok && isStdoutExpr(r) {
@@ -451,6 +490,11 @@ func TestNoDiscardedOutputWriteErrors(t *testing.T) {
 	}
 	if scanned == 0 {
 		t.Fatal("scanned no non-test files in cmd/")
+	}
+	for key := range writerParamExempt {
+		if !writerParamsSeen[key] {
+			t.Errorf("writerParamExempt names %s, which no longer has an io.Writer parameter", key)
+		}
 	}
 	if stdoutFprints == 0 {
 		t.Fatal("recognized no fmt.Fprint* to stdout anywhere; the stdout matcher is broken")
