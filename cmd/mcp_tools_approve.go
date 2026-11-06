@@ -107,7 +107,11 @@ classification, visibility).`,
 		for i, id := range args {
 			err := approveOne(id)
 			if writeErr != nil {
-				return fmt.Errorf("updated %d of %d tools before output failed: %w", i+1-failed, len(args), wrapOutputErr(writeErr))
+				approved := i + 1 - failed
+				if firstErr != nil {
+					return fmt.Errorf("approved %d of %d tools; %d failed: %w; output failed: %w", approved, len(args), failed, firstErr, wrapOutputErr(writeErr))
+				}
+				return fmt.Errorf("approved %d of %d tools; %d failed; output failed: %w", approved, len(args), failed, wrapOutputErr(writeErr))
 			}
 			if err != nil {
 				failed++

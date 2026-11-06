@@ -177,6 +177,96 @@ func TestTextOutputFailsOnOutputWriteError(t *testing.T) {
 	}
 }
 
+// runUpgradeToDeadStdout runs `upgrade` against the fake dist with a stdout
+// that always fails.
+func runUpgradeToDeadStdout(t *testing.T, args ...string) error {
+	t.Helper()
+	resetCmds(t, upgradeCmd)
+	resetRootDryRunFlag(t)
+	var errOut bytes.Buffer
+	rootCmd.SetOut(failingWriter{})
+	rootCmd.SetErr(&errOut)
+	upgradeCmd.SetOut(failingWriter{})
+	t.Cleanup(func() { rootCmd.SetOut(nil); rootCmd.SetErr(nil); upgradeCmd.SetOut(nil) })
+	upgradeCmd.SetContext(context.Background())
+	rootCmd.SetArgs(append([]string{"upgrade"}, args...))
+	return rootCmd.ExecuteContext(context.Background())
+}
+
+// `upgrade --yes` is scriptable, so its result lines must not exit 0 unseen.
+func TestUpgradeResultFailsOnOutputWriteError(t *testing.T) {
+	t.Run("already current", func(t *testing.T) {
+		d := newFakeDist(t)
+		publishIndex(t, d, idxStable06Latest07)
+		useDist(t, d, nil, "v0.7.0")
+		assertOutputWriteFailure(t, runUpgradeToDeadStdout(t, "--channel", "latest", "-y"))
+	})
+	t.Run("not standalone", func(t *testing.T) {
+		d := newFakeDist(t)
+		publishIndex(t, d, idxStable06Latest07)
+		useDist(t, d, nil, "v0.5.0")
+		upgradeExecutable = func() (string, error) { return "/opt/homebrew/Cellar/c1i/0.5.0/bin/c1i", nil }
+		assertOutputWriteFailure(t, runUpgradeToDeadStdout(t, "-y"))
+	})
+	t.Run("upgraded", func(t *testing.T) {
+		sig, d := newFakeSigstore(t), newFakeDist(t)
+		d.publish(t, sig, release{target: "v0.7.0", manifestSemver: "v0.7.0", archive: tarGz(t, []byte("NEW BINARY"))})
+		exe := useDist(t, d, sig.root, "v0.6.0")
+		assertOutputWriteFailure(t, runUpgradeToDeadStdout(t, "-y"))
+		if got := readFile(t, exe); got != "NEW BINARY" {
+			t.Errorf("binary = %q; the upgrade itself should still land", got)
+		}
+	})
+}
+
+// A batch approve that loses stdout mid-way reports the same summary as any
+// other partial batch, keeping the earlier per-id failure classifiable.
+func TestMcpToolsApproveOutputFailureKeepsSummary(t *testing.T) {
+	var requests atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests.Add(1)
+		if strings.HasSuffix(r.URL.Path, "/tool-a") {
+			w.WriteHeader(http.StatusNotFound)
+			_, _ = fmt.Fprint(w, `{"message":"not found"}`)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = fmt.Fprint(w, `{"tool":{"id":"tool-b","state":"MCP_TOOL_STATE_APPROVED"}}`)
+	}))
+	defer srv.Close()
+	stubGetClient(t, srv)
+	resetRootURLFlag(t)
+	resetRootDryRunFlag(t)
+	resetCmds(t, mcpToolsApproveCmd)
+	t.Cleanup(func() { resetCmds(t, mcpToolsApproveCmd) })
+	t.Setenv("C1I_URL", "https://example.invalid")
+
+	var errOut bytes.Buffer
+	rootCmd.SetOut(failingWriter{})
+	rootCmd.SetErr(&errOut)
+	mcpToolsApproveCmd.SetOut(failingWriter{})
+	mcpToolsApproveCmd.SetContext(context.Background())
+	t.Cleanup(func() { rootCmd.SetOut(nil); rootCmd.SetErr(nil); mcpToolsApproveCmd.SetOut(nil) })
+	rootCmd.SetArgs([]string{"mcp", "tools", "approve", "tool-a", "tool-b", "tool-c", "--app-id", "app-x", "--connector-id", "conn-y"})
+	err := rootCmd.ExecuteContext(context.Background())
+	if err == nil {
+		t.Fatal("approve returned nil although stdout failed")
+	}
+	msg := err.Error()
+	if !strings.HasPrefix(msg, "approved 1 of 3 tools; 1 failed") || !strings.Contains(msg, "; output failed: writing output: ") || strings.Count(msg, "writing output: ") != 1 {
+		t.Errorf("error %q, want the batch summary followed by \"; output failed: writing output: …\"", msg)
+	}
+	if !errors.Is(err, errStdoutFull) {
+		t.Errorf("error %v does not wrap the write error", err)
+	}
+	if got := exitCode(err); got != exitNotFound {
+		t.Errorf("exit code %d, want %d from the earlier 404", got, exitNotFound)
+	}
+	if got := requests.Load(); got != 2 {
+		t.Errorf("server received %d requests, want 2 (tool-c must not be sent)", got)
+	}
+}
+
 // A mutation that fails only at output may have landed; agents must know not
 // to blindly retry it.
 func TestOutputWriteContractDocumented(t *testing.T) {
@@ -230,7 +320,7 @@ func TestEmitterCountsOnlyWrittenRows(t *testing.T) {
 var stdoutPromptExempt = map[string]bool{
 	"auth_login.go":       true,
 	"auth_login_roles.go": true,
-	"upgrade.go":          true,
+	"upgrade.go:confirm":  true,
 	"wait.go:runWait":     true,
 }
 
