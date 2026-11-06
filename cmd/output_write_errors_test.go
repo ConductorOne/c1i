@@ -8,6 +8,7 @@ import (
 	"go/ast"
 	"go/parser"
 	"go/token"
+	"go/types"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -321,14 +322,25 @@ var stdoutPromptExempt = map[string]bool{
 	"auth_login.go":       true,
 	"auth_login_roles.go": true,
 	"upgrade.go:confirm":  true,
-	"wait.go:runWait":     true,
+}
+
+// writerParamExempt lists functions (file:func, or file:(T).method) whose
+// io.Writer parameter may discard a write error, with the reason; every other
+// io.Writer parameter is scanned as stdout. Each entry trusts its callers.
+var writerParamExempt = map[string]string{
+	"errors.go:writeError":             "the final error, written to stderr with nowhere left to report a failure; trusts its one caller to pass os.Stderr",
+	"functions_source.go:hardenOutDir": "a permissions notice on stderr; trusts its one caller to pass cmd.ErrOrStderr()",
+	"upgrade.go:upgradeProgress":       "progress on stdout; trusts every caller to follow it with a checked result write",
+	"wait.go:waitProgress":             "progress while polling; trusts its one caller, runWait, to check the stdout success line that follows",
 }
 
 // TestNoDiscardedOutputWriteErrors fails on any `_ = x.Encode(...)`,
 // `_, _ = x.Write(...)`, bare `x.Encode(...)`, or discarded `fmt.Fprint*` to
 // stdout in cmd/: a discarded write error turns a truncated output into
-// exit 0. Stdout means cmd.OutOrStdout(), os.Stdout, or a local assigned
-// from either; stderr notices may discard their error.
+// exit 0. Stdout means cmd.OutOrStdout(), os.Stdout, a local assigned from
+// either, or an io.Writer parameter of an enclosing func outside
+// writerParamExempt: checking the callee, not call sites, needs no
+// cross-function tracing. Stderr notices may discard their error.
 func TestNoDiscardedOutputWriteErrors(t *testing.T) {
 	paths, err := filepath.Glob("*.go")
 	if err != nil || len(paths) == 0 {
@@ -340,6 +352,33 @@ func TestNoDiscardedOutputWriteErrors(t *testing.T) {
 			t.Errorf("stdoutPromptExempt names %s, which no longer exists", key)
 		}
 	}
+	isWriterType := func(e ast.Expr) bool {
+		if el, ok := e.(*ast.Ellipsis); ok {
+			e = el.Elt
+		}
+		sel, ok := e.(*ast.SelectorExpr)
+		if !ok || sel.Sel.Name != "Writer" {
+			return false
+		}
+		pkg, ok := sel.X.(*ast.Ident)
+		return ok && pkg.Name == "io"
+	}
+	// writerParams returns the names of ft's own io.Writer parameters, and
+	// whether it has any (named or not). A func-typed parameter's inner
+	// signature is not a parameter list of ft.
+	writerParams := func(ft *ast.FuncType) (names []string, found bool) {
+		for _, field := range ft.Params.List {
+			if !isWriterType(field.Type) {
+				continue
+			}
+			found = true
+			for _, n := range field.Names {
+				names = append(names, n.Name)
+			}
+		}
+		return names, found
+	}
+	writerParamsSeen := map[string]bool{}
 	isWriteCall := func(e ast.Expr) (string, bool) {
 		call, ok := e.(*ast.CallExpr)
 		if !ok {
@@ -362,9 +401,9 @@ func TestNoDiscardedOutputWriteErrors(t *testing.T) {
 		}
 		return false
 	}
-	// stdoutFprint matches a fmt.Fprint* whose writer is stdout, given the
-	// locals known to hold stdout.
-	stdoutFprint := func(e ast.Expr, locals map[string]bool) (string, bool) {
+	// stdoutFprint matches a fmt.Fprint* whose writer is stdout, given which
+	// names hold stdout at that point.
+	stdoutFprint := func(e ast.Expr, isStdoutName func(string) bool) (string, bool) {
 		call, ok := e.(*ast.CallExpr)
 		if !ok || len(call.Args) == 0 {
 			return "", false
@@ -379,7 +418,11 @@ func TestNoDiscardedOutputWriteErrors(t *testing.T) {
 		if isStdoutExpr(call.Args[0]) {
 			return "fmt." + sel.Sel.Name, true
 		}
-		if id, ok := call.Args[0].(*ast.Ident); ok && locals[id.Name] {
+		w := call.Args[0]
+		if ix, ok := w.(*ast.IndexExpr); ok { // ws[i] of a ...io.Writer param
+			w = ix.X
+		}
+		if id, ok := w.(*ast.Ident); ok && isStdoutName(id.Name) {
 			return "fmt." + sel.Sel.Name, true
 		}
 		return "", false
@@ -405,7 +448,15 @@ func TestNoDiscardedOutputWriteErrors(t *testing.T) {
 		scanned++
 		for _, decl := range file.Decls {
 			fn, isFunc := decl.(*ast.FuncDecl)
-			promptOnly := stdoutPromptExempt[path] || (isFunc && stdoutPromptExempt[path+":"+fn.Name.Name])
+			declKey := path
+			if isFunc {
+				declKey = path + ":" + fn.Name.Name
+				if fn.Recv != nil && len(fn.Recv.List) > 0 {
+					declKey = fmt.Sprintf("%s:(%s).%s", path, types.ExprString(fn.Recv.List[0].Type), fn.Name.Name)
+				}
+			}
+			promptOnly := stdoutPromptExempt[path] || (isFunc && stdoutPromptExempt[declKey])
+			_, paramsExempt := writerParamExempt[declKey]
 			// Locals are collected per top-level decl, so a name reused for
 			// stderr elsewhere in the same decl over-flags (loudly) rather
 			// than under-flags.
@@ -420,10 +471,55 @@ func TestNoDiscardedOutputWriteErrors(t *testing.T) {
 				}
 				return true
 			})
+			// scopes holds, per node on the current path, the io.Writer
+			// params its signature declares (nil for a non-func node), so a
+			// param is stdout only inside the func that declares it.
+			var scopes [][]string
+			isStdoutName := func(name string) bool {
+				if locals[name] {
+					return true
+				}
+				for _, sc := range scopes {
+					if slices.Contains(sc, name) {
+						return true
+					}
+				}
+				return false
+			}
 			ast.Inspect(decl, func(n ast.Node) bool {
+				if n == nil {
+					scopes = scopes[:len(scopes)-1]
+					return true
+				}
+				var ft *ast.FuncType
+				switch f := n.(type) {
+				case *ast.FuncDecl:
+					ft = f.Type
+				case *ast.FuncLit:
+					ft = f.Type
+				}
+				var params []string
+				if ft != nil {
+					names, found := writerParams(ft)
+					if found {
+						writerParamsSeen[declKey] = true
+					}
+					if !paramsExempt {
+						params = names
+					}
+				}
+				// `for _, w := range ws` over a ...io.Writer param.
+				if rs, ok := n.(*ast.RangeStmt); ok {
+					x, xok := rs.X.(*ast.Ident)
+					v, vok := rs.Value.(*ast.Ident)
+					if xok && vok && isStdoutName(x.Name) {
+						params = []string{v.Name}
+					}
+				}
+				scopes = append(scopes, params)
 				switch s := n.(type) {
 				case *ast.CallExpr:
-					if _, ok := stdoutFprint(s, locals); ok {
+					if _, ok := stdoutFprint(s, isStdoutName); ok {
 						stdoutFprints++
 					}
 				case *ast.AssignStmt:
@@ -433,7 +529,7 @@ func TestNoDiscardedOutputWriteErrors(t *testing.T) {
 					if name, ok := isWriteCall(s.Rhs[0]); ok {
 						t.Errorf("%s: discards the error from %s; return it so a failed write can't exit 0", fset.Position(s.Pos()), name)
 					}
-					if name, ok := stdoutFprint(s.Rhs[0], locals); ok && !promptOnly {
+					if name, ok := stdoutFprint(s.Rhs[0], isStdoutName); ok && !promptOnly {
 						t.Errorf("%s: discards the error from %s to stdout; return wrapOutputErr(err) so a failed write can't exit 0", fset.Position(s.Pos()), name)
 					}
 				case *ast.ExprStmt:
@@ -441,7 +537,7 @@ func TestNoDiscardedOutputWriteErrors(t *testing.T) {
 					if name, ok := isWriteCall(s.X); ok && name == "Encode" {
 						t.Errorf("%s: ignores the error from %s; return it so a failed write can't exit 0", fset.Position(s.Pos()), name)
 					}
-					if name, ok := stdoutFprint(s.X, locals); ok && !promptOnly {
+					if name, ok := stdoutFprint(s.X, isStdoutName); ok && !promptOnly {
 						t.Errorf("%s: ignores the error from %s to stdout; return wrapOutputErr(err) so a failed write can't exit 0", fset.Position(s.Pos()), name)
 					}
 				}
@@ -451,6 +547,11 @@ func TestNoDiscardedOutputWriteErrors(t *testing.T) {
 	}
 	if scanned == 0 {
 		t.Fatal("scanned no non-test files in cmd/")
+	}
+	for key := range writerParamExempt {
+		if !writerParamsSeen[key] {
+			t.Errorf("writerParamExempt names %s, which no longer has an io.Writer parameter", key)
+		}
 	}
 	if stdoutFprints == 0 {
 		t.Fatal("recognized no fmt.Fprint* to stdout anywhere; the stdout matcher is broken")

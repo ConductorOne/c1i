@@ -508,6 +508,33 @@ func TestWaitFlagValues(t *testing.T) {
 	}
 }
 
+// `apps set-owners --wait` must not exit 0 when its success line is lost.
+func TestWaitForOwnersFailsOnOutputWriteError(t *testing.T) {
+	srv := ownerIDsServer(t, "/api/v1/apps/app1/ownerids", []string{`{"userIds":["u1"]}`})
+	c := client.NewForTesting(srv.URL, srv.Client())
+	cmd, _ := newWaitTestCmd(context.Background())
+	cmd.SetOut(failingWriter{})
+	assertOutputWriteFailure(t, waitForOwners(cmd, c, "app1", []string{"u1"}, 10*time.Second))
+}
+
+// A list command's progress goes to op.Out (stderr): a notice whose loss must
+// not fail the list.
+func TestRunWaitIgnoresFailedOutWriter(t *testing.T) {
+	cmd, _ := newWaitTestCmd(context.Background())
+	got, err := runWait(cmd, waitOp[int]{
+		Poll:     func(context.Context) (int, error) { return 7, nil },
+		Done:     func(int) bool { return true },
+		Interval: time.Millisecond,
+		Timeout:  time.Second,
+		Subject:  "s",
+		Success:  "Done",
+		Out:      failingWriter{},
+	})
+	if err != nil || got != 7 {
+		t.Fatalf("runWait = %d, %v; want 7, nil", got, err)
+	}
+}
+
 func mustSet(t *testing.T, fs *pflag.FlagSet, name, value string) {
 	t.Helper()
 	if err := fs.Set(name, value); err != nil {

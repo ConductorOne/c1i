@@ -40,6 +40,8 @@ credentials fails instead of using the working directory. With a relative
 
 ### Fixed
 
+- `apps set-owners --wait` exits 1 (`writing output:`) when its success line
+  can't be written to stdout, instead of 0; the owners were already set.
 - **A failed write to stdout now exits `1`** (e.g. a full disk) instead of
   `0`; list commands stop paging at the first failed row.
 - **Every auto-paginating command now stops on a stuck cursor** instead of
