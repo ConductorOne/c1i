@@ -854,6 +854,52 @@ c1i service-principals bindings delete --service-principal-id <sp-id> --function
 `bindings list` is by subject — it returns the principals a subject is bound to.
 `add` and `delete` are idempotent.
 
+### Webhooks
+
+Outbound webhooks are the registered https endpoints C1.ai calls, for example
+from a policy's webhook approval or provision step (which name one by
+`webhookId`).
+
+```sh
+c1i webhooks list [--page-size N] [--page-token TOKEN] [--limit N]
+c1i webhooks get <webhook-id>
+c1i webhooks create --display-name NAME --destination-url https://hooks.example.com/c1 [--description TEXT] [--callback-timeout 10m]
+c1i webhooks update <webhook-id> [--display-name NAME] [--destination-url URL] [--description TEXT] [--callback-timeout DURATION]
+c1i webhooks test <webhook-id>
+c1i webhooks delete <webhook-id>
+```
+
+The endpoint flag is `--destination-url`, not `--url`, which stays the global
+tenant flag. It must be an absolute `https://` URL with a host name or IPv4
+address; anything else exits `2` before a request is sent. The server would
+otherwise rewrite another scheme, or none, to `https` on create, and reject it
+on update with `invalid url: only 'https' scheme is supported`. An IPv6 literal
+is refused because the server strips its brackets, and `webhooks test` then
+fails with `invalid port ":db8::1" after host`. A host the server will not call
+is a `400`, `invalid url: restricted destination` (exit `2`).
+
+A blank `--display-name` exits `2` on create and update, as described under
+[Display names](#display-names); the server would store one on update.
+
+`--callback-timeout` takes a Go duration from `0` to `720h`. A negative one
+exits `2` before a request is sent; over `720h`, update returns
+`callback_timeout must be between 0 and 30 days`. `update` sends only the flags
+you pass and masks exactly those, and with no field flag it exits `2`; an empty
+`--description` clears it. Updating a soft-deleted webhook exits `0` and changes it, and it
+stays deleted. A webhook has no signing secret, so create returns nothing that
+can't be read again with `get`.
+
+`webhooks list` pages are larger than `--page-size`: the server raises a size
+below 5 to 5 and returns one row more than that, so use `--limit` for an exact
+count.
+
+`webhooks test` queues a delivery and returns the queued instance, under
+`webhook`, with `"state": "WEBHOOK_STATE_PENDING"`, at exit `0`, whether or
+not the URL is reachable. Exit `0` does not mean the endpoint answered.
+`webhooks delete` is a soft delete: the webhook leaves `webhooks list`, but
+`webhooks get` still returns it at exit `0` with `deletedAt` set, and deleting
+it again exits `0`.
+
 ### Export
 
 ```sh

@@ -505,6 +505,22 @@ resource with `--resource-id` likewise means you drop
   one is a `400`, `FieldMask.paths contains invalid path`. A malformed id is a
   `400` (`value does not match regex pattern "^[a-zA-Z0-9]{27}$"`, exit `2`),
   not a `404`.
+- `webhooks create` and `webhooks update` take the endpoint as
+  `--destination-url` (`--url` is the global tenant flag), and it must be an
+  absolute `https://` URL with a host (an IPv6 literal host is refused); a
+  violation, or a blank `--display-name` (empty, whitespace or
+  invisible-only), exits `2` before sending. `webhooks test <webhook-id>` only
+  queues a delivery: it exits `0` with `"state": "WEBHOOK_STATE_PENDING"`
+  whether or not the URL is reachable.
+  `webhooks delete` is soft: `webhooks get` still returns the webhook at exit
+  `0` with `deletedAt` set, and `webhooks list` omits it. `webhooks update` on
+  a deleted webhook exits `0` and changes it, and it stays deleted.
+  `webhooks list` pages exceed `--page-size` (a size below 5 is raised to 5,
+  plus one row), so use `--limit` for an exact count. `webhooks update` with
+  no field flag exits `2`. `--callback-timeout` takes a Go duration from `0`
+  to `720h`: a negative one exits `2` before sending, and over `720h` update
+  returns `callback_timeout must be between 0 and 30 days`. A webhook has no
+  signing secret.
 - `automations delete <automation-id>` is soft: the automation leaves
   `automations list`, but `automations get` still returns it at exit `0` with
   no field marking it deleted.

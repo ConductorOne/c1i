@@ -48,6 +48,18 @@ credentials fails instead of using the working directory. With a relative
   `--display-name`, `--description` or `--enabled` state; `--body-file` with
   `--update-mask` updates any other field (triggers, steps, draft fields).
 - `automations delete <automation-id>` soft-deletes an automation.
+- `webhooks list|get|create|update|delete|test` manage outbound webhooks.
+  `create` and `update` take `--display-name`, `--destination-url`,
+  `--description` and `--callback-timeout`. A `--destination-url` that is not
+  https, has no host, or uses an IPv6 literal host, a blank `--display-name`
+  (empty, whitespace or invisible-only), a negative `--callback-timeout`, or
+  an `update` with no field flag exits `2` before anything is sent. `test`
+  queues a delivery and returns it pending; it does not report whether the
+  endpoint answered. `delete` is a soft delete: `get` still returns the
+  webhook with `deletedAt` set, and `list` omits it. `update` on a deleted
+  webhook exits `0` and changes it, and it stays deleted. `list` pages are
+  larger than `--page-size`: a size below 5 is raised to 5, plus one row, so
+  use `--limit` for an exact count.
 
 ### Changed
 

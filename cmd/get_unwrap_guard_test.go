@@ -247,6 +247,15 @@ func getUnwrapCases() []getUnwrapCase {
 			wantKeys:    []string{"id", "displayName"},
 		},
 		{
+			name:        "webhooks get",
+			cmd:         webhooksGetCmd,
+			args:        []string{"wh-1"},
+			idKey:       "id",
+			body:        `{"webhook":{"id":"wh-1","displayName":"zz-webhook-a","deletedAt":null}}`,
+			payloadPath: []string{"webhook"},
+			wantKeys:    []string{"id", "displayName", "deletedAt"},
+		},
+		{
 			name:        "access-profiles bundle-automation get",
 			cmd:         accessProfilesBundleAutomationGetCmd,
 			args:        []string{"cat-1"},
