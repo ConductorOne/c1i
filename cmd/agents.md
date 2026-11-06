@@ -458,6 +458,12 @@ resource with `--resource-id` likewise means you drop
   `appResourceId` even though its OpenAPI schema lists only `displayName` as
   required; omitting them 400s on the id regex. `entitlements create` handles
   this for you.
+- `entitlements update` takes a Go duration for `--duration-grant` (`8h`),
+  unlike `entitlements create`, whose `--duration-grant` stays protobuf-only
+  (`3600s`). `--emergency-grant-enabled` needs `--emergency-grant-policy-id`
+  in the same call even when one is already stored; clearing the policy alone
+  leaves emergency grants enabled with no policy. Pass `--grant-policy-id ""`
+  (or revoke/certify/emergency) to clear a policy.
 - `mcp servers test-connection` returns `toolCount` as a JSON string, not a
   number. The `tool_count` in NDJSON list rows is a real number.
 - `mcp servers search` only includes `tool_count` when you pass

@@ -155,13 +155,36 @@ c1i entitlements proxy-bindings delete \
 c1i entitlements create --app-id <id> --display-name "Payroll admin" \
   [--description <text>] [--slug member] [--alias payroll_admin] [--owner-id <user-id>] \
   [--duration-grant 3600s] [--resource-type CUSTOM] \
-  [--resource-type-display-name "Payroll role"] [--resource-display-name "Payroll admins"]
+  [--resource-type-display-name "Payroll role"] [--resource-display-name "Payroll admins"] \
+  [--grant-policy-id <id>] [--revoke-policy-id <id>] [--certify-policy-id <id>] \
+  [--emergency-grant-policy-id <id>]
 
 # Reuse an existing resource type (or an existing resource) instead of creating one
 c1i entitlements create --app-id <id> --display-name "Payroll viewer" --resource-type-id <id>
 c1i entitlements create --app-id <id> --display-name "Payroll viewer (RO)" \
   --resource-type-id <id> --resource-id <id>
+
+# Update name, description, policies, or max grant duration (only the flags passed)
+c1i entitlements update <entitlement-id> --app-id <id> \
+  [--display-name <name>] [--description <text>] \
+  [--grant-policy-id <id>] [--revoke-policy-id <id>] [--certify-policy-id <id>] \
+  [--emergency-grant-policy-id <id>] [--emergency-grant-enabled[=false]] \
+  [--duration-grant 8h | --duration-unset]
 ```
+
+`entitlements update` builds the update mask from exactly the flags you pass.
+Each policy id must name a policy of that type (the server refuses otherwise
+with e.g. `grant policy id must reference a grant policy`, exit `2`; an unknown
+id is a 404, exit `4`), and an empty value clears it. The server does not check
+the type of `--emergency-grant-policy-id`. `--emergency-grant-enabled` needs
+`--emergency-grant-policy-id` in the same call even when one is already stored
+(the server's `emergency grant policy id must be set if emergency grant is
+enabled`), so it is refused at exit `2` without one. `--duration-grant` takes a
+Go duration (`8h`, `3600s`) and is sent in seconds; it must be positive.
+`--duration-unset` removes the limit, and the two are mutually exclusive. An
+empty `--display-name` is refused: the server would accept it and restore the
+entitlement's original name. On `create`, the same type rule applies to the
+policy flags, and an empty one is a usage error.
 
 An entitlement points at an app resource, which lives under an app resource
 type, so `entitlements create` is up to three `POST`s: the resource type, the

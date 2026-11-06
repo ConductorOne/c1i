@@ -520,6 +520,32 @@ func TestEntitlementCreateDurationGrantWireKey(t *testing.T) {
 	}
 }
 
+// TestEntitlementCreatePolicyFlags pins that each policy-id flag reaches the
+// entitlement body under its wire key, and that an empty one is refused rather
+// than silently creating the entitlement without that policy.
+func TestEntitlementCreatePolicyFlags(t *testing.T) {
+	p := mustPlan(t, "--app-id", "app1", "--display-name", "e",
+		"--grant-policy-id", "pg", "--revoke-policy-id", "pr",
+		"--certify-policy-id", "pc", "--emergency-grant-policy-id", "pe")
+	want := map[string]any{
+		"displayName":            "e",
+		"grantPolicyId":          "pg",
+		"revokePolicyId":         "pr",
+		"certifyPolicyId":        "pc",
+		"emergencyGrantPolicyId": "pe",
+	}
+	if !reflect.DeepEqual(p.entitlementBody, want) {
+		t.Errorf("entitlement body = %v, want %v", p.entitlementBody, want)
+	}
+
+	for _, flag := range []string{"grant-policy-id", "revoke-policy-id", "certify-policy-id", "emergency-grant-policy-id"} {
+		cmd := newEntitlementCreateCmd(t, "--app-id", "app1", "--display-name", "e", "--"+flag, "")
+		if _, err := buildEntitlementCreatePlan(cmd); err == nil || !strings.Contains(err.Error(), "--"+flag+" requires a non-empty value") {
+			t.Errorf("--%s \"\": err = %v, want a non-empty-value usage error", flag, err)
+		}
+	}
+}
+
 // TestNormalizeResourceType pins case/separator normalization, and that an
 // unknown value is passed through for the server to rule on rather than being
 // rejected against a list that can go stale.

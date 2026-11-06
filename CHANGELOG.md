@@ -19,6 +19,12 @@ credentials fails instead of using the working directory. With a relative
 
 ### Added
 
+- `entitlements update <entitlement-id> --app-id` sets an entitlement's
+  display name, description, grant/revoke/certify/emergency-grant policies,
+  emergency-grant switch, and maximum grant duration (`--duration-grant`, a Go
+  duration, or `--duration-unset`). `entitlements create` gains
+  `--grant-policy-id`, `--revoke-policy-id`, `--certify-policy-id` and
+  `--emergency-grant-policy-id`.
 - `users list --origin directory|local|system|all` (repeatable; a
   `USER_ORIGIN_*` value is also accepted) filters by user origin;
   `--origin all` lists every user, including the local-origin and system users

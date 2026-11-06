@@ -72,6 +72,11 @@ Omitting --duration-grant leaves the entitlement at standing access
 seconds with an "s" suffix, e.g. 3600s. "1h" is refused by the server with:
   invalid google.protobuf.Duration value "1h"
 
+--grant-policy-id, --revoke-policy-id and --certify-policy-id must each name a
+policy of that type, or the entitlement step fails with e.g.:
+  Grant policy ID must reference a grant policy
+Omitting one leaves that policy unset on the entitlement.
+
 Assign owners inline with --owner-id: the create request carries
 appEntitlementOwnerIds, so no follow-up call is needed. An empty --owner-id is
 a usage error, not an owner quietly dropped. Owner provisioning is
@@ -231,6 +236,22 @@ func buildEntitlementCreatePlan(cmd *cobra.Command) (*entitlementCreatePlan, err
 		"duration-grant": "durationGrant",
 	} {
 		if v, _ := cmd.Flags().GetString(flag); v != "" {
+			p.entitlementBody[key] = v
+		}
+	}
+	// An empty policy id from an unset variable would create the entitlement
+	// without that policy, with exit 0.
+	for flag, key := range map[string]string{
+		"grant-policy-id":           "grantPolicyId",
+		"revoke-policy-id":          "revokePolicyId",
+		"certify-policy-id":         "certifyPolicyId",
+		"emergency-grant-policy-id": "emergencyGrantPolicyId",
+	} {
+		v, err := requireNonEmptyIfSet(cmd, flag)
+		if err != nil {
+			return nil, err
+		}
+		if v != "" {
 			p.entitlementBody[key] = v
 		}
 	}
@@ -437,6 +458,10 @@ func addEntitlementCreateFlags(cmd *cobra.Command) {
 	f.String("slug", "", "Slug for the new entitlement (e.g. member)")
 	f.String("alias", "", "Alias for the new entitlement; exact-match queryable")
 	f.String("duration-grant", "", "Maximum grant duration as a protobuf duration, e.g. 3600s; omit for standing access")
+	f.String("grant-policy-id", "", "Grant policy for the new entitlement (must be a grant policy)")
+	f.String("revoke-policy-id", "", "Revoke policy for the new entitlement (must be a revoke policy)")
+	f.String("certify-policy-id", "", "Certify policy for the new entitlement (must be a certify policy)")
+	f.String("emergency-grant-policy-id", "", "Emergency grant policy for the new entitlement")
 	// StringArray, not StringSlice: the slice parser drops an empty value
 	// outright, so `--owner-id "" --owner-id U` would lose the empty one
 	// before this command could reject it.
