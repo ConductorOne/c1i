@@ -398,14 +398,6 @@ func nextPageTokenFromMap(raw map[string]json.RawMessage) string {
 	return tok
 }
 
-// extractListAndToken finds the array-valued field in a paginated response and
-// the nextPageToken. Most C1 list endpoints wrap items under "list", but some
-// use typed keys ("automationExecutions", "automationVersions", etc.) — for
-// those, returning an empty list would make --paginate loop forever, so we
-// detect the array generically.
-//
-// If listKey is non-empty, that field is used verbatim. Otherwise the first
-// array-valued field at the top level (other than "nextPageToken") wins.
 // listKeyNotArrayError is a named list key holding a non-array. Only `api`
 // makes it a usage error: other callers' keys are fixed, so there it is the
 // server's shape.
@@ -420,6 +412,14 @@ func (e *listKeyNotArrayError) Error() string {
 
 func (e *listKeyNotArrayError) Unwrap() error { return e.err }
 
+// extractListAndToken finds the array-valued field in a paginated response and
+// the nextPageToken. Most C1 list endpoints wrap items under "list", but some
+// use typed keys ("automationExecutions", "automationVersions", etc.) — for
+// those, returning an empty list would make --paginate loop forever, so we
+// detect the array generically.
+//
+// If listKey is non-empty, that field is used verbatim. Otherwise the first
+// array-valued field at the top level (other than "nextPageToken") wins.
 func extractListAndToken(data []byte, listKey string) ([]json.RawMessage, string, error) {
 	var raw map[string]json.RawMessage
 	if err := json.Unmarshal(data, &raw); err != nil {
