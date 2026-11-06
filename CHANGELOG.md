@@ -118,6 +118,10 @@ credentials fails instead of using the working directory. With a relative
   automation on this page calls it. A never-run automation's
   `last_executed_at` is now `null` instead of `""`.
 
+- **`tasks list` and `requests list` emitted a row of empty values** for a
+  result with no `task` object. Such a result is now skipped, as
+  `automations executions list` already does.
+
 ## [0.9.1] - 2026-10-09
 
 ### Security

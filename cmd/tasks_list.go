@@ -83,17 +83,18 @@ var tasksListCmd = &cobra.Command{
 				return fmt.Errorf("failed to parse response: %w", err)
 			}
 
-			ids := make([]string, len(resp.List))
-			for i, it := range resp.List {
-				ids[i] = it.Task.ID
+			tasks := resp.tasks()
+			ids := make([]string, len(tasks))
+			for i, t := range tasks {
+				ids[i] = t.ID
 			}
 			keep, err := guard.checkPage(cmd, route, ids)
 			if err != nil {
 				return err
 			}
-			resp.List = keepRows(resp.List, keep)
-			for _, item := range resp.List {
-				if err := enc.Encode(taskRow(item.Task)); err != nil {
+			tasks = keepRows(tasks, keep)
+			for _, t := range tasks {
+				if err := enc.Encode(taskRow(t)); err != nil {
 					return err
 				}
 				if limitReached(enc.Written(), limit) {

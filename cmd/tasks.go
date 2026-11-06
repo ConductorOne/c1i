@@ -22,7 +22,18 @@ type taskSearchList struct {
 }
 
 type taskSearchItem struct {
-	Task taskSummary `json:"task"`
+	Task *taskSummary `json:"task"`
+}
+
+// tasks skips an item with no task wrapper rather than emitting an all-"" row.
+func (l taskSearchList) tasks() []taskSummary {
+	out := make([]taskSummary, 0, len(l.List))
+	for _, it := range l.List {
+		if it.Task != nil {
+			out = append(out, *it.Task)
+		}
+	}
+	return out
 }
 
 // taskSummary is the subset of task fields both list views emit.
