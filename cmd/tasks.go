@@ -25,15 +25,16 @@ type taskSearchItem struct {
 	Task *taskSummary `json:"task"`
 }
 
-// tasks skips an item with no task wrapper rather than emitting an all-"" row.
-func (l taskSearchList) tasks() []taskSummary {
-	out := make([]taskSummary, 0, len(l.List))
-	for _, it := range l.List {
+// ids gives "" for an item with no task wrapper, so a page of only those reads
+// as an unrecognized shape rather than an empty page.
+func (l taskSearchList) ids() []string {
+	ids := make([]string, len(l.List))
+	for i, it := range l.List {
 		if it.Task != nil {
-			out = append(out, *it.Task)
+			ids[i] = it.Task.ID
 		}
 	}
-	return out
+	return ids
 }
 
 // taskSummary is the subset of task fields both list views emit.
