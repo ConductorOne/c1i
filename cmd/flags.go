@@ -224,9 +224,10 @@ func pageSizeFlag(cmd *cobra.Command) int {
 const stuckPageRepeats = 2
 
 // maxCursorPages backstops a cursor that changes every call over ever-new
-// rows, which neither check below catches. 100k pages is 5M rows at the
-// default page size: far past any tenant list except the audit log, which
-// opts out (newUncappedPaginationCursorGuard).
+// rows, which neither check below catches. 100k pages is 2.5M rows even at
+// the 25-row pages some routes return for a 50-row request; the largest list
+// seen live (entitlements, ~100k rows) is a few thousand pages. The audit log
+// is unbounded, so it opts out (newUncappedPaginationCursorGuard).
 const maxCursorPages = 100_000
 
 // paginationCursorGuard detects auto-pagination that stopped making progress:
