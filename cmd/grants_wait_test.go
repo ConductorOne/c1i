@@ -374,7 +374,7 @@ func TestGrantsListWaitEndToEnd(t *testing.T) {
 	}
 }
 
-// TestFetchAllGrantsRejectsAStuckCursor pins the same-token guard: without it a
+// TestFetchAllGrantsRejectsAStuckCursor pins the cursor guard: without it a
 // server re-issuing one cursor turns every poll into a request storm bounded
 // only by --wait-timeout.
 func TestFetchAllGrantsRejectsAStuckCursor(t *testing.T) {
@@ -396,8 +396,11 @@ func TestFetchAllGrantsRejectsAStuckCursor(t *testing.T) {
 	if err == nil {
 		t.Fatal("fetchAllGrants returned nil; a stuck cursor must be an error, not a loop")
 	}
-	if !strings.Contains(err.Error(), "same nextPageToken twice in a row") {
+	if !strings.Contains(err.Error(), "results from POST /api/v1/search/grants are INCOMPLETE: pagination cursor stopped advancing") {
 		t.Errorf("err = %q, want it to name the stuck cursor", err.Error())
+	}
+	if got := exitCode(err); got != exitServer {
+		t.Errorf("exitCode(err) = %d, want %d (exitServer)", got, exitServer)
 	}
 	if got := atomic.LoadInt32(&requests); got != 2 {
 		t.Errorf("made %d requests before giving up, want 2", got)

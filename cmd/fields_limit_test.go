@@ -39,13 +39,14 @@ import (
 
 // taskPage builds one /api/v1/search/tasks response page: certifyOutcomes[i]
 // is the certify outcome for task i on this page ("" omits taskRow's
-// "outcome" key entirely — see finalOutcome/taskRow in cmd/tasks.go).
+// "outcome" key entirely — see finalOutcome/taskRow in cmd/tasks.go). Ids are
+// unique per page (keyed by nextToken), as the cursor guard expects.
 func taskPage(certifyOutcomes []string, nextToken string) string {
 	items := make([]string, 0, len(certifyOutcomes))
 	for i, o := range certifyOutcomes {
 		outcome, _ := json.Marshal(o)
 		items = append(items, fmt.Sprintf(
-			`{"task":{"id":"t%d","type":{"certify":{"outcome":%s}}}}`, i, outcome))
+			`{"task":{"id":"t%s-%d","type":{"certify":{"outcome":%s}}}}`, nextToken, i, outcome))
 	}
 	next, _ := json.Marshal(nextToken)
 	list := "["

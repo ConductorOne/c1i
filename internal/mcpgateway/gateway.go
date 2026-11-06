@@ -140,6 +140,13 @@ func (e *TransportError) Error() string {
 
 func (e *TransportError) Unwrap() error { return e.Err }
 
+// PaginationError reports a tools/list cursor that never terminates (a
+// repeated cursor, or maxToolsListPages exceeded): a protocol-level gateway
+// failure, which cmd classifies as upstream (exit 8).
+type PaginationError struct{ Msg string }
+
+func (e *PaginationError) Error() string { return e.Msg }
+
 type rpcRequest struct {
 	JSONRPC string `json:"jsonrpc"`
 	ID      *int   `json:"id,omitempty"`
@@ -253,7 +260,7 @@ func (c *Client) ListTools(ctx context.Context) ([]Tool, error) {
 	seen := map[string]bool{"": true} // "" is the initial (no-cursor) state
 	for page := 0; ; page++ {
 		if page >= maxToolsListPages {
-			return nil, fmt.Errorf("tools/list did not terminate after %d pages (cursor %q); the gateway appears to be paginating without end", maxToolsListPages, cursor)
+			return nil, &PaginationError{fmt.Sprintf("tools/list did not terminate after %d pages (cursor %q); the gateway appears to be paginating without end", maxToolsListPages, cursor)}
 		}
 		params := map[string]any{}
 		if cursor != "" {
@@ -275,7 +282,7 @@ func (c *Client) ListTools(ctx context.Context) ([]Tool, error) {
 			return all, nil
 		}
 		if seen[out.NextCursor] {
-			return nil, fmt.Errorf("tools/list returned a repeated cursor %q; the gateway is not making pagination progress", out.NextCursor)
+			return nil, &PaginationError{fmt.Sprintf("tools/list returned a repeated cursor %q; the gateway is not making pagination progress", out.NextCursor)}
 		}
 		seen[out.NextCursor] = true
 		cursor = out.NextCursor

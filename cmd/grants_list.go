@@ -193,7 +193,13 @@ set that keeps changing, --wait times out rather than printing anything.`,
 		}
 
 		enc := newEmitter(cmd)
+		// Rows carry no id of their own, so only the token checks apply.
+		guard := newPaginationCursorGuard()
+		route := "POST /api/v1/search/grants"
 		for !limitReached(enc.Written(), limit) {
+			if guard.tokenAlreadyUsed(pageToken) {
+				return warnStuckCursor(cmd, route)
+			}
 			pageSize := requestedPageSize
 			if !enc.Filtered() {
 				pageSize = effectivePageSize(requestedPageSize, limit, enc.Written())
@@ -223,6 +229,7 @@ set that keeps changing, --wait times out rather than printing anything.`,
 			if resp.NextPageToken == "" || manualPaging {
 				break
 			}
+			guard.markTokenUsed(pageToken)
 			pageToken = resp.NextPageToken
 		}
 
@@ -288,9 +295,17 @@ func grantSetFingerprint(items []grantListItem) string {
 // fingerprints the whole set, so a first-page-only read would call a set
 // settled while later pages were still moving.
 func fetchAllGrants(ctx context.Context, c *client.Client, q grantsQuery, pageSize int) ([]grantListItem, error) {
+	const route = "POST /api/v1/search/grants"
 	var all []grantListItem
-	pageToken, prevToken := "", ""
+	pageToken := ""
+	// A stuck cursor would otherwise turn each poll into a request storm
+	// bounded only by --wait-timeout, then blame provisioning for it. Grants
+	// carry no id of their own, so only the token checks apply.
+	guard := newPaginationCursorGuard()
 	for {
+		if guard.tokenAlreadyUsed(pageToken) {
+			return nil, &stuckPaginationCursorError{route: route}
+		}
 		data, err := c.Post(ctx, "/api/v1/search/grants", q.searchBody(pageSize, pageToken))
 		if err != nil {
 			return nil, fmt.Errorf("API error: %w", err)
@@ -306,13 +321,7 @@ func fetchAllGrants(ctx context.Context, c *client.Client, q grantsQuery, pageSi
 		if resp.NextPageToken == "" {
 			return all, nil
 		}
-		// Same guard as "api --paginate" (cmd/api.go): a server that re-issues
-		// one token forever would otherwise turn each poll into a request storm
-		// bounded only by --wait-timeout, then blame provisioning for it.
-		if resp.NextPageToken == prevToken {
-			return nil, fmt.Errorf("API returned the same nextPageToken twice in a row while --wait was re-reading grants; the cursor is not advancing")
-		}
-		prevToken = resp.NextPageToken
+		guard.markTokenUsed(pageToken)
 		pageToken = resp.NextPageToken
 	}
 }

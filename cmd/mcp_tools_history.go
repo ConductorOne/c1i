@@ -41,7 +41,12 @@ created_at, trace_id, syslog_event_id, annotations).`,
 		limit := getIntFlag(cmd, "limit")
 
 		enc := newEmitter(cmd)
+		guard := newPaginationCursorGuard()
+		route := "GET " + client.Path("/api/v1/apps/%s/connectors/%s/mcp_tools/%s/history", appID, connectorID, id)
 		for !limitReached(enc.Written(), limit) {
+			if guard.tokenAlreadyUsed(pageToken) {
+				return warnStuckCursor(cmd, route)
+			}
 			pageSize := requestedPageSize
 			if !enc.Filtered() {
 				pageSize = effectivePageSize(requestedPageSize, limit, enc.Written())
@@ -67,6 +72,17 @@ created_at, trace_id, syslog_event_id, annotations).`,
 				return fmt.Errorf("failed to parse response: %w", err)
 			}
 
+			ids := make([]string, len(resp.List))
+			for i, it := range resp.List {
+				ids[i] = rawItemID(it)
+			}
+			emit, stuck := guard.checkPage(ids)
+			if stuck {
+				return warnStuckCursor(cmd, route)
+			}
+			if !emit {
+				resp.List = nil
+			}
 			for _, entry := range resp.List {
 				_ = enc.Encode(json.RawMessage(entry))
 				if limitReached(enc.Written(), limit) {
@@ -77,6 +93,7 @@ created_at, trace_id, syslog_event_id, annotations).`,
 			if resp.NextPageToken == "" || manualPaging {
 				break
 			}
+			guard.markTokenUsed(pageToken)
 			pageToken = resp.NextPageToken
 		}
 

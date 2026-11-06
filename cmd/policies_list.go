@@ -66,7 +66,12 @@ recipe above reads.`,
 		limit := getIntFlag(cmd, "limit")
 
 		enc := newEmitter(cmd)
+		guard := newPaginationCursorGuard()
+		route := "GET /api/v1/policies"
 		for !limitReached(enc.Written(), limit) {
+			if guard.tokenAlreadyUsed(pageToken) {
+				return warnStuckCursor(cmd, route)
+			}
 			pageSize := requestedPageSize
 			if !enc.Filtered() {
 				pageSize = effectivePageSize(requestedPageSize, limit, enc.Written())
@@ -95,6 +100,17 @@ recipe above reads.`,
 				return fmt.Errorf("failed to parse response: %w", err)
 			}
 
+			ids := make([]string, len(resp.List))
+			for i, it := range resp.List {
+				ids[i] = it.ID
+			}
+			emit, stuck := guard.checkPage(ids)
+			if stuck {
+				return warnStuckCursor(cmd, route)
+			}
+			if !emit {
+				resp.List = nil
+			}
 			for _, p := range resp.List {
 				_ = enc.Encode(policyRow(p))
 				if limitReached(enc.Written(), limit) {
@@ -109,6 +125,7 @@ recipe above reads.`,
 			if resp.NextPageToken == "" || manualPaging {
 				break
 			}
+			guard.markTokenUsed(pageToken)
 			pageToken = resp.NextPageToken
 		}
 

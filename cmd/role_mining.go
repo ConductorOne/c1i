@@ -185,7 +185,7 @@ var roleMiningAccessProfilesCreateCmd = &cobra.Command{
 }
 
 func postRoleMiningList(cmd *cobra.Command, path string, request map[string]any, row listRowFn) error {
-	return listJSONPages(cmd, row, func(c *client.Client, size int, token string) ([]byte, error) {
+	return listJSONPages(cmd, "POST "+path, "id", row, func(c *client.Client, size int, token string) ([]byte, error) {
 		body := cloneJSONObject(request)
 		body["pageSize"] = size
 		if token != "" {

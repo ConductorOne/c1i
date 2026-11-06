@@ -64,7 +64,12 @@ transaction.`,
 		}
 
 		enc := newEmitter(cmd)
+		guard := newPaginationCursorGuard()
+		route := "GET " + basePath
 		for !limitReached(enc.Written(), limit) {
+			if guard.tokenAlreadyUsed(pageToken) {
+				return warnStuckCursor(cmd, route)
+			}
 			pageSize := requestedPageSize
 			if !enc.Filtered() {
 				pageSize = effectivePageSize(requestedPageSize, limit, enc.Written())
@@ -89,6 +94,17 @@ transaction.`,
 				return fmt.Errorf("failed to parse response: %w", err)
 			}
 
+			ids := make([]string, len(resp.List))
+			for i, it := range resp.List {
+				ids[i] = rawItemID(it)
+			}
+			emit, stuck := guard.checkPage(ids)
+			if stuck {
+				return warnStuckCursor(cmd, route)
+			}
+			if !emit {
+				resp.List = nil
+			}
 			for _, entry := range resp.List {
 				_ = enc.Encode(json.RawMessage(entry))
 				if limitReached(enc.Written(), limit) {
@@ -99,6 +115,7 @@ transaction.`,
 			if resp.NextPageToken == "" || manualPaging {
 				break
 			}
+			guard.markTokenUsed(pageToken)
 			pageToken = resp.NextPageToken
 		}
 

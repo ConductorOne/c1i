@@ -43,7 +43,12 @@ var mcpToolsSearchCmd = &cobra.Command{
 		limit := getIntFlag(cmd, "limit")
 
 		enc := newEmitter(cmd)
+		guard := newPaginationCursorGuard()
+		route := "POST " + client.Path("/api/v1/apps/%s/connectors/%s/mcp_tools/search", appID, connectorID)
 		for !limitReached(enc.Written(), limit) {
+			if guard.tokenAlreadyUsed(pageToken) {
+				return warnStuckCursor(cmd, route)
+			}
 			pageSize := requestedPageSize
 			if !enc.Filtered() {
 				pageSize = effectivePageSize(requestedPageSize, limit, enc.Written())
@@ -96,6 +101,17 @@ var mcpToolsSearchCmd = &cobra.Command{
 				items = resp.List
 			}
 
+			ids := make([]string, len(items))
+			for i, it := range items {
+				ids[i] = it.ID
+			}
+			emit, stuck := guard.checkPage(ids)
+			if stuck {
+				return warnStuckCursor(cmd, route)
+			}
+			if !emit {
+				items = nil
+			}
 			for _, t := range items {
 				_ = enc.Encode(toolRow(t))
 				if limitReached(enc.Written(), limit) {
@@ -106,6 +122,7 @@ var mcpToolsSearchCmd = &cobra.Command{
 			if resp.NextPageToken == "" || manualPaging {
 				break
 			}
+			guard.markTokenUsed(pageToken)
 			pageToken = resp.NextPageToken
 		}
 

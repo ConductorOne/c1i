@@ -114,6 +114,9 @@ func newGatewayClient(cmd *cobra.Command) (*mcpgateway.Client, error) {
 //     response with a real status arrived, which is a different failure
 //     class than a transport failure).
 //
+//   - *mcpgateway.PaginationError (tools/list never terminates): a protocol
+//     failure at the gateway -> *upstreamError, exit 8.
+//
 // The remaining cases classify a JSON-RPC-level error from the gateway (an
 // *mcpgateway.rpcError, unexported — accessed via RPCErrorCode):
 //
@@ -157,7 +160,8 @@ func classifyGatewayError(err error) error {
 		return nil
 	}
 	var transportErr *mcpgateway.TransportError
-	if errors.As(err, &transportErr) {
+	var paginationErr *mcpgateway.PaginationError
+	if errors.As(err, &transportErr) || errors.As(err, &paginationErr) {
 		return &upstreamError{err}
 	}
 	code, ok := mcpgateway.RPCErrorCode(err)

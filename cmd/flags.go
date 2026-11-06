@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"encoding/json"
 	"fmt"
 	"strconv"
 	"strings"
@@ -222,22 +223,44 @@ func pageSizeFlag(cmd *cobra.Command) int {
 // --page-size on a busy feed).
 const stuckPageRepeats = 2
 
+// maxCursorPages backstops a cursor that changes every call over ever-new
+// rows, which neither check below catches. 100k pages is 5M rows at the
+// default page size: far past any tenant list except the audit log, which
+// opts out (newUncappedPaginationCursorGuard).
+const maxCursorPages = 100_000
+
 // paginationCursorGuard detects auto-pagination that stopped making progress:
-// a page_token sent twice, or stuckPageRepeats stale pages in a row under
-// fresh-looking tokens. Construct with newPaginationCursorGuard.
+// a page_token sent twice, stuckPageRepeats stale pages in a row under
+// fresh-looking tokens, or more than maxPages requests. Construct with
+// newPaginationCursorGuard.
 type paginationCursorGuard struct {
 	seenTokens map[string]bool
 	seenIDs    map[string]bool
 	stale      int
+	pages      int
+	maxPages   int // 0 = no cap
 }
 
 func newPaginationCursorGuard() *paginationCursorGuard {
-	return &paginationCursorGuard{seenTokens: map[string]bool{}, seenIDs: map[string]bool{}}
+	return &paginationCursorGuard{seenTokens: map[string]bool{}, seenIDs: map[string]bool{}, maxPages: maxCursorPages}
 }
 
-// tokenAlreadyUsed reports whether token was already sent. Check it before
-// the request so the repeat is caught without re-fetching the page.
+// newUncappedPaginationCursorGuard is for a stream with no natural size bound
+// (the audit log); the repeated-token and stale-page checks still apply.
+func newUncappedPaginationCursorGuard() *paginationCursorGuard {
+	g := newPaginationCursorGuard()
+	g.maxPages = 0
+	return g
+}
+
+// tokenAlreadyUsed reports whether token was already sent, or the page cap
+// is spent. Call it once before each request, so a repeat is caught without
+// re-fetching the page.
 func (g *paginationCursorGuard) tokenAlreadyUsed(token string) bool {
+	g.pages++
+	if g.maxPages > 0 && g.pages > g.maxPages {
+		return true
+	}
 	return token != "" && g.seenTokens[token]
 }
 
@@ -274,6 +297,16 @@ func (g *paginationCursorGuard) checkPage(ids []string) (emit, stuck bool) {
 	}
 	g.stale = 0
 	return true, false
+}
+
+// rawItemID returns a raw JSON row's top-level string "id", or "" (which
+// checkPage ignores) when it has none.
+func rawItemID(item []byte) string {
+	var withID struct {
+		ID string `json:"id"`
+	}
+	_ = json.Unmarshal(item, &withID)
+	return withID.ID
 }
 
 // warnStuckCursor prints the stuck-cursor warning and returns the error that

@@ -121,7 +121,12 @@ tenant.
 		limit := getIntFlag(cmd, "limit")
 
 		enc := newEmitter(cmd)
+		guard := newPaginationCursorGuard()
+		route := "POST /api/v1/search/tasks"
 		for !limitReached(enc.Written(), limit) {
+			if guard.tokenAlreadyUsed(pageToken) {
+				return warnStuckCursor(cmd, route)
+			}
 			pageSize := requestedPageSize
 			if !enc.Filtered() {
 				pageSize = effectivePageSize(requestedPageSize, limit, enc.Written())
@@ -146,6 +151,17 @@ tenant.
 				return fmt.Errorf("failed to parse response: %w", err)
 			}
 
+			ids := make([]string, len(resp.List))
+			for i, it := range resp.List {
+				ids[i] = it.Task.ID
+			}
+			emit, stuck := guard.checkPage(ids)
+			if stuck {
+				return warnStuckCursor(cmd, route)
+			}
+			if !emit {
+				resp.List = nil
+			}
 			for _, item := range resp.List {
 				_ = enc.Encode(taskRow(item.Task))
 				if limitReached(enc.Written(), limit) {
@@ -156,6 +172,7 @@ tenant.
 			if resp.NextPageToken == "" || manualPaging {
 				break
 			}
+			guard.markTokenUsed(pageToken)
 			pageToken = resp.NextPageToken
 		}
 

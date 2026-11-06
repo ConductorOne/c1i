@@ -60,7 +60,12 @@ var connectorsListCmd = &cobra.Command{
 		limit := getIntFlag(cmd, "limit")
 
 		enc := newEmitter(cmd)
+		guard := newPaginationCursorGuard()
+		route := "GET " + client.Path("/api/v1/apps/%s/connectors", appID)
 		for !limitReached(enc.Written(), limit) {
+			if guard.tokenAlreadyUsed(pageToken) {
+				return warnStuckCursor(cmd, route)
+			}
 			pageSize := requestedPageSize
 			if !enc.Filtered() {
 				pageSize = effectivePageSize(requestedPageSize, limit, enc.Written())
@@ -86,6 +91,17 @@ var connectorsListCmd = &cobra.Command{
 				return fmt.Errorf("failed to parse response: %w", err)
 			}
 
+			ids := make([]string, len(resp.List))
+			for i, it := range resp.List {
+				ids[i] = it.Connector.ID
+			}
+			emit, stuck := guard.checkPage(ids)
+			if stuck {
+				return warnStuckCursor(cmd, route)
+			}
+			if !emit {
+				resp.List = nil
+			}
 			for _, item := range resp.List {
 				_ = enc.Encode(connectorRow(item))
 				if limitReached(enc.Written(), limit) {
@@ -96,6 +112,7 @@ var connectorsListCmd = &cobra.Command{
 			if resp.NextPageToken == "" || manualPaging {
 				break
 			}
+			guard.markTokenUsed(pageToken)
 			pageToken = resp.NextPageToken
 		}
 

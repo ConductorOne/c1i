@@ -431,11 +431,8 @@ func extractListAndToken(data []byte, listKey string) ([]json.RawMessage, string
 // "id" when present, else its canonical JSON (re-marshaling sorts keys;
 // UseNumber keeps large integers distinct).
 func itemIdentity(item json.RawMessage) string {
-	var withID struct {
-		ID string `json:"id"`
-	}
-	if err := json.Unmarshal(item, &withID); err == nil && withID.ID != "" {
-		return withID.ID
+	if id := rawItemID(item); id != "" {
+		return id
 	}
 	dec := json.NewDecoder(bytes.NewReader(item))
 	dec.UseNumber()
