@@ -18,8 +18,9 @@ func policyBindingServer(t *testing.T, policies map[string]string) (*httptest.Se
 	var mu sync.Mutex
 	var reqs []string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		b, _ := io.ReadAll(r.Body)
 		mu.Lock()
-		reqs = append(reqs, r.Method+" "+r.URL.Path)
+		reqs = append(reqs, r.Method+" "+r.URL.Path+" "+string(b))
 		mu.Unlock()
 		w.Header().Set("Content-Type", "application/json")
 		if id, ok := strings.CutPrefix(r.URL.Path, "/api/v1/policies/"); ok && r.Method == http.MethodGet {
@@ -27,6 +28,10 @@ func policyBindingServer(t *testing.T, policies map[string]string) (*httptest.Se
 			if !found {
 				w.WriteHeader(http.StatusNotFound)
 				_, _ = fmt.Fprint(w, `{"code":5,"message":"not found"}`)
+				return
+			}
+			if typ == "nopolicy" {
+				_, _ = fmt.Fprint(w, `{}`)
 				return
 			}
 			deleted := "null"
@@ -61,7 +66,7 @@ func countRequests(reqs []string, prefix string) int {
 func TestPolicyBindingValidation(t *testing.T) {
 	policies := map[string]string{
 		"gp": "POLICY_TYPE_GRANT", "rp": "POLICY_TYPE_REVOKE", "cp": "POLICY_TYPE_CERTIFY",
-		"del": "deleted:POLICY_TYPE_GRANT",
+		"del": "deleted:POLICY_TYPE_GRANT", "np": "nopolicy",
 	}
 	cases := []struct {
 		name        string
@@ -70,6 +75,8 @@ func TestPolicyBindingValidation(t *testing.T) {
 		wantErr     string // "" means success
 		wantLookups int
 		wantPosts   int
+		wantExit    int    // 0 means exitUsage when wantErr is set
+		wantReq     string // substring some request must contain
 	}{
 		{name: "update 404", args: []string{"apps", "update", "app-1", "--grant-policy-id", "nope"},
 			wantErr: `--grant-policy-id "nope": no such policy`, wantLookups: 1},
@@ -81,8 +88,14 @@ func TestPolicyBindingValidation(t *testing.T) {
 			wantLookups: 3, wantPosts: 1},
 		{name: "update unbind not looked up", args: []string{"apps", "update", "app-1", "--unbind-policy", "grant", "--certify-policy-id", "cp"},
 			wantLookups: 1, wantPosts: 1},
-		{name: "update duplicate id looked up once", args: []string{"apps", "update", "app-1", "--grant-policy-id", "rp", "--revoke-policy-id", "rp"},
-			wantErr: "is a POLICY_TYPE_REVOKE policy", wantLookups: 1},
+		{name: "update duplicate id looked up once", args: []string{"apps", "update", "app-1", "--grant-policy-id", "gp", "--revoke-policy-id", "gp"},
+			wantErr: `--revoke-policy-id "gp" is a POLICY_TYPE_GRANT policy`, wantLookups: 1},
+		{name: "update 200 without policy is a C1 fault", args: []string{"apps", "update", "app-1", "--grant-policy-id", "np"},
+			wantErr: "no policy", wantExit: exitServer, wantLookups: 1},
+		{name: "update trims policy id", args: []string{"apps", "update", "app-1", "--grant-policy-id", " gp "},
+			wantLookups: 1, wantPosts: 1, wantReq: `"grantPolicyId":"gp"`},
+		{name: "create trims policy id", args: []string{"apps", "create", "--display-name", "a", "--grant-policy-id", "\tgp\n"},
+			wantLookups: 1, wantPosts: 1, wantReq: `"grantPolicyId":"gp"`},
 		{name: "update dry run sends nothing", args: []string{"apps", "update", "app-1", "--grant-policy-id", "nope"}, dryRun: true},
 		{name: "create 404", args: []string{"apps", "create", "--display-name", "a", "--revoke-policy-id", "nope"},
 			wantErr: "no such policy", wantLookups: 1},
@@ -109,8 +122,12 @@ func TestPolicyBindingValidation(t *testing.T) {
 				if err == nil || !strings.Contains(err.Error(), tc.wantErr) {
 					t.Fatalf("err = %v, want it to contain %q", err, tc.wantErr)
 				}
-				if got := exitCode(err); got != exitUsage {
-					t.Errorf("exit = %d, want %d", got, exitUsage)
+				want := tc.wantExit
+				if want == 0 {
+					want = exitUsage
+				}
+				if got := exitCode(err); got != want {
+					t.Errorf("exit = %d, want %d", got, want)
 				}
 			}
 			reqs := requests()
@@ -119,6 +136,9 @@ func TestPolicyBindingValidation(t *testing.T) {
 			}
 			if got := countRequests(reqs, "POST "); got != tc.wantPosts {
 				t.Errorf("mutations = %d, want %d (%v)", got, tc.wantPosts, reqs)
+			}
+			if tc.wantReq != "" && !strings.Contains(strings.Join(reqs, "\n"), tc.wantReq) {
+				t.Errorf("no request contains %s: %v", tc.wantReq, reqs)
 			}
 		})
 	}

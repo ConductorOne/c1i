@@ -1,12 +1,14 @@
 package cmd
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
 	"os"
 	"strings"
 
+	"github.com/ConductorOne/c1i/internal/client"
 	"github.com/spf13/cobra"
 )
 
@@ -242,4 +244,35 @@ func policyRow(p policyListItem) map[string]any {
 		"deleted_at":         deletedAt,
 		"baseline_policy_id": baselinePolicyID,
 	}
+}
+
+// policyMeta is what a GET of one policy says about its identity: its type,
+// whether it is soft-deleted, and whether the response held a policy at all.
+type policyMeta struct {
+	policyType string
+	deleted    bool
+	found      bool
+}
+
+// fetchPolicyMeta GETs one policy. Client errors are returned unwrapped so
+// callers keep their classification.
+func fetchPolicyMeta(ctx context.Context, c *client.Client, id string) (policyMeta, error) {
+	data, err := c.Get(ctx, client.Path("/api/v1/policies/%s", id), nil)
+	if err != nil {
+		return policyMeta{}, err
+	}
+	var resp struct {
+		Policy *struct {
+			PolicyType string          `json:"policyType"`
+			DeletedAt  json.RawMessage `json:"deletedAt"`
+		} `json:"policy"`
+	}
+	if err := json.Unmarshal(data, &resp); err != nil {
+		return policyMeta{}, fmt.Errorf("parsing policy response: %w", err)
+	}
+	if resp.Policy == nil {
+		return policyMeta{}, nil
+	}
+	d := string(resp.Policy.DeletedAt)
+	return policyMeta{policyType: resp.Policy.PolicyType, deleted: d != "" && d != "null", found: true}, nil
 }

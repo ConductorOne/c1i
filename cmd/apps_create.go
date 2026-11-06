@@ -79,7 +79,8 @@ func buildAppCreateBody(cmd *cobra.Command) (map[string]any, error) {
 	if err := applyPolicyIDs(cmd, appPolicyKinds, body); err != nil {
 		return nil, err
 	}
-	if v, _ := cmd.Flags().GetString("identity-matching"); v != "" {
+	if cmd.Flags().Changed("identity-matching") {
+		v, _ := cmd.Flags().GetString("identity-matching")
 		api, err := mapIdentityMatching(v)
 		if err != nil {
 			return nil, err

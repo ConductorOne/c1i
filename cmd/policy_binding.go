@@ -2,7 +2,6 @@ package cmd
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -35,12 +34,16 @@ func registerPolicyIDFlags(cmd *cobra.Command, kinds []policyKind, suffix string
 	}
 }
 
-func registerUnbindPolicyFlag(cmd *cobra.Command, kinds []policyKind) {
+func kindNames(kinds []policyKind) string {
 	names := make([]string, len(kinds))
 	for i, k := range kinds {
 		names[i] = k.kind
 	}
-	addRepeatableStringFlag(cmd, "unbind-policy", "Unbind a policy: "+strings.Join(names, ", ")+" (repeatable)")
+	return strings.Join(names, ", ")
+}
+
+func registerUnbindPolicyFlag(cmd *cobra.Command, kinds []policyKind) {
+	addRepeatableStringFlag(cmd, "unbind-policy", "Unbind a policy: "+kindNames(kinds)+" (repeatable)")
 }
 
 // policyIDFlag reads a policy-id flag; a passed-but-blank value is a usage
@@ -50,7 +53,8 @@ func policyIDFlag(cmd *cobra.Command, k policyKind) (string, bool, error) {
 		return "", false, nil
 	}
 	v, _ := cmd.Flags().GetString(k.flag)
-	if strings.TrimSpace(v) == "" {
+	v = strings.TrimSpace(v)
+	if v == "" {
 		return "", false, &usageError{fmt.Errorf("--%s requires a non-empty value; to unbind, use --unbind-policy %s", k.flag, k.kind)}
 	}
 	return v, true, nil
@@ -85,11 +89,7 @@ func applyPolicyUpdates(cmd *cobra.Command, kinds []policyKind, obj map[string]a
 			known = known || k.kind == v
 		}
 		if !known {
-			names := make([]string, len(kinds))
-			for i, k := range kinds {
-				names[i] = k.kind
-			}
-			return nil, &usageError{fmt.Errorf("invalid --unbind-policy %q: want %s", r, strings.Join(names, ", "))}
+			return nil, &usageError{fmt.Errorf("invalid --unbind-policy %q: want %s", r, kindNames(kinds))}
 		}
 		unbind[v] = true
 	}
@@ -142,7 +142,7 @@ func validatePolicyBindings(ctx context.Context, cmd *cobra.Command, c *client.C
 }
 
 func fetchBoundPolicyType(ctx context.Context, c *client.Client, flag, id string) (string, error) {
-	data, err := c.Get(ctx, client.Path("/api/v1/policies/%s", id), nil)
+	meta, err := fetchPolicyMeta(ctx, c, id)
 	if err != nil {
 		var apiErr *client.APIError
 		if errors.As(err, &apiErr) && apiErr.StatusCode == http.StatusNotFound {
@@ -150,18 +150,11 @@ func fetchBoundPolicyType(ctx context.Context, c *client.Client, flag, id string
 		}
 		return "", fmt.Errorf("checking --%s %q: %w", flag, id, err)
 	}
-	var resp struct {
-		Policy struct {
-			PolicyType string  `json:"policyType"`
-			DeletedAt  *string `json:"deletedAt"`
-		} `json:"policy"`
+	if !meta.found || meta.policyType == "" {
+		return "", &nonJSONResponseError{fmt.Errorf("checking --%s %q: the response held no policy with a policyType", flag, id)}
 	}
-	if err := json.Unmarshal(data, &resp); err != nil {
-		return "", fmt.Errorf("parsing policy %q: %w", id, err)
-	}
-	// GET still returns a soft-deleted policy.
-	if resp.Policy.DeletedAt != nil {
+	if meta.deleted {
 		return "", &usageError{fmt.Errorf("--%s %q: policy is deleted", flag, id)}
 	}
-	return resp.Policy.PolicyType, nil
+	return meta.policyType, nil
 }

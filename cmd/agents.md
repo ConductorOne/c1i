@@ -387,6 +387,11 @@ resource with `--resource-id` likewise means you drop
   calls get no such check. An empty id is exit `2`; unbind with
   `--unbind-policy <kind>`. An app user mapper set with
   `apps update --app-user-mapper-file` can be replaced but not removed.
+- `--unbind-policy grant` (or `revoke`) leaves the app with no grant (or
+  revoke) policy; the server accepts that with exit `0`.
+- An app user mapper is stored whatever `--identity-matching` is set to.
+- Binding a policy needs read access to policies: a 403 on the lookup exits
+  `3` and nothing is sent.
 - `grants list --wait` can report success with zero rows. An empty result is
   stable, so a filter matching nothing settles in ~10s and exits `0` -- which
   looks identical to "the grant did not happen" but usually means "not yet".

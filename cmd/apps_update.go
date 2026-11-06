@@ -90,13 +90,15 @@ var appIdentityMatchingValues = map[string]string{
 }
 
 // mapIdentityMatching maps --identity-matching to the API enum.
+// '-' and '_' are interchangeable, as in mapPolicyType.
 func mapIdentityMatching(raw string) (string, error) {
-	v := strings.ToLower(strings.TrimSpace(raw))
+	v := strings.ToLower(strings.ReplaceAll(strings.TrimSpace(raw), "_", "-"))
 	if api, ok := appIdentityMatchingValues[v]; ok {
 		return api, nil
 	}
+	full := strings.ToUpper(strings.ReplaceAll(v, "-", "_"))
 	for _, api := range appIdentityMatchingValues {
-		if strings.EqualFold(v, api) {
+		if full == api {
 			return api, nil
 		}
 	}
