@@ -58,8 +58,7 @@ for an exact count.`,
 
 		enc := newEmitter(cmd)
 		guard := newPaginationCursorGuard()
-		const path = webhooksPath
-		route := "GET " + path
+		route := "GET " + webhooksPath
 		for !limitReached(enc.Written(), limit) {
 			if guard.tokenAlreadyUsed(pageToken) {
 				return guard.warnStuck(cmd, route)
@@ -73,7 +72,7 @@ for an exact count.`,
 				params["page_token"] = pageToken
 			}
 
-			data, err := c.Get(cmd.Context(), path, params)
+			data, err := c.Get(cmd.Context(), webhooksPath, params)
 			if err != nil {
 				return fmt.Errorf("API error: %w", err)
 			}

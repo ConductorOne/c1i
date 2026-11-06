@@ -82,6 +82,7 @@ func TestWebhooksDisplayNameLength(t *testing.T) {
 		{"101 runes", strings.Repeat("a", 101), false},
 		{"100 multibyte runes (300 bytes)", strings.Repeat("日", 100), true},
 		{"two multibyte runes (6 bytes)", "日本", false},
+		{"two runes padded to four", "  ab", false},
 	}
 	for _, c := range cases {
 		for _, tc := range createAndUpdate("display-name", c.val) {
