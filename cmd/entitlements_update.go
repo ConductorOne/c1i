@@ -2,9 +2,7 @@ package cmd
 
 import (
 	"fmt"
-	"strconv"
 	"strings"
-	"time"
 
 	"github.com/ConductorOne/c1i/internal/client"
 	"github.com/spf13/cobra"
@@ -131,16 +129,10 @@ func buildEntitlementUpdateBody(cmd *cobra.Command, appID, id string) (map[strin
 	if f.Changed("duration-grant") && f.Changed("duration-unset") {
 		return nil, &usageError{fmt.Errorf("--duration-grant and --duration-unset are mutually exclusive: both set the entitlement's max_grant_duration")}
 	}
-	if f.Changed("duration-grant") {
-		raw, _ := f.GetString("duration-grant")
-		d, err := time.ParseDuration(raw)
-		if err != nil {
-			return nil, &usageError{fmt.Errorf("--duration-grant: %w", err)}
-		}
-		if d <= 0 {
-			return nil, &usageError{fmt.Errorf("--duration-grant must be positive, got %s; use --duration-unset to remove the limit", raw)}
-		}
-		ent["durationGrant"] = strconv.FormatFloat(d.Seconds(), 'f', -1, 64) + "s"
+	if v, ok, err := grantDurationFlag(cmd, "duration-grant"); err != nil {
+		return nil, err
+	} else if ok {
+		ent["durationGrant"] = v
 		paths = append(paths, "durationGrant")
 	}
 	if f.Changed("duration-unset") {

@@ -207,9 +207,8 @@ any other kind fails with a 500 (exit `6`, though retrying never helps) saying
 Reusing a resource with `--resource-id` likewise means you drop
 `--resource-display-name`. `--owner-id` is repeatable and goes inline in the create
 request, so no follow-up call is needed; an empty one is a usage error rather
-than an owner quietly dropped. `--duration-grant` takes a protobuf duration —
-seconds with an `s` suffix, e.g. `3600s`; a Go-style `1h` is refused by the
-server. Omit it for standing access.
+than an owner quietly dropped. `--duration-grant` takes a protobuf (`3600s`) or Go (`8h`) duration, sent in
+seconds, and must be positive. Omit it for standing access.
 
 `--dry-run` previews all three requests, printing
 `NEW_APP_RESOURCE_TYPE_ID`/`NEW_APP_RESOURCE_ID` where an id only exists after
@@ -558,9 +557,8 @@ c1i requests get <request-id>
 
 On `create`, `--user-id` defaults to the authenticated user when omitted.
 `requests create grant --duration` takes a protobuf duration in seconds
-(`86400s`), like `entitlements create --duration-grant` and
-`tasks update-grant-duration --duration`. A Go-style `24h` or `7d` is refused by
-the server with `invalid google.protobuf.Duration value "24h"`.
+(`86400s`), like `tasks update-grant-duration --duration`. A Go-style `24h` or
+`7d` is refused by the server with `invalid google.protobuf.Duration value "24h"`.
 
 `requests list` is the requester lens on access requests (the grant/revoke tasks
 you file): by default it shows requests you opened or are the subject of —

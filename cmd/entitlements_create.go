@@ -68,9 +68,9 @@ usage error. Likewise, pass --resource-id to reuse a resource and drop
 --resource-display-name.
 
 Omitting --duration-grant leaves the entitlement at standing access
-(durationUnset in the response). It takes a protobuf duration, not a Go one --
-seconds with an "s" suffix, e.g. 3600s. "1h" is refused by the server with:
-  invalid google.protobuf.Duration value "1h"
+(durationUnset in the response). It takes a protobuf duration (3600s) or a Go
+one (8h), sent in seconds since the API parses only that form, and must be
+positive.
 
 --grant-policy-id, --revoke-policy-id and --certify-policy-id must each name a
 policy of that type, or the entitlement step fails with e.g.:
@@ -230,14 +230,18 @@ func buildEntitlementCreatePlan(cmd *cobra.Command) (*entitlementCreatePlan, err
 
 	// Flag name -> request field, equal except where the wire key is camelCase.
 	for flag, key := range map[string]string{
-		"description":    "description",
-		"slug":           "slug",
-		"alias":          "alias",
-		"duration-grant": "durationGrant",
+		"description": "description",
+		"slug":        "slug",
+		"alias":       "alias",
 	} {
 		if v, _ := cmd.Flags().GetString(flag); v != "" {
 			p.entitlementBody[key] = v
 		}
+	}
+	if v, ok, err := grantDurationFlag(cmd, "duration-grant"); err != nil {
+		return nil, err
+	} else if ok {
+		p.entitlementBody["durationGrant"] = v
 	}
 	// An empty policy id from an unset variable would create the entitlement
 	// without that policy, with exit 0.
@@ -457,7 +461,7 @@ func addEntitlementCreateFlags(cmd *cobra.Command) {
 	f.String("description", "", "Description for the new entitlement")
 	f.String("slug", "", "Slug for the new entitlement (e.g. member)")
 	f.String("alias", "", "Alias for the new entitlement; exact-match queryable")
-	f.String("duration-grant", "", "Maximum grant duration as a protobuf duration, e.g. 3600s; omit for standing access")
+	f.String("duration-grant", "", "Maximum grant duration as a protobuf duration, e.g. 3600s; a Go duration such as 8h is converted to seconds; omit for standing access")
 	f.String("grant-policy-id", "", "Grant policy for the new entitlement (must be a grant policy)")
 	f.String("revoke-policy-id", "", "Revoke policy for the new entitlement (must be a revoke policy)")
 	f.String("certify-policy-id", "", "Certify policy for the new entitlement (must be a certify policy)")

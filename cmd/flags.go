@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/spf13/cobra"
 )
@@ -540,4 +541,23 @@ func repeatableStringFlag(cmd *cobra.Command, name string) ([]string, error) {
 		}
 	}
 	return values, nil
+}
+
+// grantDurationFlag reads a max-grant-duration flag. It accepts a protobuf
+// ("3600s") or Go ("8h") duration and returns it in seconds, the only form the
+// API parses; ok is false when the flag was not passed. Non-positive values
+// are refused because the server stores them without complaint.
+func grantDurationFlag(cmd *cobra.Command, name string) (string, bool, error) {
+	if !cmd.Flags().Changed(name) {
+		return "", false, nil
+	}
+	raw, _ := cmd.Flags().GetString(name)
+	d, err := time.ParseDuration(raw)
+	if err != nil {
+		return "", false, &usageError{fmt.Errorf("--%s: %w", name, err)}
+	}
+	if d <= 0 {
+		return "", false, &usageError{fmt.Errorf("--%s must be positive, got %s", name, raw)}
+	}
+	return strconv.FormatFloat(d.Seconds(), 'f', -1, 64) + "s", true, nil
 }

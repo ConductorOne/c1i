@@ -520,6 +520,26 @@ func TestEntitlementCreateDurationGrantWireKey(t *testing.T) {
 	}
 }
 
+// TestEntitlementCreateDurationGrantAcceptsGoDuration pins that create parses
+// --duration-grant like update does: Go forms are converted to seconds and a
+// non-positive or unparseable value is a usage error.
+func TestEntitlementCreateDurationGrantAcceptsGoDuration(t *testing.T) {
+	for in, want := range map[string]string{"8h": "28800s", "3600s": "3600s", "1m30.5s": "90.5s"} {
+		p := mustPlan(t, "--app-id", "app1", "--display-name", "e", "--duration-grant", in)
+		if got := p.entitlementBody["durationGrant"]; got != want {
+			t.Errorf("--duration-grant %s: durationGrant = %v, want %s", in, got, want)
+		}
+	}
+	for _, in := range []string{"0s", "-1m", "soon", ""} {
+		cmd := newEntitlementCreateCmd(t, "--app-id", "app1", "--display-name", "e", "--duration-grant", in)
+		_, err := buildEntitlementCreatePlan(cmd)
+		var ue *usageError
+		if !errors.As(err, &ue) {
+			t.Errorf("--duration-grant %q: err = %v, want *usageError", in, err)
+		}
+	}
+}
+
 // TestEntitlementCreatePolicyFlags pins that each policy-id flag reaches the
 // entitlement body under its wire key, and that an empty one is refused rather
 // than silently creating the entitlement without that policy.
