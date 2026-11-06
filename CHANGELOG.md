@@ -69,9 +69,6 @@ credentials fails instead of using the working directory. With a relative
   MCP server `--*-config-file` flags, and `--steps-file`, `--rules-file` and
   `--refs-file`. A `null` body file, which could panic, is refused the same
   way, and the error names the flag.
-- A `--body-file` containing a top-level JSON `null` panicked `policies
-  update`; every `--body-file` and config-file flag now rejects it with
-  exit 2.
 - `apps set-owners --wait` exits 1 (`writing output:`) when its success line
   can't be written to stdout, instead of 0; the owners were already set.
 - **A failed write to stdout now exits `1`** (e.g. a full disk) instead of
