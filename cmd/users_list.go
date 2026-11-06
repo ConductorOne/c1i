@@ -11,6 +11,14 @@ import (
 var usersListCmd = &cobra.Command{
 	Use:   "list",
 	Short: "Search and list C1 users (NDJSON output)",
+	Long: `Search and list C1 users (NDJSON output).
+
+Reads POST /api/v1/search/users, which with no origins filter returns only
+directory-origin users: local-origin (service) users and system users are
+excluded. The search's origins filter includes them:
+
+  c1i api --method POST --path /api/v1/search/users --paginate \
+    --body '{"origins":["USER_ORIGIN_DIRECTORY","USER_ORIGIN_LOCAL","USER_ORIGIN_SYSTEM"]}'`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		baseURL, err := GetBaseURL()
 		if err != nil {

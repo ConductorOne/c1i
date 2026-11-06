@@ -1153,3 +1153,85 @@ func TestAPIPaginateStuckCycleShapesReturnExitServer(t *testing.T) {
 		})
 	}
 }
+
+// A --list-key absent from a page that has other arrays printed 0 rows at
+// exit 0; it must be a usage error naming the key and the arrays present.
+// A page with no arrays at all (protojson omits an empty repeated field)
+// stays a clean empty result.
+func TestAPIPaginateListKeyAbsent(t *testing.T) {
+	for _, tc := range []struct {
+		name, body string
+		wantErr    bool
+	}{
+		{"other arrays present", `{"list":[{"id":"a"}],"extra":[],"nextPageToken":""}`, true},
+		{"no arrays", `{"nextPageToken":""}`, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
+				_, _ = fmt.Fprint(w, tc.body)
+			}))
+			defer srv.Close()
+
+			resetAPICmdFlags(t)
+			stubNewAPIClient(t, srv)
+			t.Setenv("C1I_URL", srv.URL)
+
+			var out, errOut bytes.Buffer
+			apiCmd.SetOut(&out)
+			apiCmd.SetErr(&errOut)
+			rootCmd.SetArgs([]string{"api", "--path", "/api/v1/automations", "--paginate", "--list-key", "nope"})
+
+			err := rootCmd.ExecuteContext(context.Background())
+			if !tc.wantErr {
+				if err != nil {
+					t.Fatalf("ExecuteContext: %v", err)
+				}
+				return
+			}
+			if err == nil {
+				t.Fatalf("want a usage error, got nil; stdout=%q", out.String())
+			}
+			if got := exitCode(err); got != exitUsage {
+				t.Errorf("exitCode = %d, want %d (usage); err=%v", got, exitUsage, err)
+			}
+			for _, want := range []string{`"nope"`, "extra, list"} {
+				if !strings.Contains(err.Error(), want) {
+					t.Errorf("error %q does not mention %s", err.Error(), want)
+				}
+			}
+		})
+	}
+}
+
+// protojson omits an empty repeated field, so a later page can lack the
+// --list-key while carrying another array. Once the key has been seen, that
+// is the end of the list, not a misspelled key.
+func TestAPIPaginateListKeyOmittedOnLaterPage(t *testing.T) {
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.URL.Query().Get("page_token") == "" {
+			_, _ = fmt.Fprint(w, `{"list":[{"id":"a"}],"nextPageToken":"tok2"}`)
+			return
+		}
+		_, _ = fmt.Fprint(w, `{"facets":[{"id":"f"}],"nextPageToken":""}`)
+	}))
+	defer srv.Close()
+
+	resetAPICmdFlags(t)
+	stubNewAPIClient(t, srv)
+	t.Setenv("C1I_URL", srv.URL)
+
+	var out, errOut bytes.Buffer
+	apiCmd.SetOut(&out)
+	apiCmd.SetErr(&errOut)
+	rootCmd.SetArgs([]string{"api", "--path", "/api/v1/automations", "--paginate", "--list-key", "list"})
+
+	if err := rootCmd.ExecuteContext(context.Background()); err != nil {
+		t.Fatalf("ExecuteContext: %v; stderr=%q", err, errOut.String())
+	}
+	rows := decodeNDJSONRows(t, out.String())
+	if len(rows) != 1 || rows[0]["id"] != "a" {
+		t.Fatalf("rows = %v, want only page 1's a", rows)
+	}
+}

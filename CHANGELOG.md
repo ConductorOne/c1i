@@ -113,6 +113,28 @@ credentials fails instead of using the working directory. With a relative
 - The README's uninstall steps now say where each install method puts the
   binary, and that the Linux config directory follows `XDG_CONFIG_HOME`.
 
+- **`functions usage` overclaimed with `--page-token`.** It scans only that
+  page, yet printed "no automations call function X"; it now says no
+  automation on this page calls it. A never-run automation's
+  `last_executed_at` is now `null` instead of `""`.
+
+- **`tasks list` and `requests list` emitted a row of empty values** for a
+  result with no `task` object. Such a result is now skipped, as
+  `automations executions list` already does.
+
+- **`api --paginate --list-key` with a misspelled key printed nothing and
+  exited 0.** A key missing from a page that has other array fields is now a
+  usage error (exit `2`) naming them, until the key has appeared once; after
+  that, a page that omits it adds no rows. A page with no array fields is
+  still an empty result.
+
+- The docs no longer say every list command auto-paginates; they name the
+  single-request ones and their stderr `partial result` warning.
+
+- `users list` help and the README now say its search route returns only
+  directory-origin users by default, omitting local-origin (service) and
+  system users, and how to include them with `api`.
+
 ## [0.9.1] - 2026-10-09
 
 ### Security

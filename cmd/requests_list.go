@@ -151,17 +151,15 @@ tenant.
 				return fmt.Errorf("failed to parse response: %w", err)
 			}
 
-			ids := make([]string, len(resp.List))
-			for i, it := range resp.List {
-				ids[i] = it.Task.ID
-			}
-			keep, err := guard.checkPage(cmd, route, ids)
+			keep, err := guard.checkPage(cmd, route, resp.ids())
 			if err != nil {
 				return err
 			}
-			resp.List = keepRows(resp.List, keep)
-			for _, item := range resp.List {
-				if err := enc.Encode(taskRow(item.Task)); err != nil {
+			for _, item := range keepRows(resp.List, keep) {
+				if item.Task == nil {
+					continue // skipped rather than emitted as an all-"" row
+				}
+				if err := enc.Encode(taskRow(*item.Task)); err != nil {
 					return err
 				}
 				if limitReached(enc.Written(), limit) {
