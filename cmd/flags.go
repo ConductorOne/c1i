@@ -466,8 +466,9 @@ func requireNonEmpty(cmd *cobra.Command, names ...string) error {
 	}
 }
 
-// requireNonEmptyIfSet errors when a flag was passed with an empty or
-// whitespace-only value, while leaving an unset flag alone. Distinct from
+// requireNonEmptyIfSet errors when a flag was passed with no visible
+// character (one that is graphic, not a space, not a format char), while
+// leaving an unset flag alone. Distinct from
 // requireNonEmpty, which is for flags that must always be present: use this
 // for an *optional* flag whose empty value would change behavior rather than
 // fail — an id flag selecting an existing object (`--resource-type-id

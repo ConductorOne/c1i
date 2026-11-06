@@ -183,7 +183,10 @@ func TestRequireNonEmptyIfSetRejectsWhitespace(t *testing.T) {
 	}{{false, "", false}, {true, "x", false}, {true, " x ", false}, {true, "", true}, {true, "  \t\n", true},
 		// Invisible-only values: zero-width space, BOM, NBSP, and a mix.
 		{true, "\u200b", true}, {true, "\ufeff", true}, {true, "\u00a0", true}, {true, " \u200b\ufeff\u00a0 ", true},
-		{true, "\u200bx", false}, {true, "é", false}} {
+		{true, "\u200bx", false}, {true, "é", false},
+		// Legitimate names carrying invisible runes must still pass:
+		// decomposed "é", an emoji ZWJ sequence, RTL text with an RLM.
+		{true, "e\u0301", false}, {true, "\U0001F468\u200D\U0001F469\u200D\U0001F467", false}, {true, "\u200Fשלום", false}} {
 		cmd := &cobra.Command{Use: "test"}
 		cmd.Flags().String("a", "", "")
 		if tc.set {
