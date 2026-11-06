@@ -23,6 +23,12 @@ credentials fails instead of using the working directory. With a relative
 
 ### Fixed
 
+- **`role-mining suggestions|runs|custom-analysis list` and
+  `findings routing-rules|transformation-rules list` would drop a page
+  silently** if the server ever paginated them: they made one request and
+  ignored `nextPageToken`. They now warn on stderr when one is returned.
+  None of these routes paginate today.
+
 - **`automations list`, `automations executions list`, `functions list`,
   `functions commits`, `functions usage`, and `api --paginate` could loop
   forever**, re-printing the same rows: on a large enough result set,

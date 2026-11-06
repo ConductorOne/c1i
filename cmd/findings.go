@@ -208,15 +208,13 @@ func getFixedList(cmd *cobra.Command, path string, row listRowFn) error {
 	if err != nil {
 		return fmt.Errorf("API error: %w", err)
 	}
-	var response struct {
-		List []json.RawMessage `json:"list"`
-	}
-	if err := json.Unmarshal(data, &response); err != nil {
+	items, next, err := extractListAndToken(data, "list")
+	if err != nil {
 		return fmt.Errorf("failed to parse response: %w", err)
 	}
 	enc := newEmitter(cmd)
 	limit := getIntFlag(cmd, "limit")
-	for _, raw := range response.List {
+	for _, raw := range items {
 		var item map[string]any
 		if err := json.Unmarshal(raw, &item); err != nil {
 			return fmt.Errorf("failed to parse response item: %w", err)
@@ -225,8 +223,14 @@ func getFixedList(cmd *cobra.Command, path string, row listRowFn) error {
 			return err
 		}
 		if limitReached(enc.Written(), limit) {
-			break
+			return nil
 		}
+	}
+	// These routes don't paginate today, so a cursor isn't followed; it still
+	// must not pass as a complete result.
+	if next != "" {
+		_, _ = fmt.Fprintf(cmd.ErrOrStderr(),
+			"Warning: GET %s returned a partial result — the server reported more pages, which c1i does not fetch for this command.\n", path)
 	}
 	return nil
 }
