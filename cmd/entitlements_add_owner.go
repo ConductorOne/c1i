@@ -68,7 +68,7 @@ polls).`,
 		if !wait {
 			return nil
 		}
-		return runEntitlementOwnersWait(cmd, c, appID, entitlementID, []string{userID}, waitTimeout)
+		return runEntitlementOwnersWait(cmd, c, appID, entitlementID, untilPresent([]string{userID}), waitTimeout)
 	},
 }
 

@@ -95,14 +95,15 @@ func waitForOwners(cmd *cobra.Command, c *client.Client, appID string, wantUserI
 // ownersWaitOp is waitForOwners' operation, built separately so a test can
 // drive the loop at a poll interval shorter than ownerWaitPollInterval.
 func ownersWaitOp(c *client.Client, appID string, wantUserIDs []string, timeout time.Duration) waitOp[[]string] {
-	return ownerIDsWaitOp(c, client.Path("/api/v1/apps/%s/ownerids", appID), wantUserIDs, timeout,
+	return ownerIDsWaitOp(c, client.Path("/api/v1/apps/%s/ownerids", appID), untilPresent(wantUserIDs), timeout,
 		"app "+appID, "c1i apps owners "+appID)
 }
 
 // ownerIDsWaitOp polls an .../ownerids path (an app's or an entitlement's)
-// until every wanted id is present. target names the owned object in the
-// progress lines ("app X"); recheck is the read to suggest on timeout.
-func ownerIDsWaitOp(c *client.Client, ownerIDsPath string, wantUserIDs []string, timeout time.Duration, target, recheck string) waitOp[[]string] {
+// until done accepts the owner ids (untilPresent or untilEqual). target names
+// the owned object in the progress lines ("app X"); recheck is the read to
+// suggest on timeout.
+func ownerIDsWaitOp(c *client.Client, ownerIDsPath string, done func([]string) bool, timeout time.Duration, target, recheck string) waitOp[[]string] {
 	return waitOp[[]string]{
 		Poll: func(ctx context.Context) ([]string, error) {
 			got, err := fetchOwnerIDs(ctx, c, ownerIDsPath)
@@ -111,7 +112,7 @@ func ownerIDsWaitOp(c *client.Client, ownerIDsPath string, wantUserIDs []string,
 			}
 			return got, nil
 		},
-		Done:     untilPresent(wantUserIDs),
+		Done:     done,
 		Interval: ownerWaitPollInterval,
 		Timeout:  timeout,
 		Subject:  "owners to provision on " + target,

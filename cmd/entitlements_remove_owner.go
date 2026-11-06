@@ -16,12 +16,17 @@ the whole list with exactly the ids you pass, this removes one owner without
 touching the rest of the list -- so it cannot drop an owner someone else
 added while you were deciding.
 
-Removing an existing user who is not an owner exits 0. A user id that does
-not exist exits 4, as does an entitlement or app that does not exist.
+A user who was never an owner exits 4, the same as a user, entitlement or
+app that does not exist, so exit 4 cannot tell "no such user" from "not an
+owner". A user who was an owner and has already been removed exits 0.
+
+Unlike "set-owners", which refuses an empty list, this can remove the last
+owner.
 
 Owner changes are provisioned ASYNCHRONOUSLY: this call returns as soon as
-the request is accepted, and may take a minute or more to show. Verify with
-"c1i entitlements owners <entitlement-id> --app-id <app-id>".
+the request is accepted, and the change showed up anywhere from about 1s to
+135s later. Verify with "c1i entitlements owners <entitlement-id> --app-id
+<app-id>".
 
 Honors --dry-run.`,
 	Args: cobra.ExactArgs(1),

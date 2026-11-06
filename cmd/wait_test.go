@@ -543,3 +543,24 @@ func mustSet(t *testing.T, fs *pflag.FlagSet, name, value string) {
 		t.Fatalf("setting --%s=%s: %v", name, value, err)
 	}
 }
+
+// TestUntilEqual pins set equality: order and duplicates don't matter, but an
+// extra or a missing id does.
+func TestUntilEqual(t *testing.T) {
+	cases := []struct {
+		want, got []string
+		ok        bool
+	}{
+		{[]string{"a"}, []string{"a"}, true},
+		{[]string{"a", "b"}, []string{"b", "a", "a"}, true},
+		{[]string{"a"}, []string{"a", "b"}, false},
+		{[]string{"a", "b"}, []string{"a"}, false},
+		{nil, nil, true},
+		{nil, []string{"a"}, false},
+	}
+	for _, tc := range cases {
+		if got := untilEqual(tc.want)(tc.got); got != tc.ok {
+			t.Errorf("untilEqual(%v)(%v) = %v, want %v", tc.want, tc.got, got, tc.ok)
+		}
+	}
+}

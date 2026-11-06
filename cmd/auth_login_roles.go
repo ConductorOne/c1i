@@ -233,7 +233,7 @@ func readRoles(ctx context.Context, c *client.Client) ([]menuRole, error) {
 	if userID == "" {
 		return nil, &nonJSONResponseError{fmt.Errorf("introspect returned no user id for the login's credential")}
 	}
-	data, err := c.Get(ctx, client.Path("/api/v1/users/%s", userID), nil)
+	data, err := c.Get(ctx, userPath(userID), nil)
 	if err != nil {
 		return nil, err
 	}

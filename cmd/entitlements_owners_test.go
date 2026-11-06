@@ -27,14 +27,16 @@ type entOwnerRequest struct {
 // every user lookup with a user, and every write with `{}`.
 func entOwnerServer(t *testing.T, ownerIDs string) (*httptest.Server, func() []entOwnerRequest) {
 	t.Helper()
-	return entOwnerServerUsers(t, ownerIDs, nil)
+	return entOwnerServerUsers(t, []string{ownerIDs}, nil)
 }
 
 // entOwnerServerUsers is entOwnerServer with GET /api/v1/users/{id} answering
-// userStatus[id] (200 when absent).
-func entOwnerServerUsers(t *testing.T, ownerIDs string, userStatus map[string]int) (*httptest.Server, func() []entOwnerRequest) {
+// userStatus[id] (200 when absent). The i-th ownerids poll gets ownerIDs[i],
+// repeating the last one thereafter.
+func entOwnerServerUsers(t *testing.T, ownerIDs []string, userStatus map[string]int) (*httptest.Server, func() []entOwnerRequest) {
 	t.Helper()
 	var mu sync.Mutex
+	polls := 0
 	var seen []entOwnerRequest
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		b, _ := io.ReadAll(r.Body)
@@ -52,7 +54,11 @@ func entOwnerServerUsers(t *testing.T, ownerIDs string, userStatus map[string]in
 			return
 		}
 		if strings.HasSuffix(r.URL.Path, "/ownerids") {
-			_, _ = w.Write([]byte(ownerIDs))
+			mu.Lock()
+			i := min(polls, len(ownerIDs)-1)
+			polls++
+			mu.Unlock()
+			_, _ = w.Write([]byte(ownerIDs[i]))
 			return
 		}
 		_, _ = w.Write([]byte(`{}`))
@@ -284,7 +290,7 @@ func TestEntitlementOwnerWritesWaitPollsEntitlementOwnerIDs(t *testing.T) {
 func TestEntitlementOwnersWaitTimesOut(t *testing.T) {
 	srv := ownerIDsServer(t, "/api/v1/apps/app1/entitlements/ent1/ownerids", []string{`{"userIds":[]}`})
 	c := client.NewForTesting(srv.URL, srv.Client())
-	op := entitlementOwnersWaitOp(c, "app1", "ent1", []string{"u1"}, 30*time.Millisecond)
+	op := entitlementOwnersWaitOp(c, "app1", "ent1", untilPresent([]string{"u1"}), 30*time.Millisecond)
 	op.Interval = 5 * time.Millisecond
 	cmd, _ := newWaitTestCmd(context.Background())
 	_, err := runWait(cmd, op)
@@ -302,7 +308,7 @@ func TestEntitlementOwnersWaitTimesOut(t *testing.T) {
 // up first.
 func TestEntitlementsSetOwnersChecksUsersExist(t *testing.T) {
 	t.Run("unknown user is exit 2 naming it, and no PUT is sent", func(t *testing.T) {
-		_, seen := entOwnerServerUsers(t, `{"userIds":[]}`, map[string]int{"ghost": http.StatusNotFound})
+		_, seen := entOwnerServerUsers(t, []string{`{"userIds":[]}`}, map[string]int{"ghost": http.StatusNotFound})
 		_, _, err := runEntOwnerCmd(t, entitlementsSetOwnersCmd,
 			map[string][]string{"app-id": {"app1"}, "user-id": {"u1", "ghost"}}, "ent1")
 		var ue *usageError
@@ -344,7 +350,7 @@ func TestEntitlementsSetOwnersChecksUsersExist(t *testing.T) {
 	})
 	t.Run("dry-run does no lookups", func(t *testing.T) {
 		withDryRun(t)
-		_, seen := entOwnerServerUsers(t, `{"userIds":[]}`, map[string]int{"ghost": http.StatusNotFound})
+		_, seen := entOwnerServerUsers(t, []string{`{"userIds":[]}`}, map[string]int{"ghost": http.StatusNotFound})
 		if _, _, err := runEntOwnerCmd(t, entitlementsSetOwnersCmd,
 			map[string][]string{"app-id": {"app1"}, "user-id": {"ghost"}}, "ent1"); err != nil {
 			t.Fatalf("RunE: %v", err)
@@ -354,7 +360,7 @@ func TestEntitlementsSetOwnersChecksUsersExist(t *testing.T) {
 		}
 	})
 	t.Run("a 403 lookup keeps its auth classification", func(t *testing.T) {
-		_, seen := entOwnerServerUsers(t, `{"userIds":[]}`, map[string]int{"u1": http.StatusForbidden})
+		_, seen := entOwnerServerUsers(t, []string{`{"userIds":[]}`}, map[string]int{"u1": http.StatusForbidden})
 		_, _, err := runEntOwnerCmd(t, entitlementsSetOwnersCmd,
 			map[string][]string{"app-id": {"app1"}, "user-id": {"u1"}}, "ent1")
 		if code := exitCode(err); code != exitAuth {
@@ -364,4 +370,45 @@ func TestEntitlementsSetOwnersChecksUsersExist(t *testing.T) {
 			t.Errorf("sent %+v after a failed lookup; want nothing", w)
 		}
 	})
+}
+
+// TestEntitlementOwnersWaitPredicates drives --wait end to end against an
+// ownerids sequence. set-owners replaces the list, so it must wait until the
+// owner set EQUALS the request -- a removal-only set must keep polling while
+// the removed id still shows. add-owner only waits for presence.
+func TestEntitlementOwnersWaitPredicates(t *testing.T) {
+	orig := entitlementOwnerWaitInterval
+	entitlementOwnerWaitInterval = 5 * time.Millisecond
+	t.Cleanup(func() { entitlementOwnerWaitInterval = orig })
+
+	seq := []string{`{"userIds":["u1","u2"]}`, `{"userIds":["u2","u1"]}`, `{"userIds":["u1"]}`}
+	cases := []struct {
+		name      string
+		cmd       *cobra.Command
+		flags     map[string][]string
+		args      []string
+		wantPolls int
+	}{
+		{"set-owners removal-only waits for the removal", entitlementsSetOwnersCmd,
+			map[string][]string{"app-id": {"app1"}, "user-id": {"u1"}, "wait": {"true"}, "wait-timeout": {"5s"}}, []string{"ent1"}, 3},
+		{"add-owner waits only for presence", entitlementsAddOwnerCmd,
+			map[string][]string{"app-id": {"app1"}, "entitlement-id": {"ent1"}, "wait": {"true"}, "wait-timeout": {"5s"}}, []string{"u1"}, 1},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			_, seen := entOwnerServerUsers(t, seq, nil)
+			if _, _, err := runEntOwnerCmd(t, tc.cmd, tc.flags, tc.args...); err != nil {
+				t.Fatalf("RunE: %v", err)
+			}
+			polls := 0
+			for _, r := range seen() {
+				if strings.HasSuffix(r.rawPath, "/ownerids") {
+					polls++
+				}
+			}
+			if polls != tc.wantPolls {
+				t.Errorf("polled ownerids %d time(s), want %d", polls, tc.wantPolls)
+			}
+		})
+	}
 }

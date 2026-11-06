@@ -25,9 +25,13 @@ credentials fails instead of using the working directory. With a relative
   change one owner; `entitlements set-owners <entitlement-id> --app-id
   --user-id ...` replaces the list and refuses an empty one; it looks up each
   user first and exits `2` on an unknown one, which the API would accept and
-  silently drop, possibly leaving no owners. `add-owner` and
-  `set-owners` take `--wait`/`--wait-timeout`, with progress on stderr; all
-  three writes print the API's JSON response and honor `--dry-run`.
+  silently drop, possibly leaving no owners. It sends a repeated `--user-id`
+  once, since the API answers a duplicate with a 500. `add-owner --wait`
+  waits until the owner appears, `set-owners --wait` until the owner set
+  equals the request (removals included), with progress on stderr. All three
+  writes print the API's JSON response and honor `--dry-run`.
+  `remove-owner` exits `4` both for an unknown user and for one who was never
+  an owner, and unlike `set-owners` it can remove the last owner.
 - `entitlements update <entitlement-id> --app-id` sets an entitlement's
   display name, description, grant/revoke/certify/emergency-grant policies,
   emergency-grant switch, and maximum grant duration (`--duration-grant`, a Go

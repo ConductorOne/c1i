@@ -29,10 +29,10 @@ the request is accepted, and the change showed up anywhere from about 1s to
 135s later. Verify with "c1i entitlements owners <entitlement-id> --app-id
 <app-id>".
 
-Pass --wait to block and poll GET .../ownerids until every requested
---user-id appears (or --wait-timeout elapses). It does not wait for replaced
-owners to disappear. Prints the API's JSON response; --wait's progress lines
-go to stderr.
+Pass --wait to block and poll GET .../ownerids until the owner set equals
+the requested ids -- additions landed and replaced owners gone -- or
+--wait-timeout elapses. Prints the API's JSON response; --wait's progress
+lines go to stderr.
 
 Honors --dry-run (with --wait, dry-run still only previews the PUT; it never
 polls).`,
@@ -86,7 +86,7 @@ polls).`,
 		if !wait {
 			return nil
 		}
-		return runEntitlementOwnersWait(cmd, c, appID, entitlementID, userIDs, waitTimeout)
+		return runEntitlementOwnersWait(cmd, c, appID, entitlementID, untilEqual(userIDs), waitTimeout)
 	},
 }
 
