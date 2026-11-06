@@ -64,7 +64,7 @@ c1i users list [--query <text>] [--email <email>] [--status enabled|disabled|del
 c1i users get <user-id>
 ```
 
-`users list` reads `POST /api/v1/search/users`, which with no `--origin` returns only directory-origin users: local-origin (service) users and system users are excluded. `--origin all` lists every user; repeat `--origin` with `directory`, `local` or `system` to pick origins (an unknown value is a usage error, exit `2`). Each row carries `origin` (e.g. `USER_ORIGIN_LOCAL`) when the server reports one.
+`users list` reads `POST /api/v1/search/users`, which with no `--origin` returns only directory-origin users: local-origin users (service principals among them) and system users are excluded. `--origin all` lists every user; repeat `--origin` with `directory`, `local`, `system` or a `USER_ORIGIN_*` value (as a row's `origin` prints) to pick origins (any other value is a usage error, exit `2`). Each row carries `origin` (e.g. `USER_ORIGIN_LOCAL`) when the server reports one.
 
 ### Apps
 

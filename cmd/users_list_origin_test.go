@@ -72,6 +72,11 @@ func TestUsersListOriginSendsOriginsFilter(t *testing.T) {
 		{"case-insensitive, repeatable", []string{"Directory", "SYSTEM"}, []any{"USER_ORIGIN_DIRECTORY", "USER_ORIGIN_SYSTEM"}},
 		{"all", []string{"all"}, all},
 		{"all with a duplicate", []string{"local", "all"}, all},
+		{"surrounding whitespace", []string{" local "}, []any{"USER_ORIGIN_LOCAL"}},
+		// A row's origin value fed back in.
+		{"enum names", []string{"USER_ORIGIN_LOCAL", "user_origin_system"}, []any{"USER_ORIGIN_LOCAL", "USER_ORIGIN_SYSTEM"}},
+		// An enum value newer than c1i reaches the server rather than exit 2.
+		{"unknown enum name passes through", []string{"USER_ORIGIN_FUTURE", "local"}, []any{"USER_ORIGIN_LOCAL", "USER_ORIGIN_FUTURE"}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			bodies, _, err := runUsersList(t, "", tc.origins...)

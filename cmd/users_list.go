@@ -14,9 +14,10 @@ var usersListCmd = &cobra.Command{
 	Long: `Search and list C1 users (NDJSON output).
 
 Reads POST /api/v1/search/users, which with no --origin returns only
-directory-origin users: local-origin (service) users and system users are
-excluded. Pass --origin all to list every user, or repeat --origin with
-directory, local, or system to pick origins.`,
+directory-origin users: local-origin users (service principals among them)
+and system users are excluded. Pass --origin all to list every user, or
+repeat --origin with directory, local, system, or a USER_ORIGIN_* value (as a
+row's origin prints) to pick origins.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		baseURL, err := GetBaseURL()
 		if err != nil {
@@ -138,7 +139,7 @@ func init() {
 	usersListCmd.Flags().String("query", "", "Fuzzy search on name or email")
 	usersListCmd.Flags().String("email", "", "Exact email match")
 	usersListCmd.Flags().String("status", "", "Filter by status: enabled, disabled, deleted")
-	addRepeatableStringFlag(usersListCmd, "origin", "Filter by origin: directory, local, system, or all (repeatable; default: the server's, directory only)")
+	addRepeatableStringFlag(usersListCmd, "origin", "Filter by origin: directory, local, system, all, or a USER_ORIGIN_* value (repeatable; default: the server's, directory only)")
 	addPaginationFlags(usersListCmd)
 	usersCmd.AddCommand(usersListCmd)
 }
@@ -169,15 +170,25 @@ var userOriginValues = []struct{ flag, api string }{
 }
 
 // userOrigins reads --origin (case-insensitive) into the API enum, deduped and
-// in a stable order; nil when unset, so the server's default applies.
+// in a stable order; nil when unset, so the server's default applies. A
+// USER_ORIGIN_* name passes through as-is, so a row's origin value round-trips
+// and an enum value newer than c1i reaches the server.
 func userOrigins(cmd *cobra.Command) ([]string, error) {
 	values, err := repeatableStringFlag(cmd, "origin")
 	if err != nil || len(values) == 0 {
 		return nil, err
 	}
 	want := map[string]bool{}
+	var extra []string
 	for _, raw := range values {
 		v := strings.ToLower(strings.TrimSpace(raw))
+		if strings.HasPrefix(v, "user_origin_") {
+			if api := strings.ToUpper(v); !want[api] {
+				want[api] = true
+				extra = append(extra, api)
+			}
+			continue
+		}
 		known := v == "all"
 		for _, o := range userOriginValues {
 			if v == "all" || v == o.flag {
@@ -186,13 +197,19 @@ func userOrigins(cmd *cobra.Command) ([]string, error) {
 			}
 		}
 		if !known {
-			return nil, &usageError{fmt.Errorf("invalid --origin %q: want directory, local, system, all", raw)}
+			return nil, &usageError{fmt.Errorf("invalid --origin %q: want directory, local, system, all, or a USER_ORIGIN_* value", raw)}
 		}
 	}
 	var out []string
 	for _, o := range userOriginValues {
 		if want[o.api] {
 			out = append(out, o.api)
+			delete(want, o.api)
+		}
+	}
+	for _, api := range extra {
+		if want[api] {
+			out = append(out, api)
 		}
 	}
 	return out, nil

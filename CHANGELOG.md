@@ -19,9 +19,10 @@ credentials fails instead of using the working directory. With a relative
 
 ### Added
 
-- `users list --origin directory|local|system|all` (repeatable) filters by
-  user origin; `--origin all` lists every user, including the local-origin
-  (service) and system users the default omits. Rows now carry `origin` when
+- `users list --origin directory|local|system|all` (repeatable; a
+  `USER_ORIGIN_*` value is also accepted) filters by user origin;
+  `--origin all` lists every user, including the local-origin and system users
+  the default omits. Rows now carry `origin` when
   the server reports one.
 
 ### Changed
@@ -139,7 +140,7 @@ credentials fails instead of using the working directory. With a relative
   single-request ones and their stderr `partial result` warning.
 
 - `users list` help and the README now say its search route returns only
-  directory-origin users by default, omitting local-origin (service) and
+  directory-origin users by default, omitting local-origin and
   system users.
 
 ## [0.9.1] - 2026-10-09
