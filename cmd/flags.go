@@ -280,13 +280,15 @@ func (g *paginationCursorGuard) markTokenUsed(token string) {
 
 // checkPage classifies a fetched page by its item ids. A stale page is not
 // emitted (it holds nothing new); stuck is true once a run of stale pages
-// meets both stuckPageRepeats and stuckStaleRows. Empty pages, and pages with
-// no non-empty id, neither count nor reset the run: a live token may precede
-// one, and a missing id is no evidence of a repeat.
+// meets both stuckPageRepeats and stuckStaleRows. Empty pages, and pages
+// holding any row without an id, are emitted and neither count nor reset the
+// run: a live token may precede one, and a missing id is no evidence of a
+// repeat.
 func (g *paginationCursorGuard) checkPage(ids []string) (emit, stuck bool) {
-	fresh, known := false, 0
+	fresh, known, unknown := false, 0, false
 	for _, id := range ids {
 		if id == "" {
+			unknown = true
 			continue
 		}
 		known++
@@ -295,7 +297,8 @@ func (g *paginationCursorGuard) checkPage(ids []string) (emit, stuck bool) {
 			g.seenIDs[id] = true
 		}
 	}
-	if known == 0 {
+	// A row without an id can't be shown to be a repeat, so its page is kept.
+	if known == 0 || (unknown && !fresh) {
 		return true, false
 	}
 	if !fresh {
