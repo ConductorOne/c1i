@@ -465,15 +465,16 @@ func requireNonEmpty(cmd *cobra.Command, names ...string) error {
 	}
 }
 
-// requireNonEmptyIfSet errors when a flag was passed with an empty value, while
-// leaving an unset flag alone. Distinct from requireNonEmpty, which is for
-// flags that must always be present: use this for an *optional* flag whose
-// empty value would change behavior rather than fail — an id flag selecting an
-// existing object (`--resource-type-id "$RT_ID"` with RT_ID unset would
-// silently create a second one), or one that scopes a read.
+// requireNonEmptyIfSet errors when a flag was passed with an empty or
+// whitespace-only value, while leaving an unset flag alone. Distinct from
+// requireNonEmpty, which is for flags that must always be present: use this
+// for an *optional* flag whose empty value would change behavior rather than
+// fail — an id flag selecting an existing object (`--resource-type-id
+// "$RT_ID"` with RT_ID unset would silently create a second one), or one that
+// scopes a read.
 func requireNonEmptyIfSet(cmd *cobra.Command, name string) (string, error) {
 	v, _ := cmd.Flags().GetString(name)
-	if v == "" && cmd.Flags().Changed(name) {
+	if strings.TrimSpace(v) == "" && cmd.Flags().Changed(name) {
 		return "", &usageError{fmt.Errorf("flag --%s requires a non-empty value", name)}
 	}
 	return v, nil
@@ -559,5 +560,10 @@ func grantDurationFlag(cmd *cobra.Command, name string) (string, bool, error) {
 	if d <= 0 {
 		return "", false, &usageError{fmt.Errorf("--%s must be positive, got %s", name, raw)}
 	}
-	return strconv.FormatFloat(d.Seconds(), 'f', -1, 64) + "s", true, nil
+	// Integer arithmetic: float64 seconds drops nanoseconds on large values.
+	secs := strconv.FormatInt(int64(d/time.Second), 10)
+	if ns := int64(d % time.Second); ns != 0 {
+		secs += "." + strings.TrimRight(fmt.Sprintf("%09d", ns), "0")
+	}
+	return secs + "s", true, nil
 }

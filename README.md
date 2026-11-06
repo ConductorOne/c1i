@@ -187,10 +187,10 @@ without one, or alongside `--unbind-policy emergency-grant`. Unbinding the
 emergency policy while emergency grants stay enabled is accepted by the server.
 `--duration-grant` takes a Go duration (`8h`, `3600s`) and is sent in seconds;
 it must be positive. `--duration-unset` removes the limit, and the two are
-mutually exclusive. An empty `--display-name` is refused: the server would
-accept it and restore the entitlement's original name. `entitlements create`
-checks its policy flags the same way before its first `POST`, so a bad policy
-creates nothing.
+mutually exclusive. An empty or whitespace-only `--display-name` is refused:
+the server would accept "" and restore the entitlement's original name.
+`entitlements create` checks its policy flags the same way before its first
+`POST`, so a bad policy creates nothing.
 
 An entitlement points at an app resource, which lives under an app resource
 type, so `entitlements create` is up to three `POST`s: the resource type, the
@@ -211,10 +211,11 @@ any other kind fails with a 500 (exit `6`, though retrying never helps) saying
 `--resource-type-id` and drop both `--resource-type` and
 `--resource-type-display-name` — either one alongside the id is a usage error.
 Reusing a resource with `--resource-id` likewise means you drop
-`--resource-display-name`. `--owner-id` is repeatable and goes inline in the create
-request, so no follow-up call is needed; an empty one is a usage error rather
-than an owner quietly dropped. `--duration-grant` takes a protobuf (`3600s`) or Go (`8h`) duration, sent in
-seconds, and must be positive. Omit it for standing access.
+`--resource-display-name`. `--owner-id` is repeatable and goes inline in the
+create request, so no follow-up call is needed; an empty one is a usage error
+rather than an owner quietly dropped. `--duration-grant` takes a protobuf
+(`3600s`) or Go (`8h`) duration, sent in seconds, and must be positive; an
+empty one is a usage error. Omit it for standing access.
 
 `--dry-run` previews all three requests, printing
 `NEW_APP_RESOURCE_TYPE_ID`/`NEW_APP_RESOURCE_ID` where an id only exists after

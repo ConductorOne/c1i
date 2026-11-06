@@ -464,8 +464,8 @@ resource with `--resource-id` likewise means you drop
   takes a grant policy, checked client-side (the server checks only when the
   same call enables emergency grants). `--emergency-grant-enabled` needs
   `--emergency-grant-policy-id` in the same call even when one is already
-  stored; `--unbind-policy emergency-grant` alone leaves emergency grants
-  enabled with no policy.
+  stored; `--unbind-policy emergency-grant` alone leaves an entitlement that
+  has emergency grants enabled still enabled, with no policy.
 - `mcp servers test-connection` returns `toolCount` as a JSON string, not a
   number. The `tool_count` in NDJSON list rows is a real number.
 - `mcp servers search` only includes `tool_count` when you pass

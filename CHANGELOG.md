@@ -29,7 +29,8 @@ credentials fails instead of using the working directory. With a relative
   must exist, not be deleted, and be of the slot's type; the emergency slot
   takes a grant policy), otherwise exit `2` and nothing is sent; an empty
   policy id is exit `2`. Create's `--duration-grant` now also accepts a
-  Go duration (`8h`) and refuses a non-positive one at exit 2.
+  Go duration (`8h`) and refuses a non-positive one at exit 2; an empty
+  `--duration-grant ""`, previously ignored, now exits 2 too.
 - `users list --origin directory|local|system|all` (repeatable; a
   `USER_ORIGIN_*` value is also accepted) filters by user origin;
   `--origin all` lists every user, including the local-origin and system users

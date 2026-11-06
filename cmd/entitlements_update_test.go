@@ -106,6 +106,9 @@ func TestEntitlementsUpdateBodyPerFlag(t *testing.T) {
 		{"duration go form", map[string]string{"duration-grant": "1h30m"}, map[string]any{"durationGrant": "5400s"}, "durationGrant"},
 		{"duration seconds form", map[string]string{"duration-grant": "3600s"}, map[string]any{"durationGrant": "3600s"}, "durationGrant"},
 		{"duration fractional", map[string]string{"duration-grant": "1.5s"}, map[string]any{"durationGrant": "1.5s"}, "durationGrant"},
+		{"duration fractional minutes", map[string]string{"duration-grant": "1m30.5s"}, map[string]any{"durationGrant": "90.5s"}, "durationGrant"},
+		{"duration max keeps every nanosecond", map[string]string{"duration-grant": "2562047h47m16.854775807s"}, map[string]any{"durationGrant": "9223372036.854775807s"}, "durationGrant"},
+		{"duration one nanosecond", map[string]string{"duration-grant": "1ns"}, map[string]any{"durationGrant": "0.000000001s"}, "durationGrant"},
 		{"duration unset", map[string]string{"duration-unset": "true"}, map[string]any{"durationUnset": map[string]any{}}, "durationUnset"},
 	}
 	for _, tc := range cases {
@@ -151,6 +154,7 @@ func TestEntitlementsUpdateUsageErrors(t *testing.T) {
 	}{
 		{"nothing to update", map[string]string{}, "nothing to update"},
 		{"empty display name", map[string]string{"display-name": ""}, "--display-name requires a non-empty value"},
+		{"whitespace display name", map[string]string{"display-name": " \t "}, "--display-name requires a non-empty value"},
 		{"duration grant and unset", map[string]string{"duration-grant": "1h", "duration-unset": "true"}, "mutually exclusive"},
 		{"duration unset false", map[string]string{"duration-unset": "false"}, "--duration-unset"},
 		{"duration unparseable", map[string]string{"duration-grant": "soon"}, "--duration-grant"},
@@ -328,5 +332,39 @@ func TestEntitlementCreateValidatesBeforeCreatingAnything(t *testing.T) {
 	}
 	if n := countRequests(requests(), "POST "); n != 0 {
 		t.Errorf("%d creates sent before the policy check failed: %v", n, requests())
+	}
+}
+
+// TestEmptyPolicyIDHintMatchesCommand pins that the empty-policy-id error
+// suggests --unbind-policy only on commands that define it.
+func TestEmptyPolicyIDHintMatchesCommand(t *testing.T) {
+	cases := []struct {
+		args     []string
+		wantHint bool
+	}{
+		{[]string{"entitlements", "update", "ent-1", "--app-id", "a", "--revoke-policy-id", ""}, true},
+		{[]string{"apps", "update", "app-1", "--revoke-policy-id", ""}, true},
+		{[]string{"entitlements", "create", "--app-id", "a", "--display-name", "e", "--revoke-policy-id", ""}, false},
+		{[]string{"apps", "create", "--display-name", "a", "--revoke-policy-id", ""}, false},
+	}
+	for _, tc := range cases {
+		t.Run(strings.Join(tc.args[:2], " "), func(t *testing.T) {
+			srv, requests := policyBindingServer(t, nil)
+			resetCmds(t, entitlementsUpdateCmd, entitlementsCreateCmd, appsUpdateCmd, appsCreateCmd)
+			stubCatalogClient(t, srv)
+			withCatalogDryRun(t, false)
+			t.Setenv("C1I_URL", "https://example.invalid")
+
+			err := runRootWithArgs(t, tc.args)
+			if err == nil || exitCode(err) != exitUsage || !strings.Contains(err.Error(), "--revoke-policy-id requires a non-empty value") {
+				t.Fatalf("err = %v (exit %d), want the empty-id usage error", err, exitCode(err))
+			}
+			if got := strings.Contains(err.Error(), "--unbind-policy"); got != tc.wantHint {
+				t.Errorf("hint present = %v, want %v: %v", got, tc.wantHint, err)
+			}
+			if len(requests()) != 0 {
+				t.Errorf("requests sent: %v", requests())
+			}
+		})
 	}
 }

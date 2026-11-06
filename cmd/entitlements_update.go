@@ -45,8 +45,8 @@ positive: the server stores "0s" and "-60s" without complaint. --duration-unset
 removes the limit (standing access). The server holds the two as one choice and
 refuses both together, so passing both is a usage error.
 
---display-name cannot be empty: the server accepts "" but restores the
-entitlement's original name instead of failing. --description "" clears it.
+--display-name cannot be empty or whitespace-only: the server accepts "" but
+restores the entitlement's original name instead of failing. --description "" clears it.
 
 Prints the server's response as pretty JSON (--fields is not applied to
 mutation output).
@@ -161,7 +161,7 @@ func init() {
 	registerUnbindPolicyFlag(entitlementsUpdateCmd, entitlementPolicyKinds)
 	f.Bool("emergency-grant-enabled", false, "Enable or disable emergency grants; enabling requires --emergency-grant-policy-id in the same call")
 	f.String("duration-grant", "", "Maximum grant duration as a protobuf duration, e.g. 3600s; a Go duration such as 8h is converted to seconds")
-	f.Bool("duration-unset", false, "Remove the maximum grant duration (standing access) instead of setting a protobuf duration like 3600s; excludes --duration-grant")
+	f.Bool("duration-unset", false, "Remove the maximum grant duration (standing access) instead of setting one (a protobuf duration like 3600s or a Go duration like 8h); excludes --duration-grant")
 	markRequired(entitlementsUpdateCmd, "app-id")
 	entitlementsCmd.AddCommand(entitlementsUpdateCmd)
 }

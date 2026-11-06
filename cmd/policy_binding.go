@@ -62,7 +62,11 @@ func policyIDFlag(cmd *cobra.Command, k policyKind) (string, bool, error) {
 	v, _ := cmd.Flags().GetString(k.flag)
 	v = strings.TrimSpace(v)
 	if v == "" {
-		return "", false, &usageError{fmt.Errorf("--%s requires a non-empty value; to unbind, use --unbind-policy %s", k.flag, k.kind)}
+		msg := fmt.Sprintf("--%s requires a non-empty value", k.flag)
+		if cmd.Flags().Lookup("unbind-policy") != nil {
+			msg += "; to unbind, use --unbind-policy " + k.kind
+		}
+		return "", false, &usageError{errors.New(msg)}
 	}
 	return v, true, nil
 }
