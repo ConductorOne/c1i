@@ -382,8 +382,21 @@ resource with `--resource-id` likewise means you drop
   write can look like a no-op. Verify app owners with `c1i apps owners
   <app-id>`, not `apps get`'s `appOwners` field; an empty `appOwners` is not
   evidence an app has no owners. Use `apps set-owners --wait` when the write
-  must converge before the next step. A wait timeout does not mean the write
-  failed — re-check before writing again.
+  must converge before the next step. Entitlement owners work the same way:
+  read with `c1i entitlements owners <entitlement-id> --app-id <app-id>`,
+  write with `entitlements add-owner`/`remove-owner <user-id> --app-id
+  --entitlement-id` or `entitlements set-owners <entitlement-id> --app-id
+  --user-id ...`. `set-owners` replaces the list and needs at least one
+  `--user-id`; an unknown user exits 2 before the write, because the API
+  would silently drop it and could leave no owners. `remove-owner` exits 4
+  both for an unknown user and for one who was never an owner. Pass `--wait`
+  on `add-owner` (waits until the owner appears) or `set-owners` (waits until
+  the owner set equals the request, removals included). A timeout exits 1,
+  though the write was accepted — re-check before writing again. An unknown
+  user, entitlement or app exits 4 on `add-owner`. `set-owners` sends a
+  repeated `--user-id` once, since the API answers a duplicate with a 500.
+  `entitlements owners` returns zero rows at exit 0 for a nonexistent
+  entitlement or app, so an empty result can also mean "wrong id".
 - `apps update`/`apps create` `--grant-policy-id`, `--revoke-policy-id` and
   `--certify-policy-id` are checked by c1i (exists, not deleted, right
   `policyType`) because the API itself stores any id with exit `0`; raw `api`

@@ -137,6 +137,15 @@ func untilPresent(want []string) func([]string) bool {
 	}
 }
 
+// untilEqual is the Done predicate for "the polled set is exactly want":
+// additions and removals have both landed. Order and duplicates don't matter.
+// Stateless.
+func untilEqual(want []string) func([]string) bool {
+	return func(got []string) bool {
+		return untilPresent(want)(got) && untilPresent(got)(want)
+	}
+}
+
 // untilStable is the Done predicate for "the value stopped changing": it is
 // satisfied once n consecutive polls read the same value. n <= 1 settles on
 // the very first read -- a footgun, so a command exposing n as a flag should
@@ -193,7 +202,7 @@ func stableAndAtLeast[T any, K comparable](n int, key func(T) K, floor func(T) b
 // waitTimeoutFlagUsage is --wait-timeout's help text everywhere. Shared
 // because the pair's wording has drifted between commands before;
 // TestWaitFlagsAreRegisteredIdentically fails CI if a command hand-rolls it.
-const waitTimeoutFlagUsage = "max time to wait with --wait (e.g. 30s, 5m)"
+const waitTimeoutFlagUsage = "max time to wait with --wait (e.g. 30s, 5m); reaching it exits 1"
 
 const (
 	waitFlagUsagePrefix = "block and poll "

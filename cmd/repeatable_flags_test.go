@@ -138,6 +138,7 @@ func TestNoCommandUsesStringSlice(t *testing.T) {
 var repeatableFlagsByCommand = map[string][]string{
 	"c1i api":                            {"query", "header"},
 	"c1i apps set-owners":                {"user-id"},
+	"c1i entitlements set-owners":        {"user-id"},
 	"c1i tasks reassign":                 {"to-user-id"},
 	"c1i mcp bindings create":            {"tool-id"},
 	"c1i mcp bindings delete":            {"tool-id"},

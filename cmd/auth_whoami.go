@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/ConductorOne/c1i/internal/client"
 	"github.com/spf13/cobra"
 )
 
@@ -68,7 +67,7 @@ thousand permissions — pass --verbose to dump it all.`,
 		// introspect summary — identity from introspect alone is the contract.
 		var displayName, email string
 		if uid, ok := payload["userId"].(string); ok && uid != "" {
-			if userBody, uerr := c.Get(cmd.Context(), client.Path("/api/v1/users/%s", uid), nil); uerr == nil {
+			if userBody, uerr := c.Get(cmd.Context(), userPath(uid), nil); uerr == nil {
 				var u struct {
 					UserView struct {
 						User struct {

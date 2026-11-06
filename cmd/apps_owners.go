@@ -60,80 +60,85 @@ either "no owners" or "wrong id"; "apps add-owner"/"apps remove-owner" on the
 same id exit 4 and can tell you which.`,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		appID := args[0]
-		baseURL, err := GetBaseURL()
+		return listOwners(cmd, client.Path("/api/v1/apps/%s/owners", args[0]))
+	},
+}
+
+// listOwners streams GET path (an app's or an entitlement's .../owners) as
+// NDJSON owner rows, auto-paginating with the stuck-cursor guard.
+func listOwners(cmd *cobra.Command, path string) error {
+	baseURL, err := GetBaseURL()
+	if err != nil {
+		return err
+	}
+
+	c, err := newListClient(cmd, baseURL)
+	if err != nil {
+		return fmt.Errorf("authentication failed: %w", err)
+	}
+
+	requestedPageSize := pageSizeFlag(cmd)
+	pageToken, _ := cmd.Flags().GetString("page-token")
+	manualPaging := cmd.Flags().Changed("page-token")
+	limit := getIntFlag(cmd, "limit")
+
+	enc := newEmitter(cmd)
+	guard := newPaginationCursorGuard()
+	route := "GET " + path
+	for !limitReached(enc.Written(), limit) {
+		if guard.tokenAlreadyUsed(pageToken) {
+			return guard.warnStuck(cmd, route)
+		}
+		pageSize := requestedPageSize
+		if !enc.Filtered() {
+			pageSize = effectivePageSize(requestedPageSize, limit, enc.Written())
+		}
+		params := map[string]string{
+			"page_size": strconv.Itoa(pageSize),
+		}
+		if pageToken != "" {
+			params["page_token"] = pageToken
+		}
+
+		data, err := c.Get(cmd.Context(), path, params)
+		if err != nil {
+			return fmt.Errorf("API error: %w", err)
+		}
+
+		var resp struct {
+			List          []appOwner `json:"list"`
+			NextPageToken string     `json:"nextPageToken"`
+		}
+		if err := json.Unmarshal(data, &resp); err != nil {
+			return fmt.Errorf("failed to parse response: %w", err)
+		}
+
+		ids := make([]string, len(resp.List))
+		for i, it := range resp.List {
+			ids[i] = it.ID
+		}
+		keep, err := guard.checkPage(cmd, route, ids)
 		if err != nil {
 			return err
 		}
-
-		c, err := newListClient(cmd, baseURL)
-		if err != nil {
-			return fmt.Errorf("authentication failed: %w", err)
-		}
-
-		requestedPageSize := pageSizeFlag(cmd)
-		pageToken, _ := cmd.Flags().GetString("page-token")
-		manualPaging := cmd.Flags().Changed("page-token")
-		limit := getIntFlag(cmd, "limit")
-
-		enc := newEmitter(cmd)
-		guard := newPaginationCursorGuard()
-		route := "GET " + client.Path("/api/v1/apps/%s/owners", appID)
-		for !limitReached(enc.Written(), limit) {
-			if guard.tokenAlreadyUsed(pageToken) {
-				return guard.warnStuck(cmd, route)
-			}
-			pageSize := requestedPageSize
-			if !enc.Filtered() {
-				pageSize = effectivePageSize(requestedPageSize, limit, enc.Written())
-			}
-			params := map[string]string{
-				"page_size": strconv.Itoa(pageSize),
-			}
-			if pageToken != "" {
-				params["page_token"] = pageToken
-			}
-
-			data, err := c.Get(cmd.Context(), client.Path("/api/v1/apps/%s/owners", appID), params)
-			if err != nil {
-				return fmt.Errorf("API error: %w", err)
-			}
-
-			var resp struct {
-				List          []appOwner `json:"list"`
-				NextPageToken string     `json:"nextPageToken"`
-			}
-			if err := json.Unmarshal(data, &resp); err != nil {
-				return fmt.Errorf("failed to parse response: %w", err)
-			}
-
-			ids := make([]string, len(resp.List))
-			for i, it := range resp.List {
-				ids[i] = it.ID
-			}
-			keep, err := guard.checkPage(cmd, route, ids)
-			if err != nil {
+		resp.List = keepRows(resp.List, keep)
+		for _, o := range resp.List {
+			if err := enc.Encode(appOwnerRow(o)); err != nil {
 				return err
 			}
-			resp.List = keepRows(resp.List, keep)
-			for _, o := range resp.List {
-				if err := enc.Encode(appOwnerRow(o)); err != nil {
-					return err
-				}
-				if limitReached(enc.Written(), limit) {
-					return nil
-				}
+			if limitReached(enc.Written(), limit) {
+				return nil
 			}
-
-			if resp.NextPageToken == "" || manualPaging {
-				break
-			}
-			guard.markTokenUsed(pageToken)
-			pageToken = resp.NextPageToken
 		}
 
-		return nil
-	},
+		if resp.NextPageToken == "" || manualPaging {
+			break
+		}
+		guard.markTokenUsed(pageToken)
+		pageToken = resp.NextPageToken
+	}
+
+	return nil
 }
 
 func init() {

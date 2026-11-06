@@ -139,6 +139,10 @@ c1i accounts set-owner <app-user-id> --app-id <id> --user-id <id>
 ```sh
 c1i entitlements list [--app-id <id>] [--query <text>] [--page-size N] [--page-token TOKEN] [--limit N]
 c1i entitlements get <entitlement-id> --app-id <id>
+c1i entitlements owners <entitlement-id> --app-id <id> [--page-size N] [--page-token TOKEN] [--limit N]
+c1i entitlements add-owner <user-id> --app-id <id> --entitlement-id <id> [--wait] [--wait-timeout 4m]
+c1i entitlements remove-owner <user-id> --app-id <id> --entitlement-id <id>
+c1i entitlements set-owners <entitlement-id> --app-id <id> --user-id <id> [--user-id <id> ...] [--wait] [--wait-timeout 4m]
 
 # Directional entitlement-to-entitlement proxy binding
 c1i entitlements proxy-bindings get \
@@ -227,6 +231,30 @@ created entitlement comes back as pretty JSON under `appEntitlementView`
 `appResourceTypeId`/`appResourceId` and expands both objects, so every id the
 command touched is in that one payload.
 
+`entitlements owners` lists an entitlement's owners (same row shape as
+`apps owners`) and is the read that reflects `entitlements add-owner`,
+`remove-owner` and `set-owners`. Owner provisioning is asynchronous: writes
+showed up anywhere from about 1s to 135s after being accepted. `--wait`
+polls `GET .../ownerids` until the change lands, or `--wait-timeout`
+(default `4m`) elapses: on `add-owner` until the owner appears, on
+`set-owners` until the owner set equals the requested ids, removals
+included. A timeout exits `1`, though the write was accepted. Its progress
+lines go to stderr, so stdout stays the write's JSON response.
+
+`set-owners` replaces the whole list and needs at least one `--user-id`,
+since the API takes an empty list as "remove every owner"; `remove-owner`
+can still remove the last owner. The API accepts a `set-owners` user id that
+matches no user at exit `0` and drops it, so a set naming only unknown ids
+leaves no owners; `set-owners` therefore looks up each distinct `--user-id`
+first and exits `2` naming an unknown one, sending nothing (`--dry-run` skips
+the lookups). A repeated `--user-id` is sent once, since the API answers a
+duplicate with a 500. An unknown user, entitlement or app exits `4` on
+`add-owner`.
+`remove-owner` exits `4` on a user who was never an owner as well as on an
+unknown one, so `4` cannot tell those apart; a user who was an owner and is
+already removed exits `0`. `owners` returns zero rows at exit `0` for a
+nonexistent entitlement or app.
+
 `entitlements proxy-bindings` manages directional entitlement-to-entitlement
 visibility and tracking links. Source and destination are each identified by
 their app and entitlement IDs; entitlement IDs are app-scoped. Creating a
@@ -262,7 +290,7 @@ prints nothing until the same grants come back `--wait-stable` times running
 Progress goes to stderr, so stdout stays pure NDJSON. The 5s interval is fixed
 and is not a flag; `--wait-stable` must fit inside `--wait-timeout` (default
 `4m`), and a combination that cannot fit is rejected as a usage error rather
-than left to time out.
+than left to time out. A timeout exits `1` and prints no rows.
 
 **An empty result is stable.** A filter matching nothing settles at the first
 opportunity -- about 10s at the defaults -- and exits `0` with zero rows.

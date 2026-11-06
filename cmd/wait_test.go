@@ -411,8 +411,10 @@ func TestWaitForOwnersAPIErrorOverHTTP(t *testing.T) {
 // exactly when a default gets "tidied" uniformly across callers, so each is
 // pinned by name here; a new --wait caller has to add itself.
 var wantWaitTimeoutDefaults = map[string]time.Duration{
-	"c1i apps set-owners": 4 * time.Minute,
-	"c1i grants list":     4 * time.Minute,
+	"c1i apps set-owners":         4 * time.Minute,
+	"c1i entitlements add-owner":  4 * time.Minute,
+	"c1i entitlements set-owners": 4 * time.Minute,
+	"c1i grants list":             4 * time.Minute,
 }
 
 // TestWaitFlagsAreRegisteredIdentically walks the whole command tree and
@@ -539,5 +541,26 @@ func mustSet(t *testing.T, fs *pflag.FlagSet, name, value string) {
 	t.Helper()
 	if err := fs.Set(name, value); err != nil {
 		t.Fatalf("setting --%s=%s: %v", name, value, err)
+	}
+}
+
+// TestUntilEqual pins set equality: order and duplicates don't matter, but an
+// extra or a missing id does.
+func TestUntilEqual(t *testing.T) {
+	cases := []struct {
+		want, got []string
+		ok        bool
+	}{
+		{[]string{"a"}, []string{"a"}, true},
+		{[]string{"a", "b"}, []string{"b", "a", "a"}, true},
+		{[]string{"a"}, []string{"a", "b"}, false},
+		{[]string{"a", "b"}, []string{"a"}, false},
+		{nil, nil, true},
+		{nil, []string{"a"}, false},
+	}
+	for _, tc := range cases {
+		if got := untilEqual(tc.want)(tc.got); got != tc.ok {
+			t.Errorf("untilEqual(%v)(%v) = %v, want %v", tc.want, tc.got, got, tc.ok)
+		}
 	}
 }
