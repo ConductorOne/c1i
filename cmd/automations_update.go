@@ -87,7 +87,7 @@ func buildAutomationUpdateBody(cmd *cobra.Command, id string) (map[string]any, e
 		mask = strings.Join(paths, ",")
 		bodyFile, _ := f.GetString("body-file")
 		var err error
-		automation, err = readBodyFile(cmd, bodyFile)
+		automation, err = readConfigFile(cmd, "body-file", bodyFile)
 		if err != nil {
 			return nil, err
 		}

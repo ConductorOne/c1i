@@ -295,6 +295,15 @@ func TestBuildHostedConfigFileExclusive(t *testing.T) {
 	}
 }
 
+func TestBuildHostedConfigFileRejectsNullNamingFlag(t *testing.T) {
+	cmd := newServerFlagCmd()
+	_ = cmd.Flags().Set("hosted-config-file", writeTempJSON(t, "null.json", `null`))
+	_, err := buildHostedConfig(cmd)
+	if err == nil || exitCode(err) != exitUsage || !strings.Contains(err.Error(), "--hosted-config-file") {
+		t.Errorf("err = %v (exit %d), want exit %d naming --hosted-config-file", err, exitCode(err), exitUsage)
+	}
+}
+
 // TestBuildExternalConfigFileExclusive pins the same for external configs.
 func TestBuildExternalConfigFileExclusive(t *testing.T) {
 	cmd := newServerFlagCmd()

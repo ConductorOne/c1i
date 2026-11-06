@@ -99,19 +99,10 @@ func applySharedAuthFields(cmd *cobra.Command, cfg map[string]any) error {
 }
 
 // readConfigFile loads a JSON object from path (or stdin when path is "-") into
-// a generic map, used as the full hosted/external config verbatim.
-func readConfigFile(cmd *cobra.Command, path string) (map[string]any, error) {
-	return readJSONObjectFile(cmd, path, "config file")
-}
-
-// readBodyFile is readConfigFile with errors that name --body-file.
-func readBodyFile(cmd *cobra.Command, path string) (map[string]any, error) {
-	return readJSONObjectFile(cmd, path, "--body-file")
-}
-
-// readJSONObjectFile rejects a top-level null: json.Unmarshal turns it into a
-// nil map without an error, and callers write into the result.
-func readJSONObjectFile(cmd *cobra.Command, path, label string) (map[string]any, error) {
+// a generic map. Errors name --<flag>. A top-level null is rejected: json.Unmarshal turns it
+// into a nil map without an error, and callers write into the result.
+func readConfigFile(cmd *cobra.Command, flag, path string) (map[string]any, error) {
+	label := "--" + flag
 	var data []byte
 	var err error
 	if path == "-" {
@@ -159,7 +150,7 @@ func buildHostedConfig(cmd *cobra.Command) (map[string]any, error) {
 		if usingFlags {
 			return nil, &usageError{fmt.Errorf("--hosted-config-file is mutually exclusive with --catalog-id/--source-app-id/--config-field and the auth flags (--auth/--bearer-token/--token-sharing/…)")}
 		}
-		return readConfigFile(cmd, file)
+		return readConfigFile(cmd, "hosted-config-file", file)
 	}
 
 	cfg := map[string]any{}
@@ -193,7 +184,7 @@ func buildExternalConfig(cmd *cobra.Command) (map[string]any, error) {
 		if usingFlags {
 			return nil, &usageError{fmt.Errorf("--external-config-file is mutually exclusive with --server-url/--transport and the auth flags (--auth/--bearer-token/--token-sharing/…)")}
 		}
-		return readConfigFile(cmd, file)
+		return readConfigFile(cmd, "external-config-file", file)
 	}
 
 	cfg := map[string]any{}

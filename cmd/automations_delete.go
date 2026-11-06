@@ -12,7 +12,7 @@ var automationsDeleteCmd = &cobra.Command{
 	Short: "Soft-delete an automation",
 	Long: `Soft-delete an automation by ID. It leaves "automations list", but
 "automations get" still returns it at exit 0, with no field marking it
-deleted. Honors --dry-run.`,
+deleted, and deleting it again exits 0 again. Honors --dry-run.`,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		baseURL, err := GetBaseURL()
