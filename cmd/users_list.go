@@ -176,8 +176,8 @@ func userOrigins(cmd *cobra.Command) ([]string, error) {
 		return nil, err
 	}
 	want := map[string]bool{}
-	for _, v := range values {
-		v = strings.ToLower(strings.TrimSpace(v))
+	for _, raw := range values {
+		v := strings.ToLower(strings.TrimSpace(raw))
 		known := v == "all"
 		for _, o := range userOriginValues {
 			if v == "all" || v == o.flag {
@@ -186,7 +186,7 @@ func userOrigins(cmd *cobra.Command) ([]string, error) {
 			}
 		}
 		if !known {
-			return nil, &usageError{fmt.Errorf("invalid --origin %q: want directory, local, system, all", v)}
+			return nil, &usageError{fmt.Errorf("invalid --origin %q: want directory, local, system, all", raw)}
 		}
 	}
 	var out []string

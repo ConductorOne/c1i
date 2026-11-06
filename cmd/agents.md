@@ -476,9 +476,9 @@ resource with `--resource-id` likewise means you drop
   lists omit them; `users get <sp-id>` shows `"status": "DELETED"` and
   `deletedAt`.
 - `users list` with no `--origin` returns directory-origin users only, so
-  service principals and system users are missing. Pass `--origin all` for
-  every user, or `--origin local` for service principals; each row's `origin`
-  says which it is.
+  local-origin (service) and system users are missing. Pass `--origin all`
+  for every user, or `--origin local` for local-origin users only; each row's
+  `origin` says which it is.
 
 ## Upgrading c1i
 

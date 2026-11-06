@@ -16,7 +16,7 @@ import (
 )
 
 // runUsersList runs users list against a stub that records each request body
-// and answers with one user, carrying origin when it is non-empty.
+// and serves two pages of one user each, carrying origin when it is non-empty.
 func runUsersList(t *testing.T, origin string, origins ...string) ([]map[string]any, string, error) {
 	t.Helper()
 	var bodies []map[string]any
@@ -25,12 +25,17 @@ func runUsersList(t *testing.T, origin string, origins ...string) ([]map[string]
 		var b map[string]any
 		_ = json.Unmarshal(raw, &b)
 		bodies = append(bodies, b)
-		user := `{"id":"u1","status":"ENABLED"}`
+		id := fmt.Sprintf("u%d", len(bodies))
+		user := fmt.Sprintf(`{"id":%q,"status":"ENABLED"}`, id)
 		if origin != "" {
-			user = fmt.Sprintf(`{"id":"u1","status":"ENABLED","origin":%q}`, origin)
+			user = fmt.Sprintf(`{"id":%q,"status":"ENABLED","origin":%q}`, id, origin)
+		}
+		next := ""
+		if len(bodies) == 1 {
+			next = "p2"
 		}
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = fmt.Fprintf(w, `{"list":[{"user":%s}],"nextPageToken":""}`, user)
+		_, _ = fmt.Fprintf(w, `{"list":[{"user":%s}],"nextPageToken":%q}`, user, next)
 	}))
 	t.Cleanup(srv.Close)
 
@@ -73,33 +78,35 @@ func TestUsersListOriginSendsOriginsFilter(t *testing.T) {
 			if err != nil {
 				t.Fatalf("RunE: %v", err)
 			}
-			if len(bodies) != 1 {
-				t.Fatalf("requests = %d, want 1", len(bodies))
+			if len(bodies) != 2 {
+				t.Fatalf("requests = %d, want 2", len(bodies))
 			}
-			got, ok := bodies[0]["origins"]
-			if tc.want == nil {
-				if ok {
-					t.Fatalf("origins = %v, want key absent", got)
+			for i, b := range bodies { // every page, not just the first
+				got, ok := b["origins"]
+				if tc.want == nil {
+					if ok {
+						t.Fatalf("page %d: origins = %v, want key absent", i+1, got)
+					}
+					continue
 				}
-				return
-			}
-			if !reflect.DeepEqual(got, tc.want) {
-				t.Fatalf("origins = %v, want %v", got, tc.want)
+				if !reflect.DeepEqual(got, tc.want) {
+					t.Fatalf("page %d: origins = %v, want %v", i+1, got, tc.want)
+				}
 			}
 		})
 	}
 }
 
 func TestUsersListUnknownOriginIsUsageError(t *testing.T) {
-	bodies, _, err := runUsersList(t, "", "service")
+	bodies, _, err := runUsersList(t, "", " Service ")
 	if code := exitCode(err); code != exitUsage {
 		t.Fatalf("exit = %d (err %v), want %d", code, err, exitUsage)
 	}
 	if len(bodies) != 0 {
 		t.Fatalf("sent %d requests, want none", len(bodies))
 	}
-	if !strings.Contains(err.Error(), "directory, local, system, all") {
-		t.Fatalf("error %q should list the accepted values", err)
+	if !strings.Contains(err.Error(), `" Service "`) || !strings.Contains(err.Error(), "directory, local, system, all") {
+		t.Fatalf("error %q should quote the input and list the accepted values", err)
 	}
 }
 
@@ -109,7 +116,7 @@ func TestUsersListRowCarriesOrigin(t *testing.T) {
 		t.Fatalf("RunE: %v", err)
 	}
 	rows := decodeNDJSONRows(t, out)
-	if len(rows) != 1 || rows[0]["origin"] != "USER_ORIGIN_LOCAL" {
+	if len(rows) != 2 || rows[0]["origin"] != "USER_ORIGIN_LOCAL" {
 		t.Fatalf("rows = %v, want origin USER_ORIGIN_LOCAL", rows)
 	}
 
