@@ -371,10 +371,14 @@ same guard as a backstop.
 ```sh
 c1i automations list [--enabled-only] [--calls-function <fid>] [--page-size N] [--page-token TOKEN] [--limit N]
 c1i automations get <automation-id>
+c1i automations update <automation-id> [--display-name NAME] [--description TEXT] [--enabled[=false]]
+c1i automations update <automation-id> --body-file automation.json --update-mask triggers
 c1i automations executions list [--state done|error|pending|...] [--template-id <tid>] [--page-size N] [--page-token TOKEN] [--limit N]
 ```
 
 Each `automations list` row includes `function_ids` (every distinct function the automation invokes), so `--calls-function` can answer "which automations call function X?". `executions list --state` accepts the short forms (`done`, `error`, `pending`, ...) or the full `AUTOMATION_EXECUTION_STATE_*` enum; state and template filtering are applied client-side, so pair a narrow filter with `--limit` to bound the work.
+
+`automations update` sends only the fields you pass (an explicit `--enabled=false` disables). For triggers, steps, draft or circuit-breaker fields, pass an Automation object with `--body-file` and name the fields to change with `--update-mask`; the server leaves every other field as it was.
 
 `automations list` and `automations executions list` read
 `POST /api/v1/search/automations` and `POST /api/v1/search/automation_executions`

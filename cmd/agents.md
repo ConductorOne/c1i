@@ -494,6 +494,14 @@ resource with `--resource-id` likewise means you drop
   field marking it (the principal's `user.status` stays `ENABLED`). Only the
   lists omit them; `users get <sp-id>` shows `"status": "DELETED"` and
   `deletedAt`.
+- `automations update <automation-id> --enabled` succeeds on a draft
+  (`isDraft` stays `true`). With `--body-file`, only the `--update-mask` paths
+  change: masking `triggers` leaves `draftTriggers` as it was, and an unknown
+  path is a `400`, `invalid update_mask`. A malformed id is a `400` (`value
+  does not match regex pattern "^[a-zA-Z0-9]{27}$"`, exit `2`), not a `404`.
+- Deleting an automation (`DELETE /api/v1/automations/{id}` via `api`) is
+  soft: it leaves `automations list`, but `automations get` still returns it at
+  exit `0` with no field marking it deleted.
 - `users list` with no `--origin` returns directory-origin users only, so
   local-origin users (service principals among them) and system users are
   missing. Pass `--origin all` for every user, or `--origin local` for

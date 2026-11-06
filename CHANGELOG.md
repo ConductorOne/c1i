@@ -44,6 +44,9 @@ credentials fails instead of using the working directory. With a relative
   id is checked first (it must exist, not be deleted, and be of the flag's
   type; otherwise exit `2` and nothing is sent). An empty policy id is exit
   `2`; `apps update --unbind-policy grant|revoke|certify` unbinds one.
+- `automations update <automation-id>` changes an automation's
+  `--display-name`, `--description` or `--enabled` state; `--body-file` with
+  `--update-mask` updates any other field (triggers, steps, draft fields).
 
 ### Changed
 
