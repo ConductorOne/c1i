@@ -104,7 +104,7 @@ func buildCreatePolicyBody(cmd *cobra.Command) (map[string]any, error) {
 		if usingFlags {
 			return nil, fmt.Errorf("--body-file is mutually exclusive with --display-name/--description/--policy-type/--steps-file/--rules-file")
 		}
-		return readConfigFile(cmd, bodyFile)
+		return readBodyFile(cmd, bodyFile)
 	}
 
 	displayName, _ := cmd.Flags().GetString("display-name")

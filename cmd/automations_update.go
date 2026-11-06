@@ -16,15 +16,20 @@ var automationsUpdateCmd = &cobra.Command{
 The API requires {"automation": {...}, "updateMask": "..."}; this command
 builds it. The mask is derived exactly from the flags you pass: an explicit
 --enabled=false or an empty --description is a change, an omitted flag is
-left alone; fields outside the mask (steps, triggers) are kept. The server
-accepts --enabled on a draft automation; isDraft is not changed by it.
+left alone. An empty --display-name is refused before sending (the server
+answers it with a 500, "display_name is required"). Updating these fields
+leaves steps and triggers unchanged. The server accepts --enabled on an
+automation with isDraft true, and leaves isDraft as it was.
 
 For anything else (triggers, steps, draft fields, circuit breaker), pass an
 Automation object via --body-file plus an explicit --update-mask (both
 required together, mutually exclusive with the flags above). The object is
-sent verbatim, with "id" set to <automation-id>; only masked fields change,
-so e.g. masking "triggers" leaves "draftTriggers" as it was. A mask path the
-server doesn't know is rejected with "invalid update_mask" (exit 2).`,
+sent verbatim, with "id" set to <automation-id>. Mask paths are camelCase,
+comma-separated; spaces around them are trimmed. Masking "triggers" replaces
+the published triggers and increments currentVersion; isDraft and
+draftTriggers stay as they were. An unknown camelCase path is a 400,
+"invalid update_mask"; a snake_case path is a 400, "FieldMask.paths contains
+invalid path" (both exit 2).`,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		body, err := buildAutomationUpdateBody(cmd, args[0])
@@ -71,9 +76,18 @@ func buildAutomationUpdateBody(cmd *cobra.Command, id string) (map[string]any, e
 		if strings.TrimSpace(mask) == "" {
 			return nil, fmt.Errorf("--update-mask is required together with --body-file")
 		}
+		// The server rejects " description" as an invalid path.
+		paths := strings.Split(mask, ",")
+		for i, p := range paths {
+			paths[i] = strings.TrimSpace(p)
+			if paths[i] == "" {
+				return nil, fmt.Errorf("--update-mask %q has an empty path", mask)
+			}
+		}
+		mask = strings.Join(paths, ",")
 		bodyFile, _ := f.GetString("body-file")
 		var err error
-		automation, err = readConfigFile(cmd, bodyFile)
+		automation, err = readBodyFile(cmd, bodyFile)
 		if err != nil {
 			return nil, err
 		}
@@ -82,6 +96,10 @@ func buildAutomationUpdateBody(cmd *cobra.Command, id string) (map[string]any, e
 		var paths []string
 		if f.Changed("display-name") {
 			v, _ := f.GetString("display-name")
+			if v == "" {
+				// The server answers an empty name with a 500.
+				return nil, fmt.Errorf("--display-name cannot be empty: the server rejects it with \"display_name is required\"")
+			}
 			automation["displayName"] = v
 			paths = append(paths, "displayName")
 		}

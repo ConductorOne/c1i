@@ -47,6 +47,7 @@ credentials fails instead of using the working directory. With a relative
 - `automations update <automation-id>` changes an automation's
   `--display-name`, `--description` or `--enabled` state; `--body-file` with
   `--update-mask` updates any other field (triggers, steps, draft fields).
+- `automations delete <automation-id>` soft-deletes an automation.
 
 ### Changed
 
@@ -63,6 +64,9 @@ credentials fails instead of using the working directory. With a relative
 
 ### Fixed
 
+- A `--body-file` containing a top-level JSON `null` panicked `policies
+  update`; every `--body-file` and config-file flag now rejects it with
+  exit 2.
 - `apps set-owners --wait` exits 1 (`writing output:`) when its success line
   can't be written to stdout, instead of 0; the owners were already set.
 - **A failed write to stdout now exits `1`** (e.g. a full disk) instead of

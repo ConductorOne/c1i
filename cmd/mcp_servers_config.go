@@ -101,6 +101,17 @@ func applySharedAuthFields(cmd *cobra.Command, cfg map[string]any) error {
 // readConfigFile loads a JSON object from path (or stdin when path is "-") into
 // a generic map, used as the full hosted/external config verbatim.
 func readConfigFile(cmd *cobra.Command, path string) (map[string]any, error) {
+	return readJSONObjectFile(cmd, path, "config file")
+}
+
+// readBodyFile is readConfigFile with errors that name --body-file.
+func readBodyFile(cmd *cobra.Command, path string) (map[string]any, error) {
+	return readJSONObjectFile(cmd, path, "--body-file")
+}
+
+// readJSONObjectFile rejects a top-level null: json.Unmarshal turns it into a
+// nil map without an error, and callers write into the result.
+func readJSONObjectFile(cmd *cobra.Command, path, label string) (map[string]any, error) {
 	var data []byte
 	var err error
 	if path == "-" {
@@ -109,11 +120,14 @@ func readConfigFile(cmd *cobra.Command, path string) (map[string]any, error) {
 		data, err = os.ReadFile(path) // #nosec G304 -- user-supplied config-file path is intentional
 	}
 	if err != nil {
-		return nil, fmt.Errorf("reading config file: %w", err)
+		return nil, fmt.Errorf("reading %s: %w", label, err)
 	}
 	var cfg map[string]any
 	if err := json.Unmarshal(data, &cfg); err != nil {
-		return nil, fmt.Errorf("parsing config file as JSON object: %w", err)
+		return nil, fmt.Errorf("parsing %s as JSON object: %w", label, err)
+	}
+	if cfg == nil {
+		return nil, &usageError{fmt.Errorf("%s must contain a JSON object, not null", label)}
 	}
 	return cfg, nil
 }

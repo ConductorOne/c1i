@@ -122,6 +122,7 @@ func TestTextOutputFailsOnOutputWriteError(t *testing.T) {
 		{name: "version", args: []string{"version"}},
 		{name: "docs guide list", args: []string{"docs", "guide"}},
 		{name: "apps delete", args: []string{"apps", "delete", "app-x"}, reset: []*cobra.Command{appsDeleteCmd}, requests: 1},
+		{name: "automations delete", args: []string{"automations", "delete", "auto-x"}, reset: []*cobra.Command{automationsDeleteCmd}, requests: 1},
 		{
 			name:     "mcp tools delete",
 			args:     []string{"mcp", "tools", "delete", "tool-a", "--app-id", "app-x", "--connector-id", "conn-y"},

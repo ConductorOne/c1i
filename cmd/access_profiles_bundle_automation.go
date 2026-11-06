@@ -156,9 +156,9 @@ func readBundleAutomationBody(cmd *cobra.Command) (map[string]any, error) {
 	if bodyFile == "" {
 		return nil, &usageError{fmt.Errorf("--body-file is required")}
 	}
-	body, err := readConfigFile(cmd, bodyFile)
+	body, err := readBodyFile(cmd, bodyFile)
 	if err != nil {
-		return nil, fmt.Errorf("reading --body-file: %w", err)
+		return nil, err
 	}
 	if err := validateBundleAutomationBody(body); err != nil {
 		return nil, err

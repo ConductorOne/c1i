@@ -172,3 +172,128 @@ func TestAutomationsUpdateDryRunSendsNothing(t *testing.T) {
 		t.Errorf("dry-run output = %s", out)
 	}
 }
+
+// A top-level JSON null used to come back as a nil map and panic on the id
+// assignment.
+func TestAutomationsUpdateNullBodyFileExitsUsage(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		t.Errorf("no request expected, got %s %s", r.Method, r.URL.Path)
+	}))
+	defer srv.Close()
+
+	resetCmdFlags(t, automationsUpdateCmd)
+	stubCatalogClient(t, srv)
+	withCatalogDryRun(t, false)
+	t.Setenv("C1I_URL", "https://example.invalid")
+	_ = automationsUpdateCmd.Flags().Set("body-file", writeTempJSON(t, "null.json", `null`))
+	_ = automationsUpdateCmd.Flags().Set("update-mask", "displayName")
+
+	_, err := runAutomationsUpdate(t, "a1")
+	if err == nil || exitCode(err) != exitUsage || !strings.Contains(err.Error(), "--body-file") {
+		t.Errorf("err = %v (exit %d), want exit %d naming --body-file", err, exitCode(err), exitUsage)
+	}
+}
+
+func TestAutomationsUpdateUsageErrors(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		t.Errorf("no request expected, got %s %s", r.Method, r.URL.Path)
+	}))
+	defer srv.Close()
+	path := writeTempJSON(t, "auto.json", `{"displayName":"x"}`)
+
+	for _, tc := range []struct {
+		name    string
+		flags   map[string]string
+		wantMsg string
+	}{
+		{"empty display name", map[string]string{"display-name": ""}, "display_name is required"},
+		{"whitespace-only mask", map[string]string{"body-file": path, "update-mask": "  "}, "--update-mask is required"},
+		{"empty mask path", map[string]string{"body-file": path, "update-mask": "displayName,,description"}, "empty path"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			resetCmdFlags(t, automationsUpdateCmd)
+			stubCatalogClient(t, srv)
+			withCatalogDryRun(t, false)
+			t.Setenv("C1I_URL", "https://example.invalid")
+			for k, v := range tc.flags {
+				_ = automationsUpdateCmd.Flags().Set(k, v)
+			}
+			_, err := runAutomationsUpdate(t, "a1")
+			if err == nil || exitCode(err) != exitUsage || !strings.Contains(err.Error(), tc.wantMsg) {
+				t.Errorf("err = %v (exit %d), want exit %d containing %q", err, exitCode(err), exitUsage, tc.wantMsg)
+			}
+		})
+	}
+}
+
+func TestAutomationsUpdateTrimsMaskPaths(t *testing.T) {
+	var got map[string]any
+	srv := automationsUpdateServer(t, "/api/v1/automations/a1", &got)
+
+	resetCmdFlags(t, automationsUpdateCmd)
+	stubCatalogClient(t, srv)
+	withCatalogDryRun(t, false)
+	t.Setenv("C1I_URL", "https://example.invalid")
+	_ = automationsUpdateCmd.Flags().Set("body-file", writeTempJSON(t, "auto.json", `{"displayName":"x","description":"y"}`))
+	_ = automationsUpdateCmd.Flags().Set("update-mask", " displayName, description ")
+
+	if _, err := runAutomationsUpdate(t, "a1"); err != nil {
+		t.Fatalf("RunE: %v", err)
+	}
+	if got["updateMask"] != "displayName,description" {
+		t.Errorf("updateMask = %#v, want %q", got["updateMask"], "displayName,description")
+	}
+}
+
+func TestAutomationsDeleteSendsEscapedDelete(t *testing.T) {
+	var received bool
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		received = true
+		if r.Method != http.MethodDelete || r.URL.EscapedPath() != "/api/v1/automations/auto%2Fid%20%3F%23" {
+			t.Errorf("request = %s %s, want DELETE escaped automation path", r.Method, r.URL.EscapedPath())
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = fmt.Fprint(w, `{}`)
+	}))
+	defer srv.Close()
+
+	stubCatalogClient(t, srv)
+	withCatalogDryRun(t, false)
+	t.Setenv("C1I_URL", "https://example.invalid")
+
+	var out bytes.Buffer
+	automationsDeleteCmd.SetOut(&out)
+	automationsDeleteCmd.SetContext(context.Background())
+	if err := automationsDeleteCmd.RunE(automationsDeleteCmd, []string{"auto/id ?#"}); err != nil {
+		t.Fatalf("RunE: %v", err)
+	}
+	if !received {
+		t.Error("delete did not reach the server")
+	}
+	if got := out.String(); got != "Deleted automation: id=auto/id ?#\n" {
+		t.Errorf("output = %q", got)
+	}
+}
+
+func TestAutomationsDeleteDryRunSendsNothing(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		t.Errorf("dry-run must not send, got %s %s", r.Method, r.URL.Path)
+	}))
+	defer srv.Close()
+
+	stubCatalogClient(t, srv)
+	withCatalogDryRun(t, true)
+	t.Setenv("C1I_URL", "https://example.invalid")
+
+	var out bytes.Buffer
+	automationsDeleteCmd.SetOut(&out)
+	automationsDeleteCmd.SetContext(context.Background())
+	if err := automationsDeleteCmd.RunE(automationsDeleteCmd, []string{"a1"}); err != nil {
+		t.Fatalf("RunE: %v", err)
+	}
+	if got := out.String(); got != "[dry-run] DELETE /api/v1/automations/a1\n" {
+		t.Errorf("output = %q", got)
+	}
+}
