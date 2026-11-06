@@ -1385,3 +1385,46 @@ func TestAPIPaginateNonJSONFirstPageIsExitServer(t *testing.T) {
 		})
 	}
 }
+
+// A --list-key naming a field that is present but not an array is the caller's
+// mistake (exit 2), not C1 failing.
+func TestAPIPaginateListKeyNotArrayIsUsageError(t *testing.T) {
+	for name, value := range map[string]string{"string": `"bar"`, "object": `{"a":1}`} {
+		t.Run(name, func(t *testing.T) {
+			srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				_, _ = fmt.Fprintf(w, `{"foo":%s,"list":[{"id":"a"}],"nextPageToken":""}`, value)
+			}))
+			defer srv.Close()
+
+			resetAPICmdFlags(t)
+			orig := newAPIClient
+			newAPIClient = func(_ *cobra.Command, _ string) (apiRequester, error) {
+				return client.NewForTesting(srv.URL, srv.Client(), client.WithMaxRetries(0)), nil
+			}
+			t.Cleanup(func() { newAPIClient = orig })
+			t.Setenv("C1I_URL", srv.URL)
+
+			var out, errOut bytes.Buffer
+			apiCmd.SetOut(&out)
+			apiCmd.SetErr(&errOut)
+			rootCmd.SetArgs([]string{"api", "--path", "/api/v1/things", "--paginate", "--list-key", "foo"})
+			err := rootCmd.ExecuteContext(context.Background())
+			if got := exitCode(err); got != exitUsage {
+				t.Errorf("exitCode = %d, want %d; err=%v", got, exitUsage, err)
+			}
+			if err == nil || !strings.Contains(err.Error(), "--list-key") {
+				t.Errorf("err = %v, want it to name --list-key", err)
+			}
+		})
+	}
+}
+
+// A hardcoded list key holding a non-array is the server's shape, not a usage
+// error, so extractListAndToken itself must not return a usageError.
+func TestExtractListAndTokenNotArrayIsNotUsageError(t *testing.T) {
+	_, _, err := extractListAndToken([]byte(`{"list":"x"}`), "list")
+	var ue *usageError
+	if err == nil || errors.As(err, &ue) {
+		t.Fatalf("err = %v, want a non-usage error", err)
+	}
+}

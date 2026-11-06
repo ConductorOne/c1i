@@ -267,6 +267,9 @@ an intended non-GET REST write.`,
 			}
 
 			items, nextToken, err := extractListAndToken(data, listKey)
+			if notArray := (*listKeyNotArrayError)(nil); errors.As(err, &notArray) {
+				return failWith(&usageError{fmt.Errorf("--list-key %q is not an array in the response: %w", listKey, notArray.err)})
+			}
 			if err != nil {
 				return failWith(&nonJSONResponseError{fmt.Errorf("failed to parse response: %w", err)})
 			}
@@ -403,6 +406,20 @@ func nextPageTokenFromMap(raw map[string]json.RawMessage) string {
 //
 // If listKey is non-empty, that field is used verbatim. Otherwise the first
 // array-valued field at the top level (other than "nextPageToken") wins.
+// listKeyNotArrayError is a named list key holding a non-array. Only `api`
+// makes it a usage error: other callers' keys are fixed, so there it is the
+// server's shape.
+type listKeyNotArrayError struct {
+	key string
+	err error
+}
+
+func (e *listKeyNotArrayError) Error() string {
+	return fmt.Sprintf("field %q is not an array: %v", e.key, e.err)
+}
+
+func (e *listKeyNotArrayError) Unwrap() error { return e.err }
+
 func extractListAndToken(data []byte, listKey string) ([]json.RawMessage, string, error) {
 	var raw map[string]json.RawMessage
 	if err := json.Unmarshal(data, &raw); err != nil {
@@ -418,7 +435,7 @@ func extractListAndToken(data []byte, listKey string) ([]json.RawMessage, string
 		}
 		var items []json.RawMessage
 		if err := json.Unmarshal(v, &items); err != nil {
-			return nil, nextPageToken, fmt.Errorf("field %q is not an array: %w", listKey, err)
+			return nil, nextPageToken, &listKeyNotArrayError{key: listKey, err: err}
 		}
 		return items, nextPageToken, nil
 	}
