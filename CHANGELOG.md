@@ -113,6 +113,11 @@ credentials fails instead of using the working directory. With a relative
 - The README's uninstall steps now say where each install method puts the
   binary, and that the Linux config directory follows `XDG_CONFIG_HOME`.
 
+- **`functions usage` overclaimed with `--page-token`.** It scans only that
+  page, yet printed "no automations call function X"; it now says no
+  automation on this page calls it. A never-run automation's
+  `last_executed_at` is now `null` instead of `""`.
+
 ## [0.9.1] - 2026-10-09
 
 ### Security

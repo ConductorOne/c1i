@@ -114,7 +114,7 @@ last_executed_at, args.`,
 						"automation_name":  a.DisplayName,
 						"step_name":        step.StepName,
 						"enabled":          a.Enabled,
-						"last_executed_at": a.LastExecutedAt,
+						"last_executed_at": nilIfEmpty(a.LastExecutedAt),
 						"args":             argKeys,
 					}); err != nil {
 						return err
@@ -134,7 +134,11 @@ last_executed_at, args.`,
 		}
 
 		if emitted == 0 {
-			_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "no automations call function %s\n", functionID)
+			if manualPaging {
+				_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "no automations on this page call function %s (--page-token scans one page only)\n", functionID)
+			} else {
+				_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "no automations call function %s\n", functionID)
+			}
 		}
 		return nil
 	},
