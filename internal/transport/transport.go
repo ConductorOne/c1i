@@ -10,6 +10,7 @@ import (
 	"os"
 	"runtime/debug"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -240,13 +241,14 @@ func New(base http.RoundTripper, opts ...Option) *Client {
 // or non-terminating redirect, or a transport-level failure that exhausted
 // its retry budget (or was marked non-retryable via WithNonRetryable).
 //
-// What's retried depends on the method (see isRetryableStatus / isIdempotent):
+// What's retried depends on the request (see isRetryableStatus / retrySafe):
 // 429 is retried for any method, since the request was rejected before
 // processing; 5xx and transport errors are retried only for idempotent
-// methods, so a POST/PATCH that may have committed server-side before the
-// failure is not silently re-applied. The request body is replayed from
-// req.GetBody on each attempt (http.NewRequestWithContext sets GetBody for
-// the bytes.Reader/strings.Reader bodies this CLI uses).
+// methods and read-only search/list POSTs, so a POST/PATCH that may have
+// committed server-side before the failure is not silently re-applied. The
+// request body is replayed from req.GetBody on each attempt
+// (http.NewRequestWithContext sets GetBody for the bytes.Reader/strings.Reader
+// bodies this CLI uses).
 func (c *Client) Do(req *http.Request) (*Response, error) {
 	if p := req.URL.EscapedPath(); pathHasEmptySegment(p) {
 		return nil, &PathError{Method: req.Method, Path: p}
@@ -285,7 +287,7 @@ func (c *Client) sendWithRetry(req *http.Request) (*Response, error) {
 			// Transport-level failure (connection reset, timeout, ...). We
 			// can't tell whether the server processed the request, so only
 			// retry idempotent methods.
-			if isIdempotent(req.Method) && attempt < c.maxRetries {
+			if retrySafe(req.Method, req.URL.EscapedPath()) && attempt < c.maxRetries {
 				if serr := sleepFn(ctx, nextBackoff(attempt, nil)); serr != nil {
 					return nil, serr
 				}
@@ -297,7 +299,7 @@ func (c *Client) sendWithRetry(req *http.Request) (*Response, error) {
 		body, readErr := c.readBody(resp.Body)
 		_ = resp.Body.Close()
 
-		if isRetryableStatus(req.Method, resp.StatusCode) && attempt < c.maxRetries {
+		if isRetryableStatus(req.Method, req.URL.EscapedPath(), resp.StatusCode) && attempt < c.maxRetries {
 			if serr := sleepFn(ctx, nextBackoff(attempt, resp)); serr != nil {
 				return nil, serr
 			}
@@ -332,9 +334,8 @@ func (c *Client) readBody(r io.Reader) ([]byte, error) {
 	return body, nil
 }
 
-// isIdempotent reports whether re-sending method after an ambiguous failure is
-// safe. Per RFC 9110 these methods are idempotent; POST and PATCH are not and
-// so are never retried on 5xx / transport errors.
+// isIdempotent reports whether method is idempotent per RFC 9110. POST and
+// PATCH are not; see retrySafe for the read-only POST exception.
 func isIdempotent(method string) bool {
 	switch method {
 	case http.MethodGet, http.MethodHead, http.MethodPut,
@@ -345,11 +346,26 @@ func isIdempotent(method string) bool {
 	}
 }
 
+// retrySafe reports whether re-sending a request after an ambiguous failure is
+// safe: an idempotent method, or a POST to a read-only search/list route. Every
+// such route in the C1 API spec (/api/v1/search/*, .../search, .../list) is a
+// Search/List/Count/Get RPC; POST there only carries the filter body.
+func retrySafe(method, path string) bool {
+	if isIdempotent(method) {
+		return true
+	}
+	if method != http.MethodPost || !strings.HasPrefix(path, "/api/v1/") {
+		return false
+	}
+	last := path[strings.LastIndex(path, "/")+1:]
+	return strings.HasPrefix(path, "/api/v1/search/") || last == "search" || last == "list"
+}
+
 // isRetryableStatus reports whether a response status warrants a retry for the
-// given method. 429 (rate limited) is always safe to retry: the request was
-// rejected before processing. The transient 5xx codes are retried only for
-// idempotent methods. 501/505 and 4xx (other than 429) are never retried.
-func isRetryableStatus(method string, code int) bool {
+// given request. 429 (rate limited) is always safe to retry: the request was
+// rejected before processing. The transient 5xx codes are retried only when
+// retrySafe. 501/505 and 4xx (other than 429) are never retried.
+func isRetryableStatus(method, path string, code int) bool {
 	switch code {
 	case http.StatusTooManyRequests: // 429
 		return true
@@ -357,7 +373,7 @@ func isRetryableStatus(method string, code int) bool {
 		http.StatusBadGateway,         // 502
 		http.StatusServiceUnavailable, // 503
 		http.StatusGatewayTimeout:     // 504
-		return isIdempotent(method)
+		return retrySafe(method, path)
 	default:
 		return false
 	}

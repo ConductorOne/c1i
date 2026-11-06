@@ -238,22 +238,22 @@ func TestIsIdempotent(t *testing.T) {
 func TestIsRetryableStatus(t *testing.T) {
 	// 429 is retryable for every method (rejected before processing).
 	for _, m := range []string{http.MethodGet, http.MethodPost, http.MethodPatch, http.MethodPut} {
-		if !isRetryableStatus(m, 429) {
+		if !isRetryableStatus(m, "/x", 429) {
 			t.Errorf("isRetryableStatus(%s, 429) = false, want true", m)
 		}
 	}
-	// 5xx is retryable only for idempotent methods.
+	// 5xx is retryable only for retry-safe requests (see retrySafe).
 	for _, c := range []int{500, 502, 503, 504} {
-		if !isRetryableStatus(http.MethodGet, c) {
+		if !isRetryableStatus(http.MethodGet, "/x", c) {
 			t.Errorf("isRetryableStatus(GET, %d) = false, want true", c)
 		}
-		if isRetryableStatus(http.MethodPost, c) {
+		if isRetryableStatus(http.MethodPost, "/x", c) {
 			t.Errorf("isRetryableStatus(POST, %d) = true, want false (non-idempotent)", c)
 		}
 	}
 	// Never retryable, regardless of method.
 	for _, c := range []int{200, 201, 400, 401, 403, 404, 409, 422, 501, 505} {
-		if isRetryableStatus(http.MethodGet, c) {
+		if isRetryableStatus(http.MethodGet, "/x", c) {
 			t.Errorf("isRetryableStatus(GET, %d) = true, want false", c)
 		}
 	}
@@ -286,6 +286,114 @@ type errDoer struct{ calls int }
 func (d *errDoer) Do(*http.Request) (*http.Response, error) {
 	d.calls++
 	return nil, errors.New("connection reset")
+}
+
+func TestRetrySafe(t *testing.T) {
+	safe := []struct{ method, path string }{
+		{http.MethodGet, "/api/v1/apps"},
+		{http.MethodPost, "/api/v1/search/users"},
+		{http.MethodPost, "/api/v1/search/graph/counts"},
+		{http.MethodPost, "/api/v1/findings/search"},
+		{http.MethodPost, "/api/v1/apps/a1/connectors/c1/mcp_tools/search"},
+		{http.MethodPost, "/api/v1/classifier_templates/list"},
+	}
+	for _, c := range safe {
+		if !retrySafe(c.method, c.path) {
+			t.Errorf("retrySafe(%s, %s) = false, want true", c.method, c.path)
+		}
+	}
+	unsafe := []struct{ method, path string }{
+		{http.MethodPost, "/api/v1/apps"},
+		{http.MethodPost, "/api/v1/searchx/users"},
+		{http.MethodPost, "/api/v1/apps/a1/search/x"},
+		{http.MethodPost, "/mcp/search"},
+		{http.MethodPost, "/x"},
+		{http.MethodPatch, "/api/v1/search/users"},
+	}
+	for _, c := range unsafe {
+		if retrySafe(c.method, c.path) {
+			t.Errorf("retrySafe(%s, %s) = true, want false", c.method, c.path)
+		}
+	}
+}
+
+// recordingServer answers 503 for the first fail requests, then 200, and
+// records every request body it saw.
+func recordingServer(t *testing.T, fail int) (*httptest.Server, *[]string) {
+	t.Helper()
+	var bodies []string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		b, _ := io.ReadAll(r.Body)
+		bodies = append(bodies, string(b))
+		if len(bodies) <= fail {
+			w.WriteHeader(http.StatusServiceUnavailable)
+			return
+		}
+		_, _ = w.Write([]byte(`{}`))
+	}))
+	t.Cleanup(srv.Close)
+	return srv, &bodies
+}
+
+func TestDo_SearchPost5xxRetriedWithSameBody(t *testing.T) {
+	deterministicBackoff(t)
+	srv, bodies := recordingServer(t, 1)
+
+	const body = `{"query":"alice","pageSize":3}`
+	resp, err := post(t, newTestClient(srv, 3), srv.URL+"/api/v1/search/users", body)
+	if err != nil {
+		t.Fatalf("Do: %v", err)
+	}
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("StatusCode = %d, want 200 after retry", resp.StatusCode)
+	}
+	if len(*bodies) != 2 {
+		t.Fatalf("calls = %d, want 2 (search POST retried on 503)", len(*bodies))
+	}
+	for i, b := range *bodies {
+		if b != body {
+			t.Fatalf("request %d body = %q, want %q", i+1, b, body)
+		}
+	}
+}
+
+func TestDo_NonSearchPost5xxNotRetried(t *testing.T) {
+	deterministicBackoff(t)
+	srv, bodies := recordingServer(t, 1)
+
+	resp, err := post(t, newTestClient(srv, 3), srv.URL+"/api/v1/apps", "{}")
+	if err != nil {
+		t.Fatalf("Do: %v", err)
+	}
+	if resp.StatusCode != http.StatusServiceUnavailable || len(*bodies) != 1 {
+		t.Fatalf("status = %d, calls = %d; want 503 and 1 (create must not be re-sent)", resp.StatusCode, len(*bodies))
+	}
+}
+
+func TestDo_SearchPostZeroRetriesDisables(t *testing.T) {
+	deterministicBackoff(t)
+	srv, bodies := recordingServer(t, 1)
+
+	resp, err := post(t, newTestClient(srv, 0), srv.URL+"/api/v1/search/users", "{}")
+	if err != nil {
+		t.Fatalf("Do: %v", err)
+	}
+	if resp.StatusCode != http.StatusServiceUnavailable || len(*bodies) != 1 {
+		t.Fatalf("status = %d, calls = %d; want 503 and 1 with max retries 0", resp.StatusCode, len(*bodies))
+	}
+}
+
+func TestDo_SearchPostTransportErrorRetried(t *testing.T) {
+	deterministicBackoff(t)
+	d := &errDoer{}
+	req, _ := http.NewRequestWithContext(context.Background(), http.MethodPost, "http://x/api/v1/search/grants", strings.NewReader("{}"))
+	c := &Client{httpClient: &http.Client{Transport: doerTransport{d}}, maxRetries: 3}
+	if _, err := c.sendWithRetry(req); err == nil {
+		t.Fatal("expected transport error to surface")
+	}
+	if d.calls != 4 { // 1 + 3 retries
+		t.Fatalf("calls = %d, want 4", d.calls)
+	}
 }
 
 func TestDo_TransportErrorRetriedOnlyForIdempotent(t *testing.T) {
@@ -520,5 +628,20 @@ func TestAPIErrorWithoutBody(t *testing.T) {
 		if got := (&APIError{Method: "GET", Path: "/x", StatusCode: 403, Body: body}).Error(); got != want {
 			t.Errorf("body %q: %q, want %q", body, got, want)
 		}
+	}
+}
+
+// An id containing an escaped "/" must not make a mutation look like a
+// search: matching uses the escaped path, not the decoded one.
+func TestDo_EscapedSlashInIDNotRetried(t *testing.T) {
+	deterministicBackoff(t)
+	srv, bodies := recordingServer(t, 1)
+
+	resp, err := post(t, newTestClient(srv, 3), srv.URL+"/api/v1/classifiers/x%2Fsearch", "{}")
+	if err != nil {
+		t.Fatalf("Do: %v", err)
+	}
+	if resp.StatusCode != http.StatusServiceUnavailable || len(*bodies) != 1 {
+		t.Fatalf("status = %d, calls = %d; want 503 and 1 (update must not be re-sent)", resp.StatusCode, len(*bodies))
 	}
 }

@@ -250,7 +250,8 @@ tracked root file outside its allowlist. Stage explicit paths rather than `-A`.
   client errors with `%w` so `errors.As` can classify them, and wrap a bad
   flag/arg combination in `&usageError{}` so it exits 2 — a bare `fmt.Errorf`
   silently becomes exit 1.
-- Retries (429/5xx + transport, idempotent-aware) live in
+- Retries (429/5xx + transport, idempotent-aware; read-only search/list POSTs
+  count as idempotent, see `retrySafe`) live in
   `internal/transport/transport.go`; `internal/client` only forwards the
   options through. Commands get them for free via `newClient`.
 - **Help text is a claim about the server.** Don't state a default, scope, or
