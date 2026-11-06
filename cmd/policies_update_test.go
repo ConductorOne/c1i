@@ -9,6 +9,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/ConductorOne/c1i/internal/client"
@@ -157,6 +158,28 @@ func TestPoliciesUpdateDryRunPreviewsWrappedBodyWithoutSending(t *testing.T) {
 
 func bytesContains(s, sub string) bool {
 	return bytes.Contains([]byte(s), []byte(sub))
+}
+
+// A top-level JSON null used to come back as a nil map and panic on the id
+// assignment.
+func TestPoliciesUpdateNullBodyFileExitsUsage(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		t.Errorf("no request expected, got %s %s", r.Method, r.URL.Path)
+	}))
+	defer srv.Close()
+
+	resetPoliciesUpdateCmdFlags(t)
+	stubPoliciesClient(t, srv)
+	withRealDryRun(t)
+	t.Setenv("C1I_URL", "https://example.invalid")
+	_ = policiesUpdateCmd.Flags().Set("body-file", writeTempJSON(t, "null.json", `null`))
+	_ = policiesUpdateCmd.Flags().Set("update-mask", "displayName")
+	policiesUpdateCmd.SetContext(context.Background())
+
+	err := policiesUpdateCmd.RunE(policiesUpdateCmd, []string{"pol1"})
+	if err == nil || exitCode(err) != exitUsage || !strings.Contains(err.Error(), "--body-file") {
+		t.Errorf("err = %v (exit %d), want exit %d naming --body-file", err, exitCode(err), exitUsage)
+	}
 }
 
 // TestPoliciesUpdateGuardFiresOnEmptyStepsFile drives the guard through the

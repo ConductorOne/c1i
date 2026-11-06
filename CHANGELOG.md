@@ -44,6 +44,10 @@ credentials fails instead of using the working directory. With a relative
   id is checked first (it must exist, not be deleted, and be of the flag's
   type; otherwise exit `2` and nothing is sent). An empty policy id is exit
   `2`; `apps update --unbind-policy grant|revoke|certify` unbinds one.
+- `automations update <automation-id>` changes an automation's
+  `--display-name`, `--description` or `--enabled` state; `--body-file` with
+  `--update-mask` updates any other field (triggers, steps, draft fields).
+- `automations delete <automation-id>` soft-deletes an automation.
 
 ### Changed
 
@@ -60,6 +64,11 @@ credentials fails instead of using the working directory. With a relative
 
 ### Fixed
 
+- An input file that is missing, malformed or the wrong JSON shape now exits
+  `2` (usage) instead of `1`: every `--body-file` (including `api`'s), the
+  MCP server `--*-config-file` flags, and `--steps-file`, `--rules-file` and
+  `--refs-file`. A `null` body file, which could panic, is refused the same
+  way, and the error names the flag.
 - `apps set-owners --wait` exits 1 (`writing output:`) when its success line
   can't be written to stdout, instead of 0; the owners were already set.
 - **A failed write to stdout now exits `1`** (e.g. a full disk) instead of

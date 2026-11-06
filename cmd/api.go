@@ -95,7 +95,7 @@ an intended non-GET REST write.`,
 				raw, err = os.ReadFile(bodyFile) // #nosec G304 -- user-supplied --body-file path is intentional
 			}
 			if err != nil {
-				return fmt.Errorf("reading --body-file: %w", err)
+				return &usageError{fmt.Errorf("reading --body-file: %w", err)}
 			}
 			body = string(raw)
 		}
@@ -156,6 +156,9 @@ an intended non-GET REST write.`,
 				if body != "" {
 					if err := json.Unmarshal([]byte(body), &bodyObj); err != nil {
 						return &usageError{fmt.Errorf("invalid JSON body: %w", err)}
+					}
+					if bodyObj == nil {
+						return errNullBody
 					}
 				}
 				previewBody = bodyObj
@@ -223,6 +226,9 @@ an intended non-GET REST write.`,
 				if body != "" {
 					if err := json.Unmarshal([]byte(body), &bodyObj); err != nil {
 						return &usageError{fmt.Errorf("invalid JSON body: %w", err)}
+					}
+					if bodyObj == nil {
+						return errNullBody
 					}
 				} else {
 					bodyObj = map[string]any{}
@@ -411,6 +417,10 @@ func (e *listKeyNotArrayError) Error() string {
 }
 
 func (e *listKeyNotArrayError) Unwrap() error { return e.err }
+
+// errNullBody: a POST/PUT/PATCH body must be an object; a JSON null decodes
+// to a nil map, which --paginate would write the page token into.
+var errNullBody = &usageError{fmt.Errorf("--body/--body-file must be a JSON object, not null")}
 
 // extractListAndToken finds the array-valued field in a paginated response and
 // the nextPageToken. Most C1 list endpoints wrap items under "list", but some

@@ -91,6 +91,18 @@ func TestAccessReviewCreateRejectsMissingOwners(t *testing.T) {
 	}
 }
 
+func TestAccessReviewCreateRejectsNullBodyFile(t *testing.T) {
+	resetCmdFlags(t, accessReviewsCreateCmd)
+	enableAccessReviewDryRun(t)
+	setAccessReviewFlag(t, accessReviewsCreateCmd, "body-file", writeAccessReviewJSON(t, "null.json", `null`))
+	accessReviewsCreateCmd.SetContext(context.Background())
+	err := accessReviewsCreateCmd.RunE(accessReviewsCreateCmd, nil)
+	if err == nil || exitCode(err) != exitUsage ||
+		!strings.Contains(err.Error(), "--body-file") || strings.Contains(err.Error(), "config file") {
+		t.Errorf("error = %v (exit %d), want exit %d naming --body-file, not \"config file\"", err, exitCode(err), exitUsage)
+	}
+}
+
 func setAccessReviewFlag(t *testing.T, cmd *cobra.Command, name, value string) {
 	t.Helper()
 	if err := cmd.Flags().Set(name, value); err != nil {

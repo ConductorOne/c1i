@@ -191,7 +191,7 @@ func buildUpdatePolicyPatch(cmd *cobra.Command, resolveFallbackPolicyType func()
 		if mask == "" {
 			return nil, "", fmt.Errorf("--update-mask is required together with --body-file")
 		}
-		policy, err = readConfigFile(cmd, bodyFile)
+		policy, err = readConfigFile(cmd, "body-file", bodyFile)
 		if err != nil {
 			return nil, "", err
 		}

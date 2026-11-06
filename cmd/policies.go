@@ -96,11 +96,11 @@ func readJSONBytes(cmd *cobra.Command, path string) ([]byte, error) {
 func readJSONArrayFile(cmd *cobra.Command, path string) ([]any, error) {
 	data, err := readJSONBytes(cmd, path)
 	if err != nil {
-		return nil, fmt.Errorf("reading file: %w", err)
+		return nil, &usageError{fmt.Errorf("reading file: %w", err)}
 	}
 	var arr []any
 	if err := json.Unmarshal(data, &arr); err != nil {
-		return nil, fmt.Errorf("parsing as a JSON array: %w", err)
+		return nil, &usageError{fmt.Errorf("parsing as a JSON array: %w", err)}
 	}
 	return arr, nil
 }
