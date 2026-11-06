@@ -202,7 +202,7 @@ func stableAndAtLeast[T any, K comparable](n int, key func(T) K, floor func(T) b
 // waitTimeoutFlagUsage is --wait-timeout's help text everywhere. Shared
 // because the pair's wording has drifted between commands before;
 // TestWaitFlagsAreRegisteredIdentically fails CI if a command hand-rolls it.
-const waitTimeoutFlagUsage = "max time to wait with --wait (e.g. 30s, 5m)"
+const waitTimeoutFlagUsage = "max time to wait with --wait (e.g. 30s, 5m); reaching it exits 1"
 
 const (
 	waitFlagUsagePrefix = "block and poll "

@@ -75,6 +75,6 @@ func init() {
 	entitlementsAddOwnerCmd.Flags().String("app-id", "", "Application ID the entitlement belongs to")
 	entitlementsAddOwnerCmd.Flags().String("entitlement-id", "", "Entitlement ID to add the owner to")
 	markRequired(entitlementsAddOwnerCmd, "app-id", "entitlement-id")
-	addWaitFlags(entitlementsAddOwnerCmd, "GET .../ownerids until the owner appears (a timeout exits 1, though the write was accepted)", 4*time.Minute)
+	addWaitFlags(entitlementsAddOwnerCmd, "GET .../ownerids until the owner appears", 4*time.Minute)
 	entitlementsCmd.AddCommand(entitlementsAddOwnerCmd)
 }

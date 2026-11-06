@@ -94,6 +94,6 @@ func init() {
 	entitlementsSetOwnersCmd.Flags().String("app-id", "", "Application ID the entitlement belongs to")
 	addRepeatableStringFlag(entitlementsSetOwnersCmd, "user-id", "C1 user ID to set as owner (repeatable; replaces the full owner list)")
 	markRequired(entitlementsSetOwnersCmd, "app-id", "user-id")
-	addWaitFlags(entitlementsSetOwnersCmd, "GET .../ownerids until the owner set equals the requested ids (removals included; a timeout exits 1, though the write was accepted)", 4*time.Minute)
+	addWaitFlags(entitlementsSetOwnersCmd, "GET .../ownerids until the owner set equals the requested ids (removals included)", 4*time.Minute)
 	entitlementsCmd.AddCommand(entitlementsSetOwnersCmd)
 }

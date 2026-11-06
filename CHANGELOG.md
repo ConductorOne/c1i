@@ -30,8 +30,10 @@ credentials fails instead of using the working directory. With a relative
   waits until the owner appears, `set-owners --wait` until the owner set
   equals the request (removals included), with progress on stderr. All three
   writes print the API's JSON response and honor `--dry-run`.
+  `add-owner` exits `4` for an unknown user, entitlement or app;
   `remove-owner` exits `4` both for an unknown user and for one who was never
-  an owner, and unlike `set-owners` it can remove the last owner.
+  an owner, and unlike `set-owners` it can remove the last owner. A `--wait`
+  that reaches `--wait-timeout` exits `1`, though the write was accepted.
 - `entitlements update <entitlement-id> --app-id` sets an entitlement's
   display name, description, grant/revoke/certify/emergency-grant policies,
   emergency-grant switch, and maximum grant duration (`--duration-grant`, a Go

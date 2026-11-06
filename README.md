@@ -290,7 +290,7 @@ prints nothing until the same grants come back `--wait-stable` times running
 Progress goes to stderr, so stdout stays pure NDJSON. The 5s interval is fixed
 and is not a flag; `--wait-stable` must fit inside `--wait-timeout` (default
 `4m`), and a combination that cannot fit is rejected as a usage error rather
-than left to time out.
+than left to time out. A timeout exits `1` and prints no rows.
 
 **An empty result is stable.** A filter matching nothing settles at the first
 opportunity -- about 10s at the defaults -- and exits `0` with zero rows.
