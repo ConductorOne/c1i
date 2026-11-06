@@ -28,19 +28,19 @@ func (e *APIError) Error() string {
 	return fmt.Sprintf("API %s %s returned %d: %s", e.Method, e.Path, e.StatusCode, e.Body)
 }
 
-// PathError is returned when a request's path contains an empty segment -- a
-// trailing slash or an interior "//" -- most commonly produced by an empty id
-// argument (e.g. `c1i users get ""`), which client.Path renders as an empty
-// segment. Left unchecked, the API 301-redirects a trailing-slash resource
-// path to its parent collection, so the request would otherwise succeed and
-// return the wrong data. Do() rejects it before any request is sent.
+// PathError is returned when a request's path contains an empty segment (a
+// trailing slash or an interior "//") or a "." / ".." segment, most commonly
+// from an id argument of "", ".", or "..", which client.Path passes through
+// unchanged. The server resolves each to the parent or collection, so the
+// request would otherwise read or mutate the wrong resource. Do() rejects it
+// before any request is sent.
 type PathError struct {
 	Method string
 	Path   string
 }
 
 func (e *PathError) Error() string {
-	return fmt.Sprintf("refusing to send %s %s: empty path segment (an id argument was likely empty)", e.Method, e.Path)
+	return fmt.Sprintf(`refusing to send %s %s: empty path segment or "."/".." segment (an id argument was likely "", ".", or "..")`, e.Method, e.Path)
 }
 
 // RedirectError is returned when a 3xx response's target changes the

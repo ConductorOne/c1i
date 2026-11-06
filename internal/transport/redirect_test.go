@@ -117,41 +117,21 @@ func TestClient_IDPathRedirectChainRefused(t *testing.T) {
 	}
 }
 
-// TestClient_DotIDPathRedirectRefused reproduces the live defect for the
-// other id shape that normalizes to the collection: `users get "."` escapes
-// to .../users/. (url.PathEscape leaves "." unescaped, unlike "/" which
-// becomes %2F for the "/" case above), and the real API collapses that
-// single dot segment server-side, 301-ing directly to .../users — one hop,
-// not the two-hop chain the "/" case goes through. Same guard, same refusal
-// branch (target path != request path), different id and a shorter path to
-// it; see resolveAllowedRedirect.
-func TestClient_DotIDPathRedirectRefused(t *testing.T) {
-	var collectionCalled bool
+// TestClient_DotIDPathRefusedBeforeWire: the real API 301s .../users/. to the
+// collection for a GET, which the redirect guard would refuse, but a non-GET
+// may be routed there with no redirect at all, so Do() refuses a dot segment
+// before anything is sent.
+func TestClient_DotIDPathRefusedBeforeWire(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch r.URL.EscapedPath() {
-		case "/api/v1/users/.":
-			w.Header().Set("Location", "/api/v1/users")
-			w.WriteHeader(http.StatusMovedPermanently)
-		case "/api/v1/users":
-			collectionCalled = true
-			_, _ = w.Write([]byte(`{"list":[{"id":"1"},{"id":"2"}]}`))
-		default:
-			t.Fatalf("unexpected request to %s", r.URL.EscapedPath())
-		}
+		t.Errorf("request sent: %s %s", r.Method, r.URL.EscapedPath())
 	}))
 	defer srv.Close()
 
 	c := newTestClient(srv, 0)
 	_, err := get(t, c, srv.URL+"/api/v1/users/.")
-	if err == nil {
-		t.Fatal(`expected an error for id ".", got nil`)
-	}
-	var redirErr *RedirectError
-	if !errors.As(err, &redirErr) {
-		t.Fatalf(`error = %T (%v), want *RedirectError`, err, err)
-	}
-	if collectionCalled {
-		t.Error("the collection endpoint was reached; the client followed the redirect instead of refusing it")
+	var pathErr *PathError
+	if !errors.As(err, &pathErr) {
+		t.Fatalf(`error = %T (%v), want *PathError`, err, err)
 	}
 }
 

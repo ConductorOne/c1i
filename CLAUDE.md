@@ -135,10 +135,12 @@ tracked root file outside its allowlist. Stage explicit paths rather than `-A`.
     non-emptiness:** `ExactArgs(1)` accepts `""`, `"/"`, or `"."`, and each
     used to reach the collection endpoint and print the whole list with exit
     0. The **shared REST client** now closes this two ways: it refuses any
-    request whose path has an empty segment up front (`client.PathError` →
-    exit 2, catches `""`), and it refuses to follow a 3xx whose target path
-    differs from the request's (`client.RedirectError` → exit 2, catches
-    `"/"`/`"."`, which the API 301s to the collection). A per-command check
+    request whose path has an empty, `.`, or `..` segment (percent-decoded,
+    so `%2E` counts) up front, for every method (`client.PathError` → exit
+    2, catches `""`/`"."`/`".."`; a non-GET dot path is routed with no
+    redirect), and it refuses to follow a 3xx whose target path differs
+    from the request's (`client.RedirectError` → exit 2, catches `"/"`,
+    which the API 301s to the collection). A per-command check
     is still unnecessary *for commands built on it* — but don't reason as
     though a positional id were guaranteed non-empty or single-resource-
     shaped, and see "Adding a new client/subsystem package" below if your

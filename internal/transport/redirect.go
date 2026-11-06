@@ -82,7 +82,7 @@ func (rt *redirectTripper) RoundTrip(req *http.Request) (*http.Response, error) 
 // resolution net/http's own redirect-following uses), and reports the
 // resolved target only when both hold: its escaped path is identical to
 // base's (EscapedPath, not the decoded Path, so a percent-encoded separator
-// like %2F isn't silently decoded into one — matching pathHasEmptySegment
+// like %2F isn't silently decoded into one — matching pathHasBadSegment
 // and Do()'s guard; a trailing-slash difference therefore counts as
 // changed, since that's the exact shape the id-normalizes-to-collection
 // bypass produces), and its host is in the same trust scope as base's (see

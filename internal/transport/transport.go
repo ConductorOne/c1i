@@ -237,7 +237,7 @@ func New(base http.RoundTripper, opts ...Option) *Client {
 // Do sends req, retrying a transient failure with exponential backoff and
 // jitter, and returns the resulting Response for any status that comes back
 // -- the caller decides what counts as success. err is non-nil only when no
-// usable Response could be produced at all: an empty path segment, a refused
+// usable Response could be produced at all: an empty or dot path segment, a refused
 // or non-terminating redirect, or a transport-level failure that exhausted
 // its retry budget (or was marked non-retryable via WithNonRetryable).
 //
@@ -250,7 +250,7 @@ func New(base http.RoundTripper, opts ...Option) *Client {
 // (http.NewRequestWithContext sets GetBody for the bytes.Reader/strings.Reader
 // bodies this CLI uses).
 func (c *Client) Do(req *http.Request) (*Response, error) {
-	if p := req.URL.EscapedPath(); pathHasEmptySegment(p) {
+	if p := req.URL.EscapedPath(); pathHasBadSegment(p) {
 		return nil, &PathError{Method: req.Method, Path: p}
 	}
 	return c.sendWithRetry(req)

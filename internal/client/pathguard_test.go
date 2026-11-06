@@ -10,7 +10,7 @@ import (
 
 // TestDo_EmptyPathSegmentNeverSendsRequest proves the guard fires before any
 // network I/O: the handler fails the test if it is ever invoked. The guard
-// itself (pathHasEmptySegment) lives in and is unit-tested by
+// itself (pathHasBadSegment) lives in and is unit-tested by
 // internal/transport; this proves it's actually wired into Client.do.
 func TestDo_EmptyPathSegmentNeverSendsRequest(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -64,7 +64,7 @@ func TestDo_LegitimatePathStillSendsRequest(t *testing.T) {
 // (a false empty-segment positive) if the guard ever read the decoded path
 // instead. This drives a real request built via client.Path end-to-end
 // through an httptest.Server so the assertion is on wire behavior, not the
-// pure pathHasEmptySegment helper.
+// pure pathHasBadSegment helper.
 func TestDo_EscapedSlashInIDStillSendsRequest(t *testing.T) {
 	var called bool
 	var gotEscapedPath string
@@ -85,5 +85,57 @@ func TestDo_EscapedSlashInIDStillSendsRequest(t *testing.T) {
 	}
 	if gotEscapedPath != "/api/v1/apps/abc%2F" {
 		t.Fatalf("server saw escaped path %q, want /api/v1/apps/abc%%2F", gotEscapedPath)
+	}
+}
+
+// TestDo_DotSegmentNeverSendsRequest drives client.Path end-to-end: "." and
+// ".." survive url.PathEscape unchanged, and the server normalizes them away
+// for any method, so every method must be refused before the wire.
+func TestDo_DotSegmentNeverSendsRequest(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		t.Errorf("request sent: %s %s", r.Method, r.URL.EscapedPath())
+	}))
+	defer srv.Close()
+
+	c := newTestClient(srv, 0)
+	ctx := context.Background()
+	for _, id := range []string{".", ".."} {
+		calls := map[string]func() error{
+			"GET":    func() error { _, err := c.Get(ctx, Path("/api/v1/users/%s", id), nil); return err },
+			"DELETE": func() error { _, err := c.Delete(ctx, Path("/api/v1/users/%s", id)); return err },
+			"POST": func() error {
+				_, err := c.Post(ctx, Path("/api/v1/webhooks/%s/test", id), map[string]any{})
+				return err
+			},
+			"PATCH": func() error { _, err := c.Patch(ctx, Path("/api/v1/users/%s", id), map[string]any{}); return err },
+		}
+		for method, call := range calls {
+			var pathErr *PathError
+			if err := call(); !errors.As(err, &pathErr) {
+				t.Errorf("%s id %q: error = %T (%v), want *PathError", method, id, err, err)
+			}
+		}
+	}
+}
+
+// TestDo_DottedIDStillSendsRequest guards against over-matching: an id that
+// merely contains dots is a real id.
+func TestDo_DottedIDStillSendsRequest(t *testing.T) {
+	var got []string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		got = append(got, r.URL.EscapedPath())
+		_, _ = w.Write([]byte(`{"ok":true}`))
+	}))
+	defer srv.Close()
+
+	c := newTestClient(srv, 0)
+	ids := []string{"a.b", "..a", "v1.2", "..."}
+	for _, id := range ids {
+		if _, err := c.Get(context.Background(), Path("/api/v1/users/%s", id), nil); err != nil {
+			t.Errorf("id %q: unexpected error: %v", id, err)
+		}
+	}
+	if len(got) != len(ids) {
+		t.Fatalf("server saw %d requests (%v), want %d", len(got), got, len(ids))
 	}
 }

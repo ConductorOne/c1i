@@ -1177,8 +1177,10 @@ indistinguishable from "the Slack connector is down."
 An **empty id argument** is a usage error, not a lookup: `c1i policies get ""`
 exits `2` and sends nothing. Without that guard an empty id renders a trailing
 empty path segment, which the API redirects to the collection endpoint — so the
-command used to print the entire list and exit `0`. The same check applies to a
-raw `api --path` ending in `/`.
+command used to print the entire list and exit `0`. An id of `.` or `..` is
+refused the same way, since the API resolves it to the parent or collection.
+The same check applies to a raw `api --path` ending in `/` or containing a `.`,
+`..`, or percent-encoded (`%2E`) dot segment.
 
 Relatedly, the REST client is **selective about HTTP redirects**. It follows one
 only when both hold: the target path is identical to what was requested (a

@@ -101,6 +101,10 @@ credentials fails instead of using the working directory. With a relative
   `--resource-type-id`/`--resource-id` (`entitlements create`), `--policy-id`
   (`findings create-task`) and `--duration` (`tasks update-grant-duration`)
   with exit 2.
+- An id of `.` or `..` (or a raw `api --path` segment such as `%2E`) now
+  exits `2` and sends nothing, for every method. The API resolves such a
+  segment to the parent or collection, and a write could reach the wrong
+  handler with no redirect for the client to refuse.
 - An input file that is missing, malformed or the wrong JSON shape now exits
   `2` (usage) instead of `1`: every `--body-file` (including `api`'s), the
   MCP server `--*-config-file` flags, and `--steps-file`, `--rules-file` and

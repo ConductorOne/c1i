@@ -1,14 +1,19 @@
 package transport
 
-import "strings"
+import (
+	"net/url"
+	"strings"
+)
 
-// pathHasEmptySegment reports whether path contains an empty segment: a
-// trailing slash after content, or an interior "//". Only the path is
-// examined — a query string or fragment suffix ("?..." / "#...") is stripped
-// first, so neither can mask or manufacture a false positive. A bare "/" is
-// not flagged: it's a single root segment, not one carved out by a missing
-// id, and no request in this codebase ever targets just "/".
-func pathHasEmptySegment(path string) bool {
+// pathHasBadSegment reports whether path contains a segment that makes the
+// server address something other than what was named: an empty segment (a
+// trailing slash after content, or an interior "//"), or a "." / ".." dot
+// segment, which the server normalizes to the parent or collection -- for a
+// non-GET with no redirect for the redirect guard to see. Each segment is
+// percent-decoded before the dot check because the server decodes %2E before
+// normalizing. A query or fragment suffix is stripped first. A bare "/" is
+// not flagged: no request in this codebase targets just "/".
+func pathHasBadSegment(path string) bool {
 	if i := strings.IndexAny(path, "?#"); i >= 0 {
 		path = path[:i]
 	}
@@ -17,6 +22,9 @@ func pathHasEmptySegment(path string) bool {
 	}
 	for _, seg := range strings.Split(strings.TrimPrefix(path, "/"), "/") {
 		if seg == "" {
+			return true
+		}
+		if dec, err := url.PathUnescape(seg); err == nil && (dec == "." || dec == "..") {
 			return true
 		}
 	}
