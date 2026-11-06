@@ -83,11 +83,14 @@ func runWait[T any](cmd *cobra.Command, op waitOp[T]) (T, error) {
 			return zero, err
 		}
 		if op.Done(got) {
-			_, _ = fmt.Fprintf(out, "%s after %s.\n", op.Success, time.Since(start).Round(time.Second))
+			// On stdout this line is the result; op.Out is a stderr notice.
+			if _, err := fmt.Fprintf(out, "%s after %s.\n", op.Success, time.Since(start).Round(time.Second)); err != nil && op.Out == nil {
+				return zero, wrapOutputErr(err)
+			}
 			return got, nil
 		}
 		if !firstPoll {
-			_, _ = fmt.Fprintf(out, "Still waiting for %s (%s elapsed)...\n",
+			waitProgress(out, "Still waiting for %s (%s elapsed)...\n",
 				op.Subject, time.Since(start).Round(time.Second))
 		}
 		firstPoll = false
@@ -108,6 +111,12 @@ func runWait[T any](cmd *cobra.Command, op waitOp[T]) (T, error) {
 			"this is not necessarily a failure — %s, "+
 			"check again later with: %s",
 		op.Timeout, op.Subject, op.Slow, op.Recheck)
+}
+
+// waitProgress prints a poll's progress line; the success line or an error
+// that follows decides the exit code.
+func waitProgress(out io.Writer, format string, args ...any) {
+	_, _ = fmt.Fprintf(out, format, args...)
 }
 
 // untilPresent is the Done predicate for "every wanted id has shown up".
