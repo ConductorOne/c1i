@@ -40,14 +40,9 @@ type listPaginationCase struct {
 	// rowIDs extracts, in emission order, the identifying value each item()
 	// call varied per row from the command's decoded NDJSON output.
 	rowIDs func(rows []map[string]any) []string
-	// stuckCursorRoute is non-empty only for a command backed by a
-	// confirmed-broken GET route (see paginationCursorGuard and
-	// warnStuckCursor): one whose page_size/page_token are not bound
-	// server-side, so it keeps resealing a fresh-looking nextPageToken over
-	// the same page forever. TestListCommandsStuckCursorReturnsExitServer
-	// runs only the cases that set this, asserting auto-pagination stops,
-	// emits each row exactly once, and exits 6 ("C1 failed") naming this
-	// route. Commands on correctly-bound routes must leave it empty.
+	// stuckCursorRoute ("METHOD /path") opts a case into
+	// TestListCommandsStuckCursorReturnsExitServer; set it only for commands
+	// that use paginationCursorGuard.
 	stuckCursorRoute string
 }
 
@@ -555,16 +550,8 @@ func TestListCommandsExplicitPageTokenDisablesAutoPagination(t *testing.T) {
 	}
 }
 
-// TestListCommandsStuckCursorReturnsExitServer covers every command backed
-// by a confirmed-broken GET route (stuckCursorRoute set in
-// listPaginationCases): a server that reseals a fresh, never-before-seen
-// nextPageToken on every call while returning the exact same row. A bare
-// seen-token check never fires against that shape; the guard must key off
-// the duplicate item id instead. Without it, these commands loop forever,
-// re-emitting the same row. The fix must stop after the repeat is detected,
-// emit the row exactly once, print a stderr warning naming the route, and
-// exit 6 ("C1 failed") -- a known C1 API server defect, not a usage mistake
-// and not something a different c1i command or endpoint works around.
+// Every guarded command, against a server that reseals a fresh token over the
+// same page: stop, emit the row once, warn naming the route, exit 6.
 func TestListCommandsStuckCursorReturnsExitServer(t *testing.T) {
 	for _, tc := range listPaginationCases() {
 		if tc.stuckCursorRoute == "" {
@@ -575,15 +562,17 @@ func TestListCommandsStuckCursorReturnsExitServer(t *testing.T) {
 			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				requestCount++
 				if requestCount > 4 {
-					t.Fatalf("server received a 5th request; auto-pagination did not terminate")
+					t.Errorf("server received a 5th request; auto-pagination did not terminate")
+					w.WriteHeader(http.StatusBadRequest)
+					return
 				}
 				tok := extractPageToken(t, tc.method, r)
 				w.Header().Set("Content-Type", "application/json")
 				switch tok {
 				case "":
 					_, _ = fmt.Fprint(w, tc.page([]string{"stuck-item"}, "tok-v1"))
-				case "tok-v1":
-					_, _ = fmt.Fprint(w, tc.page([]string{"stuck-item"}, "tok-v2"))
+				case "tok-v1", "tok-v2":
+					_, _ = fmt.Fprint(w, tc.page([]string{"stuck-item"}, fmt.Sprintf("tok-v%d", requestCount)))
 				default:
 					t.Errorf("unexpected page token: %q", tok)
 					w.WriteHeader(http.StatusInternalServerError)
@@ -598,8 +587,8 @@ func TestListCommandsStuckCursorReturnsExitServer(t *testing.T) {
 			if got, want := exitCode(err), exitServer; got != want {
 				t.Errorf("exitCode(err) = %d, want %d (exitServer, \"C1 failed\"); err=%v", got, want, err)
 			}
-			if requestCount != 2 {
-				t.Fatalf("server received %d requests, want exactly 2 (one to discover the stuck page, one to confirm it repeats)", requestCount)
+			if requestCount != 3 {
+				t.Fatalf("server received %d requests, want exactly 3 (the page must repeat twice before the cursor counts as stuck)", requestCount)
 			}
 			rows := decodeNDJSONRows(t, out)
 			ids := tc.rowIDs(rows)

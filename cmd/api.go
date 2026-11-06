@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -240,7 +241,7 @@ an intended non-GET REST write.`,
 				// Deliberately says "partial" rather than "the first page":
 				// --query page_token=X makes this page N. And --paginate is
 				// offered, not promised — on an endpoint whose cursor never
-				// advances it aborts (see the prevToken guard below), which is
+				// advances it aborts (see paginationCursorGuard), which is
 				// still a clear failure rather than this silent one.
 				if tok := nextPageTokenOf(data); tok != "" {
 					_, _ = fmt.Fprintf(cmd.ErrOrStderr(),
@@ -258,10 +259,13 @@ an intended non-GET REST write.`,
 			for i, item := range items {
 				ids[i] = itemIdentity(item)
 			}
-			if guard.pageIsDuplicate(ids) {
+			emit, stuck := guard.checkPage(ids)
+			if stuck {
 				return warnStuckCursor(cmd, route)
 			}
-			guard.markIDs(ids)
+			if !emit {
+				items = nil
+			}
 
 			for _, item := range items {
 				// Encode the raw item, not a decoded any: decoding to any turns
@@ -423,16 +427,9 @@ func extractListAndToken(data []byte, listKey string) ([]json.RawMessage, string
 	return nil, nextPageToken, nil
 }
 
-// itemIdentity returns a stable identity for a decoded list item, used by
-// the `api --paginate` stuck-cursor guard to detect a page whose rows never
-// change even though the server keeps resealing a fresh nextPageToken. Most
-// C1 items have a string "id" field; when one is present and non-empty it is
-// used verbatim, matching the identity the first-class list commands' own
-// guards key off. `api` can hit literally any endpoint, so an item without a
-// usable "id" falls back to its own canonical JSON: an unmarshal/remarshal
-// round trip through a generic value deterministically sorts object keys, so
-// two byte-for-byte-different encodings of the same logical item still
-// compare equal.
+// itemIdentity identifies a list item for the stuck-cursor guard: its string
+// "id" when present, else its canonical JSON (re-marshaling sorts keys;
+// UseNumber keeps large integers distinct).
 func itemIdentity(item json.RawMessage) string {
 	var withID struct {
 		ID string `json:"id"`
@@ -440,8 +437,10 @@ func itemIdentity(item json.RawMessage) string {
 	if err := json.Unmarshal(item, &withID); err == nil && withID.ID != "" {
 		return withID.ID
 	}
+	dec := json.NewDecoder(bytes.NewReader(item))
+	dec.UseNumber()
 	var decoded any
-	if err := json.Unmarshal(item, &decoded); err != nil {
+	if err := dec.Decode(&decoded); err != nil {
 		return string(item)
 	}
 	canon, err := json.Marshal(decoded)

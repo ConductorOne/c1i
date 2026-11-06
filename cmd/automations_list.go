@@ -135,10 +135,13 @@ var automationsListCmd = &cobra.Command{
 			for i, a := range resp.List {
 				ids[i] = a.ID
 			}
-			if guard.pageIsDuplicate(ids) {
+			emit, stuck := guard.checkPage(ids)
+			if stuck {
 				return warnStuckCursor(cmd, "GET /api/v1/automations")
 			}
-			guard.markIDs(ids)
+			if !emit {
+				resp.List = nil
+			}
 
 			for _, a := range resp.List {
 				if enabledOnly && !a.Enabled {

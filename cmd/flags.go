@@ -215,76 +215,72 @@ func pageSizeFlag(cmd *cobra.Command) int {
 	return maxSize
 }
 
-// paginationCursorGuard detects a server that stops making real progress
-// during auto-pagination instead of raising nextPageToken to "": either the
-// same cursor sent twice, or a non-empty page whose every id was already
-// emitted. Both shapes loop forever without it (observed live on
-// /api/v1/automations: a final page can carry a non-empty nextPageToken that
-// leads straight back to page one). Zero value is unusable; construct with
-// newPaginationCursorGuard.
+// stuckPageRepeats is how many consecutive stale pages (every item already
+// seen) mark a cursor as stuck. One can be a healthy offset-paginated server
+// that gained exactly a page of rows between requests; two in a row is
+// unlikely unless rows arrive faster than a page per request (tiny
+// --page-size on a busy feed).
+const stuckPageRepeats = 2
+
+// paginationCursorGuard detects auto-pagination that stopped making progress:
+// a page_token sent twice, or stuckPageRepeats stale pages in a row under
+// fresh-looking tokens. Construct with newPaginationCursorGuard.
 type paginationCursorGuard struct {
 	seenTokens map[string]bool
 	seenIDs    map[string]bool
+	stale      int
 }
 
 func newPaginationCursorGuard() *paginationCursorGuard {
 	return &paginationCursorGuard{seenTokens: map[string]bool{}, seenIDs: map[string]bool{}}
 }
 
-// tokenAlreadyUsed reports whether token was already sent as a page_token
-// earlier in this run. Check it before issuing the request so a repeated
-// cursor is caught without re-fetching and re-emitting that page first.
+// tokenAlreadyUsed reports whether token was already sent. Check it before
+// the request so the repeat is caught without re-fetching the page.
 func (g *paginationCursorGuard) tokenAlreadyUsed(token string) bool {
 	return token != "" && g.seenTokens[token]
 }
 
-// markTokenUsed records token as sent. Call once per request, with the
-// token that request just used, after the page has been accepted.
+// markTokenUsed records the token the request just sent.
 func (g *paginationCursorGuard) markTokenUsed(token string) {
 	if token != "" {
 		g.seenTokens[token] = true
 	}
 }
 
-// pageIsDuplicate reports whether every id in a freshly fetched page was
-// already recorded by markIDs for an earlier page — the server repeating
-// content under a cursor that doesn't actually advance, even if the cursor
-// string itself varies. An empty page is never a duplicate: a live token can
-// legitimately precede an empty intermediate page.
-func (g *paginationCursorGuard) pageIsDuplicate(ids []string) bool {
-	if len(ids) == 0 {
-		return false
-	}
+// checkPage classifies a fetched page by its item ids. A stale page is not
+// emitted (it holds nothing new); stuck is true once stuckPageRepeats stale
+// pages arrive in a row. Empty pages, and pages with no non-empty id, neither
+// count nor reset the run: a live token may precede one, and a missing id is
+// no evidence of a repeat.
+func (g *paginationCursorGuard) checkPage(ids []string) (emit, stuck bool) {
+	fresh, known := false, false
 	for _, id := range ids {
+		if id == "" {
+			continue
+		}
+		known = true
 		if !g.seenIDs[id] {
-			return false
+			fresh = true
+			g.seenIDs[id] = true
 		}
 	}
-	return true
-}
-
-// markIDs records a page's item ids once it has been accepted, i.e. after
-// pageIsDuplicate returned false for it.
-func (g *paginationCursorGuard) markIDs(ids []string) {
-	for _, id := range ids {
-		g.seenIDs[id] = true
+	if !known {
+		return true, false
 	}
+	if !fresh {
+		g.stale++
+		return false, g.stale >= stuckPageRepeats
+	}
+	g.stale = 0
+	return true, false
 }
 
-// warnStuckCursor prints the one stderr line every stuck-cursor call site
-// must show (automations/functions list commands, and `api --paginate`)
-// and returns the error the caller's RunE must return immediately after, so
-// Run() exits 6 ("C1 failed") rather than 0. route names the method and
-// path for the user/agent to report (e.g. "GET /api/v1/automations").
-//
-// This is deliberately not a silent `break` + exit 0: the rows already
-// fetched stay on stdout (the caller must not re-fetch or re-emit the stuck
-// page), but the overall result is incomplete because of a known C1 API
-// server defect -- not something a c1i workaround or a different endpoint
-// fixes -- so the exit code has to say so.
+// warnStuckCursor prints the stuck-cursor warning and returns the error that
+// maps to exit 6. route is "METHOD /path", for the user to report.
 func warnStuckCursor(cmd *cobra.Command, route string) error {
 	_, _ = fmt.Fprintf(cmd.ErrOrStderr(),
-		"Warning: results from %s are INCOMPLETE: the server did not advance the pagination cursor (repeated or non-advancing nextPageToken). Rows already fetched are printed above with no duplicates; this is a known C1 API server defect, not a c1i bug.\n", route)
+		"Warning: results from %s are INCOMPLETE: the server's pagination cursor stopped advancing (a repeated nextPageToken, or repeated pages of rows already seen). Rows already printed are kept.\n", route)
 	return &stuckPaginationCursorError{route: route}
 }
 

@@ -111,10 +111,13 @@ var functionsListCmd = &cobra.Command{
 			for i, f := range resp.List {
 				ids[i] = f.ID
 			}
-			if guard.pageIsDuplicate(ids) {
+			emit, stuck := guard.checkPage(ids)
+			if stuck {
 				return warnStuckCursor(cmd, "GET /api/v1/functions")
 			}
-			guard.markIDs(ids)
+			if !emit {
+				resp.List = nil
+			}
 
 			for _, f := range resp.List {
 				published := functionIsPublished(f)

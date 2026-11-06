@@ -145,3 +145,14 @@ func TestRequireNonEmpty(t *testing.T) {
 		}
 	})
 }
+
+// Rows with no id carry no evidence of a repeat, so pages of them must never
+// count toward a stuck cursor.
+func TestPaginationCursorGuardIgnoresEmptyIDs(t *testing.T) {
+	g := newPaginationCursorGuard()
+	for i := 0; i < 5; i++ {
+		if emit, stuck := g.checkPage([]string{"", ""}); !emit || stuck {
+			t.Fatalf("page %d of empty ids: emit=%v stuck=%v, want emit=true stuck=false", i, emit, stuck)
+		}
+	}
+}

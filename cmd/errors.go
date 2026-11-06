@@ -26,7 +26,7 @@ const (
 	exitAuth        = 3 // not authenticated, or API returned 401/403
 	exitNotFound    = 4 // API returned 404
 	exitRateLimited = 5 // API returned 429
-	exitServer      = 6 // C1 failed: 5xx, a redirect loop, a 200 with a non-JSON body, or a list route whose pagination cursor never advances
+	exitServer      = 6 // C1 failed: 5xx, a redirect loop, a 200 with a non-JSON body, or a stuck pagination cursor
 	exitToolError   = 7 // an MCP tool call completed (transport/protocol succeeded) but the tool itself reported isError
 	exitUpstream    = 8 // an upstream system, or the protocol layer itself, failed -- distinct from the C1 API failing (e.g. an unreachable MCP connector, or a JSON-RPC protocol-level error)
 )
@@ -65,22 +65,13 @@ type nonJSONResponseError struct{ err error }
 func (e *nonJSONResponseError) Error() string { return e.err.Error() }
 func (e *nonJSONResponseError) Unwrap() error { return e.err }
 
-// stuckPaginationCursorError marks a list route (GET, or any method under
-// `c1i api --paginate`) whose nextPageToken never makes real progress: the
-// exact same token sent twice, or a non-empty page whose every item was
-// already emitted under an earlier -- possibly different-looking -- token.
-// This is a known C1 API server defect (the affected route's page_size and
-// page_token query/body parameters are never bound server-side, so it keeps
-// resealing a fresh-looking cursor over the same first page) rather than a
-// client bug or a usage mistake, so it maps to exitServer (6, "C1 failed")
-// like any other case of C1 not honoring its own API contract. By the time
-// this is returned, a stderr warning naming the route has already been
-// printed and every row fetched before the stuck page is already on stdout,
-// with no duplicates: only further cursor-following stopped.
+// stuckPaginationCursorError: auto-pagination stopped because the cursor
+// stopped advancing (see paginationCursorGuard). Rows already printed stand;
+// the result is incomplete, so it maps to exitServer.
 type stuckPaginationCursorError struct{ route string }
 
 func (e *stuckPaginationCursorError) Error() string {
-	return fmt.Sprintf("results from %s are INCOMPLETE: the server did not advance its pagination cursor", e.route)
+	return fmt.Sprintf("results from %s are INCOMPLETE: pagination cursor stopped advancing", e.route)
 }
 
 // upstreamError marks a failure beyond C1, or in the protocol layer, that did

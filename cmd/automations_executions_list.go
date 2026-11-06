@@ -105,10 +105,13 @@ the server returns. Combine with --limit to bound the work.`,
 			for i, e := range resp.AutomationExecutions {
 				ids[i] = e.ID
 			}
-			if guard.pageIsDuplicate(ids) {
+			emit, stuck := guard.checkPage(ids)
+			if stuck {
 				return warnStuckCursor(cmd, "GET /api/v1/automation_executions")
 			}
-			guard.markIDs(ids)
+			if !emit {
+				resp.AutomationExecutions = nil
+			}
 
 			for _, e := range resp.AutomationExecutions {
 				if stateFilter != "" && e.State != stateFilter {

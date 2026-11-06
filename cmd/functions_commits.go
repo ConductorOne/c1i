@@ -72,10 +72,13 @@ var functionsCommitsCmd = &cobra.Command{
 			for i, item := range resp.List {
 				ids[i] = item.ID
 			}
-			if guard.pageIsDuplicate(ids) {
+			emit, stuck := guard.checkPage(ids)
+			if stuck {
 				return warnStuckCursor(cmd, route)
 			}
-			guard.markIDs(ids)
+			if !emit {
+				resp.List = nil
+			}
 
 			for _, c := range resp.List {
 				_ = enc.Encode(map[string]string{

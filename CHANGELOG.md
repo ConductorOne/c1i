@@ -24,22 +24,15 @@ credentials fails instead of using the working directory. With a relative
 ### Fixed
 
 - **`automations list`, `automations executions list`, `functions list`,
-  `functions commits`, and `functions usage` could loop forever**, and
-  `api --paginate` against the same routes could too: a handful of GET list
-  routes (`/api/v1/automations`, `/api/v1/automation_executions`,
-  `/api/v1/functions`, `/api/v1/functions/{id}/commits`) never bind
-  `page_size`/`page_token` server-side, so a large enough result set makes
-  the server keep resealing a fresh-looking `nextPageToken` over the exact
-  same first page forever — a known C1 API server defect, reported
-  separately, not something a c1i workaround or a different endpoint fixes.
-  Every affected command, and `api --paginate` generically (via item `id`,
-  falling back to an item's canonical JSON when it has none), now detects
-  the stuck cursor — the same token sent twice, or a non-empty page whose
-  every item was already emitted under an earlier token — stops instead of
-  looping, prints each row already fetched with no duplicates, warns on
-  stderr that results are INCOMPLETE and names the route, and exits `6`
-  ("C1 failed") instead of 0. `c1i docs agents`, the README, and CLAUDE.md
-  document the new exit-6 cause and the `stuckPaginationCursorError` type.
+  `functions commits`, `functions usage`, and `api --paginate` could loop
+  forever**, re-printing the same rows: on a large enough result set,
+  `/api/v1/automations`, `/api/v1/automation_executions`,
+  `/api/v1/functions`, and `/api/v1/functions/{id}/commits` ignore
+  `page_size`/`page_token` and return the first page under a fresh
+  `nextPageToken` every time. These commands now stop when the cursor stops
+  advancing (the same token twice, or two pages in a row of rows already
+  seen), keep the rows already printed, warn on stderr that results are
+  INCOMPLETE, and exit `6`.
 
 - **`--debug` and `--max-retries` did nothing on `docs openapi`,
   `docs endpoints` and `docs endpoint`.** The spec fetch now uses the shared
