@@ -100,13 +100,11 @@ var spCredentialsListCmd = &cobra.Command{
 			for i, it := range resp.List {
 				ids[i] = it.ID
 			}
-			emit, stuck := guard.checkPage(ids)
-			if stuck {
-				return guard.warnStuck(cmd, route)
+			keep, err := guard.checkPage(cmd, route, ids)
+			if err != nil {
+				return err
 			}
-			if !emit {
-				resp.List = nil
-			}
+			resp.List = keepRows(resp.List, keep)
 			for _, cred := range resp.List {
 				if err := enc.Encode(spCredentialRow(cred)); err != nil {
 					return err

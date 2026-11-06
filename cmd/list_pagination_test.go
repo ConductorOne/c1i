@@ -43,6 +43,9 @@ type listPaginationCase struct {
 	// noRowID marks rows with no id of their own, so the cursor guard can
 	// only catch a repeated token, not fresh tokens over the same rows.
 	noRowID bool
+	// compositeID marks a guard id built from several or expanded fields, so
+	// a page of rows missing it is emitted, not rejected as a bad shape.
+	compositeID bool
 }
 
 // Every case's command is a package-level singleton shared by the whole test
@@ -208,12 +211,13 @@ func listPaginationCases() []listPaginationCase {
 			rowIDs:   idRows("id"),
 		},
 		{
-			name:     "automations executions list",
-			cmd:      automationsExecutionsListCmd,
-			method:   http.MethodPost,
-			wantPath: "/api/v1/search/automation_executions",
-			page:     nestedPage("list", "automationExecution", "id"),
-			rowIDs:   idRows("id"),
+			name:        "automations executions list",
+			compositeID: true, // the automationExecution wrapper may be null
+			cmd:         automationsExecutionsListCmd,
+			method:      http.MethodPost,
+			wantPath:    "/api/v1/search/automation_executions",
+			page:        nestedPage("list", "automationExecution", "id"),
+			rowIDs:      idRows("id"),
 		},
 		{
 			name:     "automations list",
@@ -241,12 +245,13 @@ func listPaginationCases() []listPaginationCase {
 			rowIDs:     idRows("id"),
 		},
 		{
-			name:     "entitlements list",
-			cmd:      entitlementsListCmd,
-			method:   http.MethodPost,
-			wantPath: "/api/v1/search/entitlements",
-			page:     entitlementPage,
-			rowIDs:   idRows("id"),
+			name:        "entitlements list",
+			compositeID: true,
+			cmd:         entitlementsListCmd,
+			method:      http.MethodPost,
+			wantPath:    "/api/v1/search/entitlements",
+			page:        entitlementPage,
+			rowIDs:      idRows("id"),
 		},
 		{
 			name:     "export events",
@@ -294,11 +299,12 @@ func listPaginationCases() []listPaginationCase {
 			rowIDs: idRows("automation_id"),
 		},
 		{
-			name:       "grants list",
-			cmd:        grantsListCmd,
-			method:     http.MethodPost,
-			wantPath:   "/api/v1/search/grants",
-			extraFlags: map[string]string{"app-id": "app1"},
+			name:        "grants list",
+			compositeID: true,
+			cmd:         grantsListCmd,
+			method:      http.MethodPost,
+			wantPath:    "/api/v1/search/grants",
+			extraFlags:  map[string]string{"app-id": "app1"},
 			page: func(ids []string, next string) string {
 				items := make([]string, 0, len(ids))
 				for _, id := range ids {
@@ -416,22 +422,24 @@ func listPaginationCases() []listPaginationCase {
 			rowIDs: idRows("id"),
 		},
 		{
-			name:     "access-profiles requestable-entitlements list",
-			cmd:      accessProfilesRequestableEntitlementsListCmd,
-			method:   http.MethodGet,
-			wantPath: "/api/v1/catalogs/ap1/requestable_entitlements",
-			args:     []string{"ap1"},
-			page:     entitlementPage,
-			rowIDs:   idRows("id"),
+			name:        "access-profiles requestable-entitlements list",
+			compositeID: true,
+			cmd:         accessProfilesRequestableEntitlementsListCmd,
+			method:      http.MethodGet,
+			wantPath:    "/api/v1/catalogs/ap1/requestable_entitlements",
+			args:        []string{"ap1"},
+			page:        entitlementPage,
+			rowIDs:      idRows("id"),
 		},
 		{
-			name:     "access-profiles visibility-entitlements list",
-			cmd:      accessProfilesVisibilityEntitlementsListCmd,
-			method:   http.MethodGet,
-			wantPath: "/api/v1/catalogs/ap1/visibility_entitlements",
-			args:     []string{"ap1"},
-			page:     entitlementPage,
-			rowIDs:   idRows("id"),
+			name:        "access-profiles visibility-entitlements list",
+			compositeID: true,
+			cmd:         accessProfilesVisibilityEntitlementsListCmd,
+			method:      http.MethodGet,
+			wantPath:    "/api/v1/catalogs/ap1/visibility_entitlements",
+			args:        []string{"ap1"},
+			page:        entitlementPage,
+			rowIDs:      idRows("id"),
 		},
 		{
 			name:     "access-reviews list",
@@ -459,10 +467,11 @@ func listPaginationCases() []listPaginationCase {
 			rowIDs:   idRows("id"),
 		},
 		{
-			name:     "findings audits search",
-			cmd:      findingsAuditsSearchCmd,
-			method:   http.MethodPost,
-			wantPath: "/api/v1/search/finding_audits",
+			name:        "findings audits search",
+			compositeID: true,
+			cmd:         findingsAuditsSearchCmd,
+			method:      http.MethodPost,
+			wantPath:    "/api/v1/search/finding_audits",
 			page: func(ids []string, next string) string {
 				items := make([]string, 0, len(ids))
 				for _, id := range ids {

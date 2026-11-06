@@ -136,6 +136,9 @@ them to an external system.
 			if err := json.Unmarshal(data, &resp); err != nil {
 				return fmt.Errorf("failed to parse response: %w", err)
 			}
+			if err := guard.checkIDlessPage(cmd, route, len(resp.List)); err != nil {
+				return err
+			}
 
 			for _, event := range resp.List {
 				// Emit each OCSF event as one NDJSON line. Like every list

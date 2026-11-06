@@ -70,13 +70,11 @@ var mcpToolsListCmd = &cobra.Command{
 			for i, it := range resp.Tools {
 				ids[i] = it.ID
 			}
-			emit, stuck := guard.checkPage(ids)
-			if stuck {
-				return guard.warnStuck(cmd, route)
+			keep, err := guard.checkPage(cmd, route, ids)
+			if err != nil {
+				return err
 			}
-			if !emit {
-				resp.Tools = nil
-			}
+			resp.Tools = keepRows(resp.Tools, keep)
 			for _, t := range resp.Tools {
 				if err := enc.Encode(toolRow(t)); err != nil {
 					return err

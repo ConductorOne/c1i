@@ -174,7 +174,7 @@ func newAccessProfileEntitlementListCmd(short, endpoint string) *cobra.Command {
 			enc := newEmitter(cmd)
 			path := client.Path("/api/v1/catalogs/%s/"+endpoint, args[0])
 
-			guard := newPaginationCursorGuard()
+			guard := newPaginationCursorGuard().withCompositeIDs()
 			route := "GET " + path
 			for !limitReached(enc.Written(), limit) {
 				if guard.tokenAlreadyUsed(pageToken) {
@@ -204,13 +204,11 @@ func newAccessProfileEntitlementListCmd(short, endpoint string) *cobra.Command {
 				for i, it := range resp.List {
 					ids[i] = scopedRowID(it.AppEntitlement.AppID, it.AppEntitlement.ID) // an entitlement id repeats across apps
 				}
-				emit, stuck := guard.checkPage(ids)
-				if stuck {
-					return guard.warnStuck(cmd, route)
+				keep, err := guard.checkPage(cmd, route, ids)
+				if err != nil {
+					return err
 				}
-				if !emit {
-					resp.List = nil
-				}
+				resp.List = keepRows(resp.List, keep)
 				for _, item := range resp.List {
 					if err := enc.Encode(entitlementRow(item)); err != nil {
 						return err

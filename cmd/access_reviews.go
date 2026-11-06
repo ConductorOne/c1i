@@ -189,13 +189,11 @@ func newAccessReviewListCmd(use, short, pathTemplate string, requiresID bool) *c
 					rows[i] = unwrapEnvelope(item, "id")
 					ids[i] = rawItemID(rows[i])
 				}
-				emit, stuck := guard.checkPage(ids)
-				if stuck {
-					return guard.warnStuck(cmd, route)
+				keep, err := guard.checkPage(cmd, route, ids)
+				if err != nil {
+					return err
 				}
-				if !emit {
-					rows = nil
-				}
+				rows = keepRows(rows, keep)
 				for _, row := range rows {
 					if err := enc.Encode(row); err != nil {
 						return err

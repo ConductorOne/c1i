@@ -26,7 +26,7 @@ const (
 	exitAuth        = 3 // not authenticated, or API returned 401/403
 	exitNotFound    = 4 // API returned 404
 	exitRateLimited = 5 // API returned 429
-	exitServer      = 6 // C1 failed: 5xx, a redirect loop, a 200 with a non-JSON body, or a stuck pagination cursor
+	exitServer      = 6 // C1 failed: 5xx, a redirect loop, a 200 with a non-JSON body, a stuck pagination cursor, or a list page in a shape the command doesn't recognize
 	exitToolError   = 7 // an MCP tool call completed (transport/protocol succeeded) but the tool itself reported isError
 	exitUpstream    = 8 // an upstream system, or the protocol layer itself, failed -- distinct from the C1 API failing (e.g. an unreachable MCP connector, or a JSON-RPC protocol-level error)
 )
@@ -69,13 +69,13 @@ func (e *nonJSONResponseError) Unwrap() error { return e.err }
 // stopped advancing (see paginationCursorGuard). Rows already printed stand;
 // the result is incomplete, so it maps to exitServer.
 type stuckPaginationCursorError struct {
-	route     string
-	idlePages bool // the no-new-rows cap tripped, not a repeat
+	route  string
+	reason string // the cap that tripped; "" for a repeat
 }
 
 func (e *stuckPaginationCursorError) Error() string {
-	if e.idlePages {
-		return fmt.Sprintf("results from %s are INCOMPLETE: no new rows in %d pages", e.route, maxIdlePages)
+	if e.reason != "" {
+		return fmt.Sprintf("results from %s are INCOMPLETE: %s", e.route, e.reason)
 	}
 	return fmt.Sprintf("results from %s are INCOMPLETE: pagination cursor stopped advancing", e.route)
 }

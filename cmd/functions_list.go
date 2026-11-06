@@ -111,13 +111,11 @@ var functionsListCmd = &cobra.Command{
 			for i, f := range resp.List {
 				ids[i] = f.ID
 			}
-			emit, stuck := guard.checkPage(ids)
-			if stuck {
-				return guard.warnStuck(cmd, "GET /api/v1/functions")
+			keep, err := guard.checkPage(cmd, "GET /api/v1/functions", ids)
+			if err != nil {
+				return err
 			}
-			if !emit {
-				resp.List = nil
-			}
+			resp.List = keepRows(resp.List, keep)
 
 			for _, f := range resp.List {
 				published := functionIsPublished(f)

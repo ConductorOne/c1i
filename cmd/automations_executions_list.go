@@ -69,7 +69,7 @@ Combine with --limit to bound the work.`,
 		clientFilter := stateFilter != "" || templateID != ""
 
 		enc := newEmitter(cmd)
-		guard := newPaginationCursorGuard()
+		guard := newPaginationCursorGuard().withCompositeIDs() // the wrapper may be null
 		for !limitReached(enc.Written(), limit) {
 			if guard.tokenAlreadyUsed(pageToken) {
 				return guard.warnStuck(cmd, "POST /api/v1/search/automation_executions")
@@ -100,24 +100,24 @@ Combine with --limit to bound the work.`,
 			if err := json.Unmarshal(data, &page); err != nil {
 				return fmt.Errorf("failed to parse response: %w", err)
 			}
+			// The spec allows a null wrapper; such an item is an id-less row to
+			// the guard and is skipped below.
+			ids := make([]string, len(page.List))
+			for i, item := range page.List {
+				if item.AutomationExecution != nil {
+					ids[i] = item.AutomationExecution.ID
+				}
+			}
+			keep, err := guard.checkPage(cmd, "POST /api/v1/search/automation_executions", ids)
+			if err != nil {
+				return err
+			}
 			// A missing wrapper is skipped rather than emitted as an all-"" row.
 			execs := make([]executionListItem, 0, len(page.List))
-			for _, item := range page.List {
+			for _, item := range keepRows(page.List, keep) {
 				if item.AutomationExecution != nil {
 					execs = append(execs, *item.AutomationExecution)
 				}
-			}
-
-			ids := make([]string, len(execs))
-			for i, e := range execs {
-				ids[i] = e.ID
-			}
-			emit, stuck := guard.checkPage(ids)
-			if stuck {
-				return guard.warnStuck(cmd, "POST /api/v1/search/automation_executions")
-			}
-			if !emit {
-				execs = nil
 			}
 
 			for _, e := range execs {

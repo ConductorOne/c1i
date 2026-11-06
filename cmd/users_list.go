@@ -83,13 +83,11 @@ var usersListCmd = &cobra.Command{
 			for i, it := range resp.List {
 				ids[i] = it.User.ID
 			}
-			emit, stuck := guard.checkPage(ids)
-			if stuck {
-				return guard.warnStuck(cmd, route)
+			keep, err := guard.checkPage(cmd, route, ids)
+			if err != nil {
+				return err
 			}
-			if !emit {
-				resp.List = nil
-			}
+			resp.List = keepRows(resp.List, keep)
 			for _, item := range resp.List {
 				u := item.User
 				if err := enc.Encode(map[string]string{

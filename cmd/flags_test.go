@@ -147,22 +147,28 @@ func TestRequireNonEmpty(t *testing.T) {
 }
 
 // Rows with no id carry no evidence of a repeat, so pages of them must never
-// count toward a stuck cursor.
+// count toward a stuck cursor on a command whose rows have none.
 func TestPaginationCursorGuardIgnoresEmptyIDs(t *testing.T) {
 	g := newPaginationCursorGuard()
 	for i := 0; i < 5; i++ {
-		if emit, stuck := g.checkPage([]string{"", ""}); !emit || stuck {
-			t.Fatalf("page %d of empty ids: emit=%v stuck=%v, want emit=true stuck=false", i, emit, stuck)
+		if err := g.checkIDlessPage(nil, "GET /x", 2); err != nil {
+			t.Fatalf("page %d of id-less rows: %v", i, err)
 		}
 	}
 }
 
-// A row with no id on an otherwise-seen page might be new, so the page must
-// still be emitted rather than skipped as stale.
+// A row with no id on an otherwise-seen page might be new, so it is emitted;
+// the seen row beside it is not. A page with any new id is emitted whole,
+// repeats included, since an id need not be unique.
 func TestPaginationCursorGuardKeepsPageWithIDlessRow(t *testing.T) {
 	g := newPaginationCursorGuard()
-	g.checkPage([]string{"a", "b"})
-	if emit, stuck := g.checkPage([]string{"", "a"}); !emit || stuck {
-		t.Fatalf("page with an id-less row and a seen id: emit=%v stuck=%v, want emit=true stuck=false", emit, stuck)
+	_, _ = g.checkPage(nil, "GET /x", []string{"a", "b"})
+	keep, err := g.checkPage(nil, "GET /x", []string{"", "a"})
+	if err != nil || !keep[0] || keep[1] {
+		t.Fatalf("stale page: keep=%v err=%v, want [true false]", keep, err)
+	}
+	keep, err = g.checkPage(nil, "GET /x", []string{"", "a", "c", "c"})
+	if err != nil || !keep[0] || !keep[1] || !keep[2] || !keep[3] {
+		t.Fatalf("fresh page: keep=%v err=%v, want all true", keep, err)
 	}
 }

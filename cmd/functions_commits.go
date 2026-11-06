@@ -72,13 +72,11 @@ var functionsCommitsCmd = &cobra.Command{
 			for i, item := range resp.List {
 				ids[i] = item.ID
 			}
-			emit, stuck := guard.checkPage(ids)
-			if stuck {
-				return guard.warnStuck(cmd, route)
+			keep, err := guard.checkPage(cmd, route, ids)
+			if err != nil {
+				return err
 			}
-			if !emit {
-				resp.List = nil
-			}
+			resp.List = keepRows(resp.List, keep)
 
 			for _, c := range resp.List {
 				if err := enc.Encode(map[string]string{

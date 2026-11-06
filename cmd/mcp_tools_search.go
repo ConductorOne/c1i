@@ -105,13 +105,11 @@ var mcpToolsSearchCmd = &cobra.Command{
 			for i, it := range items {
 				ids[i] = it.ID
 			}
-			emit, stuck := guard.checkPage(ids)
-			if stuck {
-				return guard.warnStuck(cmd, route)
+			keep, err := guard.checkPage(cmd, route, ids)
+			if err != nil {
+				return err
 			}
-			if !emit {
-				items = nil
-			}
+			items = keepRows(items, keep)
 			for _, t := range items {
 				if err := enc.Encode(toolRow(t)); err != nil {
 					return err

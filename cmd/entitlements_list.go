@@ -60,7 +60,7 @@ var entitlementsListCmd = &cobra.Command{
 		limit := getIntFlag(cmd, "limit")
 
 		enc := newEmitter(cmd)
-		guard := newPaginationCursorGuard()
+		guard := newPaginationCursorGuard().withCompositeIDs()
 		route := "POST /api/v1/search/entitlements"
 		for !limitReached(enc.Written(), limit) {
 			if guard.tokenAlreadyUsed(pageToken) {
@@ -100,13 +100,11 @@ var entitlementsListCmd = &cobra.Command{
 			for i, it := range resp.List {
 				ids[i] = scopedRowID(it.AppEntitlement.AppID, it.AppEntitlement.ID) // an entitlement id repeats across apps
 			}
-			emit, stuck := guard.checkPage(ids)
-			if stuck {
-				return guard.warnStuck(cmd, route)
+			keep, err := guard.checkPage(cmd, route, ids)
+			if err != nil {
+				return err
 			}
-			if !emit {
-				resp.List = nil
-			}
+			resp.List = keepRows(resp.List, keep)
 			for _, item := range resp.List {
 				if err := enc.Encode(entitlementRow(item)); err != nil {
 					return err

@@ -35,6 +35,10 @@ type grantListItem struct {
 		// grantSources lists the groups/roles a grant is inherited through; an
 		// empty list means the grant is direct.
 		GrantSources []json.RawMessage `json:"grantSources"`
+		// Flat ids, present even when the expanded objects are null.
+		AppID            string `json:"appId"`
+		AppEntitlementID string `json:"appEntitlementId"`
+		AppUserID        string `json:"appUserId"`
 	} `json:"appEntitlementUserBinding"`
 	Entitlement struct {
 		AppEntitlement struct {
@@ -47,22 +51,27 @@ type grantListItem struct {
 	} `json:"entitlement"`
 }
 
-// grantRow flattens a grant into the NDJSON output row.
-// grantAppID is the entitlement's app id, falling back to the account's if
-// the entitlement wasn't expanded for some reason.
+// grantAppID is the entitlement's app id, falling back to the binding's and
+// then the account's if the entitlement wasn't expanded.
 func grantAppID(item grantListItem) string {
-	if id := item.Entitlement.AppEntitlement.AppID; id != "" {
-		return id
-	}
-	return item.AppEntitlementUserBinding.AppUser.AppUser.AppID
+	return firstNonEmpty(item.Entitlement.AppEntitlement.AppID, item.AppEntitlementUserBinding.AppID, item.AppEntitlementUserBinding.AppUser.AppUser.AppID)
+}
+
+func grantEntitlementID(item grantListItem) string {
+	return firstNonEmpty(item.Entitlement.AppEntitlement.ID, item.AppEntitlementUserBinding.AppEntitlementID)
+}
+
+func grantAppUserID(item grantListItem) string {
+	return firstNonEmpty(item.AppEntitlementUserBinding.AppUser.AppUser.ID, item.AppEntitlementUserBinding.AppUserID)
 }
 
 // grantGuardID identifies a grant for the cursor guard: it has no id of its
 // own, but (app, entitlement, account) is unique.
 func grantGuardID(item grantListItem) string {
-	return scopedRowID(grantAppID(item), item.Entitlement.AppEntitlement.ID, item.AppEntitlementUserBinding.AppUser.AppUser.ID)
+	return scopedRowID(grantAppID(item), grantEntitlementID(item), grantAppUserID(item))
 }
 
+// grantRow flattens a grant into the NDJSON output row.
 func grantRow(item grantListItem) map[string]any {
 	b := item.AppEntitlementUserBinding
 	e := item.Entitlement.AppEntitlement
@@ -70,14 +79,14 @@ func grantRow(item grantListItem) map[string]any {
 	appID := grantAppID(item)
 	return map[string]any{
 		"app_id":                   appID,
-		"entitlement_id":           e.ID,
+		"entitlement_id":           grantEntitlementID(item),
 		"entitlement_display_name": e.DisplayName,
 		"entitlement_slug":         e.Slug,
 		// A grant to a soft-deleted entitlement or account is still an active
 		// binding server-side (only the entitlement/account itself, not this
 		// grant, was deleted) — surface both so a stale grant is visible.
 		"entitlement_deleted_at": nilIfEmpty(e.DeletedAt),
-		"app_user_id":            au.ID,
+		"app_user_id":            grantAppUserID(item),
 		"app_user_display_name":  au.DisplayName,
 		"app_user_deleted_at":    nilIfEmpty(au.DeletedAt),
 		"email":                  au.Email,
@@ -205,7 +214,7 @@ set that keeps changing, --wait times out rather than printing anything.`,
 		}
 
 		enc := newEmitter(cmd)
-		guard := newPaginationCursorGuard()
+		guard := newPaginationCursorGuard().withCompositeIDs()
 		route := "POST /api/v1/search/grants"
 		for !limitReached(enc.Written(), limit) {
 			if guard.tokenAlreadyUsed(pageToken) {
@@ -234,13 +243,11 @@ set that keeps changing, --wait times out rather than printing anything.`,
 			for i, it := range resp.List {
 				ids[i] = grantGuardID(it)
 			}
-			emit, stuck := guard.checkPage(ids)
-			if stuck {
-				return guard.warnStuck(cmd, route)
+			keep, err := guard.checkPage(cmd, route, ids)
+			if err != nil {
+				return err
 			}
-			if !emit {
-				resp.List = nil
-			}
+			resp.List = keepRows(resp.List, keep)
 			for _, item := range resp.List {
 				if err := enc.Encode(grantRow(item)); err != nil {
 					return err
@@ -324,7 +331,7 @@ func fetchAllGrants(ctx context.Context, c *client.Client, q grantsQuery, pageSi
 	pageToken := ""
 	// A stuck cursor would otherwise turn each poll into a request storm
 	// bounded only by --wait-timeout, then blame provisioning for it.
-	guard := newPaginationCursorGuard()
+	guard := newPaginationCursorGuard().withCompositeIDs()
 	for {
 		if guard.tokenAlreadyUsed(pageToken) {
 			return nil, guard.stuckError(route)
@@ -344,13 +351,11 @@ func fetchAllGrants(ctx context.Context, c *client.Client, q grantsQuery, pageSi
 		for i, it := range resp.List {
 			ids[i] = grantGuardID(it)
 		}
-		emit, stuck := guard.checkPage(ids)
-		if stuck {
-			return nil, guard.stuckError(route)
+		keep, err := guard.checkPage(nil, route, ids)
+		if err != nil {
+			return nil, err
 		}
-		if emit {
-			all = append(all, resp.List...)
-		}
+		all = append(all, keepRows(resp.List, keep)...)
 		if resp.NextPageToken == "" {
 			return all, nil
 		}

@@ -58,6 +58,9 @@ var mcpServersConnectionsListCmd = &cobra.Command{
 			if err := json.Unmarshal(data, &resp); err != nil {
 				return fmt.Errorf("failed to parse response: %w", err)
 			}
+			if err := guard.checkIDlessPage(cmd, route, len(resp.List)); err != nil {
+				return err
+			}
 
 			for _, v := range resp.List {
 				if err := enc.Encode(connectionRow(v)); err != nil {

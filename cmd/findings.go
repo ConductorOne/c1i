@@ -252,6 +252,9 @@ func listJSONPages(cmd *cobra.Command, route string, idKeys []string, row listRo
 	limit := getIntFlag(cmd, "limit")
 	enc := newEmitter(cmd)
 	guard := newPaginationCursorGuard()
+	if len(idKeys) > 1 {
+		guard.withCompositeIDs()
+	}
 	for !limitReached(enc.Written(), limit) {
 		if guard.tokenAlreadyUsed(token) {
 			return guard.warnStuck(cmd, route)
@@ -278,12 +281,16 @@ func listJSONPages(cmd *cobra.Command, route string, idKeys []string, row listRo
 			rows[i] = row(item)
 			ids[i] = rowGuardID(rows[i], idKeys)
 		}
-		emit, stuck := guard.checkPage(ids)
-		if stuck {
-			return guard.warnStuck(cmd, route)
-		}
-		if !emit {
-			rows = nil
+		if len(idKeys) == 0 {
+			if err := guard.checkIDlessPage(cmd, route, len(rows)); err != nil {
+				return err
+			}
+		} else {
+			keep, err := guard.checkPage(cmd, route, ids)
+			if err != nil {
+				return err
+			}
+			rows = keepRows(rows, keep)
 		}
 		for _, r := range rows {
 			if err := enc.Encode(r); err != nil {

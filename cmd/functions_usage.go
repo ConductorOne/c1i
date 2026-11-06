@@ -94,13 +94,11 @@ last_executed_at, args.`,
 			for i, a := range resp.List {
 				ids[i] = a.ID
 			}
-			emit, stuck := guard.checkPage(ids)
-			if stuck {
-				return guard.warnStuck(cmd, "POST /api/v1/search/automations")
+			keep, err := guard.checkPage(cmd, "POST /api/v1/search/automations", ids)
+			if err != nil {
+				return err
 			}
-			if !emit {
-				resp.List = nil
-			}
+			resp.List = keepRows(resp.List, keep)
 
 			for _, a := range resp.List {
 				for _, step := range a.AutomationSteps {
