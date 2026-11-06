@@ -13,7 +13,7 @@ var entitlementsOwnersCmd = &cobra.Command{
 	Long: `List the owners of an app entitlement via GET .../owners -- the read that
 reflects what "entitlements set-owners"/"add-owner"/"remove-owner" write.
 Owner provisioning is asynchronous: a write showed up here anywhere from
-about 1s to 100s after it was accepted, so an owner added moments ago may not
+about 1s to 135s after it was accepted, so an owner added moments ago may not
 appear yet.
 
 Rows have the same shape as "apps owners".

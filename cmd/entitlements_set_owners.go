@@ -18,13 +18,15 @@ At least one --user-id is required: the API takes an empty list as "remove
 every owner", which is too easy to send by accident with an unset shell
 variable. Use "entitlements remove-owner" to drop owners one at a time.
 
-The API accepts a --user-id that matches no user (exit 0) and drops it: a
-set naming only such an id left the entitlement with no owners. Check the
-ids first; "entitlements add-owner" exits 4 on an unknown user.
+Before the PUT, each distinct --user-id is looked up with GET
+/api/v1/users/{id}; an unknown one exits 2 naming it, and nothing is sent.
+The API itself accepts an unknown id (exit 0) and drops it: a set naming only
+such an id left the entitlement with no owners. --dry-run skips the lookups.
+A repeated --user-id is sent once: the API answers a duplicate with a 500.
 
 Owner changes are provisioned ASYNCHRONOUSLY: this call returns as soon as
 the request is accepted, and the change showed up anywhere from about 1s to
-100s later. Verify with "c1i entitlements owners <entitlement-id> --app-id
+135s later. Verify with "c1i entitlements owners <entitlement-id> --app-id
 <app-id>".
 
 Pass --wait to block and poll GET .../ownerids until every requested
@@ -46,6 +48,8 @@ polls).`,
 		if len(userIDs) == 0 {
 			return &usageError{fmt.Errorf("at least one --user-id is required")}
 		}
+		// The API 500s on a repeated id.
+		userIDs = dedupe(userIDs)
 		wait, waitTimeout, err := waitFlagValues(cmd)
 		if err != nil {
 			return err
@@ -67,6 +71,9 @@ polls).`,
 		c, err := newClient(cmd, baseURL)
 		if err != nil {
 			return fmt.Errorf("authentication failed: %w", err)
+		}
+		if err := requireExistingUsers(cmd.Context(), c, "user-id", userIDs); err != nil {
+			return err
 		}
 		data, err := c.Put(cmd.Context(), path, body)
 		if err != nil {

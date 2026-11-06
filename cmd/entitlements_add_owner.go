@@ -21,7 +21,7 @@ does not exist.
 
 Owner changes are provisioned ASYNCHRONOUSLY: this call returns as soon as
 the request is accepted, and the new owner showed up anywhere from about 1s
-to 100s later. Verify with "c1i entitlements owners <entitlement-id> --app-id
+to 135s later. Verify with "c1i entitlements owners <entitlement-id> --app-id
 <app-id>", or pass --wait to poll GET .../ownerids until the owner appears
 (or --wait-timeout elapses). Prints the API's JSON response; --wait's
 progress lines go to stderr.

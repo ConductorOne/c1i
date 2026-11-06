@@ -22,7 +22,7 @@ var usersGetCmd = &cobra.Command{
 			return fmt.Errorf("authentication failed: %w", err)
 		}
 
-		data, err := c.Get(cmd.Context(), client.Path("/api/v1/users/%s", args[0]), nil)
+		data, err := c.Get(cmd.Context(), userPath(args[0]), nil)
 		if err != nil {
 			return fmt.Errorf("API error: %w", err)
 		}
@@ -30,6 +30,9 @@ var usersGetCmd = &cobra.Command{
 		return writeResource(cmd, data, "id")
 	},
 }
+
+// userPath is GET /api/v1/users/{id}, shared with the owner-set existence check.
+func userPath(id string) string { return client.Path("/api/v1/users/%s", id) }
 
 func init() {
 	usersCmd.AddCommand(usersGetCmd)

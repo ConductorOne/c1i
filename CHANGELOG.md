@@ -23,7 +23,9 @@ credentials fails instead of using the working directory. With a relative
   owners (NDJSON, auto-paginating). `entitlements add-owner <user-id>` and
   `entitlements remove-owner <user-id>` (both `--app-id --entitlement-id`)
   change one owner; `entitlements set-owners <entitlement-id> --app-id
-  --user-id ...` replaces the list and refuses an empty one. `add-owner` and
+  --user-id ...` replaces the list and refuses an empty one; it looks up each
+  user first and exits `2` on an unknown one, which the API would accept and
+  silently drop, possibly leaving no owners. `add-owner` and
   `set-owners` take `--wait`/`--wait-timeout`, with progress on stderr; all
   three writes print the API's JSON response and honor `--dry-run`.
 - `entitlements update <entitlement-id> --app-id` sets an entitlement's

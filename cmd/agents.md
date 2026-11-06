@@ -383,7 +383,9 @@ resource with `--resource-id` likewise means you drop
   read with `c1i entitlements owners <entitlement-id> --app-id <app-id>`,
   write with `entitlements add-owner`/`remove-owner <user-id> --app-id
   --entitlement-id` or `entitlements set-owners <entitlement-id> --app-id
-  --user-id ...` (replaces the list; at least one `--user-id`), and pass
+  --user-id ...` (replaces the list; at least one `--user-id`; an unknown
+  user exits 2 before the write, because the API would silently drop it and
+  could leave no owners), and pass
   `--wait` on `add-owner`/`set-owners` to converge. A wait timeout does not mean the write
   failed — re-check before writing again.
 - `apps update`/`apps create` `--grant-policy-id`, `--revoke-policy-id` and

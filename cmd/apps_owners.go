@@ -1,8 +1,11 @@
 package cmd
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"net/http"
 	"strconv"
 
 	"github.com/ConductorOne/c1i/internal/client"
@@ -62,6 +65,22 @@ same id exit 4 and can tell you which.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		return listOwners(cmd, client.Path("/api/v1/apps/%s/owners", args[0]))
 	},
+}
+
+// requireExistingUsers GETs each distinct id once and turns a 404 into a usage
+// error naming it. An owner-set PUT accepts an unknown user id with 200 and
+// drops it, which can leave the target with no owners at all.
+func requireExistingUsers(ctx context.Context, c *client.Client, flag string, ids []string) error {
+	for _, id := range dedupe(ids) {
+		if _, err := c.Get(ctx, userPath(id), nil); err != nil {
+			var apiErr *client.APIError
+			if errors.As(err, &apiErr) && apiErr.StatusCode == http.StatusNotFound {
+				return &usageError{fmt.Errorf("--%s %q: no such user", flag, id)}
+			}
+			return fmt.Errorf("checking --%s %q: %w", flag, id, err)
+		}
+	}
+	return nil
 }
 
 // listOwners streams GET path (an app's or an entitlement's .../owners) as
