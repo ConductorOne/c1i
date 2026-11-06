@@ -163,7 +163,7 @@ func buildRegisterBody(cmd *cobra.Command) (map[string]any, error) {
 func init() {
 	mcpServersRegisterCmd.Flags().String("app-id", "", "Application ID to register under")
 	mcpServersRegisterCmd.Flags().String("type", "", "Server type: hosted or external")
-	mcpServersRegisterCmd.Flags().String("display-name", "", "Display name")
+	mcpServersRegisterCmd.Flags().String("display-name", "", "Display name ("+displayNameRule+")")
 	mcpServersRegisterCmd.Flags().String("description", "", "Description")
 	mcpServersRegisterCmd.Flags().String("data-sensitivity", "", "Data sensitivity: public, internal, confidential, restricted")
 	mcpServersRegisterCmd.Flags().String("tool-prefix", "", "Prefix for exposed tool names")

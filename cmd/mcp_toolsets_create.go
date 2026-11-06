@@ -63,7 +63,7 @@ After creating, attach tools with "c1i mcp bindings create".`,
 func init() {
 	mcpToolsetsCreateCmd.Flags().String("app-id", "", "Application ID")
 	mcpToolsetsCreateCmd.Flags().String("connector-id", "", "Connector ID")
-	mcpToolsetsCreateCmd.Flags().String("display-name", "", "Toolset display name")
+	mcpToolsetsCreateCmd.Flags().String("display-name", "", "Toolset display name ("+displayNameRule+")")
 	mcpToolsetsCreateCmd.Flags().String("description", "", "Toolset description")
 	markRequired(mcpToolsetsCreateCmd, "app-id", "connector-id", "display-name")
 	mcpToolsetsCmd.AddCommand(mcpToolsetsCreateCmd)

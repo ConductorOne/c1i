@@ -42,7 +42,7 @@ var servicePrincipalsCreateCmd = &cobra.Command{
 }
 
 func init() {
-	servicePrincipalsCreateCmd.Flags().String("display-name", "", "Display name for the new service principal (required)")
+	servicePrincipalsCreateCmd.Flags().String("display-name", "", "Display name for the new service principal ("+displayNameRule+")")
 	markRequired(servicePrincipalsCreateCmd, "display-name")
 	servicePrincipalsCmd.AddCommand(servicePrincipalsCreateCmd)
 }

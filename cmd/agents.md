@@ -348,6 +348,9 @@ Two things are irreversible in ways their `--help` doesn't make obvious:
   each toolset's app entitlement, is soft-deleted with it. Anyone whose
   access came through one of those entitlements is affected.
 
+A blank `--display-name` (empty, whitespace or invisible-only, such as a lone
+U+200B) exits 2 on every create and update, before any request is sent.
+
 One command sends more than one write: `entitlements create` POSTs a resource
 type, a resource, then the entitlement, skipping the steps whose id you supply
 via `--resource-type-id`/`--resource-id`. Its `--dry-run` previews all three.

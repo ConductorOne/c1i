@@ -466,6 +466,10 @@ func requireNonEmpty(cmd *cobra.Command, names ...string) error {
 	}
 }
 
+// displayNameRule is the one wording for every --display-name: blank is
+// refused by requireNonEmptyIfSet, so a create/update exits 2 before sending.
+const displayNameRule = "cannot be blank: empty, whitespace or invisible-only"
+
 // requireNonEmptyIfSet errors when a flag was passed with no visible
 // character (one that is graphic, not a space, not a format char), while
 // leaving an unset flag alone. Distinct from

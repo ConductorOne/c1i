@@ -452,7 +452,7 @@ func createdObjectID(data []byte, key string) (string, error) {
 func addEntitlementCreateFlags(cmd *cobra.Command) {
 	f := cmd.Flags()
 	f.String("app-id", "", "Application ID to create the entitlement on")
-	f.String("display-name", "", "Display name for the new entitlement (also names the resource type and resource this command creates)")
+	f.String("display-name", "", "Display name for the new entitlement ("+displayNameRule+"; also names the resource type and resource this command creates)")
 	f.String("description", "", "Description for the new entitlement")
 	f.String("slug", "", "Slug for the new entitlement (e.g. member)")
 	f.String("alias", "", "Alias for the new entitlement; exact-match queryable")

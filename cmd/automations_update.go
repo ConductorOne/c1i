@@ -16,8 +16,9 @@ var automationsUpdateCmd = &cobra.Command{
 The API requires {"automation": {...}, "updateMask": "..."}; this command
 builds it. The mask is derived exactly from the flags you pass: an explicit
 --enabled=false or an empty --description is a change, an omitted flag is
-left alone. An empty or whitespace-only --display-name is refused before
-sending (the server answers "" with a 500, "display_name is required").
+left alone. A blank --display-name (empty, whitespace or invisible-only)
+exits 2, nothing sent (the server answers "" with a 500, "display_name is
+required").
 Updating these fields leaves steps and triggers unchanged. The server
 accepts --enabled on an automation with isDraft true, and leaves isDraft as
 it was.
@@ -126,7 +127,7 @@ func buildAutomationUpdateBody(cmd *cobra.Command, id string) (map[string]any, e
 
 func init() {
 	f := automationsUpdateCmd.Flags()
-	f.String("display-name", "", "New display name (omit to leave unchanged; cannot be empty or whitespace-only)")
+	f.String("display-name", "", "New display name (omit to leave unchanged; "+displayNameRule+")")
 	f.String("description", "", "New description; pass an empty value to clear it (omit to leave unchanged)")
 	f.Bool("enabled", false, "Enable (--enabled) or disable (--enabled=false) the automation (omit to leave unchanged)")
 	f.String("body-file", "", "Automation JSON object, sent verbatim (file, or \"-\" for stdin); requires --update-mask; mutually exclusive with the flags above")

@@ -155,7 +155,7 @@ func mustGetString(cmd *cobra.Command, name string) string {
 }
 
 func init() {
-	policiesCreateCmd.Flags().String("display-name", "", "Display name for the new policy")
+	policiesCreateCmd.Flags().String("display-name", "", "Display name for the new policy ("+displayNameRule+")")
 	policiesCreateCmd.Flags().String("description", "", "Description for the new policy")
 	policiesCreateCmd.Flags().String("policy-type", "", "Policy type: grant, revoke, certify (access_request is deprecated; provision is server-internal)")
 	policiesCreateCmd.Flags().String("steps-file", "", "JSON array: the baseline policySteps.steps content (file, or \"-\" for stdin)")

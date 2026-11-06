@@ -18,9 +18,9 @@ The API requires {"app": {"id": "...", ...}, "updateMask": "..."}. The update
 mask is derived exactly from the flags you pass: an omitted flag is left
 alone, while an explicit empty value is a change.
 
---display-name cannot be empty or whitespace-only (exit 2, nothing sent):
-sent as is, "" made c1i exit 0 while the server kept the old name, and the
-server stores "  " verbatim.
+A blank --display-name (empty, whitespace or invisible-only) exits 2,
+nothing sent. Sent as is, "" made c1i exit 0 while the server kept the old
+name, and the server stores "  " verbatim.
 
 --grant-policy-id, --revoke-policy-id and --certify-policy-id bind a policy
 to the app. Before sending, c1i fetches each policy and refuses (exit 2,
@@ -190,7 +190,7 @@ func buildAppUpdateBody(cmd *cobra.Command, id string) (map[string]any, error) {
 
 func init() {
 	f := appsUpdateCmd.Flags()
-	f.String("display-name", "", "New display name (omit to leave unchanged; cannot be empty or whitespace-only)")
+	f.String("display-name", "", "New display name (omit to leave unchanged; "+displayNameRule+")")
 	f.String("description", "", "New description; pass an empty value to clear it (omit to leave unchanged)")
 	registerPolicyIDFlags(appsUpdateCmd, appPolicyKinds, " (omit to leave unchanged)")
 	registerUnbindPolicyFlag(appsUpdateCmd, appPolicyKinds)

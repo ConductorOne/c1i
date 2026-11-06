@@ -16,8 +16,9 @@ var accessProfilesUpdateCmd = &cobra.Command{
 The API requires {"catalog": {"id": "...", ...}, "updateMask": "..."}.
 The update mask is derived exactly from the flags you pass: an explicit false
 or empty --description is a change, while an omitted flag is left alone.
---display-name cannot be empty or whitespace-only (exit 2, nothing sent):
-the server stores "" as an empty name and keeps "  " verbatim.
+A blank --display-name (empty, whitespace or invisible-only) exits 2,
+nothing sent. Sent as is, the server stores "" as an empty name and keeps
+"  " verbatim.
 
 Behavior flags accept their short values (for example, "bypass", "enforce",
 "revoke-all") or the full REQUEST_CATALOG_* enum value.`,
@@ -71,7 +72,7 @@ func buildAccessProfileUpdateBody(cmd *cobra.Command, id string) (map[string]any
 
 func init() {
 	f := accessProfilesUpdateCmd.Flags()
-	f.String("display-name", "", "New display name (omit to leave unchanged; cannot be empty or whitespace-only)")
+	f.String("display-name", "", "New display name (omit to leave unchanged; "+displayNameRule+")")
 	f.String("description", "", "New description; pass an empty value to clear it (omit to leave unchanged)")
 	f.Bool("published", false, "Publish or unpublish the access profile (omit to leave unchanged)")
 	f.Bool("visible-to-everyone", false, "Set whether every user can see the access profile (omit to leave unchanged)")

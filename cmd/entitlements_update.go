@@ -45,8 +45,9 @@ positive: the server stores "0s" and "-60s" without complaint. --duration-unset
 removes the limit (standing access). The server holds the two as one choice and
 refuses both together, so passing both is a usage error.
 
---display-name cannot be empty or whitespace-only: the server accepts "" but
-restores the entitlement's original name instead of failing. --description "" clears it.
+A blank --display-name (empty, whitespace or invisible-only) exits 2,
+nothing sent. Sent as is, the server accepts "" but restores the
+entitlement's original name instead of failing. --description "" clears it.
 
 Prints the server's response as pretty JSON (--fields is not applied to
 mutation output).
@@ -155,7 +156,7 @@ func buildEntitlementUpdateBody(cmd *cobra.Command, appID, id string) (map[strin
 func init() {
 	f := entitlementsUpdateCmd.Flags()
 	f.String("app-id", "", "Application ID the entitlement belongs to")
-	f.String("display-name", "", "New display name (omit to leave unchanged; cannot be empty or whitespace-only)")
+	f.String("display-name", "", "New display name (omit to leave unchanged; "+displayNameRule+")")
 	f.String("description", "", "New description; an empty value clears it (omit to leave unchanged)")
 	registerPolicyIDFlags(entitlementsUpdateCmd, entitlementPolicyKinds, " (omit to leave unchanged)")
 	registerUnbindPolicyFlag(entitlementsUpdateCmd, entitlementPolicyKinds)

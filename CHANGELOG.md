@@ -69,7 +69,11 @@ credentials fails instead of using the working directory. With a relative
   `create` that takes one, including `service-principals credentials`. `apps`,
   `access-profiles`, `policies`, `service-principals` and `mcp servers`/
   `mcp toolsets` `update` sent it as is: the server blanked the name, stored
-  the spaces, or (`apps update ""`) kept the old name with exit 0.
+  the spaces, or (`apps update ""`) kept the old name with exit 0. The same
+  visible-character rule now also refuses an invisible-only
+  `--resource-type-id`/`--resource-id` (`entitlements create`), `--policy-id`
+  (`findings create-task`) and `--duration` (`tasks update-grant-duration`)
+  with exit 2.
 - An input file that is missing, malformed or the wrong JSON shape now exits
   `2` (usage) instead of `1`: every `--body-file` (including `api`'s), the
   MCP server `--*-config-file` flags, and `--steps-file`, `--rules-file` and
