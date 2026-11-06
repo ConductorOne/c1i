@@ -1428,3 +1428,25 @@ func TestExtractListAndTokenNotArrayIsNotUsageError(t *testing.T) {
 		t.Fatalf("err = %v, want a non-usage error", err)
 	}
 }
+
+// A JSON null body used to reach the page-2 token write as a nil map and
+// panic; a body for POST/PUT/PATCH must be an object, so null is exit 2.
+func TestAPINullBodyIsUsageError(t *testing.T) {
+	srv := getTwoPageFixtureServer()
+	defer srv.Close()
+	for _, extra := range [][]string{{"--paginate"}, {}, {"--dry-run"}} {
+		t.Run(strings.Join(append([]string{"POST"}, extra...), " "), func(t *testing.T) {
+			resetAPICmdFlags(t)
+			stubNewAPIClient(t, srv)
+			t.Setenv("C1I_URL", srv.URL)
+			var out, errOut bytes.Buffer
+			apiCmd.SetOut(&out)
+			apiCmd.SetErr(&errOut)
+			rootCmd.SetArgs(append([]string{"api", "--method", "POST", "--path", "/api/v1/search/catalogs", "--body", "null"}, extra...))
+			err := rootCmd.ExecuteContext(context.Background())
+			if exitCode(err) != exitUsage || !strings.Contains(fmt.Sprint(err), "JSON object") {
+				t.Fatalf("err = %v (exit %d), want exit %d naming a JSON object", err, exitCode(err), exitUsage)
+			}
+		})
+	}
+}
