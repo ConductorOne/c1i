@@ -160,6 +160,9 @@ var spCredentialsCreateCmd = &cobra.Command{
 	Short: "Create a client credential (the secret is shown once, at creation)",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
+		if _, err := requireNonEmptyIfSet(cmd, "display-name"); err != nil {
+			return err
+		}
 		if err := requireNonEmpty(cmd, "display-name"); err != nil {
 			return err
 		}
@@ -240,6 +243,9 @@ var spCredentialsUpdateCmd = &cobra.Command{
 	Short: "Update a client credential's display name",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
+		if _, err := requireNonEmptyIfSet(cmd, "display-name"); err != nil {
+			return err
+		}
 		if err := requireNonEmpty(cmd, "service-principal-id"); err != nil {
 			return err
 		}
@@ -326,14 +332,14 @@ func init() {
 		markRequired(c, "service-principal-id")
 	}
 
-	spCredentialsCreateCmd.Flags().String("display-name", "", "Display name for the new credential (required)")
+	spCredentialsCreateCmd.Flags().String("display-name", "", "Display name for the new credential ("+displayNameRule+")")
 	addRepeatableStringFlag(spCredentialsCreateCmd, "scoped-role", "Restrict the credential to a role ID from \"c1i roles list\" (repeatable)")
 	addRepeatableStringFlag(spCredentialsCreateCmd, "allow-cidr", "Restrict the credential to a source CIDR (repeatable)")
 	spCredentialsCreateCmd.Flags().String("expires", "", "Time until the credential expires as a Go duration, e.g. 720h; the server accepts the range (0s, 4320h] (up to 180 days)")
 	spCredentialsCreateCmd.Flags().Bool("require-dpop", false, "Require DPoP proof-of-possession for token exchange")
 	markRequired(spCredentialsCreateCmd, "display-name")
 
-	spCredentialsUpdateCmd.Flags().String("display-name", "", "New display name")
+	spCredentialsUpdateCmd.Flags().String("display-name", "", "New display name ("+displayNameRule+")")
 
 	spCredentialsCmd.AddCommand(
 		spCredentialsListCmd,

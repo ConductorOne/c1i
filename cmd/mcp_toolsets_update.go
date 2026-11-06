@@ -15,9 +15,16 @@ var mcpToolsetsUpdateCmd = &cobra.Command{
 
 The update_mask is derived from which flags you set: pass --display-name to
 update only the name, --description for only the description, both for both.
-Editing the AppEntitlement created behind the toolset is not supported here.`,
+Editing the AppEntitlement created behind the toolset is not supported here.
+
+A blank --display-name (empty, whitespace or invisible-only) exits 2,
+nothing sent. Sent as is, the server 400s "" ("value length must be between
+1 and 255 runes") but stores "  " verbatim.`,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
+		if _, err := requireNonEmptyIfSet(cmd, "display-name"); err != nil {
+			return err
+		}
 		if err := requireNonEmpty(cmd, "app-id", "connector-id"); err != nil {
 			return err
 		}
@@ -79,7 +86,7 @@ Editing the AppEntitlement created behind the toolset is not supported here.`,
 func init() {
 	mcpToolsetsUpdateCmd.Flags().String("app-id", "", "Application ID")
 	mcpToolsetsUpdateCmd.Flags().String("connector-id", "", "Connector ID")
-	mcpToolsetsUpdateCmd.Flags().String("display-name", "", "New display name (omit to leave unchanged)")
+	mcpToolsetsUpdateCmd.Flags().String("display-name", "", "New display name (omit to leave unchanged; "+displayNameRule+")")
 	mcpToolsetsUpdateCmd.Flags().String("description", "", "New description (omit to leave unchanged)")
 	markRequired(mcpToolsetsUpdateCmd, "app-id", "connector-id")
 	mcpToolsetsCmd.AddCommand(mcpToolsetsUpdateCmd)

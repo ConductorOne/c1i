@@ -58,6 +58,9 @@ requires --app-id. Approve discovered tools afterward with
 			return printConfigTemplate(cmd)
 		}
 
+		if _, err := requireNonEmptyIfSet(cmd, "display-name"); err != nil {
+			return err
+		}
 		if err := requireNonEmpty(cmd, "app-id", "type", "display-name"); err != nil {
 			// Wrap as a usage error so a missing required flag still maps to
 			// exit code 2 (these flags are annotate-only, not cobra-required,
@@ -160,7 +163,7 @@ func buildRegisterBody(cmd *cobra.Command) (map[string]any, error) {
 func init() {
 	mcpServersRegisterCmd.Flags().String("app-id", "", "Application ID to register under")
 	mcpServersRegisterCmd.Flags().String("type", "", "Server type: hosted or external")
-	mcpServersRegisterCmd.Flags().String("display-name", "", "Display name")
+	mcpServersRegisterCmd.Flags().String("display-name", "", "Display name ("+displayNameRule+")")
 	mcpServersRegisterCmd.Flags().String("description", "", "Description")
 	mcpServersRegisterCmd.Flags().String("data-sensitivity", "", "Data sensitivity: public, internal, confidential, restricted")
 	mcpServersRegisterCmd.Flags().String("tool-prefix", "", "Prefix for exposed tool names")

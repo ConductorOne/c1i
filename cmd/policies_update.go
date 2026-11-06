@@ -22,6 +22,9 @@ The update_mask is derived from which flags/files you pass — e.g.
 --display-name alone masks only "displayName". Pass --steps-file /
 --rules-file the same way "create" takes them (see its --help for the file
 shape); each REPLACES its entire field, not a merge into the existing one.
+A blank --display-name (empty, whitespace or invisible-only) exits 2,
+nothing sent. Sent as is, the server stores "" as an empty name and keeps
+"  " verbatim.
 
 For anything the convenience flags can't express, pass the full Policy
 object yourself via --body-file plus an explicit --update-mask (both
@@ -45,6 +48,9 @@ with exit 2 rather than send an unguarded request. Pass --policy-type to
 skip the lookup.`,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
+		if _, err := requireNonEmptyIfSet(cmd, "display-name"); err != nil {
+			return err
+		}
 		id := args[0]
 		allowDenyAll, _ := cmd.Flags().GetBool("allow-deny-all")
 
@@ -253,7 +259,7 @@ func buildUpdatePolicyPatch(cmd *cobra.Command, resolveFallbackPolicyType func()
 }
 
 func init() {
-	policiesUpdateCmd.Flags().String("display-name", "", "New display name")
+	policiesUpdateCmd.Flags().String("display-name", "", "New display name (omit to leave unchanged; "+displayNameRule+")")
 	policiesUpdateCmd.Flags().String("description", "", "New description")
 	policiesUpdateCmd.Flags().String("policy-type", "", "New policy type: grant, revoke, certify (rarely changed)")
 	policiesUpdateCmd.Flags().String("steps-file", "", "JSON array: replaces the baseline policySteps.steps content (file, or \"-\" for stdin)")

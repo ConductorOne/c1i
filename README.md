@@ -187,7 +187,7 @@ without one, or alongside `--unbind-policy emergency-grant`. Unbinding the
 emergency policy while emergency grants stay enabled is accepted by the server.
 `--duration-grant` takes a Go duration (`8h`, `3600s`) and is sent in seconds;
 it must be positive. `--duration-unset` removes the limit, and the two are
-mutually exclusive. An empty or whitespace-only `--display-name` is refused:
+mutually exclusive. A blank `--display-name` is refused:
 the server would accept "" and restore the entitlement's original name.
 `entitlements create` checks its policy flags the same way before its first
 `POST`, so a bad policy creates nothing.
@@ -379,7 +379,7 @@ c1i automations executions list [--state done|error|pending|...] [--template-id 
 
 Each `automations list` row includes `function_ids` (every distinct function the automation invokes), so `--calls-function` can answer "which automations call function X?". `executions list --state` accepts the short forms (`done`, `error`, `pending`, ...) or the full `AUTOMATION_EXECUTION_STATE_*` enum; state and template filtering are applied client-side, so pair a narrow filter with `--limit` to bound the work.
 
-`automations update` sends only the fields you pass (an explicit `--enabled=false` disables; an empty `--display-name` is refused). For triggers, steps, draft or circuit-breaker fields, pass an Automation object with `--body-file` and list the camelCase fields to change in `--update-mask`. Masking `triggers` replaces the published triggers and increments `currentVersion`; `draftTriggers` and `isDraft` are left as they were. `automations delete` is a soft delete: the automation leaves `automations list`, but `automations get` still returns it.
+`automations update` sends only the fields you pass (an explicit `--enabled=false` disables; a blank `--display-name` is refused). For triggers, steps, draft or circuit-breaker fields, pass an Automation object with `--body-file` and list the camelCase fields to change in `--update-mask`. Masking `triggers` replaces the published triggers and increments `currentVersion`; `draftTriggers` and `isDraft` are left as they were. `automations delete` is a soft delete: the automation leaves `automations list`, but `automations get` still returns it.
 
 `automations list` and `automations executions list` read
 `POST /api/v1/search/automations` and `POST /api/v1/search/automation_executions`
@@ -978,6 +978,11 @@ sets `region` to `us1,env=prod` and the server may accept it.
 An empty occurrence is a usage error (exit 2), rejected before any request, so
 an unset shell variable cannot silently shorten a list or remove a credential
 restriction. Contrast `--fields`, which *is* comma-separated.
+
+### Display names
+
+A blank `--display-name` (empty, whitespace or invisible-only, such as a lone
+U+200B) exits 2 on every create and update, before any request is sent.
 
 ### Field selection
 

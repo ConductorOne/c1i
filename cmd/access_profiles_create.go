@@ -29,6 +29,9 @@ Example:
   CAT_ID=$(c1i access-profiles create --display-name "Engineering" --published | jq -r .requestCatalogView.requestCatalog.id)
   c1i access-profiles get "$CAT_ID"`,
 	RunE: func(cmd *cobra.Command, args []string) error {
+		if _, err := requireNonEmptyIfSet(cmd, "display-name"); err != nil {
+			return err
+		}
 		if err := requireNonEmpty(cmd, "display-name"); err != nil {
 			return err
 		}
@@ -153,7 +156,7 @@ func buildAccessProfileCreateBody(cmd *cobra.Command) map[string]any {
 
 func init() {
 	f := accessProfilesCreateCmd.Flags()
-	f.String("display-name", "", "Display name for the new access profile")
+	f.String("display-name", "", "Display name for the new access profile ("+displayNameRule+")")
 	f.String("description", "", "Description for the new access profile")
 	f.Bool("published", false, "Create the access profile already published (omit to leave it unset)")
 	f.Bool("visible-to-everyone", false, "Let every user see the access profile regardless of its access entitlements; while set, the API refuses to add new ones (\"catalog is visible to everyone, cannot add access entitlements\") (omit to leave it unset)")

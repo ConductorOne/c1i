@@ -16,10 +16,12 @@ var automationsUpdateCmd = &cobra.Command{
 The API requires {"automation": {...}, "updateMask": "..."}; this command
 builds it. The mask is derived exactly from the flags you pass: an explicit
 --enabled=false or an empty --description is a change, an omitted flag is
-left alone. An empty --display-name is refused before sending (the server
-answers it with a 500, "display_name is required"). Updating these fields
-leaves steps and triggers unchanged. The server accepts --enabled on an
-automation with isDraft true, and leaves isDraft as it was.
+left alone. A blank --display-name (empty, whitespace or invisible-only)
+exits 2, nothing sent (the server answers "" with a 500, "display_name is
+required").
+Updating these fields leaves steps and triggers unchanged. The server
+accepts --enabled on an automation with isDraft true, and leaves isDraft as
+it was.
 
 For anything else (triggers, steps, draft fields, circuit breaker), pass an
 Automation object via --body-file plus an explicit --update-mask (both
@@ -95,10 +97,10 @@ func buildAutomationUpdateBody(cmd *cobra.Command, id string) (map[string]any, e
 		automation = map[string]any{}
 		var paths []string
 		if f.Changed("display-name") {
-			v, _ := f.GetString("display-name")
-			if v == "" {
+			v, err := requireNonEmptyIfSet(cmd, "display-name")
+			if err != nil {
 				// The server answers an empty name with a 500.
-				return nil, fmt.Errorf("--display-name cannot be empty: the server rejects it with \"display_name is required\"")
+				return nil, fmt.Errorf("%w: the server rejects it with \"display_name is required\"", err)
 			}
 			automation["displayName"] = v
 			paths = append(paths, "displayName")
@@ -125,7 +127,7 @@ func buildAutomationUpdateBody(cmd *cobra.Command, id string) (map[string]any, e
 
 func init() {
 	f := automationsUpdateCmd.Flags()
-	f.String("display-name", "", "New display name (omit to leave unchanged)")
+	f.String("display-name", "", "New display name (omit to leave unchanged; "+displayNameRule+")")
 	f.String("description", "", "New description; pass an empty value to clear it (omit to leave unchanged)")
 	f.Bool("enabled", false, "Enable (--enabled) or disable (--enabled=false) the automation (omit to leave unchanged)")
 	f.String("body-file", "", "Automation JSON object, sent verbatim (file, or \"-\" for stdin); requires --update-mask; mutually exclusive with the flags above")

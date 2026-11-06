@@ -32,6 +32,9 @@ Example:
   APP_ID=$(c1i apps create --display-name "Google Workspace" | jq -r .app.id)
   c1i mcp servers register --app-id "$APP_ID" --type hosted ...`,
 	RunE: func(cmd *cobra.Command, args []string) error {
+		if _, err := requireNonEmptyIfSet(cmd, "display-name"); err != nil {
+			return err
+		}
 		if err := requireNonEmpty(cmd, "display-name"); err != nil {
 			return err
 		}
@@ -91,7 +94,7 @@ func buildAppCreateBody(cmd *cobra.Command) (map[string]any, error) {
 }
 
 func init() {
-	appsCreateCmd.Flags().String("display-name", "", "Display name for the new app")
+	appsCreateCmd.Flags().String("display-name", "", "Display name for the new app ("+displayNameRule+")")
 	appsCreateCmd.Flags().String("description", "", "Description for the new app")
 	registerPolicyIDFlags(appsCreateCmd, appPolicyKinds, " (omit for the server's default)")
 	appsCreateCmd.Flags().String("identity-matching", "", "How app users are matched to C1.ai users: strict, display-name, custom, or a full APP_USER_IDENTITY_MATCHING_* value")

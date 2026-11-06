@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode"
 
 	"github.com/spf13/cobra"
 )
@@ -465,8 +466,13 @@ func requireNonEmpty(cmd *cobra.Command, names ...string) error {
 	}
 }
 
-// requireNonEmptyIfSet errors when a flag was passed with an empty or
-// whitespace-only value, while leaving an unset flag alone. Distinct from
+// displayNameRule is the one wording for every --display-name: blank is
+// refused by requireNonEmptyIfSet, so a create/update exits 2 before sending.
+const displayNameRule = "cannot be blank: empty, whitespace or invisible-only"
+
+// requireNonEmptyIfSet errors when a flag was passed with no visible
+// character (one that is graphic, not a space, not a format char), while
+// leaving an unset flag alone. Distinct from
 // requireNonEmpty, which is for flags that must always be present: use this
 // for an *optional* flag whose empty value would change behavior rather than
 // fail — an id flag selecting an existing object (`--resource-type-id
@@ -474,10 +480,21 @@ func requireNonEmpty(cmd *cobra.Command, names ...string) error {
 // scopes a read.
 func requireNonEmptyIfSet(cmd *cobra.Command, name string) (string, error) {
 	v, _ := cmd.Flags().GetString(name)
-	if strings.TrimSpace(v) == "" && cmd.Flags().Changed(name) {
+	if !hasVisibleRune(v) && cmd.Flags().Changed(name) {
 		return "", &usageError{fmt.Errorf("flag --%s requires a non-empty value", name)}
 	}
 	return v, nil
+}
+
+// hasVisibleRune reports whether s has a rune that renders. TrimSpace alone
+// lets through zero-width/format runes (U+200B, U+FEFF), i.e. an invisible name.
+func hasVisibleRune(s string) bool {
+	for _, r := range s {
+		if unicode.IsGraphic(r) && !unicode.IsSpace(r) && !unicode.Is(unicode.Cf, r) {
+			return true
+		}
+	}
+	return false
 }
 
 // flagOrDefault returns a string flag's value, falling back to def when unset.
