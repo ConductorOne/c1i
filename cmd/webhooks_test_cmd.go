@@ -23,7 +23,7 @@ reachable, so exit 0 does not mean the endpoint answered. Honors --dry-run.`,
 			return err
 		}
 
-		path := client.Path("/api/v1/webhooks/%s/test", args[0])
+		path := client.Path(webhooksPath+"/%s/test", args[0])
 		body := map[string]any{}
 		if dryRunActive() {
 			return printDryRun(cmd, "POST", path, body)

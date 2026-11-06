@@ -5,6 +5,7 @@ import (
 	"net/url"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/ConductorOne/c1i/internal/client"
 	"github.com/spf13/cobra"
@@ -31,18 +32,20 @@ func init() {
 	rootCmd.AddCommand(webhooksCmd)
 }
 
+const webhooksPath = "/api/v1/webhooks"
+
 // webhookPath builds the path for one webhook.
 func webhookPath(id string) string {
-	return client.Path("/api/v1/webhooks/%s", id)
+	return client.Path(webhooksPath+"/%s", id)
 }
 
 // webhookFieldFlags registers the writable Webhook fields shared by create and
 // update.
 func webhookFieldFlags(cmd *cobra.Command, verb string) {
-	cmd.Flags().String("display-name", "", verb+" display name (the server requires 3-100 characters on create)")
-	cmd.Flags().String("destination-url", "", verb+" destination URL; must be an absolute https:// URL")
+	cmd.Flags().String("display-name", "", verb+" display name, 3-100 characters")
+	cmd.Flags().String("destination-url", "", verb+` destination URL; must be an absolute https:// URL with a host name or IPv4 address (an IPv6 literal later fails "test" with "invalid port ... after host")`)
 	cmd.Flags().String("description", "", verb+" description (an empty value clears it on update)")
-	cmd.Flags().String("callback-timeout", "", verb+" time to wait for an asynchronous callback, as a Go duration (e.g. 10m); the server accepts [0s, 720h]")
+	cmd.Flags().String("callback-timeout", "", verb+` time to wait for an asynchronous callback, as a Go duration (e.g. 10m); 0 to 720h; over that, update returns "callback_timeout must be between 0 and 30 days" (create: "value must be inside range [0s, 720h0m0s]")`)
 }
 
 // webhookFields reads the changed field flags into a Webhook body and the
@@ -54,6 +57,10 @@ func webhookFields(cmd *cobra.Command) (map[string]any, []string, error) {
 		v, err := requireNonEmptyIfSet(cmd, "display-name")
 		if err != nil {
 			return nil, nil, err
+		}
+		// Update stores any length, so the create-side rule is applied to both.
+		if n := utf8.RuneCountInString(v); n < 3 || n > 100 {
+			return nil, nil, &usageError{fmt.Errorf("--display-name must be 3-100 characters, got %d (the server's create rule: \"value length must be between 3 and 100 runes, inclusive\")", n)}
 		}
 		fields["displayName"] = v
 		paths = append(paths, "displayName")
@@ -90,10 +97,14 @@ func webhookFields(cmd *cobra.Command) (map[string]any, []string, error) {
 // rewrites any other scheme (or none) to https and stores an unparseable value
 // as a URL that "test" then fails on, so the server can't be relied on here;
 // update rejects it with "invalid url: only 'https' scheme is supported".
+// An IPv6 literal is stored without its brackets, which "test" can't parse.
 func validateWebhookURL(raw string) error {
 	u, err := url.Parse(raw)
-	if err != nil || u.Scheme != "https" || u.Host == "" {
-		return &usageError{fmt.Errorf("--destination-url must be an absolute https:// URL, got %q", raw)}
+	if err != nil || u.Scheme != "https" || u.Hostname() == "" {
+		return &usageError{fmt.Errorf("--destination-url must be an absolute https:// URL with a host, got %q", raw)}
+	}
+	if strings.Contains(u.Hostname(), ":") {
+		return &usageError{fmt.Errorf("--destination-url must not use an IPv6 literal host, got %q", raw)}
 	}
 	return nil
 }

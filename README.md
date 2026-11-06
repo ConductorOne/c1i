@@ -870,19 +870,27 @@ c1i webhooks delete <webhook-id>
 ```
 
 The endpoint flag is `--destination-url`, not `--url`, which stays the global
-tenant flag. It must be an absolute `https://` URL; anything else exits `2`
-before a request is sent. The server would otherwise rewrite another scheme,
-or none, to `https` on create, and reject it on update with
-`invalid url: only 'https' scheme is supported`. A host the server will not
-call is a `400`, `invalid url: restricted destination` (exit `2`).
+tenant flag. It must be an absolute `https://` URL with a host name or IPv4
+address; anything else exits `2` before a request is sent. The server would
+otherwise rewrite another scheme, or none, to `https` on create, and reject it
+on update with `invalid url: only 'https' scheme is supported`. An IPv6 literal
+is refused because the server strips its brackets, and `webhooks test` then
+fails with `invalid port ":db8::1" after host`. A host the server will not call
+is a `400`, `invalid url: restricted destination` (exit `2`).
 
-`--display-name` must be 3–100 characters on create
-(`value length must be between 3 and 100 runes, inclusive`). An empty or
-whitespace-only `--display-name` exits `2` on both create and update; the
-server would accept and store one on update. `--callback-timeout` takes a Go duration and the
-server accepts `[0s, 720h]`. `update` sends only the flags you pass and masks
-exactly those; an empty `--description` clears it. A webhook has no signing
-secret, so create returns nothing that can't be read again with `get`.
+`--display-name` must be 3–100 characters (runes) on both create and update,
+or the command exits `2`. The server enforces that only on create
+(`value length must be between 3 and 100 runes, inclusive`) and would store any
+length on update. `--callback-timeout` takes a Go duration up to `720h`; over
+that, update returns `callback_timeout must be between 0 and 30 days`. `update`
+sends only the flags you pass and masks exactly those; an empty `--description`
+clears it. Updating a soft-deleted webhook exits `0` and changes it, and it
+stays deleted. A webhook has no signing secret, so create returns nothing that
+can't be read again with `get`.
+
+`webhooks list` pages are larger than `--page-size`: the server raises a size
+below 5 to 5 and returns one row more than that, so use `--limit` for an exact
+count.
 
 `webhooks test` queues a delivery and returns the queued instance, under
 `webhook`, with `"state": "WEBHOOK_STATE_PENDING"`, at exit `0`, whether or

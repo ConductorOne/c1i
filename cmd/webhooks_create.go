@@ -6,8 +6,6 @@ import (
 	"github.com/spf13/cobra"
 )
 
-const webhooksPath = "/api/v1/webhooks"
-
 var webhooksCreateCmd = &cobra.Command{
 	Use:   "create",
 	Short: "Create a webhook",

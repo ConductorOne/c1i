@@ -37,8 +37,9 @@ var webhooksListCmd = &cobra.Command{
 	Short: "List webhooks (NDJSON output)",
 	Long: `List webhooks (NDJSON output). Deleted webhooks are omitted.
 
-The server has been seen returning every webhook in one page regardless of
---page-size; use --limit for an exact count.`,
+The server raises a page size below 5 to 5 and returns one row more than the
+page size it uses, so pages are larger than --page-size asks for; use --limit
+for an exact count.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		baseURL, err := GetBaseURL()
 		if err != nil {
@@ -57,7 +58,7 @@ The server has been seen returning every webhook in one page regardless of
 
 		enc := newEmitter(cmd)
 		guard := newPaginationCursorGuard()
-		const path = "/api/v1/webhooks"
+		const path = webhooksPath
 		route := "GET " + path
 		for !limitReached(enc.Written(), limit) {
 			if guard.tokenAlreadyUsed(pageToken) {
