@@ -1203,3 +1203,35 @@ func TestAPIPaginateListKeyAbsent(t *testing.T) {
 		})
 	}
 }
+
+// protojson omits an empty repeated field, so a later page can lack the
+// --list-key while carrying another array. Once the key has been seen, that
+// is the end of the list, not a misspelled key.
+func TestAPIPaginateListKeyOmittedOnLaterPage(t *testing.T) {
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.URL.Query().Get("page_token") == "" {
+			_, _ = fmt.Fprint(w, `{"list":[{"id":"a"}],"nextPageToken":"tok2"}`)
+			return
+		}
+		_, _ = fmt.Fprint(w, `{"facets":[{"id":"f"}],"nextPageToken":""}`)
+	}))
+	defer srv.Close()
+
+	resetAPICmdFlags(t)
+	stubNewAPIClient(t, srv)
+	t.Setenv("C1I_URL", srv.URL)
+
+	var out, errOut bytes.Buffer
+	apiCmd.SetOut(&out)
+	apiCmd.SetErr(&errOut)
+	rootCmd.SetArgs([]string{"api", "--path", "/api/v1/automations", "--paginate", "--list-key", "list"})
+
+	if err := rootCmd.ExecuteContext(context.Background()); err != nil {
+		t.Fatalf("ExecuteContext: %v; stderr=%q", err, errOut.String())
+	}
+	rows := decodeNDJSONRows(t, out.String())
+	if len(rows) != 1 || rows[0]["id"] != "a" {
+		t.Fatalf("rows = %v, want only page 1's a", rows)
+	}
+}

@@ -172,6 +172,7 @@ an intended non-GET REST write.`,
 		var held []json.RawMessage
 		pageToken := ""
 		route := fmt.Sprintf("%s %s", method, path)
+		listKeySeen := listKey == ""
 
 		for !limitReached(enc.Written(), limit) {
 			if guard.tokenAlreadyUsed(pageToken) {
@@ -255,8 +256,10 @@ an intended non-GET REST write.`,
 			if err != nil {
 				return fmt.Errorf("failed to parse response: %w", err)
 			}
-			if err := checkListKeyPresent(data, listKey); err != nil {
-				return err
+			if !listKeySeen {
+				if listKeySeen, err = checkListKeyPresent(data, listKey); err != nil {
+					return err
+				}
 			}
 
 			ids := make([]string, len(items))
@@ -437,19 +440,18 @@ func extractListAndToken(data []byte, listKey string) ([]json.RawMessage, string
 	return nil, nextPageToken, nil
 }
 
-// checkListKeyPresent rejects a --list-key absent from a page that has other
-// array fields: draining it would print 0 rows at exit 0. A page with no
-// arrays at all is fine, since protojson omits an empty repeated field.
-func checkListKeyPresent(data []byte, listKey string) error {
-	if listKey == "" {
-		return nil
-	}
+// checkListKeyPresent reports whether the page carries listKey, and rejects
+// one absent from a page that has other array fields: draining it would print
+// 0 rows at exit 0. A page with no arrays at all is fine, since protojson
+// omits an empty repeated field. Callers stop checking once the key is seen,
+// so an empty first page beside an unrelated non-empty array still errors.
+func checkListKeyPresent(data []byte, listKey string) (bool, error) {
 	var raw map[string]json.RawMessage
 	if err := json.Unmarshal(data, &raw); err != nil {
-		return nil // extractListAndToken already parsed it
+		return false, nil // extractListAndToken already parsed it
 	}
 	if _, ok := raw[listKey]; ok {
-		return nil
+		return true, nil
 	}
 	var arrays []string
 	for k, v := range raw {
@@ -458,10 +460,10 @@ func checkListKeyPresent(data []byte, listKey string) error {
 		}
 	}
 	if len(arrays) == 0 {
-		return nil
+		return false, nil
 	}
 	sort.Strings(arrays)
-	return &usageError{fmt.Errorf("--list-key %q is not in the response; its array fields are: %s", listKey, strings.Join(arrays, ", "))}
+	return false, &usageError{fmt.Errorf("--list-key %q is not in the response; its array fields are: %s", listKey, strings.Join(arrays, ", "))}
 }
 
 // itemIdentity identifies a list item for the stuck-cursor guard: its string

@@ -64,7 +64,7 @@ c1i users list [--query <text>] [--email <email>] [--status enabled|disabled|del
 c1i users get <user-id>
 ```
 
-`users list` reads `POST /api/v1/search/users`, which with no `origins` filter returned only directory-origin users: on one tenant 101 of the 308 users `GET /api/v1/users` returned, omitting all 206 local-origin (service) users and the one system user. To include them, pass `origins` yourself: `c1i api --method POST --path /api/v1/search/users --paginate --body '{"origins":["USER_ORIGIN_DIRECTORY","USER_ORIGIN_LOCAL","USER_ORIGIN_SYSTEM"]}'`.
+`users list` reads `POST /api/v1/search/users`, which with no `origins` filter returns only directory-origin users: local-origin (service) users and system users are excluded. The search's `origins` filter includes them: `c1i api --method POST --path /api/v1/search/users --paginate --body '{"origins":["USER_ORIGIN_DIRECTORY","USER_ORIGIN_LOCAL","USER_ORIGIN_SYSTEM"]}'`.
 
 ### Apps
 
