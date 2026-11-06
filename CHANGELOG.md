@@ -29,17 +29,14 @@ credentials fails instead of using the working directory. With a relative
   `/api/v1/automations`, `/api/v1/automation_executions`,
   `/api/v1/functions`, and `/api/v1/functions/{id}/commits` ignore
   `page_size`/`page_token` and return the first page under a fresh
-  `nextPageToken` every time. These commands now stop when the cursor stops
-  advancing (the same token twice, or two pages in a row of rows already
-  seen), keep the rows already printed, warn on stderr that results are
-  INCOMPLETE, and exit `6`.
-
-- **`automations list`, `automations executions list`, and `functions usage`
-  returned INCOMPLETE results (exit `6`) once a tenant had more than about 60
-  automations or executions.** They now read
-  `POST /api/v1/search/automations` and
-  `POST /api/v1/search/automation_executions`, which page correctly. Output
-  rows are unchanged.
+  `nextPageToken` every time. `automations list`, `automations executions
+  list`, and `functions usage` now read `POST /api/v1/search/automations` and
+  `POST /api/v1/search/automation_executions`, which page correctly, with
+  output rows unchanged. `functions list`, `functions commits`, and
+  `api --paginate` stop when the cursor stops advancing (the same token
+  twice, or two pages in a row of rows already seen), keep the rows already
+  printed, warn on stderr that results are INCOMPLETE, and exit `6`; the
+  search-backed commands keep the same guard as a backstop.
 
 - **`--debug` and `--max-retries` did nothing on `docs openapi`,
   `docs endpoints` and `docs endpoint`.** The spec fetch now uses the shared

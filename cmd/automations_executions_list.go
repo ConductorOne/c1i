@@ -93,16 +93,19 @@ Combine with --limit to bound the work.`,
 
 			var page struct {
 				List []struct {
-					AutomationExecution executionListItem `json:"automationExecution"`
+					AutomationExecution *executionListItem `json:"automationExecution"`
 				} `json:"list"`
 				NextPageToken string `json:"nextPageToken"`
 			}
 			if err := json.Unmarshal(data, &page); err != nil {
 				return fmt.Errorf("failed to parse response: %w", err)
 			}
-			execs := make([]executionListItem, len(page.List))
-			for i, item := range page.List {
-				execs[i] = item.AutomationExecution
+			// A missing wrapper is skipped rather than emitted as an all-"" row.
+			execs := make([]executionListItem, 0, len(page.List))
+			for _, item := range page.List {
+				if item.AutomationExecution != nil {
+					execs = append(execs, *item.AutomationExecution)
+				}
 			}
 
 			ids := make([]string, len(execs))

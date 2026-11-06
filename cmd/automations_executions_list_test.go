@@ -101,3 +101,32 @@ func TestAutomationsExecutionsListUnwrapsSearchItems(t *testing.T) {
 		t.Errorf("rows = %v, want %v", rows, want)
 	}
 }
+
+// A list item without its automationExecution wrapper must be skipped, not
+// emitted as a row of empty strings.
+func TestAutomationsExecutionsListSkipsMissingWrapper(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = fmt.Fprint(w, `{"list":[{"automationExecution":{"id":"e1","state":"AUTOMATION_EXECUTION_STATE_DONE"}},{"automationExecution":null},{}],"nextPageToken":""}`)
+	}))
+	defer srv.Close()
+
+	orig := newListClient
+	newListClient = func(_ *cobra.Command, _ string) (*client.Client, error) {
+		return client.NewForTesting(srv.URL, srv.Client()), nil
+	}
+	t.Cleanup(func() { newListClient = orig })
+	t.Setenv("C1I_URL", "https://example.invalid")
+
+	resetCmdFlags(t, automationsExecutionsListCmd)
+	var out strings.Builder
+	automationsExecutionsListCmd.SetOut(&out)
+	automationsExecutionsListCmd.SetContext(context.Background())
+	if err := automationsExecutionsListCmd.RunE(automationsExecutionsListCmd, nil); err != nil {
+		t.Fatalf("RunE: %v", err)
+	}
+	rows := decodeNDJSONRows(t, out.String())
+	if len(rows) != 1 || rows[0]["id"] != "e1" {
+		t.Fatalf("rows = %v, want only e1", rows)
+	}
+}
