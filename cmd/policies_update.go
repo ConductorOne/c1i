@@ -1,7 +1,6 @@
 package cmd
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -160,19 +159,11 @@ func (r *policyTypeResolver) resolve(cmd *cobra.Command, id string) (string, err
 // without its own policyType, regardless of whether that patch came from
 // --steps-file or --body-file.
 func fetchPolicyType(cmd *cobra.Command, c *client.Client, id string) (string, error) {
-	data, err := c.Get(cmd.Context(), client.Path("/api/v1/policies/%s", id), nil)
+	meta, err := fetchPolicyMeta(cmd.Context(), c, id)
 	if err != nil {
 		return "", fmt.Errorf("resolving the policy's current type (pass --policy-type to skip this lookup): %w", err)
 	}
-	var resp struct {
-		Policy struct {
-			PolicyType string `json:"policyType"`
-		} `json:"policy"`
-	}
-	if err := json.Unmarshal(data, &resp); err != nil {
-		return "", fmt.Errorf("parsing policy response: %w", err)
-	}
-	return resp.Policy.PolicyType, nil
+	return meta.policyType, nil
 }
 
 // buildUpdatePolicyPatch builds the partial "policy" object and its
