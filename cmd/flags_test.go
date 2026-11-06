@@ -180,7 +180,10 @@ func TestRequireNonEmptyIfSetRejectsWhitespace(t *testing.T) {
 		set     bool
 		val     string
 		wantErr bool
-	}{{false, "", false}, {true, "x", false}, {true, " x ", false}, {true, "", true}, {true, "  \t\n", true}} {
+	}{{false, "", false}, {true, "x", false}, {true, " x ", false}, {true, "", true}, {true, "  \t\n", true},
+		// Invisible-only values: zero-width space, BOM, NBSP, and a mix.
+		{true, "\u200b", true}, {true, "\ufeff", true}, {true, "\u00a0", true}, {true, " \u200b\ufeff\u00a0 ", true},
+		{true, "\u200bx", false}, {true, "é", false}} {
 		cmd := &cobra.Command{Use: "test"}
 		cmd.Flags().String("a", "", "")
 		if tc.set {

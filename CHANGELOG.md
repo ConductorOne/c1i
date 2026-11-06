@@ -64,8 +64,9 @@ credentials fails instead of using the working directory. With a relative
 
 ### Fixed
 
-- An empty or whitespace-only `--display-name` now exits `2` before
-  any request on every `update` and `create` that takes one. `apps`,
+- An empty, whitespace-only or invisible-only (e.g. U+200B, U+FEFF)
+  `--display-name` now exits `2` before any request on every `update` and
+  `create` that takes one, including `service-principals credentials`. `apps`,
   `access-profiles`, `policies`, `service-principals` and `mcp servers`/
   `mcp toolsets` `update` sent it as is: the server blanked the name, stored
   the spaces, or (`apps update ""`) kept the old name with exit 0.

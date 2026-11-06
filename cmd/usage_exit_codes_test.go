@@ -204,9 +204,45 @@ func TestValidationGuardsExitUsage(t *testing.T) {
 			cmds:    []*cobra.Command{automationsUpdateCmd},
 			wantMsg: "nothing to update",
 		},
-		// One rule for every --display-name: empty or whitespace-only exits 2
+		// One rule for every --display-name: empty or invisible-only exits 2
 		// before sending. Live, servers variously blanked the name, stored
 		// the spaces, kept the old name, or 400'd.
+		{
+			name:    "service-principals credentials update: empty --display-name",
+			args:    []string{"service-principals", "credentials", "update", "cred-1", "--service-principal-id", "sp-1", "--display-name", ""},
+			wantMsg: "--display-name requires a non-empty value",
+			cmds:    []*cobra.Command{spCredentialsUpdateCmd},
+		},
+		{
+			name:    "service-principals credentials update: whitespace-only --display-name",
+			args:    []string{"service-principals", "credentials", "update", "cred-1", "--service-principal-id", "sp-1", "--display-name", "  "},
+			wantMsg: "--display-name requires a non-empty value",
+			cmds:    []*cobra.Command{spCredentialsUpdateCmd},
+		},
+		{
+			name:    "service-principals credentials create: whitespace-only --display-name",
+			args:    []string{"service-principals", "credentials", "create", "sp-1", "--display-name", "  "},
+			wantMsg: "--display-name requires a non-empty value",
+			cmds:    []*cobra.Command{spCredentialsCreateCmd},
+		},
+		{
+			name:    "apps update: zero-width-space --display-name",
+			args:    []string{"apps", "update", "app-1", "--display-name", "\u200b"},
+			wantMsg: "--display-name requires a non-empty value",
+			cmds:    []*cobra.Command{appsUpdateCmd},
+		},
+		{
+			name:    "apps update: BOM-only --display-name",
+			args:    []string{"apps", "update", "app-1", "--display-name", "\ufeff"},
+			wantMsg: "--display-name requires a non-empty value",
+			cmds:    []*cobra.Command{appsUpdateCmd},
+		},
+		{
+			name:    "apps update: NBSP-only --display-name",
+			args:    []string{"apps", "update", "app-1", "--display-name", "\u00a0"},
+			wantMsg: "--display-name requires a non-empty value",
+			cmds:    []*cobra.Command{appsUpdateCmd},
+		},
 		{
 			name:    "apps update: empty --display-name",
 			args:    []string{"apps", "update", "app-1", "--display-name", ""},

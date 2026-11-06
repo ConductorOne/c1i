@@ -155,7 +155,7 @@ func buildEntitlementUpdateBody(cmd *cobra.Command, appID, id string) (map[strin
 func init() {
 	f := entitlementsUpdateCmd.Flags()
 	f.String("app-id", "", "Application ID the entitlement belongs to")
-	f.String("display-name", "", "New display name (omit to leave unchanged; cannot be empty)")
+	f.String("display-name", "", "New display name (omit to leave unchanged; cannot be empty or whitespace-only)")
 	f.String("description", "", "New description; an empty value clears it (omit to leave unchanged)")
 	registerPolicyIDFlags(entitlementsUpdateCmd, entitlementPolicyKinds, " (omit to leave unchanged)")
 	registerUnbindPolicyFlag(entitlementsUpdateCmd, entitlementPolicyKinds)

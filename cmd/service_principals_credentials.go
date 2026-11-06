@@ -160,6 +160,9 @@ var spCredentialsCreateCmd = &cobra.Command{
 	Short: "Create a client credential (the secret is shown once, at creation)",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
+		if _, err := requireNonEmptyIfSet(cmd, "display-name"); err != nil {
+			return err
+		}
 		if err := requireNonEmpty(cmd, "display-name"); err != nil {
 			return err
 		}
@@ -240,6 +243,9 @@ var spCredentialsUpdateCmd = &cobra.Command{
 	Short: "Update a client credential's display name",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
+		if _, err := requireNonEmptyIfSet(cmd, "display-name"); err != nil {
+			return err
+		}
 		if err := requireNonEmpty(cmd, "service-principal-id"); err != nil {
 			return err
 		}
@@ -333,7 +339,7 @@ func init() {
 	spCredentialsCreateCmd.Flags().Bool("require-dpop", false, "Require DPoP proof-of-possession for token exchange")
 	markRequired(spCredentialsCreateCmd, "display-name")
 
-	spCredentialsUpdateCmd.Flags().String("display-name", "", "New display name")
+	spCredentialsUpdateCmd.Flags().String("display-name", "", "New display name (cannot be empty or whitespace-only)")
 
 	spCredentialsCmd.AddCommand(
 		spCredentialsListCmd,

@@ -18,8 +18,9 @@ builds it. The mask is derived exactly from the flags you pass: an explicit
 --enabled=false or an empty --description is a change, an omitted flag is
 left alone. An empty or whitespace-only --display-name is refused before
 sending (the server answers "" with a 500, "display_name is required").
-Updating these fields leaves steps and triggers unchanged. The server accepts --enabled on an
-automation with isDraft true, and leaves isDraft as it was.
+Updating these fields leaves steps and triggers unchanged. The server
+accepts --enabled on an automation with isDraft true, and leaves isDraft as
+it was.
 
 For anything else (triggers, steps, draft fields, circuit breaker), pass an
 Automation object via --body-file plus an explicit --update-mask (both

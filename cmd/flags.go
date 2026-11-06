@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode"
 
 	"github.com/spf13/cobra"
 )
@@ -474,10 +475,21 @@ func requireNonEmpty(cmd *cobra.Command, names ...string) error {
 // scopes a read.
 func requireNonEmptyIfSet(cmd *cobra.Command, name string) (string, error) {
 	v, _ := cmd.Flags().GetString(name)
-	if strings.TrimSpace(v) == "" && cmd.Flags().Changed(name) {
+	if !hasVisibleRune(v) && cmd.Flags().Changed(name) {
 		return "", &usageError{fmt.Errorf("flag --%s requires a non-empty value", name)}
 	}
 	return v, nil
+}
+
+// hasVisibleRune reports whether s has a rune that renders. TrimSpace alone
+// lets through zero-width/format runes (U+200B, U+FEFF), i.e. an invisible name.
+func hasVisibleRune(s string) bool {
+	for _, r := range s {
+		if unicode.IsGraphic(r) && !unicode.IsSpace(r) && !unicode.Is(unicode.Cf, r) {
+			return true
+		}
+	}
+	return false
 }
 
 // flagOrDefault returns a string flag's value, falling back to def when unset.

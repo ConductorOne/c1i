@@ -19,7 +19,8 @@ mask is derived exactly from the flags you pass: an omitted flag is left
 alone, while an explicit empty value is a change.
 
 --display-name cannot be empty or whitespace-only (exit 2, nothing sent):
-the server answers "" with exit 0 but keeps the old name, and stores "  ".
+sent as is, "" made c1i exit 0 while the server kept the old name, and the
+server stores "  " verbatim.
 
 --grant-policy-id, --revoke-policy-id and --certify-policy-id bind a policy
 to the app. Before sending, c1i fetches each policy and refuses (exit 2,
