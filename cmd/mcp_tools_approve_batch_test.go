@@ -11,12 +11,9 @@ import (
 // Before the fix, ExactArgs(1) rejected a second id outright.
 func TestMcpToolsApproveBatchesOnePostPerId(t *testing.T) {
 	resetCmdFlags(t, rootCmd)
-	resetCmdFlags(t, rootCmd)
 	// approve's own --app-id/--connector-id live on the shared command object;
-	// clear them before and after so this test neither inherits nor leaks a
-	// Changed flag (the C182 order-dependence class).
+	// resetCmdFlags also restores them on cleanup.
 	resetCmds(t, mcpToolsApproveCmd)
-	t.Cleanup(func() { resetCmds(t, mcpToolsApproveCmd) })
 	t.Setenv("C1I_URL", "")
 	withDryRun(t)
 

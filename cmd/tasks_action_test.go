@@ -369,7 +369,6 @@ func TestTaskActionsDryRunStillResolvesTheURL(t *testing.T) {
 	for _, name := range []string{"close", "restart"} {
 		t.Run(name, func(t *testing.T) {
 			resetCmdFlags(t, rootCmd)
-			resetCmdFlags(t, rootCmd)
 			t.Setenv("C1I_URL", "")
 			withDryRun(t)
 

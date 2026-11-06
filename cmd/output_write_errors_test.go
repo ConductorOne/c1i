@@ -149,7 +149,6 @@ func TestTextOutputFailsOnOutputWriteError(t *testing.T) {
 			defer srv.Close()
 			stubGetClient(t, srv)
 			resetCmdFlags(t, rootCmd)
-			resetCmdFlags(t, rootCmd)
 			resetCmds(t, tc.reset...)
 			t.Cleanup(func() { resetCmds(t, tc.reset...) })
 			if slices.Contains(tc.args, "--dry-run") {
@@ -237,7 +236,6 @@ func TestMcpToolsApproveOutputFailureKeepsSummary(t *testing.T) {
 	}))
 	defer srv.Close()
 	stubGetClient(t, srv)
-	resetCmdFlags(t, rootCmd)
 	resetCmdFlags(t, rootCmd)
 	resetCmds(t, mcpToolsApproveCmd)
 	t.Cleanup(func() { resetCmds(t, mcpToolsApproveCmd) })
