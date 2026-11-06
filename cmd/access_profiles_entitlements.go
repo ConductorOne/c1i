@@ -202,7 +202,7 @@ func newAccessProfileEntitlementListCmd(short, endpoint string) *cobra.Command {
 				}
 				ids := make([]string, len(resp.List))
 				for i, it := range resp.List {
-					ids[i] = it.AppEntitlement.AppID + "/" + it.AppEntitlement.ID // an entitlement id repeats across apps
+					ids[i] = scopedRowID(it.AppEntitlement.AppID, it.AppEntitlement.ID) // an entitlement id repeats across apps
 				}
 				emit, stuck := guard.checkPage(ids)
 				if stuck {

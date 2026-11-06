@@ -310,6 +310,15 @@ func rawItemID(item []byte) string {
 	return withID.ID
 }
 
+// scopedRowID keys a row whose id is unique only within scope. An empty id
+// stays "" so checkPage still ignores it.
+func scopedRowID(scope, id string) string {
+	if id == "" {
+		return ""
+	}
+	return scope + "\x00" + id
+}
+
 // warnStuckCursor prints the stuck-cursor warning and returns the error that
 // maps to exit 6. route is "METHOD /path", for the user to report.
 func warnStuckCursor(cmd *cobra.Command, route string) error {

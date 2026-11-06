@@ -209,6 +209,46 @@ func TestEntitlementListsKeyGuardOnAppAndID(t *testing.T) {
 	}
 }
 
+// Rows with no entitlement id carry no evidence of a repeat, so pages of them
+// under fresh tokens must not trip the guard.
+func TestEntitlementListsIgnoreRowsWithoutID(t *testing.T) {
+	var cases []listPaginationCase
+	for _, tc := range listPaginationCases() {
+		switch tc.name {
+		case "entitlements list", "access-profiles requestable-entitlements list":
+			cases = append(cases, tc)
+		}
+	}
+	if len(cases) != 2 {
+		t.Fatalf("found %d entitlement cases in listPaginationCases, want 2", len(cases))
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			var requests int
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				requests++
+				if requests > 4 {
+					t.Errorf("request %d; pagination did not terminate", requests)
+					w.WriteHeader(http.StatusBadRequest)
+					return
+				}
+				next := map[string]string{"": "tok1", "tok1": "tok2"}[extractPageToken(t, c.method, r)]
+				w.Header().Set("Content-Type", "application/json")
+				_, _ = fmt.Fprintf(w, `{"list":[{}],"nextPageToken":%q}`, next)
+			}))
+			defer srv.Close()
+
+			out, errOut, err := runListPaginationCase(t, c, srv)
+			if err != nil {
+				t.Fatalf("RunE: %v (stderr %q)", err, errOut)
+			}
+			if rows := decodeNDJSONRows(t, out); len(rows) != 3 || requests != 3 {
+				t.Errorf("got %d rows over %d requests, want 3 over 3", len(rows), requests)
+			}
+		})
+	}
+}
+
 // readRoles (auth login's scope menu) follows the role catalog's cursor and
 // accumulates in memory, so a stuck cursor must end it with exit 6.
 func TestReadRolesStuckCursorReturnsExitServer(t *testing.T) {
