@@ -313,8 +313,13 @@ and any other code, exit 1.
 
 ## Pagination
 
-List commands auto-paginate to completion by default — one invocation gets
-every page. Pass `--page-token` to opt out and fetch a single page manually.
+Most list commands auto-paginate to completion by default — one invocation
+gets every page. Pass `--page-token` to opt out and fetch a single page
+manually. The exceptions send one request:
+`role-mining suggestions|runs|custom-analysis list` and
+`findings routing-rules|transformation-rules list` warn on stderr of a
+`partial result` if the server reports more pages, and `mcp bindings by-tools`
+and `mcp toolsets requestable-connectors` are not paginated.
 Don't write your own pagination loop.
 
 

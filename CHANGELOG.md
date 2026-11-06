@@ -127,6 +127,9 @@ credentials fails instead of using the working directory. With a relative
   usage error (exit `2`) naming them. A page with no array fields is still an
   empty result.
 
+- The docs no longer say every list command auto-paginates; they name the
+  single-request ones and their stderr `partial result` warning.
+
 ## [0.9.1] - 2026-10-09
 
 ### Security
