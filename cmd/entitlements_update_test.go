@@ -38,11 +38,23 @@ func runEntitlementsUpdate(t *testing.T, srv *httptest.Server, dryRun bool, id s
 	return out.String(), err
 }
 
-// captureServer records the one request it gets and answers with an
-// entitlement envelope.
+// entitlementTestPolicies are the policies captureServer serves; the emergency
+// slot takes a grant policy.
+var entitlementTestPolicies = map[string]string{
+	"pol-g": "POLICY_TYPE_GRANT", "pol-r": "POLICY_TYPE_REVOKE",
+	"pol-c": "POLICY_TYPE_CERTIFY", "pol-e": "POLICY_TYPE_GRANT",
+}
+
+// captureServer answers policy lookups from entitlementTestPolicies and
+// records the one mutation it gets, answering with an entitlement envelope.
 func captureServer(t *testing.T, gotPath *string, gotBody *map[string]any) *httptest.Server {
 	t.Helper()
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if id, ok := strings.CutPrefix(r.URL.Path, "/api/v1/policies/"); ok && r.Method == http.MethodGet {
+			_, _ = fmt.Fprintf(w, `{"policy":{"id":%q,"policyType":%q,"deletedAt":null}}`, id, entitlementTestPolicies[id])
+			return
+		}
 		if r.Method != http.MethodPost {
 			t.Errorf("method = %s, want POST", r.Method)
 		}
@@ -74,10 +86,16 @@ func TestEntitlementsUpdateBodyPerFlag(t *testing.T) {
 		{"revoke policy", map[string]string{"revoke-policy-id": "pol-r"}, map[string]any{"revokePolicyId": "pol-r"}, "revokePolicyId"},
 		{"certify policy", map[string]string{"certify-policy-id": "pol-c"}, map[string]any{"certifyPolicyId": "pol-c"}, "certifyPolicyId"},
 		{"emergency policy", map[string]string{"emergency-grant-policy-id": "pol-e"}, map[string]any{"emergencyGrantPolicyId": "pol-e"}, "emergencyGrantPolicyId"},
-		{"grant policy cleared", map[string]string{"grant-policy-id": ""}, map[string]any{"grantPolicyId": ""}, "grantPolicyId"},
-		{"revoke policy cleared", map[string]string{"revoke-policy-id": ""}, map[string]any{"revokePolicyId": ""}, "revokePolicyId"},
-		{"certify policy cleared", map[string]string{"certify-policy-id": ""}, map[string]any{"certifyPolicyId": ""}, "certifyPolicyId"},
-		{"emergency policy cleared", map[string]string{"emergency-grant-policy-id": ""}, map[string]any{"emergencyGrantPolicyId": ""}, "emergencyGrantPolicyId"},
+		{"grant policy unbound", map[string]string{"unbind-policy": "grant"}, map[string]any{"grantPolicyId": ""}, "grantPolicyId"},
+		{"revoke policy unbound", map[string]string{"unbind-policy": "revoke"}, map[string]any{"revokePolicyId": ""}, "revokePolicyId"},
+		{"certify policy unbound", map[string]string{"unbind-policy": "certify"}, map[string]any{"certifyPolicyId": ""}, "certifyPolicyId"},
+		{"emergency policy unbound", map[string]string{"unbind-policy": "emergency-grant"}, map[string]any{"emergencyGrantPolicyId": ""}, "emergencyGrantPolicyId"},
+		{
+			"emergency disabled and unbound",
+			map[string]string{"emergency-grant-enabled": "false", "unbind-policy": "emergency-grant"},
+			map[string]any{"emergencyGrantEnabled": false, "emergencyGrantPolicyId": ""},
+			"emergencyGrantPolicyId,emergencyGrantEnabled",
+		},
 		{"emergency disabled", map[string]string{"emergency-grant-enabled": "false"}, map[string]any{"emergencyGrantEnabled": false}, "emergencyGrantEnabled"},
 		{
 			"emergency enabled with policy",
@@ -139,7 +157,13 @@ func TestEntitlementsUpdateUsageErrors(t *testing.T) {
 		{"duration zero", map[string]string{"duration-grant": "0s"}, "must be positive"},
 		{"duration negative", map[string]string{"duration-grant": "-1m"}, "must be positive"},
 		{"emergency enabled without policy", map[string]string{"emergency-grant-enabled": "true"}, "emergency grant policy id must be set if emergency grant is enabled"},
-		{"emergency enabled with cleared policy", map[string]string{"emergency-grant-enabled": "true", "emergency-grant-policy-id": ""}, "emergency grant policy id must be set if emergency grant is enabled"},
+		{"emergency enabled with policy unbound", map[string]string{"emergency-grant-enabled": "true", "unbind-policy": "emergency-grant"}, "emergency grant policy id must be set if emergency grant is enabled"},
+		{"empty grant policy id", map[string]string{"grant-policy-id": ""}, "--grant-policy-id requires a non-empty value"},
+		{"empty revoke policy id", map[string]string{"revoke-policy-id": ""}, "--revoke-policy-id requires a non-empty value"},
+		{"empty certify policy id", map[string]string{"certify-policy-id": ""}, "--certify-policy-id requires a non-empty value"},
+		{"empty emergency policy id", map[string]string{"emergency-grant-policy-id": ""}, "--emergency-grant-policy-id requires a non-empty value"},
+		{"unknown unbind kind", map[string]string{"unbind-policy": "emergency"}, `invalid --unbind-policy "emergency"`},
+		{"set and unbind emergency", map[string]string{"emergency-grant-policy-id": "pol-e", "unbind-policy": "emergency-grant"}, "--emergency-grant-policy-id and --unbind-policy emergency-grant"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -206,5 +230,89 @@ func TestEntitlementsUpdatePrintsRawResponse(t *testing.T) {
 	}
 	if !strings.Contains(out, `"id": "ent-1"`) {
 		t.Errorf("output = %q, want the raw response", out)
+	}
+}
+
+// TestEntitlementPolicyBindingValidation pins the client-side policy check on
+// entitlements update and create: a missing, deleted, or wrong-type policy is
+// exit 2 with no mutation sent, and the emergency slot takes a grant policy.
+func TestEntitlementPolicyBindingValidation(t *testing.T) {
+	policies := map[string]string{
+		"gp": "POLICY_TYPE_GRANT", "rp": "POLICY_TYPE_REVOKE", "cp": "POLICY_TYPE_CERTIFY",
+		"del": "deleted:POLICY_TYPE_GRANT",
+	}
+	upd := []string{"entitlements", "update", "ent-1", "--app-id", "app-1"}
+	crt := []string{"entitlements", "create", "--app-id", "app-1", "--display-name", "e", "--resource-type-id", "rt-1", "--resource-id", "res-1"}
+	with := func(base []string, extra ...string) []string { return append(append([]string(nil), base...), extra...) }
+	cases := []struct {
+		name        string
+		args        []string
+		dryRun      bool
+		wantErr     string
+		wantLookups int
+		wantPosts   int
+	}{
+		{name: "update missing", args: with(upd, "--grant-policy-id", "nope"), wantErr: `--grant-policy-id "nope": no such policy`, wantLookups: 1},
+		{name: "update deleted", args: with(upd, "--certify-policy-id", "del"), wantErr: "policy is deleted", wantLookups: 1},
+		{name: "update wrong grant", args: with(upd, "--grant-policy-id", "rp"), wantErr: "it must be POLICY_TYPE_GRANT", wantLookups: 1},
+		{name: "update wrong revoke", args: with(upd, "--revoke-policy-id", "gp"), wantErr: "it must be POLICY_TYPE_REVOKE", wantLookups: 1},
+		{name: "update wrong certify", args: with(upd, "--certify-policy-id", "gp"), wantErr: "it must be POLICY_TYPE_CERTIFY", wantLookups: 1},
+		{name: "update emergency revoke", args: with(upd, "--emergency-grant-policy-id", "rp"), wantErr: `--emergency-grant-policy-id "rp" is a POLICY_TYPE_REVOKE policy; it must be POLICY_TYPE_GRANT`, wantLookups: 1},
+		{name: "update emergency certify", args: with(upd, "--emergency-grant-policy-id", "cp"), wantErr: "it must be POLICY_TYPE_GRANT", wantLookups: 1},
+		{name: "update all right", args: with(upd, "--grant-policy-id", "gp", "--revoke-policy-id", "rp", "--certify-policy-id", "cp", "--emergency-grant-policy-id", "gp"), wantLookups: 3, wantPosts: 1},
+		{name: "update unbind not looked up", args: with(upd, "--unbind-policy", "emergency-grant"), wantPosts: 1},
+		{name: "update dry run", args: with(upd, "--grant-policy-id", "nope"), dryRun: true},
+		{name: "create missing", args: with(crt, "--revoke-policy-id", "nope"), wantErr: "no such policy", wantLookups: 1},
+		{name: "create emergency certify", args: with(crt, "--emergency-grant-policy-id", "cp"), wantErr: "it must be POLICY_TYPE_GRANT", wantLookups: 1},
+		{name: "create all right", args: with(crt, "--grant-policy-id", "gp", "--revoke-policy-id", "rp", "--certify-policy-id", "cp", "--emergency-grant-policy-id", "gp"), wantLookups: 3, wantPosts: 1},
+		{name: "create dry run", args: with(crt, "--grant-policy-id", "nope"), dryRun: true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			srv, requests := policyBindingServer(t, policies)
+			resetCmds(t, entitlementsUpdateCmd, entitlementsCreateCmd)
+			stubCatalogClient(t, srv)
+			withCatalogDryRun(t, tc.dryRun)
+			t.Setenv("C1I_URL", "https://example.invalid")
+
+			err := runRootWithArgs(t, tc.args)
+			if tc.wantErr == "" {
+				if err != nil {
+					t.Fatalf("run: %v", err)
+				}
+			} else {
+				if err == nil || !strings.Contains(err.Error(), tc.wantErr) {
+					t.Fatalf("err = %v, want it to contain %q", err, tc.wantErr)
+				}
+				if got := exitCode(err); got != exitUsage {
+					t.Errorf("exit = %d, want %d", got, exitUsage)
+				}
+			}
+			reqs := requests()
+			if got := countRequests(reqs, "GET /api/v1/policies/"); got != tc.wantLookups {
+				t.Errorf("policy lookups = %d, want %d (%v)", got, tc.wantLookups, reqs)
+			}
+			if got := countRequests(reqs, "POST "); got != tc.wantPosts {
+				t.Errorf("mutations = %d, want %d (%v)", got, tc.wantPosts, reqs)
+			}
+		})
+	}
+}
+
+// TestEntitlementCreateValidatesBeforeCreatingAnything pins that a bad policy
+// is refused before step 1, so no resource type or resource is left behind.
+func TestEntitlementCreateValidatesBeforeCreatingAnything(t *testing.T) {
+	srv, requests := policyBindingServer(t, map[string]string{"rp": "POLICY_TYPE_REVOKE"})
+	resetCmds(t, entitlementsCreateCmd)
+	stubCatalogClient(t, srv)
+	withCatalogDryRun(t, false)
+	t.Setenv("C1I_URL", "https://example.invalid")
+
+	err := runRootWithArgs(t, []string{"entitlements", "create", "--app-id", "app-1", "--display-name", "e", "--grant-policy-id", "rp"})
+	if exitCode(err) != exitUsage {
+		t.Fatalf("err = %v (exit %d), want exit 2", err, exitCode(err))
+	}
+	if n := countRequests(requests(), "POST "); n != 0 {
+		t.Errorf("%d creates sent before the policy check failed: %v", n, requests())
 	}
 }

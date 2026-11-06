@@ -72,10 +72,11 @@ Omitting --duration-grant leaves the entitlement at standing access
 one (8h), sent in seconds since the API parses only that form, and must be
 positive.
 
---grant-policy-id, --revoke-policy-id and --certify-policy-id must each name a
-policy of that type, or the entitlement step fails with e.g.:
-  Grant policy ID must reference a grant policy
-Omitting one leaves that policy unset on the entitlement.
+Each --<kind>-policy-id is checked before the first create: it must name an
+existing, undeleted policy of the slot's type (a grant policy for
+--emergency-grant-policy-id), or the command exits 2 and creates nothing. An
+empty one is a usage error. Omitting one leaves that policy unset on the
+entitlement. --dry-run skips the check.
 
 Assign owners inline with --owner-id: the create request carries
 appEntitlementOwnerIds, so no follow-up call is needed. An empty --owner-id is
@@ -126,6 +127,10 @@ Example:
 		c, err := newClient(cmd, baseURL)
 		if err != nil {
 			return fmt.Errorf("authentication failed: %w", err)
+		}
+		// Before step 1, so a bad policy leaves no resource type behind.
+		if err := validatePolicyBindings(cmd.Context(), cmd, c, entitlementPolicyKinds); err != nil {
+			return err
 		}
 
 		return plan.run(cmd, c)
@@ -243,21 +248,8 @@ func buildEntitlementCreatePlan(cmd *cobra.Command) (*entitlementCreatePlan, err
 	} else if ok {
 		p.entitlementBody["durationGrant"] = v
 	}
-	// An empty policy id from an unset variable would create the entitlement
-	// without that policy, with exit 0.
-	for flag, key := range map[string]string{
-		"grant-policy-id":           "grantPolicyId",
-		"revoke-policy-id":          "revokePolicyId",
-		"certify-policy-id":         "certifyPolicyId",
-		"emergency-grant-policy-id": "emergencyGrantPolicyId",
-	} {
-		v, err := requireNonEmptyIfSet(cmd, flag)
-		if err != nil {
-			return nil, err
-		}
-		if v != "" {
-			p.entitlementBody[key] = v
-		}
+	if err := applyPolicyIDs(cmd, entitlementPolicyKinds, p.entitlementBody); err != nil {
+		return nil, err
 	}
 	// An owner id from an unset shell variable would otherwise create the
 	// entitlement with fewer owners than asked for, and owner reads are async,
@@ -462,10 +454,7 @@ func addEntitlementCreateFlags(cmd *cobra.Command) {
 	f.String("slug", "", "Slug for the new entitlement (e.g. member)")
 	f.String("alias", "", "Alias for the new entitlement; exact-match queryable")
 	f.String("duration-grant", "", "Maximum grant duration as a protobuf duration, e.g. 3600s; a Go duration such as 8h is converted to seconds; omit for standing access")
-	f.String("grant-policy-id", "", "Grant policy for the new entitlement (must be a grant policy)")
-	f.String("revoke-policy-id", "", "Revoke policy for the new entitlement (must be a revoke policy)")
-	f.String("certify-policy-id", "", "Certify policy for the new entitlement (must be a certify policy)")
-	f.String("emergency-grant-policy-id", "", "Emergency grant policy for the new entitlement")
+	registerPolicyIDFlags(cmd, entitlementPolicyKinds, " (omit to leave unset)")
 	// StringArray, not StringSlice: the slice parser drops an empty value
 	// outright, so `--owner-id "" --owner-id U` would lose the empty one
 	// before this command could reject it.

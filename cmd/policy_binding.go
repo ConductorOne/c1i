@@ -28,9 +28,16 @@ var appPolicyKinds = []policyKind{
 	newPolicyKind("certify", "certifyPolicyId", "POLICY_TYPE_CERTIFY"),
 }
 
+// entitlementPolicyKinds adds the emergency slot, which takes a grant policy.
+// The server checks that type only when the same request enables emergency
+// grants, so it is checked here on every bind.
+var entitlementPolicyKinds = append(append([]policyKind(nil), appPolicyKinds...),
+	newPolicyKind("emergency-grant", "emergencyGrantPolicyId", "POLICY_TYPE_GRANT"))
+
 func registerPolicyIDFlags(cmd *cobra.Command, kinds []policyKind, suffix string) {
 	for _, k := range kinds {
-		cmd.Flags().String(k.flag, "", fmt.Sprintf("%s policy ID to bind; must exist and be a %s policy%s", strings.ToUpper(k.kind[:1])+k.kind[1:], k.kind, suffix))
+		typ := strings.ToLower(strings.TrimPrefix(k.wantType, "POLICY_TYPE_"))
+		cmd.Flags().String(k.flag, "", fmt.Sprintf("%s policy ID to bind; must exist and be a %s policy%s", strings.ToUpper(k.kind[:1])+k.kind[1:], typ, suffix))
 	}
 }
 

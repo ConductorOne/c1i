@@ -460,10 +460,12 @@ resource with `--resource-id` likewise means you drop
   this for you.
 - `entitlements create` and `entitlements update` take a Go duration for
   `--duration-grant` (`8h`) as well as `3600s`, unlike `requests create grant
-  --duration` and `update-grant-duration`. `--emergency-grant-enabled` needs `--emergency-grant-policy-id`
-  in the same call even when one is already stored; clearing the policy alone
-  leaves emergency grants enabled with no policy. Pass `--grant-policy-id ""`
-  (or revoke/certify/emergency) to clear a policy.
+  --duration` and `update-grant-duration`. `--emergency-grant-policy-id`
+  takes a grant policy, checked client-side (the server checks only when the
+  same call enables emergency grants). `--emergency-grant-enabled` needs
+  `--emergency-grant-policy-id` in the same call even when one is already
+  stored; `--unbind-policy emergency-grant` alone leaves emergency grants
+  enabled with no policy.
 - `mcp servers test-connection` returns `toolCount` as a JSON string, not a
   number. The `tool_count` in NDJSON list rows is a real number.
 - `mcp servers search` only includes `tool_count` when you pass

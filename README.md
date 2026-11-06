@@ -169,22 +169,28 @@ c1i entitlements update <entitlement-id> --app-id <id> \
   [--display-name <name>] [--description <text>] \
   [--grant-policy-id <id>] [--revoke-policy-id <id>] [--certify-policy-id <id>] \
   [--emergency-grant-policy-id <id>] [--emergency-grant-enabled[=false]] \
+  [--unbind-policy grant|revoke|certify|emergency-grant] \
   [--duration-grant 8h | --duration-unset]
 ```
 
 `entitlements update` builds the update mask from exactly the flags you pass.
-Each policy id must name a policy of that type (the server refuses otherwise
-with e.g. `grant policy id must reference a grant policy`, exit `2`; an unknown
-id is a 404, exit `4`), and an empty value clears it. The server does not check
-the type of `--emergency-grant-policy-id`. `--emergency-grant-enabled` needs
-`--emergency-grant-policy-id` in the same call even when one is already stored
-(the server's `emergency grant policy id must be set if emergency grant is
-enabled`), so it is refused at exit `2` without one. `--duration-grant` takes a
-Go duration (`8h`, `3600s`) and is sent in seconds; it must be positive.
-`--duration-unset` removes the limit, and the two are mutually exclusive. An
-empty `--display-name` is refused: the server would accept it and restore the
-entitlement's original name. On `create`, the same type rule applies to the
-policy flags, and an empty one is a usage error.
+Each policy id is checked before anything is sent: it must exist, not be
+deleted, and be of the slot's type, or the command exits `2`.
+`--emergency-grant-policy-id` takes a grant policy; the server enforces that
+only when the same call enables emergency grants (`emergency policy id must
+reference a grant policy`) and otherwise stores any id. An empty policy id is
+exit `2`; unbind with the repeatable `--unbind-policy`.
+`--emergency-grant-enabled` needs `--emergency-grant-policy-id` in the same
+call even when one is already stored (the server's `emergency grant policy id
+must be set if emergency grant is enabled`), so it is refused at exit `2`
+without one, or alongside `--unbind-policy emergency-grant`. Unbinding the
+emergency policy while emergency grants stay enabled is accepted by the server.
+`--duration-grant` takes a Go duration (`8h`, `3600s`) and is sent in seconds;
+it must be positive. `--duration-unset` removes the limit, and the two are
+mutually exclusive. An empty `--display-name` is refused: the server would
+accept it and restore the entitlement's original name. `entitlements create`
+checks its policy flags the same way before its first `POST`, so a bad policy
+creates nothing.
 
 An entitlement points at an app resource, which lives under an app resource
 type, so `entitlements create` is up to three `POST`s: the resource type, the

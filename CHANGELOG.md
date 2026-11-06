@@ -22,9 +22,13 @@ credentials fails instead of using the working directory. With a relative
 - `entitlements update <entitlement-id> --app-id` sets an entitlement's
   display name, description, grant/revoke/certify/emergency-grant policies,
   emergency-grant switch, and maximum grant duration (`--duration-grant`, a Go
-  duration, or `--duration-unset`). `entitlements create` gains
-  `--grant-policy-id`, `--revoke-policy-id`, `--certify-policy-id` and
-  `--emergency-grant-policy-id`, and its `--duration-grant` now also accepts a
+  duration, or `--duration-unset`); `--unbind-policy
+  grant|revoke|certify|emergency-grant` unbinds a policy. `entitlements create`
+  gains `--grant-policy-id`, `--revoke-policy-id`, `--certify-policy-id` and
+  `--emergency-grant-policy-id`. On both, each policy id is checked first (it
+  must exist, not be deleted, and be of the slot's type; the emergency slot
+  takes a grant policy), otherwise exit `2` and nothing is sent; an empty
+  policy id is exit `2`. Create's `--duration-grant` now also accepts a
   Go duration (`8h`) and refuses a non-positive one at exit 2.
 - `users list --origin directory|local|system|all` (repeatable; a
   `USER_ORIGIN_*` value is also accepted) filters by user origin;
