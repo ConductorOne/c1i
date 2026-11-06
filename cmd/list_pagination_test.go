@@ -91,6 +91,14 @@ func extractPageToken(t *testing.T, method string, r *http.Request) string {
 
 func runListPaginationCase(t *testing.T, tc listPaginationCase, srv *httptest.Server) (stdout, stderr string, err error) {
 	t.Helper()
+	var out bytes.Buffer
+	errOut, runErr := runListPaginationCaseTo(t, tc, srv, &out)
+	return out.String(), errOut, runErr
+}
+
+// runListPaginationCaseTo is runListPaginationCase with a caller-supplied stdout.
+func runListPaginationCaseTo(t *testing.T, tc listPaginationCase, srv *httptest.Server, out io.Writer) (stderr string, err error) {
+	t.Helper()
 	orig, origPolicies := newListClient, newPoliciesClient
 	stub := func(_ *cobra.Command, _ string) (*client.Client, error) {
 		return client.NewForTesting(srv.URL, srv.Client()), nil
@@ -106,12 +114,12 @@ func runListPaginationCase(t *testing.T, tc listPaginationCase, srv *httptest.Se
 		}
 	}
 
-	var out, errOut bytes.Buffer
-	tc.cmd.SetOut(&out)
+	var errOut bytes.Buffer
+	tc.cmd.SetOut(out)
 	tc.cmd.SetErr(&errOut)
 	tc.cmd.SetContext(context.Background())
 	runErr := tc.cmd.RunE(tc.cmd, tc.args)
-	return out.String(), errOut.String(), runErr
+	return errOut.String(), runErr
 }
 
 // jstr renders a Go string as a JSON string literal for hand-built fixture

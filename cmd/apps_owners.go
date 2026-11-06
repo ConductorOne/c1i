@@ -119,7 +119,9 @@ same id exit 4 and can tell you which.`,
 				resp.List = nil
 			}
 			for _, o := range resp.List {
-				_ = enc.Encode(appOwnerRow(o))
+				if err := enc.Encode(appOwnerRow(o)); err != nil {
+					return err
+				}
 				if limitReached(enc.Written(), limit) {
 					return nil
 				}

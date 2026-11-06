@@ -38,8 +38,8 @@ var docsOpenapiCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		_, _ = cmd.OutOrStdout().Write(data)
-		return nil
+		_, err = cmd.OutOrStdout().Write(data)
+		return wrapOutputErr(err)
 	},
 }
 
@@ -108,7 +108,9 @@ resources. Pass a returned path to "docs endpoint" for its full schema.`,
 
 		enc := newEmitter(cmd)
 		for _, e := range endpoints {
-			_ = enc.Encode(e)
+			if err := enc.Encode(e); err != nil {
+				return err
+			}
 		}
 
 		if len(endpoints) == 0 && filter != "" {
@@ -162,8 +164,8 @@ Examples:
 		if err != nil {
 			return err
 		}
-		_, _ = fmt.Fprintln(cmd.OutOrStdout(), string(out))
-		return nil
+		_, err = fmt.Fprintln(cmd.OutOrStdout(), string(out))
+		return wrapOutputErr(err)
 	},
 }
 

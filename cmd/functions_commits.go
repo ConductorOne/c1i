@@ -81,13 +81,15 @@ var functionsCommitsCmd = &cobra.Command{
 			}
 
 			for _, c := range resp.List {
-				_ = enc.Encode(map[string]string{
+				if err := enc.Encode(map[string]string{
 					"id":          c.ID,
 					"function_id": c.FunctionID,
 					"author":      c.Author,
 					"message":     c.Message,
 					"created_at":  c.CreatedAt,
-				})
+				}); err != nil {
+					return err
+				}
 				if limitReached(enc.Written(), limit) {
 					return nil
 				}

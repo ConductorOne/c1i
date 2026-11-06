@@ -92,14 +92,16 @@ var usersListCmd = &cobra.Command{
 			}
 			for _, item := range resp.List {
 				u := item.User
-				_ = enc.Encode(map[string]string{
+				if err := enc.Encode(map[string]string{
 					"id":           u.ID,
 					"display_name": u.DisplayName,
 					"email":        u.Email,
 					"department":   u.Department,
 					"job_title":    u.JobTitle,
 					"status":       u.Status,
-				})
+				}); err != nil {
+					return err
+				}
 				if limitReached(enc.Written(), limit) {
 					return nil
 				}

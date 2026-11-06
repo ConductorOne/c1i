@@ -26,13 +26,17 @@ func dryRunActive() bool {
 // A nil body is omitted (e.g. DELETE), matching what would actually be sent.
 func printDryRun(cmd *cobra.Command, method, path string, body any) error {
 	out := cmd.OutOrStdout()
-	_, _ = fmt.Fprintf(out, "[dry-run] %s %s\n", method, path)
+	if _, err := fmt.Fprintf(out, "[dry-run] %s %s\n", method, path); err != nil {
+		return wrapOutputErr(err)
+	}
 	if body != nil {
 		b, err := json.MarshalIndent(body, "", "  ")
 		if err != nil {
 			return fmt.Errorf("marshaling dry-run body: %w", err)
 		}
-		_, _ = fmt.Fprintf(out, "%s\n", b)
+		if _, err := fmt.Fprintf(out, "%s\n", b); err != nil {
+			return wrapOutputErr(err)
+		}
 	}
 	return nil
 }

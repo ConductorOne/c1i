@@ -441,8 +441,7 @@ func newEmitter(cmd *cobra.Command) *emitter {
 // row here only changes what gets printed, never that verdict.
 func (e *emitter) Encode(v any) error {
 	if len(e.paths) == 0 {
-		e.written++
-		return e.enc.Encode(v)
+		return e.write(v)
 	}
 	projected := projectValue(v, e.paths)
 	empty := projectionMatchedNothing(projected)
@@ -455,8 +454,28 @@ func (e *emitter) Encode(v any) error {
 	if empty {
 		return nil
 	}
+	return e.write(projected)
+}
+
+// write counts a row only once it has reached stdout, so --limit never
+// counts a row the caller didn't get.
+func (e *emitter) write(v any) error {
+	if err := e.enc.Encode(v); err != nil {
+		return wrapOutputErr(err)
+	}
 	e.written++
-	return e.enc.Encode(projected)
+	return nil
+}
+
+// wrapOutputErr wraps a failed stdout write (ENOSPC, EIO, ...). It exits 1
+// (generic): a local I/O failure is neither C1's fault nor a usage error.
+// On Unix, EPIPE never gets here (Go's SIGPIPE default kills the process
+// first); on Windows a closed pipe is an ordinary error and exits 1.
+func wrapOutputErr(err error) error {
+	if err == nil {
+		return nil
+	}
+	return fmt.Errorf("writing output: %w", err)
 }
 
 // Written reports how many rows Encode has actually written to stdout so
@@ -500,8 +519,8 @@ func writeObject(cmd *cobra.Command, data []byte) error {
 				return &usageError{fmt.Errorf("--fields %q matched no keys in the response", viper.GetString("fields"))}
 			}
 			if b, err := json.MarshalIndent(projected, "", "  "); err == nil {
-				_, _ = cmd.OutOrStdout().Write(append(b, '\n'))
-				return nil
+				_, err := cmd.OutOrStdout().Write(append(b, '\n'))
+				return wrapOutputErr(err)
 			}
 		}
 	}
@@ -552,6 +571,6 @@ func writeRawObject(cmd *cobra.Command, data []byte) error {
 		return &nonJSONResponseError{fmt.Errorf("response was not JSON: %w", err)}
 	}
 	pretty.WriteByte('\n')
-	_, _ = out.Write(pretty.Bytes())
-	return nil
+	_, err := out.Write(pretty.Bytes())
+	return wrapOutputErr(err)
 }

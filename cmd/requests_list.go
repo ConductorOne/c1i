@@ -163,7 +163,9 @@ tenant.
 				resp.List = nil
 			}
 			for _, item := range resp.List {
-				_ = enc.Encode(taskRow(item.Task))
+				if err := enc.Encode(taskRow(item.Task)); err != nil {
+					return err
+				}
 				if limitReached(enc.Written(), limit) {
 					return nil
 				}

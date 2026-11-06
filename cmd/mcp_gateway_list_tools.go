@@ -30,7 +30,9 @@ each tool's input JSON schema.`,
 			if full && len(t.InputSchema) > 0 {
 				row["input_schema"] = json.RawMessage(t.InputSchema)
 			}
-			_ = enc.Encode(row)
+			if err := enc.Encode(row); err != nil {
+				return err
+			}
 		}
 		return nil
 	},

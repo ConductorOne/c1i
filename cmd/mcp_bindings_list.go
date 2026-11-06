@@ -75,13 +75,15 @@ var mcpBindingsListCmd = &cobra.Command{
 			}
 
 			for _, b := range resp.Bindings {
-				_ = enc.Encode(map[string]string{
+				if err := enc.Encode(map[string]string{
 					"app_id":            b.AppID,
 					"connector_id":      b.ConnectorID,
 					"access_profile_id": b.AccessProfileID,
 					"mcp_tool_id":       b.MCPToolID,
 					"created_at":        b.CreatedAt,
-				})
+				}); err != nil {
+					return err
+				}
 				if limitReached(enc.Written(), limit) {
 					return nil
 				}

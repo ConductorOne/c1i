@@ -47,7 +47,9 @@ for external MCP servers").`,
 			return fmt.Errorf("API error: %w", err)
 		}
 
-		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Triggered tool resync: connector_id=%s\n", connectorID)
+		if _, err := fmt.Fprintf(cmd.OutOrStdout(), "Triggered tool resync: connector_id=%s\n", connectorID); err != nil {
+			return wrapOutputErr(err)
+		}
 		return nil
 	},
 }

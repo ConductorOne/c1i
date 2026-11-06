@@ -48,10 +48,12 @@ Unlike most other "list" commands this endpoint is not paginated server-side
 
 		enc := newEmitter(cmd)
 		for _, cn := range resp.Connectors {
-			_ = enc.Encode(map[string]string{
+			if err := enc.Encode(map[string]string{
 				"app_id":       cn.AppID,
 				"connector_id": cn.ConnectorID,
-			})
+			}); err != nil {
+				return err
+			}
 		}
 		return nil
 	},

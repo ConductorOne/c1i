@@ -74,7 +74,9 @@ polls).`,
 			return fmt.Errorf("API error: %w", err)
 		}
 
-		_, _ = fmt.Fprintf(cmd.OutOrStdout(), setOwnersSuccessFmt, len(userIDs), appID, appID)
+		if _, err := fmt.Fprintf(cmd.OutOrStdout(), setOwnersSuccessFmt, len(userIDs), appID, appID); err != nil {
+			return wrapOutputErr(err)
+		}
 
 		if !wait {
 			return nil

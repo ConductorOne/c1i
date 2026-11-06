@@ -78,7 +78,9 @@ var mcpToolsetsListCmd = &cobra.Command{
 				resp.Profiles = nil
 			}
 			for _, p := range resp.Profiles {
-				_ = enc.Encode(toolsetRow(p))
+				if err := enc.Encode(toolsetRow(p)); err != nil {
+					return err
+				}
 				if limitReached(enc.Written(), limit) {
 					return nil
 				}

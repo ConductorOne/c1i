@@ -111,14 +111,16 @@ last_executed_at, args.`,
 					for k := range step.CallFunction.Args {
 						argKeys = append(argKeys, k)
 					}
-					_ = enc.Encode(map[string]any{
+					if err := enc.Encode(map[string]any{
 						"automation_id":    a.ID,
 						"automation_name":  a.DisplayName,
 						"step_name":        step.StepName,
 						"enabled":          a.Enabled,
 						"last_executed_at": a.LastExecutedAt,
 						"args":             argKeys,
-					})
+					}); err != nil {
+						return err
+					}
 					emitted++
 					if limitReached(enc.Written(), limit) {
 						return nil

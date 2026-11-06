@@ -113,7 +113,9 @@ var mcpToolsSearchCmd = &cobra.Command{
 				items = nil
 			}
 			for _, t := range items {
-				_ = enc.Encode(toolRow(t))
+				if err := enc.Encode(toolRow(t)); err != nil {
+					return err
+				}
 				if limitReached(enc.Written(), limit) {
 					return nil
 				}

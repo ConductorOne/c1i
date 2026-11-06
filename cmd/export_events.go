@@ -143,7 +143,9 @@ them to an external system.
 				// projection applies and values are re-encoded with Go's
 				// standard JSON encoding (which \u-escapes <, >, and & — valid
 				// JSON that any parser reads back identically).
-				_ = enc.Encode(event)
+				if err := enc.Encode(event); err != nil {
+					return err
+				}
 				if limitReached(enc.Written(), limit) {
 					return nil
 				}

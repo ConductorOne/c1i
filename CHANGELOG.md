@@ -23,6 +23,8 @@ credentials fails instead of using the working directory. With a relative
 
 ### Fixed
 
+- **A failed write to stdout now exits `1`** (e.g. a full disk) instead of
+  `0`; list commands stop paging at the first failed row.
 - **Every auto-paginating command now stops on a stuck cursor** instead of
   looping forever, exiting `6`: on a repeated `nextPageToken`; for rows with
   an id, on repeated pages of rows already seen; and (except `export events`)

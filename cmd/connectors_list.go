@@ -103,7 +103,9 @@ var connectorsListCmd = &cobra.Command{
 				resp.List = nil
 			}
 			for _, item := range resp.List {
-				_ = enc.Encode(connectorRow(item))
+				if err := enc.Encode(connectorRow(item)); err != nil {
+					return err
+				}
 				if limitReached(enc.Written(), limit) {
 					return nil
 				}

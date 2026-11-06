@@ -96,7 +96,9 @@ transaction.`,
 			}
 
 			for _, entry := range resp.List {
-				_ = enc.Encode(json.RawMessage(entry))
+				if err := enc.Encode(json.RawMessage(entry)); err != nil {
+					return err
+				}
 				if limitReached(enc.Written(), limit) {
 					return nil
 				}

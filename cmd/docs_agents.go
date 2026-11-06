@@ -42,8 +42,8 @@ plain Markdown.
 			return nil
 		}
 
-		_, _ = fmt.Fprint(cmd.OutOrStdout(), content)
-		return nil
+		_, err := fmt.Fprint(cmd.OutOrStdout(), content)
+		return wrapOutputErr(err)
 	},
 }
 

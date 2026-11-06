@@ -29,12 +29,18 @@ C1I_CLIENT_SECRET) are not affected.`,
 
 		out := cmd.OutOrStdout()
 		if removed {
-			_, _ = fmt.Fprintf(out, "Removed credentials for %s.\n", baseURL)
+			if _, err := fmt.Fprintf(out, "Removed credentials for %s.\n", baseURL); err != nil {
+				return wrapOutputErr(err)
+			}
 		} else {
-			_, _ = fmt.Fprintf(out, "No stored credentials to remove for %s.\n", baseURL)
+			if _, err := fmt.Fprintf(out, "No stored credentials to remove for %s.\n", baseURL); err != nil {
+				return wrapOutputErr(err)
+			}
 		}
 		if keychain.EnvCredentialsSet() {
-			_, _ = fmt.Fprintln(out, "Note: C1I_CLIENT_ID/C1I_CLIENT_SECRET are still set in your environment and take precedence; unset them to fully log out.")
+			if _, err := fmt.Fprintln(out, "Note: C1I_CLIENT_ID/C1I_CLIENT_SECRET are still set in your environment and take precedence; unset them to fully log out."); err != nil {
+				return wrapOutputErr(err)
+			}
 		}
 		return nil
 	},

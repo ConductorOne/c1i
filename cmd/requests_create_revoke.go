@@ -104,7 +104,9 @@ var requestsCreateRevokeCmd = &cobra.Command{
 			return fmt.Errorf("failed to parse response: %w", err)
 		}
 
-		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Created revoke request: task_id=%s state=%s\n", resp.TaskView.Task.ID, resp.TaskView.Task.State)
+		if _, err := fmt.Fprintf(cmd.OutOrStdout(), "Created revoke request: task_id=%s state=%s\n", resp.TaskView.Task.ID, resp.TaskView.Task.State); err != nil {
+			return wrapOutputErr(err)
+		}
 		return nil
 	},
 }

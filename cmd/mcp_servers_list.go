@@ -77,7 +77,9 @@ var mcpServersListCmd = &cobra.Command{
 				resp.List = nil
 			}
 			for _, s := range resp.List {
-				_ = enc.Encode(serverRow(s))
+				if err := enc.Encode(serverRow(s)); err != nil {
+					return err
+				}
 				if limitReached(enc.Written(), limit) {
 					return nil
 				}

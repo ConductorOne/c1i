@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -75,16 +76,26 @@ verifies the release and prints what it would replace, installing nothing.
 		}
 		switch {
 		case !isReleaseVersion(current):
-			_, _ = fmt.Fprintf(out, "c1i is a development build (version %q); `c1i upgrade` works on released binaries.\n", current)
-			_, _ = fmt.Fprintf(out, "The current %s release is %q.\n", channel, target)
+			if _, err := fmt.Fprintf(out, "c1i is a development build (version %q); `c1i upgrade` works on released binaries.\n", current); err != nil {
+				return wrapOutputErr(err)
+			}
+			if _, err := fmt.Fprintf(out, "The current %s release is %q.\n", channel, target); err != nil {
+				return wrapOutputErr(err)
+			}
 			return nil
 		case cmp == 0:
-			_, _ = fmt.Fprintf(out, "c1i %s is current on the %s channel.\n", current, channel)
+			if _, err := fmt.Fprintf(out, "c1i %s is current on the %s channel.\n", current, channel); err != nil {
+				return wrapOutputErr(err)
+			}
 			return nil
 		case cmp > 0:
-			_, _ = fmt.Fprintf(out, "c1i %s is newer than the %s channel (%q); nothing to do.\n", current, channel, target)
+			if _, err := fmt.Fprintf(out, "c1i %s is newer than the %s channel (%q); nothing to do.\n", current, channel, target); err != nil {
+				return wrapOutputErr(err)
+			}
 			if latest := idx.Channels["latest"]; channel == "stable" && newerRelease(latest, current) && !idx.Semvers[latest].Yanked {
-				_, _ = fmt.Fprintln(out, "(Pass --channel latest to track the newest release.)")
+				if _, err := fmt.Fprintln(out, "(Pass --channel latest to track the newest release.)"); err != nil {
+					return wrapOutputErr(err)
+				}
 			}
 			return nil
 		}
@@ -94,7 +105,9 @@ verifies the release and prints what it would replace, installing nothing.
 			return fmt.Errorf("locating the running binary: %w", err)
 		}
 		if method, hint := selfupdate.Detect(execPath, runtime.GOOS); method != selfupdate.Standalone {
-			_, _ = fmt.Fprintf(out, "Not upgrading in place: %s\n", hint)
+			if _, err := fmt.Fprintf(out, "Not upgrading in place: %s\n", hint); err != nil {
+				return wrapOutputErr(err)
+			}
 			return nil
 		}
 		installDir := filepath.Dir(execPath)
@@ -137,8 +150,12 @@ verifies the release and prints what it would replace, installing nothing.
 			return &upstreamError{fmt.Errorf("%s has no build for %s", target, selfupdate.PlatformKey())}
 		}
 		if dryRunActive() {
-			_, _ = fmt.Fprintf(out, "[dry-run] manifest signature verified; would download %s\n", asset.Href)
-			_, _ = fmt.Fprintf(out, "[dry-run] would verify sha256 %s and replace %s\n", asset.SHA256, execPath)
+			if _, err := fmt.Fprintf(out, "[dry-run] manifest signature verified; would download %s\n", asset.Href); err != nil {
+				return wrapOutputErr(err)
+			}
+			if _, err := fmt.Fprintf(out, "[dry-run] would verify sha256 %s and replace %s\n", asset.SHA256, execPath); err != nil {
+				return wrapOutputErr(err)
+			}
 			return nil
 		}
 
@@ -155,10 +172,12 @@ verifies the release and prints what it would replace, installing nothing.
 		if cmp, ok := selfupdate.CompareVersions(current, target); !ok {
 			return &upstreamError{fmt.Errorf("cannot compare installed version %q with %s", current, target)}
 		} else if cmp >= 0 {
-			_, _ = fmt.Fprintf(out, "Installed c1i is %s; nothing to do.\n", current)
+			if _, err := fmt.Fprintf(out, "Installed c1i is %s; nothing to do.\n", current); err != nil {
+				return wrapOutputErr(err)
+			}
 			return nil
 		}
-		_, _ = fmt.Fprintf(out, "A newer %s release is available: %s -> %s.\n", channel, current, target)
+		upgradeProgress(out, "A newer %s release is available: %s -> %s.\n", channel, current, target)
 
 		if !assumeYes {
 			ok, err := confirm(cmd, fmt.Sprintf("Upgrade c1i %s -> %s, replacing %s?", current, target, execPath))
@@ -166,12 +185,14 @@ verifies the release and prints what it would replace, installing nothing.
 				return err
 			}
 			if !ok {
-				_, _ = fmt.Fprintln(out, "Upgrade cancelled.")
+				if _, err := fmt.Fprintln(out, "Upgrade cancelled."); err != nil {
+					return wrapOutputErr(err)
+				}
 				return nil
 			}
 		}
 
-		_, _ = fmt.Fprintf(out, "Downloading %s...\n", asset.Filename)
+		upgradeProgress(out, "Downloading %s...\n", asset.Filename)
 		bin, err := dist.FetchBinary(cmd.Context(), asset)
 		if err != nil {
 			return distError(err, "downloading %s", target)
@@ -179,7 +200,9 @@ verifies the release and prints what it would replace, installing nothing.
 		if err := selfupdate.ReplaceExecutable(execPath, bin); err != nil {
 			return fmt.Errorf("installing into %s: %w", installDir, err)
 		}
-		_, _ = fmt.Fprintf(out, "Upgraded c1i %s -> %s.\n", current, target)
+		if _, err := fmt.Fprintf(out, "Upgraded c1i %s -> %s.\n", current, target); err != nil {
+			return wrapOutputErr(err)
+		}
 		return nil
 	},
 }
@@ -268,6 +291,12 @@ func isReleaseVersion(v string) bool {
 	}
 	_, ok := selfupdate.CompareVersions(v, v)
 	return ok
+}
+
+// upgradeProgress prints a step that precedes the result; a dead stdout
+// still fails the run at the result line, so its error is not needed here.
+func upgradeProgress(out io.Writer, format string, args ...any) {
+	_, _ = fmt.Fprintf(out, format, args...)
 }
 
 // confirm asks a yes/no question. It requires --yes when stdin is not a

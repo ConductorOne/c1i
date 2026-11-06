@@ -91,6 +91,8 @@ func (a taskAction) runTaskAction(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to parse response: %w", err)
 	}
 
-	_, _ = fmt.Fprintf(cmd.OutOrStdout(), "%s", a.confirm(id, state, stepID))
+	if _, err := fmt.Fprintf(cmd.OutOrStdout(), "%s", a.confirm(id, state, stepID)); err != nil {
+		return wrapOutputErr(err)
+	}
 	return nil
 }

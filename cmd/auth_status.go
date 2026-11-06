@@ -33,18 +33,28 @@ var authStatusCmd = &cobra.Command{
 		}
 
 		out := cmd.OutOrStdout()
-		_, _ = fmt.Fprintf(out, "Authenticated to %s.\n", baseURL)
+		if _, err := fmt.Fprintf(out, "Authenticated to %s.\n", baseURL); err != nil {
+			return wrapOutputErr(err)
+		}
 		if loadErr == nil {
 			switch backend {
 			case keychain.BackendEnv:
-				_, _ = fmt.Fprintln(out, "Source: environment variables (C1I_CLIENT_ID, C1I_CLIENT_SECRET)")
+				if _, err := fmt.Fprintln(out, "Source: environment variables (C1I_CLIENT_ID, C1I_CLIENT_SECRET)"); err != nil {
+					return wrapOutputErr(err)
+				}
 			case keychain.BackendKeyring:
-				_, _ = fmt.Fprintf(out, "Source: %s\n", keyringName())
+				if _, err := fmt.Fprintf(out, "Source: %s\n", keyringName()); err != nil {
+					return wrapOutputErr(err)
+				}
 			case keychain.BackendFile:
 				if path, perr := keychain.FilePath(service); perr == nil {
-					_, _ = fmt.Fprintf(out, "Source: file %s\n", path)
+					if _, err := fmt.Fprintf(out, "Source: file %s\n", path); err != nil {
+						return wrapOutputErr(err)
+					}
 				} else {
-					_, _ = fmt.Fprintln(out, "Source: file fallback")
+					if _, err := fmt.Fprintln(out, "Source: file fallback"); err != nil {
+						return wrapOutputErr(err)
+					}
 				}
 			}
 		}

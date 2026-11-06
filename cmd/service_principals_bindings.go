@@ -60,7 +60,9 @@ var spBindingsAddCmd = &cobra.Command{
 		if _, err := c.Post(cmd.Context(), spBindingsPath, body); err != nil {
 			return fmt.Errorf("API error: %w", err)
 		}
-		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Bound subject to service principal: id=%s\n", spID)
+		if _, err := fmt.Fprintf(cmd.OutOrStdout(), "Bound subject to service principal: id=%s\n", spID); err != nil {
+			return wrapOutputErr(err)
+		}
 		return nil
 	},
 }
@@ -94,7 +96,9 @@ var spBindingsDeleteCmd = &cobra.Command{
 		if _, err := c.Post(cmd.Context(), spBindingsDeletePath, body); err != nil {
 			return fmt.Errorf("API error: %w", err)
 		}
-		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Removed binding to service principal: id=%s\n", spID)
+		if _, err := fmt.Fprintf(cmd.OutOrStdout(), "Removed binding to service principal: id=%s\n", spID); err != nil {
+			return wrapOutputErr(err)
+		}
 		return nil
 	},
 }
@@ -153,7 +157,9 @@ var spBindingsListCmd = &cobra.Command{
 			}
 
 			for _, b := range resp.Bindings {
-				_ = enc.Encode(spBindingRow(b))
+				if err := enc.Encode(spBindingRow(b)); err != nil {
+					return err
+				}
 				if limitReached(enc.Written(), limit) {
 					return nil
 				}

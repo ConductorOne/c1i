@@ -82,6 +82,7 @@ classification, visibility).`,
 		}
 
 		out := cmd.OutOrStdout()
+		var writeErr error
 		approveOne := func(id string) error {
 			data, err := c.Post(cmd.Context(), pathFor(id), bodyFor(id))
 			if err != nil {
@@ -96,14 +97,23 @@ classification, visibility).`,
 			if err := json.Unmarshal(data, &resp); err != nil {
 				return fmt.Errorf("failed to parse response: %w", err)
 			}
-			_, _ = fmt.Fprintf(out, "Updated tool: id=%s state=%s\n", resp.Tool.ID, resp.Tool.State)
+			// The update landed; a dead stdout ends the batch but isn't this id's failure.
+			_, writeErr = fmt.Fprintf(out, "Updated tool: id=%s state=%s\n", resp.Tool.ID, resp.Tool.State)
 			return nil
 		}
 
 		var firstErr error
 		failed := 0
-		for _, id := range args {
-			if err := approveOne(id); err != nil {
+		for i, id := range args {
+			err := approveOne(id)
+			if writeErr != nil {
+				approved := i + 1 - failed
+				if firstErr != nil {
+					return fmt.Errorf("approved %d of %d tools; %d failed: %w; output failed: %w", approved, len(args), failed, firstErr, wrapOutputErr(writeErr))
+				}
+				return fmt.Errorf("approved %d of %d tools; %d failed; output failed: %w", approved, len(args), failed, wrapOutputErr(writeErr))
+			}
+			if err != nil {
 				failed++
 				if firstErr == nil {
 					firstErr = err
