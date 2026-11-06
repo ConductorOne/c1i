@@ -878,6 +878,9 @@ is refused because the server strips its brackets, and `webhooks test` then
 fails with `invalid port ":db8::1" after host`. A host the server will not call
 is a `400`, `invalid url: restricted destination` (exit `2`).
 
+A blank `--display-name` exits `2` on create and update, as described under
+[Display names](#display-names); the server would store one on update.
+
 `--callback-timeout` takes a Go duration up to `720h`; over
 that, update returns `callback_timeout must be between 0 and 30 days`. `update`
 sends only the flags you pass and masks exactly those; an empty `--description`

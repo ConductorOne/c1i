@@ -12,7 +12,7 @@ var webhooksCreateCmd = &cobra.Command{
 	Long: `Create a webhook. --display-name and --destination-url are required.
 
 Refused with exit 2 before a request is sent:
-  - an empty or whitespace-only --display-name
+  - a blank --display-name (empty, whitespace or invisible-only)
   - a --destination-url that is not https, has no host, or uses an IPv6
     literal host (the server would rewrite another scheme to https, and
     strips an IPv6 literal's brackets)

@@ -51,8 +51,9 @@ credentials fails instead of using the working directory. With a relative
 - `webhooks list|get|create|update|delete|test` manage outbound webhooks.
   `create` and `update` take `--display-name`, `--destination-url`,
   `--description` and `--callback-timeout`. A `--destination-url` that is not
-  https, has no host, or uses an IPv6 literal host, or an empty or
-  whitespace-only `--display-name`, exits `2` before anything is sent. `test`
+  https, has no host, or uses an IPv6 literal host, or a blank
+  `--display-name` (empty, whitespace or invisible-only), exits `2` before
+  anything is sent. `test`
   queues a delivery and returns it pending; it does not report whether the
   endpoint answered. `delete` is a soft delete: `get` still returns the
   webhook with `deletedAt` set, and `list` omits it. `update` on a deleted

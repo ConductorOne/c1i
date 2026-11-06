@@ -15,7 +15,8 @@ update mask; an empty --description clears it.
 
 Refused with exit 2 before a request is sent:
   - no field flag at all
-  - an empty or whitespace-only --display-name (the server would store it)
+  - a blank --display-name (empty, whitespace or invisible-only; the server
+    would store it on update)
   - a --destination-url that is not https, has no host, or uses an IPv6
     literal host
 

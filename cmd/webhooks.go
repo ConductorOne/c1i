@@ -45,7 +45,7 @@ func webhookFieldFlags(cmd *cobra.Command, update bool) {
 	if update {
 		verb, keep = "New", "omit to leave unchanged; "
 	}
-	cmd.Flags().String("display-name", "", verb+" display name ("+keep+"cannot be empty)")
+	cmd.Flags().String("display-name", "", verb+" display name ("+keep+displayNameRule+")")
 	cmd.Flags().String("destination-url", "", verb+" destination URL ("+keep+"https only, with a host; an IPv6 literal host is refused; else exit 2)")
 	cmd.Flags().String("description", "", verb+" description ("+keep+"an empty value clears it)")
 	cmd.Flags().String("callback-timeout", "", verb+` time to wait for an asynchronous callback, as a Go duration (e.g. 10m) (`+keep+`0 to 720h; over that, update returns "callback_timeout must be between 0 and 30 days" and create "value must be inside range [0s, 720h0m0s]")`)
