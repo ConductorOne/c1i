@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/url"
@@ -173,6 +174,19 @@ an intended non-GET REST write.`,
 		pageToken := ""
 		route := fmt.Sprintf("%s %s", method, path)
 		listKeySeen := listKey == ""
+		// failWith prints held rows before a failure that isn't the guard's:
+		// they were deferred only until the run proved it wasn't stuck.
+		failWith := func(err error) error {
+			for _, item := range held {
+				if limitReached(enc.Written(), limit) {
+					break
+				}
+				if wErr := enc.Encode(item); wErr != nil {
+					return errors.Join(err, wErr)
+				}
+			}
+			return err
+		}
 
 		for !limitReached(enc.Written(), limit) {
 			if guard.tokenAlreadyUsed(pageToken) {
@@ -228,9 +242,9 @@ an intended non-GET REST write.`,
 			data, reqErr := c.Request(cmd.Context(), method, reqPath, bodyBytes, headers)
 			if reqErr != nil {
 				if method == "GET" && looksLikePOSTOnly(reqErr.Error(), reqPath) {
-					return fmt.Errorf("API error: %w\n\nHint: this looks like a POST-only endpoint (e.g. /search/* paths). Try '--body \"{}\"' (which switches to POST) or '--method=POST'", reqErr)
+					return failWith(fmt.Errorf("API error: %w\n\nHint: this looks like a POST-only endpoint (e.g. /search/* paths). Try '--body \"{}\"' (which switches to POST) or '--method=POST'", reqErr))
 				}
-				return fmt.Errorf("API error: %w", reqErr)
+				return failWith(fmt.Errorf("API error: %w", reqErr))
 			}
 
 			if !paginate {
@@ -254,11 +268,11 @@ an intended non-GET REST write.`,
 
 			items, nextToken, err := extractListAndToken(data, listKey)
 			if err != nil {
-				return fmt.Errorf("failed to parse response: %w", err)
+				return failWith(fmt.Errorf("failed to parse response: %w", err))
 			}
 			if !listKeySeen {
 				if listKeySeen, err = checkListKeyPresent(data, listKey); err != nil {
-					return err
+					return failWith(err)
 				}
 			}
 

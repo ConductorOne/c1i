@@ -13,6 +13,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/ConductorOne/c1i/internal/client"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
@@ -1234,4 +1235,99 @@ func TestAPIPaginateListKeyOmittedOnLaterPage(t *testing.T) {
 	if len(rows) != 1 || rows[0]["id"] != "a" {
 		t.Fatalf("rows = %v, want only page 1's a", rows)
 	}
+}
+
+// A held all-seen page is printed when a later request fails for a reason other
+// than a stuck cursor; the exit code stays the failure's.
+func TestAPIPaginateFlushesHeldPageOnLaterError(t *testing.T) {
+	cases := []struct {
+		name     string
+		fail     func(w http.ResponseWriter)
+		wantExit int
+	}{
+		{"api error", func(w http.ResponseWriter) { w.WriteHeader(http.StatusNotFound) }, exitNotFound},
+		{"unparseable page", func(w http.ResponseWriter) { _, _ = fmt.Fprint(w, `{"list":[`) }, exitError},
+		{"transport error", func(w http.ResponseWriter) {
+			conn, _, err := w.(http.Hijacker).Hijack()
+			if err == nil {
+				_ = conn.Close()
+			}
+		}, exitError},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			var out bytes.Buffer
+			err := runAPIHeldPageThenFail(t, &out, tc.fail)
+			if err == nil {
+				t.Fatalf("want an error, got nil; stdout=%q", out.String())
+			}
+			if got := exitCode(err); got != tc.wantExit {
+				t.Errorf("exitCode = %d, want %d; err=%v", got, tc.wantExit, err)
+			}
+			var got []string
+			for _, row := range decodeNDJSONRows(t, out.String()) {
+				got = append(got, fmt.Sprint(row["id"]))
+			}
+			if strings.Join(got, ",") != "a,b,a,b" {
+				t.Fatalf("rows = %v, want [a b a b] (the held page printed before the error)", got)
+			}
+		})
+	}
+}
+
+// A write error while flushing held rows is returned alongside the failure.
+func TestAPIPaginateHeldFlushWriteErrorIsReturned(t *testing.T) {
+	out := &failAfterWriter{ok: 2}
+	err := runAPIHeldPageThenFail(t, out, func(w http.ResponseWriter) { w.WriteHeader(http.StatusNotFound) })
+	if !errors.Is(err, errStdoutFull) {
+		t.Fatalf("err = %v, want it to wrap the write error", err)
+	}
+	if got := exitCode(err); got != exitNotFound {
+		t.Errorf("exitCode = %d, want %d (the request failure's); err=%v", got, exitNotFound, err)
+	}
+}
+
+// failAfterWriter accepts ok writes, then fails like a full disk.
+type failAfterWriter struct{ ok int }
+
+func (w *failAfterWriter) Write(p []byte) (int, error) {
+	if w.ok == 0 {
+		return 0, errStdoutFull
+	}
+	w.ok--
+	return len(p), nil
+}
+
+// runAPIHeldPageThenFail runs `api --paginate` over a page, the same page
+// again (held), then a request answered by fail.
+func runAPIHeldPageThenFail(t *testing.T, out io.Writer, fail func(http.ResponseWriter)) error {
+	t.Helper()
+	var requests int
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests++
+		w.Header().Set("Content-Type", "application/json")
+		switch requests {
+		case 1:
+			_, _ = fmt.Fprint(w, `{"list":[{"id":"a"},{"id":"b"}],"nextPageToken":"t1"}`)
+		case 2:
+			_, _ = fmt.Fprint(w, `{"list":[{"id":"a"},{"id":"b"}],"nextPageToken":"t2"}`)
+		default:
+			fail(w)
+		}
+	}))
+	t.Cleanup(srv.Close)
+
+	resetAPICmdFlags(t)
+	orig := newAPIClient
+	newAPIClient = func(_ *cobra.Command, _ string) (apiRequester, error) {
+		return client.NewForTesting(srv.URL, srv.Client(), client.WithMaxRetries(0)), nil
+	}
+	t.Cleanup(func() { newAPIClient = orig })
+	t.Setenv("C1I_URL", srv.URL)
+
+	var errOut bytes.Buffer
+	apiCmd.SetOut(out)
+	apiCmd.SetErr(&errOut)
+	rootCmd.SetArgs([]string{"api", "--path", "/api/v1/things", "--paginate"})
+	return rootCmd.ExecuteContext(context.Background())
 }
