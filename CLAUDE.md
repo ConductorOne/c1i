@@ -135,10 +135,11 @@ tracked root file outside its allowlist. Stage explicit paths rather than `-A`.
     non-emptiness:** `ExactArgs(1)` accepts `""`, `"/"`, or `"."`, and each
     used to reach the collection endpoint and print the whole list with exit
     0. The **shared REST client** now closes this two ways: it refuses any
-    request whose path has an empty, `.`, or `..` segment (percent-decoded,
-    ignoring a `;params` suffix, so `%2E` and `..;x` count) up front, for every method (`client.PathError` → exit
-    2, catches `""`/`"."`/`".."`; a non-GET dot path is routed with no
-    redirect), and it refuses to follow a 3xx whose target path differs
+    request whose path has an empty, `.`, or `..` segment up front, for
+    every method (`client.PathError` → exit 2). Segments are
+    percent-decoded and a `;params` suffix is ignored, so `%2E` and `..;x`
+    count; the server routes a dot path with no redirect. And it refuses
+    to follow a 3xx whose target path differs
     from the request's (`client.RedirectError` → exit 2, catches `"/"`,
     which the API 301s to the collection). A per-command check
     is still unnecessary *for commands built on it* — but don't reason as
@@ -241,7 +242,7 @@ tracked root file outside its allowlist. Stage explicit paths rather than `-A`.
   |------|---------|
   | `0` | ok |
   | `1` | generic |
-  | `2` | usage (bad flags/args, an empty id, a refused redirect, or any API `4xx` other than `401`/`403`/`404`/`408`/`429`/`499`) |
+  | `2` | usage (bad flags/args, an empty, `.` or `..` id, a refused redirect, or any API `4xx` other than `401`/`403`/`404`/`408`/`429`/`499`) |
   | `3` | auth (`401`/`403`) |
   | `4` | not-found (`404`) |
   | `5` | rate-limited (`429`) |
@@ -299,8 +300,8 @@ a package, verify each of these against the new code:
 - **Reject an empty id before sending, and don't trust a 3xx either.** A
   package that hand-rolls its own `http.Client` gets neither guard:
   `cobra.ExactArgs` will hand you `""` happily, and Go's default
-  `http.Client` follows a 3xx transparently. An id of `""`, `"/"`, or `"."`
-  reaching the collection endpoint by either path is the shape that produced
+  `http.Client` follows a 3xx transparently. An id of `""`, `"/"`, `"."` or
+  `".."` reaching the collection endpoint by either path is the shape that produced
   the silent "returned the whole list with exit 0" bug.
 - **Thread `--debug` and `--max-retries` yourself — nothing does it for you.**
   `transport.New` *accepts* both as options but sources neither: it defaults to
