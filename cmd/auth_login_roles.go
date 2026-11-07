@@ -193,7 +193,7 @@ func detached(ctx context.Context) (context.Context, context.CancelFunc) {
 func withHelper(ctx context.Context, cmd *cobra.Command, baseURL, accessToken string, opts []transport.Option, fn func(*client.Client) error) (leftover, err error) {
 	helper, err := login.CreatePersonalClient(ctx, baseURL, accessToken, login.PersonalClientOptions{
 		DisplayName: helperDisplayName,
-		Expires:     formatProtoJSONDuration(helperLifetime),
+		Expires:     formatProtoDuration(helperLifetime),
 	}, opts...)
 	if err != nil {
 		return nil, err

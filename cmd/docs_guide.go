@@ -465,9 +465,9 @@ object which now already exists is refused. "--dry-run" previews all three
 requests.
 
 Omitting --duration-grant defaults the entitlement to standing access
-(durationUnset). For time-boxed access pass a protobuf duration -- seconds
-with an "s" suffix, e.g. "--duration-grant 3600s"; a Go-style "1h" is refused
-by the server with "invalid google.protobuf.Duration value".
+(durationUnset). For time-boxed access pass a whole-number Go or protobuf
+duration, e.g. "--duration-grant 8h" or "--duration-grant 3600s"; c1i sends it
+in seconds. No sign, no decimals: "1.5h" exits 2; write "1h30m".
 
 ## Verify
 

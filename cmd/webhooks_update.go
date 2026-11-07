@@ -19,7 +19,7 @@ Refused with exit 2 before a request is sent:
     would store it on update)
   - a --destination-url that is not https, has no host, or uses an IPv6
     literal host
-  - a negative --callback-timeout
+  - a --callback-timeout with a sign or decimal
 
 Updating a soft-deleted webhook exits 0 and changes it; it stays deleted.
 Honors --dry-run.`,
