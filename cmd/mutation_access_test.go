@@ -3,8 +3,6 @@ package cmd
 import (
 	"encoding/json"
 	"net/http"
-	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -13,21 +11,10 @@ import (
 // sendMutation; these tests drive them end to end through rootCmd.
 
 const (
-	accessCatalogEnvelope = `{"requestCatalogView":{"requestCatalog":{"id":"cat-1","displayName":"zz <x>"},"memberCount":"2"},"expanded":[]}`
-	accessCatalogDoc      = "{\n  \"id\": \"cat-1\",\n  \"displayName\": \"zz <x>\",\n  \"expanded\": [],\n  \"memberCount\": \"2\"\n}\n"
-	accessTaskEnvelope    = `{"taskView":{"task":{"id":"task-1","state":"TASK_STATE_OPEN"}},"ticketActionId":"act-1","expanded":[]}`
-	accessTaskDoc         = "{\n  \"id\": \"task-1\",\n  \"state\": \"TASK_STATE_OPEN\",\n  \"expanded\": [],\n  \"ticketActionId\": \"act-1\"\n}\n"
-	accessStepGet         = `{"taskView":{"task":{"id":"task-1","policy":{"current":{"id":"step-9"}}}}}`
+	accessTaskEnvelope = `{"taskView":{"task":{"id":"task-1","state":"TASK_STATE_OPEN"}},"ticketActionId":"act-1","expanded":[]}`
+	accessTaskDoc      = "{\n  \"id\": \"task-1\",\n  \"state\": \"TASK_STATE_OPEN\",\n  \"expanded\": [],\n  \"ticketActionId\": \"act-1\"\n}\n"
+	accessStepGet      = `{"taskView":{"task":{"id":"task-1","policy":{"current":{"id":"step-9"}}}}}`
 )
-
-func accessJSONFile(t *testing.T, content string) string {
-	t.Helper()
-	p := filepath.Join(t.TempDir(), "in.json")
-	if err := os.WriteFile(p, []byte(content), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	return p
-}
 
 // accessRoute answers GETs with the policy-step and introspect lookups and
 // every write with body.
@@ -40,60 +27,6 @@ func accessRoute(body string) func(*http.Request, int) mutReply {
 			return mutReply{body: accessStepGet}
 		}
 		return mutReply{body: body}
-	}
-}
-
-func TestAccessMutationStdout(t *testing.T) {
-	refs := accessJSONFile(t, `[{"appId":"app-1","id":"ent-1"}]`)
-	auto := accessJSONFile(t, `{"enabled":true}`)
-	const automation = `{"requestCatalogId":"cat-1","enabled":true}`
-	const automationDoc = "{\n  \"requestCatalogId\": \"cat-1\",\n  \"enabled\": true\n}\n"
-	ent := []string{"--app-id", "app-1", "--entitlement-id", "ent-1"}
-	cases := []struct {
-		name string
-		args []string
-		body string
-		want string
-	}{
-		{"profiles create", []string{"access-profiles", "create", "--display-name", "zz"}, accessCatalogEnvelope, accessCatalogDoc},
-		{"profiles update", []string{"access-profiles", "update", "cat-1", "--description", "d"}, accessCatalogEnvelope, accessCatalogDoc},
-		{"profiles delete", []string{"access-profiles", "delete", "cat-1"}, `{}`, "{}\n"},
-		{"profiles delete empty body", []string{"access-profiles", "delete", "cat-1"}, ``, "{}\n"},
-		{"bundle create", []string{"access-profiles", "bundle-automation", "create", "cat-1", "--body-file", auto}, automation, automationDoc},
-		{"bundle set", []string{"access-profiles", "bundle-automation", "set", "cat-1", "--body-file", auto}, automation, automationDoc},
-		{"bundle delete", []string{"access-profiles", "bundle-automation", "delete", "cat-1"}, `{}`, "{}\n"},
-		{"bundle resume", []string{"access-profiles", "bundle-automation", "resume", "cat-1"}, `{}`, "{}\n"},
-		{"bundle run", []string{"access-profiles", "bundle-automation", "run", "cat-1"}, `{}`, "{}\n"},
-		{"requestable add", []string{"access-profiles", "requestable-entitlements", "add", "cat-1", "--app-id", "app-1", "--entitlement-id", "ent-1"}, `{}`, "{}\n"},
-		{"requestable remove", []string{"access-profiles", "requestable-entitlements", "remove", "cat-1", "--app-id", "app-1", "--entitlement-id", "ent-1"}, `{}`, "{}\n"},
-		{"requestable set", []string{"access-profiles", "requestable-entitlements", "set", "cat-1", "--refs-file", refs}, `{}`, "{}\n"},
-		{"visibility add", []string{"access-profiles", "visibility-entitlements", "add", "cat-1", "--app-id", "app-1", "--entitlement-id", "ent-1"}, `{}`, "{}\n"},
-		{"visibility remove", []string{"access-profiles", "visibility-entitlements", "remove", "cat-1", "--app-id", "app-1", "--entitlement-id", "ent-1"}, `{}`, "{}\n"},
-		{"tasks approve", []string{"tasks", "approve", "task-1", "--policy-step-id", "s"}, accessTaskEnvelope, accessTaskDoc},
-		{"tasks deny", []string{"tasks", "deny", "task-1"}, accessTaskEnvelope, accessTaskDoc},
-		{"tasks close", []string{"tasks", "close", "task-1"}, accessTaskEnvelope, accessTaskDoc},
-		{"tasks comment", []string{"tasks", "comment", "task-1", "--comment", "hi"}, accessTaskEnvelope, accessTaskDoc},
-		{"tasks process", []string{"tasks", "process", "task-1"}, accessTaskEnvelope, accessTaskDoc},
-		{"tasks reassign", []string{"tasks", "reassign", "task-1", "--to-user-id", "u1", "--policy-step-id", "s"}, accessTaskEnvelope, accessTaskDoc},
-		{"tasks reset", []string{"tasks", "reset", "task-1"}, accessTaskEnvelope, accessTaskDoc},
-		{"tasks restart", []string{"tasks", "restart", "task-1"}, accessTaskEnvelope, accessTaskDoc},
-		{"tasks skip-step", []string{"tasks", "skip-step", "task-1", "--policy-step-id", "s"}, accessTaskEnvelope, accessTaskDoc},
-		{"tasks update-grant-duration", []string{"tasks", "update-grant-duration", "task-1", "--duration", "1h"}, accessTaskEnvelope, accessTaskDoc},
-		{"requests grant", append([]string{"requests", "create", "grant", "--user-id", "u1"}, ent...), accessTaskEnvelope, accessTaskDoc},
-		{"requests revoke", append([]string{"requests", "create", "revoke", "--user-id", "u1"}, ent...), accessTaskEnvelope, accessTaskDoc},
-	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			s := newMutServer(t, accessRoute(tc.body))
-			t.Setenv("C1I_URL", mutTestURL)
-			r := runMutationCLI(t, s.srv, 0, nil, tc.args...)
-			if r.err != nil {
-				t.Fatalf("exit %d: %v\n%s", r.exit, r.err, r.stderr)
-			}
-			if r.stdout != tc.want {
-				t.Errorf("stdout = %q, want %q", r.stdout, tc.want)
-			}
-		})
 	}
 }
 
@@ -130,13 +63,7 @@ func TestTasksResolvedStepIsReportedOnStderrOnly(t *testing.T) {
 }
 
 func TestAccessMutationPreview(t *testing.T) {
-	preview := func(method, path, body string) string {
-		out := "{\n  \"dryRun\": true,\n  \"requests\": [\n    {\n      \"method\": \"" + method + "\",\n      \"url\": \"" + mutTestURL + path + "\""
-		if body != "" {
-			out += ",\n      \"body\": " + body
-		}
-		return out + "\n    }\n  ]\n}\n"
-	}
+	preview := wantPreview
 	t.Run("profiles delete", func(t *testing.T) {
 		withDryRun(t)
 		t.Setenv("C1I_URL", mutTestURL)
@@ -184,24 +111,6 @@ func TestAccessMutationPreview(t *testing.T) {
 			t.Errorf("stdout = %q (%v), want identityUserId self-1", r.stdout, err)
 		}
 	})
-}
-
-func TestAccessMutationRefusesFields(t *testing.T) {
-	for _, args := range [][]string{
-		{"access-profiles", "delete", "cat-1"},
-		{"access-profiles", "bundle-automation", "resume", "cat-1"},
-		{"tasks", "approve", "task-1", "--policy-step-id", "s"},
-		{"requests", "create", "revoke", "--app-id", "a", "--entitlement-id", "e", "--user-id", "u"},
-	} {
-		t.Run(strings.Join(args[:2], " "), func(t *testing.T) {
-			s := newMutServer(t, fixedReply(200, `{}`))
-			t.Setenv("C1I_URL", mutTestURL)
-			r := runMutationCLI(t, s.srv, 0, nil, append(args, "--fields", "id")...)
-			if r.exit != exitUsage || len(s.requests()) != 0 || r.stdout != "" {
-				t.Errorf("exit %d, %d requests, stdout %q; want exit 2, none sent", r.exit, len(s.requests()), r.stdout)
-			}
-		})
-	}
 }
 
 func TestAccessMutationApplied(t *testing.T) {

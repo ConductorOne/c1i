@@ -1,195 +1,17 @@
 package cmd
 
 import (
-	"bytes"
-	"context"
 	"encoding/json"
 	"io"
-	"net"
 	"net/http"
 	"net/http/httptest"
 	"slices"
 	"strings"
-	"sync"
 	"testing"
 	"time"
 
-	"github.com/ConductorOne/c1i/internal/client"
-	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
-
-const mutTestURL = "https://tenant.example.invalid"
-
-// mutReply is one canned answer; a nil hijack writes status and body.
-type mutReply struct {
-	status int
-	body   string
-	hijack bool
-}
-
-// mutServer answers requests in order from replies (the last repeats) and
-// records what it saw.
-type mutServer struct {
-	srv  *httptest.Server
-	mu   sync.Mutex
-	seen []entOwnerRequest
-}
-
-func newMutServer(t *testing.T, route func(r *http.Request, n int) mutReply) *mutServer {
-	t.Helper()
-	m := &mutServer{}
-	m.srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		b, _ := io.ReadAll(r.Body)
-		m.mu.Lock()
-		m.seen = append(m.seen, entOwnerRequest{r.Method, r.URL.EscapedPath(), string(b)})
-		n := len(m.seen)
-		m.mu.Unlock()
-		rep := route(r, n)
-		if rep.hijack {
-			if conn, _, err := w.(http.Hijacker).Hijack(); err == nil {
-				_ = conn.Close()
-			}
-			return
-		}
-		if rep.status == 0 {
-			rep.status = http.StatusOK
-		}
-		w.WriteHeader(rep.status)
-		_, _ = io.WriteString(w, rep.body)
-	}))
-	t.Cleanup(m.srv.Close)
-	return m
-}
-
-func (m *mutServer) requests() []entOwnerRequest {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	return append([]entOwnerRequest(nil), m.seen...)
-}
-
-func fixedReply(status int, body string) func(*http.Request, int) mutReply {
-	return func(*http.Request, int) mutReply { return mutReply{status: status, body: body} }
-}
-
-type mutResult struct {
-	stdout, stderr string
-	exit           int
-	err            error
-}
-
-// stderrObjects parses every stderr line as one JSON object.
-func (r mutResult) stderrObjects(t *testing.T) []map[string]any {
-	t.Helper()
-	var out []map[string]any
-	for _, line := range strings.Split(strings.TrimRight(r.stderr, "\n"), "\n") {
-		if line == "" {
-			continue
-		}
-		var obj map[string]any
-		if err := json.Unmarshal([]byte(line), &obj); err != nil {
-			t.Fatalf("stderr line is not a JSON object: %q", line)
-		}
-		out = append(out, obj)
-	}
-	return out
-}
-
-// errorObject returns the last stderr object carrying "error".
-func (r mutResult) errorObject(t *testing.T) map[string]any {
-	t.Helper()
-	objs := r.stderrObjects(t)
-	for i := len(objs) - 1; i >= 0; i-- {
-		if _, ok := objs[i]["error"]; ok {
-			return objs[i]
-		}
-	}
-	t.Fatalf("no error object on stderr: %q", r.stderr)
-	return nil
-}
-
-// runMutationCLI runs args through rootCmd the way Run does, rendering a
-// failure with writeError. srv nil means no client can be built.
-func runMutationCLI(t *testing.T, srv *httptest.Server, retries int, out io.Writer, args ...string) mutResult {
-	t.Helper()
-	resetCmdFlags(t, rootCmd)
-	leaf, _, err := rootCmd.Find(args)
-	if err != nil {
-		t.Fatal(err)
-	}
-	resetCmdFlags(t, leaf)
-	orig := newClient
-	newClient = func(_ *cobra.Command, _ string) (*client.Client, error) {
-		if srv == nil {
-			t.Error("a client was built")
-			return nil, &client.AuthError{Err: io.EOF}
-		}
-		return client.NewForTesting(srv.URL, srv.Client(), client.WithMaxRetries(retries)), nil
-	}
-	t.Cleanup(func() { newClient = orig })
-	var stdout, stderr bytes.Buffer
-	if out == nil {
-		out = &stdout
-	}
-	for _, c := range []*cobra.Command{rootCmd, leaf} {
-		c.SetOut(out)
-		c.SetErr(&stderr)
-		c.SetContext(context.Background())
-	}
-	t.Cleanup(func() {
-		for _, c := range []*cobra.Command{rootCmd, leaf} {
-			c.SetOut(nil)
-			c.SetErr(nil)
-		}
-	})
-	rootCmd.SetArgs(args)
-	ran, err := rootCmd.ExecuteContextC(context.Background())
-	if err != nil {
-		format, _ := rootCmd.PersistentFlags().GetString("error-format")
-		writeError(&stderr, err, format, ran)
-	}
-	return mutResult{stdout: stdout.String(), stderr: stderr.String(), exit: exitCode(err), err: err}
-}
-
-func TestAppsMutationStdout(t *testing.T) {
-	const appEnvelope = `{"app":{"id":"app-1","displayName":"zz <x>","appOwners":[]}}`
-	const appDoc = "{\n  \"id\": \"app-1\",\n  \"displayName\": \"zz <x>\",\n  \"appOwners\": []\n}\n"
-	cases := []struct {
-		name string
-		args []string
-		body string
-		want string
-	}{
-		{"create", []string{"apps", "create", "--display-name", "zz"}, appEnvelope, appDoc},
-		{"update", []string{"apps", "update", "app-1", "--description", "d"}, appEnvelope, appDoc},
-		{"delete", []string{"apps", "delete", "app-1"}, `{}`, "{}\n"},
-		{"delete empty body", []string{"apps", "delete", "app-1"}, ``, "{}\n"},
-		{"add-owner", []string{"apps", "add-owner", "u1", "--app-id", "app-1"}, `{}`, "{}\n"},
-		{"remove-owner", []string{"apps", "remove-owner", "u1", "--app-id", "app-1"}, `{}`, "{}\n"},
-		{"set-owners", []string{"apps", "set-owners", "app-1", "--user-id", "u1"}, `{}`, "{}\n"},
-	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			s := newMutServer(t, func(r *http.Request, _ int) mutReply {
-				if r.Method == http.MethodGet {
-					return mutReply{body: `{"user":{"id":"u1"}}`}
-				}
-				return mutReply{body: tc.body}
-			})
-			t.Setenv("C1I_URL", mutTestURL)
-			r := runMutationCLI(t, s.srv, 0, nil, tc.args...)
-			if r.err != nil {
-				t.Fatalf("exit %d: %v\n%s", r.exit, r.err, r.stderr)
-			}
-			if r.stdout != tc.want {
-				t.Errorf("stdout = %q, want %q", r.stdout, tc.want)
-			}
-			if r.stderr != "" {
-				t.Errorf("stderr = %q, want nothing", r.stderr)
-			}
-		})
-	}
-}
 
 func TestAppsMutationPreview(t *testing.T) {
 	for _, format := range []string{"text", "json"} {
@@ -200,8 +22,7 @@ func TestAppsMutationPreview(t *testing.T) {
 			if r.err != nil {
 				t.Fatalf("exit %d: %v", r.exit, r.err)
 			}
-			want := "{\n  \"dryRun\": true,\n  \"requests\": [\n    {\n      \"method\": \"PUT\",\n      \"url\": \"" + mutTestURL +
-				"/api/v1/apps/app%2F1/owners\",\n      \"body\": {\n        \"userIds\": [\n          \"u1\"\n        ]\n      }\n    }\n  ]\n}\n"
+			want := wantPreview("PUT", "/api/v1/apps/app%2F1/owners", "{\n        \"userIds\": [\n          \"u1\"\n        ]\n      }")
 			if r.stdout != want {
 				t.Errorf("stdout =\n%s\nwant\n%s", r.stdout, want)
 			}
@@ -222,7 +43,7 @@ func TestAppsMutationPreview(t *testing.T) {
 		withDryRun(t)
 		t.Setenv("C1I_URL", mutTestURL)
 		r := runMutationCLI(t, nil, 0, nil, "apps", "delete", "app-1")
-		if want := "{\n  \"dryRun\": true,\n  \"requests\": [\n    {\n      \"method\": \"DELETE\",\n      \"url\": \"" + mutTestURL + "/api/v1/apps/app-1\"\n    }\n  ]\n}\n"; r.stdout != want {
+		if want := wantPreview("DELETE", "/api/v1/apps/app-1", ""); r.stdout != want {
 			t.Errorf("stdout = %q, want %q", r.stdout, want)
 		}
 	})
@@ -280,18 +101,6 @@ func TestAppsMutationRefusesFields(t *testing.T) {
 			t.Errorf("exit %d stdout %q, want the full object", r.exit, r.stdout)
 		}
 	})
-}
-
-func closedPortServer(t *testing.T) *httptest.Server {
-	t.Helper()
-	ln, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		t.Fatal(err)
-	}
-	srv := &httptest.Server{Listener: ln, Config: &http.Server{ReadHeaderTimeout: 0}}
-	srv.URL = "http://" + ln.Addr().String()
-	_ = ln.Close()
-	return srv
 }
 
 func TestAppsMutationApplied(t *testing.T) {

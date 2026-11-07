@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 
@@ -86,15 +87,11 @@ func runHelperCmd(t *testing.T, c *cobra.Command, srv *mutServer, ctx context.Co
 	t.Helper()
 	t.Setenv("C1I_URL", mutTestURL)
 	t.Setenv("C1I_ERROR_FORMAT", format)
-	orig := newClient
-	newClient = func(_ *cobra.Command, _ string) (*client.Client, error) {
-		if srv == nil {
-			t.Error("a client was built")
-			return nil, &client.AuthError{Err: io.EOF}
-		}
-		return client.NewForTesting(srv.srv.URL, srv.srv.Client(), client.WithMaxRetries(0)), nil
+	var hs *httptest.Server
+	if srv != nil {
+		hs = srv.srv
 	}
-	t.Cleanup(func() { newClient = orig })
+	stubMutationClient(t, hs, 0)
 	var stdout, stderr bytes.Buffer
 	if out == nil {
 		out = &stdout
