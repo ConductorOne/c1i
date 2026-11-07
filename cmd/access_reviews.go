@@ -56,7 +56,9 @@ var accessReviewsCreateCmd = &cobra.Command{
 	Long: `Create an access-review campaign from a complete JSON request object.
 
 The request must contain at least one owner id in ownerIds. Provide the JSON
-with --body-file; use "-" to read it from standard input.`,
+with --body-file; use "-" to read it from standard input.
+
+Prints the campaign unwrapped like "access-reviews get": the id is .id.`,
 	Args: cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, _ []string) error {
 		body, err := readRequiredJSONObject(cmd, "body-file")
@@ -76,7 +78,8 @@ var accessReviewsUpdateCmd = &cobra.Command{
 	Long: `Update an access-review campaign from a partial AccessReview JSON object.
 
 Provide the JSON with --body-file and name its fields with --update-mask; both
-are required. The command inserts the campaign id and wraps the request.`,
+are required. The command inserts the campaign id and wraps the request. Prints the campaign
+unwrapped like "access-reviews get".`,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		campaign, err := readRequiredJSONObject(cmd, "body-file")
@@ -104,7 +107,7 @@ var accessReviewReportsGenerateCmd = &cobra.Command{
 
 The response confirms that generation was requested, not that a report is ready.
 Use "access-reviews reports list <campaign-id>" to find the report state and
-its time-limited downloadUrl. Use --format for JSON, CSV, or XLSX, or
+its time-limited downloadUrl. Prints {}. Use --format for JSON, CSV, or XLSX, or
 --body-file for the full request; they are mutually exclusive.`,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {

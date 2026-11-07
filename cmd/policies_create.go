@@ -55,6 +55,9 @@ Client-side guards (before any request is sent, exit code 2):
     as an opaque HTTP 500 rather than a 400, so catching them early is the
     only way to get a useful message.
 
+Prints the created policy unwrapped like "policies get": the id is .id (use
+jq -er; --fields is a usage error on a mutation).
+
 CEL conditions run with root variable "subject" (not "user") — validate one
 with "c1i policies validate-cel" before using it here (note: that command
 validates the rules[].condition environment, not the different environment

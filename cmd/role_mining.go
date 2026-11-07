@@ -15,7 +15,11 @@ var roleMiningCmd = &cobra.Command{
 
 Mutations and searches accept JSON request objects through --body-file so profile
 filters, entitlement selections, and full configuration documents reach C1
-unchanged. Searches that support public REST pagination emit NDJSON.`,
+unchanged. Searches that support public REST pagination emit NDJSON.
+
+A mutation prints the API's response: "suggestions state" the suggestion, and
+"config update" the configuration unwrapped like "config show". The others keep
+their shape (.runId, .id, .accessProfileId); --fields is a usage error.`,
 }
 
 var roleMiningTriggerCmd = &cobra.Command{

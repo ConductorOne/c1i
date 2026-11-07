@@ -47,7 +47,10 @@ still run. A failed lookup (e.g. the policy doesn't exist, or you're not
 authorized) surfaces as that failure's own exit code, not exit 2; if the
 lookup succeeds but still can't produce a usable type, the command refuses
 with exit 2 rather than send an unguarded request. Pass --policy-type to
-skip the lookup.`,
+skip the lookup; --dry-run skips it too, so it needs --policy-type to preview
+such a patch (exit 2 otherwise).
+
+Prints the updated policy unwrapped like "policies get" (id is .id).`,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		if _, err := requireNonEmptyIfSet(cmd, "display-name"); err != nil {

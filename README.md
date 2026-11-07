@@ -483,6 +483,11 @@ wrapper for you — a flat body 400s. The `--steps-file`/`--rules-file`
 convenience flags derive the update mask from what you pass; `--body-file`
 requires an explicit `--update-mask`.
 
+`create`/`update` print the policy unwrapped like `get` (`jq -er .id`); `delete`
+prints `{}`. A `--steps-file` or `--body-file` update that states no
+`policyType` looks the policy's current type up first (nothing is sent if that
+fails); `--dry-run` skips the lookup, so pass `--policy-type` to preview one.
+
 `validate-cel` checks a CEL condition without creating or updating anything.
 Its root variable is `subject` (not `user`); this validates the
 `rules[].condition` environment specifically, which is NOT the same
@@ -670,6 +675,13 @@ selects the app policy or built-in Finding Review policy. `bulk-state` and
 explicit `refs` in the JSON to avoid unexpectedly applying a broad
 `searchRequest`.
 
+Mutations print the finding or rule unwrapped like `get` (`jq -er .id`);
+`routing-rules`/`transformation-rules` `delete` prints `{}`. The exceptions keep
+the API's shape: `bulk-state`/`bulk-create-tasks` print `{"bulkActionId"}`,
+`settings update` prints `{"list":[…]}`, and `create-task` prints
+`{"finding":{…},"taskId":…}`, whose ids are `.taskId` (the created task) and
+`.finding.id`.
+
 The public API intentionally excludes its internal summary, app-NHI, and
 shadow-MCP notification RPCs. `FindingSearchService.GetSearchTerms` is also not
 routed through public REST; it is tracked in [#130](https://github.com/ConductorOne/c1i/issues/130).
@@ -702,7 +714,11 @@ c1i role-mining access-profiles create --body-file <file|->
 inspect `runs latest` for its eventual result. `custom-analysis trigger` returns
 an analysis ID that `custom-analysis get` can poll. The latest custom-analysis
 pointer is scoped to the authenticated user; custom-analysis list and get are
-tenant-scoped. `config update` replaces the entire configuration, so begin with
+tenant-scoped. Mutations print the API's response: `suggestions state` the
+suggestion (`.id`), `config update` the configuration (unwrapped, as
+`config show` prints it), and `trigger` `{"runId"}`; `custom-analysis trigger`
+prints `{"id"}` and `access-profiles create` `{"accessProfileId","celExpression"}`.
+`config update` replaces the entire configuration, so begin with
 `config show`. Access-profile creation persists the profile, entitlement bindings,
 and optional automation as separate service operations; validate its JSON before
 submitting it.
@@ -734,7 +750,8 @@ nested oneof, so the CLI intentionally accepts it through `--body-file` rather
 than a lossy flag surface; at least one `ownerIds` entry is required. `update`
 takes a partial `AccessReview` object, inserts the id, and wraps it with the
 required explicit `--update-mask`. Prepared campaigns cannot change their
-scope or policy.
+scope or policy. `create` and `update` print the campaign unwrapped like `get`
+(`jq -er .id`); `reports generate` prints `{}`.
 
 Report generation is asynchronous: `generate` creates a report record but does
 not return a ready download. Use `reports list` to find its state and

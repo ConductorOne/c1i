@@ -17,7 +17,11 @@ var findingsCmd = &cobra.Command{
 Finding create, state, bulk, routing-rule, transformation-rule, and settings
 updates accept JSON files so oneof actions and nested rule documents reach C1
 unchanged. Pass --body-file - to read JSON from standard input. Search commands
-auto-paginate and emit NDJSON; get and mutation commands print one JSON object.`,
+auto-paginate and emit NDJSON; get and mutation commands print one JSON object.
+Mutations print the finding or rule unwrapped like get (id is .id; use jq -er).
+bulk-state and bulk-create-tasks print {"bulkActionId"}, settings update prints
+{"list":[...]}, and create-task prints {"finding":{...},"taskId":...}: its ids
+are .taskId (the created task) and .finding.id. Deletes print {}.`,
 }
 
 var findingsSearchCmd = &cobra.Command{
