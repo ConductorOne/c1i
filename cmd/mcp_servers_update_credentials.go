@@ -49,7 +49,11 @@ The update_mask is derived from the fields you supply — e.g. --auth bearer-tok
 masks "bearerToken"; --server-url masks "url". Pass --update-mask with comma-separated
 proto field paths to override. Note the mask uses the auth oneof case name
 ("bearerToken", "customHeader", "basicAuth", "oauth2", "none"), not the
-"hostedConfig"/"externalConfig" wrapper.`,
+"hostedConfig"/"externalConfig" wrapper.
+
+Prints the updated server, unwrapped like "mcp servers get" (id: .connectorId).
+For a hosted server without --catalog-id, c1i first looks the catalog id up
+(also on --dry-run) and reports "Resolved catalog id: <id>" on stderr.`,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		if err := requireNonEmpty(cmd, "app-id", "type"); err != nil {

@@ -20,7 +20,9 @@ Editing the AppEntitlement created behind the toolset is not supported here.
 
 A blank --display-name (empty, whitespace or invisible-only) exits 2,
 nothing sent. Sent as is, the server 400s "" ("value length must be between
-1 and 255 runes") but stores "  " verbatim.`,
+1 and 255 runes") but stores "  " verbatim.
+
+Prints the updated toolset, unwrapped like "mcp toolsets get".`,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		if _, err := requireNonEmptyIfSet(cmd, "display-name"); err != nil {

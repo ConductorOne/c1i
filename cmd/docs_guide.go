@@ -77,10 +77,12 @@ EXTERNAL:
       --display-name "My Server" --server-url https://your-mcp-server.example/mcp \
       --transport streamable-http --auth bearer-token --bearer-token "$TOKEN"
 
-The command prints the created server as pretty JSON — note its
-"connectorId":
+The command prints the created server as pretty JSON, unwrapped like
+"mcp servers get"; its id is .connectorId (there is no .id). Capture it with
+jq -er, which fails on a --dry-run preview instead of printing null: pipe
+either register command above to "jq -er .connectorId" and keep the result as
 
-    CONNECTOR_ID=<connectorId from the response>
+    CONNECTOR_ID=<the .connectorId it prints>
 
 Registering triggers tool discovery automatically; newly discovered tools
 land in state MCP_TOOL_STATE_PENDING_REVIEW and are not yet callable.
@@ -93,8 +95,9 @@ For each tool you want the gateway to proxy:
 
     c1i mcp tools approve "$TOOL_ID" --app-id "$APP_ID" --connector-id "$CONNECTOR_ID"
 
-A tool left in PENDING_REVIEW is never proxied. To explicitly block one
-instead of approving it, pass --state disabled to "mcp tools approve".
+Each id prints one compact JSON line (the tool: .id, .state) on stdout, even
+for a single id. A tool left in PENDING_REVIEW is never proxied. To explicitly
+block one instead of approving it, pass --state disabled to "mcp tools approve".
 
 ## 6. Verify
 
@@ -133,12 +136,10 @@ role and permissions instead.
 
 ## 1. Create the toolset
 
-    c1i mcp toolsets create --app-id "$APP_ID" --connector-id "$CONNECTOR_ID" \
-      --display-name "Everyone toolset" --description "Baseline MCP tools for all users"
+    TOOLSET_ID=$(c1i mcp toolsets create --app-id "$APP_ID" --connector-id "$CONNECTOR_ID" --display-name "Everyone toolset" --description "Baseline MCP tools for all users" | jq -er .id)
 
-Note the returned "id":
-
-    TOOLSET_ID=<id from the response>
+The toolset prints unwrapped like "mcp toolsets get", so its id is .id; jq -er
+fails on a --dry-run preview instead of printing null.
 
 ## 2. Bind approved tools to it
 

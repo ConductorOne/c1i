@@ -24,7 +24,11 @@ instantiate curated classifiers and their dependent gates. The singleton
 Create and update commands take JSON objects through --body-file (or "-" for
 standard input), preserving nested CEL rules, hooks, gates, and template
 parameters without a lossy flag translation. Updates require --update-mask as
-an explicit safeguard: including "rules" replaces the entire ordered cascade.`,
+an explicit safeguard: including "rules" replaces the entire ordered cascade.
+
+Mutations print the object unwrapped like the matching get (id: .id; "policy
+update" prints the singleton policy); deletes print {}. --fields is a usage
+error on a mutation; extract with jq -er, which fails on a --dry-run preview.`,
 }
 
 var mcpClassifiersListCmd = &cobra.Command{

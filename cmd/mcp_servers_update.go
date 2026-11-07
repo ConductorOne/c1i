@@ -21,7 +21,9 @@ require_tool_approval. Auth config and URL are NOT updatable here — use
 
 A blank --display-name (empty, whitespace or invisible-only) exits 2,
 nothing sent. Sent as is, the server stores "" as an empty name and keeps
-"  " verbatim.`,
+"  " verbatim.
+
+Prints the updated server, unwrapped like "mcp servers get" (id: .connectorId).`,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		if _, err := requireNonEmptyIfSet(cmd, "display-name"); err != nil {

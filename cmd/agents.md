@@ -400,6 +400,18 @@ resource with `--resource-id` likewise means you drop
   one process (one token, one TLS handshake). The API has no batch approve, so
   each id is still its own request, but don't loop the CLI per id — pass them
   all at once (pipe `mcp tools search --state pending --fields id | jq -r .id`).
+  It prints one compact JSON line per applied tool (`.id`, `.state`), even for
+  one id. A failed stdout write aborts the batch, and a partial failure exits
+  with the first failure's code while earlier ids stay applied: under
+  `--error-format json` check each per-id error's `applied` and the summary's
+  `notAttempted`.
+- Other `mcp` mutations print the response unwrapped like the matching `get`:
+  a server's id is `.connectorId` (`register`, `update`, `update-credentials`),
+  a toolset's, classifier's, binding's and tool gate's is `.id`. Deletes,
+  `resync-tools` and `mcp bindings delete` print `{}`; capture ids with
+  `jq -er`, which fails on a `--dry-run` preview. `update-credentials` without
+  `--catalog-id` resolves it first and reports `Resolved catalog id: …` on
+  stderr.
 - Owner changes are applied asynchronously and can take several minutes to
   appear; pass --wait to block until they do. Grant provisioning is
   asynchronous too. A read immediately after a write can look like a no-op.
