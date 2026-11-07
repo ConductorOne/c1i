@@ -85,27 +85,22 @@ func printConfigTemplate(cmd *cobra.Command) error {
 	if err != nil {
 		return &usageError{err}
 	}
-	serverType := "hosted"
+	typ := "MCP_SERVER_TYPE_HOSTED"
 	if t := mustGetString(cmd, "type"); t != "" {
-		typ, err := serverTypeFlag.parse(t)
-		if err != nil {
+		if typ, err = serverTypeFlag.parse(t); err != nil {
 			return err
 		}
-		if typ == "MCP_SERVER_TYPE_EXTERNAL" {
-			serverType = "external"
-		}
 	}
+	// serverTypeFlag is closed, so typ is HOSTED or EXTERNAL.
+	serverType := strings.ToLower(strings.TrimPrefix(typ, serverTypeFlag.prefix))
 
 	cfg := map[string]any{}
-	switch strings.ToLower(serverType) {
-	case "hosted":
-		cfg["mcpServerCatalogId"] = "<catalog entry id — see: c1i mcp servers catalog list>"
-		cfg["tokenSharing"] = "MCP_SERVER_TOKEN_SHARING_SHARED"
-	case "external":
+	if typ == "MCP_SERVER_TYPE_EXTERNAL" {
 		cfg["url"] = "https://your-mcp-server.example/mcp"
 		cfg["transportType"] = "MCP_SERVER_TRANSPORT_TYPE_STREAMABLE_HTTP"
-	default:
-		return &usageError{fmt.Errorf("invalid --type %q: use hosted or external", serverType)}
+	} else {
+		cfg["mcpServerCatalogId"] = "<catalog entry id — see: c1i mcp servers catalog list>"
+		cfg["tokenSharing"] = "MCP_SERVER_TOKEN_SHARING_SHARED"
 	}
 	for k, v := range arm {
 		cfg[k] = v
@@ -121,17 +116,14 @@ func printConfigTemplate(cmd *cobra.Command) error {
 		return err
 	}
 
-	flagName := "hosted-config-file"
-	if strings.EqualFold(serverType, "external") {
-		flagName = "external-config-file"
-	}
+	flagName := serverType + "-config-file"
 	authLabel := auth
 	if authLabel == "" {
 		authLabel = "none"
 	}
 	_, _ = fmt.Fprintf(cmd.ErrOrStderr(),
 		"# %s %s config template. Replace <placeholders>, then:\n#   c1i mcp servers register --app-id APP --type %s --display-name NAME --%s config.json\n# Fields with <angle-brackets> are placeholders; enum/URL values are examples. Secrets are sealed server-side.\n",
-		serverType, authLabel, strings.ToLower(serverType), flagName)
+		serverType, authLabel, serverType, flagName)
 	_, err = fmt.Fprint(cmd.OutOrStdout(), buf.String())
 	return err
 }

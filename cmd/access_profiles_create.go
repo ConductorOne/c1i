@@ -112,8 +112,8 @@ func addCatalogChangedFields(cmd *cobra.Command, catalog map[string]any) ([]stri
 }
 
 var catalogEnrollmentFlag = enumFlag{flag: "enrollment-behavior", prefix: "REQUEST_CATALOG_ENROLLMENT_BEHAVIOR_", unknown: enumPassPrefixed, values: []enumValue{
-	{name: "bypass", api: "REQUEST_CATALOG_ENROLLMENT_BEHAVIOR_BYPASS_ENTITLEMENT_REQUEST_POLICY"},
-	{name: "enforce", api: "REQUEST_CATALOG_ENROLLMENT_BEHAVIOR_ENFORCE_ENTITLEMENT_REQUEST_POLICY"},
+	{name: "bypass", api: "REQUEST_CATALOG_ENROLLMENT_BEHAVIOR_BYPASS_ENTITLEMENT_REQUEST_POLICY", aliases: []string{"REQUEST_CATALOG_ENROLLMENT_BEHAVIOR_BYPASS"}},
+	{name: "enforce", api: "REQUEST_CATALOG_ENROLLMENT_BEHAVIOR_ENFORCE_ENTITLEMENT_REQUEST_POLICY", aliases: []string{"REQUEST_CATALOG_ENROLLMENT_BEHAVIOR_ENFORCE"}},
 	{name: "unspecified", api: "REQUEST_CATALOG_ENROLLMENT_BEHAVIOR_UNSPECIFIED"},
 }}
 

@@ -36,6 +36,9 @@ func TestEnumFlagParse(t *testing.T) {
 		{"reject empty", reject, "", "", true},
 		{"reject blank", reject, "  ", "", true},
 		{"prefixed passes newer", prefixed, "x_state_new", "X_STATE_NEW", false},
+		// prefix+short name is a possible future server value, not an alias.
+		{"prefixed short name not remapped", prefixed, "X_STATE_PENDING", "X_STATE_PENDING", false},
+		{"reject prefixed short name", reject, "X_STATE_PENDING", "", true},
 		{"prefixed bare prefix refused", prefixed, "X_STATE_", "", true},
 		{"prefixed refuses short unknown", prefixed, "bogus", "", true},
 		{"prefixed empty is unset", prefixed, "", "", false},
@@ -185,7 +188,7 @@ func TestEnumFlagValues(t *testing.T) {
 			"removed": "MCP_TOOL_STATE_REMOVED", "": "",
 			"pending-review": "MCP_TOOL_STATE_PENDING_REVIEW", "mcp_tool_state_approved": "MCP_TOOL_STATE_APPROVED",
 			"MCP_TOOL_STATE_FUTURE": "MCP_TOOL_STATE_FUTURE", "unknown": bad,
-			"pendıng": bad, "approvedſ": bad, "MCP_TOOL_STATE_PENDING": "MCP_TOOL_STATE_PENDING_REVIEW",
+			"pendıng": bad, "approvedſ": bad, "MCP_TOOL_STATE_PENDING": "MCP_TOOL_STATE_PENDING_REVIEW", "mcp_tool_state_approved_v2": "MCP_TOOL_STATE_APPROVED_V2", "MCP_TOOL_STATE_DISABLED_SOFT": "MCP_TOOL_STATE_DISABLED_SOFT",
 		}},
 		{toolClassificationFlag, map[string]string{
 			"read": "TOOL_CLASSIFICATION_READ", "READ": "TOOL_CLASSIFICATION_READ", "write": "TOOL_CLASSIFICATION_WRITE",

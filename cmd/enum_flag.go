@@ -66,15 +66,13 @@ func isASCII(s string) bool {
 	return true
 }
 
-// inputs lists the normalised keys that select v: its short name and
-// aliases (bare and prefixed), its API name, and the API name minus prefix.
+// inputs lists the normalised keys that select v: its short name, aliases,
+// API name, and API name minus prefix. Prefix+short name is deliberately not
+// matched: a future server value of that shape must not be remapped.
 func (e enumFlag) inputs(v enumValue) []string {
 	keys := []string{enumKey(v.api), enumKey(strings.TrimPrefix(v.api, e.prefix))}
 	for _, n := range append([]string{v.name}, v.aliases...) {
 		keys = append(keys, enumKey(n))
-		if e.prefix != "" {
-			keys = append(keys, e.prefix+enumKey(n))
-		}
 	}
 	return keys
 }
@@ -134,6 +132,8 @@ func (e enumFlag) usage() string {
 	names = append(names, e.keywords...)
 	s := strings.Join(names, ", ")
 	switch {
+	case e.prefix == "" && len(names) > 1:
+		return strings.Join(names[:len(names)-1], ", ") + ", or " + names[len(names)-1]
 	case e.prefix == "":
 		return s
 	case e.unknown == enumPassPrefixed:

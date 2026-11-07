@@ -14,7 +14,7 @@ func init() {
 }
 
 var toolStateFlag = enumFlag{flag: "state", prefix: "MCP_TOOL_STATE_", unknown: enumPassPrefixed, values: []enumValue{
-	{name: "pending", api: "MCP_TOOL_STATE_PENDING_REVIEW"},
+	{name: "pending", api: "MCP_TOOL_STATE_PENDING_REVIEW", aliases: []string{"MCP_TOOL_STATE_PENDING"}},
 	{name: "approved", api: "MCP_TOOL_STATE_APPROVED"},
 	{name: "disabled", api: "MCP_TOOL_STATE_DISABLED"},
 	{name: "removed", api: "MCP_TOOL_STATE_REMOVED"},

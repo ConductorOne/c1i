@@ -93,7 +93,9 @@ credentials fails instead of using the working directory. With a relative
   that answered 400, or of printing it under `--dry-run`; and a blank
   (whitespace-only) value on those flags is refused rather than sent.
   `users list --status` still sends any ASCII value, since its enum has no
-  prefix.
+  prefix. `mcp servers register`/`update-credentials --type` take only
+  `hosted` or `external` (or their full `MCP_SERVER_TYPE_*` names): an unknown
+  `MCP_SERVER_TYPE_*` value exits 2, as every full name did before.
 - `golang.org/x/term` moves to 0.47.0 and `golang.org/x/sys` to 0.49.0.
 - `golang.org/x/crypto` is pinned to the untagged
   `v0.58.1-0.20261009181718-2f1f834330b2`, which fixes GO-2026-5932; c1i does
