@@ -15,11 +15,15 @@ const synthViolations = `package cmd
 
 import (
 	"bufio"
+	"context"
 	"fmt"
 	"io"
+	"net/http"
 	"os"
 	"strings"
 
+	"github.com/ConductorOne/c1i/internal/client"
+	"github.com/ConductorOne/c1i/internal/keychain"
 	"github.com/spf13/cobra"
 )
 
@@ -111,6 +115,88 @@ func zzTemplate(cmd *cobra.Command) error {
 	return err
 }
 
+type zzGetter interface {
+	Get(ctx any, path string, q any) ([]byte, error)
+}
+
+func zzEagerGetBuilder(cmd *cobra.Command, c zzGetter) preRead {
+	_, _ = c.Get(cmd.Context(), "/x", nil)
+	return preRead{Run: func(ctx context.Context, c *client.Client, _ *mutation) ([]resolvedID, error) {
+		return nil, nil
+	}}
+}
+
+func zzEagerGet(cmd *cobra.Command, _ []string) error {
+	return sendMutation(cmd, mutation{}, withPreRead(zzEagerGetBuilder(cmd, nil)))
+}
+
+func zzEagerWriteBuilder(cmd *cobra.Command) preRead {
+	_, _ = cmd.OutOrStdout().Write([]byte("x"))
+	return preRead{}
+}
+
+func zzEagerWrite(cmd *cobra.Command, _ []string) error {
+	return sendMutation(cmd, mutation{}, withPreRead(zzEagerWriteBuilder(cmd)))
+}
+
+func zzLazyGetBuilder(cmd *cobra.Command) preRead {
+	return preRead{Run: func(ctx context.Context, c *client.Client, _ *mutation) ([]resolvedID, error) {
+		_, err := c.Get(ctx, "/x", nil)
+		return nil, err
+	}}
+}
+
+func zzLazyGet(cmd *cobra.Command, _ []string) error {
+	return sendMutation(cmd, mutation{}, withPreRead(zzLazyGetBuilder(cmd)))
+}
+
+func zzPreReadStdout(cmd *cobra.Command, _ []string) error {
+	return sendMutation(cmd, mutation{}, withPreRead(preRead{Run: func(ctx context.Context, c *client.Client, _ *mutation) ([]resolvedID, error) {
+		fmt.Fprintln(cmd.OutOrStdout(), "resolved")
+		return nil, nil
+	}}))
+}
+
+func zzPreReadInput(cmd *cobra.Command, _ []string) error {
+	return sendMutation(cmd, mutation{}, withPreRead(preRead{Run: func(ctx context.Context, c *client.Client, m *mutation) ([]resolvedID, error) {
+		body, err := readJSONFile[map[string]any](cmd, "body-file", "-")
+		m.Body = body
+		return nil, err
+	}}))
+}
+
+type zzOut struct{ zzW io.Writer }
+
+func (o zzOut) zzSay() { _, _ = o.zzW.Write([]byte("x")) }
+
+func zzFieldWriter(cmd *cobra.Command, _ []string) error {
+	o := zzOut{}
+	o.zzW = cmd.OutOrStdout()
+	o.zzSay()
+	return sendMutation(cmd, mutation{})
+}
+
+func zzHTTPPost() {
+	_, _ = http.Post("https://example.invalid", "application/json", nil)
+}
+
+func zzDefaultDo(req *http.Request) {
+	_, _ = http.DefaultClient.Do(req)
+}
+
+func zzNewClientMethod(c interface{ PostJSON() }) {
+	c.PostJSON()
+}
+
+func zzScoped() {
+	_, _ = keychain.Delete("svc")
+}
+
+func zzScopedOther(c interface{ Post() }) {
+	_, _ = keychain.Delete("svc")
+	c.Post()
+}
+
 func zzTemplateMode(cmd *cobra.Command, _ []string) error {
 	if cmd.Flags().Changed("template") {
 		return zzTemplate(cmd)
@@ -121,7 +207,10 @@ func zzTemplateMode(cmd *cobra.Command, _ []string) error {
 
 func synthIndex(t *testing.T) *srcIndex {
 	t.Helper()
-	return loadSrcIndex(t, map[string]string{"cmd/zz_synthetic.go": synthViolations})
+	return loadSrcIndex(t, map[string]string{
+		"cmd/zz_synthetic.go":          synthViolations,
+		"internal/client/zz_client.go": "package client\n\nfunc (c *Client) PostJSON() {}\n",
+	})
 }
 
 func synthLeaf(t *testing.T, ix *srcIndex, fn string, marked bool) (leafCmd, *closureReport) {
@@ -216,6 +305,53 @@ func TestEnforcementCatchesViolations(t *testing.T) {
 		nonMutatingOutputModes["cmd/zz_synthetic.go:zzSend"] = "test"
 		defer delete(nonMutatingOutputModes, "cmd/zz_synthetic.go:zzSend")
 		wantViolation(t, staleOutputExemptions(ix), "cmd/zz_synthetic.go:zzSend")
+	})
+	t.Run("read in a builder's eager body", func(t *testing.T) {
+		l, rep := synthLeaf(t, ix, "zzEagerGet", true)
+		wantViolation(t, leafViolations(l, rep), "a .Get read outside withPreRead/withWait")
+	})
+	t.Run("stdout write in a builder's eager body", func(t *testing.T) {
+		l, rep := synthLeaf(t, ix, "zzEagerWrite", true)
+		wantViolation(t, leafViolations(l, rep), ".Write to stdout")
+	})
+	t.Run("read in a builder's returned closure is allowed", func(t *testing.T) {
+		l, rep := synthLeaf(t, ix, "zzLazyGet", true)
+		if v := leafViolations(l, rep); len(v) != 0 {
+			t.Errorf("deferred read reported: %q", v)
+		}
+	})
+	t.Run("stdout write inside a pre-read", func(t *testing.T) {
+		l, rep := synthLeaf(t, ix, "zzPreReadStdout", true)
+		wantViolation(t, leafViolations(l, rep), "fmt.Fprintln to stdout")
+	})
+	t.Run("input file read inside a pre-read", func(t *testing.T) {
+		l, rep := synthLeaf(t, ix, "zzPreReadInput", true)
+		wantViolation(t, leafViolations(l, rep), "readJSONFile inside withPreRead/withWait")
+	})
+	t.Run("stdout writer held in a field", func(t *testing.T) {
+		l, rep := synthLeaf(t, ix, "zzFieldWriter", true)
+		wantViolation(t, leafViolations(l, rep), ".Write to stdout")
+	})
+	t.Run("http.Post", func(t *testing.T) {
+		wantViolation(t, ruleAViolations(ix), "zz_synthetic.go:zzHTTPPost")
+	})
+	t.Run("http.DefaultClient.Do", func(t *testing.T) {
+		wantViolation(t, ruleAViolations(ix), "zz_synthetic.go:zzDefaultDo")
+	})
+	t.Run("new exported client method", func(t *testing.T) {
+		wantViolation(t, ruleAViolations(ix), "zz_synthetic.go:zzNewClientMethod")
+	})
+	t.Run("out-of-scope entry covers only its call", func(t *testing.T) {
+		outOfScopeSelectors["cmd/zz_synthetic.go:zzScopedOther keychain.Delete"] = "test"
+		defer delete(outOfScopeSelectors, "cmd/zz_synthetic.go:zzScopedOther keychain.Delete")
+		got := ruleAViolations(ix)
+		wantViolation(t, got, ".Post in cmd/zz_synthetic.go:zzScopedOther")
+		wantViolation(t, got, ".Delete in cmd/zz_synthetic.go:zzScoped ")
+		for _, g := range got {
+			if strings.Contains(g, ".Delete in cmd/zz_synthetic.go:zzScopedOther") {
+				t.Errorf("exempted call still reported: %s", g)
+			}
+		}
 	})
 	t.Run("stale allowlist entry", func(t *testing.T) {
 		readOnlyPOST["cmd/zz_gone.go:nothing"] = "test"

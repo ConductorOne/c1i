@@ -20,9 +20,12 @@ import (
 // These tests enforce cmd/mutation.go as the single chokepoint for mutation
 // output (TestMutationsWriteOnlyThroughHelper and friends).
 
-// mutatingSelectors are the client methods that can send a write. A match
-// counts as a call or a method value.
-var mutatingSelectors = map[string]bool{"Post": true, "Put": true, "Patch": true, "Delete": true, "Request": true, "Do": true}
+// readOnlyClientMethods are the exported *Client methods (internal/client,
+// internal/transport) that cannot send a write. Every other exported method
+// is a mutating selector, so a new one is caught until listed here.
+var readOnlyClientMethods = map[string]string{
+	"Get": "sends GET only",
+}
 
 var mutationHelpers = map[string]bool{"sendMutation": true, "sendMutationBatch": true, "sendMutationSequence": true}
 
@@ -59,17 +62,21 @@ var readOnlyPOST = map[string]string{
 	"cmd/findings.go:postFindingsList":                                "POST findings and audit searches",
 }
 
-// outOfScopeSelectors lists files (or package dirs) whose matches are not C1
-// mutations through the shared client, one reason each.
+// outOfScopeSelectors lists single calls ("file:decl selector") that are not
+// C1 mutations through the shared client, one reason each.
 var outOfScopeSelectors = map[string]string{
-	"cmd/api.go":                          "the raw escape hatch",
-	"cmd/auth_login_roles.go":             "cleans up the credential login created",
-	"cmd/auth_logout.go":                  "keychain.Delete removes a local credential, not an HTTP call",
-	"cmd/docs_openapi.go":                 "a GET Do that fetches the spec",
-	"cmd/docs_search.go":                  "GETs of the public docs search and pages; no auth",
-	"internal/selfupdate/":                "GETs the distribution index and manifests",
-	"internal/tokensource/tokensource.go": "the OAuth token request; changes no C1 resource",
-	"internal/keychain/keychain.go":       "keyring.Delete removes a local OS keyring entry",
+	"cmd/api.go:apiCmd c.Request":                                              "the raw escape hatch",
+	"cmd/auth_login_roles.go:deletePersonalClient c.Delete":                    "cleans up the credential login created",
+	"cmd/auth_logout.go:authLogoutCmd keychain.Delete":                         "removes a local credential, not an HTTP call",
+	"cmd/docs_openapi.go:fetchOpenAPISpec hc.Do":                               "a GET that fetches the spec",
+	"cmd/docs_search.go:docsSearchCmd http.DefaultClient.Do":                   "a GET of the public docs search; no auth",
+	"cmd/docs_search.go:docsPageCmd http.DefaultClient.Do":                     "a GET of a public docs page; no auth",
+	"internal/keychain/keychain.go:Delete keyring.Delete":                      "removes a local OS keyring entry",
+	"internal/keychain/keychain.go:DeleteSecret keyring.Delete":                "removes a local OS keyring entry",
+	"internal/keychain/keychain.go:storeKeyring keyring.Delete":                "rolls back a local OS keyring entry",
+	"internal/selfupdate/dist.go:(Client).get doer.Do":                         "GETs the distribution index and manifests",
+	"internal/selfupdate/verify.go:(tufFetcher).DownloadFile f.doer.Do":        "GETs signed release metadata",
+	"internal/tokensource/tokensource.go:(c1TokenSource).Token c.transport.Do": "the OAuth token request; changes no C1 resource",
 }
 
 // batchCommands maps each command calling sendMutationBatch to the id key
@@ -88,14 +95,15 @@ var nonMutatingOutputModes = map[string]string{
 // ---- source index ----
 
 type srcIndex struct {
-	fset    *token.FileSet
-	files   map[string]*ast.File // repo-relative path -> file
-	funcs   map[string]*ast.FuncDecl
-	methods map[string][]*ast.FuncDecl
-	vars    map[string]ast.Expr // package var -> initializer (cmd only)
-	declKey map[ast.Node]string // top-level decl -> file:decl
-	byLine  map[string]map[int][]ast.Node
-	fileOf  map[ast.Node]string
+	fset     *token.FileSet
+	files    map[string]*ast.File // repo-relative path -> file
+	funcs    map[string]*ast.FuncDecl
+	methods  map[string][]*ast.FuncDecl
+	vars     map[string]ast.Expr // package var -> initializer (cmd only)
+	declKey  map[ast.Node]string // top-level decl -> file:decl
+	byLine   map[string]map[int][]ast.Node
+	fileOf   map[ast.Node]string
+	mutating map[string]bool // mutating selector names (mutatingMethods)
 }
 
 func loadSrcIndex(t *testing.T, extra map[string]string) *srcIndex {
@@ -133,6 +141,7 @@ func loadSrcIndex(t *testing.T, extra map[string]string) *srcIndex {
 		}
 		ix.add(name, f)
 	}
+	ix.mutating = ix.mutatingMethods()
 	return ix
 }
 
@@ -204,13 +213,48 @@ func isUnder(path string, prefixes []string) bool {
 	return false
 }
 
-func outOfScope(path string) bool {
-	for p := range outOfScopeSelectors {
-		if path == p || (strings.HasSuffix(p, "/") && strings.HasPrefix(path, p)) {
-			return true
+func outOfScopeKey(key string, x *ast.SelectorExpr) string {
+	return key + " " + types.ExprString(x)
+}
+
+func outOfScope(_, key string, x *ast.SelectorExpr) bool {
+	_, ok := outOfScopeSelectors[outOfScopeKey(key, x)]
+	return ok
+}
+
+// isMutatingSelector: an exported *Client method not in
+// readOnlyClientMethods, or Do on any receiver, as a call or a method value.
+// Only net/http's Request type is exempt.
+func (ix *srcIndex) isMutatingSelector(x *ast.SelectorExpr) bool {
+	if !ix.mutating[x.Sel.Name] {
+		return false
+	}
+	pkg, ok := x.X.(*ast.Ident)
+	return !(ok && pkg.Name == "http" && x.Sel.Name == "Request")
+}
+
+// mutatingMethods derives the mutating selector names from the exported API
+// of the client packages.
+func (ix *srcIndex) mutatingMethods() map[string]bool {
+	out := map[string]bool{"Do": true}
+	for path, f := range ix.files {
+		if !isUnder(path, []string{"internal/client/", "internal/transport/"}) {
+			continue
+		}
+		for _, d := range f.Decls {
+			fd, ok := d.(*ast.FuncDecl)
+			if !ok || fd.Recv == nil || !fd.Name.IsExported() {
+				continue
+			}
+			if types.ExprString(fd.Recv.List[0].Type) != "*Client" {
+				continue
+			}
+			if _, ro := readOnlyClientMethods[fd.Name.Name]; !ro {
+				out[fd.Name.Name] = true
+			}
 		}
 	}
-	return false
+	return out
 }
 
 // ---- closure walk ----
@@ -227,36 +271,47 @@ type closureReport struct {
 	nonTail   []finding
 }
 
+type walkMode uint8
+
+const (
+	// modeDirect is the command's own code: no read, wait or stdout write.
+	modeDirect walkMode = 1 << iota
+	// modeInHelper is code the helper runs (a pre-read, a --wait op): it may
+	// read through the client, but never write stdout or read an input file,
+	// since it can run after the command already read stdin.
+	modeInHelper
+)
+
 type walker struct {
-	ix   *srcIndex
-	seen map[ast.Node]int // 1 = walked indirect, 2 = walked direct
-	rep  *closureReport
+	ix     *srcIndex
+	seen   map[ast.Node]walkMode
+	rep    *closureReport
+	fields map[string]bool // ".field" names that hold a stdout writer somewhere in cmd
 }
 
 // closureOf walks root and everything it references in package cmd: package
 // funcs and vars by name (called or as values), cmd methods by name, and
-// function-typed arguments. Arguments of withPreRead/withWait are walked as
-// indirect, where reads and waits are allowed. The helper is not entered.
+// function-typed arguments. Functions handed to withPreRead/withWait, and the
+// closures a preRead/waitOp builder returns, are walked in modeInHelper. The
+// helper is not entered.
 func (ix *srcIndex) closureOf(root ast.Node) *closureReport {
-	w := &walker{ix: ix, seen: map[ast.Node]int{}, rep: &closureReport{helpers: map[string]bool{}}}
-	w.walk(root, true)
+	w := &walker{ix: ix, seen: map[ast.Node]walkMode{}, rep: &closureReport{helpers: map[string]bool{}}, fields: ix.stdoutFields()}
+	w.walk(root, modeDirect)
 	return w.rep
 }
 
-func (w *walker) walk(root ast.Node, direct bool) {
-	// A func that builds a waitOp or preRead is only usable through
-	// withWait/withPreRead, so its reads are the helper's.
-	if buildsHelperOp(root) {
-		direct = false
-	}
-	level := 1
-	if direct {
-		level = 2
-	}
-	if w.seen[root] >= level {
+func (w *walker) walk(root ast.Node, mode walkMode) {
+	w.walkWith(root, mode, helperOpClosures(root))
+}
+
+// walkWith walks root in mode, except for the FuncLits in deferred, which
+// run inside the helper.
+func (w *walker) walkWith(root ast.Node, mode walkMode, deferred map[ast.Node]bool) {
+	if w.seen[root]&mode != 0 {
 		return
 	}
-	w.seen[root] = level
+	w.seen[root] |= mode
+	direct := mode == modeDirect
 	path := w.ix.fileOf[root]
 	if path == "" {
 		for p, f := range w.ix.files {
@@ -269,6 +324,9 @@ func (w *walker) walk(root ast.Node, direct bool) {
 		return
 	}
 	locals := writerLocals(root, isStdoutForm)
+	for f := range w.fields {
+		locals[f] = true
+	}
 	_, exempt := nonMutatingOutputModes[w.ix.declKey[root]]
 	var stack []ast.Node
 	ast.Inspect(root, func(n ast.Node) bool {
@@ -276,13 +334,17 @@ func (w *walker) walk(root ast.Node, direct bool) {
 			stack = stack[:len(stack)-1]
 			return true
 		}
+		if n != root && deferred[n] {
+			w.walk(n, modeInHelper)
+			return false
+		}
 		stack = append(stack, n)
 		pos := w.ix.fset.Position(n.Pos())
 		switch x := n.(type) {
 		case *ast.CallExpr:
 			if id, ok := x.Fun.(*ast.Ident); ok && (id.Name == "withPreRead" || id.Name == "withWait") {
 				for _, a := range x.Args {
-					w.walk(a, false)
+					w.walkOpArg(a, mode)
 				}
 				stack = stack[:len(stack)-1]
 				return false
@@ -295,15 +357,13 @@ func (w *walker) walk(root ast.Node, direct bool) {
 					w.rep.nonTail = append(w.rep.nonTail, finding{pos, id.Name + " is not a tail call (return " + id.Name + "(...))"})
 				}
 			}
-			if direct {
-				if what := forbiddenCall(x, locals, w.ix, exempt); what != "" {
-					w.rep.forbidden = append(w.rep.forbidden, finding{pos, what})
-				}
+			if what := forbiddenCall(x, locals, w.ix, exempt, mode); what != "" {
+				w.rep.forbidden = append(w.rep.forbidden, finding{pos, what})
 			}
 		case *ast.SelectorExpr:
-			if mutatingSelectors[x.Sel.Name] && !isMethodConst(x) {
+			if w.ix.isMutatingSelector(x) {
 				key := w.ix.enclosingKey(path, x.Pos())
-				if _, ro := readOnlyPOST[key]; !ro && !outOfScope(path) && !isUnder(path, chokepointFiles) {
+				if _, ro := readOnlyPOST[key]; !ro && !outOfScope(path, key, x) && !isUnder(path, chokepointFiles) {
 					w.rep.rawWrites = append(w.rep.rawWrites, finding{pos, "." + x.Sel.Name})
 				}
 			}
@@ -312,22 +372,94 @@ func (w *walker) walk(root ast.Node, direct bool) {
 					w.rep.forbidden = append(w.rep.forbidden, finding{pos, "method value .Get"})
 				}
 			}
+			if mode == modeInHelper && x.Sel.Name == "InOrStdin" {
+				w.rep.forbidden = append(w.rep.forbidden, finding{pos, "stdin read inside withPreRead/withWait (read input once, before the helper)"})
+			}
 			for _, m := range w.ix.methods[x.Sel.Name] {
-				w.walk(m, direct)
+				w.walk(m, mode)
 			}
 		case *ast.Ident:
 			if direct && (x.Name == "fetchOwnerIDs" || x.Name == "runWait") {
 				w.rep.forbidden = append(w.rep.forbidden, finding{pos, x.Name + " outside withPreRead/withWait"})
 			}
+			if mode == modeInHelper && inputReaders[x.Name] {
+				w.rep.forbidden = append(w.rep.forbidden, finding{pos, x.Name + " inside withPreRead/withWait (read input once, before the helper)"})
+			}
 			if fd, ok := w.ix.funcs[x.Name]; ok && fd != root {
-				w.walk(fd, direct)
+				w.walk(fd, mode)
 			}
 			if v, ok := w.ix.vars[x.Name]; ok {
-				w.walk(v, direct)
+				w.walk(v, mode)
 			}
 		}
 		return true
 	})
+}
+
+// inputReaders read a --*-file flag or stdin.
+var inputReaders = map[string]bool{"readJSONFile": true, "readJSONBytes": true}
+
+// walkOpArg walks an argument of withPreRead/withWait. A function value runs
+// inside the helper; anything else is evaluated now, in mode, except the
+// function literals it carries.
+func (w *walker) walkOpArg(a ast.Expr, mode walkMode) {
+	switch x := a.(type) {
+	case *ast.FuncLit:
+		w.walk(x, modeInHelper)
+		return
+	case *ast.Ident:
+		if fd, ok := w.ix.funcs[x.Name]; ok {
+			w.walk(fd, modeInHelper)
+			return
+		}
+	}
+	w.walkWith(a, mode, outerFuncLits(a))
+}
+
+// outerFuncLits are the FuncLits in n not nested in another FuncLit.
+func outerFuncLits(n ast.Node) map[ast.Node]bool {
+	out := map[ast.Node]bool{}
+	ast.Inspect(n, func(m ast.Node) bool {
+		if fl, ok := m.(*ast.FuncLit); ok && m != n {
+			out[fl] = true
+			return false
+		}
+		return true
+	})
+	return out
+}
+
+// helperOpClosures are the FuncLits a preRead/waitOp builder returns. Only
+// they run inside the helper; the builder's own body runs when it is called.
+func helperOpClosures(n ast.Node) map[ast.Node]bool {
+	var body *ast.BlockStmt
+	switch f := n.(type) {
+	case *ast.FuncLit:
+		body = f.Body
+	case *ast.FuncDecl:
+		body = f.Body
+	}
+	out := map[ast.Node]bool{}
+	if !buildsHelperOp(n) || body == nil {
+		return out
+	}
+	ast.Inspect(body, func(m ast.Node) bool {
+		switch m := m.(type) {
+		case *ast.FuncLit:
+			return false // its returns are its own
+		case *ast.ReturnStmt:
+			for _, r := range m.Results {
+				for fl := range outerFuncLits(r) {
+					out[fl] = true
+				}
+				if fl, ok := r.(*ast.FuncLit); ok {
+					out[fl] = true
+				}
+			}
+		}
+		return true
+	})
+	return out
 }
 
 func buildsHelperOp(n ast.Node) bool {
@@ -357,13 +489,6 @@ func isReturnOf(parent ast.Node, call *ast.CallExpr) bool {
 	return ok && len(r.Results) == 1 && r.Results[0] == call
 }
 
-// isMethodConst skips http.MethodPost-style names and package funcs that are
-// not client methods.
-func isMethodConst(x *ast.SelectorExpr) bool {
-	id, ok := x.X.(*ast.Ident)
-	return ok && (id.Name == "http" || id.Name == "strings" || id.Name == "os" || id.Name == "filepath")
-}
-
 func isCallFun(stack []ast.Node, sel *ast.SelectorExpr, nargs int) bool {
 	if len(stack) < 2 {
 		return false
@@ -381,13 +506,16 @@ func isCallFunAny(stack []ast.Node, sel *ast.SelectorExpr) bool {
 }
 
 // writerForm matches a stream: a cobra accessor call, os.<file>, or a local
-// holding one.
+// or field (keyed ".name") holding one.
 func writerForm(e ast.Expr, locals map[string]bool, accessors map[string]bool, osFile string) bool {
 	switch x := e.(type) {
 	case *ast.CallExpr:
 		sel, ok := x.Fun.(*ast.SelectorExpr)
 		return ok && accessors[sel.Sel.Name]
 	case *ast.SelectorExpr:
+		if locals["."+x.Sel.Name] {
+			return true
+		}
 		pkg, ok := x.X.(*ast.Ident)
 		return ok && pkg.Name == "os" && x.Sel.Name == osFile
 	case *ast.Ident:
@@ -408,33 +536,66 @@ func isStderrForm(e ast.Expr, locals map[string]bool) bool {
 }
 
 // writerLocals names the locals in root assigned (:=, =, or var) from a
-// stream form.
+// stream form, and the fields (".name") assigned or keyed from one.
 func writerLocals(root ast.Node, form func(ast.Expr, map[string]bool) bool) map[string]bool {
 	locals := map[string]bool{}
 	ast.Inspect(root, func(n ast.Node) bool {
-		var lhs []*ast.Ident
+		var lhs []string
 		var rhs []ast.Expr
 		switch x := n.(type) {
 		case *ast.AssignStmt:
 			for _, l := range x.Lhs {
-				id, _ := l.(*ast.Ident)
-				lhs = append(lhs, id)
+				lhs = append(lhs, writerHolder(l))
 			}
 			rhs = x.Rhs
 		case *ast.ValueSpec:
-			lhs, rhs = x.Names, x.Values
+			for _, id := range x.Names {
+				lhs = append(lhs, id.Name)
+			}
+			rhs = x.Values
+		case *ast.KeyValueExpr:
+			if k, ok := x.Key.(*ast.Ident); ok {
+				lhs, rhs = []string{"." + k.Name}, []ast.Expr{x.Value}
+			}
 		}
 		if len(lhs) != len(rhs) {
 			return true
 		}
 		for i, r := range rhs {
-			if lhs[i] != nil && form(r, nil) {
-				locals[lhs[i].Name] = true
+			if lhs[i] != "" && form(r, nil) {
+				locals[lhs[i]] = true
 			}
 		}
 		return true
 	})
 	return locals
+}
+
+func writerHolder(e ast.Expr) string {
+	switch x := e.(type) {
+	case *ast.Ident:
+		return x.Name
+	case *ast.SelectorExpr:
+		return "." + x.Sel.Name
+	}
+	return ""
+}
+
+// stdoutFields are the fields assigned a stdout writer anywhere in cmd
+// outside the helper; a method can write through one set elsewhere.
+func (ix *srcIndex) stdoutFields() map[string]bool {
+	out := map[string]bool{}
+	for path, f := range ix.files {
+		if !strings.HasPrefix(path, "cmd/") || path == "cmd/mutation.go" {
+			continue
+		}
+		for k := range writerLocals(f, isStdoutForm) {
+			if strings.HasPrefix(k, ".") {
+				out[k] = true
+			}
+		}
+	}
+	return out
 }
 
 // writerMethods write to their receiver.
@@ -498,9 +659,9 @@ func untrusted(*ast.FuncDecl) bool { return false }
 
 var outputFuncs = map[string]bool{"writeObject": true, "writeResource": true, "writeNamedResource": true, "writeRawObject": true, "newEmitter": true, "printDryRun": true}
 
-// forbiddenCall reports a §5.2 output form or a read/wait in call. An
-// exempt declaration (nonMutatingOutputModes) may write stdout.
-func forbiddenCall(call *ast.CallExpr, locals map[string]bool, ix *srcIndex, exempt bool) string {
+// forbiddenCall reports a §5.2 output form in call, and in modeDirect a
+// read too. An exempt declaration (nonMutatingOutputModes) may write stdout.
+func forbiddenCall(call *ast.CallExpr, locals map[string]bool, ix *srcIndex, exempt bool, mode walkMode) string {
 	if id, ok := call.Fun.(*ast.Ident); ok && outputFuncs[id.Name] {
 		return id.Name + " (mutation output goes through the helper)"
 	}
@@ -522,7 +683,7 @@ func forbiddenCall(call *ast.CallExpr, locals map[string]bool, ix *srcIndex, exe
 		case pkg != nil && pkg.Name == "cmd" && strings.HasPrefix(name, "Print"):
 			return "cmd." + name
 		}
-		if name == "Get" && len(call.Args) == 3 {
+		if mode == modeDirect && name == "Get" && len(call.Args) == 3 {
 			return "a .Get read outside withPreRead/withWait"
 		}
 	}
@@ -677,16 +838,16 @@ func TestMutatingSelectorsOnlyAtChokepoint(t *testing.T) {
 func ruleAViolations(ix *srcIndex) []string {
 	var out []string
 	for path, f := range ix.files {
-		if isUnder(path, chokepointFiles) || outOfScope(path) {
+		if isUnder(path, chokepointFiles) {
 			continue
 		}
 		ast.Inspect(f, func(n ast.Node) bool {
 			x, ok := n.(*ast.SelectorExpr)
-			if !ok || !mutatingSelectors[x.Sel.Name] || isMethodConst(x) {
+			if !ok || !ix.isMutatingSelector(x) {
 				return true
 			}
 			key := ix.enclosingKey(path, x.Pos())
-			if _, ro := readOnlyPOST[key]; ro {
+			if _, ro := readOnlyPOST[key]; ro || outOfScope(path, key, x) {
 				return true
 			}
 			out = append(out, fmt.Sprintf("%s: .%s in %s outside cmd/mutation.go; send writes through sendMutation*", ix.fset.Position(x.Pos()), x.Sel.Name, key))
@@ -703,15 +864,12 @@ func staleAllowlistEntries(ix *srcIndex) []string {
 	for path, f := range ix.files {
 		ast.Inspect(f, func(n ast.Node) bool {
 			x, ok := n.(*ast.SelectorExpr)
-			if !ok || !mutatingSelectors[x.Sel.Name] || isMethodConst(x) {
+			if !ok || !ix.isMutatingSelector(x) {
 				return true
 			}
-			matched[ix.enclosingKey(path, x.Pos())] = true
-			for p := range outOfScopeSelectors {
-				if path == p || (strings.HasSuffix(p, "/") && strings.HasPrefix(path, p)) {
-					matched[p] = true
-				}
-			}
+			key := ix.enclosingKey(path, x.Pos())
+			matched[key] = true
+			matched[outOfScopeKey(key, x)] = true
 			return true
 		})
 	}
