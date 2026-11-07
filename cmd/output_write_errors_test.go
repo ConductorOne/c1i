@@ -304,6 +304,9 @@ func TestOutputWriteContractDocumented(t *testing.T) {
 		if !strings.Contains(doc, "`writing output:`") || !strings.Contains(doc, "verify before retrying a mutation") {
 			t.Errorf("%s does not document that exit 1 with `writing output:` may follow a successful mutation", name)
 		}
+		if !strings.Contains(doc, "succeeded but writing its response") {
+			t.Errorf("%s does not quote the mutation write-failure message", name)
+		}
 	}
 	if err := wrapOutputErr(errStdoutFull); !strings.HasPrefix(err.Error(), "writing output: ") {
 		t.Errorf("wrapOutputErr message %q no longer matches the documented prefix", err)

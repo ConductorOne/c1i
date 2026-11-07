@@ -79,7 +79,7 @@ EXTERNAL:
 
 The command prints the created server as pretty JSON, unwrapped like
 "mcp servers get"; its id is .connectorId (there is no .id). Capture it with
-jq -er, which fails on a --dry-run preview instead of printing null: pipe
+jq -er, which fails on a --dry-run preview where jq -r exits 0 with null: pipe
 either register command above to "jq -er .connectorId" and keep the result as
 
     CONNECTOR_ID=<the .connectorId it prints>
@@ -139,7 +139,7 @@ role and permissions instead.
     TOOLSET_ID=$(c1i mcp toolsets create --app-id "$APP_ID" --connector-id "$CONNECTOR_ID" --display-name "Everyone toolset" --description "Baseline MCP tools for all users" | jq -er .id)
 
 The toolset prints unwrapped like "mcp toolsets get", so its id is .id; jq -er
-fails on a --dry-run preview instead of printing null.
+fails on a --dry-run preview where jq -r exits 0 with null.
 
 ## 2. Bind approved tools to it
 

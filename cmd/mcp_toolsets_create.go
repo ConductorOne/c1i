@@ -17,7 +17,8 @@ AppEntitlement so users can request/get granted the whole bundle at once.
 After creating, attach tools with "c1i mcp bindings create".
 
 Prints the toolset, unwrapped like "mcp toolsets get": the id is .id. Extract
-it with jq -er, which fails on a --dry-run preview instead of printing null.`,
+it with jq -er, which fails on a --dry-run preview where jq -r exits 0 with
+null.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		if _, err := requireNonEmptyIfSet(cmd, "display-name"); err != nil {
 			return err

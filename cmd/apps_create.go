@@ -27,7 +27,7 @@ each id exists and has the flag's type (exit 2 otherwise, nothing sent);
 
 Prints the created app as pretty JSON, unwrapped like "apps get": the id is
 .id. --fields is a usage error on a mutation; extract with jq -er, which fails
-on a --dry-run preview instead of printing null.
+on a --dry-run preview where jq -r exits 0 with null.
 
 Example:
   APP_ID=$(c1i apps create --display-name "Google Workspace" | jq -er .id)

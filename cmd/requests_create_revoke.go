@@ -33,8 +33,8 @@ var requestsCreateRevokeCmd = &cobra.Command{
 Prints the created task as pretty JSON, unwrapped like "requests get": the id
 is .id. Its .state is a snapshot from creation, not the outcome; re-read with
 "c1i requests get <task-id>" before acting on it. --fields is a usage error on
-a mutation; extract with jq -er, which fails on a --dry-run preview instead of
-printing null.`,
+a mutation; extract with jq -er, which fails on a --dry-run preview where jq -r
+exits 0 with null.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		appID, _ := cmd.Flags().GetString("app-id")
 		entitlementID, _ := cmd.Flags().GetString("entitlement-id")

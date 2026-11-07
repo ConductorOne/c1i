@@ -85,8 +85,8 @@ container app — the zero state for "make an app, then register MCP servers
 under it". The caller is auto-assigned as an owner, showing up in `apps owners`
 after the usual provisioning lag. The new app prints as pretty JSON, unwrapped
 like `apps get`, so read its id with `jq -er .id` (`-e` fails on a `--dry-run`
-preview instead of printing `null`). An explicit `--fields` on a mutation is a
-usage error (exit `2`).
+preview, where `jq -r` exits 0 with `null`). An explicit `--fields` on a
+mutation is a usage error (exit `2`).
 
 `apps update` sends only the fields whose flags you pass, and prints the
 updated app the same way. `--grant-policy-id`, `--revoke-policy-id` and
@@ -1095,6 +1095,19 @@ both print identical output.
 ## Output Conventions
 
 - **List commands** (`users list`, `apps list`, etc.) output NDJSON (one JSON object per line).
+- **Mutations** (create, update, delete, owner changes, task actions,
+  bindings) print the API's response as pretty JSON, unwrapped the same way the
+  matching `get` unwraps it; every other envelope key, `expanded` included,
+  stays as a top-level sibling. **The id path varies by command:** most use
+  `.id`, but an MCP server's is `.connectorId`, a proxy binding's `.srcAppId`,
+  `role-mining trigger` prints `.runId`, `findings bulk-*` `.bulkActionId`,
+  `role-mining access-profiles create` `.accessProfileId`,
+  `findings create-task` `.taskId` and `.finding.id`, and `webhooks test`
+  `.id` (the delivery) and `.webhookId`. Extract an id with `jq -er`, which
+  fails rather than printing `null`. Deletes and other empty responses print
+  `{}`; exit `0` is the success signal. A task's `.state` (`tasks` actions,
+  `requests create`) is the server's snapshot, not the outcome: re-read with
+  `tasks get`. `mcp tools approve` prints one compact JSON line per tool.
 - **`api`** outputs pretty-printed JSON. With `--paginate`, outputs NDJSON (one list item per line). A `200` whose body is not JSON is an error (exit `6`), not a silent pass-through — a `--path` that escapes the API prefix can reach the web app and return HTML, which used to print as though it had succeeded. An empty body still succeeds, since some endpoints answer a write with nothing.
 - **`docs`** commands output NDJSON (`search`, `endpoints`), pretty JSON (`endpoint`, `openapi` is YAML), or plain text (`page`).
 - List commands auto-paginate by default, except the single-request ones the agent guide names under Pagination (the `role-mining` and `findings …-rules` lists warn on stderr when a result is partial). Pass `--page-token` to fetch a single page manually. A page holding only rows already printed is skipped (apart from any rows without an id); a page with any new row is printed whole. If the server's cursor stops advancing, or sends 100 empty pages in a row (`export events` excepted), the command keeps the rows already printed, warns that results are INCOMPLETE, and exits `6`. A page whose rows all lack the id the command reads is an unrecognized response (exit `6`); commands keyed on several fields, such as `grants list` and `entitlements list`, print such rows instead.
@@ -1147,9 +1160,8 @@ the keys you need. It has no external dependency, keeps list output as NDJSON,
 and understands c1i's snake_case/camelCase field variants.
 
 Use `jq` only when the work is more than projection: conditional selection,
-reshaping, aggregation, sorting, or extracting a value from a mutation
-confirmation. `--fields` deliberately never changes create/update/delete
-output.
+reshaping, aggregation, sorting, or extracting a value from mutation output
+(with `jq -er`). `--fields` never changes mutation output.
 
 ```sh
 # Known keys: prefer c1i's built-in projection
@@ -1225,8 +1237,8 @@ APP_ID=$(c1i apps create --display-name "Example" | jq -er .id)
     combined with `--limit` is one more instance of it, not a new behavior.
 - Missing fields are silently omitted, so requesting a superset is safe.
 - Also settable via `C1I_FIELDS`. Applies to read output — list commands, `api`,
-  and single-object `get` commands. Mutation confirmations (create/update/delete)
-  are never projected, so a session-wide `C1I_FIELDS` can't hide their status.
+  and single-object `get` commands. Mutation output is never projected, so a
+  session-wide `C1I_FIELDS` is ignored there.
 
 ### Errors & exit codes
 
@@ -1245,7 +1257,9 @@ branch on without parsing text:
 | `7` | `mcp gateway call` completed, but the tool itself reported an error (`isError: true` in its result) |
 | `8` | a system beyond C1, or the MCP protocol layer, failed — an upstream connector was unreachable or errored, the gateway itself was unreachable (DNS failure, refused connection), or the gateway returned a protocol-level JSON-RPC error |
 
-Exit `1` with `writing output:` means stdout failed (e.g. a full disk), and the request may already have succeeded server-side: verify before retrying a mutation.
+Exit `1` with `writing output:` means stdout failed (e.g. a full disk). On a
+mutation the message is `<METHOD> <path> succeeded but writing its response
+failed`: the change was applied, so verify before retrying a mutation.
 
 `6` and `8` are both "something remote broke," but they call for different
 responses. `6` means C1 itself is failing, so retrying later is reasonable and
@@ -1319,11 +1333,27 @@ In JSON mode **stderr is NDJSON**: every line is one object. Errors carry
 `"notice"` and `"kind"`, `--wait` progress `"progress"`, and `--debug` trace
 lines `"debug"`. Text mode is unchanged.
 
-An error from a command that writes also carries `"applied"`: `false` when
-nothing reached the server, `true` when the change was applied (for example,
-the response wasn't JSON, printing it failed, or a `--wait` after it failed),
-and `"unknown"` when the request may have reached the server, including when a
-retried attempt was sent before the final failure. Exit codes are unchanged.
+An error from a command that writes also carries `"applied"` (`api` does not:
+c1i can't tell whether an arbitrary call writes):
+
+| `applied` | When |
+|---|---|
+| `false` | Nothing reached the server: a flag or argument error, an explicit `--fields`, a refused id or redirect, a failed pre-send lookup, a failure before the request was written, or an API `4xx` other than `408`/`499` |
+| `"unknown"` | The request may have reached the server: an API `408`/`499` or `5xx`, a transport error or timeout after the request was written, or **any** failure after an earlier attempt was sent and retried (a `DELETE` that gets a `503` and then a `404` is `"unknown"`) |
+| `true` | The change was applied: the response wasn't JSON, printing it failed, or a `--wait` after it failed |
+
+`entitlements create` adds a `"steps"` array naming each attempted request, and
+its `applied` is `true` once any step was written.
+
+`mcp tools approve` reports each failed id as its own object
+(`{"error":…,"id":"<tool-id>","applied":…}`) and ends with a summary object
+that has no `id`:
+`{"error":"approved N of M tools; …","applied":…,"succeeded":N,"failed":K,"notAttempted":[…]}`.
+**A batch can exit non-zero with changes applied:** it exits with the first
+failure's code while the ids before it stay approved, a failed stdout write
+stops it (exit `1`), and `notAttempted` lists the ids it never sent.
+
+Exit codes are unchanged.
 
 ## Configuration
 
@@ -1430,8 +1460,9 @@ there's no known case that needs a longer one.
 
 ### Dry run
 
-`--dry-run` (or `C1I_DRY_RUN=1`) previews a C1 REST mutation — its method, path,
-and pretty-printed JSON body — and returns without sending it:
+`--dry-run` (or `C1I_DRY_RUN=1`) previews a C1 REST mutation and returns
+without sending it. The preview is one JSON object on stdout, the requests in
+send order with the full URL and the exact body:
 
 ```sh
 $ c1i requests create grant --app-id A1 --entitlement-id E1 --user-id U1 --dry-run
@@ -1451,20 +1482,42 @@ $ c1i requests create grant --app-id A1 --entitlement-id E1 --user-id U1 --dry-r
 }
 ```
 
-It applies to every REST write command (`requests create`,
-`tasks approve/deny/comment/close/reassign`, `accounts set-owner`, and the
-REST-backed `mcp` mutations) and to non-GET `api` calls; it never sends that
-mutation. `mcp gateway call` rejects both `--dry-run` and `C1I_DRY_RUN`: c1i
-cannot preview or suppress a gateway tool's side effects, so inspect the tool
-and treat its invocation as live. `auth login` rejects both too: it can't preview
-or suppress storing a credential.
+Its only keys are `dryRun` and `requests` (one entry per request: several for
+`mcp tools approve` with several ids, up to three for `entitlements create`);
+it never has an `id`, and `body` is omitted when the request has none. A
+stderr notice, `dry run: nothing was sent`, accompanies every preview.
 
-Most previews run fully offline — no credentials required. The exceptions are
-`upgrade` (it fetches and verifies the release; see Upgrading),
-`tasks approve`/`deny`/`reassign` (authenticate and read the task to resolve its
-current policy step) and `requests create grant`/`revoke` when `--user-id` is
-omitted (authenticate to resolve it to the caller) — both so the previewed body
-is exact.
+It applies to every REST write command and to non-GET `api` calls, and never
+sends that mutation. `mcp gateway call` rejects both `--dry-run` and
+`C1I_DRY_RUN`: c1i cannot preview or suppress a gateway tool's side effects, so
+inspect the tool and treat its invocation as live. `auth login` rejects both
+too: it can't preview or suppress storing a credential.
+
+A preview resolves the URL first, so it needs one configured (exit `2`
+without), and it applies the same id guard as a real send: an empty, `.` or
+`..` id exits `2`. An explicit `--fields` exits `2` too, since a preview is
+never projected. A preview needs no credentials, except where c1i must look
+something up so the previewed body is exact:
+
+- `tasks approve`, `deny`, `restart`, `skip-step` and `reassign` without
+  `--policy-step-id` read the task to resolve its current policy step;
+- `mcp servers update-credentials` for a hosted server without `--catalog-id`
+  reads the server to resolve its catalog id;
+- `requests create grant`/`revoke` without `--user-id` resolve the caller;
+- `upgrade` fetches and verifies the release (see Upgrading).
+
+Other pre-send checks, such as the policy lookups on `apps` and
+`entitlements` writes, are skipped on a preview. `policies update` skips its
+policy-type lookup too, so a patch that needs the type exits `2` under
+`--dry-run` unless you pass `--policy-type`.
+
+**An inherited `C1I_DRY_RUN=1` turns every write in a script into a
+preview.** The preview has no `id`, so `jq -r .id` prints `null` and the script
+carries on with it. Extract ids with `jq -er`, which fails on a preview:
+
+```sh
+APP_ID=$(c1i apps create --display-name "Example" | jq -er .id) || exit 1
+```
 
 ### Debug tracing
 

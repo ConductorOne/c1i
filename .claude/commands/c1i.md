@@ -55,15 +55,19 @@ falls through to whatever the config file names.
 
 - `--fields=a,b,c` / `C1I_FIELDS` — project emitted JSON to these dot-paths;
   missing keys are silently omitted. Never applied to mutation output: an
-  explicit `--fields` on a mutation is exit 2; read its id with `jq -er`.
+  explicit `--fields` on a mutation is exit 2. A mutation prints the response
+  unwrapped like its `get` (deletes print `{}`); read its id with `jq -er` from
+  the path the command documents (`.id`, `.connectorId`, `.srcAppId`, ...).
 - `--max-retries=N` / `C1I_MAX_RETRIES` (default 4, `0` disables) — retries
   429 (any method) and 5xx/network errors (idempotent GET/PUT/DELETE only)
   with backoff, honoring `Retry-After`.
 - `--error-format=text|json` / `C1I_ERROR_FORMAT` — `json` makes stderr
   NDJSON: errors carry `"error"` (and `"applied"` on a write), notices
   `"notice"`, progress `"progress"`, `--debug` lines `"debug"`.
-- `--dry-run` / `C1I_DRY_RUN` — preview a C1 REST mutation's method/path/body
-  without sending it; `mcp gateway call` and `auth login` reject it. `upgrade
+- `--dry-run` / `C1I_DRY_RUN` — preview a C1 REST mutation without sending
+  it, as one JSON object (`{"dryRun":true,"requests":[…]}`, never an `id`)
+  plus a stderr notice; it needs a URL, and `mcp gateway call` and
+  `auth login` reject it. `upgrade
   --dry-run` verifies the release and installs nothing.
 - `--debug` / `C1I_DEBUG` — trace HTTP method/URL/status/timing to stderr
   (never headers or bodies).

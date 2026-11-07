@@ -551,10 +551,8 @@ func projectionMatchedNothing(v any) bool {
 }
 
 // writeRawObject pretty-prints a single JSON response to stdout WITHOUT applying
-// --fields. Use it for mutation confirmations (create/update/delete), whose
-// status objects must never be trimmed away by a session-wide C1I_FIELDS — a
-// projection that matched none of the confirmation's keys would silently emit
-// "{}" and hide whether the change succeeded.
+// --fields, for output that must not be projected. Mutation output does not
+// use it: it goes through sendMutation (cmd/mutation.go).
 //
 // An empty (or whitespace-only) body is treated as a legitimate no-content
 // success — some endpoints answer 2xx with nothing — and writes nothing.

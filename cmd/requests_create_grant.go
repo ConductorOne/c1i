@@ -68,8 +68,8 @@ and the server refuses it with "value must be greater than 0s".
 Prints the created task as pretty JSON, unwrapped like "requests get": the id
 is .id. Its .state is a snapshot from creation, not the outcome; re-read with
 "c1i requests get <task-id>" before acting on it. --fields is a usage error on
-a mutation; extract with jq -er, which fails on a --dry-run preview instead of
-printing null.
+a mutation; extract with jq -er, which fails on a --dry-run preview where jq -r
+exits 0 with null.
 
 Example:
   TASK_ID=$(c1i requests create grant --app-id "$APP" --entitlement-id "$ENT" | jq -er .id)`,

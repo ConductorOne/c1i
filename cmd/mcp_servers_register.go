@@ -51,7 +51,8 @@ See full schema: c1i docs page api-reference/mcp-servers/register
 
 Prints the created server as pretty JSON, unwrapped like "mcp servers get": the
 id is .connectorId (there is no .id). --fields is a usage error on a mutation;
-extract with jq -er, which fails on a --dry-run preview instead of printing null.
+extract with jq -er, which fails on a --dry-run preview where jq -r exits 0
+with null.
 
 NOTE: registering under app_id="" (new managed app) or via an
 app_managed_state_binding_ref is not reachable over REST — this command

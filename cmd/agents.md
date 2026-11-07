@@ -92,7 +92,7 @@ apply it for a whole session; the flag wins for a single invocation.
 |---|---|---|
 | `--url` | `C1I_URL` | tenant host — see above |
 | `--fields` | `C1I_FIELDS` | comma-separated dot-paths to keep in JSON output — see "Reading output" |
-| `--dry-run` | `C1I_DRY_RUN` | preview a C1 REST mutation's method, path, and body; unsupported for `mcp gateway call` and `auth login` |
+| `--dry-run` | `C1I_DRY_RUN` | preview a C1 REST mutation as one JSON object (`.requests[]`: method, URL, body); it never has an `id`; unsupported for `mcp gateway call` and `auth login` |
 | `--debug` | `C1I_DEBUG` | trace API HTTP requests (method, URL, status, timing) to stderr |
 | `--max-retries` | `C1I_MAX_RETRIES` | retries for transient API failures (`429`/`5xx`); `0` disables |
 | `--error-format` | `C1I_ERROR_FORMAT` | `text` (default) or `json` |
@@ -103,8 +103,11 @@ with `jq 'select(.error)'`) plus `status`, `method`, `path`, and the response
 `body` when the failure came from the API; notices carry `"notice"`, `--wait`
 progress `"progress"`, and `--debug` lines `"debug"`. A write command's error
 also carries `"applied"`: `true`, `false`, or `"unknown"` (the request may
-have reached the server). Still branch on the exit code — the JSON is for the
-detail, not the classification.
+have reached the server, including when a retried attempt was sent before the
+final failure); `api` carries none. `mcp tools approve` writes one error
+object per failed id (with `"id"`) and a final summary with no `id`, carrying
+`succeeded`, `failed` and `notAttempted`. Still branch on the exit code — the
+JSON is for the detail, not the classification.
 
 `--debug` and `--max-retries` cover `mcp gateway`, `auth login` (except its
 device-code polling, which never retries), `upgrade`, `docs openapi`,
@@ -250,10 +253,20 @@ Rule of thumb: a product concept starts at `docs search` → `docs page`; a raw
   exits 2. Exceptions: `mcp servers get` identifies itself with `.connectorId`;
   `entitlements proxy-bindings get` has a directional composite identity:
   `.srcAppId`, `.srcAppEntitlementId`, `.dstAppId`, and
-  `.dstAppEntitlementId`. `c1i api` and mutation confirmations still return
-  the API's envelope.
-- Mutation confirmations (create/update/delete) are never field-projected —
-  `--fields`/`C1I_FIELDS` can't blank a success message.
+  `.dstAppEntitlementId`. `c1i api` still returns the API's envelope.
+- Mutations print the API's response unwrapped the same way, as pretty JSON.
+  **Read the id from the path the command documents; it is not always
+  `.id`:** `.connectorId` (MCP servers), `.srcAppId` (proxy bindings),
+  `.runId` (`role-mining trigger`), `.bulkActionId` (`findings bulk-*`),
+  `.accessProfileId` (`role-mining access-profiles create`), `.taskId` and
+  `.finding.id` (`findings create-task`), and `.id` for the delivery plus
+  `.webhookId` for `webhooks test`. Deletes and other empty responses print
+  `{}`: exit 0 is the success signal. `mcp tools approve` prints one compact
+  line per tool. A task's `.state` (task actions, `requests create`) is the
+  server's snapshot, not the outcome; re-read with `tasks get`.
+- Mutation output is never projected: an explicit `--fields` on a mutation
+  (even `--fields ""`) exits 2 before anything is sent, and `C1I_FIELDS` is
+  ignored there.
 - Casing differs by mode: list rows are snake_case (`app_id`,
   `display_name`); single-object reads carry the API's own camelCase
   (`displayName`, `createdAt`). `--fields` matches either casing at any
@@ -270,8 +283,8 @@ Choose the simplest output tool:
   names, and errors (exit `2`) if no requested key exists anywhere in the
   result.
 - Pipe to `jq` only for conditional selection, reshaping, aggregation, sorting,
-  or extracting a value from a mutation confirmation. `--fields` deliberately
-  never changes create/update/delete output.
+  or extracting a value from mutation output (use `jq -er`, which fails on a
+  missing id or a `--dry-run` preview where `jq -r` exits 0 with `null`).
 
 ```sh
 # Known keys: prefer c1i's built-in projection
@@ -288,16 +301,20 @@ APP_ID=$(c1i apps create --display-name "Example" | jq -er .id)
 | Code | Meaning | Do this |
 |---|---|---|
 | 0 | success | — |
-| 1 | generic / unclassified error | inspect the message |
+| 1 | generic / unclassified error | inspect the message; on a write, read `applied` (a `--wait` timeout or failed stdout write is `true`) before retrying |
 | 2 | usage error (bad flags/args, an empty, `.` or `..` id, a refused redirect, or any API `4xx` other than `401`/`403`/`404`/`408`/`429`/`499`) | fix the invocation, don't retry as-is — but read the message first: an API `4xx` can also be a state rejection (e.g. `task is closed`) rather than a bad argument |
 | 3 | not authenticated, or API `401`/`403` | re-authenticate (`c1i auth login`); a scoped credential needs a role that covers the call |
 | 4 | API `404` | stop — the resource/path doesn't exist |
 | 5 | API `429` | back off and retry |
-| 6 | C1 failed: API `5xx`, a `200` with a body that isn't JSON, a redirect chain that never settles, a stuck pagination cursor, or a list page in a shape the command doesn't recognize | retryable, except a stuck cursor or unrecognized page, which persists: the printed rows (if any) are real but incomplete |
+| 6 | C1 failed: API `5xx`, a `200` with a body that isn't JSON, a redirect chain that never settles, a stuck pagination cursor, or a list page in a shape the command doesn't recognize | retryable, except a stuck cursor or unrecognized page, which persists: the printed rows (if any) are real but incomplete. On a write, a `5xx` is `applied: "unknown"` and a non-JSON `200` is `applied: true`: re-read before re-sending |
 | 7 | `mcp gateway call` succeeded but the tool reported `isError: true` | inspect the printed result, not just the code |
 | 8 | a system beyond C1, or the protocol layer, failed — including a gateway that is unreachable (DNS failure, refused connection) | retrying the same call usually repeats it. For a connector failure, check the server with `mcp servers get <connector-id> --app-id <id>` and `mcp servers test-connection`; the upstream may be unreachable or its credentials expired. For a protocol error, it's a version mismatch or a c1i bug — report it, don't work around it |
 
-Exit 1 with `writing output:` means stdout failed (e.g. a full disk), and the request may already have succeeded server-side: verify before retrying a mutation.
+Exit 1 with `writing output:` means stdout failed (e.g. a full disk). On a
+write the message is
+`<METHOD> <path> succeeded but writing its response failed` and `applied` is
+`true`: the change landed, so verify before retrying a mutation. A batch (`mcp tools approve`) can exit non-zero after applying
+some ids; its summary's `notAttempted` lists the ids never sent.
 
 Branch on the exit code, not stderr text. An empty id argument is a usage error
 (`c1i users get ""` exits 2 without sending anything) — worth knowing if you
@@ -345,10 +362,20 @@ the server returns.
 
 ## Before you mutate
 
-`--dry-run` (or `C1I_DRY_RUN`) previews a C1 REST mutation's method, path,
-and body without sending it. `mcp gateway call` rejects it: c1i cannot preview
-or suppress a tool's side effects, so inspect the tool first and treat its call
-as live. `auth login` rejects it too.
+`--dry-run` (or `C1I_DRY_RUN`) previews a C1 REST mutation without sending
+it: one JSON object, `{"dryRun":true,"requests":[{"method","url","body"}]}`,
+never with an `id`, plus a stderr notice. It needs a configured URL (exit 2
+without) and refuses an empty, `.` or `..` id (exit 2) as a real send does. It
+needs no credentials unless c1i must look something up for an exact body: a
+task action's current policy step without `--policy-step-id`, a hosted MCP
+server's catalog id without `--catalog-id`, or the caller for
+`requests create` without `--user-id`. `mcp gateway call` rejects it: c1i
+cannot preview or suppress a tool's side effects, so inspect the tool first
+and treat its call as live. `auth login` rejects it too.
+
+**An inherited `C1I_DRY_RUN=1` turns every write into a preview**, and
+`jq -r .id` on a preview prints `null` and your script carries on. Extract ids
+with `jq -er`, which fails instead.
 
 Two things are irreversible in ways their `--help` doesn't make obvious:
 

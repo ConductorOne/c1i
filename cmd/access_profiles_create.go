@@ -17,7 +17,7 @@ body unless you pass it, so the server's own defaults apply.
 Prints the created profile as pretty JSON, unwrapped like "access-profiles
 get": the id is .id and the member count .memberCount. --fields is a usage
 error on a mutation; extract with jq -er, which fails on a --dry-run preview
-instead of printing null.
+where jq -r exits 0 with null.
 
 --published and --visible-to-everyone both take effect at create time: a
 profile can be created already published. Ordering matters for the visibility
