@@ -3,6 +3,7 @@ package cmd
 import (
 	"encoding/json"
 	"fmt"
+	"net/http"
 	"strconv"
 	"strings"
 
@@ -23,7 +24,11 @@ instantiate curated classifiers and their dependent gates. The singleton
 Create and update commands take JSON objects through --body-file (or "-" for
 standard input), preserving nested CEL rules, hooks, gates, and template
 parameters without a lossy flag translation. Updates require --update-mask as
-an explicit safeguard: including "rules" replaces the entire ordered cascade.`,
+an explicit safeguard: including "rules" replaces the entire ordered cascade.
+
+Mutations print the object unwrapped like the matching get (id: .id; "policy
+update" prints the singleton policy); deletes print {}. --fields is a usage
+error on a mutation; extract with jq -er, which fails on a --dry-run preview.`,
 }
 
 var mcpClassifiersListCmd = &cobra.Command{
@@ -60,7 +65,7 @@ first match wins; leave a new rule's id empty for C1 to assign it.`,
 		if err != nil {
 			return err
 		}
-		return postClassifierMutation(cmd, "/api/v1/classifiers", map[string]any{"classifier": classifier})
+		return postClassifierMutation(cmd, "/api/v1/classifiers", map[string]any{"classifier": classifier}, named("classifier"))
 	},
 }
 
@@ -80,7 +85,7 @@ and preserve the existing classifier first when changing rules.`,
 		if err != nil {
 			return err
 		}
-		return postClassifierMutation(cmd, client.Path("/api/v1/classifiers/%s", args[0]), body)
+		return postClassifierMutation(cmd, client.Path("/api/v1/classifiers/%s", args[0]), body, named("classifier"))
 	},
 }
 
@@ -89,7 +94,7 @@ var mcpClassifiersDeleteCmd = &cobra.Command{
 	Short: "Delete a classifier (pretty JSON)",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		return postClassifierMutation(cmd, client.Path("/api/v1/classifiers/%s/delete", args[0]), map[string]any{})
+		return postClassifierMutation(cmd, client.Path("/api/v1/classifiers/%s/delete", args[0]), map[string]any{}, byID("id"))
 	},
 }
 
@@ -123,7 +128,7 @@ uses one.`,
 		if err != nil {
 			return err
 		}
-		return postClassifierMutation(cmd, "/api/v1/classifier_bindings", map[string]any{"binding": binding})
+		return postClassifierMutation(cmd, "/api/v1/classifier_bindings", map[string]any{"binding": binding}, named("binding"))
 	},
 }
 
@@ -132,7 +137,7 @@ var mcpClassifierBindingsDeleteCmd = &cobra.Command{
 	Short: "Delete a classifier binding (pretty JSON)",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		return postClassifierMutation(cmd, client.Path("/api/v1/classifier_bindings/%s/delete", args[0]), map[string]any{})
+		return postClassifierMutation(cmd, client.Path("/api/v1/classifier_bindings/%s/delete", args[0]), map[string]any{}, byID("id"))
 	},
 }
 
@@ -186,7 +191,7 @@ templateVersion, displayName, and params. Required params are declared by
 		if err != nil {
 			return err
 		}
-		return postClassifierMutation(cmd, client.Path("/api/v1/classifier_templates/%s/instantiate", args[0]), body)
+		return postClassifierMutation(cmd, client.Path("/api/v1/classifier_templates/%s/instantiate", args[0]), body, named("classifier"))
 	},
 }
 
@@ -205,7 +210,7 @@ canonical. ruleIndex defaults to 0; insertIndex at or past the end appends.`,
 			return err
 		}
 		body["templateId"] = args[1]
-		return postClassifierMutation(cmd, client.Path("/api/v1/classifiers/%s/rules/from_template", args[0]), body)
+		return postClassifierMutation(cmd, client.Path("/api/v1/classifiers/%s/rules/from_template", args[0]), body, named("classifier"))
 	},
 }
 
@@ -236,7 +241,7 @@ first-match-wins cascade in the supplied order.`,
 		if err != nil {
 			return err
 		}
-		return postClassifierMutation(cmd, "/api/v1/settings/ai-governance/agent-classifier-policy", body)
+		return postClassifierMutation(cmd, "/api/v1/settings/ai-governance/agent-classifier-policy", body, named("policy"))
 	},
 }
 
@@ -293,7 +298,7 @@ expression.`,
 		if err != nil {
 			return err
 		}
-		return postClassifierMutation(cmd, "/api/v1/tool_gates", body)
+		return postClassifierMutation(cmd, "/api/v1/tool_gates", body, named("toolGate"))
 	},
 }
 
@@ -306,7 +311,7 @@ var mcpClassifierToolGatesUpdateCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		return postClassifierMutation(cmd, client.Path("/api/v1/tool_gates/%s", args[0]), body)
+		return postClassifierMutation(cmd, client.Path("/api/v1/tool_gates/%s", args[0]), body, named("toolGate"))
 	},
 }
 
@@ -315,7 +320,7 @@ var mcpClassifierToolGatesDeleteCmd = &cobra.Command{
 	Short: "Delete a tool gate (pretty JSON)",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		return postClassifierMutation(cmd, client.Path("/api/v1/tool_gates/%s/delete", args[0]), map[string]any{})
+		return postClassifierMutation(cmd, client.Path("/api/v1/tool_gates/%s/delete", args[0]), map[string]any{}, byID("id"))
 	},
 }
 
@@ -423,23 +428,8 @@ func getClassifierResourceWithParams(cmd *cobra.Command, path string, params map
 	return writeNamedResource(cmd, data, key)
 }
 
-func postClassifierMutation(cmd *cobra.Command, path string, body map[string]any) error {
-	baseURL, err := GetBaseURL()
-	if err != nil {
-		return err
-	}
-	if dryRunActive() {
-		return printDryRun(cmd, "POST", path, body)
-	}
-	c, err := newClient(cmd, baseURL)
-	if err != nil {
-		return fmt.Errorf("authentication failed: %w", err)
-	}
-	data, err := c.Post(cmd.Context(), path, body)
-	if err != nil {
-		return fmt.Errorf("API error: %w", err)
-	}
-	return writeRawObject(cmd, data)
+func postClassifierMutation(cmd *cobra.Command, path string, body map[string]any, unwrap unwrapRule) error {
+	return sendMutation(cmd, mutation{Method: http.MethodPost, Path: path, Body: body, Unwrap: unwrap})
 }
 
 func readOptionalClassifierJSONObject(cmd *cobra.Command, flag string) (map[string]any, error) {
@@ -589,6 +579,15 @@ func init() {
 	mcpClassifierTemplatesCmd.AddCommand(mcpClassifierTemplatesListCmd, mcpClassifierTemplatesGetCmd, mcpClassifierTemplatesInstantiateCmd, mcpClassifierTemplatesAddRuleCmd)
 	mcpClassifierPolicyCmd.AddCommand(mcpClassifierPolicyShowCmd, mcpClassifierPolicyUpdateCmd)
 	mcpClassifierToolGatesCmd.AddCommand(mcpClassifierToolGatesListCmd, mcpClassifierToolGatesSearchCmd, mcpClassifierToolGatesGetCmd, mcpClassifierToolGatesCreateCmd, mcpClassifierToolGatesUpdateCmd, mcpClassifierToolGatesDeleteCmd)
+	for _, command := range []*cobra.Command{
+		mcpClassifiersCreateCmd, mcpClassifiersUpdateCmd, mcpClassifiersDeleteCmd,
+		mcpClassifierBindingsCreateCmd, mcpClassifierBindingsDeleteCmd,
+		mcpClassifierTemplatesInstantiateCmd, mcpClassifierTemplatesAddRuleCmd,
+		mcpClassifierPolicyUpdateCmd,
+		mcpClassifierToolGatesCreateCmd, mcpClassifierToolGatesUpdateCmd, mcpClassifierToolGatesDeleteCmd,
+	} {
+		markMutating(command)
+	}
 	mcpClassifiersCmd.AddCommand(mcpClassifierBindingsCmd, mcpClassifierTemplatesCmd, mcpClassifierPolicyCmd, mcpClassifierToolGatesCmd)
 	mcpCmd.AddCommand(mcpClassifiersCmd)
 }

@@ -88,29 +88,6 @@ var pendingMigration = map[string]bool{
 	"c1i entitlements proxy-bindings delete":    true,
 	"c1i entitlements remove-owner":             true,
 	"c1i entitlements update":                   true,
-	"c1i mcp bindings create":                   true,
-	"c1i mcp bindings delete":                   true,
-	"c1i mcp classifiers bindings create":       true,
-	"c1i mcp classifiers bindings delete":       true,
-	"c1i mcp classifiers create":                true,
-	"c1i mcp classifiers delete":                true,
-	"c1i mcp classifiers policy update":         true,
-	"c1i mcp classifiers templates add-rule":    true,
-	"c1i mcp classifiers templates instantiate": true,
-	"c1i mcp classifiers tool-gates create":     true,
-	"c1i mcp classifiers tool-gates delete":     true,
-	"c1i mcp classifiers tool-gates update":     true,
-	"c1i mcp classifiers update":                true,
-	"c1i mcp servers delete":                    true,
-	"c1i mcp servers register":                  true,
-	"c1i mcp servers resync-tools":              true,
-	"c1i mcp servers update":                    true,
-	"c1i mcp servers update-credentials":        true,
-	"c1i mcp tools approve":                     true,
-	"c1i mcp tools delete":                      true,
-	"c1i mcp toolsets create":                   true,
-	"c1i mcp toolsets delete":                   true,
-	"c1i mcp toolsets update":                   true,
 	"c1i service-principals bindings add":       true,
 	"c1i service-principals bindings delete":    true,
 	"c1i service-principals create":             true,
@@ -127,13 +104,13 @@ var pendingMigration = map[string]bool{
 
 // batchCommands maps each command calling sendMutationBatch to the id key
 // every output line carries.
-var batchCommands = map[string]string{}
+var batchCommands = map[string]string{
+	"c1i mcp tools approve": "id",
+}
 
 // stderrPending holds files whose raw stderr writes move to the helper with
 // their command's migration.
-var stderrPending = map[string]string{
-	"cmd/mcp_tools_approve.go": "per-id lines move to sendMutationBatch with mcp tools approve",
-}
+var stderrPending = map[string]string{}
 
 // ---- source index ----
 

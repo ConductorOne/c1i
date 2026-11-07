@@ -134,6 +134,7 @@ func TestTextOutputFailsOnOutputWriteError(t *testing.T) {
 		reset    []*cobra.Command
 		requests int32
 		mutation string // the applied request a failed write reports
+		summary  string // a batch abort's message prefix instead (exit 1; the batch stops)
 	}{
 		{name: "version", args: []string{"version"}},
 		{name: "docs guide list", args: []string{"docs", "guide"}},
@@ -144,12 +145,14 @@ func TestTextOutputFailsOnOutputWriteError(t *testing.T) {
 			args:     []string{"mcp", "tools", "delete", "tool-a", "--app-id", "app-x", "--connector-id", "conn-y"},
 			reset:    []*cobra.Command{mcpToolsDeleteCmd},
 			requests: 1,
+			mutation: "DELETE /api/v1/apps/app-x/connectors/conn-y/mcp_tools/tool-a",
 		},
 		{
 			name:     "mcp tools approve batch",
 			args:     []string{"mcp", "tools", "approve", "tool-a", "tool-b", "--app-id", "app-x", "--connector-id", "conn-y"},
 			reset:    []*cobra.Command{mcpToolsApproveCmd},
 			requests: 1,
+			summary:  "approved 0 of 2 tools; 1 failed; output failed: POST /api/v1/apps/app-x/connectors/conn-y/mcp_tools/tool-a succeeded but writing its response failed: ",
 		},
 		{name: "apps create dry-run", args: []string{"apps", "create", "--display-name", "zz-x", "--dry-run"}, reset: []*cobra.Command{appsCreateCmd}},
 		{name: "api paginate", args: []string{"api", "--path", "/api/v1/things", "--paginate"}, reset: []*cobra.Command{apiCmd}, requests: 1},
@@ -186,9 +189,14 @@ func TestTextOutputFailsOnOutputWriteError(t *testing.T) {
 			t.Cleanup(func() { leaf.SetOut(nil) })
 			rootCmd.SetArgs(tc.args)
 			err := rootCmd.ExecuteContext(context.Background())
-			if tc.mutation != "" {
+			switch {
+			case tc.summary != "":
+				if err == nil || exitCode(err) != exitError || !strings.HasPrefix(err.Error(), tc.summary) {
+					t.Errorf("error %v (exit %d), want exit 1 and prefix %q", err, exitCode(err), tc.summary)
+				}
+			case tc.mutation != "":
 				assertMutationWriteFailure(t, err, tc.mutation)
-			} else {
+			default:
 				assertOutputWriteFailure(t, err)
 			}
 			if got := requests.Load(); got != tc.requests {
@@ -240,8 +248,9 @@ func TestUpgradeResultFailsOnOutputWriteError(t *testing.T) {
 	})
 }
 
-// A batch approve that loses stdout mid-way reports the same summary as any
-// other partial batch, keeping the earlier per-id failure classifiable.
+// A batch approve that loses stdout mid-way aborts: no further id is sent, the
+// summary names the failed write, and the exit is 1 even though an earlier id
+// 404ed (the abort override, R33).
 func TestMcpToolsApproveOutputFailureKeepsSummary(t *testing.T) {
 	var requests atomic.Int32
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -272,15 +281,12 @@ func TestMcpToolsApproveOutputFailureKeepsSummary(t *testing.T) {
 	if err == nil {
 		t.Fatal("approve returned nil although stdout failed")
 	}
-	msg := err.Error()
-	if !strings.HasPrefix(msg, "approved 1 of 3 tools; 1 failed") || !strings.Contains(msg, "; output failed: writing output: ") || strings.Count(msg, "writing output: ") != 1 {
-		t.Errorf("error %q, want the batch summary followed by \"; output failed: writing output: …\"", msg)
+	want := "approved 0 of 3 tools; 2 failed; output failed: POST /api/v1/apps/app-x/connectors/conn-y/mcp_tools/tool-b succeeded but writing its response failed: "
+	if !strings.HasPrefix(err.Error(), want) {
+		t.Errorf("error %q, want prefix %q", err, want)
 	}
-	if !errors.Is(err, errStdoutFull) {
-		t.Errorf("error %v does not wrap the write error", err)
-	}
-	if got := exitCode(err); got != exitNotFound {
-		t.Errorf("exit code %d, want %d from the earlier 404", got, exitNotFound)
+	if got := exitCode(err); got != exitError {
+		t.Errorf("exit code %d, want %d (the batch aborted on a write failure)", got, exitError)
 	}
 	if got := requests.Load(); got != 2 {
 		t.Errorf("server received %d requests, want 2 (tool-c must not be sent)", got)

@@ -56,7 +56,7 @@ func TestClassifierMutationsDryRunUsePublicRequestShapes(t *testing.T) {
 	}{
 		{
 			name: "classifier create", cmd: mcpClassifiersCreateCmd, bodyFile: classifierFile,
-			contains: []string{"[dry-run] POST /api/v1/classifiers", `"classifier"`, `"displayName": "Observe MCP"`},
+			contains: []string{`"method": "POST"`, `"url": "https://example.invalid/api/v1/classifiers"`, `"classifier"`, `"displayName": "Observe MCP"`},
 		},
 		{
 			name: "classifier update", cmd: mcpClassifiersUpdateCmd, args: []string{"classifier/1"}, bodyFile: classifierFile, mask: "description",

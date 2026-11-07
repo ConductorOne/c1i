@@ -1,7 +1,7 @@
 package cmd
 
 import (
-	"fmt"
+	"net/http"
 
 	"github.com/ConductorOne/c1i/internal/client"
 	"github.com/spf13/cobra"
@@ -14,17 +14,15 @@ var mcpToolsetsCreateCmd = &cobra.Command{
 
 A toolset is an admin-curated grouping of MCP tools bound to a single
 AppEntitlement so users can request/get granted the whole bundle at once.
-After creating, attach tools with "c1i mcp bindings create".`,
+After creating, attach tools with "c1i mcp bindings create".
+
+Prints the toolset, unwrapped like "mcp toolsets get": the id is .id. Extract
+it with jq -er, which fails on a --dry-run preview instead of printing null.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		if _, err := requireNonEmptyIfSet(cmd, "display-name"); err != nil {
 			return err
 		}
 		if err := requireNonEmpty(cmd, "app-id", "connector-id", "display-name"); err != nil {
-			return err
-		}
-
-		baseURL, err := GetBaseURL()
-		if err != nil {
 			return err
 		}
 
@@ -43,20 +41,7 @@ After creating, attach tools with "c1i mcp bindings create".`,
 		}
 
 		path := client.Path("/api/v1/apps/%s/connectors/%s/mcp_toolsets", appID, connectorID)
-		if dryRunActive() {
-			return printDryRun(cmd, "POST", path, body)
-		}
-
-		c, err := newClient(cmd, baseURL)
-		if err != nil {
-			return fmt.Errorf("authentication failed: %w", err)
-		}
-		data, err := c.Post(cmd.Context(), path, body)
-		if err != nil {
-			return fmt.Errorf("API error: %w", err)
-		}
-
-		return writeRawObject(cmd, data)
+		return sendMutation(cmd, mutation{Method: http.MethodPost, Path: path, Body: body})
 	},
 }
 
@@ -66,5 +51,6 @@ func init() {
 	mcpToolsetsCreateCmd.Flags().String("display-name", "", "Toolset display name ("+displayNameRule+")")
 	mcpToolsetsCreateCmd.Flags().String("description", "", "Toolset description")
 	markRequired(mcpToolsetsCreateCmd, "app-id", "connector-id", "display-name")
+	markMutating(mcpToolsetsCreateCmd)
 	mcpToolsetsCmd.AddCommand(mcpToolsetsCreateCmd)
 }
