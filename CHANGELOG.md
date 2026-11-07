@@ -271,6 +271,10 @@ exits:
 - `docs agents` no longer calls its doc "short", and its `service-principals
   delete` note matches live behavior: `get` on a deleted principal exits 4.
 - `policies create --help` no longer sends readers to a source-code comment.
+- `mcp toolsets update --help` said `--description` alone updates only the
+  description. The server requires `--display-name` on every update and 400s
+  without it ("DisplayName value length must be between 1 and 255 runes",
+  exit 2); the help and README now say so.
 - An empty, whitespace-only or invisible-only (e.g. U+200B, U+FEFF)
   `--display-name` now exits `2` before any request on every `update` and
   `create` that takes one, including `service-principals credentials`. `apps`,

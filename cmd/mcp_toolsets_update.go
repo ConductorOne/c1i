@@ -11,11 +11,13 @@ import (
 
 var mcpToolsetsUpdateCmd = &cobra.Command{
 	Use:   "update <toolset-id>",
-	Short: "Update an MCP toolset's display name and/or description (pretty JSON)",
+	Short: "Update an MCP toolset's display name and description (pretty JSON)",
 	Long: `Update editable fields on a toolset (display_name, description).
 
-The update_mask is derived from which flags you set: pass --display-name to
-update only the name, --description for only the description, both for both.
+The update_mask is derived from which flags you set. The server requires
+--display-name on every update: --description alone 400s with
+"DisplayName value length must be between 1 and 255 runes" (exit 2,
+applied:false). To change only the description, pass the current name too.
 Editing the AppEntitlement created behind the toolset is not supported here.
 
 A blank --display-name (empty, whitespace or invisible-only) exits 2,
@@ -71,8 +73,8 @@ Prints the updated toolset, unwrapped like "mcp toolsets get".`,
 func init() {
 	mcpToolsetsUpdateCmd.Flags().String("app-id", "", "Application ID")
 	mcpToolsetsUpdateCmd.Flags().String("connector-id", "", "Connector ID")
-	mcpToolsetsUpdateCmd.Flags().String("display-name", "", "New display name (omit to leave unchanged; "+displayNameRule+")")
-	mcpToolsetsUpdateCmd.Flags().String("description", "", "New description (omit to leave unchanged)")
+	mcpToolsetsUpdateCmd.Flags().String("display-name", "", "New display name (the server requires it on every update; "+displayNameRule+")")
+	mcpToolsetsUpdateCmd.Flags().String("description", "", "New description (pass --display-name too; the server requires it)")
 	markRequired(mcpToolsetsUpdateCmd, "app-id", "connector-id")
 	markMutating(mcpToolsetsUpdateCmd)
 	mcpToolsetsCmd.AddCommand(mcpToolsetsUpdateCmd)

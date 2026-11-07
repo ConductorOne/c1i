@@ -556,7 +556,7 @@ c1i mcp tools history <tool-id> --app-id <id> --connector-id <id> [--page-size N
 c1i mcp toolsets list                   --app-id <id> --connector-id <id> [--page-size N] [--limit N]
 c1i mcp toolsets get                    <toolset-id> --app-id <id> --connector-id <id>
 c1i mcp toolsets create                 --app-id <id> --connector-id <id> --display-name <name> [--description <text>]
-c1i mcp toolsets update                 <toolset-id> --app-id <id> --connector-id <id> [--display-name <name>] [--description <text>]
+c1i mcp toolsets update                 <toolset-id> --app-id <id> --connector-id <id> --display-name <name> [--description <text>]   # server 400s without --display-name: "DisplayName value length must be between 1 and 255 runes"
 c1i mcp toolsets delete                 <toolset-id> --app-id <id> --connector-id <id>
 c1i mcp toolsets get-by-entitlement     <app-entitlement-id> --app-id <id>
 c1i mcp toolsets requestable-connectors <user-id>   # not paginated; returns the full set in one response
