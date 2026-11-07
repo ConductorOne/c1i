@@ -14,8 +14,11 @@ import (
 const synthViolations = `package cmd
 
 import (
+	"bufio"
 	"fmt"
+	"io"
 	"os"
+	"strings"
 
 	"github.com/spf13/cobra"
 )
@@ -57,6 +60,62 @@ func zzMethodValue(c interface{ Post() }) {
 
 func zzStderr() {
 	fmt.Fprintf(os.Stderr, "oops\n")
+}
+
+func zzStderrMethod(cmd *cobra.Command) {
+	_, _ = cmd.ErrOrStderr().Write([]byte("oops\n"))
+}
+
+func zzWriteMethod(cmd *cobra.Command, _ []string) error {
+	if _, err := cmd.OutOrStdout().Write([]byte("x")); err != nil {
+		return err
+	}
+	return sendMutation(cmd, mutation{})
+}
+
+func zzOsWriteString(cmd *cobra.Command, _ []string) error {
+	if _, err := os.Stdout.WriteString("x"); err != nil {
+		return err
+	}
+	return sendMutation(cmd, mutation{})
+}
+
+func zzWrapped(cmd *cobra.Command, _ []string) error {
+	var out io.Writer = cmd.OutOrStdout()
+	b := bufio.NewWriter(out)
+	_ = b.Flush()
+	return sendMutation(cmd, mutation{})
+}
+
+func zzCopy(cmd *cobra.Command, _ []string) error {
+	if _, err := io.Copy(os.Stdout, strings.NewReader("x")); err != nil {
+		return err
+	}
+	return sendMutation(cmd, mutation{})
+}
+
+func zzEmit(w io.Writer) error {
+	_, err := w.Write([]byte("x"))
+	return err
+}
+
+func zzParamWrite(cmd *cobra.Command, _ []string) error {
+	if err := zzEmit(cmd.OutOrStdout()); err != nil {
+		return err
+	}
+	return sendMutation(cmd, mutation{})
+}
+
+func zzTemplate(cmd *cobra.Command) error {
+	_, err := cmd.OutOrStdout().Write([]byte("{}"))
+	return err
+}
+
+func zzTemplateMode(cmd *cobra.Command, _ []string) error {
+	if cmd.Flags().Changed("template") {
+		return zzTemplate(cmd)
+	}
+	return sendMutation(cmd, mutation{})
 }
 `
 
@@ -124,7 +183,39 @@ func TestEnforcementCatchesViolations(t *testing.T) {
 		wantViolation(t, ruleAViolations(ix), "zz_synthetic.go:zzMethodValue")
 	})
 	t.Run("raw stderr write", func(t *testing.T) {
-		wantViolation(t, stderrViolations(ix), "zz_synthetic.go")
+		wantViolation(t, stderrViolations(ix), "zz_synthetic.go:zzStderr;")
+	})
+	t.Run("stderr Write method", func(t *testing.T) {
+		wantViolation(t, stderrViolations(ix), "zz_synthetic.go:zzStderrMethod;")
+	})
+	for fn, what := range map[string]string{
+		"zzWriteMethod":   ".Write to stdout",
+		"zzOsWriteString": ".WriteString to stdout",
+		"zzWrapped":       "bufio.NewWriter to stdout",
+		"zzCopy":          "io.Copy to stdout",
+		"zzParamWrite":    "zzEmit writes stdout through its writer parameter",
+	} {
+		t.Run("stdout bypass "+fn, func(t *testing.T) {
+			l, rep := synthLeaf(t, ix, fn, true)
+			wantViolation(t, leafViolations(l, rep), what)
+		})
+	}
+	t.Run("unexempted output mode", func(t *testing.T) {
+		l, rep := synthLeaf(t, ix, "zzTemplateMode", true)
+		wantViolation(t, leafViolations(l, rep), ".Write to stdout")
+	})
+	t.Run("exempted output mode", func(t *testing.T) {
+		nonMutatingOutputModes["cmd/zz_synthetic.go:zzTemplate"] = "test"
+		defer delete(nonMutatingOutputModes, "cmd/zz_synthetic.go:zzTemplate")
+		l, rep := synthLeaf(t, ix, "zzTemplateMode", true)
+		if v := leafViolations(l, rep); len(v) != 0 {
+			t.Errorf("exempted mode still reported: %q", v)
+		}
+	})
+	t.Run("stale output-mode exemption", func(t *testing.T) {
+		nonMutatingOutputModes["cmd/zz_synthetic.go:zzSend"] = "test"
+		defer delete(nonMutatingOutputModes, "cmd/zz_synthetic.go:zzSend")
+		wantViolation(t, staleOutputExemptions(ix), "cmd/zz_synthetic.go:zzSend")
 	})
 	t.Run("stale allowlist entry", func(t *testing.T) {
 		readOnlyPOST["cmd/zz_gone.go:nothing"] = "test"

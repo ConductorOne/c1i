@@ -78,6 +78,13 @@ var batchCommands = map[string]string{
 	"c1i mcp tools approve": "id",
 }
 
+// nonMutatingOutputModes are declarations a mutating command reaches that
+// write stdout in a mode that sends nothing. Their own bodies may write
+// stdout; one reason each, and an entry that writes no stdout fails.
+var nonMutatingOutputModes = map[string]string{
+	"cmd/mcp_servers_register_template.go:printConfigTemplate": "--print-config-template prints a config skeleton and sends nothing",
+}
+
 // ---- source index ----
 
 type srcIndex struct {
@@ -261,17 +268,8 @@ func (w *walker) walk(root ast.Node, direct bool) {
 	if path == "cmd/mutation.go" {
 		return
 	}
-	locals := map[string]bool{}
-	ast.Inspect(root, func(n ast.Node) bool {
-		if as, ok := n.(*ast.AssignStmt); ok && len(as.Lhs) == len(as.Rhs) {
-			for i, r := range as.Rhs {
-				if id, ok := as.Lhs[i].(*ast.Ident); ok && isStdoutForm(r, nil) {
-					locals[id.Name] = true
-				}
-			}
-		}
-		return true
-	})
+	locals := writerLocals(root, isStdoutForm)
+	_, exempt := nonMutatingOutputModes[w.ix.declKey[root]]
 	var stack []ast.Node
 	ast.Inspect(root, func(n ast.Node) bool {
 		if n == nil {
@@ -298,7 +296,7 @@ func (w *walker) walk(root ast.Node, direct bool) {
 				}
 			}
 			if direct {
-				if what := forbiddenCall(x, locals, w.ix); what != "" {
+				if what := forbiddenCall(x, locals, w.ix, exempt); what != "" {
 					w.rep.forbidden = append(w.rep.forbidden, finding{pos, what})
 				}
 			}
@@ -382,72 +380,93 @@ func isCallFunAny(stack []ast.Node, sel *ast.SelectorExpr) bool {
 	return ok && c.Fun == sel
 }
 
-// isStdoutForm matches cmd.OutOrStdout(), os.Stdout, or a local holding one.
-func isStdoutForm(e ast.Expr, locals map[string]bool) bool {
+// writerForm matches a stream: a cobra accessor call, os.<file>, or a local
+// holding one.
+func writerForm(e ast.Expr, locals map[string]bool, accessors map[string]bool, osFile string) bool {
 	switch x := e.(type) {
 	case *ast.CallExpr:
 		sel, ok := x.Fun.(*ast.SelectorExpr)
-		return ok && sel.Sel.Name == "OutOrStdout"
+		return ok && accessors[sel.Sel.Name]
 	case *ast.SelectorExpr:
 		pkg, ok := x.X.(*ast.Ident)
-		return ok && pkg.Name == "os" && x.Sel.Name == "Stdout"
+		return ok && pkg.Name == "os" && x.Sel.Name == osFile
 	case *ast.Ident:
 		return locals[x.Name]
+	case *ast.ParenExpr:
+		return writerForm(x.X, locals, accessors, osFile)
 	}
 	return false
+}
+
+// OutOrStderr is the command's out writer too: it is stdout once SetOut is.
+func isStdoutForm(e ast.Expr, locals map[string]bool) bool {
+	return writerForm(e, locals, map[string]bool{"OutOrStdout": true, "OutOrStderr": true}, "Stdout")
 }
 
 func isStderrForm(e ast.Expr, locals map[string]bool) bool {
-	switch x := e.(type) {
-	case *ast.CallExpr:
-		sel, ok := x.Fun.(*ast.SelectorExpr)
-		return ok && sel.Sel.Name == "ErrOrStderr"
-	case *ast.SelectorExpr:
-		pkg, ok := x.X.(*ast.Ident)
-		return ok && pkg.Name == "os" && x.Sel.Name == "Stderr"
-	case *ast.Ident:
-		return locals[x.Name]
-	}
-	return false
+	return writerForm(e, locals, map[string]bool{"ErrOrStderr": true}, "Stderr")
 }
 
-var outputFuncs = map[string]bool{"writeObject": true, "writeResource": true, "writeNamedResource": true, "writeRawObject": true, "newEmitter": true, "printDryRun": true}
-
-// forbiddenCall reports a §5.2 output form or a read/wait in call.
-func forbiddenCall(call *ast.CallExpr, locals map[string]bool, ix *srcIndex) string {
-	switch fun := call.Fun.(type) {
-	case *ast.Ident:
-		if outputFuncs[fun.Name] {
-			return fun.Name + " (mutation output goes through the helper)"
+// writerLocals names the locals in root assigned (:=, =, or var) from a
+// stream form.
+func writerLocals(root ast.Node, form func(ast.Expr, map[string]bool) bool) map[string]bool {
+	locals := map[string]bool{}
+	ast.Inspect(root, func(n ast.Node) bool {
+		var lhs []*ast.Ident
+		var rhs []ast.Expr
+		switch x := n.(type) {
+		case *ast.AssignStmt:
+			for _, l := range x.Lhs {
+				id, _ := l.(*ast.Ident)
+				lhs = append(lhs, id)
+			}
+			rhs = x.Rhs
+		case *ast.ValueSpec:
+			lhs, rhs = x.Names, x.Values
 		}
-		if fd, ok := ix.funcs[fun.Name]; ok {
-			for i, a := range call.Args {
-				if isStdoutForm(a, locals) && writesToParam(fd, i) {
-					return fun.Name + " writes stdout through its writer parameter"
-				}
+		if len(lhs) != len(rhs) {
+			return true
+		}
+		for i, r := range rhs {
+			if lhs[i] != nil && form(r, nil) {
+				locals[lhs[i].Name] = true
 			}
 		}
-	case *ast.SelectorExpr:
-		pkg, _ := fun.X.(*ast.Ident)
-		name := fun.Sel.Name
+		return true
+	})
+	return locals
+}
+
+// writerMethods write to their receiver.
+var writerMethods = map[string]bool{"Write": true, "WriteString": true, "WriteByte": true, "WriteRune": true, "ReadFrom": true}
+
+// writesTo reports how call writes to a stream that is matches: a write
+// method on it, handing it to anything outside package cmd (fmt.Fprint*,
+// io.Copy, json.NewEncoder, bufio.NewWriter, …), or passing it to a cmd
+// func that does either with that parameter. trusted cmd funcs may.
+func writesTo(call *ast.CallExpr, is func(ast.Expr) bool, ix *srcIndex, trusted func(*ast.FuncDecl) bool, depth int) string {
+	if sel, ok := call.Fun.(*ast.SelectorExpr); ok && writerMethods[sel.Sel.Name] && is(sel.X) {
+		return "." + sel.Sel.Name
+	}
+	var fd *ast.FuncDecl
+	if id, ok := call.Fun.(*ast.Ident); ok {
+		fd = ix.funcs[id.Name]
+	}
+	for i, a := range call.Args {
 		switch {
-		case pkg != nil && pkg.Name == "fmt" && strings.HasPrefix(name, "Fprint") && len(call.Args) > 0 && isStdoutForm(call.Args[0], locals),
-			pkg != nil && pkg.Name == "io" && name == "WriteString" && len(call.Args) > 0 && isStdoutForm(call.Args[0], locals),
-			pkg != nil && pkg.Name == "json" && name == "NewEncoder" && len(call.Args) > 0 && isStdoutForm(call.Args[0], locals):
-			return pkg.Name + "." + name + " to stdout"
-		case pkg != nil && pkg.Name == "fmt" && strings.HasPrefix(name, "Print"):
-			return "fmt." + name + " (stdout)"
-		case pkg != nil && pkg.Name == "cmd" && strings.HasPrefix(name, "Print"):
-			return "cmd." + name
-		case name == "Get" && len(call.Args) == 3:
-			return "a .Get read outside withPreRead/withWait"
+		case !is(a):
+		case fd == nil:
+			return types.ExprString(call.Fun)
+		case trusted(fd):
+		case depth < 4 && writesToParam(fd, i, ix, trusted, depth+1):
+			return fd.Name.Name + " writes"
 		}
 	}
 	return ""
 }
 
-// writesToParam reports whether fd Fprint*s to its i-th parameter.
-func writesToParam(fd *ast.FuncDecl, i int) bool {
+// writesToParam reports whether fd writes to its i-th parameter.
+func writesToParam(fd *ast.FuncDecl, i int, ix *srcIndex, trusted func(*ast.FuncDecl) bool, depth int) bool {
 	var name string
 	n := 0
 	for _, f := range fd.Type.Params.List {
@@ -458,25 +477,56 @@ func writesToParam(fd *ast.FuncDecl, i int) bool {
 			n++
 		}
 	}
-	if name == "" {
+	if name == "" || fd.Body == nil {
 		return false
+	}
+	is := func(e ast.Expr) bool {
+		id, ok := e.(*ast.Ident)
+		return ok && id.Name == name
 	}
 	found := false
 	ast.Inspect(fd.Body, func(n ast.Node) bool {
-		c, ok := n.(*ast.CallExpr)
-		if !ok || len(c.Args) == 0 {
-			return true
+		if c, ok := n.(*ast.CallExpr); ok && !found && writesTo(c, is, ix, trusted, depth) != "" {
+			found = true
 		}
-		if sel, ok := c.Fun.(*ast.SelectorExpr); ok {
-			if pkg, ok := sel.X.(*ast.Ident); ok && (pkg.Name == "fmt" && strings.HasPrefix(sel.Sel.Name, "Fprint") || pkg.Name == "io" && sel.Sel.Name == "WriteString") {
-				if id, ok := c.Args[0].(*ast.Ident); ok && id.Name == name {
-					found = true
-				}
-			}
-		}
-		return true
+		return !found
 	})
 	return found
+}
+
+func untrusted(*ast.FuncDecl) bool { return false }
+
+var outputFuncs = map[string]bool{"writeObject": true, "writeResource": true, "writeNamedResource": true, "writeRawObject": true, "newEmitter": true, "printDryRun": true}
+
+// forbiddenCall reports a §5.2 output form or a read/wait in call. An
+// exempt declaration (nonMutatingOutputModes) may write stdout.
+func forbiddenCall(call *ast.CallExpr, locals map[string]bool, ix *srcIndex, exempt bool) string {
+	if id, ok := call.Fun.(*ast.Ident); ok && outputFuncs[id.Name] {
+		return id.Name + " (mutation output goes through the helper)"
+	}
+	if !exempt {
+		if how := writesTo(call, func(e ast.Expr) bool { return isStdoutForm(e, locals) }, ix, untrusted, 0); how != "" {
+			if strings.HasSuffix(how, " writes") {
+				return how + " stdout through its writer parameter"
+			}
+			return how + " to stdout"
+		}
+	}
+	if fun, ok := call.Fun.(*ast.SelectorExpr); ok {
+		pkg, _ := fun.X.(*ast.Ident)
+		name := fun.Sel.Name
+		switch {
+		case exempt:
+		case pkg != nil && pkg.Name == "fmt" && strings.HasPrefix(name, "Print"):
+			return "fmt." + name + " (stdout)"
+		case pkg != nil && pkg.Name == "cmd" && strings.HasPrefix(name, "Print"):
+			return "cmd." + name
+		}
+		if name == "Get" && len(call.Args) == 3 {
+			return "a .Get read outside withPreRead/withWait"
+		}
+	}
+	return ""
 }
 
 // ---- runtime command -> RunE source ----
@@ -567,6 +617,9 @@ func TestMutationsWriteOnlyThroughHelper(t *testing.T) {
 		if l.path == "c1i tasks approve" && len(rep.helpers) == 0 {
 			t.Error("tasks approve is not classified as mutating; the classifier is broken")
 		}
+	}
+	for _, v := range staleOutputExemptions(ix) {
+		t.Error(v)
 	}
 	for p := range batchCommands {
 		if !batchSeen[p] {
@@ -687,49 +740,51 @@ func TestStderrWritesOnlyThroughHelpers(t *testing.T) {
 }
 
 func stderrViolations(ix *srcIndex) []string {
+	stderrFiles := []string{"cmd/stderr.go", "cmd/errors.go"}
+	trusted := func(fd *ast.FuncDecl) bool { return isUnder(ix.fileOf[fd], stderrFiles) }
 	var out []string
 	for path, f := range ix.files {
-		if !strings.HasPrefix(path, "cmd/") || path == "cmd/stderr.go" || path == "cmd/errors.go" {
+		if !strings.HasPrefix(path, "cmd/") || isUnder(path, stderrFiles) {
 			continue
 		}
-		locals := map[string]bool{}
-		ast.Inspect(f, func(n ast.Node) bool {
-			if as, ok := n.(*ast.AssignStmt); ok && len(as.Lhs) == len(as.Rhs) {
-				for i, r := range as.Rhs {
-					if id, ok := as.Lhs[i].(*ast.Ident); ok && isStderrForm(r, nil) {
-						locals[id.Name] = true
-					}
-				}
-			}
-			return true
-		})
+		locals := writerLocals(f, isStderrForm)
+		is := func(e ast.Expr) bool { return isStderrForm(e, locals) }
 		ast.Inspect(f, func(n ast.Node) bool {
 			c, ok := n.(*ast.CallExpr)
-			if !ok || len(c.Args) == 0 {
+			if !ok {
 				return true
 			}
-			bad := ""
-			switch fun := c.Fun.(type) {
-			case *ast.SelectorExpr:
-				pkg, _ := fun.X.(*ast.Ident)
-				if pkg != nil && (pkg.Name == "fmt" && strings.HasPrefix(fun.Sel.Name, "Fprint") || pkg.Name == "io" && fun.Sel.Name == "WriteString") && isStderrForm(c.Args[0], locals) {
-					bad = pkg.Name + "." + fun.Sel.Name
-				}
-			case *ast.Ident:
-				if fd, ok := ix.funcs[fun.Name]; ok && !isUnder(ix.fileOf[fd], []string{"cmd/stderr.go", "cmd/errors.go"}) {
-					for i, a := range c.Args {
-						if isStderrForm(a, locals) && writesToParam(fd, i) {
-							bad = fun.Name + " (through its writer parameter)"
-						}
-					}
-				}
+			if how := writesTo(c, is, ix, trusted, 0); how != "" {
+				out = append(out, fmt.Sprintf("%s: %s to stderr in %s; use notice/progress (cmd/stderr.go)", ix.fset.Position(c.Pos()), how, ix.enclosingKey(path, c.Pos())))
 			}
-			if bad == "" {
-				return true
-			}
-			out = append(out, fmt.Sprintf("%s: %s to stderr; use notice/progress (cmd/stderr.go)", ix.fset.Position(c.Pos()), bad))
 			return true
 		})
+	}
+	sort.Strings(out)
+	return out
+}
+
+// staleOutputExemptions: every nonMutatingOutputModes entry must still name a
+// declaration that writes stdout.
+func staleOutputExemptions(ix *srcIndex) []string {
+	var out []string
+	for key := range nonMutatingOutputModes {
+		writes := false
+		for n, k := range ix.declKey {
+			if k != key {
+				continue
+			}
+			locals := writerLocals(n, isStdoutForm)
+			ast.Inspect(n, func(m ast.Node) bool {
+				if c, ok := m.(*ast.CallExpr); ok && writesTo(c, func(e ast.Expr) bool { return isStdoutForm(e, locals) }, ix, untrusted, 0) != "" {
+					writes = true
+				}
+				return !writes
+			})
+		}
+		if !writes {
+			out = append(out, "nonMutatingOutputModes names "+key+", which writes no stdout")
+		}
 	}
 	sort.Strings(out)
 	return out

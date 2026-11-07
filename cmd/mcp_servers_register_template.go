@@ -124,7 +124,7 @@ func printConfigTemplate(cmd *cobra.Command) error {
 	notice(cmd, noticeInfo, fmt.Sprintf(
 		"# %s %s config template. Replace <placeholders>, then:\n#   c1i mcp servers register --app-id APP --type %s --display-name NAME --%s config.json\n# Fields with <angle-brackets> are placeholders; enum/URL values are examples. Secrets are sealed server-side.",
 		serverType, authLabel, serverType, flagName), nil)
-	// Not mutation output: this mode sends nothing.
+	// Not mutation output: this mode sends nothing (nonMutatingOutputModes).
 	_, err = cmd.OutOrStdout().Write(buf.Bytes())
 	return err
 }
