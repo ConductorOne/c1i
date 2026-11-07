@@ -466,7 +466,7 @@ func addEntitlementCreateFlags(cmd *cobra.Command) {
 	// outright, so `--owner-id "" --owner-id U` would lose the empty one
 	// before this command could reject it.
 	addRepeatableStringFlag(cmd, "owner-id", "C1 user ID to own the new entitlement (repeatable)")
-	f.String("resource-type", "CUSTOM", "Kind of resource type to create: "+resourceTypeFlag.usage())
+	f.String("resource-type", "custom", "Kind of resource type to create: "+resourceTypeFlag.usage())
 	f.String("resource-type-id", "", "Existing app resource type to reuse instead of creating one")
 	f.String("resource-type-display-name", "", "Display name for the resource type this command creates (default: --display-name)")
 	f.String("resource-id", "", "Existing app resource to reuse instead of creating one; requires --resource-type-id")

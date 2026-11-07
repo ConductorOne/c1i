@@ -26,7 +26,7 @@ and exit 0. An unknown short value for `accounts list --status`/`--type`,
 value (such as a lookalike `ı` or `ſ`), is refused on every such flag. A value
 carrying the flag's API prefix is still sent, upper-cased with `-` turned to
 `_`; `mcp servers --type` is the exception and takes only `hosted` or
-`external`. Three typed values are now rewritten, where main sent them as
+`external`. Three typed values are now rewritten, where 0.9.1 sent them as
 typed and the server answered 400: `MCP_TOOL_STATE_PENDING` becomes
 `MCP_TOOL_STATE_PENDING_REVIEW`, and
 `REQUEST_CATALOG_ENROLLMENT_BEHAVIOR_BYPASS`/`_ENFORCE` become their

@@ -447,7 +447,7 @@ func TestResourceTypeKindsAreDocumented(t *testing.T) {
 
 	// The default must be one of them, or --help promises a value that 400s.
 	def := entitlementsCreateCmd.Flags().Lookup("resource-type").DefValue
-	if !slices.Contains(resourceTypeKinds, def) {
+	if api, err := resourceTypeFlag.parse(def); err != nil || !slices.Contains(resourceTypeKinds, api) {
 		t.Errorf("--resource-type defaults to %q, which is not in resourceTypeKinds", def)
 	}
 }
