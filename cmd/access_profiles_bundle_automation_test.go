@@ -160,7 +160,7 @@ func TestBundleAutomationRunRejectsNullRefsFile(t *testing.T) {
 	accessProfilesBundleAutomationRunCmd.SetContext(context.Background())
 
 	err := accessProfilesBundleAutomationRunCmd.RunE(accessProfilesBundleAutomationRunCmd, []string{"catalog-1"})
-	if err == nil || !strings.Contains(err.Error(), "--refs-file must contain a JSON array") {
+	if err == nil || !strings.Contains(err.Error(), "--refs-file must contain a JSON array, not null") {
 		t.Errorf("error = %v, want --refs-file JSON-array rejection", err)
 	}
 }

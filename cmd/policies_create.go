@@ -107,7 +107,7 @@ func buildCreatePolicyBody(cmd *cobra.Command) (map[string]any, error) {
 		if usingFlags {
 			return nil, fmt.Errorf("--body-file is mutually exclusive with --display-name/--description/--policy-type/--steps-file/--rules-file")
 		}
-		return readConfigFile(cmd, "body-file", bodyFile)
+		return readJSONFile[map[string]any](cmd, "body-file", bodyFile)
 	}
 
 	displayName, _ := cmd.Flags().GetString("display-name")
@@ -128,9 +128,9 @@ func buildCreatePolicyBody(cmd *cobra.Command) (map[string]any, error) {
 	}
 
 	if stepsFile, _ := cmd.Flags().GetString("steps-file"); stepsFile != "" {
-		steps, err := readJSONArrayFile(cmd, stepsFile)
+		steps, err := readJSONFile[[]any](cmd, "steps-file", stepsFile)
 		if err != nil {
-			return nil, fmt.Errorf("reading --steps-file: %w", err)
+			return nil, err
 		}
 		key, err := policyStepsKey(policyType)
 		if err != nil {
@@ -140,9 +140,9 @@ func buildCreatePolicyBody(cmd *cobra.Command) (map[string]any, error) {
 	}
 
 	if rulesFile, _ := cmd.Flags().GetString("rules-file"); rulesFile != "" {
-		rules, err := readJSONArrayFile(cmd, rulesFile)
+		rules, err := readJSONFile[[]any](cmd, "rules-file", rulesFile)
 		if err != nil {
-			return nil, fmt.Errorf("reading --rules-file: %w", err)
+			return nil, err
 		}
 		body["rules"] = rules
 	}

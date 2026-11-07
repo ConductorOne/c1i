@@ -1,10 +1,7 @@
 package cmd
 
 import (
-	"encoding/json"
 	"fmt"
-	"io"
-	"os"
 	"slices"
 	"sort"
 	"strings"
@@ -121,31 +118,6 @@ func applySharedAuthFields(cmd *cobra.Command, cfg map[string]any) error {
 	return nil
 }
 
-// readConfigFile loads a JSON object from path (or stdin when path is "-") into
-// a generic map. Errors name --<flag>. A top-level null is rejected: json.Unmarshal turns it
-// into a nil map without an error, and callers write into the result.
-func readConfigFile(cmd *cobra.Command, flag, path string) (map[string]any, error) {
-	label := "--" + flag
-	var data []byte
-	var err error
-	if path == "-" {
-		data, err = io.ReadAll(cmd.InOrStdin())
-	} else {
-		data, err = os.ReadFile(path) // #nosec G304 -- user-supplied config-file path is intentional
-	}
-	if err != nil {
-		return nil, &usageError{fmt.Errorf("reading %s: %w", label, err)}
-	}
-	var cfg map[string]any
-	if err := json.Unmarshal(data, &cfg); err != nil {
-		return nil, &usageError{fmt.Errorf("parsing %s as JSON object: %w", label, err)}
-	}
-	if cfg == nil {
-		return nil, &usageError{fmt.Errorf("%s must contain a JSON object, not null", label)}
-	}
-	return cfg, nil
-}
-
 // sharedAuthFlagsChanged reports whether any convenience auth flag (from
 // addAuthFlags) was set. A config-file supplies the whole config verbatim, so
 // these flags would be silently dropped alongside it — this lets the builders
@@ -173,7 +145,7 @@ func buildHostedConfig(cmd *cobra.Command) (map[string]any, error) {
 		if usingFlags {
 			return nil, &usageError{fmt.Errorf("--hosted-config-file is mutually exclusive with --catalog-id/--source-app-id/--config-field and the auth flags (--auth/--bearer-token/--token-sharing/…)")}
 		}
-		return readConfigFile(cmd, "hosted-config-file", file)
+		return readJSONFile[map[string]any](cmd, "hosted-config-file", file)
 	}
 
 	cfg := map[string]any{}
@@ -207,7 +179,7 @@ func buildExternalConfig(cmd *cobra.Command) (map[string]any, error) {
 		if usingFlags {
 			return nil, &usageError{fmt.Errorf("--external-config-file is mutually exclusive with --server-url/--transport and the auth flags (--auth/--bearer-token/--token-sharing/…)")}
 		}
-		return readConfigFile(cmd, "external-config-file", file)
+		return readJSONFile[map[string]any](cmd, "external-config-file", file)
 	}
 
 	cfg := map[string]any{}

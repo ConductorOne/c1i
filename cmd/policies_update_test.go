@@ -526,3 +526,43 @@ func TestPolicyTypeResolverMemoizesClientConstructionFailure(t *testing.T) {
 		t.Errorf("newPoliciesClient was called %d times, want exactly 1 (no re-attempt building the client)", buildCount)
 	}
 }
+
+// A top-level null array file used to send "steps": null / "rules": null.
+func TestPoliciesNullArrayFilesExitUsage(t *testing.T) {
+	for _, tc := range []struct {
+		cmd  *cobra.Command
+		args []string
+		flag string
+	}{
+		{policiesCreateCmd, nil, "steps-file"},
+		{policiesCreateCmd, nil, "rules-file"},
+		{policiesUpdateCmd, []string{"pol1"}, "steps-file"},
+		{policiesUpdateCmd, []string{"pol1"}, "rules-file"},
+	} {
+		t.Run(tc.cmd.Name()+"/"+tc.flag, func(t *testing.T) {
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				t.Errorf("no request expected, got %s %s", r.Method, r.URL.Path)
+			}))
+			defer srv.Close()
+
+			resetCmdFlags(t, tc.cmd)
+			stubPoliciesClient(t, srv)
+			withRealDryRun(t)
+			t.Setenv("C1I_URL", "https://example.invalid")
+			_ = tc.cmd.Flags().Set("policy-type", "grant")
+			if tc.cmd == policiesCreateCmd {
+				_ = tc.cmd.Flags().Set("display-name", "x")
+				_ = tc.cmd.Flags().Set("allow-deny-all", "true")
+			}
+			_ = tc.cmd.Flags().Set(tc.flag, writeTempJSON(t, "null.json", `null`))
+			tc.cmd.SetOut(&bytes.Buffer{})
+			tc.cmd.SetContext(context.Background())
+
+			err := tc.cmd.RunE(tc.cmd, tc.args)
+			want := "--" + tc.flag + " must contain a JSON array, not null"
+			if err == nil || exitCode(err) != exitUsage || !strings.Contains(err.Error(), want) {
+				t.Errorf("err = %v (exit %d), want exit %d containing %q", err, exitCode(err), exitUsage, want)
+			}
+		})
+	}
+}
