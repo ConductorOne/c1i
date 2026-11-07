@@ -1,7 +1,7 @@
 package cmd
 
 import (
-	"fmt"
+	"net/http"
 
 	"github.com/ConductorOne/c1i/internal/client"
 	"github.com/spf13/cobra"
@@ -23,11 +23,6 @@ After creating, attach tools with "c1i mcp bindings create".`,
 			return err
 		}
 
-		baseURL, err := GetBaseURL()
-		if err != nil {
-			return err
-		}
-
 		appID, _ := cmd.Flags().GetString("app-id")
 		connectorID, _ := cmd.Flags().GetString("connector-id")
 		displayName, _ := cmd.Flags().GetString("display-name")
@@ -43,20 +38,7 @@ After creating, attach tools with "c1i mcp bindings create".`,
 		}
 
 		path := client.Path("/api/v1/apps/%s/connectors/%s/mcp_toolsets", appID, connectorID)
-		if dryRunActive() {
-			return printDryRun(cmd, "POST", path, body)
-		}
-
-		c, err := newClient(cmd, baseURL)
-		if err != nil {
-			return fmt.Errorf("authentication failed: %w", err)
-		}
-		data, err := c.Post(cmd.Context(), path, body)
-		if err != nil {
-			return fmt.Errorf("API error: %w", err)
-		}
-
-		return writeRawObject(cmd, data)
+		return sendMutation(cmd, mutation{Method: http.MethodPost, Path: path, Body: body})
 	},
 }
 
@@ -66,5 +48,6 @@ func init() {
 	mcpToolsetsCreateCmd.Flags().String("display-name", "", "Toolset display name ("+displayNameRule+")")
 	mcpToolsetsCreateCmd.Flags().String("description", "", "Toolset description")
 	markRequired(mcpToolsetsCreateCmd, "app-id", "connector-id", "display-name")
+	markMutating(mcpToolsetsCreateCmd)
 	mcpToolsetsCmd.AddCommand(mcpToolsetsCreateCmd)
 }

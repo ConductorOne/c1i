@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"fmt"
+	"net/http"
 
 	"github.com/ConductorOne/c1i/internal/client"
 	"github.com/spf13/cobra"
@@ -67,11 +68,6 @@ requires --app-id. Approve discovered tools afterward with
 			return &usageError{err}
 		}
 
-		baseURL, err := GetBaseURL()
-		if err != nil {
-			return err
-		}
-
 		appID, _ := cmd.Flags().GetString("app-id")
 		body, err := buildRegisterBody(cmd)
 		if err != nil {
@@ -82,20 +78,7 @@ requires --app-id. Approve discovered tools afterward with
 		}
 
 		path := client.Path("/api/v1/apps/%s/mcp_servers", appID)
-		if dryRunActive() {
-			return printDryRun(cmd, "POST", path, body)
-		}
-
-		c, err := newClient(cmd, baseURL)
-		if err != nil {
-			return fmt.Errorf("authentication failed: %w", err)
-		}
-		data, err := c.Post(cmd.Context(), path, body)
-		if err != nil {
-			return fmt.Errorf("API error: %w", err)
-		}
-
-		return writeRawObject(cmd, data)
+		return sendMutation(cmd, mutation{Method: http.MethodPost, Path: path, Body: body, Unwrap: byID("connectorId")})
 	},
 }
 
@@ -187,5 +170,6 @@ func init() {
 	// annotate-only (not cobra-required) so --print-config-template works
 	// without --app-id/--type/--display-name; RunE enforces them otherwise.
 	annotateRequired(mcpServersRegisterCmd, "app-id", "type", "display-name")
+	markMutating(mcpServersRegisterCmd)
 	mcpServersCmd.AddCommand(mcpServersRegisterCmd)
 }

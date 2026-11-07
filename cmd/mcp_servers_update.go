@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"fmt"
+	"net/http"
 	"strings"
 
 	"github.com/ConductorOne/c1i/internal/client"
@@ -27,11 +28,6 @@ nothing sent. Sent as is, the server stores "" as an empty name and keeps
 			return err
 		}
 		if err := requireNonEmpty(cmd, "app-id"); err != nil {
-			return err
-		}
-
-		baseURL, err := GetBaseURL()
-		if err != nil {
 			return err
 		}
 
@@ -87,20 +83,7 @@ nothing sent. Sent as is, the server stores "" as an empty name and keeps
 		}
 
 		path := client.Path("/api/v1/apps/%s/mcp_servers/%s", appID, connectorID)
-		if dryRunActive() {
-			return printDryRun(cmd, "POST", path, body)
-		}
-
-		c, err := newClient(cmd, baseURL)
-		if err != nil {
-			return fmt.Errorf("authentication failed: %w", err)
-		}
-		data, err := c.Post(cmd.Context(), path, body)
-		if err != nil {
-			return fmt.Errorf("API error: %w", err)
-		}
-
-		return writeRawObject(cmd, data)
+		return sendMutation(cmd, mutation{Method: http.MethodPost, Path: path, Body: body, Unwrap: byID("connectorId")})
 	},
 }
 
@@ -112,5 +95,6 @@ func init() {
 	mcpServersUpdateCmd.Flags().String("tool-prefix", "", "New tool-name prefix")
 	mcpServersUpdateCmd.Flags().Bool("require-tool-approval", false, "Per-server override for tool auto-approval")
 	markRequired(mcpServersUpdateCmd, "app-id")
+	markMutating(mcpServersUpdateCmd)
 	mcpServersCmd.AddCommand(mcpServersUpdateCmd)
 }

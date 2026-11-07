@@ -1,7 +1,7 @@
 package cmd
 
 import (
-	"fmt"
+	"net/http"
 
 	"github.com/ConductorOne/c1i/internal/client"
 	"github.com/spf13/cobra"
@@ -15,15 +15,13 @@ credential. Newly discovered tools land in PENDING_REVIEW; approve them with
 "c1i mcp tools approve".
 
 EXTERNAL servers only; HOSTED servers return an error ("resync is only supported
-for external MCP servers").`,
+for external MCP servers").
+
+Prints the API's response, which is {}; exit 0 is the success signal. Honors
+--dry-run.`,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		if err := requireNonEmpty(cmd, "app-id"); err != nil {
-			return err
-		}
-
-		baseURL, err := GetBaseURL()
-		if err != nil {
 			return err
 		}
 
@@ -35,27 +33,13 @@ for external MCP servers").`,
 			"connectorId": connectorID,
 		}
 		path := client.Path("/api/v1/apps/%s/mcp_servers/%s/resync_tools", appID, connectorID)
-		if dryRunActive() {
-			return printDryRun(cmd, "POST", path, body)
-		}
-
-		c, err := newClient(cmd, baseURL)
-		if err != nil {
-			return fmt.Errorf("authentication failed: %w", err)
-		}
-		if _, err := c.Post(cmd.Context(), path, body); err != nil {
-			return fmt.Errorf("API error: %w", err)
-		}
-
-		if _, err := fmt.Fprintf(cmd.OutOrStdout(), "Triggered tool resync: connector_id=%s\n", connectorID); err != nil {
-			return wrapOutputErr(err)
-		}
-		return nil
+		return sendMutation(cmd, mutation{Method: http.MethodPost, Path: path, Body: body})
 	},
 }
 
 func init() {
 	mcpServersResyncToolsCmd.Flags().String("app-id", "", "Application ID")
 	markRequired(mcpServersResyncToolsCmd, "app-id")
+	markMutating(mcpServersResyncToolsCmd)
 	mcpServersCmd.AddCommand(mcpServersResyncToolsCmd)
 }

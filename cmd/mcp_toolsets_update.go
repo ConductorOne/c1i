@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"fmt"
+	"net/http"
 	"strings"
 
 	"github.com/ConductorOne/c1i/internal/client"
@@ -26,11 +27,6 @@ nothing sent. Sent as is, the server 400s "" ("value length must be between
 			return err
 		}
 		if err := requireNonEmpty(cmd, "app-id", "connector-id"); err != nil {
-			return err
-		}
-
-		baseURL, err := GetBaseURL()
-		if err != nil {
 			return err
 		}
 
@@ -66,20 +62,7 @@ nothing sent. Sent as is, the server 400s "" ("value length must be between
 		}
 
 		path := client.Path("/api/v1/apps/%s/connectors/%s/mcp_toolsets/%s", appID, connectorID, id)
-		if dryRunActive() {
-			return printDryRun(cmd, "POST", path, body)
-		}
-
-		c, err := newClient(cmd, baseURL)
-		if err != nil {
-			return fmt.Errorf("authentication failed: %w", err)
-		}
-		data, err := c.Post(cmd.Context(), path, body)
-		if err != nil {
-			return fmt.Errorf("API error: %w", err)
-		}
-
-		return writeRawObject(cmd, data)
+		return sendMutation(cmd, mutation{Method: http.MethodPost, Path: path, Body: body})
 	},
 }
 
@@ -89,5 +72,6 @@ func init() {
 	mcpToolsetsUpdateCmd.Flags().String("display-name", "", "New display name (omit to leave unchanged; "+displayNameRule+")")
 	mcpToolsetsUpdateCmd.Flags().String("description", "", "New description (omit to leave unchanged)")
 	markRequired(mcpToolsetsUpdateCmd, "app-id", "connector-id")
+	markMutating(mcpToolsetsUpdateCmd)
 	mcpToolsetsCmd.AddCommand(mcpToolsetsUpdateCmd)
 }
