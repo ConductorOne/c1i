@@ -1,0 +1,1 @@
+Error: API error: API DELETE /api/v1/apps/app-1 returned 404: {"code":5,"message":"not found"}
