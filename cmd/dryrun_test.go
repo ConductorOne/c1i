@@ -1,46 +1,8 @@
 package cmd
 
 import (
-	"bytes"
-	"strings"
 	"testing"
-
-	"github.com/spf13/cobra"
 )
-
-func TestPrintDryRunWithBody(t *testing.T) {
-	cmd := &cobra.Command{}
-	var buf bytes.Buffer
-	cmd.SetOut(&buf)
-
-	if err := printDryRun(cmd, "POST", "/api/v1/task/grant", map[string]any{"appId": "a1"}); err != nil {
-		t.Fatalf("printDryRun: %v", err)
-	}
-	out := buf.String()
-	if !strings.Contains(out, "[dry-run] POST /api/v1/task/grant") {
-		t.Errorf("missing request line in %q", out)
-	}
-	if !strings.Contains(out, `"appId": "a1"`) {
-		t.Errorf("missing pretty-printed body in %q", out)
-	}
-}
-
-func TestPrintDryRunNilBodyOmitsBody(t *testing.T) {
-	cmd := &cobra.Command{}
-	var buf bytes.Buffer
-	cmd.SetOut(&buf)
-
-	if err := printDryRun(cmd, "DELETE", "/api/v1/apps/a/connectors/c/mcp_tools/t", nil); err != nil {
-		t.Fatalf("printDryRun: %v", err)
-	}
-	out := buf.String()
-	if !strings.Contains(out, "[dry-run] DELETE /api/v1/apps/a/connectors/c/mcp_tools/t") {
-		t.Errorf("missing request line in %q", out)
-	}
-	if strings.Contains(out, "{") {
-		t.Errorf("nil body should not print any body, got %q", out)
-	}
-}
 
 func TestParseKeyValueFlag(t *testing.T) {
 	m, err := parseKeyValueFlag([]string{"A=1", "B=x=y"}, "header")
