@@ -329,10 +329,9 @@ type closureReport struct {
 }
 
 type walker struct {
-	ix      *srcIndex
-	seen    map[ast.Node]int // 1 = walked indirect, 2 = walked direct
-	rep     *closureReport
-	stdouts map[string]bool // local names holding stdout, per walked root
+	ix   *srcIndex
+	seen map[ast.Node]int // 1 = walked indirect, 2 = walked direct
+	rep  *closureReport
 }
 
 // closureOf walks root and everything it references in package cmd: package

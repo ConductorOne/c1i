@@ -547,11 +547,14 @@ func writeMutationResult(cmd *cobra.Command, m mutation, data []byte, secret sec
 	}
 	out.WriteByte('\n')
 	if _, werr := cmd.OutOrStdout().Write(out.Bytes()); werr != nil {
-		msg := fmt.Sprintf("%s %s succeeded but writing its response failed: %%w", m.Method, m.Path)
-		if extra := secretWording(secret, doc); extra != "" {
-			msg += "; " + extra
+		extra := secretWording(secret, doc)
+		if extra != "" {
+			extra = "; " + extra
 		}
-		return &mutationError{err: fmt.Errorf(msg, werr), applied: appliedTrue}
+		return &mutationError{
+			err:     fmt.Errorf("%s %s succeeded but writing its response failed: %w%s", m.Method, m.Path, werr, extra),
+			applied: appliedTrue,
+		}
 	}
 	return nil
 }

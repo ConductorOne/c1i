@@ -356,6 +356,42 @@ func TestSecretWording(t *testing.T) {
 	}
 }
 
+// The unwrap rules: byID hoists the object holding the id, named the named
+// key, raw nothing; a collision leaves the body unchanged.
+func TestUnwrapRules(t *testing.T) {
+	cases := []struct {
+		name string
+		rule unwrapRule
+		in   string
+		want string
+	}{
+		{"zero is byID(id)", unwrapRule{}, `{"app":{"id":"a"},"expanded":[]}`, `{"id":"a","expanded":[]}`},
+		{"byID connectorId", byID("connectorId"), `{"mcpServer":{"connectorId":"c"},"accessProfilesAttached":1}`, `{"connectorId":"c","accessProfilesAttached":1}`},
+		{"named config", named("config"), `{"config":{"minCohortSize":3}}`, `{"minCohortSize":3}`},
+		{"raw", raw(), `{"finding":{"id":"f","taskId":""},"taskId":"t"}`, `{"finding":{"id":"f","taskId":""},"taskId":"t"}`},
+		{"collision is unchanged", byID("id"), `{"finding":{"id":"f","taskId":""},"taskId":"t"}`, `{"finding":{"id":"f","taskId":""},"taskId":"t"}`},
+	}
+	for _, tc := range cases {
+		if got := string(tc.rule.apply([]byte(tc.in))); got != tc.want {
+			t.Errorf("%s: %s, want %s", tc.name, got, tc.want)
+		}
+	}
+}
+
+// secretBearing adds its wording to a failed stdout write.
+func TestSecretBearingWriteFailure(t *testing.T) {
+	c := &cobra.Command{Use: "create", RunE: func(cmd *cobra.Command, _ []string) error {
+		return sendMutation(cmd, mutation{Method: http.MethodPost, Path: "/api/v1/creds", Body: map[string]any{}}, secretBearing(secretSPCredential))
+	}}
+	markMutating(c)
+	s := newMutServer(t, fixedReply(200, `{"credential":{"id":"c1"},"clientSecret":"placeholder"}`))
+	r := runHelperCmd(t, c, s, context.Background(), failingWriter{}, "json", []string{}...)
+	obj := r.errorObject(t)
+	if r.exit != exitError || obj["applied"] != true || !strings.HasSuffix(obj["error"].(string), "revoke the credential and create a new one") {
+		t.Errorf("exit %d error %v", r.exit, obj)
+	}
+}
+
 func TestAPIPreview(t *testing.T) {
 	cases := []struct {
 		name string
