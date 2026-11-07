@@ -176,7 +176,9 @@ func TestAccessMutationPreview(t *testing.T) {
 		s := newMutServer(t, accessRoute(accessTaskEnvelope))
 		r := runMutationCLI(t, s.srv, 0, nil, "requests", "create", "revoke", "--app-id", "a", "--entitlement-id", "e")
 		var doc struct {
-			Requests []struct{ Body struct{ IdentityUserID string } }
+			Requests []struct {
+				Body struct{ IdentityUserID string }
+			}
 		}
 		if err := json.Unmarshal([]byte(r.stdout), &doc); err != nil || len(doc.Requests) != 1 || doc.Requests[0].Body.IdentityUserID != "self-1" {
 			t.Errorf("stdout = %q (%v), want identityUserId self-1", r.stdout, err)
