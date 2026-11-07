@@ -169,7 +169,7 @@ func init() {
 	exportEventsCmd.Flags().String("since", "", "Only events at or after this RFC3339 time (e.g. 2026-07-01T00:00:00Z)")
 	exportEventsCmd.Flags().String("until", "", "Only events before this RFC3339 time")
 	exportEventsCmd.Flags().String("since-event-uid", "", "Resume after this event UID (incremental sync)")
-	exportEventsCmd.Flags().String("sort", "asc", "Chronological order, asc being oldest first: "+sortDirectionFlag.usage())
+	exportEventsCmd.Flags().String("sort", "asc", "Sort order (asc is oldest first): "+sortDirectionFlag.usage())
 	addPaginationFlags(exportEventsCmd)
 	exportCmd.AddCommand(exportEventsCmd)
 }

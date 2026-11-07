@@ -156,6 +156,6 @@ var appUserStatusFlag = enumFlag{flag: "status", prefix: "STATUS_", unknown: enu
 
 var appUserTypeFlag = enumFlag{flag: "type", prefix: "APP_USER_TYPE_", unknown: enumPassPrefixed, values: []enumValue{
 	{name: "user", api: "APP_USER_TYPE_USER"},
-	{name: "service_account", api: "APP_USER_TYPE_SERVICE_ACCOUNT"},
-	{name: "system_account", api: "APP_USER_TYPE_SYSTEM_ACCOUNT"},
+	{name: "service-account", api: "APP_USER_TYPE_SERVICE_ACCOUNT"},
+	{name: "system-account", api: "APP_USER_TYPE_SYSTEM_ACCOUNT"},
 }}

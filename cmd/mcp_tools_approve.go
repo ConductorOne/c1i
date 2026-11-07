@@ -141,7 +141,7 @@ classification, visibility).`,
 func init() {
 	mcpToolsApproveCmd.Flags().String("app-id", "", "Application ID")
 	mcpToolsApproveCmd.Flags().String("connector-id", "", "Connector ID")
-	mcpToolsApproveCmd.Flags().String("state", "", "Target state (default approved): "+toolStateFlag.usage()+" (removed is refused: sync owns it)")
+	mcpToolsApproveCmd.Flags().String("state", "", "Target state (default approved): "+toolStateFlag.without("removed").usage())
 	markRequired(mcpToolsApproveCmd, "app-id", "connector-id")
 	mcpToolsCmd.AddCommand(mcpToolsApproveCmd)
 }

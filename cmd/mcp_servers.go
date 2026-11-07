@@ -40,7 +40,8 @@ func init() {
 	mcpCmd.AddCommand(mcpServersCmd)
 }
 
-var serverTypeFlag = enumFlag{flag: "type", prefix: "MCP_SERVER_TYPE_", unknown: enumPassPrefixed, values: []enumValue{
+// serverTypeFlag is closed: every consumer builds a HOSTED or EXTERNAL config.
+var serverTypeFlag = enumFlag{flag: "type", prefix: "MCP_SERVER_TYPE_", unknown: enumReject, values: []enumValue{
 	{name: "hosted", api: "MCP_SERVER_TYPE_HOSTED"},
 	{name: "external", api: "MCP_SERVER_TYPE_EXTERNAL"},
 }}

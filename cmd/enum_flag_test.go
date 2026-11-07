@@ -74,25 +74,27 @@ func TestEnumFlagParse(t *testing.T) {
 // allEnumFlags is every table, so the invariant test below covers a new one
 // only if it is added here.
 var allEnumFlags = map[string]enumFlag{
-	"users --status":               userStatusFlag,
-	"users --origin":               userOriginFlag,
-	"accounts --status":            appUserStatusFlag,
-	"accounts --type":              appUserTypeFlag,
-	"policies --policy-type":       policyTypeFlag,
-	"apps --identity-matching":     identityMatchingFlag,
-	"mcp tools --state":            toolStateFlag,
-	"mcp tools --classification":   toolClassificationFlag,
-	"mcp servers --type":           serverTypeFlag,
-	"mcp servers --data-sens":      dataSensitivityFlag,
-	"mcp servers --transport":      transportTypeFlag,
-	"mcp servers --token-sharing":  tokenSharingFlag,
-	"access-profiles --enroll":     catalogEnrollmentFlag,
-	"access-profiles --unenroll":   catalogUnenrollmentFlag,
-	"access-profiles --unenroll-e": catalogUnenrollmentEntitlementFlag,
-	"automations --state":          executionStateFlag,
-	"tasks --state":                taskStateFlag,
-	"export --sort":                sortDirectionFlag,
-	"access-reviews --format":      reportFormatFlag,
+	"users --status":                 userStatusFlag,
+	"users --origin":                 userOriginFlag,
+	"accounts --status":              appUserStatusFlag,
+	"accounts --type":                appUserTypeFlag,
+	"policies --policy-type":         policyTypeFlag,
+	"apps --identity-matching":       identityMatchingFlag,
+	"mcp tools --state":              toolStateFlag,
+	"mcp tools --classification":     toolClassificationFlag,
+	"mcp servers --type":             serverTypeFlag,
+	"mcp servers --data-sens":        dataSensitivityFlag,
+	"mcp servers --transport":        transportTypeFlag,
+	"mcp servers --token-sharing":    tokenSharingFlag,
+	"access-profiles --enroll":       catalogEnrollmentFlag,
+	"access-profiles --unenroll":     catalogUnenrollmentFlag,
+	"access-profiles --unenroll-e":   catalogUnenrollmentEntitlementFlag,
+	"automations --state":            executionStateFlag,
+	"tasks --state":                  taskStateFlag,
+	"export --sort":                  sortDirectionFlag,
+	"access-reviews --format":        reportFormatFlag,
+	"mcp servers --auth":             authFlag,
+	"--print-config-template --auth": authTemplateFlag,
 }
 
 // TestEnumFlagTablesAreConsistent: every API name carries the prefix, and no
@@ -107,15 +109,18 @@ func TestEnumFlagTablesAreConsistent(t *testing.T) {
 			}
 			seen[k] = api
 		}
+		for _, kw := range e.keywords {
+			add(kw, "keyword "+kw)
+		}
 		for _, v := range e.values {
 			if !strings.HasPrefix(v.api, e.prefix) {
 				t.Errorf("%s: %s lacks prefix %q", name, v.api, e.prefix)
 			}
-			add(v.name, v.api)
-			add(v.api, v.api)
-			add(strings.TrimPrefix(v.api, e.prefix), v.api)
-			for _, a := range v.aliases {
-				add(a, v.api)
+			if strings.Contains(v.name, "_") {
+				t.Errorf("%s: short name %q: use '-' as the separator", name, v.name)
+			}
+			for _, k := range e.inputs(v) {
+				add(k, v.api)
 			}
 		}
 		if e.unknown == enumPassAny && e.prefix != "" {
@@ -140,11 +145,13 @@ func TestEnumFlagValues(t *testing.T) {
 			"enabled": "ENABLED", "disabled": "DISABLED", "deleted": "DELETED",
 			"ENABLED": "ENABLED", "Disabled": "DISABLED", "": "",
 			" enabled ": "ENABLED", "unknown": "unknown",
+			"enabıed": bad,
 		}},
 		{userOriginFlag, map[string]string{
 			"directory": "USER_ORIGIN_DIRECTORY", "LOCAL": "USER_ORIGIN_LOCAL", "system": "USER_ORIGIN_SYSTEM",
 			"all": "all", "user_origin_local": "USER_ORIGIN_LOCAL", "user-origin-future": "USER_ORIGIN_FUTURE",
-			"bogus": bad,
+			"bogus":     bad,
+			"dırectory": bad,
 		}},
 		{appUserStatusFlag, map[string]string{
 			"enabled": "STATUS_ENABLED", "disabled": "STATUS_DISABLED", "deleted": "STATUS_DELETED",
@@ -169,6 +176,7 @@ func TestEnumFlagValues(t *testing.T) {
 			"display_name": "APP_USER_IDENTITY_MATCHING_DISPLAY_NAME", "CUSTOM": "APP_USER_IDENTITY_MATCHING_CUSTOM",
 			"app_user_identity_matching_strict": "APP_USER_IDENTITY_MATCHING_STRICT",
 			"unspecified":                       bad, "APP_USER_IDENTITY_MATCHING_UNSPECIFIED": bad, "fuzzy": bad, "": bad,
+			"ſtrict": bad, "cuſtom": bad,
 		}},
 		{toolStateFlag, map[string]string{
 			"pending": "MCP_TOOL_STATE_PENDING_REVIEW", "pending_review": "MCP_TOOL_STATE_PENDING_REVIEW",
@@ -177,6 +185,7 @@ func TestEnumFlagValues(t *testing.T) {
 			"removed": "MCP_TOOL_STATE_REMOVED", "": "",
 			"pending-review": "MCP_TOOL_STATE_PENDING_REVIEW", "mcp_tool_state_approved": "MCP_TOOL_STATE_APPROVED",
 			"MCP_TOOL_STATE_FUTURE": "MCP_TOOL_STATE_FUTURE", "unknown": bad,
+			"pendıng": bad, "approvedſ": bad, "MCP_TOOL_STATE_PENDING": "MCP_TOOL_STATE_PENDING_REVIEW",
 		}},
 		{toolClassificationFlag, map[string]string{
 			"read": "TOOL_CLASSIFICATION_READ", "READ": "TOOL_CLASSIFICATION_READ", "write": "TOOL_CLASSIFICATION_WRITE",
@@ -187,6 +196,7 @@ func TestEnumFlagValues(t *testing.T) {
 		{serverTypeFlag, map[string]string{
 			"hosted": "MCP_SERVER_TYPE_HOSTED", "EXTERNAL": "MCP_SERVER_TYPE_EXTERNAL",
 			"mcp_server_type_hosted": "MCP_SERVER_TYPE_HOSTED", "passthrough": bad,
+			"MCP_SERVER_TYPE_FUTURE": bad, "": bad,
 		}},
 		{dataSensitivityFlag, map[string]string{
 			"confidential": "MCP_SERVER_DATA_SENSITIVITY_CONFIDENTIAL", "Public": "MCP_SERVER_DATA_SENSITIVITY_PUBLIC",
@@ -212,6 +222,7 @@ func TestEnumFlagValues(t *testing.T) {
 			"enforce-entitlement-request-policy": "REQUEST_CATALOG_ENROLLMENT_BEHAVIOR_ENFORCE_ENTITLEMENT_REQUEST_POLICY",
 			"request_catalog_enrollment_behavior_bypass_entitlement_request_policy": "REQUEST_CATALOG_ENROLLMENT_BEHAVIOR_BYPASS_ENTITLEMENT_REQUEST_POLICY",
 			"": "", "maybe": bad,
+			"REQUEST_CATALOG_ENROLLMENT_BEHAVIOR_BYPASS": "REQUEST_CATALOG_ENROLLMENT_BEHAVIOR_BYPASS_ENTITLEMENT_REQUEST_POLICY",
 		}},
 		{catalogUnenrollmentFlag, map[string]string{
 			"unspecified":        "REQUEST_CATALOG_UNENROLLMENT_BEHAVIOR_UNSPECIFIED",
@@ -252,11 +263,21 @@ func TestEnumFlagValues(t *testing.T) {
 		{sortDirectionFlag, map[string]string{
 			"asc": "SORT_DIRECTION_ASC", "ASC": "SORT_DIRECTION_ASC", "desc": "SORT_DIRECTION_DESC",
 			" Desc ": "SORT_DIRECTION_DESC", "sort_direction_desc": "SORT_DIRECTION_DESC", "newest": bad,
+			"aſc": bad, "deſc": bad,
 		}},
 		{reportFormatFlag, map[string]string{
 			"json": "ACCESS_REVIEW_REPORT_FORMAT_JSON", "CSV": "ACCESS_REVIEW_REPORT_FORMAT_CSV",
 			" xlsx ":                          "ACCESS_REVIEW_REPORT_FORMAT_XLSX",
 			"access_review_report_format_csv": "ACCESS_REVIEW_REPORT_FORMAT_CSV", "pdf": bad,
+		}},
+		{authFlag, map[string]string{
+			"none": "none", "bearer-token": "bearerToken", "Bearer": "bearerToken", "bearer_token": "bearerToken",
+			"bearerToken": "bearerToken", " custom-header ": "customHeader", "basic": "basicAuth", "basic-auth": "basicAuth",
+			"oauth2": bad, "baſic": bad, "": bad,
+		}},
+		{authTemplateFlag, map[string]string{
+			"bearer": "bearerToken", "oauth2": "oauth2", "aws": "awsSigv4", "aws-sigv4": "awsSigv4",
+			"google": "googleServiceAccount", "google-service-account": "googleServiceAccount", "kerberos": bad,
 		}},
 	}
 	for _, c := range cases {

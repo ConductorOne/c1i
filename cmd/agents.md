@@ -375,11 +375,12 @@ resource with `--resource-id` likewise means you drop
   accept. Validate shell variables before supplying any repeatable flag:
   a comma is not a substitute for multiple values, and an empty value can
   silently remove a restriction. `--fields` IS comma-separated.
-- Enum flags (`--state`, `--status`, `--type`, `--policy-type`, ...) ignore
-  case, whitespace and `-` vs `_`, and take the full API name too; `--help`
-  lists the short names. An unknown value exits 2 before any request; one
-  carrying the API prefix `--help` names (`MCP_TOOL_STATE_*`) is sent as is.
-  `users list --status` sends any value.
+- Enum flags (`--state`, `--status`, `--type`, `--policy-type`, `--auth`, ...)
+  ignore ASCII case, whitespace and `-` vs `_`, and take the full API name
+  too; `--help` lists the short names. An unknown or non-ASCII value exits 2
+  before any request. Where `--help` says "or any `PREFIX_*` value", a value
+  with that prefix is upper-cased, `-` turned to `_`, and sent.
+  `users list --status` sends any ASCII value, trimmed.
 - `mcp tools approve` takes one or more tool ids in a single invocation:
   `approve id1 id2 id3 --app-id A --connector-id C` approves a whole toolset in
   one process (one token, one TLS handshake). The API has no batch approve, so

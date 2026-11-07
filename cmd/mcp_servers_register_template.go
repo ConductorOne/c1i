@@ -16,19 +16,26 @@ import (
 // --external-config-file unchanged. Returns an error for an unknown mode so the
 // template never emits a silently wrong shape.
 func authArmTemplate(mode string) (map[string]any, error) {
-	switch strings.ToLower(mode) {
-	case "", "none":
+	arm := "none"
+	if mode != "" {
+		var err error
+		if arm, err = authTemplateFlag.parse(mode); err != nil {
+			return nil, fmt.Errorf("unknown --auth %q for --print-config-template: use %s", mode, authTemplateFlag.usage())
+		}
+	}
+	switch arm {
+	case "none":
 		return map[string]any{"none": map[string]any{}}, nil
-	case "bearer-token", "bearer":
+	case "bearerToken":
 		return map[string]any{"bearerToken": map[string]any{
 			"token": "<bearer-token>",
 		}}, nil
-	case "custom-header":
+	case "customHeader":
 		return map[string]any{"customHeader": map[string]any{
 			"headerName":  "<header-name>",
 			"headerValue": "<header-value>",
 		}}, nil
-	case "basic-auth", "basic":
+	case "basicAuth":
 		return map[string]any{"basicAuth": map[string]any{
 			"username": "<username>",
 			"password": "<password>",
@@ -48,19 +55,19 @@ func authArmTemplate(mode string) (map[string]any, error) {
 			"tokenUrl":     "https://provider.example/oauth/token",
 			"scopes":       []string{"<scope>"},
 		}}, nil // #nosec G101 -- placeholder template values (e.g. "<oauth-client-secret>"), not real secrets
-	case "aws-sigv4", "aws":
+	case "awsSigv4":
 		return map[string]any{"awsSigv4": map[string]any{
 			"accessKeyId":     "<aws-access-key-id>",
 			"secretAccessKey": "<aws-secret-access-key>",
 			"sessionToken":    "",
 		}}, nil // #nosec G101 -- placeholder template values (e.g. "<aws-secret-access-key>"), not real secrets
-	case "google-service-account", "google":
+	case "googleServiceAccount":
 		return map[string]any{"googleServiceAccount": map[string]any{
 			"credentialsJson": "<service-account-credentials-json-string>",
 			"scopes":          []string{"<scope>"},
 		}}, nil
 	default:
-		return nil, fmt.Errorf("unknown --auth %q for --print-config-template: use none, bearer-token, custom-header, basic-auth, oauth2, aws-sigv4, or google-service-account", mode)
+		return nil, fmt.Errorf("--auth %q has no template", arm)
 	}
 }
 
@@ -78,15 +85,15 @@ func printConfigTemplate(cmd *cobra.Command) error {
 	if err != nil {
 		return &usageError{err}
 	}
-	typ, err := serverTypeFlag.parse(mustGetString(cmd, "type"))
-	if err != nil {
-		return err
-	}
 	serverType := "hosted"
-	if typ == "MCP_SERVER_TYPE_EXTERNAL" {
-		serverType = "external"
-	} else if typ != "" && typ != "MCP_SERVER_TYPE_HOSTED" {
-		serverType = typ
+	if t := mustGetString(cmd, "type"); t != "" {
+		typ, err := serverTypeFlag.parse(t)
+		if err != nil {
+			return err
+		}
+		if typ == "MCP_SERVER_TYPE_EXTERNAL" {
+			serverType = "external"
+		}
 	}
 
 	cfg := map[string]any{}

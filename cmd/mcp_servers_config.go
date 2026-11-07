@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"slices"
 	"sort"
 	"strings"
 
@@ -37,7 +38,7 @@ func deriveCredentialUpdateMask(cfg map[string]any) string {
 // OAuth2 / AWS SigV4 / Google service-account configs go through the
 // --hosted-config-file / --external-config-file JSON escape hatch instead.
 func addAuthFlags(cmd *cobra.Command) {
-	cmd.Flags().String("auth", "", "Auth method: none, bearer-token, custom-header, basic-auth (OAuth2/AWS/Google go via --*-config-file)")
+	cmd.Flags().String("auth", "", "Auth method: "+authFlag.usage()+" (OAuth2/AWS/Google go via --*-config-file)")
 	cmd.Flags().String("bearer-token", "", "Bearer token value (with --auth bearer-token)")
 	cmd.Flags().String("header-name", "", "Custom header name (with --auth custom-header)")
 	cmd.Flags().String("header-value", "", "Custom header value (with --auth custom-header)")
@@ -52,27 +53,47 @@ func addAuthFlags(cmd *cobra.Command) {
 // members serialize flat into the parent config object, so the returned map is
 // meant to be merged into the hosted/external config.
 func authArmFromFlags(cmd *cobra.Command) (map[string]any, error) {
-	auth, _ := cmd.Flags().GetString("auth")
-	switch strings.ToLower(auth) {
-	case "":
+	auth := mustGetString(cmd, "auth")
+	if auth == "" {
 		return nil, nil
-	case "none":
-		return map[string]any{"none": map[string]any{}}, nil
-	case "bearer-token", "bearer":
+	}
+	arm, err := authFlag.parse(auth)
+	if err != nil {
+		return nil, &usageError{fmt.Errorf("unsupported --auth %q: use %s (OAuth2/AWS/Google go via --hosted-config-file / --external-config-file)", auth, authFlag.usage())}
+	}
+	switch arm {
+	case "bearerToken":
 		token, _ := cmd.Flags().GetString("bearer-token")
-		return map[string]any{"bearerToken": map[string]any{"token": token}}, nil
-	case "custom-header":
+		return map[string]any{arm: map[string]any{"token": token}}, nil
+	case "customHeader":
 		name, _ := cmd.Flags().GetString("header-name")
 		value, _ := cmd.Flags().GetString("header-value")
-		return map[string]any{"customHeader": map[string]any{"headerName": name, "headerValue": value}}, nil
-	case "basic-auth", "basic":
+		return map[string]any{arm: map[string]any{"headerName": name, "headerValue": value}}, nil
+	case "basicAuth":
 		user, _ := cmd.Flags().GetString("basic-auth-username")
 		pass, _ := cmd.Flags().GetString("basic-auth-password")
-		return map[string]any{"basicAuth": map[string]any{"username": user, "password": pass}}, nil
-	default:
-		return nil, &usageError{fmt.Errorf("unsupported --auth %q: use none, bearer-token, custom-header, or basic-auth (OAuth2/AWS/Google go via --hosted-config-file / --external-config-file)", auth)}
+		return map[string]any{arm: map[string]any{"username": user, "password": pass}}, nil
+	default: // none
+		return map[string]any{arm: map[string]any{}}, nil
 	}
 }
+
+// authFlag lists the --auth methods the convenience flags can fill in; api
+// is the config's oneof arm.
+var authFlag = enumFlag{flag: "auth", unknown: enumReject, values: []enumValue{
+	{name: "none", api: "none"},
+	{name: "bearer-token", api: "bearerToken", aliases: []string{"bearer"}},
+	{name: "custom-header", api: "customHeader"},
+	{name: "basic-auth", api: "basicAuth", aliases: []string{"basic"}},
+}}
+
+// authTemplateFlag adds the methods only a config file can carry, for
+// --print-config-template.
+var authTemplateFlag = enumFlag{flag: "auth", unknown: enumReject, values: append(slices.Clone(authFlag.values),
+	enumValue{name: "oauth2", api: "oauth2"},
+	enumValue{name: "aws-sigv4", api: "awsSigv4", aliases: []string{"aws"}},
+	enumValue{name: "google-service-account", api: "googleServiceAccount", aliases: []string{"google"}},
+)}
 
 // applySharedAuthFields merges the auth arm, token-sharing, and
 // require-tool-approval flags into a config object built from flags.

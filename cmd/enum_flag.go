@@ -2,7 +2,9 @@ package cmd
 
 import (
 	"fmt"
+	"slices"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/spf13/cobra"
 )
@@ -49,29 +51,50 @@ func (e enumFlag) as(flag string) enumFlag {
 	return e
 }
 
+// enumKey normalises s for matching. Callers refuse non-ASCII first:
+// strings.ToUpper folds lookalikes (ſ→S, ı→I) onto real values.
 func enumKey(s string) string {
 	return strings.ToUpper(strings.ReplaceAll(strings.TrimSpace(s), "-", "_"))
+}
+
+func isASCII(s string) bool {
+	for i := 0; i < len(s); i++ {
+		if s[i] >= utf8.RuneSelf {
+			return false
+		}
+	}
+	return true
+}
+
+// inputs lists the normalised keys that select v: its short name and
+// aliases (bare and prefixed), its API name, and the API name minus prefix.
+func (e enumFlag) inputs(v enumValue) []string {
+	keys := []string{enumKey(v.api), enumKey(strings.TrimPrefix(v.api, e.prefix))}
+	for _, n := range append([]string{v.name}, v.aliases...) {
+		keys = append(keys, enumKey(n))
+		if e.prefix != "" {
+			keys = append(keys, e.prefix+enumKey(n))
+		}
+	}
+	return keys
 }
 
 // parse returns the API enum for raw. An empty raw returns "" for a flag
 // that passes unknowns, as the per-flag mappers did; a blank one is refused.
 func (e enumFlag) parse(raw string) (string, error) {
-	key := enumKey(raw)
 	if raw == "" && e.unknown != enumReject {
 		return "", nil
 	}
-	if key != "" {
+	key := enumKey(raw)
+	if key != "" && isASCII(raw) {
 		for _, kw := range e.keywords {
 			if key == enumKey(kw) {
 				return kw, nil
 			}
 		}
 		for _, v := range e.values {
-			if key == enumKey(v.name) || key == v.api || (e.prefix != "" && e.prefix+key == v.api) {
-				return v.api, nil
-			}
-			for _, a := range v.aliases {
-				if key == enumKey(a) {
+			for _, k := range e.inputs(v) {
+				if key == k {
 					return v.api, nil
 				}
 			}
@@ -86,6 +109,19 @@ func (e enumFlag) parse(raw string) (string, error) {
 		}
 	}
 	return "", &usageError{fmt.Errorf("invalid --%s %q: want %s", e.flag, raw, e.usage())}
+}
+
+// without returns e minus the named values, for help that omits a value the
+// command refuses with its own message.
+func (e enumFlag) without(names ...string) enumFlag {
+	var kept []enumValue
+	for _, v := range e.values {
+		if !slices.Contains(names, v.name) {
+			kept = append(kept, v)
+		}
+	}
+	e.values = kept
+	return e
 }
 
 // usage lists the accepted values for help text and errors, so neither can

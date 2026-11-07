@@ -61,7 +61,7 @@ var policyTypeFlag = enumFlag{flag: "policy-type", prefix: "POLICY_TYPE_", unkno
 	{name: "grant", api: "POLICY_TYPE_GRANT"},
 	{name: "revoke", api: "POLICY_TYPE_REVOKE"},
 	{name: "certify", api: "POLICY_TYPE_CERTIFY"},
-	{name: "access_request", api: "POLICY_TYPE_ACCESS_REQUEST", aliases: []string{"accessrequest"}},
+	{name: "access-request", api: "POLICY_TYPE_ACCESS_REQUEST", aliases: []string{"accessrequest"}},
 	{name: "provision", api: "POLICY_TYPE_PROVISION"},
 }}
 

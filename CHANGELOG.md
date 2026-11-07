@@ -78,20 +78,21 @@ credentials fails instead of using the working directory. With a relative
 
 ### Changed
 
-- Every enum flag now parses the same way: case and surrounding whitespace
-  are ignored, `-` and `_` are interchangeable, and the full API name is
-  accepted in any case (`--state pending-review`, `--sort SORT_DIRECTION_DESC`,
-  `--format access_review_report_format_csv`). An unknown short value is a
-  usage error (exit 2) before any request; on a flag that used to pass
-  unknown values on, one carrying the API prefix still does. This changes
-  three behaviors:
-  `automations executions list --state <unknown>` exits 2 instead of printing
-  nothing and exiting 0; `--status`/`--type` on `accounts list`,
-  `--policy-type`, the `mcp tools`/`mcp servers` enum flags and the
-  `access-profiles` behavior flags refuse an unknown short value locally
-  instead of sending it to a server that answered 400 (exit 2 either way);
-  and a blank (whitespace-only) value on those flags is refused rather than
-  sent. `users list --status` still sends any value, since its enum has no
+- Every enum flag, `--auth` included, now parses the same way: ASCII case
+  and surrounding whitespace are ignored, `-` and `_` are interchangeable,
+  the full API name is accepted in any case (`--state pending-review`,
+  `--sort SORT_DIRECTION_DESC`, `--format access_review_report_format_csv`),
+  and non-ASCII input is refused. An unknown short value is a usage error
+  (exit 2) before any request; on a flag that used to pass unknown values on,
+  one carrying the API prefix is still sent, upper-cased with `-` turned to
+  `_`. This changes three behaviors: `automations executions list --state
+  <unknown>` exits 2 instead of printing nothing and exiting 0;
+  `--status`/`--type` on `accounts list`, `--policy-type`, the `mcp tools`
+  and `mcp servers` enum flags and the `access-profiles` behavior flags
+  refuse an unknown short value locally instead of sending it to a server
+  that answered 400, or of printing it under `--dry-run`; and a blank
+  (whitespace-only) value on those flags is refused rather than sent.
+  `users list --status` still sends any ASCII value, since its enum has no
   prefix.
 - `golang.org/x/term` moves to 0.47.0 and `golang.org/x/sys` to 0.49.0.
 - `golang.org/x/crypto` is pinned to the untagged
