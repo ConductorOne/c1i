@@ -230,7 +230,7 @@ func (ix *srcIndex) isMutatingSelector(x *ast.SelectorExpr) bool {
 		return false
 	}
 	pkg, ok := x.X.(*ast.Ident)
-	return !(ok && pkg.Name == "http" && x.Sel.Name == "Request")
+	return !ok || pkg.Name != "http" || x.Sel.Name != "Request"
 }
 
 // mutatingMethods derives the mutating selector names from the exported API
