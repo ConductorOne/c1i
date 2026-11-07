@@ -11,10 +11,18 @@ import (
 
 // resourceTypeKinds is the AppResourceType enum, and the single source for
 // every place this repo names it. TestResourceTypeKindsAreDocumented holds the
-// help text, README.md and the configure-new-app guide to this list. Not used
-// to validate --resource-type: the server stays authoritative if the enum
-// grows, and normalizeResourceType passes an unknown name through.
+// help text, README.md and the configure-new-app guide to this list.
 var resourceTypeKinds = []string{"ROLE", "GROUP", "LICENSE", "PROJECT", "CATALOG", "CUSTOM", "VAULT", "PROFILE_TYPE"}
+
+// resourceTypeFlag passes unknowns: the enum has no prefix, so the server
+// stays authoritative if it grows.
+var resourceTypeFlag = func() enumFlag {
+	e := enumFlag{flag: "resource-type", unknown: enumPassAny}
+	for _, k := range resourceTypeKinds {
+		e.values = append(e.values, enumValue{name: strings.ToLower(strings.ReplaceAll(k, "_", "-")), api: k})
+	}
+	return e
+}()
 
 // Stand-ins printed by --dry-run for ids only a preceding response can supply.
 // Alphanumeric + "_" so client.Path leaves them unescaped and the previewed
@@ -203,7 +211,10 @@ func buildEntitlementCreatePlan(cmd *cobra.Command) (*entitlementCreatePlan, err
 	// --resource-type has a default, so an explicit "" is a mistake. Checked
 	// after the reuse rejection above, whose message is the more useful one when
 	// --resource-type-id is also set.
-	resourceType, err := requireNonEmptyIfSet(cmd, "resource-type")
+	if _, err := requireNonEmptyIfSet(cmd, "resource-type"); err != nil {
+		return nil, err
+	}
+	resourceType, err := resourceTypeFlag.parse(mustGetString(cmd, "resource-type"))
 	if err != nil {
 		return nil, err
 	}
@@ -226,7 +237,7 @@ func buildEntitlementCreatePlan(cmd *cobra.Command) (*entitlementCreatePlan, err
 	if resourceTypeID == "" {
 		p.resourceTypeBody = map[string]any{
 			"displayName":  flagOrDefault(cmd, "resource-type-display-name", displayName),
-			"resourceType": normalizeResourceType(resourceType),
+			"resourceType": resourceType,
 		}
 		p.typeOnlyFlags = changedFlags(cmd, typeCreateOnlyFlags...)
 	}
@@ -291,13 +302,6 @@ func changedFlags(cmd *cobra.Command, names ...string) []string {
 		}
 	}
 	return passed
-}
-
-// normalizeResourceType upper-cases the enum name so "custom" and
-// "profile-type" work; anything unrecognized is passed through for the server
-// to reject, keeping it authoritative if the enum grows.
-func normalizeResourceType(s string) string {
-	return strings.ToUpper(strings.ReplaceAll(s, "-", "_"))
 }
 
 func (p *entitlementCreatePlan) resourceTypesPath() string {
@@ -463,7 +467,7 @@ func addEntitlementCreateFlags(cmd *cobra.Command) {
 	// outright, so `--owner-id "" --owner-id U` would lose the empty one
 	// before this command could reject it.
 	addRepeatableStringFlag(cmd, "owner-id", "C1 user ID to own the new entitlement (repeatable)")
-	f.String("resource-type", "CUSTOM", "Kind of resource type to create: "+strings.Join(resourceTypeKinds, ", "))
+	f.String("resource-type", "custom", "Kind of resource type to create: "+resourceTypeFlag.usage())
 	f.String("resource-type-id", "", "Existing app resource type to reuse instead of creating one")
 	f.String("resource-type-display-name", "", "Display name for the resource type this command creates (default: --display-name)")
 	f.String("resource-id", "", "Existing app resource to reuse instead of creating one; requires --resource-type-id")

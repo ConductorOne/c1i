@@ -129,7 +129,7 @@ owner added between your read and your write is silently removed.
 ### Accounts
 
 ```sh
-c1i accounts list --app-id <id> [--status enabled|disabled|deleted] [--type user|service_account|system_account] [--unmapped-only] [--query <text>] [--page-size N] [--page-token TOKEN] [--limit N]
+c1i accounts list --app-id <id> [--status enabled|disabled|deleted] [--type user|service-account|system-account] [--unmapped-only] [--query <text>] [--page-size N] [--page-token TOKEN] [--limit N]
 
 c1i accounts set-owner <app-user-id> --app-id <id> --user-id <id>
 ```
@@ -1060,6 +1060,23 @@ sets `region` to `us1,env=prod` and the server may accept it.
 An empty occurrence is a usage error (exit 2), rejected before any request, so
 an unset shell variable cannot silently shorten a list or remove a credential
 restriction. Contrast `--fields`, which *is* comma-separated.
+
+### Enum flags
+
+Every flag that takes a named value (`--state`, `--status`, `--type`,
+`--policy-type`, `--sort`, `--auth`, `--unbind-policy`, `--error-format`,
+`--method`, ...) parses it the same way: ASCII case and surrounding
+whitespace are ignored, `-` and `_` are the same, and the full API name is
+accepted in any case (`--state pending-review`, `--state
+mcp_tool_state_approved`). Its `--help` lists the short names. An unknown or
+non-ASCII value is a usage error (exit 2), rejected before any request.
+
+Where `--help` says "or any `PREFIX_*` value", a value carrying that prefix
+is sent upper-cased with `-` changed to `_`, so an enum newer than c1i still
+works. Two flags whose API enums have no prefix, `users list --status` and
+`entitlements create --resource-type`, send any ASCII value that way. The
+only values rewritten to a different enum are these listed aliases:
+`MCP_TOOL_STATE_PENDING` is sent as `MCP_TOOL_STATE_PENDING_REVIEW`, and `REQUEST_CATALOG_ENROLLMENT_BEHAVIOR_BYPASS`/`_ENFORCE` as their `..._ENTITLEMENT_REQUEST_POLICY` names. No other prefixed value is ever remapped.
 
 ### Display names
 

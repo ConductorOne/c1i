@@ -46,13 +46,17 @@ func TestBuildRequestSearchBody_TypeFilter(t *testing.T) {
 }
 
 func TestBuildRequestSearchBody_ScopeAndFilters(t *testing.T) {
+	state, err := taskStateFlag.parse("open")
+	if err != nil {
+		t.Fatal(err)
+	}
 	body := buildRequestSearchBody(requestSearchFilters{
 		pageSize:      25,
 		pageToken:     "tok",
 		scopeUserID:   "user-1",
 		appID:         "app-1",
 		entitlementID: "ent-1",
-		state:         "open",
+		state:         state,
 	})
 
 	if body["openerOrSubjectUserId"] != "user-1" {

@@ -65,7 +65,10 @@ func TestBuildAccessProfileCreateBodyAllWritableFields(t *testing.T) {
 		}
 	}
 
-	got := buildAccessProfileCreateBody(cmd)
+	got, err := buildAccessProfileCreateBody(cmd)
+	if err != nil {
+		t.Fatalf("buildAccessProfileCreateBody: %v", err)
+	}
 	want := map[string]any{
 		"displayName":                     "Engineering",
 		"description":                     "eng access",

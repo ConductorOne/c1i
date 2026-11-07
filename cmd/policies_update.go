@@ -218,8 +218,11 @@ func buildUpdatePolicyPatch(cmd *cobra.Command, resolveFallbackPolicyType func()
 		paths = append(paths, "description")
 	}
 	if cmd.Flags().Changed("policy-type") {
-		v, _ := cmd.Flags().GetString("policy-type")
-		policy["policyType"] = mapPolicyType(v)
+		v, err := policyTypeFlag.parse(mustGetString(cmd, "policy-type"))
+		if err != nil {
+			return nil, "", err
+		}
+		policy["policyType"] = v
 		paths = append(paths, "policyType")
 	}
 	if cmd.Flags().Changed("steps-file") {
@@ -261,7 +264,7 @@ func buildUpdatePolicyPatch(cmd *cobra.Command, resolveFallbackPolicyType func()
 func init() {
 	policiesUpdateCmd.Flags().String("display-name", "", "New display name (omit to leave unchanged; "+displayNameRule+")")
 	policiesUpdateCmd.Flags().String("description", "", "New description")
-	policiesUpdateCmd.Flags().String("policy-type", "", "New policy type: grant, revoke, certify (rarely changed)")
+	policiesUpdateCmd.Flags().String("policy-type", "", "New policy type: "+policyTypeFlag.usage()+" (rarely changed)")
 	policiesUpdateCmd.Flags().String("steps-file", "", "JSON array: replaces the baseline policySteps.steps content (file, or \"-\" for stdin)")
 	policiesUpdateCmd.Flags().String("rules-file", "", "JSON array: replaces rules[] (file, or \"-\" for stdin)")
 	policiesUpdateCmd.Flags().String("body-file", "", "Full Policy JSON object, verbatim (file, or \"-\" for stdin); requires --update-mask; mutually exclusive with the flags above")

@@ -381,6 +381,17 @@ resource with `--resource-id` likewise means you drop
   accept. Validate shell variables before supplying any repeatable flag:
   a comma is not a substitute for multiple values, and an empty value can
   silently remove a restriction. `--fields` IS comma-separated.
+- Every named-value flag (`--state`, `--status`, `--type`, `--auth`,
+  `--unbind-policy`, `--error-format`, `--method`, ...) ignores ASCII case,
+  whitespace and `-` vs `_`, and takes the full API name too; `--help` lists
+  the short names. An unknown or non-ASCII value exits 2 before any request.
+  Where `--help` says "or any `PREFIX_*` value", a value with that prefix is
+  sent upper-cased, `-` turned to `_`; `users list --status` and
+  `entitlements create --resource-type` send any ASCII value that way. The
+  only rewrites to a different enum are listed aliases:
+  `MCP_TOOL_STATE_PENDING` → `MCP_TOOL_STATE_PENDING_REVIEW`, and
+  `REQUEST_CATALOG_ENROLLMENT_BEHAVIOR_BYPASS`/`_ENFORCE` → their
+  `..._ENTITLEMENT_REQUEST_POLICY` names.
 - `mcp tools approve` takes one or more tool ids in a single invocation:
   `approve id1 id2 id3 --app-id A --connector-id C` approves a whole toolset in
   one process (one token, one TLS handshake). The API has no batch approve, so

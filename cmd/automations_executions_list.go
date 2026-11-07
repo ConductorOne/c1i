@@ -53,7 +53,11 @@ Combine with --limit to bound the work.`,
 			return fmt.Errorf("authentication failed: %w", err)
 		}
 
-		stateFilter := mapExecutionState(strings.TrimSpace(cmd.Flag("state").Value.String()))
+		// Blank means no filter, as before.
+		stateFilter, err := executionStateFlag.parse(strings.TrimSpace(mustGetString(cmd, "state")))
+		if err != nil {
+			return err
+		}
 		templateID, _ := cmd.Flags().GetString("template-id")
 		requestedPageSize := pageSizeFlag(cmd)
 		pageToken, _ := cmd.Flags().GetString("page-token")
@@ -146,35 +150,20 @@ Combine with --limit to bound the work.`,
 	},
 }
 
-// mapExecutionState translates the user-friendly --state value to the bare
-// enum the API expects. The full enum name (AUTOMATION_EXECUTION_STATE_DONE)
-// is verbose; the short form (done|error|pending) is what humans actually
-// remember. Case-insensitive. Returns the input unchanged for unknown values
-// so a future enum addition surfaces as a server-side validation error
-// rather than a silent client-side drop.
-func mapExecutionState(s string) string {
-	switch strings.ToLower(s) {
-	case "":
-		return ""
-	case "done", "success":
-		return "AUTOMATION_EXECUTION_STATE_DONE"
-	case "error", "failed", "failure":
-		return "AUTOMATION_EXECUTION_STATE_ERROR"
-	case "pending":
-		return "AUTOMATION_EXECUTION_STATE_PENDING"
-	case "creating":
-		return "AUTOMATION_EXECUTION_STATE_CREATING"
-	case "waiting":
-		return "AUTOMATION_EXECUTION_STATE_WAITING"
-	case "terminate", "terminated":
-		return "AUTOMATION_EXECUTION_STATE_TERMINATE"
-	default:
-		return s
-	}
-}
+// executionStateFlag filters client-side, so an unknown short name used to
+// match nothing and exit 0; it is now refused. A prefixed value still passes,
+// for a state newer than c1i.
+var executionStateFlag = enumFlag{flag: "state", prefix: "AUTOMATION_EXECUTION_STATE_", unknown: enumPassPrefixed, values: []enumValue{
+	{name: "done", api: "AUTOMATION_EXECUTION_STATE_DONE", aliases: []string{"success"}},
+	{name: "error", api: "AUTOMATION_EXECUTION_STATE_ERROR", aliases: []string{"failed", "failure"}},
+	{name: "pending", api: "AUTOMATION_EXECUTION_STATE_PENDING"},
+	{name: "creating", api: "AUTOMATION_EXECUTION_STATE_CREATING"},
+	{name: "waiting", api: "AUTOMATION_EXECUTION_STATE_WAITING"},
+	{name: "terminate", api: "AUTOMATION_EXECUTION_STATE_TERMINATE", aliases: []string{"terminated"}},
+}}
 
 func init() {
-	automationsExecutionsListCmd.Flags().String("state", "", "Filter by execution state: done, error, pending, creating, waiting, terminate (or the full AUTOMATION_EXECUTION_STATE_* enum)")
+	automationsExecutionsListCmd.Flags().String("state", "", "Filter by execution state: "+executionStateFlag.usage())
 	automationsExecutionsListCmd.Flags().String("template-id", "", "Filter by automation template (the parent automation's ID)")
 	addPaginationFlags(automationsExecutionsListCmd)
 	automationsExecutionsCmd.AddCommand(automationsExecutionsListCmd)

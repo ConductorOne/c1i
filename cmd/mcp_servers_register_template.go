@@ -16,19 +16,26 @@ import (
 // --external-config-file unchanged. Returns an error for an unknown mode so the
 // template never emits a silently wrong shape.
 func authArmTemplate(mode string) (map[string]any, error) {
-	switch strings.ToLower(mode) {
-	case "", "none":
+	arm := "none"
+	if mode != "" {
+		var err error
+		if arm, err = authTemplateFlag.parse(mode); err != nil {
+			return nil, fmt.Errorf("unknown --auth %q for --print-config-template: use %s", mode, authTemplateFlag.usage())
+		}
+	}
+	switch arm {
+	case "none":
 		return map[string]any{"none": map[string]any{}}, nil
-	case "bearer-token", "bearer":
+	case "bearerToken":
 		return map[string]any{"bearerToken": map[string]any{
 			"token": "<bearer-token>",
 		}}, nil
-	case "custom-header":
+	case "customHeader":
 		return map[string]any{"customHeader": map[string]any{
 			"headerName":  "<header-name>",
 			"headerValue": "<header-value>",
 		}}, nil
-	case "basic-auth", "basic":
+	case "basicAuth":
 		return map[string]any{"basicAuth": map[string]any{
 			"username": "<username>",
 			"password": "<password>",
@@ -48,19 +55,19 @@ func authArmTemplate(mode string) (map[string]any, error) {
 			"tokenUrl":     "https://provider.example/oauth/token",
 			"scopes":       []string{"<scope>"},
 		}}, nil // #nosec G101 -- placeholder template values (e.g. "<oauth-client-secret>"), not real secrets
-	case "aws-sigv4", "aws":
+	case "awsSigv4":
 		return map[string]any{"awsSigv4": map[string]any{
 			"accessKeyId":     "<aws-access-key-id>",
 			"secretAccessKey": "<aws-secret-access-key>",
 			"sessionToken":    "",
 		}}, nil // #nosec G101 -- placeholder template values (e.g. "<aws-secret-access-key>"), not real secrets
-	case "google-service-account", "google":
+	case "googleServiceAccount":
 		return map[string]any{"googleServiceAccount": map[string]any{
 			"credentialsJson": "<service-account-credentials-json-string>",
 			"scopes":          []string{"<scope>"},
 		}}, nil
 	default:
-		return nil, fmt.Errorf("unknown --auth %q for --print-config-template: use none, bearer-token, custom-header, basic-auth, oauth2, aws-sigv4, or google-service-account", mode)
+		return nil, fmt.Errorf("--auth %q has no template", arm)
 	}
 }
 
@@ -69,10 +76,6 @@ func authArmTemplate(mode string) (map[string]any, error) {
 // pipes to a file), with human guidance on stderr. It performs no auth and no
 // network I/O.
 func printConfigTemplate(cmd *cobra.Command) error {
-	serverType, _ := cmd.Flags().GetString("type")
-	if serverType == "" {
-		serverType = "hosted"
-	}
 	auth, _ := cmd.Flags().GetString("auth")
 
 	// Bad --auth / --type are user-input problems: wrap as usageError so they
@@ -82,17 +85,22 @@ func printConfigTemplate(cmd *cobra.Command) error {
 	if err != nil {
 		return &usageError{err}
 	}
+	typ := "MCP_SERVER_TYPE_HOSTED"
+	if t := mustGetString(cmd, "type"); t != "" {
+		if typ, err = serverTypeFlag.parse(t); err != nil {
+			return err
+		}
+	}
+	// serverTypeFlag is closed, so typ is HOSTED or EXTERNAL.
+	serverType := strings.ToLower(strings.TrimPrefix(typ, serverTypeFlag.prefix))
 
 	cfg := map[string]any{}
-	switch strings.ToLower(serverType) {
-	case "hosted":
-		cfg["mcpServerCatalogId"] = "<catalog entry id — see: c1i mcp servers catalog list>"
-		cfg["tokenSharing"] = "MCP_SERVER_TOKEN_SHARING_SHARED"
-	case "external":
+	if typ == "MCP_SERVER_TYPE_EXTERNAL" {
 		cfg["url"] = "https://your-mcp-server.example/mcp"
 		cfg["transportType"] = "MCP_SERVER_TRANSPORT_TYPE_STREAMABLE_HTTP"
-	default:
-		return &usageError{fmt.Errorf("invalid --type %q: use hosted or external", serverType)}
+	} else {
+		cfg["mcpServerCatalogId"] = "<catalog entry id — see: c1i mcp servers catalog list>"
+		cfg["tokenSharing"] = "MCP_SERVER_TOKEN_SHARING_SHARED"
 	}
 	for k, v := range arm {
 		cfg[k] = v
@@ -108,17 +116,14 @@ func printConfigTemplate(cmd *cobra.Command) error {
 		return err
 	}
 
-	flagName := "hosted-config-file"
-	if strings.EqualFold(serverType, "external") {
-		flagName = "external-config-file"
-	}
+	flagName := serverType + "-config-file"
 	authLabel := auth
 	if authLabel == "" {
 		authLabel = "none"
 	}
 	_, _ = fmt.Fprintf(cmd.ErrOrStderr(),
 		"# %s %s config template. Replace <placeholders>, then:\n#   c1i mcp servers register --app-id APP --type %s --display-name NAME --%s config.json\n# Fields with <angle-brackets> are placeholders; enum/URL values are examples. Secrets are sealed server-side.\n",
-		serverType, authLabel, strings.ToLower(serverType), flagName)
+		serverType, authLabel, serverType, flagName)
 	_, err = fmt.Fprint(cmd.OutOrStdout(), buf.String())
 	return err
 }
