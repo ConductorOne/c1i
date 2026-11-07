@@ -223,9 +223,9 @@ func TestEntitlementOwnerWritesDryRun(t *testing.T) {
 		not   string
 	}{
 		{"add-owner", entitlementsAddOwnerCmd, map[string][]string{"app-id": {"app1"}, "entitlement-id": {"ent1"}, "wait": {"true"}, "wait-timeout": {"2s"}}, []string{"u1"},
-			[]string{"[dry-run] POST /api/v1/apps/app1/entitlements/ent1/owners\n", `"userId": "u1"`}, ""},
+			[]string{`"method": "POST",`, `"url": "https://example.invalid/api/v1/apps/app1/entitlements/ent1/owners",`, `"userId": "u1"`}, ""},
 		{"remove-owner", entitlementsRemoveOwnerCmd, map[string][]string{"app-id": {"app1"}, "entitlement-id": {"ent1"}}, []string{"u1"},
-			[]string{"[dry-run] DELETE /api/v1/apps/app1/entitlements/ent1/owners/u1\n"}, "{"},
+			[]string{`"method": "DELETE",`, `"url": "https://example.invalid/api/v1/apps/app1/entitlements/ent1/owners/u1"`}, `"body"`},
 		{"set-owners", entitlementsSetOwnersCmd, map[string][]string{"app-id": {"app1"}, "user-id": {"u1"}, "wait": {"true"}, "wait-timeout": {"2s"}}, []string{"ent1"},
 			[]string{`"method": "PUT",`, `"url": "https://example.invalid/api/v1/apps/app1/entitlements/ent1/owners",`, `"userIds": [`}, ""},
 	}

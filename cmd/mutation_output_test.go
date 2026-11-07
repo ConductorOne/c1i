@@ -77,30 +77,7 @@ var outOfScopeSelectors = map[string]string{
 // pendingMigration is Phase B's checklist: mutating commands that still send
 // through the client directly. Remove an entry when its command moves onto
 // sendMutation*; the test fails on an entry that already has.
-var pendingMigration = map[string]bool{
-	"c1i accounts set-owner":                    true,
-	"c1i automations delete":                    true,
-	"c1i automations update":                    true,
-	"c1i entitlements add-owner":                true,
-	"c1i entitlements create":                   true,
-	"c1i entitlements delete":                   true,
-	"c1i entitlements proxy-bindings create":    true,
-	"c1i entitlements proxy-bindings delete":    true,
-	"c1i entitlements remove-owner":             true,
-	"c1i entitlements update":                   true,
-	"c1i service-principals bindings add":       true,
-	"c1i service-principals bindings delete":    true,
-	"c1i service-principals create":             true,
-	"c1i service-principals credentials create": true,
-	"c1i service-principals credentials revoke": true,
-	"c1i service-principals credentials update": true,
-	"c1i service-principals delete":             true,
-	"c1i service-principals update":             true,
-	"c1i webhooks create":                       true,
-	"c1i webhooks delete":                       true,
-	"c1i webhooks test":                         true,
-	"c1i webhooks update":                       true,
-}
+var pendingMigration = map[string]bool{}
 
 // batchCommands maps each command calling sendMutationBatch to the id key
 // every output line carries.

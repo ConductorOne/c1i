@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"fmt"
+	"net/http"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -32,34 +33,16 @@ nothing sent. Sent as is, the server stores "" as an empty name and keeps
 			return &usageError{fmt.Errorf("nothing to update: pass --display-name")}
 		}
 
-		baseURL, err := GetBaseURL()
-		if err != nil {
-			return err
-		}
-
 		body := map[string]any{
 			"servicePrincipal": sp,
 			"updateMask":       strings.Join(paths, ","),
 		}
-		path := spPath(id)
-		if dryRunActive() {
-			return printDryRun(cmd, "PATCH", path, body)
-		}
-
-		c, err := newServicePrincipalsClient(cmd, baseURL)
-		if err != nil {
-			return fmt.Errorf("authentication failed: %w", err)
-		}
-		data, err := c.Patch(cmd.Context(), path, body)
-		if err != nil {
-			return fmt.Errorf("API error: %w", err)
-		}
-
-		return writeRawObject(cmd, data)
+		return sendMutation(cmd, mutation{Method: http.MethodPatch, Path: spPath(id), Body: body})
 	},
 }
 
 func init() {
 	servicePrincipalsUpdateCmd.Flags().String("display-name", "", "New display name (omit to leave unchanged; "+displayNameRule+")")
+	markMutating(servicePrincipalsUpdateCmd)
 	servicePrincipalsCmd.AddCommand(servicePrincipalsUpdateCmd)
 }

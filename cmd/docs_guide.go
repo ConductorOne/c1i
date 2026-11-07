@@ -427,12 +427,12 @@ type, so creating one is three POSTs. "entitlements create" sends all three:
     c1i entitlements create --app-id "$APP_ID" \
       --display-name "Payroll admin" --resource-type-display-name "Payroll role" \
       --slug member --alias payroll_admin --owner-id "$OWNER_USER_ID"
-    ENT_ID=<appEntitlementView.appEntitlement.id from the response>
+    ENT_ID=<.id from the response>  # capture with jq -er .id
 
 The response echoes the ids of the other two objects in that same payload:
 
-    RT_ID=<appEntitlementView.appEntitlement.appResourceTypeId from the response>
-    RES_ID=<appEntitlementView.appEntitlement.appResourceId from the response>
+    RT_ID=<.appResourceTypeId from the response>
+    RES_ID=<.appResourceId from the response>
 
 Reuse them for the next entitlement rather than minting a duplicate resource
 type per entitlement:

@@ -271,6 +271,49 @@ func newEntitlementCreateServer(t *testing.T, failEnt bool) *entitlementCreateSe
 	return s
 }
 
+// runPlan sends p's sequence through the helper against srv, writing stdout to
+// cmd.
+func runPlan(t *testing.T, p *entitlementCreatePlan, srv *httptest.Server, cmd *cobra.Command) error {
+	t.Helper()
+	t.Setenv("C1I_URL", mutTestURL)
+	orig := newClient
+	newClient = func(*cobra.Command, string) (*client.Client, error) {
+		return client.NewForTesting(srv.URL, srv.Client()), nil
+	}
+	t.Cleanup(func() { newClient = orig })
+	cmd.SetContext(context.Background())
+	return sendMutationSequence(cmd, p.steps(), p.placeholderNote())
+}
+
+// previewPlan returns the dry-run stdout and stderr for p.
+func previewPlan(t *testing.T, p *entitlementCreatePlan) (stdout, stderr string) {
+	t.Helper()
+	withDryRun(t)
+	t.Setenv("C1I_URL", mutTestURL)
+	var out, errOut bytes.Buffer
+	cmd := &cobra.Command{}
+	cmd.SetOut(&out)
+	cmd.SetErr(&errOut)
+	cmd.SetContext(context.Background())
+	if err := sendMutationSequence(cmd, p.steps(), p.placeholderNote()); err != nil {
+		t.Fatalf("preview: %v", err)
+	}
+	return out.String(), errOut.String()
+}
+
+// previewDoc parses a preview and returns its requests.
+func previewDoc(t *testing.T, stdout string) []map[string]any {
+	t.Helper()
+	var doc struct {
+		DryRun   bool             `json:"dryRun"`
+		Requests []map[string]any `json:"requests"`
+	}
+	if err := json.Unmarshal([]byte(stdout), &doc); err != nil || !doc.DryRun {
+		t.Fatalf("stdout is not a preview: %q (%v)", stdout, err)
+	}
+	return doc.Requests
+}
+
 // TestEntitlementCreateRunChainsIDs drives the wired end-to-end path: each
 // response's id must address the next request, and the entitlement body must
 // carry both ids the server requires.
@@ -283,7 +326,7 @@ func TestEntitlementCreateRunChainsIDs(t *testing.T) {
 	cmd.SetOut(&out)
 	cmd.SetContext(context.Background())
 
-	if err := p.run(cmd, client.NewForTesting(s.srv.URL, s.srv.Client())); err != nil {
+	if err := runPlan(t, p, s.srv, cmd); err != nil {
 		t.Fatalf("run: %v", err)
 	}
 
@@ -299,8 +342,8 @@ func TestEntitlementCreateRunChainsIDs(t *testing.T) {
 	if ent["appResourceTypeId"] != "rt-new" || ent["appResourceId"] != "res-new" {
 		t.Errorf("entitlement body = %v, want the ids from the two preceding responses", ent)
 	}
-	if !strings.Contains(out.String(), `"id": "ent-new"`) {
-		t.Errorf("output = %q, want the raw entitlement response", out.String())
+	if want := "{\n  \"id\": \"ent-new\"\n}\n"; out.String() != want {
+		t.Errorf("stdout = %q, want the unwrapped entitlement %q", out.String(), want)
 	}
 }
 
@@ -315,7 +358,7 @@ func TestEntitlementCreateRunReportsPartialCreates(t *testing.T) {
 	cmd.SetOut(new(bytes.Buffer))
 	cmd.SetContext(context.Background())
 
-	err := p.run(cmd, client.NewForTesting(s.srv.URL, s.srv.Client()))
+	err := runPlan(t, p, s.srv, cmd)
 	if err == nil {
 		t.Fatal("expected the entitlement create to fail")
 	}
@@ -341,7 +384,7 @@ func TestEntitlementCreateRunReusedObjectsAreNotClaimed(t *testing.T) {
 	cmd.SetOut(new(bytes.Buffer))
 	cmd.SetContext(context.Background())
 
-	err := p.run(cmd, client.NewForTesting(s.srv.URL, s.srv.Client()))
+	err := runPlan(t, p, s.srv, cmd)
 	if err == nil {
 		t.Fatal("expected the entitlement create to fail")
 	}
@@ -357,39 +400,34 @@ func TestEntitlementCreateRunReusedObjectsAreNotClaimed(t *testing.T) {
 // three writes, not just the first -- the other two are writes the caller would
 // otherwise not see coming.
 func TestEntitlementCreateDryRunPreviewsEveryRequest(t *testing.T) {
-	p := mustPlan(t, "--app-id", "app1", "--display-name", "Payroll admin")
-
-	var out bytes.Buffer
-	cmd := &cobra.Command{}
-	cmd.SetOut(&out)
-	if err := p.previewRequests(cmd); err != nil {
-		t.Fatalf("printDryRun: %v", err)
+	stdout, _ := previewPlan(t, mustPlan(t, "--app-id", "app1", "--display-name", "Payroll admin"))
+	reqs := previewDoc(t, stdout)
+	wantURLs := []string{
+		mutTestURL + "/api/v1/apps/app1/resource_types",
+		mutTestURL + "/api/v1/apps/app1/resource_types/" + newResourceTypeIDPlaceholder + "/resources",
+		mutTestURL + "/api/v1/apps/app1/entitlements",
 	}
-
-	got := out.String()
-	for _, want := range []string{
-		"[dry-run] POST /api/v1/apps/app1/resource_types\n",
-		"[dry-run] POST /api/v1/apps/app1/resource_types/" + newResourceTypeIDPlaceholder + "/resources\n",
-		"[dry-run] POST /api/v1/apps/app1/entitlements\n",
-		`"appResourceId": "` + newResourceIDPlaceholder + `"`,
-	} {
-		if !strings.Contains(got, want) {
-			t.Errorf("dry run output missing %q:\n%s", want, got)
+	if len(reqs) != len(wantURLs) {
+		t.Fatalf("previewed %d requests, want %d:\n%s", len(reqs), len(wantURLs), stdout)
+	}
+	for i, want := range wantURLs {
+		if reqs[i]["url"] != want || reqs[i]["method"] != "POST" {
+			t.Errorf("request %d = %v %v, want POST %s", i, reqs[i]["method"], reqs[i]["url"], want)
 		}
 	}
-	if n := strings.Count(got, "[dry-run] POST"); n != 3 {
-		t.Errorf("previewed %d requests, want 3:\n%s", n, got)
+	body, _ := reqs[2]["body"].(map[string]any)
+	if body["appResourceTypeId"] != newResourceTypeIDPlaceholder || body["appResourceId"] != newResourceIDPlaceholder {
+		t.Errorf("entitlement body = %v, want the literal placeholders", body)
 	}
 
 	// A fully-specified run has nothing to stand in for, so it must not print
 	// placeholders at all.
-	out.Reset()
-	single := mustPlan(t, "--app-id", "app1", "--display-name", "e", "--resource-type-id", "rt1", "--resource-id", "r1")
-	if err := single.previewRequests(cmd); err != nil {
-		t.Fatalf("printDryRun: %v", err)
+	stdout, stderr := previewPlan(t, mustPlan(t, "--app-id", "app1", "--display-name", "e", "--resource-type-id", "rt1", "--resource-id", "r1"))
+	if n := len(previewDoc(t, stdout)); n != 1 {
+		t.Errorf("previewed %d requests, want 1:\n%s", n, stdout)
 	}
-	if strings.Contains(out.String(), "NEW_APP_RESOURCE") {
-		t.Errorf("placeholder leaked into a fully-specified preview:\n%s", out.String())
+	if strings.Contains(stdout+stderr, "NEW_APP_RESOURCE") {
+		t.Errorf("placeholder leaked into a fully-specified preview:\n%s\n%s", stdout, stderr)
 	}
 }
 
@@ -477,13 +515,13 @@ func TestEntitlementCreateDryRunBannerNamesOnlyUsedPlaceholders(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			var out bytes.Buffer
-			cmd := &cobra.Command{}
-			cmd.SetOut(&out)
-			if err := mustPlan(t, tc.args...).previewRequests(cmd); err != nil {
-				t.Fatalf("previewRequests: %v", err)
+			stdout, stderr := previewPlan(t, mustPlan(t, tc.args...))
+			banner := ""
+			for _, line := range strings.Split(stderr, "\n") {
+				if strings.HasPrefix(line, "requests are sent in order") {
+					banner = line
+				}
 			}
-			banner, _, _ := strings.Cut(out.String(), "\n")
 			for _, w := range tc.want {
 				if !strings.Contains(banner, w) {
 					t.Errorf("banner %q does not name %s, which the preview uses", banner, w)
@@ -495,8 +533,8 @@ func TestEntitlementCreateDryRunBannerNamesOnlyUsedPlaceholders(t *testing.T) {
 				}
 				// A placeholder must not appear anywhere in a preview whose
 				// id was supplied, banner or request.
-				if strings.HasPrefix(w, "NEW_") && strings.Contains(out.String(), w) {
-					t.Errorf("preview used %s despite the id being supplied:\n%s", w, out.String())
+				if strings.HasPrefix(w, "NEW_") && strings.Contains(stdout+stderr, w) {
+					t.Errorf("preview used %s despite the id being supplied:\n%s", w, stdout)
 				}
 			}
 		})
@@ -585,7 +623,7 @@ func TestEntitlementCreateRetryRemediationIsAccepted(t *testing.T) {
 	cmd := &cobra.Command{}
 	cmd.SetOut(new(bytes.Buffer))
 	cmd.SetContext(context.Background())
-	runErr := mustPlan(t, args...).run(cmd, client.NewForTesting(s.srv.URL, s.srv.Client()))
+	runErr := runPlan(t, mustPlan(t, args...), s.srv, cmd)
 	if runErr == nil {
 		t.Fatal("expected the entitlement create to fail")
 	}
@@ -701,7 +739,7 @@ func TestRemediationOnResourceFailureKeepsResourceName(t *testing.T) {
 	cmd := &cobra.Command{}
 	cmd.SetOut(new(bytes.Buffer))
 	cmd.SetContext(context.Background())
-	runErr := mustPlan(t, args...).run(cmd, client.NewForTesting(s.srv.URL, s.srv.Client()))
+	runErr := runPlan(t, mustPlan(t, args...), s.srv, cmd)
 	if runErr == nil {
 		t.Fatal("expected the resource create to fail")
 	}

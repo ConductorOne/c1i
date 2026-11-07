@@ -167,8 +167,10 @@ func TestAutomationsUpdateDryRunSendsNothing(t *testing.T) {
 	if err != nil {
 		t.Fatalf("RunE: %v", err)
 	}
-	if !strings.Contains(out, "[dry-run] POST /api/v1/automations/a1") ||
-		!strings.Contains(out, `"automation"`) || !strings.Contains(out, `"updateMask": "enabled"`) {
+	reqs := previewDoc(t, out)
+	body, _ := reqs[0]["body"].(map[string]any)
+	if len(reqs) != 1 || reqs[0]["method"] != "POST" || reqs[0]["url"] != "https://example.invalid/api/v1/automations/a1" ||
+		body["updateMask"] != "enabled" || body["automation"] == nil {
 		t.Errorf("dry-run output = %s", out)
 	}
 }
@@ -272,8 +274,8 @@ func TestAutomationsDeleteSendsEscapedDelete(t *testing.T) {
 	if !received {
 		t.Error("delete did not reach the server")
 	}
-	if got := out.String(); got != "Deleted automation: id=auto/id ?#\n" {
-		t.Errorf("output = %q", got)
+	if got := out.String(); got != "{}\n" {
+		t.Errorf("output = %q, want the API's {}", got)
 	}
 }
 
@@ -293,7 +295,8 @@ func TestAutomationsDeleteDryRunSendsNothing(t *testing.T) {
 	if err := automationsDeleteCmd.RunE(automationsDeleteCmd, []string{"a1"}); err != nil {
 		t.Fatalf("RunE: %v", err)
 	}
-	if got := out.String(); got != "[dry-run] DELETE /api/v1/automations/a1\n" {
-		t.Errorf("output = %q", got)
+	reqs := previewDoc(t, out.String())
+	if len(reqs) != 1 || reqs[0]["method"] != "DELETE" || reqs[0]["url"] != "https://example.invalid/api/v1/automations/a1" || reqs[0]["body"] != nil {
+		t.Errorf("output = %q", out.String())
 	}
 }

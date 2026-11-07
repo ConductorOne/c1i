@@ -43,10 +43,6 @@ func entitlementOwnersWaitOp(c *client.Client, appID, entitlementID string, done
 		"c1i entitlements owners "+entitlementID+" --app-id "+appID)
 }
 
-func runEntitlementOwnersWait(cmd *cobra.Command, c *client.Client, appID, entitlementID string, done func([]string) bool, timeout time.Duration) error {
-	return runOwnerIDsWait(cmd, entitlementOwnersWaitOp(c, appID, entitlementID, done, timeout))
-}
-
 func init() {
 	entitlementsOwnersCmd.Flags().String("app-id", "", "Application ID the entitlement belongs to")
 	markRequired(entitlementsOwnersCmd, "app-id")

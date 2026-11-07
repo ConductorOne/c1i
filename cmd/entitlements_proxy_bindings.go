@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"fmt"
+	"net/http"
 
 	"github.com/ConductorOne/c1i/internal/client"
 	"github.com/spf13/cobra"
@@ -54,50 +55,20 @@ var entitlementsProxyBindingsCreateCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		if dryRunActive() {
-			return printDryRun(cmd, "POST", path, map[string]any{})
-		}
-		baseURL, err := GetBaseURL()
-		if err != nil {
-			return err
-		}
-		c, err := newClient(cmd, baseURL)
-		if err != nil {
-			return fmt.Errorf("authentication failed: %w", err)
-		}
-		data, err := c.Post(cmd.Context(), path, map[string]any{})
-		if err != nil {
-			return fmt.Errorf("API error: %w", err)
-		}
-		return writeRawObject(cmd, data)
+		return sendMutation(cmd, mutation{Method: http.MethodPost, Path: path, Body: map[string]any{}, Unwrap: byID("srcAppId")})
 	},
 }
 
 var entitlementsProxyBindingsDeleteCmd = &cobra.Command{
 	Use:   "delete",
-	Short: "Delete an entitlement proxy binding (pretty JSON)",
+	Short: "Delete an entitlement proxy binding",
 	Args:  cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, _ []string) error {
 		path, err := proxyBindingPath(cmd)
 		if err != nil {
 			return err
 		}
-		if dryRunActive() {
-			return printDryRun(cmd, "DELETE", path, nil)
-		}
-		baseURL, err := GetBaseURL()
-		if err != nil {
-			return err
-		}
-		c, err := newClient(cmd, baseURL)
-		if err != nil {
-			return fmt.Errorf("authentication failed: %w", err)
-		}
-		data, err := c.Delete(cmd.Context(), path)
-		if err != nil {
-			return fmt.Errorf("API error: %w", err)
-		}
-		return writeRawObject(cmd, data)
+		return sendMutation(cmd, mutation{Method: http.MethodDelete, Path: path})
 	},
 }
 
@@ -141,6 +112,8 @@ func init() {
 		markRequired(cmd, "destination-app-id")
 		markRequired(cmd, "destination-entitlement-id")
 	}
+	markMutating(entitlementsProxyBindingsCreateCmd)
+	markMutating(entitlementsProxyBindingsDeleteCmd)
 	entitlementsProxyBindingsCmd.AddCommand(
 		entitlementsProxyBindingsGetCmd,
 		entitlementsProxyBindingsCreateCmd,

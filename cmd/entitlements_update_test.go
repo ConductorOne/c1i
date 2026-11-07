@@ -213,16 +213,16 @@ func TestEntitlementsUpdateDryRunSendsNothing(t *testing.T) {
 	if err != nil {
 		t.Fatalf("RunE: %v", err)
 	}
-	for _, want := range []string{"[dry-run] POST /api/v1/apps/app-1/entitlements/ent-1\n", `"grantPolicyId": "pol-g"`, `"updateMask": "grantPolicyId"`} {
+	for _, want := range []string{`"url": "https://example.invalid/api/v1/apps/app-1/entitlements/ent-1"`, `"grantPolicyId": "pol-g"`, `"updateMask": "grantPolicyId"`} {
 		if !strings.Contains(out, want) {
 			t.Errorf("dry-run output missing %q:\n%s", want, out)
 		}
 	}
 }
 
-// TestEntitlementsUpdatePrintsRawResponse pins writeRawObject: a session-wide
-// --fields must not blank the confirmation.
-func TestEntitlementsUpdatePrintsRawResponse(t *testing.T) {
+// TestEntitlementsUpdatePrintsUnprojectedResponse pins that a session-wide
+// C1I_FIELDS does not blank the printed entitlement.
+func TestEntitlementsUpdatePrintsUnprojectedResponse(t *testing.T) {
 	var path string
 	var body map[string]any
 	srv := captureServer(t, &path, &body)
@@ -234,7 +234,7 @@ func TestEntitlementsUpdatePrintsRawResponse(t *testing.T) {
 		t.Fatalf("RunE: %v", err)
 	}
 	if !strings.Contains(out, `"id": "ent-1"`) {
-		t.Errorf("output = %q, want the raw response", out)
+		t.Errorf("output = %q, want the unprojected entitlement", out)
 	}
 }
 
