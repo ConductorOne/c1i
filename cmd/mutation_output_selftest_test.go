@@ -118,10 +118,10 @@ func TestEnforcementCatchesViolations(t *testing.T) {
 		wantViolation(t, leafViolations(l, rep), "does not call markMutating")
 	})
 	t.Run("c.Post outside the helper", func(t *testing.T) {
-		wantViolation(t, ruleAViolations(ix, nil), "zz_synthetic.go:zzRawPost")
+		wantViolation(t, ruleAViolations(ix), "zz_synthetic.go:zzRawPost")
 	})
 	t.Run("method value outside the helper", func(t *testing.T) {
-		wantViolation(t, ruleAViolations(ix, nil), "zz_synthetic.go:zzMethodValue")
+		wantViolation(t, ruleAViolations(ix), "zz_synthetic.go:zzMethodValue")
 	})
 	t.Run("raw stderr write", func(t *testing.T) {
 		wantViolation(t, stderrViolations(ix), "zz_synthetic.go")
@@ -130,11 +130,5 @@ func TestEnforcementCatchesViolations(t *testing.T) {
 		readOnlyPOST["cmd/zz_gone.go:nothing"] = "test"
 		defer delete(readOnlyPOST, "cmd/zz_gone.go:nothing")
 		wantViolation(t, staleAllowlistEntries(ix), "cmd/zz_gone.go:nothing")
-	})
-	t.Run("stale pending entry", func(t *testing.T) {
-		l, rep := synthLeaf(t, ix, "zzSend", true)
-		pendingMigration[l.path] = true
-		defer delete(pendingMigration, l.path)
-		wantViolation(t, leafViolations(l, rep), "remove the entry")
 	})
 }

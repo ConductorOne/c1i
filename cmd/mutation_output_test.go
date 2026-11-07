@@ -18,9 +18,7 @@ import (
 )
 
 // These tests enforce cmd/mutation.go as the single chokepoint for mutation
-// output (TestMutationsWriteOnlyThroughHelper and friends). They report every
-// command still to migrate; pendingMigration is that checklist, and it can
-// only shrink: an entry whose command no longer sends a raw write fails.
+// output (TestMutationsWriteOnlyThroughHelper and friends).
 
 // mutatingSelectors are the client methods that can send a write. A match
 // counts as a call or a method value.
@@ -74,20 +72,11 @@ var outOfScopeSelectors = map[string]string{
 	"internal/keychain/keychain.go":       "keyring.Delete removes a local OS keyring entry",
 }
 
-// pendingMigration is Phase B's checklist: mutating commands that still send
-// through the client directly. Remove an entry when its command moves onto
-// sendMutation*; the test fails on an entry that already has.
-var pendingMigration = map[string]bool{}
-
 // batchCommands maps each command calling sendMutationBatch to the id key
 // every output line carries.
 var batchCommands = map[string]string{
 	"c1i mcp tools approve": "id",
 }
-
-// stderrPending holds files whose raw stderr writes move to the helper with
-// their command's migration.
-var stderrPending = map[string]string{}
 
 // ---- source index ----
 
@@ -227,7 +216,6 @@ type finding struct {
 type closureReport struct {
 	helpers   map[string]bool // sendMutation* reached directly
 	rawWrites []finding       // mutating selectors outside the allowlists
-	rawKeys   map[string]bool // their declarations
 	forbidden []finding       // reads, waits and stdout writes outside withPreRead/withWait or the helper
 	nonTail   []finding
 }
@@ -243,7 +231,7 @@ type walker struct {
 // function-typed arguments. Arguments of withPreRead/withWait are walked as
 // indirect, where reads and waits are allowed. The helper is not entered.
 func (ix *srcIndex) closureOf(root ast.Node) *closureReport {
-	w := &walker{ix: ix, seen: map[ast.Node]int{}, rep: &closureReport{helpers: map[string]bool{}, rawKeys: map[string]bool{}}}
+	w := &walker{ix: ix, seen: map[ast.Node]int{}, rep: &closureReport{helpers: map[string]bool{}}}
 	w.walk(root, true)
 	return w.rep
 }
@@ -319,7 +307,6 @@ func (w *walker) walk(root ast.Node, direct bool) {
 				key := w.ix.enclosingKey(path, x.Pos())
 				if _, ro := readOnlyPOST[key]; !ro && !outOfScope(path) && !isUnder(path, chokepointFiles) {
 					w.rep.rawWrites = append(w.rep.rawWrites, finding{pos, "." + x.Sel.Name})
-					w.rep.rawKeys[key] = true
 				}
 			}
 			if direct && x.Sel.Name == "Get" && !isCallFun(stack, x, 3) {
@@ -563,8 +550,7 @@ func (ix *srcIndex) methodValue(name string) ast.Node {
 
 // TestMutationsWriteOnlyThroughHelper is Rule B: a command is mutating when
 // its RunE closure reaches sendMutation*; it must be marked, tail-call the
-// helper, and do no read, wait or output of its own. A command still sending
-// a raw write must be in pendingMigration, and an entry there must still be.
+// helper, and do no read, wait or output of its own.
 func TestMutationsWriteOnlyThroughHelper(t *testing.T) {
 	ix := loadSrcIndex(t, nil)
 	leaves := leafCommands(t, ix)
@@ -577,14 +563,9 @@ func TestMutationsWriteOnlyThroughHelper(t *testing.T) {
 		for _, v := range leafViolations(l, rep) {
 			t.Error(v)
 		}
-		// Self-test: tasks approve is mutating whether migrated or pending.
-		if l.path == "c1i tasks approve" && len(rep.helpers) == 0 && len(rep.rawWrites) == 0 {
+		// Self-test: the classifier must see tasks approve as mutating.
+		if l.path == "c1i tasks approve" && len(rep.helpers) == 0 {
 			t.Error("tasks approve is not classified as mutating; the classifier is broken")
-		}
-	}
-	for p := range pendingMigration {
-		if !seen[p] {
-			t.Errorf("pendingMigration names %q, which is not a command", p)
 		}
 	}
 	for p := range batchCommands {
@@ -598,18 +579,13 @@ func TestMutationsWriteOnlyThroughHelper(t *testing.T) {
 func leafViolations(l leafCmd, rep *closureReport) []string {
 	var out []string
 	migrated := len(rep.helpers) > 0
-	raw := len(rep.rawWrites) > 0
-	pending := pendingMigration[l.path]
-	switch {
-	case raw && !pending:
+	if len(rep.rawWrites) > 0 {
 		out = append(out, fmt.Sprintf("%s sends a write outside cmd/mutation.go (%s at %s); use sendMutation", l.path, rep.rawWrites[0].what, rep.rawWrites[0].pos))
-	case pending && !raw:
-		out = append(out, fmt.Sprintf("%s is in pendingMigration but sends no raw write: remove the entry", l.path))
 	}
 	if migrated && !isMutating(l.cmd) {
 		out = append(out, fmt.Sprintf("%s reaches %v but its init does not call markMutating", l.path, keys(rep.helpers)))
 	}
-	if isMutating(l.cmd) && !migrated && !pending {
+	if isMutating(l.cmd) && !migrated {
 		out = append(out, fmt.Sprintf("%s calls markMutating but never reaches sendMutation*", l.path))
 	}
 	if _, ok := batchCommands[l.path]; rep.helpers["sendMutationBatch"] && !ok {
@@ -634,18 +610,10 @@ func keys[V any](m map[string]V) []string {
 
 // TestMutatingSelectorsOnlyAtChokepoint is Rule A: outside the helper and the
 // transport/protocol packages, a write selector may appear only in an
-// allowlisted declaration or one a pending command reaches.
+// allowlisted declaration.
 func TestMutatingSelectorsOnlyAtChokepoint(t *testing.T) {
 	ix := loadSrcIndex(t, nil)
-	pendingKeys := map[string]bool{}
-	for _, l := range leafCommands(t, ix) {
-		if pendingMigration[l.path] {
-			for k := range ix.closureOf(l.root).rawKeys {
-				pendingKeys[k] = true
-			}
-		}
-	}
-	for _, v := range ruleAViolations(ix, pendingKeys) {
+	for _, v := range ruleAViolations(ix) {
 		t.Error(v)
 	}
 	for _, v := range staleAllowlistEntries(ix) {
@@ -653,7 +621,7 @@ func TestMutatingSelectorsOnlyAtChokepoint(t *testing.T) {
 	}
 }
 
-func ruleAViolations(ix *srcIndex, pendingKeys map[string]bool) []string {
+func ruleAViolations(ix *srcIndex) []string {
 	var out []string
 	for path, f := range ix.files {
 		if isUnder(path, chokepointFiles) || outOfScope(path) {
@@ -665,7 +633,7 @@ func ruleAViolations(ix *srcIndex, pendingKeys map[string]bool) []string {
 				return true
 			}
 			key := ix.enclosingKey(path, x.Pos())
-			if _, ro := readOnlyPOST[key]; ro || pendingKeys[key] {
+			if _, ro := readOnlyPOST[key]; ro {
 				return true
 			}
 			out = append(out, fmt.Sprintf("%s: .%s in %s outside cmd/mutation.go; send writes through sendMutation*", ix.fset.Position(x.Pos()), x.Sel.Name, key))
@@ -720,7 +688,6 @@ func TestStderrWritesOnlyThroughHelpers(t *testing.T) {
 
 func stderrViolations(ix *srcIndex) []string {
 	var out []string
-	seenPending := map[string]bool{}
 	for path, f := range ix.files {
 		if !strings.HasPrefix(path, "cmd/") || path == "cmd/stderr.go" || path == "cmd/errors.go" {
 			continue
@@ -760,18 +727,9 @@ func stderrViolations(ix *srcIndex) []string {
 			if bad == "" {
 				return true
 			}
-			if _, ok := stderrPending[path]; ok {
-				seenPending[path] = true
-				return true
-			}
 			out = append(out, fmt.Sprintf("%s: %s to stderr; use notice/progress (cmd/stderr.go)", ix.fset.Position(c.Pos()), bad))
 			return true
 		})
-	}
-	for p := range stderrPending {
-		if !seenPending[p] && ix.files[p] != nil {
-			out = append(out, "stderrPending names "+p+", which no longer writes stderr directly")
-		}
 	}
 	sort.Strings(out)
 	return out

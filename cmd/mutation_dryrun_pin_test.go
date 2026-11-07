@@ -111,8 +111,7 @@ func stubArgs(c *cobra.Command) []string {
 
 // TestDryRunPreviewSetMatchesRuleB is Rule C: under C1I_DRY_RUN every leaf a
 // closure reaches sendMutation* through prints the JSON preview, and no other
-// leaf does. A pending leaf must still preview in the old form, which pins
-// its stub for Phase B.
+// leaf does.
 func TestDryRunPreviewSetMatchesRuleB(t *testing.T) {
 	ix := loadSrcIndex(t, nil)
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
@@ -147,7 +146,6 @@ func TestDryRunPreviewSetMatchesRuleB(t *testing.T) {
 		}
 		rep := ix.closureOf(l.root)
 		migrated := len(rep.helpers) > 0
-		pending := pendingMigration[l.path]
 		t.Run(strings.TrimPrefix(l.path, "c1i "), func(t *testing.T) {
 			resetCmdFlags(t, rootCmd)
 			resetCmdFlags(t, l.cmd)
@@ -187,8 +185,6 @@ func TestDryRunPreviewSetMatchesRuleB(t *testing.T) {
 				t.Errorf("reaches sendMutation* but printed no preview (args %q, err %v): %q; add a dryRunStubs entry if the stub is wrong", args, err, out.String())
 			case !migrated && preview:
 				t.Errorf("printed a preview but Rule B does not see sendMutation* in its closure")
-			case pending && !strings.HasPrefix(out.String(), "[dry-run] "):
-				t.Errorf("pending leaf did not reach its dry run (args %q, err %v): %q; add a dryRunStubs entry", args, err, out.String())
 			}
 		})
 	}
