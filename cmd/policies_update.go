@@ -58,10 +58,15 @@ Prints the updated policy unwrapped like "policies get" (id is .id).`,
 		}
 		id := args[0]
 		m := mutation{Method: http.MethodPost, Path: client.Path("/api/v1/policies/%s", id)}
+		// Read once: both passes below build from these, and stdin drains.
+		in, err := readPolicyUpdateInputs(cmd)
+		if err != nil {
+			return err
+		}
 
 		// A first pass with a resolver that only reports "type needed" builds
 		// the body offline whenever the patch states its own policyType.
-		body, err := buildPolicyUpdateBody(cmd, id, func() (string, error) { return "", errPolicyTypeNeeded })
+		body, err := buildPolicyUpdateBody(cmd, id, in, func() (string, error) { return "", errPolicyTypeNeeded })
 		if err == nil {
 			m.Body = body
 			return sendMutation(cmd, m)
@@ -74,7 +79,7 @@ Prints the updated policy unwrapped like "policies get" (id is .id).`,
 		}
 		return sendMutation(cmd, m, withPreRead(preRead{Run: func(ctx context.Context, c *client.Client, m *mutation) ([]resolvedID, error) {
 			r := &policyTypeResolver{client: c}
-			body, err := buildPolicyUpdateBody(cmd, id, func() (string, error) { return r.resolve(ctx, id) })
+			body, err := buildPolicyUpdateBody(cmd, id, in, func() (string, error) { return r.resolve(ctx, id) })
 			m.Body = body
 			return nil, err
 		}}))
@@ -83,12 +88,48 @@ Prints the updated policy unwrapped like "policies get" (id is .id).`,
 
 var errPolicyTypeNeeded = errors.New("policy type lookup needed")
 
+// policyUpdateInputs holds the --*-file contents, read once per run.
+type policyUpdateInputs struct {
+	body         map[string]any
+	steps, rules []any
+}
+
+func readPolicyUpdateInputs(cmd *cobra.Command) (policyUpdateInputs, error) {
+	var in policyUpdateInputs
+	stdin := 0
+	for _, f := range []string{"body-file", "steps-file", "rules-file"} {
+		if v, _ := cmd.Flags().GetString(f); v == "-" {
+			stdin++
+		}
+	}
+	if stdin > 1 {
+		return in, &usageError{errors.New("only one of --body-file, --steps-file and --rules-file can read stdin (\"-\")")}
+	}
+	var err error
+	if f, _ := cmd.Flags().GetString("body-file"); f != "" {
+		if in.body, err = readJSONFile[map[string]any](cmd, "body-file", f); err != nil {
+			return in, err
+		}
+	}
+	if cmd.Flags().Changed("steps-file") {
+		if in.steps, err = readJSONFile[[]any](cmd, "steps-file", mustGetString(cmd, "steps-file")); err != nil {
+			return in, err
+		}
+	}
+	if cmd.Flags().Changed("rules-file") {
+		if in.rules, err = readJSONFile[[]any](cmd, "rules-file", mustGetString(cmd, "rules-file")); err != nil {
+			return in, err
+		}
+	}
+	return in, nil
+}
+
 // buildPolicyUpdateBody builds and guards the wrapped update body. resolve
 // supplies the policy's current type when the patch carries policySteps
 // without one of its own.
-func buildPolicyUpdateBody(cmd *cobra.Command, id string, resolve func() (string, error)) (map[string]any, error) {
+func buildPolicyUpdateBody(cmd *cobra.Command, id string, in policyUpdateInputs, resolve func() (string, error)) (map[string]any, error) {
 	allowDenyAll, _ := cmd.Flags().GetBool("allow-deny-all")
-	policy, mask, err := buildUpdatePolicyPatch(cmd, resolve)
+	policy, mask, err := buildUpdatePolicyPatch(cmd, in, resolve)
 	if err != nil {
 		// A classified fetch failure keeps its exit code; anything else is usage.
 		var apiErr *client.APIError
@@ -147,18 +188,11 @@ func fetchPolicyType(ctx context.Context, c *client.Client, id string) (string, 
 }
 
 // buildUpdatePolicyPatch builds the partial "policy" object and its
-// update_mask from flags, or reads both (policy verbatim, mask from
-// --update-mask) when --body-file is used. Pure aside from
-// resolveFallbackPolicyType, which is only invoked (and only does network
-// I/O) here when --steps-file is supplied without --policy-type, to resolve
-// the policySteps baseline map key — a --body-file patch needs the same
-// fallback for the policyType-dependent guards, but can't resolve it here
-// (its policySteps, if any, is opaque JSON with no map key to derive), so
-// the caller (RunE) resolves it again afterward when needed; the closure is
-// memoized, so that costs nothing extra. The "id" field is intentionally
-// NOT set here — the caller adds it after guard validation, matching
-// create's shape where the guards see exactly the fields being changed.
-func buildUpdatePolicyPatch(cmd *cobra.Command, resolveFallbackPolicyType func() (string, error)) (policy map[string]any, mask string, err error) {
+// update_mask from flags and in, or from a copy of in.body plus --update-mask.
+// It does no I/O itself; resolveFallbackPolicyType supplies the baseline key
+// when --steps-file comes without --policy-type. "id" is left to the caller,
+// so the guards see only the fields being changed.
+func buildUpdatePolicyPatch(cmd *cobra.Command, in policyUpdateInputs, resolveFallbackPolicyType func() (string, error)) (policy map[string]any, mask string, err error) {
 	bodyFile, _ := cmd.Flags().GetString("body-file")
 	usingFlags := cmd.Flags().Changed("display-name") || cmd.Flags().Changed("description") ||
 		cmd.Flags().Changed("policy-type") || cmd.Flags().Changed("steps-file") || cmd.Flags().Changed("rules-file")
@@ -171,9 +205,10 @@ func buildUpdatePolicyPatch(cmd *cobra.Command, resolveFallbackPolicyType func()
 		if mask == "" {
 			return nil, "", fmt.Errorf("--update-mask is required together with --body-file")
 		}
-		policy, err = readJSONFile[map[string]any](cmd, "body-file", bodyFile)
-		if err != nil {
-			return nil, "", err
+		// A copy: the caller sets "id" on it, and a second pass reuses in.
+		policy = make(map[string]any, len(in.body))
+		for k, v := range in.body {
+			policy[k] = v
 		}
 		return policy, mask, nil
 	}
@@ -200,11 +235,7 @@ func buildUpdatePolicyPatch(cmd *cobra.Command, resolveFallbackPolicyType func()
 		paths = append(paths, "policyType")
 	}
 	if cmd.Flags().Changed("steps-file") {
-		stepsFile, _ := cmd.Flags().GetString("steps-file")
-		steps, stepsErr := readJSONFile[[]any](cmd, "steps-file", stepsFile)
-		if stepsErr != nil {
-			return nil, "", stepsErr
-		}
+		steps := in.steps
 		policyType, _ := policy["policyType"].(string)
 		if policyType == "" {
 			policyType, err = resolveFallbackPolicyType()
@@ -220,12 +251,7 @@ func buildUpdatePolicyPatch(cmd *cobra.Command, resolveFallbackPolicyType func()
 		paths = append(paths, "policySteps")
 	}
 	if cmd.Flags().Changed("rules-file") {
-		rulesFile, _ := cmd.Flags().GetString("rules-file")
-		rules, rulesErr := readJSONFile[[]any](cmd, "rules-file", rulesFile)
-		if rulesErr != nil {
-			return nil, "", rulesErr
-		}
-		policy["rules"] = rules
+		policy["rules"] = in.rules
 		paths = append(paths, "rules")
 	}
 	if len(paths) == 0 {

@@ -284,7 +284,7 @@ func TestPoliciesUpdateBodyFileRequiresUpdateMask(t *testing.T) {
 	cmd.Flags().String("update-mask", "", "")
 	_ = cmd.Flags().Set("body-file", bodyPath)
 
-	_, _, err := buildUpdatePolicyPatch(cmd, func() (string, error) { return "", nil })
+	_, _, err := buildUpdatePolicyPatch(cmd, policyUpdateInputs{}, func() (string, error) { return "", nil })
 	if err == nil {
 		t.Fatal("expected an error: --body-file requires --update-mask")
 	}
