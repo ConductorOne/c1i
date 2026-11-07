@@ -38,9 +38,8 @@ type waitOp[T any] struct {
 	// Recheck is the command to suggest on timeout: "c1i apps owners X".
 	Recheck string
 
-	// Out receives the progress and success lines; nil means cmd's stdout.
-	// A list command must set this to stderr, or its prose lines land in the
-	// middle of the NDJSON stream a caller is piping to jq.
+	// Out receives the progress and success lines; nil means cmd's stderr.
+	// Stdout is never used: it carries the command's document or rows.
 	Out io.Writer
 }
 
@@ -58,7 +57,7 @@ func runWait[T any](cmd *cobra.Command, op waitOp[T]) (T, error) {
 	var zero T
 	out := op.Out
 	if out == nil {
-		out = cmd.OutOrStdout()
+		out = cmd.ErrOrStderr()
 	}
 
 	ctx, cancel := context.WithTimeout(cmd.Context(), op.Timeout)
@@ -83,15 +82,14 @@ func runWait[T any](cmd *cobra.Command, op waitOp[T]) (T, error) {
 			return zero, err
 		}
 		if op.Done(got) {
-			// On stdout this line is the result; op.Out is a stderr notice.
-			if _, err := fmt.Fprintf(out, "%s after %s.\n", op.Success, time.Since(start).Round(time.Second)); err != nil && op.Out == nil {
-				return zero, wrapOutputErr(err)
-			}
+			elapsed := time.Since(start).Round(time.Second)
+			noticeTo(out, noticeWaitDone, fmt.Sprintf("%s after %s.", op.Success, elapsed),
+				map[string]any{"subject": op.Subject, "elapsed": elapsed.String()})
 			return got, nil
 		}
 		if !firstPoll {
-			waitProgress(out, "Still waiting for %s (%s elapsed)...\n",
-				op.Subject, time.Since(start).Round(time.Second))
+			elapsed := time.Since(start).Round(time.Second)
+			progress(out, op.Subject, fmt.Sprintf("Still waiting for %s (%s elapsed)...", op.Subject, elapsed), elapsed)
 		}
 		firstPoll = false
 
@@ -111,12 +109,6 @@ func runWait[T any](cmd *cobra.Command, op waitOp[T]) (T, error) {
 			"this is not necessarily a failure — %s, "+
 			"check again later with: %s",
 		op.Timeout, op.Subject, op.Slow, op.Recheck)
-}
-
-// waitProgress prints a poll's progress line; the success line or an error
-// that follows decides the exit code.
-func waitProgress(out io.Writer, format string, args ...any) {
-	_, _ = fmt.Fprintf(out, format, args...)
 }
 
 // untilPresent is the Done predicate for "every wanted id has shown up".

@@ -222,7 +222,7 @@ func loginWithBrowser(cmd *cobra.Command, in *lineReader, baseURL string, scope 
 	// instead of silently hanging or giving up after one try.
 	opts := []transport.Option{
 		transport.WithMaxRetries(viper.GetInt("max_retries")),
-		transport.WithDebug(debugWriter(cmd)),
+		transport.WithDebug(debugWriter()),
 	}
 
 	code, err := login.StartDeviceFlow(ctx, baseURL, opts...)
@@ -297,7 +297,7 @@ func keepNewCredential(cmd *cobra.Command, baseURL, accessToken string, opts []t
 		return nil
 	}
 	if errors.Is(problem, context.Canceled) {
-		_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "Deleting the new credential (%s)...\n", printable(creds.ID))
+		notice(cmd, noticeInfo, fmt.Sprintf("Deleting the new credential (%s)...", printable(creds.ID)), nil)
 	}
 	outcome, leftover := discardCredential(cmd, baseURL, accessToken, opts, c, creds)
 	return joinLeftover(fmt.Errorf("%w; %s", problem, outcome), leftover)

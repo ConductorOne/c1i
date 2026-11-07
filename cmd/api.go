@@ -263,8 +263,8 @@ an intended non-GET REST write.`,
 				// advances it aborts (see paginationCursorGuard), which is
 				// still a clear failure rather than this silent one.
 				if tok := nextPageTokenOf(data); tok != "" {
-					_, _ = fmt.Fprintf(cmd.ErrOrStderr(),
-						"Warning: %s returned a partial result — more pages exist and c1i is discarding the cursor to them. Pass --paginate to fetch the rest (which emits NDJSON rows rather than a single JSON object).\n", path)
+					notice(cmd, noticeInfo, fmt.Sprintf(
+						"Warning: %s returned a partial result — more pages exist and c1i is discarding the cursor to them. Pass --paginate to fetch the rest (which emits NDJSON rows rather than a single JSON object).", path), nil)
 				}
 				return writeObject(cmd, data)
 			}

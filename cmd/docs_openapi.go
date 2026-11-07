@@ -114,9 +114,9 @@ resources. Pass a returned path to "docs endpoint" for its full schema.`,
 		}
 
 		if len(endpoints) == 0 && filter != "" {
-			_, _ = fmt.Fprintf(cmd.ErrOrStderr(),
-				"No endpoints matched %q in the public OpenAPI spec. Try 'c1i docs search %q' for related documentation, or a first-class command to inspect tenant resources.\n",
-				filter, filter)
+			notice(cmd, noticeInfo, fmt.Sprintf(
+				"No endpoints matched %q in the public OpenAPI spec. Try 'c1i docs search %q' for related documentation, or a first-class command to inspect tenant resources.",
+				filter, filter), nil)
 		}
 
 		return nil
@@ -195,7 +195,7 @@ func fetchOpenAPISpec(cmd *cobra.Command) ([]byte, error) {
 
 	hc := transport.New(openAPIBase,
 		transport.WithMaxRetries(openAPIRetries(cachePath)),
-		transport.WithDebug(debugWriter(cmd)),
+		transport.WithDebug(debugWriter()),
 		transport.WithMaxResponseBytes(maxOpenAPISpecBytes),
 	)
 	resp, err := hc.Do(req)
@@ -243,8 +243,8 @@ func staleOpenAPISpec(cmd *cobra.Command, cachePath string, err error) ([]byte, 
 	if statErr != nil || readErr != nil {
 		return nil, err
 	}
-	_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "Warning: using cached OpenAPI spec from %s ago (%v)\n",
-		formatAge(time.Since(info.ModTime())), err)
+	notice(cmd, noticeInfo, fmt.Sprintf("Warning: using cached OpenAPI spec from %s ago (%v)",
+		formatAge(time.Since(info.ModTime())), err), nil)
 	return data, nil
 }
 

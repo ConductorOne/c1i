@@ -77,7 +77,7 @@ func newGatewayClient(cmd *cobra.Command) (*mcpgateway.Client, error) {
 	// like the rest of the CLI instead of silently ignoring them.
 	tokenOpts := []client.Option{
 		client.WithMaxRetries(viper.GetInt("max_retries")),
-		client.WithDebug(debugWriter(cmd)),
+		client.WithDebug(debugWriter()),
 	}
 	tok, err := client.Token(cmd.Context(), baseURL, tokenOpts...)
 	if err != nil {
@@ -85,7 +85,7 @@ func newGatewayClient(cmd *cobra.Command) (*mcpgateway.Client, error) {
 	}
 	gc := mcpgateway.New(endpoint, tok.AccessToken, nil,
 		transport.WithMaxRetries(viper.GetInt("max_retries")),
-		transport.WithDebug(debugWriter(cmd)),
+		transport.WithDebug(debugWriter()),
 	)
 	// *mcpgateway.HTTPError unwraps to a *client.APIError, so wrapping with %w
 	// here is enough for cmd/errors.go's exitCode to classify a gateway 401/403

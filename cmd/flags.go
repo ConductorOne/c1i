@@ -360,8 +360,8 @@ func (g *paginationCursorGuard) shapeError(cmd *cobra.Command, route string, row
 		return &nonJSONResponseError{fmt.Errorf("%s: %s", route, problem)}
 	}
 	if cmd != nil {
-		_, _ = fmt.Fprintf(cmd.ErrOrStderr(),
-			"Warning: results from %s are INCOMPLETE: %s. Rows already printed are kept.\n", route, problem)
+		notice(cmd, noticeInfo, fmt.Sprintf(
+			"Warning: results from %s are INCOMPLETE: %s. Rows already printed are kept.", route, problem), nil)
 	}
 	return &nonJSONResponseError{fmt.Errorf("results from %s are INCOMPLETE: %s", route, problem)}
 }
@@ -410,8 +410,8 @@ func (g *paginationCursorGuard) warnStuck(cmd *cobra.Command, route string) erro
 		if g.stopReason != "" {
 			reason = g.stopReason
 		}
-		_, _ = fmt.Fprintf(cmd.ErrOrStderr(),
-			"Warning: results from %s are INCOMPLETE: %s. Rows already printed are kept.\n", route, reason)
+		notice(cmd, noticeInfo, fmt.Sprintf(
+			"Warning: results from %s are INCOMPLETE: %s. Rows already printed are kept.", route, reason), nil)
 	}
 	return g.stuckError(route)
 }

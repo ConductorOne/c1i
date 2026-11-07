@@ -229,8 +229,8 @@ func getFixedList(cmd *cobra.Command, path string, row listRowFn) error {
 	// These routes don't paginate today, so a cursor isn't followed; it still
 	// must not pass as a complete result.
 	if next != "" {
-		_, _ = fmt.Fprintf(cmd.ErrOrStderr(),
-			"Warning: GET %s returned a partial result — the server reported more pages, which c1i does not fetch for this command.\n", path)
+		notice(cmd, noticeInfo, fmt.Sprintf(
+			"Warning: GET %s returned a partial result — the server reported more pages, which c1i does not fetch for this command.", path), nil)
 	}
 	return nil
 }

@@ -70,24 +70,20 @@ func writeJSONLine(w io.Writer, obj map[string]any) {
 	if err != nil {
 		return
 	}
-	_, _ = w.Write(append(b, '\n'))
+	_, _ = fmt.Fprintln(w, string(b))
 }
 
 // debugWriter is the --debug trace sink every transport call site passes to
 // WithDebug: nil when --debug is off, stderr in text mode, and a writer that
 // wraps each line as {"debug":…} in JSON mode.
-func debugWriter(cmd *cobra.Command) io.Writer {
+func debugWriter() io.Writer {
 	if !viper.GetBool("debug") {
 		return nil
 	}
-	var w io.Writer = os.Stderr
-	if cmd != nil {
-		w = cmd.ErrOrStderr()
-	}
 	if !stderrIsJSON() {
-		return w
+		return os.Stderr
 	}
-	return &jsonLineWriter{out: w, key: "debug"}
+	return &jsonLineWriter{out: os.Stderr, key: "debug"}
 }
 
 // jsonLineWriter re-emits each complete line written to it as {key: line}.

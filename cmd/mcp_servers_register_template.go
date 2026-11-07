@@ -121,9 +121,9 @@ func printConfigTemplate(cmd *cobra.Command) error {
 	if authLabel == "" {
 		authLabel = "none"
 	}
-	_, _ = fmt.Fprintf(cmd.ErrOrStderr(),
-		"# %s %s config template. Replace <placeholders>, then:\n#   c1i mcp servers register --app-id APP --type %s --display-name NAME --%s config.json\n# Fields with <angle-brackets> are placeholders; enum/URL values are examples. Secrets are sealed server-side.\n",
-		serverType, authLabel, serverType, flagName)
+	notice(cmd, noticeInfo, fmt.Sprintf(
+		"# %s %s config template. Replace <placeholders>, then:\n#   c1i mcp servers register --app-id APP --type %s --display-name NAME --%s config.json\n# Fields with <angle-brackets> are placeholders; enum/URL values are examples. Secrets are sealed server-side.",
+		serverType, authLabel, serverType, flagName), nil)
 	_, err = fmt.Fprint(cmd.OutOrStdout(), buf.String())
 	return err
 }

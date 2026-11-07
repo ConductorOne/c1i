@@ -132,7 +132,7 @@ named exactly as the function has them — usually main.ts and main.test.ts).`,
 				if err := os.WriteFile(path, decoded, 0o600); err != nil {
 					return fmt.Errorf("failed to write %s: %w", path, err)
 				}
-				_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "wrote %s (%d bytes)\n", path, len(decoded))
+				notice(cmd, noticeInfo, fmt.Sprintf("wrote %s (%d bytes)", path, len(decoded)), nil)
 			} else {
 				if _, err := fmt.Fprintf(out, "// ===== %s =====\n", name); err != nil {
 					return wrapOutputErr(err)
@@ -224,7 +224,7 @@ func hardenOutDir(outDir string, warn io.Writer) error {
 		if err := os.Chmod(outDir, newPerm); err != nil { // #nosec G302 -- outDir is a directory, not a file; newPerm is at most 0700 (owner rwx only), the intended ceiling
 			return fmt.Errorf("failed to tighten out-dir permissions: %w", err)
 		}
-		_, _ = fmt.Fprintf(warn, "tightened %s from %04o to %04o (fetched source may contain credentials)\n", outDir, unixMode(oldMode), newPerm)
+		noticeTo(warn, noticeInfo, fmt.Sprintf("tightened %s from %04o to %04o (fetched source may contain credentials)", outDir, unixMode(oldMode), newPerm), nil)
 	}
 	return nil
 }
