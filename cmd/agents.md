@@ -474,8 +474,10 @@ resource with `--resource-id` likewise means you drop
 - The `/api/v1/tasks/{id}/action/*` endpoints echo the task as it was *before*
   the action. Live: closing an open task returned `TASK_STATE_OPEN`, and
   restarting a closed one returned `TASK_STATE_CLOSED`. `tasks
-  close`/`reassign` therefore never print a state (`close` reports `task_id`,
-  `reassign` also the `policy_step_id`); if you call these actions
+  close`/`reassign` and every other task action print the task unwrapped
+  (`jq -er .id`), so `.state` is that pre-action snapshot, not the outcome:
+  re-read with `tasks get` before acting on it. A step c1i resolved is reported
+  on stderr (`Resolved policy step: <id>`) only; if you call these actions
   through `api`, read the task back rather than trusting the response's
   `state`. The same holds for `restart`, `reset`, `skip-step`, `process` and
   `update-grant-duration`.

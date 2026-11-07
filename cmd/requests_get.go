@@ -13,7 +13,7 @@ var requestsGetCmd = &cobra.Command{
 	Args:  cobra.ExactArgs(1),
 	Long: `Get a single access request by ID.
 
-Access requests are backed by tasks, so the ID is the task_id returned by
+Access requests are backed by tasks, so the ID is the .id printed by
 "c1i requests create" or shown in "c1i requests list". The response is the full
 task view, including its current policy step and outcome.`,
 	RunE: runTaskGet,

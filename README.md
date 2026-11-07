@@ -383,11 +383,12 @@ closed` (exit 2).
 `reassign` sets the step's approvers to the users named by
 `--to-user-id`; repeat the flag to assign several.
 
-`close` and `reassign` never print a task state: `close` reports `task_id`,
-and `reassign` also reports the `policy_step_id` it acted on. The task action
-endpoints return the task as it was *before* the action, so closing an open
-task answers `TASK_STATE_OPEN` — echoing that would report the opposite of what
-happened. Read the task back if you need the post-action state.
+Every task action prints the task unwrapped like `tasks get` (`jq -er .id`),
+plus `ticketActionId` (`taskActionId` on `close`) where the API returns one. The
+endpoints return the task as it was *before* the action, so `.state` is a
+snapshot: closing an open task prints `TASK_STATE_OPEN`. Re-read with `tasks
+get` before acting on it. A policy step c1i looked up for you is reported on
+stderr (`Resolved policy step: <id>`), never in the document.
 
 ### Connectors
 
@@ -631,8 +632,11 @@ sent, and the server refuses it with `value must be greater than 0s`.
 you file): by default it shows requests you opened or are the subject of —
 complementing `tasks list`, which is the approver's My Work lens. Use `--user-id`
 to scope to another user or `--all` for every request in the tenant. `requests
-get` fetches a single request (the `task_id` returned by `requests create`) as
+get` fetches a single request (the `.id` printed by `requests create`) as
 pretty JSON, including its current policy step and outcome.
+`requests create grant`/`revoke` print the created task unwrapped like `get`:
+capture it with `jq -er .id`. Its `.state` is a snapshot from creation, not the
+outcome.
 
 ### Findings
 
@@ -807,6 +811,11 @@ flags accept short values shown above or the full `REQUEST_CATALOG_*` API enum.
 
 `delete` is a soft delete: the catalog leaves `access-profiles list`, while
 `access-profiles get` still returns it with `deletedAt` populated.
+
+`create` and `update` print the profile unwrapped like `get` (`jq -er .id`;
+the count is `.memberCount`). `bundle-automation create`/`set` print the
+automation (id path `.requestCatalogId`); every delete, `resume`, `run` and
+`requestable-entitlements`/`visibility-entitlements` mutation prints `{}`.
 
 `requestable-entitlements` manages what the profile grants. `add` and `remove`
 scope each entitlement to one `--app-id`; repeat `--entitlement-id` for that
@@ -1413,11 +1422,19 @@ and pretty-printed JSON body — and returns without sending it:
 
 ```sh
 $ c1i requests create grant --app-id A1 --entitlement-id E1 --user-id U1 --dry-run
-[dry-run] POST /api/v1/task/grant
 {
-  "appEntitlementId": "E1",
-  "appId": "A1",
-  "identityUserId": "U1"
+  "dryRun": true,
+  "requests": [
+    {
+      "method": "POST",
+      "url": "https://tenant.example.invalid/api/v1/task/grant",
+      "body": {
+        "appEntitlementId": "E1",
+        "appId": "A1",
+        "identityUserId": "U1"
+      }
+    }
+  ]
 }
 ```
 

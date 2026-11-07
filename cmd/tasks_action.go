@@ -1,7 +1,8 @@
 package cmd
 
 import (
-	"fmt"
+	"context"
+	"net/http"
 
 	"github.com/ConductorOne/c1i/internal/client"
 	"github.com/spf13/cobra"
@@ -24,13 +25,11 @@ type taskAction struct {
 	// extraBody adds fields beyond comment/policyStepId, and may reject bad
 	// flag combinations. Runs before any client is built, so it exits 2.
 	extraBody func(cmd *cobra.Command, body map[string]any) error
-	// confirm formats the success line. State is passed but is the task's
-	// PRE-action state, so most actions must not print it.
-	confirm func(id, state, stepID string) string
 }
 
 // runTaskAction is the shared RunE. Flags are validated before a client is
-// built, so a usage error exits 2 rather than failing on credentials.
+// built, so a usage error exits 2 rather than failing on credentials. The
+// response's .state is the task before the action, not the outcome.
 func (a taskAction) runTaskAction(cmd *cobra.Command, args []string) error {
 	var comment string
 	if cmd.Flags().Lookup("comment") != nil {
@@ -45,54 +44,29 @@ func (a taskAction) runTaskAction(cmd *cobra.Command, args []string) error {
 	}
 
 	taskID := args[0]
-	path := client.Path("/api/v1/tasks/%s/action/%s", taskID, a.verb)
 	if comment != "" {
 		body["comment"] = comment
 	}
-
-	// Resolved even for a preview, so --dry-run still rejects a bad --url and
-	// still names the tenant it would hit.
-	baseURL, err := GetBaseURL()
-	if err != nil {
-		return err
+	m := mutation{Method: http.MethodPost, Path: client.Path("/api/v1/tasks/%s/action/%s", taskID, a.verb), Body: body}
+	if a.step == stepUnused {
+		return sendMutation(cmd, m)
 	}
+	return sendMutation(cmd, m, withPreRead(a.stepLookup(cmd, taskID)))
+}
 
-	// Credentials are only needed to send, or to fetch a step. Matches what
-	// each command did before sharing this runner.
-	if a.step == stepUnused && dryRunActive() {
-		return printDryRun(cmd, "POST", path, body)
-	}
-	c, err := newClient(cmd, baseURL)
-	if err != nil {
-		return fmt.Errorf("authentication failed: %w", err)
-	}
-
-	var stepID string
-	if a.step != stepUnused {
+// stepLookup resolves the policy step before the send, on a dry run too. The
+// id is reported on stderr only when c1i, not --policy-step-id, chose it.
+func (a taskAction) stepLookup(cmd *cobra.Command, taskID string) preRead {
+	return preRead{OnDryRun: true, Run: func(ctx context.Context, c *client.Client, m *mutation) ([]resolvedID, error) {
 		explicit, _ := cmd.Flags().GetString("policy-step-id")
-		stepID, err = resolvePolicyStepID(cmd.Context(), c, taskID, explicit, a.step == stepRequired)
-		if err != nil {
-			return err
+		stepID, err := resolvePolicyStepID(ctx, c, taskID, explicit, a.step == stepRequired)
+		if err != nil || stepID == "" {
+			return nil, err
 		}
-		if stepID != "" {
-			body["policyStepId"] = stepID
+		m.Body.(map[string]any)["policyStepId"] = stepID
+		if explicit != "" {
+			return nil, nil
 		}
-		if dryRunActive() {
-			return printDryRun(cmd, "POST", path, body)
-		}
-	}
-
-	data, err := c.Post(cmd.Context(), path, body)
-	if err != nil {
-		return fmt.Errorf("API error: %w", err)
-	}
-	id, state, err := parseTaskActionResponse(data)
-	if err != nil {
-		return fmt.Errorf("failed to parse response: %w", err)
-	}
-
-	if _, err := fmt.Fprintf(cmd.OutOrStdout(), "%s", a.confirm(id, state, stepID)); err != nil {
-		return wrapOutputErr(err)
-	}
-	return nil
+		return []resolvedID{{Name: "policyStepId", Label: "policy step", ID: stepID}}, nil
+	}}
 }

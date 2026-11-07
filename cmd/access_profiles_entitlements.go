@@ -296,45 +296,11 @@ func buildVisibilityEntitlementsBody(refs []catalogEntitlementRef) map[string]an
 }
 
 func postAccessProfileEntitlements(cmd *cobra.Command, path string, body map[string]any) error {
-	baseURL, err := GetBaseURL()
-	if err != nil {
-		return err
-	}
-	if dryRunActive() {
-		return printDryRun(cmd, http.MethodPost, path, body)
-	}
-	c, err := newClient(cmd, baseURL)
-	if err != nil {
-		return fmt.Errorf("authentication failed: %w", err)
-	}
-	data, err := c.Post(cmd.Context(), path, body)
-	if err != nil {
-		return fmt.Errorf("API error: %w", err)
-	}
-	return writeRawObject(cmd, data)
+	return sendMutation(cmd, mutation{Method: http.MethodPost, Path: path, Body: body})
 }
 
 func deleteAccessProfileEntitlements(cmd *cobra.Command, path string, body map[string]any) error {
-	baseURL, err := GetBaseURL()
-	if err != nil {
-		return err
-	}
-	if dryRunActive() {
-		return printDryRun(cmd, http.MethodDelete, path, body)
-	}
-	bodyBytes, err := json.Marshal(body)
-	if err != nil {
-		return err
-	}
-	c, err := newClient(cmd, baseURL)
-	if err != nil {
-		return fmt.Errorf("authentication failed: %w", err)
-	}
-	data, err := c.Request(cmd.Context(), http.MethodDelete, path, bodyBytes, nil)
-	if err != nil {
-		return fmt.Errorf("API error: %w", err)
-	}
-	return writeRawObject(cmd, data)
+	return sendMutation(cmd, mutation{Method: http.MethodDelete, Path: path, Body: body})
 }
 
 func init() {
@@ -351,6 +317,15 @@ func init() {
 	accessProfilesRequestableEntitlementsSetCmd.Flags().String("refs-file", "", "JSON array of AppEntitlementRef objects (file, or \"-\" for stdin)")
 	accessProfilesRequestableEntitlementsAddCmd.Flags().Bool("create-requests", false, "Create requests for users in the access profile when adding these entitlements")
 
+	for _, c := range []*cobra.Command{
+		accessProfilesRequestableEntitlementsAddCmd,
+		accessProfilesRequestableEntitlementsRemoveCmd,
+		accessProfilesRequestableEntitlementsSetCmd,
+		accessProfilesVisibilityEntitlementsAddCmd,
+		accessProfilesVisibilityEntitlementsRemoveCmd,
+	} {
+		markMutating(c)
+	}
 	accessProfilesRequestableEntitlementsCmd.AddCommand(
 		accessProfilesRequestableEntitlementsListCmd,
 		accessProfilesRequestableEntitlementIDsListCmd,
