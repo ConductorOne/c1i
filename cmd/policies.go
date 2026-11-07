@@ -3,6 +3,7 @@ package cmd
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -69,6 +70,21 @@ func readJSONBytes(cmd *cobra.Command, path string) ([]byte, error) {
 		return io.ReadAll(cmd.InOrStdin())
 	}
 	return os.ReadFile(path) // #nosec G304 -- user-supplied --*-file path is intentional
+}
+
+// refuseMultipleStdin is a usage error when more than one --*-file is "-":
+// stdin drains on the first read.
+func refuseMultipleStdin(cmd *cobra.Command) error {
+	n := 0
+	for _, f := range []string{"body-file", "steps-file", "rules-file"} {
+		if v, _ := cmd.Flags().GetString(f); v == "-" {
+			n++
+		}
+	}
+	if n > 1 {
+		return &usageError{errors.New("only one of --body-file, --steps-file and --rules-file can read stdin (\"-\")")}
+	}
+	return nil
 }
 
 // readJSONFile reads a JSON array or object from path (file or "-" for

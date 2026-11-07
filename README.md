@@ -465,7 +465,8 @@ resourceOwners, agent), and how `rules[]` route a task to one of several
 step sequences by CEL condition. That structure is too deeply nested for a
 flag surface, so `create`/`update` take it from a JSON file (or `-` for
 stdin) via `--steps-file`/`--rules-file`/`--body-file` — the same pattern
-`mcp servers register` uses for its auth config.
+`mcp servers register` uses for its auth config. Only one of the three can
+read stdin (`-`); two exit 2 before reading.
 
 **Client-side guards** (`create` and `update`, before any request is sent,
 exit code 2) exist because several C1 policy API defects are either silent

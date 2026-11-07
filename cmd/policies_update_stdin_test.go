@@ -79,3 +79,19 @@ func TestPoliciesUpdateRefusesTwoStdinInputs(t *testing.T) {
 		t.Fatalf("err = %v (exit %d), want the one-stdin usage error", err, exitCode(err))
 	}
 }
+
+func TestPoliciesCreateRefusesTwoStdinInputs(t *testing.T) {
+	resetCmdFlags(t, policiesCreateCmd)
+	_ = policiesCreateCmd.Flags().Set("display-name", "zz-c1i-test")
+	_ = policiesCreateCmd.Flags().Set("steps-file", "-")
+	_ = policiesCreateCmd.Flags().Set("rules-file", "-")
+	policiesCreateCmd.SetContext(context.Background())
+	policiesCreateCmd.SetIn(strings.NewReader("must not be read"))
+	err := policiesCreateCmd.RunE(policiesCreateCmd, nil)
+	if exitCode(err) != exitUsage || err == nil || !strings.Contains(err.Error(), "only one of") {
+		t.Fatalf("err = %v (exit %d), want the one-stdin usage error", err, exitCode(err))
+	}
+	if b, _ := io.ReadAll(policiesCreateCmd.InOrStdin()); len(b) == 0 {
+		t.Error("stdin was consumed before the refusal")
+	}
+}

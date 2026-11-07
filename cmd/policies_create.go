@@ -61,9 +61,15 @@ jq -er; --fields is a usage error on a mutation).
 CEL conditions run with root variable "subject" (not "user") — validate one
 with "c1i policies validate-cel" before using it here (note: that command
 validates the rules[].condition environment, not the different environment
-ExpressionApproval.expressions run in — see its --help).`,
+ExpressionApproval.expressions run in — see its --help).
+
+Only one of --body-file, --steps-file and --rules-file can read stdin ("-");
+two exit 2 before reading.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		if _, err := requireNonEmptyIfSet(cmd, "display-name"); err != nil {
+			return err
+		}
+		if err := refuseMultipleStdin(cmd); err != nil {
 			return err
 		}
 		body, err := buildCreatePolicyBody(cmd)

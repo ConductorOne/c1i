@@ -28,6 +28,9 @@ A blank --display-name (empty, whitespace or invisible-only) exits 2,
 nothing sent. Sent as is, the server stores "" as an empty name and keeps
 "  " verbatim.
 
+Only one of --body-file, --steps-file and --rules-file can read stdin ("-");
+two exit 2 before reading.
+
 For anything the convenience flags can't express, pass the full Policy
 object yourself via --body-file plus an explicit --update-mask (both
 required together) — mutually exclusive with the convenience flags.
@@ -96,14 +99,8 @@ type policyUpdateInputs struct {
 
 func readPolicyUpdateInputs(cmd *cobra.Command) (policyUpdateInputs, error) {
 	var in policyUpdateInputs
-	stdin := 0
-	for _, f := range []string{"body-file", "steps-file", "rules-file"} {
-		if v, _ := cmd.Flags().GetString(f); v == "-" {
-			stdin++
-		}
-	}
-	if stdin > 1 {
-		return in, &usageError{errors.New("only one of --body-file, --steps-file and --rules-file can read stdin (\"-\")")}
+	if err := refuseMultipleStdin(cmd); err != nil {
+		return in, err
 	}
 	var err error
 	if f, _ := cmd.Flags().GetString("body-file"); f != "" {
