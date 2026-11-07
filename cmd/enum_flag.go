@@ -19,8 +19,8 @@ const (
 	// upper-cased, so an enum newer than c1i still reaches the server. Any
 	// other unknown is a usage error — the gateway 400s on it anyway.
 	enumPassPrefixed
-	// enumPassAny: any unknown is sent trimmed. Only for an enum with no
-	// prefix, where a newer value can't be told apart from a typo.
+	// enumPassAny: any unknown is sent upper-cased with '-' as '_'. Only for
+	// an enum with no prefix, where a newer value can't be told from a typo.
 	enumPassAny
 )
 
@@ -99,7 +99,7 @@ func (e enumFlag) parse(raw string) (string, error) {
 		}
 		switch e.unknown {
 		case enumPassAny:
-			return strings.TrimSpace(raw), nil
+			return key, nil
 		case enumPassPrefixed:
 			if e.prefix != "" && strings.HasPrefix(key, e.prefix) && len(key) > len(e.prefix) {
 				return key, nil
@@ -132,7 +132,9 @@ func (e enumFlag) usage() string {
 	names = append(names, e.keywords...)
 	s := strings.Join(names, ", ")
 	switch {
-	case e.prefix == "" && len(names) > 1:
+	case e.prefix == "" && len(names) == 2:
+		return names[0] + " or " + names[1]
+	case e.prefix == "" && len(names) > 2:
 		return strings.Join(names[:len(names)-1], ", ") + ", or " + names[len(names)-1]
 	case e.prefix == "":
 		return s

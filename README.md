@@ -1055,16 +1055,20 @@ restriction. Contrast `--fields`, which *is* comma-separated.
 
 ### Enum flags
 
-An enum flag (`--state`, `--status`, `--type`, `--policy-type`, `--sort`,
-`--auth`, ...) ignores ASCII case and surrounding whitespace, treats `-` and
-`_` as the same, and also takes the full API name in any case
-(`--state pending-review`, `--state mcp_tool_state_approved`). Its `--help`
-lists the short names. An unknown or non-ASCII value is a usage error
-(exit 2), rejected before any request. Where `--help` says "or any `PREFIX_*`
-value", a value carrying that prefix is upper-cased, with `-` changed to `_`,
-and sent, so an enum newer than c1i still works. `users list --status` is the
-exception: its API enum has no prefix, so any ASCII value is sent trimmed and
-the server judges it.
+Every flag that takes a named value (`--state`, `--status`, `--type`,
+`--policy-type`, `--sort`, `--auth`, `--unbind-policy`, `--error-format`,
+`--method`, ...) parses it the same way: ASCII case and surrounding
+whitespace are ignored, `-` and `_` are the same, and the full API name is
+accepted in any case (`--state pending-review`, `--state
+mcp_tool_state_approved`). Its `--help` lists the short names. An unknown or
+non-ASCII value is a usage error (exit 2), rejected before any request.
+
+Where `--help` says "or any `PREFIX_*` value", a value carrying that prefix
+is sent upper-cased with `-` changed to `_`, so an enum newer than c1i still
+works. Two flags whose API enums have no prefix, `users list --status` and
+`entitlements create --resource-type`, send any ASCII value that way. The
+only values rewritten to a different enum are these listed aliases:
+`MCP_TOOL_STATE_PENDING` is sent as `MCP_TOOL_STATE_PENDING_REVIEW`, and `REQUEST_CATALOG_ENROLLMENT_BEHAVIOR_BYPASS`/`_ENFORCE` as their `..._ENTITLEMENT_REQUEST_POLICY` names. No other prefixed value is ever remapped.
 
 ### Display names
 

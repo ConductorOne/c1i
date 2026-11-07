@@ -32,9 +32,9 @@ To unbind, pass --unbind-policy grant|revoke|certify (repeatable). An empty
 policy id is a usage error rather than an unbind, so an unset shell variable
 can't silently remove a policy; setting and unbinding the same kind is too.
 
---identity-matching accepts strict, display-name, or custom, or the full
-APP_USER_IDENTITY_MATCHING_* name of one of them (case-insensitive); anything
-else is a usage error (exit 2) before any request is sent.
+--identity-matching accepts strict, display-name, custom, or the full
+APP_USER_IDENTITY_MATCHING_* name of one of them; anything else is a usage
+error (exit 2) before any request is sent.
 
 --app-user-mapper-file takes a JSON object (file, or "-" for stdin) that
 REPLACES the app's whole user mapper:

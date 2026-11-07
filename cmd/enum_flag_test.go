@@ -43,7 +43,7 @@ func TestEnumFlagParse(t *testing.T) {
 		{"prefixed refuses short unknown", prefixed, "bogus", "", true},
 		{"prefixed empty is unset", prefixed, "", "", false},
 		{"prefixed blank refused", prefixed, " ", "", true},
-		{"any passes trimmed", passAll, " Suspended ", "Suspended", false},
+		{"any passes normalised", passAll, " Suspended-Now ", "SUSPENDED_NOW", false},
 		{"any maps known", passAll, "Enabled", "ENABLED", false},
 		{"any empty is unset", passAll, "", "", false},
 	}
@@ -98,6 +98,11 @@ var allEnumFlags = map[string]enumFlag{
 	"access-reviews --format":        reportFormatFlag,
 	"mcp servers --auth":             authFlag,
 	"--print-config-template --auth": authTemplateFlag,
+	"--error-format":                 errorFormatFlag,
+	"requests list --type":           requestTypeFlag,
+	"apps --unbind-policy":           unbindPolicyFlag(appPolicyKinds),
+	"entitlements --unbind-policy":   unbindPolicyFlag(entitlementPolicyKinds),
+	"entitlements --resource-type":   resourceTypeFlag,
 }
 
 // TestEnumFlagTablesAreConsistent: every API name carries the prefix, and no
@@ -147,7 +152,7 @@ func TestEnumFlagValues(t *testing.T) {
 		{userStatusFlag, map[string]string{
 			"enabled": "ENABLED", "disabled": "DISABLED", "deleted": "DELETED",
 			"ENABLED": "ENABLED", "Disabled": "DISABLED", "": "",
-			" enabled ": "ENABLED", "unknown": "unknown",
+			" enabled ": "ENABLED", "unknown": "UNKNOWN",
 			"enabıed": bad,
 		}},
 		{userOriginFlag, map[string]string{
@@ -277,6 +282,27 @@ func TestEnumFlagValues(t *testing.T) {
 			"none": "none", "bearer-token": "bearerToken", "Bearer": "bearerToken", "bearer_token": "bearerToken",
 			"bearerToken": "bearerToken", " custom-header ": "customHeader", "basic": "basicAuth", "basic-auth": "basicAuth",
 			"oauth2": bad, "baſic": bad, "": bad,
+		}},
+		{httpMethodFlag, map[string]string{
+			"GET": "GET", "post": "POST", " Patch ": "PATCH", "delete": "DELETE", "put": "PUT", "TRACE": bad, "": bad,
+		}},
+		{errorFormatFlag, map[string]string{
+			"text": "text", "JSON": "json", " json ": "json", "jsonn": bad, "j\u017fon": bad, "": bad,
+		}},
+		{requestTypeFlag, map[string]string{
+			"grant": "grant", "REVOKE": "revoke", " grant ": "grant", "both": bad, "": bad,
+		}},
+		{unbindPolicyFlag(entitlementPolicyKinds), map[string]string{
+			"grant": "grant", "emergency-grant": "emergency-grant", "Emergency_Grant": "emergency-grant",
+			" certify ": "certify", "emergency": bad,
+		}},
+		{unbindPolicyFlag(appPolicyKinds), map[string]string{
+			"revoke": "revoke", "emergency-grant": bad,
+		}},
+		// No prefix, so an unknown kind is sent normalised for the server to judge.
+		{resourceTypeFlag, map[string]string{
+			"custom": "CUSTOM", "CUSTOM": "CUSTOM", "profile-type": "PROFILE_TYPE", "profile_type": "PROFILE_TYPE",
+			" role ": "ROLE", "something_new": "SOMETHING_NEW", "something-new": "SOMETHING_NEW", "r\u0131le": bad,
 		}},
 		{authTemplateFlag, map[string]string{
 			"bearer": "bearerToken", "oauth2": "oauth2", "aws": "awsSigv4", "aws-sigv4": "awsSigv4",

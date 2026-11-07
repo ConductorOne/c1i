@@ -105,18 +105,15 @@ an intended non-GET REST write.`,
 			return err
 		}
 
-		method = strings.ToUpper(method)
-		if method == "" {
-			if body != "" {
-				method = "POST"
-			} else {
-				method = "GET"
+		switch {
+		case method != "":
+			if method, err = httpMethodFlag.parse(method); err != nil {
+				return err
 			}
-		}
-		switch method {
-		case "GET", "POST", "PUT", "PATCH", "DELETE":
+		case body != "":
+			method = "POST"
 		default:
-			return &usageError{fmt.Errorf("unsupported method: %s (use GET, POST, PUT, PATCH, or DELETE)", method)}
+			method = "GET"
 		}
 
 		// GET carries no request body, full stop. DELETE normally doesn't
@@ -346,7 +343,7 @@ func parseKeyValueFlag(pairs []string, flagName string) (map[string]string, erro
 
 func init() {
 	apiCmd.Flags().String("path", "", "API path (e.g. /api/v1/search/app_users)")
-	apiCmd.Flags().String("method", "", "HTTP method: GET, POST, PUT, PATCH, or DELETE (default: GET, or POST if a body is set)")
+	apiCmd.Flags().String("method", "", "HTTP method: "+httpMethodFlag.usage()+" (default: get, or post if a body is set)")
 	apiCmd.Flags().String("body", "", "JSON request body (implies POST)")
 	apiCmd.Flags().String("body-file", "", "Read the JSON request body from a file (\"-\" for stdin); mutually exclusive with --body")
 	apiCmd.Flags().Bool("allow-delete-body", false, "Allow --body/--body-file with --method DELETE (some C1 endpoints, e.g. remove-membership, require a body on DELETE; without this flag such a request is refused)")
@@ -526,3 +523,11 @@ func itemIdentity(item json.RawMessage) string {
 	}
 	return string(canon)
 }
+
+var httpMethodFlag = enumFlag{flag: "method", unknown: enumReject, values: []enumValue{
+	{name: "get", api: "GET"},
+	{name: "post", api: "POST"},
+	{name: "put", api: "PUT"},
+	{name: "patch", api: "PATCH"},
+	{name: "delete", api: "DELETE"},
+}}

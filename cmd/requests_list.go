@@ -76,11 +76,12 @@ tenant.
 		entitlementID, _ := cmd.Flags().GetString("entitlement-id")
 		userID, _ := cmd.Flags().GetString("user-id")
 		all, _ := cmd.Flags().GetBool("all")
-		typeFlag, _ := cmd.Flags().GetString("type")
-		typ := strings.ToLower(strings.TrimSpace(typeFlag))
-
-		if typ != "" && typ != "grant" && typ != "revoke" {
-			return &usageError{fmt.Errorf(`--type must be "grant" or "revoke"`)}
+		var typ string
+		if v := mustGetString(cmd, "type"); strings.TrimSpace(v) != "" {
+			var err error
+			if typ, err = requestTypeFlag.parse(v); err != nil {
+				return err
+			}
 		}
 		state, err := parseTaskState(cmd)
 		if err != nil {
@@ -184,7 +185,13 @@ func init() {
 	requestsListCmd.Flags().String("app-id", "", "Filter to requests targeting this application")
 	requestsListCmd.Flags().String("entitlement-id", "", "Filter to requests for this entitlement")
 	requestsListCmd.Flags().String("state", "", "Filter by state: "+taskStateFlag.usage())
-	requestsListCmd.Flags().String("type", "", `Filter by request type: "grant" or "revoke" (default: both)`)
+	requestsListCmd.Flags().String("type", "", "Filter by request type: "+requestTypeFlag.usage()+" (default: both)")
 	addPaginationFlags(requestsListCmd)
 	requestsCmd.AddCommand(requestsListCmd)
 }
+
+// requestTypeFlag is client-side: it picks which task types to search.
+var requestTypeFlag = enumFlag{flag: "type", unknown: enumReject, values: []enumValue{
+	{name: "grant", api: "grant"},
+	{name: "revoke", api: "revoke"},
+}}

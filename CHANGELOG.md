@@ -17,6 +17,24 @@ attempt. When the config directory resolves to a relative path (a relative
 credentials fails instead of using the working directory. With a relative
 `HOME`, `~/.c1i.yaml` is ignored.
 
+Named-value flags now refuse more input before sending anything, each with
+exit 2. `automations executions list --state <unknown>` used to print nothing
+and exit 0. An unknown short value for `accounts list --status`/`--type`,
+`--policy-type`, the `mcp tools` and `mcp servers` enum flags and the
+`access-profiles` behavior flags used to reach the server (which answered
+400) or be printed by `--dry-run`. A whitespace-only value, and any non-ASCII
+value (such as a lookalike `ı` or `ſ`), is refused on every such flag. A value
+carrying the flag's API prefix is still sent, upper-cased with `-` turned to
+`_`; `mcp servers --type` is the exception and takes only `hosted` or
+`external`. Three typed values are now rewritten, where main sent them as
+typed and the server answered 400: `MCP_TOOL_STATE_PENDING` becomes
+`MCP_TOOL_STATE_PENDING_REVIEW`, and
+`REQUEST_CATALOG_ENROLLMENT_BEHAVIOR_BYPASS`/`_ENFORCE` become their
+`..._ENTITLEMENT_REQUEST_POLICY` names. These listed aliases are the only
+rewrites; no other prefixed value is remapped. `users list --status` sends
+an unknown value upper-cased with `-` turned to `_`, where it sent it as
+typed.
+
 ### Added
 
 - `entitlements owners <entitlement-id> --app-id` lists an entitlement's
@@ -78,24 +96,13 @@ credentials fails instead of using the working directory. With a relative
 
 ### Changed
 
-- Every enum flag, `--auth` included, now parses the same way: ASCII case
-  and surrounding whitespace are ignored, `-` and `_` are interchangeable,
-  the full API name is accepted in any case (`--state pending-review`,
-  `--sort SORT_DIRECTION_DESC`, `--format access_review_report_format_csv`),
-  and non-ASCII input is refused. An unknown short value is a usage error
-  (exit 2) before any request; on a flag that used to pass unknown values on,
-  one carrying the API prefix is still sent, upper-cased with `-` turned to
-  `_`. This changes three behaviors: `automations executions list --state
-  <unknown>` exits 2 instead of printing nothing and exiting 0;
-  `--status`/`--type` on `accounts list`, `--policy-type`, the `mcp tools`
-  and `mcp servers` enum flags and the `access-profiles` behavior flags
-  refuse an unknown short value locally instead of sending it to a server
-  that answered 400, or of printing it under `--dry-run`; and a blank
-  (whitespace-only) value on those flags is refused rather than sent.
-  `users list --status` still sends any ASCII value, since its enum has no
-  prefix. `mcp servers register`/`update-credentials --type` take only
-  `hosted` or `external` (or their full `MCP_SERVER_TYPE_*` names): an unknown
-  `MCP_SERVER_TYPE_*` value exits 2, as every full name did before.
+- Every named-value flag now parses the same way, including `--auth`,
+  `--unbind-policy`, `requests list --type`, `--error-format`, `api --method`
+  and `entitlements create --resource-type`: ASCII case and surrounding
+  whitespace are ignored, `-` and `_` are interchangeable, and the full API
+  name is accepted in any case (`--state pending-review`,
+  `--sort SORT_DIRECTION_DESC`). `--help` value lists are generated from one
+  table per flag. See "Upgrading from 0.9.1" for the exit-code changes.
 - `golang.org/x/term` moves to 0.47.0 and `golang.org/x/sys` to 0.49.0.
 - `golang.org/x/crypto` is pinned to the untagged
   `v0.58.1-0.20261009181718-2f1f834330b2`, which fixes GO-2026-5932; c1i does

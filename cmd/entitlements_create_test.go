@@ -435,6 +435,9 @@ func TestResourceTypeKindsAreDocumented(t *testing.T) {
 		"guideConfigureNewApp":       guideConfigureNewApp,
 	}
 	for name, doc := range docs {
+		if name == "--resource-type flag usage" {
+			doc = enumKey(doc) // generated from the table's short names
+		}
 		for _, kind := range resourceTypeKinds {
 			if !strings.Contains(doc, kind) {
 				t.Errorf("%s does not name the %q resource type kind", name, kind)
@@ -562,24 +565,6 @@ func TestEntitlementCreatePolicyFlags(t *testing.T) {
 		cmd := newEntitlementCreateCmd(t, "--app-id", "app1", "--display-name", "e", "--"+flag, "")
 		if _, err := buildEntitlementCreatePlan(cmd); err == nil || !strings.Contains(err.Error(), "--"+flag+" requires a non-empty value") {
 			t.Errorf("--%s \"\": err = %v, want a non-empty-value usage error", flag, err)
-		}
-	}
-}
-
-// TestNormalizeResourceType pins case/separator normalization, and that an
-// unknown value is passed through for the server to rule on rather than being
-// rejected against a list that can go stale.
-func TestNormalizeResourceType(t *testing.T) {
-	cases := map[string]string{
-		"custom":        "CUSTOM",
-		"CUSTOM":        "CUSTOM",
-		"profile-type":  "PROFILE_TYPE",
-		"profile_type":  "PROFILE_TYPE",
-		"something_new": "SOMETHING_NEW",
-	}
-	for in, want := range cases {
-		if got := normalizeResourceType(in); got != want {
-			t.Errorf("normalizeResourceType(%q) = %q, want %q", in, got, want)
 		}
 	}
 }
