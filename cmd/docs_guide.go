@@ -402,8 +402,9 @@ of anything specific to what you're about to model.
     OWNER_USER_ID=<id from "c1i users list" above>
     c1i apps set-owners "$APP_ID" --user-id "$OWNER_USER_ID" --wait
 
-"--wait" polls "GET .../ownerids" until the owner appears (or times out) and
-prints "Owners provisioned on app ... after ...". Without "--wait", the PUT
+"--wait" polls "GET .../ownerids" until the owner set equals the ids you
+passed (or times out) and prints "Owners provisioned on app ... after ..." to
+stderr; stdout is the API's JSON response. Without "--wait", the PUT
 returns immediately but the owner takes roughly 96-129s to show up in
 "GET .../ownerids" -- four measured "set-owners" writes, a fifth still
 pending at 108s. Read through "apps owners" instead, and across

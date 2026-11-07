@@ -10,16 +10,12 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// ownerWaitPollInterval is how often --wait re-polls GET .../ownerids. Long
+// ownerWaitInterval is how often --wait re-polls GET .../ownerids. Long
 // enough to avoid hammering the API during a provisioning window observed
 // at 96-129s across four converged writes (a fifth was still pending at
-// 108s), short enough that --wait-timeout still feels responsive.
-const ownerWaitPollInterval = 12 * time.Second
-
-// setOwnersSuccessFmt is the PUT-accepted confirmation. Points at "apps
-// owners", not "apps get": appOwners reads [] even for apps that do have
-// owners.
-const setOwnersSuccessFmt = "Set %d owner(s) on app %s (provisioning is async; check with \"c1i apps owners %s\" in a minute or two).\n"
+// 108s), short enough that --wait-timeout still feels responsive. A var so a
+// test can poll fast.
+var ownerWaitInterval = 12 * time.Second
 
 var appsSetOwnersCmd = &cobra.Command{
 	Use:   "set-owners <app-id>",
@@ -27,16 +23,22 @@ var appsSetOwnersCmd = &cobra.Command{
 	Long: `Set the complete list of owners for an app via PUT .../owners, replacing
 any existing owners. Provide one or more --user-id (C1 user IDs, 27 chars each).
 
-Owner changes are provisioned ASYNCHRONOUSLY: this call returns immediately,
-but the new owners take a couple of minutes to show up in GET .../ownerids.
-A success here means the request was accepted, not that the owner list is
-already live. Don't check ownership via the "appOwners" field in "apps get":
-it read [] on every app checked, including those GET .../ownerids reported
-owners for.
+Before the PUT, each distinct --user-id is looked up with GET
+/api/v1/users/{id}; an unknown one exits 2 naming it, and nothing is sent.
+The API itself accepts an unknown id (exit 0) and stores it: GET .../ownerids
+lists it but "apps owners" does not, so a set naming only such ids leaves the
+app with no real owners. --dry-run skips the lookups.
 
-Pass --wait to block and poll GET .../ownerids until every requested
---user-id appears (or --wait-timeout elapses). Without --wait, behavior is
-unchanged: the command returns as soon as the PUT is accepted.
+Owner changes are provisioned ASYNCHRONOUSLY: this call returns as soon as
+the request is accepted, but the change takes a couple of minutes to show up
+in GET .../ownerids. Verify with "c1i apps owners <app-id>". Don't check
+ownership via the "appOwners" field in "apps get": it read [] on every app
+checked, including those GET .../ownerids reported owners for.
+
+Pass --wait to block and poll GET .../ownerids until the owner set equals
+the requested ids -- additions landed and replaced owners gone -- or
+--wait-timeout elapses; a timeout exits 1, though the write was accepted.
+Prints the API's JSON response; --wait's progress lines go to stderr.
 
 Honors --dry-run (with --wait, dry-run still only previews the PUT; it never
 polls).`,
@@ -70,33 +72,36 @@ polls).`,
 		if err != nil {
 			return fmt.Errorf("authentication failed: %w", err)
 		}
-		if _, err := c.Put(cmd.Context(), path, body); err != nil {
+		if err := requireExistingUsers(cmd.Context(), c, "user-id", userIDs); err != nil {
+			return err
+		}
+		data, err := c.Put(cmd.Context(), path, body)
+		if err != nil {
 			return fmt.Errorf("API error: %w", err)
 		}
-
-		if _, err := fmt.Fprintf(cmd.OutOrStdout(), setOwnersSuccessFmt, len(userIDs), appID, appID); err != nil {
-			return wrapOutputErr(err)
+		if err := writeRawObject(cmd, data); err != nil {
+			return err
 		}
 
 		if !wait {
 			return nil
 		}
-		return waitForOwners(cmd, c, appID, userIDs, waitTimeout)
+		return runOwnerIDsWait(cmd, appOwnersWaitOp(c, appID, untilEqual(userIDs), waitTimeout))
 	},
 }
 
-// waitForOwners blocks until every id in wantUserIDs appears in
-// GET .../ownerids on appID, timeout elapses, or cmd's context is canceled.
-func waitForOwners(cmd *cobra.Command, c *client.Client, appID string, wantUserIDs []string, timeout time.Duration) error {
-	_, err := runWait(cmd, ownersWaitOp(c, appID, wantUserIDs, timeout))
-	return err
+// appOwnersWaitOp polls an app's ownerids until done accepts them.
+func appOwnersWaitOp(c *client.Client, appID string, done func([]string) bool, timeout time.Duration) waitOp[[]string] {
+	return ownerIDsWaitOp(c, client.Path("/api/v1/apps/%s/ownerids", appID), done, timeout,
+		"app "+appID, "c1i apps owners "+appID)
 }
 
-// ownersWaitOp is waitForOwners' operation, built separately so a test can
-// drive the loop at a poll interval shorter than ownerWaitPollInterval.
-func ownersWaitOp(c *client.Client, appID string, wantUserIDs []string, timeout time.Duration) waitOp[[]string] {
-	return ownerIDsWaitOp(c, client.Path("/api/v1/apps/%s/ownerids", appID), untilPresent(wantUserIDs), timeout,
-		"app "+appID, "c1i apps owners "+appID)
+// runOwnerIDsWait runs an owner write's --wait with its prose on stderr, so
+// stdout stays the write's JSON response.
+func runOwnerIDsWait(cmd *cobra.Command, op waitOp[[]string]) error {
+	op.Out = cmd.ErrOrStderr()
+	_, err := runWait(cmd, op)
+	return err
 }
 
 // ownerIDsWaitOp polls an .../ownerids path (an app's or an entitlement's)
@@ -113,7 +118,7 @@ func ownerIDsWaitOp(c *client.Client, ownerIDsPath string, done func([]string) b
 			return got, nil
 		},
 		Done:     done,
-		Interval: ownerWaitPollInterval,
+		Interval: ownerWaitInterval,
 		Timeout:  timeout,
 		Subject:  "owners to provision on " + target,
 		Success:  "Owners provisioned on " + target,
@@ -137,11 +142,6 @@ func fetchOwnerIDs(ctx context.Context, c *client.Client, path string) ([]string
 	return parsed.UserIDs, nil
 }
 
-// allOwnersPresent reports whether every id in want is present in got: the
-// set-owners --wait success condition (untilPresent's) as a pure function, so
-// it stays unit-testable without a fake server.
-func allOwnersPresent(want, got []string) bool { return untilPresent(want)(got) }
-
 // buildSetOwnersBody assembles the PUT .../owners request body. Pure, so the
 // dry-run preview and a unit test pin the exact wire shape (userIds, not
 // user_ids, unwrapped) that the API expects.
@@ -152,6 +152,6 @@ func buildSetOwnersBody(userIDs []string) map[string]any {
 func init() {
 	addRepeatableStringFlag(appsSetOwnersCmd, "user-id", "C1 user ID to set as owner (repeatable; replaces the full owner list)")
 	markRequired(appsSetOwnersCmd, "user-id")
-	addWaitFlags(appsSetOwnersCmd, "GET .../ownerids until the requested owners appear", 4*time.Minute)
+	addWaitFlags(appsSetOwnersCmd, "GET .../ownerids until the owner set equals the requested ids (removals included)", 4*time.Minute)
 	appsCmd.AddCommand(appsSetOwnersCmd)
 }

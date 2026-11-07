@@ -337,7 +337,7 @@ func ownerIDsServer(t *testing.T, wantPath string, responses []string) *httptest
 func runOwnersWait(t *testing.T, srv *httptest.Server, appID string, want []string, timeout time.Duration) (string, error) {
 	t.Helper()
 	c := client.NewForTesting(srv.URL, srv.Client())
-	op := ownersWaitOp(c, appID, want, timeout)
+	op := appOwnersWaitOp(c, appID, untilEqual(want), timeout)
 	op.Interval = 5 * time.Millisecond
 	cmd, out := newWaitTestCmd(context.Background())
 	_, err := runWait(cmd, op)
@@ -508,15 +508,6 @@ func TestWaitFlagValues(t *testing.T) {
 			}
 		})
 	}
-}
-
-// `apps set-owners --wait` must not exit 0 when its success line is lost.
-func TestWaitForOwnersFailsOnOutputWriteError(t *testing.T) {
-	srv := ownerIDsServer(t, "/api/v1/apps/app1/ownerids", []string{`{"userIds":["u1"]}`})
-	c := client.NewForTesting(srv.URL, srv.Client())
-	cmd, _ := newWaitTestCmd(context.Background())
-	cmd.SetOut(failingWriter{})
-	assertOutputWriteFailure(t, waitForOwners(cmd, c, "app1", []string{"u1"}, 10*time.Second))
 }
 
 // A list command's progress goes to op.Out (stderr): a notice whose loss must

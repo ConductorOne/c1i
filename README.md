@@ -110,12 +110,20 @@ no way to remove a mapper.
 erased, which is why `apps list` rows carry a `deleted_at` field. Both commands
 honor `--dry-run`.
 
-`apps set-owners` returns as soon as the `PUT` is accepted. Pass `--wait` to
-block and poll `GET .../ownerids` until every requested `--user-id` appears, or
-`--wait-timeout` (default `4m`) elapses. A timeout exits `1` even though the
-write itself was accepted — provisioning can simply still be in flight, so
-re-check with `apps owners` rather than re-issuing the write. With `--dry-run`
-the preview still only covers the `PUT`; `--wait` never polls.
+`apps set-owners` prints the API's JSON response and returns as soon as the
+`PUT` is accepted. Pass `--wait` to block and poll `GET .../ownerids` until the
+owner set equals the requested ids, removals included, or `--wait-timeout`
+(default `4m`) elapses. Its progress lines go to stderr, so stdout stays the
+write's JSON response. A timeout exits `1` even though the write itself was
+accepted — provisioning can simply still be in flight, so re-check with
+`apps owners` rather than re-issuing the write. With `--dry-run` the preview
+still only covers the `PUT`; `--wait` never polls.
+
+The API accepts an `apps set-owners` user id that matches no user at exit `0`
+and stores it (`GET .../ownerids` lists it, `apps owners` does not), so a set
+naming only unknown ids leaves no real owners; `set-owners` therefore looks
+up each distinct `--user-id` first and exits `2` naming an unknown one,
+sending nothing (`--dry-run` skips the lookups).
 
 `apps owners` is the read that reflects what `apps add-owner`,
 `apps remove-owner` and `apps set-owners` write, and lags a write by roughly

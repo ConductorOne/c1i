@@ -17,6 +17,14 @@ attempt. When the config directory resolves to a relative path (a relative
 credentials fails instead of using the working directory. With a relative
 `HOME`, `~/.c1i.yaml` is ignored.
 
+`apps set-owners` now prints the API's JSON response on stdout, like every
+other owner write, instead of the line `Set N owner(s) on app ...`; with
+`--wait`, the progress and `Owners provisioned on app ...` lines move to
+stderr. A script that matched the old text should check the exit code or
+parse the JSON instead. `apps set-owners --wait` now waits until the owner
+set equals the request, so a set that removes an owner can wait longer than
+before.
+
 ### Added
 
 - `entitlements owners <entitlement-id> --app-id` lists an entitlement's
@@ -78,6 +86,14 @@ credentials fails instead of using the working directory. With a relative
 
 ### Changed
 
+- `apps set-owners` looks up each distinct `--user-id` before the `PUT` and
+  exits `2` naming an unknown one, sending nothing (`--dry-run` skips the
+  lookups): the API accepts an unknown id at exit `0` and stores it as an
+  owner no user matches, so a set naming only unknown ids leaves no real
+  owners. `--wait` now waits until the
+  owner set equals the request, removals included, instead of returning as
+  soon as the requested ids are present. It prints the API's JSON response,
+  with `--wait` progress on stderr (see Upgrading).
 - `golang.org/x/term` moves to 0.47.0 and `golang.org/x/sys` to 0.49.0.
 - `golang.org/x/crypto` is pinned to the untagged
   `v0.58.1-0.20261009181718-2f1f834330b2`, which fixes GO-2026-5932; c1i does
@@ -111,8 +127,8 @@ credentials fails instead of using the working directory. With a relative
   MCP server `--*-config-file` flags, and `--steps-file`, `--rules-file` and
   `--refs-file`. A `null` body file, which could panic, is refused the same
   way, and the error names the flag.
-- `apps set-owners --wait` exits 1 (`writing output:`) when its success line
-  can't be written to stdout, instead of 0; the owners were already set.
+- `apps set-owners` exits 1 (`writing output:`) when its response can't be
+  written to stdout, instead of 0; the owners were already set.
 - **A failed write to stdout now exits `1`** (e.g. a full disk) instead of
   `0`; list commands stop paging at the first failed row.
 - **Every auto-paginating command now stops on a stuck cursor** instead of

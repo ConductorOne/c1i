@@ -152,17 +152,15 @@ func findAppOwnersPopulateClaims(text string) []string {
 	return violations
 }
 
-// TestAppOwnersNeverClaimedToPopulate guards the four user/agent-facing
-// surfaces that have carried the false claim that new owners show up in
-// "apps get"'s appOwners field: the set-owners command's Long, its success
-// message, and the embedded onboarding guide (docs_guide.go and the
-// embedded cmd/agents.md).
+// TestAppOwnersNeverClaimedToPopulate guards the user/agent-facing surfaces
+// that could claim new owners show up in "apps get"'s appOwners field: the
+// set-owners command's Long and the embedded onboarding guide (docs_guide.go
+// and the embedded cmd/agents.md).
 func TestAppOwnersNeverClaimedToPopulate(t *testing.T) {
 	surfaces := map[string]string{
-		"apps set-owners --help (Long)":   appsSetOwnersCmd.Long,
-		"apps set-owners success message": setOwnersSuccessFmt,
-		"docs guide: configure-new-app":   guideConfigureNewApp,
-		"cmd/agents.md (embedded)":        agentsTemplate,
+		"apps set-owners --help (Long)": appsSetOwnersCmd.Long,
+		"docs guide: configure-new-app": guideConfigureNewApp,
+		"cmd/agents.md (embedded)":      agentsTemplate,
 	}
 	for name, text := range surfaces {
 		if violations := findAppOwnersPopulateClaims(text); len(violations) > 0 {

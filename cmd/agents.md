@@ -384,7 +384,11 @@ resource with `--resource-id` likewise means you drop
   write can look like a no-op. Verify app owners with `c1i apps owners
   <app-id>`, not `apps get`'s `appOwners` field; an empty `appOwners` is not
   evidence an app has no owners. Use `apps set-owners --wait` when the write
-  must converge before the next step. Entitlement owners work the same way:
+  must converge before the next step; it waits until the owner set equals
+  the request, removals included. `apps set-owners` prints the API's JSON
+  response (progress on stderr) and exits 2 before the write on an unknown
+  user, which the API would store as an owner no user matches. Entitlement
+  owners work the same way:
   read with `c1i entitlements owners <entitlement-id> --app-id <app-id>`,
   write with `entitlements add-owner`/`remove-owner <user-id> --app-id
   --entitlement-id` or `entitlements set-owners <entitlement-id> --app-id
