@@ -54,12 +54,14 @@ falls through to whatever the config file names.
 ## Global flags (persistent, on every command)
 
 - `--fields=a,b,c` / `C1I_FIELDS` — project emitted JSON to these dot-paths;
-  missing keys are silently omitted. Never trims mutation/auth confirmations.
+  missing keys are silently omitted. Never applied to mutation output: an
+  explicit `--fields` on a mutation is exit 2; read its id with `jq -er`.
 - `--max-retries=N` / `C1I_MAX_RETRIES` (default 4, `0` disables) — retries
   429 (any method) and 5xx/network errors (idempotent GET/PUT/DELETE only)
   with backoff, honoring `Retry-After`.
-- `--error-format=text|json` / `C1I_ERROR_FORMAT` — `json` emits a structured
-  error object instead of `Error: ...` text.
+- `--error-format=text|json` / `C1I_ERROR_FORMAT` — `json` makes stderr
+  NDJSON: errors carry `"error"` (and `"applied"` on a write), notices
+  `"notice"`, progress `"progress"`, `--debug` lines `"debug"`.
 - `--dry-run` / `C1I_DRY_RUN` — preview a C1 REST mutation's method/path/body
   without sending it; `mcp gateway call` and `auth login` reject it. `upgrade
   --dry-run` verifies the release and installs nothing.

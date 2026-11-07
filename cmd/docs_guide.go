@@ -28,7 +28,7 @@ create a new one:
     c1i apps list
     # pick the target app's "id" from the list -> APP_ID
     # or, to start fresh:
-    APP_ID=$(c1i apps create --display-name "My MCP Apps" | jq -r .app.id)
+    APP_ID=$(c1i apps create --display-name "My MCP Apps" | jq -er .id)
 
 ## 2a. HOSTED: find a catalog entry
 
@@ -394,11 +394,9 @@ via toolset sync).
 
 ### 1. Create the app
 
-    c1i apps create --display-name "Acme Payroll" --description "Manually-managed payroll access"
+    APP_ID=$(c1i apps create --display-name "Acme Payroll" --description "Manually-managed payroll access" | jq -er .id)
 
-Prints the created app as pretty JSON under an "app" key. Capture its id:
-
-    APP_ID=<id from the response>
+Prints the created app as pretty JSON; its id is .id.
 
 A fresh app already carries one system-builtin entitlement ("Access") and one
 default resource type ("Credential") — it is not entirely empty, just empty
@@ -411,7 +409,7 @@ of anything specific to what you're about to model.
 
 "--wait" polls "GET .../ownerids" until the owner set equals the ids you
 passed (or times out) and prints "Owners provisioned on app ... after ..." to
-stderr; stdout is the API's JSON response.
+stderr; stdout is the API's JSON response, {}.
 ` + ownerAsyncWaitNote + `
 See "Verify" below for why "apps get"'s "appOwners" field is not the way
 to check this.

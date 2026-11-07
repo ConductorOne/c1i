@@ -98,10 +98,13 @@ apply it for a whole session; the flag wins for a single invocation.
 | `--error-format` | `C1I_ERROR_FORMAT` | `text` (default) or `json` |
 
 `--error-format json` is the one worth setting by default if you parse
-failures: instead of `Error: <prose>` on stderr you get one JSON object,
-`{"error": ...}`, carrying `status`, `method`, `path`, and the response `body`
-when the failure came from the API. Still branch on the exit code — the JSON is
-for the detail, not the classification.
+failures: stderr becomes NDJSON. Error objects carry `"error"` (select them
+with `jq 'select(.error)'`) plus `status`, `method`, `path`, and the response
+`body` when the failure came from the API; notices carry `"notice"`, `--wait`
+progress `"progress"`, and `--debug` lines `"debug"`. A write command's error
+also carries `"applied"`: `true`, `false`, or `"unknown"` (the request may
+have reached the server). Still branch on the exit code — the JSON is for the
+detail, not the classification.
 
 `--debug` and `--max-retries` cover `mcp gateway`, `auth login` (except its
 device-code polling, which never retries), `upgrade`, `docs openapi`,
@@ -276,8 +279,8 @@ c1i users list --fields id,email
 # Conditional selection: jq is appropriate
 DELETED_APPS="$(c1i apps list | jq -c 'if .deleted_at then . else empty end')"
 
-# Mutation confirmation: jq is required to extract the returned id
-APP_ID=$(c1i apps create --display-name "Example" | jq -r '.app.id')
+# Mutation output: never projected; extract the id with jq -er
+APP_ID=$(c1i apps create --display-name "Example" | jq -er .id)
 ```
 
 ## Exit codes
@@ -405,7 +408,8 @@ resource with `--resource-id` likewise means you drop
   evidence an app has no owners. Use `apps set-owners --wait` when the write
   must converge before the next step; it waits until the owner set equals
   the request, removals included. `apps set-owners` prints the API's JSON
-  response (progress on stderr) and exits 2 before the write on an unknown
+  response, `{}` (progress on stderr; a wait failure is `"applied": true`), and
+  exits 2 before the write on an unknown
   user, which the API would store as an owner no user matches. Entitlement
   owners work the same way:
   read with `c1i entitlements owners <entitlement-id> --app-id <app-id>`,

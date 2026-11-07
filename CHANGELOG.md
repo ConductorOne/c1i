@@ -8,6 +8,66 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Upgrading from 0.9.1
 
+**Mutations now print the API's response, unwrapped the same way `get`
+unwraps it.** This is the breaking change in this release, and it is meant to
+be the only one for mutation output. Every create, update, delete, owner
+change, task action and binding command prints JSON.
+
+- **Drop the wrapper key from your paths, and read the id from the path the
+  command documents.** For example:
+  - `apps create`: `.app.id` → `.id`
+  - `service-principals create`: `.servicePrincipal.id` → `.id`
+  - `access-profiles create`: `.requestCatalogView.requestCatalog.id` → `.id`
+  - `requests create grant` and the `tasks` actions: `task_id=…` → `.id`
+  - `mcp servers register|update`: `.mcpServer.connectorId` → `.connectorId`
+  - `entitlements proxy-bindings create`: `.srcAppId`
+  - `webhooks test`: `.id` is the delivery, `.webhookId` the webhook
+
+  **Not every response has an `id`:**
+  - `role-mining trigger`: `.runId`
+  - `role-mining access-profiles create`: `.accessProfileId`
+  - `findings bulk-*`: `.bulkActionId`
+  - `findings create-task`: unchanged, `.taskId` and `.finding.id`
+  - `mcp bindings create`: `.bindings[]`
+
+  Nothing is dropped: every other envelope key, including `expanded`, is a
+  top-level field, and `.clientSecret` is where it was.
+- **Text confirmations are gone.**
+  - Deletes, `credentials revoke`, SP `bindings add|delete`, `resync-tools`
+    and `apps set-owners` print `{}`; exit 0 is the success signal.
+  - `mcp bindings delete` prints `{}`.
+  - `mcp tools approve` prints one JSON line per tool and stops at the first
+    stdout write failure.
+- **A task's `.state` is the server's snapshot, not the outcome.** For
+  example, `tasks close` can report `OPEN`; re-read with `tasks get`. An id c1i
+  looked up for you is reported on stderr.
+- **An empty success response prints `{}`.** `--wait` progress for
+  `apps set-owners` goes to stderr.
+- **`--dry-run` prints one JSON object**, `{"dryRun":true,"requests":[…]}`,
+  with no `id`. Extract ids with `jq -er`, because under an inherited
+  `C1I_DRY_RUN=1`, `jq -r .id` prints `null` and your script carries on.
+  - A preview needs a configured URL, but still no credentials.
+  - A preview refuses an empty, `.` or `..` id (exit 2), as a real send does.
+- **Passing `--fields` to a mutation is a usage error (exit 2).** `C1I_FIELDS`
+  is still ignored on mutations.
+- **`--error-format json` now makes stderr NDJSON for every command.**
+  - Previously you got one error object and text for everything else. Now
+    each line is one object: `{"error":…}`, `{"notice":…}`, `{"progress":…}`
+    or `{"debug":…}`.
+  - Select errors with `jq 'select(.error)'` instead of parsing the whole
+    stream as one object.
+  - Errors from mutating commands carry `"applied": true | false | "unknown"`.
+    `"unknown"` means the request may have reached the server, including when
+    a retry then failed.
+  - `mcp tools approve` adds per-id error objects and a summary with
+    `notAttempted`. A batch can exit non-zero after applying changes.
+  - Exit codes are unchanged.
+  - In text mode, stderr is unchanged except for four lines:
+    - `Resolved …` is new.
+    - `dry run: nothing was sent` is new.
+    - The `apps set-owners --wait` lines move from stdout to stderr.
+    - The `entitlements create` dry-run note moves from stdout to stderr.
+
 With no cached spec, a failed `docs openapi`, `docs endpoints` or
 `docs endpoint` now exits 4, 5, 6 or 8 instead of 1, and a 429, a transient
 5xx or a network error is retried up to 4 times by default, so an unreachable

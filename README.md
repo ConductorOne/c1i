@@ -83,12 +83,13 @@ c1i apps delete <app-id>
 `apps create` needs only `--display-name`; it makes a plain, unmanaged
 container app — the zero state for "make an app, then register MCP servers
 under it". The caller is auto-assigned as an owner, showing up in `apps owners`
-after the usual provisioning lag. The new app comes back as pretty JSON under
-an `app` key, and `--fields` is never applied to mutation output, so read the
-new id from `.app.id` on the full object, not `.id`.
+after the usual provisioning lag. The new app prints as pretty JSON, unwrapped
+like `apps get`, so read its id with `jq -er .id` (`-e` fails on a `--dry-run`
+preview instead of printing `null`). An explicit `--fields` on a mutation is a
+usage error (exit `2`).
 
-`apps update` sends only the fields whose flags you pass, and returns
-`{"app": ...}`. `--grant-policy-id`, `--revoke-policy-id` and
+`apps update` sends only the fields whose flags you pass, and prints the
+updated app the same way. `--grant-policy-id`, `--revoke-policy-id` and
 `--certify-policy-id` bind policies, on `apps create` too (omitted at create,
 the server assigns its default grant and revoke policies and no certify
 policy). Before sending, c1i fetches each policy and refuses (exit `2`,
@@ -107,14 +108,16 @@ accepts an empty mapper with exit `0` but keeps the old one, and the API has
 no way to remove a mapper.
 
 `apps delete` is a soft delete: the app is marked with `deletedAt` rather than
-erased, which is why `apps list` rows carry a `deleted_at` field. Both commands
-honor `--dry-run`.
+erased, which is why `apps list` rows carry a `deleted_at` field. It prints the
+API's response, `{}`; exit `0` is the success signal. Both commands honor
+`--dry-run`.
 
 `apps set-owners` prints the API's JSON response and returns as soon as the
 `PUT` is accepted. Pass `--wait` to block and poll `GET .../ownerids` until the
 owner set equals the requested ids, removals included, or `--wait-timeout`
 (default `4m`) elapses. Its progress lines go to stderr, so stdout stays the
-write's JSON response. A timeout exits `1` even though the write itself was
+write's JSON response. A wait failure reports `"applied": true` under
+`--error-format json`. A timeout exits `1` even though the write itself was
 accepted — provisioning can simply still be in flight, so re-check with
 `apps owners` rather than re-issuing the write. With `--dry-run` the preview
 still only covers the `PUT`; `--wait` never polls.
@@ -1119,8 +1122,8 @@ c1i functions get <id> --fields id,displayName,publishedCommitId
 # Conditional selection: jq is appropriate
 DELETED_APPS="$(c1i apps list | jq -c 'if .deleted_at then . else empty end')"
 
-# Mutation confirmation: jq is required to extract the returned id
-APP_ID=$(c1i apps create --display-name "Example" | jq -r '.app.id')
+# Mutation output: never projected; extract the id with jq -er
+APP_ID=$(c1i apps create --display-name "Example" | jq -er .id)
 ```
 
 - Comma-separated; use dot-paths (`user.email`) for nested access.
@@ -1138,9 +1141,11 @@ APP_ID=$(c1i apps create --display-name "Example" | jq -r '.app.id')
   for any genuinely nested field, a name that doesn't match at the top level is
   also searched for deeper: the shallowest match wins, and a tie at the same
   depth resolves to the alphabetically first full path, deterministically.
-- Mutation output (`apps create` returns `{"app": ...}`) also keeps the
-  envelope, but is never projected at all — `--fields` cannot blank a success
-  message, so no search happens there.
+- Mutation output is unwrapped the same way, but never projected: an explicit
+  `--fields` on a mutation (even `--fields ""`) is a usage error (exit `2`),
+  checked before anything is sent; `C1I_FIELDS` alone is ignored there. The id
+  path varies by command (`.id`, `.connectorId`, `.srcAppId`, ...); a delete
+  prints `{}`.
 - A `--fields` spec that matches **nothing at all** in the response (a typo, or
   a field that truly doesn't exist) is a usage error (exit `2`), not a silent
   `{}`. This is a zero-match check only: `--fields id,dispalyName` (typo) still
@@ -1269,6 +1274,17 @@ $ c1i api --path /api/v1/apps/<nonexistent-id> --error-format json
 ```
 
 The `body` is embedded as JSON when the API returned JSON, otherwise as a string.
+
+In JSON mode **stderr is NDJSON**: every line is one object. Errors carry
+`"error"` (select them with `jq 'select(.error)'`), warnings and other notices
+`"notice"` and `"kind"`, `--wait` progress `"progress"`, and `--debug` trace
+lines `"debug"`. Text mode is unchanged.
+
+An error from a command that writes also carries `"applied"`: `false` when
+nothing reached the server, `true` when the change was applied (for example,
+the response wasn't JSON, printing it failed, or a `--wait` after it failed),
+and `"unknown"` when the request may have reached the server, including when a
+retried attempt was sent before the final failure. Exit codes are unchanged.
 
 ## Configuration
 
