@@ -171,12 +171,19 @@ delay.
 
 ## 5. Request the entitlement for every user
 
-The app must already be configured for self-service access requests (C1 web
-console: App > Access requests > standard audience) — c1i has no command for
-this. An unconfigured entitlement rejects every request below outright with
-403 "target user is not allowed to request that resource", before any task
-is filed; matching the entitlement's grantPolicyId to the app's default via
-"c1i api" does not fix it.
+The entitlement must be requestable by those users. One that is in no access
+profile they can see rejects every request below outright with 403 "target
+user is not allowed to request that resource", before any task is filed;
+matching the entitlement's grantPolicyId to the app's default via "c1i api"
+does not fix it. Put it in a published, visible-to-everyone access profile
+(read the profile id from .requestCatalogView.requestCatalog.id):
+
+    c1i access-profiles create --display-name "<name>" --published --visible-to-everyone
+    c1i access-profiles requestable-entitlements add "$PROFILE_ID" --app-id "$APP_ID" --entitlement-id "$ENTITLEMENT_ID"
+    c1i access-profiles requestable-entitlements list "$PROFILE_ID"
+
+The list shows the profile's members; skip this step if the entitlement is
+already in a profile your users can see.
 
 For each user ID from step 4:
 
@@ -508,7 +515,8 @@ matters.
 - "apps owners <id>" returns nothing at exit 0 for a well-formed but wrong
   app id -> that endpoint answers 200 with an empty list -> confirm with
   "c1i apps get <id>" or "apps add-owner", both of which exit 4.
-- "c1i apps get <id>" on a deleted or never-existed app -> 404 -> exit 4.
+- "c1i apps get <id>" on a never-existed app -> 404 -> exit 4; on a deleted
+  app it exits 0 with deletedAt set, so check deletedAt, not the exit code.
 - Building a SaaS-backed connector (Salesforce, Okta, Google Workspace, ...)
   by hand through "c1i api" instead of following this runbook -> don't:
   connector "create" needs a provider-specific catalogId that has no
@@ -574,9 +582,12 @@ you'd take it back.
 
   This is a weak signal, not a guarantee: a populated grantPolicyId does
   not mean the entitlement is requestable, and an empty one does not mean
-  it isn't — real requestability is decided by catalog membership, which
-  this response does not show and which c1i has no command for reading.
-  The create call in step 2 below is the actual test.
+  it isn't — real requestability is decided by access-profile membership,
+  which this response does not show. "c1i access-profiles
+  requestable-entitlements list <access-profile-id>" reads one profile's
+  members; to make an entitlement requestable, see "c1i docs guide
+  configure-new-app" step 5. The create call in step 2 below is the actual
+  test.
 
 - The target's C1 user id — the directory-sourced identity being granted
   access, not an app account ("c1i accounts list"), which is how that same

@@ -16,24 +16,27 @@ var requestsGetCmd = &cobra.Command{
 Access requests are backed by tasks, so the ID is the task_id returned by
 "c1i requests create" or shown in "c1i requests list". The response is the full
 task view, including its current policy step and outcome.`,
-	RunE: func(cmd *cobra.Command, args []string) error {
-		baseURL, err := GetBaseURL()
-		if err != nil {
-			return err
-		}
+	RunE: runTaskGet,
+}
 
-		c, err := newClient(cmd, baseURL)
-		if err != nil {
-			return fmt.Errorf("authentication failed: %w", err)
-		}
+// runTaskGet backs `requests get` and `tasks get`: both read /api/v1/tasks/{id}.
+func runTaskGet(cmd *cobra.Command, args []string) error {
+	baseURL, err := GetBaseURL()
+	if err != nil {
+		return err
+	}
 
-		data, err := c.Get(cmd.Context(), client.Path("/api/v1/tasks/%s", args[0]), nil)
-		if err != nil {
-			return fmt.Errorf("API error: %w", err)
-		}
+	c, err := newClient(cmd, baseURL)
+	if err != nil {
+		return fmt.Errorf("authentication failed: %w", err)
+	}
 
-		return writeResource(cmd, data, "id")
-	},
+	data, err := c.Get(cmd.Context(), client.Path("/api/v1/tasks/%s", args[0]), nil)
+	if err != nil {
+		return fmt.Errorf("API error: %w", err)
+	}
+
+	return writeResource(cmd, data, "id")
 }
 
 func init() {

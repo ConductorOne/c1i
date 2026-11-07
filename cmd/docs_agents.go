@@ -16,7 +16,7 @@ var docsAgentsCmd = &cobra.Command{
 	Use:     "agents",
 	Aliases: []string{"skill"},
 	Short:   "Output a bootstrap doc for AI agents using c1i",
-	Long: `Output a short, agent-facing doc covering the conventions c1i's --help
+	Long: `Output an agent-facing doc covering the conventions c1i's --help
 text can't: getting the tenant right, output contracts, exit codes,
 pagination, and when to prefer a first-class command over "c1i api".
 
