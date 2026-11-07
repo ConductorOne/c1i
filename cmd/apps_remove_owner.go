@@ -19,9 +19,8 @@ cannot drop an owner someone else added while you were deciding.
 owner you know about can still leave the app owned by someone you never
 chose -- its creator. Check "c1i apps owners <app-id>" first if that matters.
 
-Owner changes are provisioned ASYNCHRONOUSLY: this call returns as soon as
-the request is accepted, but the removal takes roughly 45-150s to show
-up. Verify with "c1i apps owners <app-id>".
+` + ownerAsyncNote + `
+Verify with "c1i apps owners <app-id>".
 
 Honors --dry-run.`,
 	Args: cobra.ExactArgs(1),

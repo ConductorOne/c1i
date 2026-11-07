@@ -17,6 +17,14 @@ attempt. When the config directory resolves to a relative path (a relative
 credentials fails instead of using the working directory. With a relative
 `HOME`, `~/.c1i.yaml` is ignored.
 
+`apps set-owners` now prints the API's JSON response on stdout, like the
+other apps and entitlement owner commands, instead of the line `Set N owner(s) on app ...`; with
+`--wait`, the progress and `Owners provisioned on app ...` lines move to
+stderr. A script that matched the old text should check the exit code or
+parse the JSON instead. `apps set-owners --wait` now waits until the owner
+set equals the request, so a set that removes an owner can wait longer than
+before.
+
 Named-value flags now refuse more input before sending anything, each with
 exit 2. `automations executions list --state <unknown>` used to print nothing
 and exit 0. An unknown short value for `accounts list --status`/`--type`,
@@ -118,6 +126,19 @@ exits:
 
 ### Changed
 
+- `apps set-owners` looks up each distinct `--user-id` before the `PUT` and
+  exits `2` naming an unknown one, sending nothing (`--dry-run` skips the
+  lookups): the API accepts an unknown id at exit `0` and stores it as an
+  owner no user matches, so a set naming only unknown ids leaves no real
+  owners. A repeated `--user-id` is sent once. `--wait` now waits until the
+  owner set equals the request, removals included, instead of returning as
+  soon as the requested ids are present. It prints the API's JSON response,
+  with `--wait` progress on stderr (see Upgrading).
+- Apps and entitlement owner help, README, `cmd/agents.md` and the
+  configure-new-app guide no longer quote a provisioning range, which varies
+  by tenant and server version: "Owner changes are applied asynchronously
+  and can take several minutes to appear; pass --wait to block until they
+  do." The `--wait` timeout message says the same.
 - Every named-value flag now parses the same way, including `--auth`,
   `--unbind-policy`, `requests list --type`, `--error-format`, `api --method`
   and `entitlements create --resource-type`: ASCII case and surrounding
@@ -161,14 +182,14 @@ exits:
   every method. The API resolves such a segment to the parent or collection,
   and a write could reach the wrong handler with no redirect for the client to
   refuse.
+- `apps set-owners` exits 1 (`writing output:`) when its response can't be
+  written to stdout, instead of 0; the owners were already set.
 - An input file that is missing, malformed, JSON `null` or the wrong JSON
   shape now exits `2` (usage) before any request, and the error names the
   flag: every `--body-file` (including `api`'s), the MCP server
   `--*-config-file` flags, and `--steps-file`, `--rules-file` and
   `--refs-file`. These exited `1`; a `null` body file could panic, and a
   `null` `--rules-file` sent `"rules": null` with exit 0.
-- `apps set-owners --wait` exits 1 (`writing output:`) when its success line
-  can't be written to stdout, instead of 0; the owners were already set.
 - **A failed write to stdout now exits `1`** (e.g. a full disk) instead of
   `0`; list commands stop paging at the first failed row.
 - **Every auto-paginating command now stops on a stuck cursor** instead of

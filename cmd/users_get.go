@@ -38,8 +38,9 @@ var usersGetCmd = &cobra.Command{
 func userPath(id string) string { return client.Path("/api/v1/users/%s", id) }
 
 // requireExistingUsers GETs each distinct id once and turns a 404 into a usage
-// error naming it. An owner-set PUT accepts an unknown user id with 200 and
-// drops it, which can leave the target with no owners at all.
+// error naming it. An owner-set PUT accepts an unknown user id with 200 (the
+// entitlement one drops it, the app one stores it), which can leave the
+// target with no real owners.
 func requireExistingUsers(ctx context.Context, c *client.Client, flag string, ids []string) error {
 	for _, id := range dedupe(ids) {
 		if _, err := c.Get(ctx, userPath(id), nil); err != nil {

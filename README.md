@@ -110,19 +110,28 @@ no way to remove a mapper.
 erased, which is why `apps list` rows carry a `deleted_at` field. Both commands
 honor `--dry-run`.
 
-`apps set-owners` returns as soon as the `PUT` is accepted. Pass `--wait` to
-block and poll `GET .../ownerids` until every requested `--user-id` appears, or
-`--wait-timeout` (default `4m`) elapses. A timeout exits `1` even though the
-write itself was accepted — provisioning can simply still be in flight, so
-re-check with `apps owners` rather than re-issuing the write. With `--dry-run`
-the preview still only covers the `PUT`; `--wait` never polls.
+`apps set-owners` prints the API's JSON response and returns as soon as the
+`PUT` is accepted. Pass `--wait` to block and poll `GET .../ownerids` until the
+owner set equals the requested ids, removals included, or `--wait-timeout`
+(default `4m`) elapses. Its progress lines go to stderr, so stdout stays the
+write's JSON response. A timeout exits `1` even though the write itself was
+accepted — provisioning can simply still be in flight, so re-check with
+`apps owners` rather than re-issuing the write. With `--dry-run` the preview
+still only covers the `PUT`; `--wait` never polls.
+
+The API accepts an `apps set-owners` user id that matches no user at exit `0`
+and stores it (`GET .../ownerids` lists it, `apps owners` does not), so a set
+naming only unknown ids leaves no real owners; `set-owners` therefore looks
+up each distinct `--user-id` first and exits `2` naming an unknown one,
+sending nothing (`--dry-run` skips the lookups). A repeated `--user-id` is
+sent once.
 
 `apps owners` is the read that reflects what `apps add-owner`,
-`apps remove-owner` and `apps set-owners` write, and lags a write by roughly
-45-150s (owner provisioning is asynchronous). It returns zero rows at exit 0
-for a well-formed but nonexistent app id, so an empty result can also mean
-"wrong id". `apps add-owner` and `apps remove-owner` change one owner at a
-time; two `add-owner` calls issued at once were both observed to land.
+`apps remove-owner` and `apps set-owners` write. Owner changes are applied
+asynchronously and can take several minutes to appear. It returns zero rows
+at exit 0 for a well-formed but nonexistent app id, so an empty result can
+also mean "wrong id". `apps add-owner` and `apps remove-owner` change one
+owner at a time; two `add-owner` calls issued at once were both observed to land.
 `apps set-owners` replaces the whole list with exactly the ids you pass, so an
 owner added between your read and your write is silently removed.
 
@@ -235,9 +244,9 @@ command touched is in that one payload.
 
 `entitlements owners` lists an entitlement's owners (same row shape as
 `apps owners`) and is the read that reflects `entitlements add-owner`,
-`remove-owner` and `set-owners`. Owner provisioning is asynchronous: writes
-showed up anywhere from about 1s to 135s after being accepted. `--wait`
-polls `GET .../ownerids` until the change lands, or `--wait-timeout`
+`remove-owner` and `set-owners`. Owner changes are applied asynchronously
+and can take several minutes to appear; pass --wait to block until they do.
+`--wait` polls `GET .../ownerids` until the change lands, or `--wait-timeout`
 (default `4m`) elapses: on `add-owner` until the owner appears, on
 `set-owners` until the owner set equals the requested ids, removals
 included. A timeout exits `1`, though the write was accepted. Its progress

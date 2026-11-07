@@ -377,9 +377,9 @@ func TestEntitlementsSetOwnersChecksUsersExist(t *testing.T) {
 // owner set EQUALS the request -- a removal-only set must keep polling while
 // the removed id still shows. add-owner only waits for presence.
 func TestEntitlementOwnersWaitPredicates(t *testing.T) {
-	orig := entitlementOwnerWaitInterval
-	entitlementOwnerWaitInterval = 5 * time.Millisecond
-	t.Cleanup(func() { entitlementOwnerWaitInterval = orig })
+	orig := ownerWaitInterval
+	ownerWaitInterval = 5 * time.Millisecond
+	t.Cleanup(func() { ownerWaitInterval = orig })
 
 	seq := []string{`{"userIds":["u1","u2"]}`, `{"userIds":["u2","u1"]}`, `{"userIds":["u1"]}`}
 	cases := []struct {

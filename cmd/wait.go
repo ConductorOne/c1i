@@ -32,8 +32,8 @@ type waitOp[T any] struct {
 	Subject string
 	// Success is the completion sentence stem, printed as "<Success> after 12s.".
 	Success string
-	// Slow says why a timeout is not necessarily a failure: "provisioning can
-	// take several minutes".
+	// Slow says why a timeout is not necessarily a failure: "owner changes can
+	// take several minutes to appear".
 	Slow string
 	// Recheck is the command to suggest on timeout: "c1i apps owners X".
 	Recheck string

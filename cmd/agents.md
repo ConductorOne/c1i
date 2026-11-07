@@ -397,11 +397,17 @@ resource with `--resource-id` likewise means you drop
   one process (one token, one TLS handshake). The API has no batch approve, so
   each id is still its own request, but don't loop the CLI per id — pass them
   all at once (pipe `mcp tools search --state pending --fields id | jq -r .id`).
-- Owner and grant provisioning are asynchronous. A read immediately after a
-  write can look like a no-op. Verify app owners with `c1i apps owners
-  <app-id>`, not `apps get`'s `appOwners` field; an empty `appOwners` is not
+- Owner changes are applied asynchronously and can take several minutes to
+  appear; pass --wait to block until they do. Grant provisioning is
+  asynchronous too. A read immediately after a write can look like a no-op.
+  Verify app owners with `c1i apps owners <app-id>`, not `apps get`'s
+  `appOwners` field; an empty `appOwners` is not
   evidence an app has no owners. Use `apps set-owners --wait` when the write
-  must converge before the next step. Entitlement owners work the same way:
+  must converge before the next step; it waits until the owner set equals
+  the request, removals included. `apps set-owners` prints the API's JSON
+  response (progress on stderr) and exits 2 before the write on an unknown
+  user, which the API would store as an owner no user matches. Entitlement
+  owners work the same way:
   read with `c1i entitlements owners <entitlement-id> --app-id <app-id>`,
   write with `entitlements add-owner`/`remove-owner <user-id> --app-id
   --entitlement-id` or `entitlements set-owners <entitlement-id> --app-id

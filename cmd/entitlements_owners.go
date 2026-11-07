@@ -12,9 +12,8 @@ var entitlementsOwnersCmd = &cobra.Command{
 	Short: "List an entitlement's owners (NDJSON output)",
 	Long: `List the owners of an app entitlement via GET .../owners -- the read that
 reflects what "entitlements set-owners"/"add-owner"/"remove-owner" write.
-Owner provisioning is asynchronous: a write showed up here anywhere from
-about 1s to 135s after it was accepted, so an owner added moments ago may not
-appear yet.
+` + ownerAsyncNote + `
+An owner added moments ago may not appear yet.
 
 Rows have the same shape as "apps owners".
 
@@ -34,9 +33,6 @@ same ids exits 4 and can tell you which.`,
 	},
 }
 
-// entitlementOwnerWaitInterval is a var so a test can poll fast.
-var entitlementOwnerWaitInterval = ownerWaitPollInterval
-
 // entitlementOwnersWaitOp is the --wait of entitlements add-owner
 // (untilPresent) and set-owners (untilEqual).
 func entitlementOwnersWaitOp(c *client.Client, appID, entitlementID string, done func([]string) bool, timeout time.Duration) waitOp[[]string] {
@@ -47,14 +43,8 @@ func entitlementOwnersWaitOp(c *client.Client, appID, entitlementID string, done
 		"c1i entitlements owners "+entitlementID+" --app-id "+appID)
 }
 
-// runEntitlementOwnersWait runs the wait with its prose on stderr, so stdout
-// stays the write's JSON response.
 func runEntitlementOwnersWait(cmd *cobra.Command, c *client.Client, appID, entitlementID string, done func([]string) bool, timeout time.Duration) error {
-	op := entitlementOwnersWaitOp(c, appID, entitlementID, done, timeout)
-	op.Interval = entitlementOwnerWaitInterval
-	op.Out = cmd.ErrOrStderr()
-	_, err := runWait(cmd, op)
-	return err
+	return runOwnerIDsWait(cmd, entitlementOwnersWaitOp(c, appID, entitlementID, done, timeout))
 }
 
 func init() {
