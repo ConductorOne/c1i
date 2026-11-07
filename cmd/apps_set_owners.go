@@ -22,7 +22,7 @@ var ownerWaitInterval = 12 * time.Second
 // (TestOwnerAsyncNoteInDocs).
 const (
 	ownerAsyncLag      = "can take several minutes to appear"
-	ownerAsyncClause   = "Owner changes are applied asynchronously and\n" + ownerAsyncLag
+	ownerAsyncClause   = "Owner changes are applied asynchronously and " + ownerAsyncLag
 	ownerAsyncNote     = ownerAsyncClause + "."
 	ownerAsyncWaitNote = ownerAsyncClause + "; pass --wait to block until they do."
 )

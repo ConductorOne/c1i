@@ -19,8 +19,8 @@ variable. Use "entitlements remove-owner" to drop owners one at a time.
 
 ` + setOwnersLookupNote + `
 The API itself accepts an unknown id (exit 0) and drops it: a set naming only
-such an id left the entitlement with no owners. It answers a repeated id with
-a 500.
+such an id left the entitlement with no owners. The entitlement owners API
+answers a repeated id with a 500, so ids are sent once.
 
 ` + ownerAsyncWaitNote + `
 Verify with "c1i entitlements owners <entitlement-id> --app-id <app-id>".
