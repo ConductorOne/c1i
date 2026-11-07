@@ -49,12 +49,11 @@ func taskActionResponse(taskID, state string) string {
 
 const closeTestTaskID = "zz-c1i-test-task-1"
 
-// TestTasksCloseNeverEchoesResponseState is the load-bearing test for this
-// command pair: /action/close returns the task as it was BEFORE the close, so
-// a live close of an open task answers TASK_STATE_OPEN. Printing that state
-// would tell the user the close didn't happen. The confirmation must carry the
-// id only.
-func TestTasksCloseNeverEchoesResponseState(t *testing.T) {
+// TestTasksClosePrintsTheServerSnapshot: /action/close returns the task as it
+// was BEFORE the close, so a live close of an open task answers
+// TASK_STATE_OPEN. c1i prints that response untouched (it neither relabels nor
+// hides the state); the docs tell the reader to re-read with "tasks get".
+func TestTasksClosePrintsTheServerSnapshot(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		if r.Method != http.MethodPost || r.URL.Path != "/api/v1/tasks/"+closeTestTaskID+"/action/close" {
@@ -72,10 +71,9 @@ func TestTasksCloseNeverEchoesResponseState(t *testing.T) {
 	if err != nil {
 		t.Fatalf("RunE: %v", err)
 	}
-	// Exact match, not a substring absence: a relabelled state ("was=open")
-	// would slip past a TASK_STATE/state= check.
-	if want := "Closed task: task_id=" + closeTestTaskID + "\n"; out != want {
-		t.Errorf("output = %q, must not report a state: the response echoes the pre-close state", out)
+	want := "{\n  \"id\": \"" + closeTestTaskID + "\",\n  \"state\": \"TASK_STATE_OPEN\",\n  \"expanded\": []\n}\n"
+	if out != want {
+		t.Errorf("output = %q, want the unwrapped response %q", out, want)
 	}
 }
 
@@ -167,8 +165,9 @@ func TestTasksReassignSendsUserIDsAsArray(t *testing.T) {
 	if _, sent := gotBody["comment"]; sent {
 		t.Errorf("body = %v, want no comment key when --comment is unset", gotBody)
 	}
-	if want := "Reassigned task: task_id=" + taskID + " policy_step_id=step-1\n"; out != want {
-		t.Errorf("output = %q, want exactly %q: the response echoes the pre-reassign state", out, want)
+	want := "{\n  \"id\": \"" + taskID + "\",\n  \"state\": \"TASK_STATE_OPEN\",\n  \"expanded\": []\n}\n"
+	if out != want {
+		t.Errorf("output = %q, want the unwrapped response %q", out, want)
 	}
 }
 

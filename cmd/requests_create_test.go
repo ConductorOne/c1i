@@ -77,16 +77,16 @@ func TestBuildGrantTaskBodyOmitsEmpty(t *testing.T) {
 	}
 }
 
-// stubNewGrantClient swaps newGrantClient to return a *client.Client wired
+// stubNewGrantClient swaps newClient to return a *client.Client wired
 // (via client.NewForTesting) to a real httptest.Server, bypassing newClient's
 // OAuth mint, restoring the original when the test ends.
 func stubNewGrantClient(t *testing.T, srv *httptest.Server) {
 	t.Helper()
-	orig := newGrantClient
-	newGrantClient = func(_ *cobra.Command, _ string) (*client.Client, error) {
+	orig := newClient
+	newClient = func(_ *cobra.Command, _ string) (*client.Client, error) {
 		return client.NewForTesting(srv.URL, srv.Client()), nil
 	}
-	t.Cleanup(func() { newGrantClient = orig })
+	t.Cleanup(func() { newClient = orig })
 }
 
 // TestRequestsCreateGrantDefaultsUserIDToSelf pins the fix for --user-id's
@@ -420,11 +420,11 @@ func TestRequestsCreateGrantDryRunExplicitUserIDSkipsSelfResolution(t *testing.T
 func TestRequestsCreateGrantDryRunUnauthenticatedFailsLegibly(t *testing.T) {
 	resetCmdFlags(t, requestsCreateGrantCmd)
 
-	origNewGrantClient := newGrantClient
-	newGrantClient = func(_ *cobra.Command, _ string) (*client.Client, error) {
+	origNewGrantClient := newClient
+	newClient = func(_ *cobra.Command, _ string) (*client.Client, error) {
 		return nil, &client.AuthError{Err: fmt.Errorf("no credentials found")}
 	}
-	t.Cleanup(func() { newGrantClient = origNewGrantClient })
+	t.Cleanup(func() { newClient = origNewGrantClient })
 
 	t.Setenv("C1I_URL", "https://example.invalid")
 
@@ -476,15 +476,15 @@ func TestRequestsCreateGrantDryRunIntrospectServerFailureClassifies(t *testing.T
 	defer srv.Close()
 
 	resetCmdFlags(t, requestsCreateGrantCmd)
-	origNewGrantClient := newGrantClient
+	origNewGrantClient := newClient
 	// WithMaxRetries(0): a 500 is otherwise retried (idempotent GET), which
 	// would make this legitimately slow (multi-second real backoff) for no
 	// benefit -- the classification this test pins doesn't depend on retry
 	// count.
-	newGrantClient = func(_ *cobra.Command, _ string) (*client.Client, error) {
+	newClient = func(_ *cobra.Command, _ string) (*client.Client, error) {
 		return client.NewForTesting(srv.URL, srv.Client(), client.WithMaxRetries(0)), nil
 	}
-	t.Cleanup(func() { newGrantClient = origNewGrantClient })
+	t.Cleanup(func() { newClient = origNewGrantClient })
 	t.Setenv("C1I_URL", "https://example.invalid")
 
 	origDryRun := viper.GetBool("dry_run")
@@ -528,11 +528,11 @@ func TestRequestsCreateGrantDryRunIntrospectNetworkFailureExitsGenerically(t *te
 	srv.Close()
 
 	resetCmdFlags(t, requestsCreateGrantCmd)
-	origNewGrantClient := newGrantClient
-	newGrantClient = func(_ *cobra.Command, _ string) (*client.Client, error) {
+	origNewGrantClient := newClient
+	newClient = func(_ *cobra.Command, _ string) (*client.Client, error) {
 		return client.NewForTesting(deadURL, http.DefaultClient), nil
 	}
-	t.Cleanup(func() { newGrantClient = origNewGrantClient })
+	t.Cleanup(func() { newClient = origNewGrantClient })
 	t.Setenv("C1I_URL", "https://example.invalid")
 
 	origDryRun := viper.GetBool("dry_run")
@@ -609,14 +609,14 @@ func TestBuildRevokeTaskBodyOmitsEmpty(t *testing.T) {
 	}
 }
 
-// stubNewRevokeClient mirrors stubNewGrantClient for newRevokeClient.
+// stubNewRevokeClient mirrors stubNewGrantClient for newClient.
 func stubNewRevokeClient(t *testing.T, srv *httptest.Server) {
 	t.Helper()
-	orig := newRevokeClient
-	newRevokeClient = func(_ *cobra.Command, _ string) (*client.Client, error) {
+	orig := newClient
+	newClient = func(_ *cobra.Command, _ string) (*client.Client, error) {
 		return client.NewForTesting(srv.URL, srv.Client()), nil
 	}
-	t.Cleanup(func() { newRevokeClient = orig })
+	t.Cleanup(func() { newClient = orig })
 }
 
 // TestRequestsCreateRevokeDefaultsUserIDToSelf mirrors
@@ -838,11 +838,11 @@ func TestRequestsCreateRevokeDryRunExplicitUserIDSkipsSelfResolution(t *testing.
 func TestRequestsCreateRevokeDryRunUnauthenticatedFailsLegibly(t *testing.T) {
 	resetCmdFlags(t, requestsCreateRevokeCmd)
 
-	origNewRevokeClient := newRevokeClient
-	newRevokeClient = func(_ *cobra.Command, _ string) (*client.Client, error) {
+	origNewRevokeClient := newClient
+	newClient = func(_ *cobra.Command, _ string) (*client.Client, error) {
 		return nil, &client.AuthError{Err: fmt.Errorf("no credentials found")}
 	}
-	t.Cleanup(func() { newRevokeClient = origNewRevokeClient })
+	t.Cleanup(func() { newClient = origNewRevokeClient })
 
 	t.Setenv("C1I_URL", "https://example.invalid")
 
@@ -888,11 +888,11 @@ func TestRequestsCreateRevokeDryRunIntrospectServerFailureClassifies(t *testing.
 	defer srv.Close()
 
 	resetCmdFlags(t, requestsCreateRevokeCmd)
-	origNewRevokeClient := newRevokeClient
-	newRevokeClient = func(_ *cobra.Command, _ string) (*client.Client, error) {
+	origNewRevokeClient := newClient
+	newClient = func(_ *cobra.Command, _ string) (*client.Client, error) {
 		return client.NewForTesting(srv.URL, srv.Client(), client.WithMaxRetries(0)), nil
 	}
-	t.Cleanup(func() { newRevokeClient = origNewRevokeClient })
+	t.Cleanup(func() { newClient = origNewRevokeClient })
 	t.Setenv("C1I_URL", "https://example.invalid")
 
 	origDryRun := viper.GetBool("dry_run")
@@ -927,11 +927,11 @@ func TestRequestsCreateRevokeDryRunIntrospectNetworkFailureExitsGenerically(t *t
 	srv.Close()
 
 	resetCmdFlags(t, requestsCreateRevokeCmd)
-	origNewRevokeClient := newRevokeClient
-	newRevokeClient = func(_ *cobra.Command, _ string) (*client.Client, error) {
+	origNewRevokeClient := newClient
+	newClient = func(_ *cobra.Command, _ string) (*client.Client, error) {
 		return client.NewForTesting(deadURL, http.DefaultClient), nil
 	}
-	t.Cleanup(func() { newRevokeClient = origNewRevokeClient })
+	t.Cleanup(func() { newClient = origNewRevokeClient })
 	t.Setenv("C1I_URL", "https://example.invalid")
 
 	origDryRun := viper.GetBool("dry_run")

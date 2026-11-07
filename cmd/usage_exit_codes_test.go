@@ -667,11 +667,11 @@ func TestRequestsCreateRevokeUnresolvableUserExitsUsage(t *testing.T) {
 	srv := emptyUserIDIntrospectServer(t)
 	t.Setenv("C1I_URL", "https://example.invalid")
 
-	orig := newRevokeClient
-	newRevokeClient = func(_ *cobra.Command, _ string) (*client.Client, error) {
+	orig := newClient
+	newClient = func(_ *cobra.Command, _ string) (*client.Client, error) {
 		return client.NewForTesting(srv.URL, srv.Client()), nil
 	}
-	t.Cleanup(func() { newRevokeClient = orig })
+	t.Cleanup(func() { newClient = orig })
 
 	resetCmdFlags(t, requestsCreateRevokeCmd)
 	_ = requestsCreateRevokeCmd.Flags().Set("app-id", "app1")

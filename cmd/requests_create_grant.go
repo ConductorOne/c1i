@@ -1,18 +1,33 @@
 package cmd
 
 import (
-	"encoding/json"
+	"context"
 	"fmt"
+	"net/http"
 
+	"github.com/ConductorOne/c1i/internal/client"
 	"github.com/spf13/cobra"
 )
 
-// newGrantClient builds the client `requests create grant` sends its
-// self-resolution (currentUserID) and POST /api/v1/task/grant requests
-// through. It's a var, not a direct newClient call, so a test can substitute
-// a client pointed at an httptest.Server (via client.NewForTesting) without a
-// real OAuth mint — the same DI pattern `c1i api` uses via newAPIClient.
-var newGrantClient = newClient
+// selfUserOpts resolves a missing --user-id to the caller before the send, on
+// a dry run too, so the preview's body matches what would be sent. An explicit
+// --user-id needs no read, so its preview needs no credentials.
+func selfUserOpts(userID string) []mutationOpt {
+	if userID != "" {
+		return nil
+	}
+	return []mutationOpt{withPreRead(preRead{OnDryRun: true, Run: func(ctx context.Context, c *client.Client, m *mutation) ([]resolvedID, error) {
+		id, err := currentUserID(ctx, c)
+		if err != nil {
+			return nil, err
+		}
+		if id == "" {
+			return nil, &usageError{fmt.Errorf("could not determine the current user; pass --user-id")}
+		}
+		m.Body.(map[string]any)["identityUserId"] = id
+		return nil, nil
+	}})}
+}
 
 // buildGrantTaskBody builds the CreateGrantTaskRequest wire body for
 // POST /api/v1/task/grant (c1.api.task.v1.TaskService.CreateGrantTask).
@@ -48,13 +63,17 @@ var requestsCreateGrantCmd = &cobra.Command{
 --duration takes a whole-number Go (24h, 1h30m) or protobuf (86400s) duration
 (no sign, no decimals) and is sent in seconds, the only form the API parses;
 anything else, such as -1h, 1.5h or 7d, exits 2 before sending. Zero is sent,
-and the server refuses it with "value must be greater than 0s".`,
-	RunE: func(cmd *cobra.Command, args []string) error {
-		baseURL, err := GetBaseURL()
-		if err != nil {
-			return err
-		}
+and the server refuses it with "value must be greater than 0s".
 
+Prints the created task as pretty JSON, unwrapped like "requests get": the id
+is .id. Its .state is a snapshot from creation, not the outcome; re-read with
+"c1i requests get <task-id>" before acting on it. --fields is a usage error on
+a mutation; extract with jq -er, which fails on a --dry-run preview instead of
+printing null.
+
+Example:
+  TASK_ID=$(c1i requests create grant --app-id "$APP" --entitlement-id "$ENT" | jq -er .id)`,
+	RunE: func(cmd *cobra.Command, args []string) error {
 		appID, _ := cmd.Flags().GetString("app-id")
 		entitlementID, _ := cmd.Flags().GetString("entitlement-id")
 		userID, _ := cmd.Flags().GetString("user-id")
@@ -65,65 +84,8 @@ and the server refuses it with "value must be greater than 0s".`,
 		description, _ := cmd.Flags().GetString("description")
 		emergency, _ := cmd.Flags().GetBool("emergency")
 
-		// Authenticate before the dry-run check (like tasks_approve.go /
-		// tasks_deny.go resolving the policy step before theirs) so that when
-		// --user-id is omitted, self-resolution below runs before printDryRun
-		// builds the body — otherwise --dry-run would preview a body missing
-		// identityUserId while the real call sends one. This means --dry-run
-		// now needs credentials when --user-id is omitted; see README.md's
-		// "Dry run" section for the exception list.
-		c, err := newGrantClient(cmd, baseURL)
-		if err != nil {
-			return fmt.Errorf("authentication failed: %w", err)
-		}
-
-		// --user-id's help promises "defaults to self if omitted" — resolve it
-		// here via the same introspect-based lookup requests_list.go's default
-		// requester scope and tasks_list.go's --assigned-to-me already use
-		// (see currentUserID in cmd/tasks.go), rather than sending no
-		// identityUserId at all: the API has no default of its own and
-		// rejects that with a 500 "user_id is required". Skipped entirely when
-		// --user-id is explicit, so that path never pays for the introspect
-		// call, dry-run or not.
-		if userID == "" {
-			userID, err = currentUserID(cmd.Context(), c)
-			if err != nil {
-				return err
-			}
-			if userID == "" {
-				return &usageError{fmt.Errorf("could not determine the current user; pass --user-id")}
-			}
-		}
-
 		body := buildGrantTaskBody(appID, entitlementID, userID, duration, description, emergency)
-
-		if dryRunActive() {
-			return printDryRun(cmd, "POST", "/api/v1/task/grant", body)
-		}
-
-		data, err := c.Post(cmd.Context(), "/api/v1/task/grant", body)
-		if err != nil {
-			return fmt.Errorf("API error: %w", err)
-		}
-
-		// CreateGrantTaskResponse nests the created task under
-		// taskView.task, not at the top level.
-		var resp struct {
-			TaskView struct {
-				Task struct {
-					ID    string `json:"id"`
-					State string `json:"state"`
-				} `json:"task"`
-			} `json:"taskView"`
-		}
-		if err := json.Unmarshal(data, &resp); err != nil {
-			return fmt.Errorf("failed to parse response: %w", err)
-		}
-
-		if _, err := fmt.Fprintf(cmd.OutOrStdout(), "Created grant request: task_id=%s state=%s\n", resp.TaskView.Task.ID, resp.TaskView.Task.State); err != nil {
-			return wrapOutputErr(err)
-		}
-		return nil
+		return sendMutation(cmd, mutation{Method: http.MethodPost, Path: "/api/v1/task/grant", Body: body}, selfUserOpts(userID)...)
 	},
 }
 
@@ -137,5 +99,6 @@ func init() {
 	requestsCreateGrantCmd.Flags().Bool("emergency", false, "Request emergency access")
 	markRequired(requestsCreateGrantCmd, "app-id")
 	markRequired(requestsCreateGrantCmd, "entitlement-id")
+	markMutating(requestsCreateGrantCmd)
 	requestsCreateCmd.AddCommand(requestsCreateGrantCmd)
 }

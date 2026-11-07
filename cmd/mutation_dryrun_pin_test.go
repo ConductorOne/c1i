@@ -122,7 +122,7 @@ func TestDryRunPreviewSetMatchesRuleB(t *testing.T) {
 	stub := func(_ *cobra.Command, _ string) (*client.Client, error) {
 		return client.NewForTesting(srv.URL, srv.Client(), client.WithMaxRetries(0)), nil
 	}
-	origs := []*func(*cobra.Command, string) (*client.Client, error){&newClient, &newListClient, &newPoliciesClient, &newServicePrincipalsClient, &newGrantClient, &newRevokeClient, &newWhoamiClient}
+	origs := []*func(*cobra.Command, string) (*client.Client, error){&newClient, &newListClient, &newPoliciesClient, &newServicePrincipalsClient, &newWhoamiClient}
 	saved := make([]func(*cobra.Command, string) (*client.Client, error), len(origs))
 	for i, p := range origs {
 		saved[i] = *p

@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"fmt"
+	"net/http"
 	"strings"
 
 	"github.com/ConductorOne/c1i/internal/client"
@@ -21,7 +22,10 @@ nothing sent. Sent as is, the server stores "" as an empty name and keeps
 "  " verbatim.
 
 Behavior flags accept their short values (for example, "bypass", "enforce",
-"revoke-all") or the full REQUEST_CATALOG_* enum value.`,
+"revoke-all") or the full REQUEST_CATALOG_* enum value.
+
+Prints the updated profile as pretty JSON, unwrapped like "access-profiles
+get" (the id is .id). --fields is a usage error on a mutation.`,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		body, err := buildAccessProfileUpdateBody(cmd, args[0])
@@ -29,26 +33,7 @@ Behavior flags accept their short values (for example, "bypass", "enforce",
 			return &usageError{err}
 		}
 
-		baseURL, err := GetBaseURL()
-		if err != nil {
-			return err
-		}
-
-		path := client.Path("/api/v1/catalogs/%s", args[0])
-		if dryRunActive() {
-			return printDryRun(cmd, "POST", path, body)
-		}
-
-		c, err := newClient(cmd, baseURL)
-		if err != nil {
-			return fmt.Errorf("authentication failed: %w", err)
-		}
-		data, err := c.Post(cmd.Context(), path, body)
-		if err != nil {
-			return fmt.Errorf("API error: %w", err)
-		}
-
-		return writeRawObject(cmd, data)
+		return sendMutation(cmd, mutation{Method: http.MethodPost, Path: client.Path("/api/v1/catalogs/%s", args[0]), Body: body})
 	},
 }
 
@@ -83,5 +68,6 @@ func init() {
 	f.String("enrollment-behavior", "", "Enrollment request-policy behavior: "+catalogEnrollmentFlag.usage()+" (omit to leave unchanged)")
 	f.String("unenrollment-behavior", "", "Unenrollment behavior: "+catalogUnenrollmentFlag.usage()+" (omit to leave unchanged)")
 	f.String("unenrollment-entitlement-behavior", "", "Unenrollment entitlement revoke-policy behavior: "+catalogUnenrollmentEntitlementFlag.usage()+" (omit to leave unchanged)")
+	markMutating(accessProfilesUpdateCmd)
 	accessProfilesCmd.AddCommand(accessProfilesUpdateCmd)
 }
