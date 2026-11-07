@@ -176,9 +176,9 @@ profile they can see rejects every request below outright with 403 "target
 user is not allowed to request that resource", before any task is filed;
 matching the entitlement's grantPolicyId to the app's default via "c1i api"
 does not fix it. Put it in a published, visible-to-everyone access profile
-(read the profile id from .requestCatalogView.requestCatalog.id):
+(the create prints the profile; its id is .id):
 
-    c1i access-profiles create --display-name "<name>" --published --visible-to-everyone
+    PROFILE_ID=$(c1i access-profiles create --display-name "<name>" --published --visible-to-everyone | jq -er .id)
     c1i access-profiles requestable-entitlements add "$PROFILE_ID" --app-id "$APP_ID" --entitlement-id "$ENTITLEMENT_ID"
     c1i access-profiles requestable-entitlements list "$PROFILE_ID"
 
@@ -608,7 +608,9 @@ you'd take it back.
 
        c1i requests create grant --app-id "$APP_ID" --entitlement-id "$ENTITLEMENT_ID" --user-id "$USER_ID" --description "<why>"
 
-   Prints task_id=... state=...; capture it as TASK_ID. A 403 here (target
+   Prints the task as JSON; capture "jq -er .id" as TASK_ID (.state is a
+   snapshot from creation, not the outcome; re-read with requests get).
+   A 403 here (target
    user is not allowed to request that resource) means the entitlement
    isn't reachable through any request catalog for this user — a
    console/catalog setting, not something a flag fixes. This is common, not
@@ -628,7 +630,7 @@ you'd take it back.
 
        c1i requests create revoke --app-id "$APP_ID" --entitlement-id "$ENTITLEMENT_ID" --user-id "$USER_ID" --description "<why>"
 
-   Capture the new task id and resolve it exactly like the grant above.
+   Capture the new task id (.id) and resolve it exactly like the grant above.
 
 ## Verify
 
@@ -748,8 +750,11 @@ output of "c1i requests create grant"/"revoke".
 
        c1i tasks deny "$TASK_ID" --comment "not needed"
 
-   Both resolve --policy-step-id to the current step automatically (step
-   2's policy.current.id) — pass it explicitly only if that lookup fails or
+   Both print the task (.id, with .state as it was before the action, so
+   re-read the task before acting on it). Both resolve
+   --policy-step-id to the current step automatically (step
+   2's policy.current.id), reporting "Resolved policy step: <id>" on stderr
+   — pass it explicitly only if that lookup fails or
    you deliberately want a non-current step. tasks approve errors if no
    current step can be resolved (approve requires one); tasks deny
    proceeds without one when it can't be derived — denying a task in an
