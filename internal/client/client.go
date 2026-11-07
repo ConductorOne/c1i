@@ -129,7 +129,7 @@ type Client struct {
 // buildConfig accumulates what Option mutates before a Client is built.
 type buildConfig struct {
 	maxRetries int
-	debug      bool
+	debug      io.Writer
 }
 
 // Option configures a Client (or a Token call) at construction time.
@@ -145,11 +145,10 @@ func WithMaxRetries(n int) Option {
 	return func(c *buildConfig) { c.maxRetries = n }
 }
 
-// WithDebug enables HTTP wire tracing to stderr: each request's method and URL,
-// then the response status and elapsed time (including every retry attempt).
-// Headers and bodies are never logged, so credentials don't leak.
-func WithDebug(enabled bool) Option {
-	return func(c *buildConfig) { c.debug = enabled }
+// WithDebug traces each request attempt to w (see transport.WithDebug); nil
+// disables tracing.
+func WithDebug(w io.Writer) Option {
+	return func(c *buildConfig) { c.debug = w }
 }
 
 // transportOpts translates this package's Option (which only cmd/client.go
@@ -264,6 +263,17 @@ func rewind(req *http.Request) (*http.Request, bool) {
 	}
 	clone.Body = body
 	return clone, true
+}
+
+// CheckRequest applies the guards a send would before any request exists:
+// G1, building the request from rawURL (its error is returned as is), then
+// G2, transport.CheckPath (a *PathError).
+func CheckRequest(method, rawURL string) error {
+	req, err := http.NewRequestWithContext(context.Background(), method, rawURL, nil)
+	if err != nil {
+		return err
+	}
+	return transport.CheckPath(method, req.URL.EscapedPath())
 }
 
 // NewForTesting returns a *Client that sends every request through hc's
@@ -457,6 +467,7 @@ func (c *Client) do(req *http.Request) ([]byte, error) {
 			Path:       req.URL.Path,
 			StatusCode: resp.StatusCode,
 			Body:       string(resp.Body),
+			PriorSent:  resp.PriorSent,
 		}
 	}
 	return resp.Body, nil

@@ -1,7 +1,7 @@
 package cmd
 
 import (
-	"fmt"
+	"net/http"
 
 	"github.com/spf13/cobra"
 )
@@ -14,9 +14,10 @@ var accessProfilesCreateCmd = &cobra.Command{
 Only --display-name is required. Every other flag is omitted from the request
 body unless you pass it, so the server's own defaults apply.
 
-The new profile is returned as pretty JSON under requestCatalogView (--fields
-is not applied to mutation output), so read the id from
-.requestCatalogView.requestCatalog.id.
+Prints the created profile as pretty JSON, unwrapped like "access-profiles
+get": the id is .id and the member count .memberCount. --fields is a usage
+error on a mutation; extract with jq -er, which fails on a --dry-run preview
+where jq -r exits 0 with null.
 
 --published and --visible-to-everyone both take effect at create time: a
 profile can be created already published. Ordering matters for the visibility
@@ -25,7 +26,7 @@ entitlement to an unpublished profile is refused with a 400, "catalog must be
 published to add an access entitlement", so publish first.
 
 Example:
-  CAT_ID=$(c1i access-profiles create --display-name "Engineering" --published | jq -r .requestCatalogView.requestCatalog.id)
+  CAT_ID=$(c1i access-profiles create --display-name "Engineering" --published | jq -er .id)
   c1i access-profiles get "$CAT_ID"`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		if _, err := requireNonEmptyIfSet(cmd, "display-name"); err != nil {
@@ -35,30 +36,11 @@ Example:
 			return err
 		}
 
-		baseURL, err := GetBaseURL()
-		if err != nil {
-			return err
-		}
-
 		body, err := buildAccessProfileCreateBody(cmd)
 		if err != nil {
 			return err
 		}
-
-		if dryRunActive() {
-			return printDryRun(cmd, "POST", "/api/v1/catalogs", body)
-		}
-
-		c, err := newClient(cmd, baseURL)
-		if err != nil {
-			return fmt.Errorf("authentication failed: %w", err)
-		}
-		data, err := c.Post(cmd.Context(), "/api/v1/catalogs", body)
-		if err != nil {
-			return fmt.Errorf("API error: %w", err)
-		}
-
-		return writeRawObject(cmd, data)
+		return sendMutation(cmd, mutation{Method: http.MethodPost, Path: "/api/v1/catalogs", Body: body})
 	},
 }
 
@@ -153,5 +135,6 @@ func init() {
 	f.String("unenrollment-behavior", "", "Unenrollment behavior: "+catalogUnenrollmentFlag.usage()+" (omit to leave it unset)")
 	f.String("unenrollment-entitlement-behavior", "", "Unenrollment entitlement revoke-policy behavior: "+catalogUnenrollmentEntitlementFlag.usage()+" (omit to leave it unset)")
 	markRequired(accessProfilesCreateCmd, "display-name")
+	markMutating(accessProfilesCreateCmd)
 	accessProfilesCmd.AddCommand(accessProfilesCreateCmd)
 }

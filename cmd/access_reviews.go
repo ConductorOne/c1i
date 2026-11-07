@@ -3,6 +3,7 @@ package cmd
 import (
 	"encoding/json"
 	"fmt"
+	"net/http"
 	"strconv"
 	"strings"
 
@@ -55,7 +56,9 @@ var accessReviewsCreateCmd = &cobra.Command{
 	Long: `Create an access-review campaign from a complete JSON request object.
 
 The request must contain at least one owner id in ownerIds. Provide the JSON
-with --body-file; use "-" to read it from standard input.`,
+with --body-file; use "-" to read it from standard input.
+
+Prints the campaign unwrapped like "access-reviews get": the id is .id.`,
 	Args: cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, _ []string) error {
 		body, err := readRequiredJSONObject(cmd, "body-file")
@@ -65,7 +68,7 @@ with --body-file; use "-" to read it from standard input.`,
 		if err := validateCampaignOwners(body); err != nil {
 			return err
 		}
-		return postAccessReview(cmd, "/api/v1/access_review", body)
+		return sendMutation(cmd, mutation{Method: http.MethodPost, Path: "/api/v1/access_review", Body: body})
 	},
 }
 
@@ -75,7 +78,8 @@ var accessReviewsUpdateCmd = &cobra.Command{
 	Long: `Update an access-review campaign from a partial AccessReview JSON object.
 
 Provide the JSON with --body-file and name its fields with --update-mask; both
-are required. The command inserts the campaign id and wraps the request.`,
+are required. The command inserts the campaign id and wraps the request. Prints the campaign
+unwrapped like "access-reviews get".`,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		campaign, err := readRequiredJSONObject(cmd, "body-file")
@@ -87,10 +91,10 @@ are required. The command inserts the campaign id and wraps the request.`,
 			return &usageError{fmt.Errorf("--update-mask is required")}
 		}
 		campaign["id"] = args[0]
-		return postAccessReview(cmd, client.Path("/api/v1/access_review/%s", args[0]), map[string]any{
+		return sendMutation(cmd, mutation{Method: http.MethodPost, Path: client.Path("/api/v1/access_review/%s", args[0]), Body: map[string]any{
 			"accessReview": campaign,
 			"updateMask":   mask,
-		})
+		}})
 	},
 }
 
@@ -103,7 +107,7 @@ var accessReviewReportsGenerateCmd = &cobra.Command{
 
 The response confirms that generation was requested, not that a report is ready.
 Use "access-reviews reports list <campaign-id>" to find the report state and
-its time-limited downloadUrl. Use --format for JSON, CSV, or XLSX, or
+its time-limited downloadUrl. Prints {}. Use --format for JSON, CSV, or XLSX, or
 --body-file for the full request; they are mutually exclusive.`,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
@@ -126,7 +130,7 @@ its time-limited downloadUrl. Use --format for JSON, CSV, or XLSX, or
 			}
 			body["format"] = mapped
 		}
-		return postAccessReview(cmd, client.Path("/api/v1/access_review/%s/report", args[0]), body)
+		return sendMutation(cmd, mutation{Method: http.MethodPost, Path: client.Path("/api/v1/access_review/%s/report", args[0]), Body: body})
 	},
 }
 
@@ -236,25 +240,6 @@ func validateCampaignOwners(body map[string]any) error {
 	return nil
 }
 
-func postAccessReview(cmd *cobra.Command, path string, body map[string]any) error {
-	if dryRunActive() {
-		return printDryRun(cmd, "POST", path, body)
-	}
-	baseURL, err := GetBaseURL()
-	if err != nil {
-		return err
-	}
-	c, err := newClient(cmd, baseURL)
-	if err != nil {
-		return fmt.Errorf("authentication failed: %w", err)
-	}
-	data, err := c.Post(cmd.Context(), path, body)
-	if err != nil {
-		return fmt.Errorf("API error: %w", err)
-	}
-	return writeRawObject(cmd, data)
-}
-
 var reportFormatFlag = enumFlag{flag: "format", prefix: "ACCESS_REVIEW_REPORT_FORMAT_", unknown: enumReject, values: []enumValue{
 	{name: "json", api: "ACCESS_REVIEW_REPORT_FORMAT_JSON"},
 	{name: "csv", api: "ACCESS_REVIEW_REPORT_FORMAT_CSV"},
@@ -268,6 +253,9 @@ func init() {
 	accessReviewReportsGenerateCmd.Flags().String("format", "", "Report format: "+reportFormatFlag.usage()+" (mutually exclusive with --body-file)")
 	accessReviewReportsGenerateCmd.Flags().String("body-file", "", "Full GenerateAccessReviewReport request JSON object (file or \"-\" for stdin; mutually exclusive with --format)")
 
+	for _, command := range []*cobra.Command{accessReviewsCreateCmd, accessReviewsUpdateCmd, accessReviewReportsGenerateCmd} {
+		markMutating(command)
+	}
 	accessReviewReportsCmd.AddCommand(accessReviewReportsListCmd, accessReviewReportsGenerateCmd)
 	accessReviewsCmd.AddCommand(accessReviewsListCmd, accessReviewsGetCmd, accessReviewsCreateCmd, accessReviewsUpdateCmd, accessReviewReportsCmd)
 	rootCmd.AddCommand(accessReviewsCmd)

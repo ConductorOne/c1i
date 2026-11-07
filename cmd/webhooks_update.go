@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"fmt"
+	"net/http"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -22,7 +23,8 @@ Refused with exit 2 before a request is sent:
   - a --callback-timeout with a sign or decimal
 
 Updating a soft-deleted webhook exits 0 and changes it; it stays deleted.
-Honors --dry-run.`,
+Prints the webhook, unwrapped like "webhooks get": the id is .id. Honors
+--dry-run.`,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		id := args[0]
@@ -35,34 +37,16 @@ Honors --dry-run.`,
 		}
 		fields["id"] = id
 
-		baseURL, err := GetBaseURL()
-		if err != nil {
-			return err
-		}
-
 		body := map[string]any{
 			"webhook":    fields,
 			"updateMask": strings.Join(paths, ","),
 		}
-		path := webhookPath(id)
-		if dryRunActive() {
-			return printDryRun(cmd, "POST", path, body)
-		}
-
-		c, err := newClient(cmd, baseURL)
-		if err != nil {
-			return fmt.Errorf("authentication failed: %w", err)
-		}
-		data, err := c.Post(cmd.Context(), path, body)
-		if err != nil {
-			return fmt.Errorf("API error: %w", err)
-		}
-
-		return writeRawObject(cmd, data)
+		return sendMutation(cmd, mutation{Method: http.MethodPost, Path: webhookPath(id), Body: body})
 	},
 }
 
 func init() {
 	webhookFieldFlags(webhooksUpdateCmd, true)
+	markMutating(webhooksUpdateCmd)
 	webhooksCmd.AddCommand(webhooksUpdateCmd)
 }

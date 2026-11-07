@@ -8,6 +8,99 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Upgrading from 0.9.1
 
+**Mutations now print the API's response, unwrapped the same way `get`
+unwraps it.** This is the breaking change in this release, and it is meant to
+be the only one for mutation output. Every create, update, delete, owner
+change, task action and binding command prints JSON. Of the 101 mutating
+commands in 0.9.1, 26 move from a text line to JSON (14 print an object, 12
+print `{}`), 41 drop a wrapper, `mcp bindings delete` drops its synthesized
+object, and 33 print exactly what they did. `entitlements delete` and
+`tasks get` are new (see Added) and follow the same contract.
+
+- **Drop the wrapper key from your paths, and read the id from the path the
+  command documents:**
+  - `access-profiles create|update`: `.requestCatalogView.requestCatalog.id`
+    → `.id`; `.requestCatalogView.memberCount` → `.memberCount`
+  - `access-reviews create|update`: `.accessReview.accessReview.id` → `.id`
+  - `accounts set-owner`: `app_user_id=…` → `.id`; `identity_user_id=…` →
+    `.identityUserId`
+  - `apps create|update`: `.app.id` → `.id`
+  - `automations update`: `.automation.id` → `.id`
+  - `entitlements create|update`: `.appEntitlementView.appEntitlement.id` →
+    `.id`
+  - `entitlements proxy-bindings create`:
+    `.appProxyEntitlementView.appProxyEntitlement.srcAppId` → `.srcAppId`
+    (likewise `.srcAppEntitlementId`, `.dstAppId`, `.dstAppEntitlementId`)
+  - `findings create|state|assignee`: `.finding.id` → `.id`; the
+    `routing-rules` and `transformation-rules` `create|update`:
+    `.routingRule.id` / `.transformationRule.id` → `.id`
+  - `mcp classifiers create|update` and `templates add-rule|instantiate`:
+    `.classifier.id` → `.id`; `bindings create`: `.binding.id` → `.id`;
+    `tool-gates create|update`: `.toolGate.id` → `.id`; `policy update`:
+    `.policy.X` → `.X`
+  - `mcp servers register|update|update-credentials`: `.mcpServer.connectorId`
+    → `.connectorId`
+  - `mcp toolsets create|update`: `.profile.id` → `.id`
+  - `mcp tools approve`: `id=…` → `.id`, `state=…` → `.state`
+  - `policies create|update`: `.policy.id` → `.id`
+  - `requests create grant|revoke` and the `tasks` actions: `task_id=…` →
+    `.id`, `state=…` → `.state`
+  - `role-mining suggestions state`: `.suggestion.id` → `.id`;
+    `config update`: `.config.X` → `.X`
+  - `service-principals create|update`: `.servicePrincipal.id` → `.id`;
+    `credentials create|update`: `.credential.id` → `.id`,
+    `.credential.clientId` → `.clientId`
+  - `webhooks create|update`: `.webhook.id` → `.id`; `webhooks test`:
+    `.webhook.id` → `.id` (the delivery), `.webhook.webhookId` →
+    `.webhookId` (the webhook)
+
+  **Not every response has an `id`:**
+  - `role-mining trigger`: `.runId`
+  - `role-mining access-profiles create`: `.accessProfileId`
+  - `findings bulk-*`: `.bulkActionId`
+  - `findings create-task`: unchanged, `.taskId` and `.finding.id`
+  - `mcp bindings create`: `.bindings[]`
+
+  Nothing is dropped: every other envelope key, including `expanded`, is a
+  top-level field, and `.clientSecret` is where it was.
+- **Text confirmations are gone.**
+  - Deletes, `credentials revoke`, SP `bindings add|delete`, `resync-tools`
+    and `apps set-owners` print `{}`; exit 0 is the success signal.
+  - `mcp bindings delete` prints `{}`.
+  - `mcp tools approve` prints one JSON line per tool and stops at the first
+    stdout write failure.
+- **A task's `.state` is the server's snapshot, not the outcome.** For
+  example, `tasks close` can report `OPEN`; re-read with `tasks get`. An id c1i
+  looked up for you is reported on stderr.
+- **An empty success response prints `{}`.** `--wait` progress for
+  `apps set-owners` goes to stderr.
+- **`--dry-run` prints one JSON object**, `{"dryRun":true,"requests":[…]}`,
+  with no `id`. Extract ids with `jq -er`, because under an inherited
+  `C1I_DRY_RUN=1`, `jq -r .id` prints `null` and your script carries on.
+  - A preview needs a configured URL, but still no credentials unless c1i
+    must look up an id the body needs (a task's current policy step, a
+    hosted MCP server's catalog id, or the caller for `requests create`).
+  - A preview refuses an empty, `.` or `..` id (exit 2), as a real send does.
+- **Passing `--fields` to a mutation is a usage error (exit 2).** `C1I_FIELDS`
+  is still ignored on mutations.
+- **`--error-format json` now makes stderr NDJSON for every command.**
+  - Previously you got one error object and text for everything else. Now
+    each line is one object: `{"error":…}`, `{"notice":…}`, `{"progress":…}`
+    or `{"debug":…}`.
+  - Select errors with `jq 'select(.error)'` instead of parsing the whole
+    stream as one object.
+  - Errors from mutating commands carry `"applied": true | false | "unknown"`.
+    `"unknown"` means the request may have reached the server, including when
+    a retry then failed.
+  - `mcp tools approve` adds per-id error objects and a summary with
+    `notAttempted`. A batch can exit non-zero after applying changes.
+  - Exit codes are unchanged.
+  - In text mode, stderr is unchanged except for four lines:
+    - `Resolved …` is new.
+    - `dry run: nothing was sent` is new.
+    - The `apps set-owners --wait` lines move from stdout to stderr.
+    - The `entitlements create` dry-run note moves from stdout to stderr.
+
 With no cached spec, a failed `docs openapi`, `docs endpoints` or
 `docs endpoint` now exits 4, 5, 6 or 8 instead of 1, and a 429, a transient
 5xx or a network error is retried up to 4 times by default, so an unreachable
@@ -17,13 +110,8 @@ attempt. When the config directory resolves to a relative path (a relative
 credentials fails instead of using the working directory. With a relative
 `HOME`, `~/.c1i.yaml` is ignored.
 
-`apps set-owners` now prints the API's JSON response on stdout, like the
-other apps and entitlement owner commands, instead of the line `Set N owner(s) on app ...`; with
-`--wait`, the progress and `Owners provisioned on app ...` lines move to
-stderr. A script that matched the old text should check the exit code or
-parse the JSON instead. `apps set-owners --wait` now waits until the owner
-set equals the request, so a set that removes an owner can wait longer than
-before.
+`apps set-owners --wait` now waits until the owner set equals the request,
+so a set that removes an owner can wait longer than before.
 
 Named-value flags now refuse more input before sending anything, each with
 exit 2. `automations executions list --state <unknown>` used to print nothing
@@ -183,6 +271,10 @@ exits:
 - `docs agents` no longer calls its doc "short", and its `service-principals
   delete` note matches live behavior: `get` on a deleted principal exits 4.
 - `policies create --help` no longer sends readers to a source-code comment.
+- `mcp toolsets update --help` said `--description` alone updates only the
+  description. The server requires `--display-name` on every update and 400s
+  without it ("DisplayName value length must be between 1 and 255 runes",
+  exit 2); the help and README now say so.
 - An empty, whitespace-only or invisible-only (e.g. U+200B, U+FEFF)
   `--display-name` now exits `2` before any request on every `update` and
   `create` that takes one, including `service-principals credentials`. `apps`,

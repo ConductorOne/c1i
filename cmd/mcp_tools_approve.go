@@ -1,8 +1,8 @@
 package cmd
 
 import (
-	"encoding/json"
 	"fmt"
+	"net/http"
 
 	"github.com/ConductorOne/c1i/internal/client"
 	"github.com/spf13/cobra"
@@ -18,8 +18,12 @@ MCP_TOOL_STATE_PENDING_REVIEW and admin approval moves them to APPROVED so the
 MCP gateway will proxy calls to them.
 
 Pass one or more tool ids. The API has no batch approve, so each id is sent as
-its own request and prints its own confirmation line; if one fails the rest are
-still attempted and the command exits non-zero. All ids share --app-id,
+its own request and prints one compact JSON line (the tool, .id and .state) per
+id on stdout, in argument order, even for a single id. If one fails the rest are
+still attempted and the command exits with the first failure's code, so it can
+exit non-zero with some tools already approved: under --error-format json check
+each per-id error's "applied" and the summary's "notAttempted". A failed stdout
+write aborts the batch. All ids share --app-id,
 --connector-id and --state, so a selector pipes straight in:
 
   c1i mcp tools approve $(c1i mcp tools search --app-id A --connector-id C \
@@ -32,11 +36,6 @@ approve command is a thin wrapper around the underlying Update RPC; use
 classification, visibility).`,
 	Args: cobra.MinimumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		baseURL, err := GetBaseURL()
-		if err != nil {
-			return err
-		}
-
 		appID, _ := cmd.Flags().GetString("app-id")
 		connectorID, _ := cmd.Flags().GetString("connector-id")
 		state, err := toolStateFlag.parse(mustGetString(cmd, "state"))
@@ -53,88 +52,23 @@ classification, visibility).`,
 			return &usageError{fmt.Errorf("--state=removed is system-managed by sync; use \"mcp tools delete\" to soft-delete a tool, or --state=disabled to block it")}
 		}
 
-		pathFor := func(id string) string {
-			return client.Path("/api/v1/apps/%s/connectors/%s/mcp_tools/%s", appID, connectorID, id)
-		}
-		bodyFor := func(id string) map[string]any {
-			return map[string]any{
-				"tool": map[string]any{
-					"id":          id,
-					"appId":       appID,
-					"connectorId": connectorID,
-					"state":       state,
-				},
-				"updateMask": "state",
-			}
-		}
-
-		if dryRunActive() {
-			for _, id := range args {
-				if err := printDryRun(cmd, "POST", pathFor(id), bodyFor(id)); err != nil {
-					return err
-				}
-			}
-			return nil
-		}
-
-		c, err := newClient(cmd, baseURL)
-		if err != nil {
-			return fmt.Errorf("authentication failed: %w", err)
-		}
-
-		out := cmd.OutOrStdout()
-		var writeErr error
-		approveOne := func(id string) error {
-			data, err := c.Post(cmd.Context(), pathFor(id), bodyFor(id))
-			if err != nil {
-				return fmt.Errorf("API error: %w", err)
-			}
-			var resp struct {
-				Tool struct {
-					ID    string `json:"id"`
-					State string `json:"state"`
-				} `json:"tool"`
-			}
-			if err := json.Unmarshal(data, &resp); err != nil {
-				return fmt.Errorf("failed to parse response: %w", err)
-			}
-			// The update landed; a dead stdout ends the batch but isn't this id's failure.
-			_, writeErr = fmt.Fprintf(out, "Updated tool: id=%s state=%s\n", resp.Tool.ID, resp.Tool.State)
-			return nil
-		}
-
-		var firstErr error
-		failed := 0
+		ms := make([]mutation, len(args))
 		for i, id := range args {
-			err := approveOne(id)
-			if writeErr != nil {
-				approved := i + 1 - failed
-				if firstErr != nil {
-					return fmt.Errorf("approved %d of %d tools; %d failed: %w; output failed: %w", approved, len(args), failed, firstErr, wrapOutputErr(writeErr))
-				}
-				return fmt.Errorf("approved %d of %d tools; %d failed; output failed: %w", approved, len(args), failed, wrapOutputErr(writeErr))
-			}
-			if err != nil {
-				failed++
-				if firstErr == nil {
-					firstErr = err
-				}
-				// One line per id only when batching; a single id's error is
-				// the returned one, so printing it here too would double it.
-				if len(args) > 1 {
-					_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "tool %s: %v\n", id, err)
-				}
+			ms[i] = mutation{
+				Method: http.MethodPost,
+				Path:   client.Path("/api/v1/apps/%s/connectors/%s/mcp_tools/%s", appID, connectorID, id),
+				Body: map[string]any{
+					"tool": map[string]any{
+						"id":          id,
+						"appId":       appID,
+						"connectorId": connectorID,
+						"state":       state,
+					},
+					"updateMask": "state",
+				},
 			}
 		}
-
-		if firstErr != nil {
-			if len(args) == 1 {
-				return firstErr
-			}
-			// Wrap the first failure so exit-code classification still fires.
-			return fmt.Errorf("approved %d of %d tools; %d failed: %w", len(args)-failed, len(args), failed, firstErr)
-		}
-		return nil
+		return sendMutationBatch(cmd, ms, "id", func(i int) string { return args[i] }, withBatchWording("approved", "tool"))
 	},
 }
 
@@ -143,5 +77,6 @@ func init() {
 	mcpToolsApproveCmd.Flags().String("connector-id", "", "Connector ID")
 	mcpToolsApproveCmd.Flags().String("state", "", "Target state (default approved): "+toolStateFlag.without("removed").usage())
 	markRequired(mcpToolsApproveCmd, "app-id", "connector-id")
+	markMutating(mcpToolsApproveCmd)
 	mcpToolsCmd.AddCommand(mcpToolsApproveCmd)
 }

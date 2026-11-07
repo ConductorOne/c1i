@@ -25,9 +25,6 @@ var tasksReassignAction = taskAction{
 		body["newStepUserIds"] = toUserIDs
 		return nil
 	},
-	confirm: func(id, _, stepID string) string {
-		return fmt.Sprintf("Reassigned task: task_id=%s policy_step_id=%s\n", id, stepID)
-	},
 }
 
 var tasksReassignCmd = &cobra.Command{
@@ -42,8 +39,13 @@ assign several.
 task's currently executing step is fetched and used; if it cannot be determined
 the command errors and asks you to pass --policy-step-id explicitly.
 
-The confirmation reports the task id and the policy step acted on, never a
-state: the action endpoints echo the task's state from before the action.`,
+A step c1i looked up is reported on stderr ("Resolved policy step: <id>"),
+not on stdout.
+
+Prints the task as pretty JSON, unwrapped like "tasks get": the id is .id.
+Its .state is the task from before the action, not the outcome; re-read with
+"c1i tasks get <task-id>" before acting on it. --fields is a usage error on a
+mutation; extract with jq -er, which fails on a --dry-run preview.`,
 	Args: cobra.ExactArgs(1),
 	RunE: tasksReassignAction.runTaskAction,
 }
@@ -53,5 +55,6 @@ func init() {
 	tasksReassignCmd.Flags().String("policy-step-id", "", "Policy step to reassign (defaults to the task's current step)")
 	tasksReassignCmd.Flags().String("comment", "", "Optional comment")
 	markRequired(tasksReassignCmd, "to-user-id")
+	markMutating(tasksReassignCmd)
 	tasksCmd.AddCommand(tasksReassignCmd)
 }

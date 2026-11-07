@@ -29,6 +29,21 @@ type failingWriter struct{}
 
 func (failingWriter) Write([]byte) (int, error) { return 0, errStdoutFull }
 
+// assertMutationWriteFailure is assertOutputWriteFailure for a mutation,
+// whose write failure happens after the change was applied.
+func assertMutationWriteFailure(t *testing.T, err error, request string) {
+	t.Helper()
+	if err == nil {
+		t.Fatal("RunE returned nil although every write to stdout failed")
+	}
+	if !errors.Is(err, errStdoutFull) || exitCode(err) != exitError {
+		t.Errorf("error %v (exit %d) does not wrap the write error with exit 1", err, exitCode(err))
+	}
+	if want := request + " succeeded but writing its response failed: "; !strings.HasPrefix(err.Error(), want) {
+		t.Errorf("error %q, want prefix %q", err, want)
+	}
+}
+
 func assertOutputWriteFailure(t *testing.T, err error) {
 	t.Helper()
 	if err == nil {
@@ -118,22 +133,26 @@ func TestTextOutputFailsOnOutputWriteError(t *testing.T) {
 		args     []string
 		reset    []*cobra.Command
 		requests int32
+		mutation string // the applied request a failed write reports
+		summary  string // a batch abort's message prefix instead (exit 1; the batch stops)
 	}{
 		{name: "version", args: []string{"version"}},
 		{name: "docs guide list", args: []string{"docs", "guide"}},
-		{name: "apps delete", args: []string{"apps", "delete", "app-x"}, reset: []*cobra.Command{appsDeleteCmd}, requests: 1},
-		{name: "automations delete", args: []string{"automations", "delete", "auto-x"}, reset: []*cobra.Command{automationsDeleteCmd}, requests: 1},
+		{name: "apps delete", args: []string{"apps", "delete", "app-x"}, reset: []*cobra.Command{appsDeleteCmd}, requests: 1, mutation: "DELETE /api/v1/apps/app-x"},
+		{name: "automations delete", args: []string{"automations", "delete", "auto-x"}, reset: []*cobra.Command{automationsDeleteCmd}, requests: 1, mutation: "DELETE /api/v1/automations/auto-x"},
 		{
 			name:     "mcp tools delete",
 			args:     []string{"mcp", "tools", "delete", "tool-a", "--app-id", "app-x", "--connector-id", "conn-y"},
 			reset:    []*cobra.Command{mcpToolsDeleteCmd},
 			requests: 1,
+			mutation: "DELETE /api/v1/apps/app-x/connectors/conn-y/mcp_tools/tool-a",
 		},
 		{
 			name:     "mcp tools approve batch",
 			args:     []string{"mcp", "tools", "approve", "tool-a", "tool-b", "--app-id", "app-x", "--connector-id", "conn-y"},
 			reset:    []*cobra.Command{mcpToolsApproveCmd},
 			requests: 1,
+			summary:  "approved 0 of 2 tools; 1 failed; output failed: POST /api/v1/apps/app-x/connectors/conn-y/mcp_tools/tool-a succeeded but writing its response failed: ",
 		},
 		{name: "apps create dry-run", args: []string{"apps", "create", "--display-name", "zz-x", "--dry-run"}, reset: []*cobra.Command{appsCreateCmd}},
 		{name: "api paginate", args: []string{"api", "--path", "/api/v1/things", "--paginate"}, reset: []*cobra.Command{apiCmd}, requests: 1},
@@ -170,7 +189,16 @@ func TestTextOutputFailsOnOutputWriteError(t *testing.T) {
 			t.Cleanup(func() { leaf.SetOut(nil) })
 			rootCmd.SetArgs(tc.args)
 			err := rootCmd.ExecuteContext(context.Background())
-			assertOutputWriteFailure(t, err)
+			switch {
+			case tc.summary != "":
+				if err == nil || exitCode(err) != exitError || !strings.HasPrefix(err.Error(), tc.summary) {
+					t.Errorf("error %v (exit %d), want exit 1 and prefix %q", err, exitCode(err), tc.summary)
+				}
+			case tc.mutation != "":
+				assertMutationWriteFailure(t, err, tc.mutation)
+			default:
+				assertOutputWriteFailure(t, err)
+			}
 			if got := requests.Load(); got != tc.requests {
 				t.Errorf("server received %d requests, want %d", got, tc.requests)
 			}
@@ -220,8 +248,9 @@ func TestUpgradeResultFailsOnOutputWriteError(t *testing.T) {
 	})
 }
 
-// A batch approve that loses stdout mid-way reports the same summary as any
-// other partial batch, keeping the earlier per-id failure classifiable.
+// A batch approve that loses stdout mid-way aborts: no further id is sent, the
+// summary names the failed write, and the exit is 1 even though an earlier id
+// 404ed (the abort override, R33).
 func TestMcpToolsApproveOutputFailureKeepsSummary(t *testing.T) {
 	var requests atomic.Int32
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -252,15 +281,12 @@ func TestMcpToolsApproveOutputFailureKeepsSummary(t *testing.T) {
 	if err == nil {
 		t.Fatal("approve returned nil although stdout failed")
 	}
-	msg := err.Error()
-	if !strings.HasPrefix(msg, "approved 1 of 3 tools; 1 failed") || !strings.Contains(msg, "; output failed: writing output: ") || strings.Count(msg, "writing output: ") != 1 {
-		t.Errorf("error %q, want the batch summary followed by \"; output failed: writing output: …\"", msg)
+	want := "approved 0 of 3 tools; 2 failed; output failed: POST /api/v1/apps/app-x/connectors/conn-y/mcp_tools/tool-b succeeded but writing its response failed: "
+	if !strings.HasPrefix(err.Error(), want) {
+		t.Errorf("error %q, want prefix %q", err, want)
 	}
-	if !errors.Is(err, errStdoutFull) {
-		t.Errorf("error %v does not wrap the write error", err)
-	}
-	if got := exitCode(err); got != exitNotFound {
-		t.Errorf("exit code %d, want %d from the earlier 404", got, exitNotFound)
+	if got := exitCode(err); got != exitError {
+		t.Errorf("exit code %d, want %d (the batch aborted on a write failure)", got, exitError)
 	}
 	if got := requests.Load(); got != 2 {
 		t.Errorf("server received %d requests, want 2 (tool-c must not be sent)", got)
@@ -277,6 +303,9 @@ func TestOutputWriteContractDocumented(t *testing.T) {
 	for name, doc := range map[string]string{"README.md": string(readme), "cmd/agents.md": agentsTemplate} {
 		if !strings.Contains(doc, "`writing output:`") || !strings.Contains(doc, "verify before retrying a mutation") {
 			t.Errorf("%s does not document that exit 1 with `writing output:` may follow a successful mutation", name)
+		}
+		if !strings.Contains(doc, "succeeded but writing its response") {
+			t.Errorf("%s does not quote the mutation write-failure message", name)
 		}
 	}
 	if err := wrapOutputErr(errStdoutFull); !strings.HasPrefix(err.Error(), "writing output: ") {
@@ -329,8 +358,10 @@ var stdoutPromptExempt = map[string]bool{
 var writerParamExempt = map[string]string{
 	"errors.go:writeError":             "the final error, written to stderr with nowhere left to report a failure; trusts its one caller to pass os.Stderr",
 	"functions_source.go:hardenOutDir": "a permissions notice on stderr; trusts its one caller to pass cmd.ErrOrStderr()",
+	"stderr.go:noticeTo":               "a stderr notice; its callers pass stderr (TestStderrWritesOnlyThroughHelpers)",
+	"stderr.go:progress":               "a --wait progress line; runWait passes stderr",
+	"stderr.go:writeJSONLine":          "one JSON-mode stderr line; only stderr.go and errors.go call it",
 	"upgrade.go:upgradeProgress":       "progress on stdout; trusts every caller to follow it with a checked result write",
-	"wait.go:waitProgress":             "progress while polling; trusts its one caller, runWait, to check the stdout success line that follows",
 }
 
 // TestNoDiscardedOutputWriteErrors fails on any `_ = x.Encode(...)`,

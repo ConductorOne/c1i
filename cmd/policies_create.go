@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"fmt"
+	"net/http"
 
 	"github.com/spf13/cobra"
 )
@@ -54,12 +55,21 @@ Client-side guards (before any request is sent, exit code 2):
     as an opaque HTTP 500 rather than a 400, so catching them early is the
     only way to get a useful message.
 
+Prints the created policy unwrapped like "policies get": the id is .id (use
+jq -er; --fields is a usage error on a mutation).
+
 CEL conditions run with root variable "subject" (not "user") — validate one
 with "c1i policies validate-cel" before using it here (note: that command
 validates the rules[].condition environment, not the different environment
-ExpressionApproval.expressions run in — see its --help).`,
+ExpressionApproval.expressions run in — see its --help).
+
+Only one of --body-file, --steps-file and --rules-file can read stdin ("-");
+two exit 2 before reading.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		if _, err := requireNonEmptyIfSet(cmd, "display-name"); err != nil {
+			return err
+		}
+		if err := refuseMultipleStdin(cmd); err != nil {
 			return err
 		}
 		body, err := buildCreatePolicyBody(cmd)
@@ -72,25 +82,7 @@ ExpressionApproval.expressions run in — see its --help).`,
 			return err
 		}
 
-		baseURL, err := GetBaseURL()
-		if err != nil {
-			return err
-		}
-
-		if dryRunActive() {
-			return printDryRun(cmd, "POST", "/api/v1/policies", body)
-		}
-
-		c, err := newPoliciesClient(cmd, baseURL)
-		if err != nil {
-			return fmt.Errorf("authentication failed: %w", err)
-		}
-		data, err := c.Post(cmd.Context(), "/api/v1/policies", body)
-		if err != nil {
-			return fmt.Errorf("API error: %w", err)
-		}
-
-		return writeRawObject(cmd, data)
+		return sendMutation(cmd, mutation{Method: http.MethodPost, Path: "/api/v1/policies", Body: body})
 	},
 }
 
@@ -165,5 +157,6 @@ func init() {
 	policiesCreateCmd.Flags().String("body-file", "", "Full CreatePolicyRequest JSON body, verbatim (file, or \"-\" for stdin); mutually exclusive with the flags above")
 	policiesCreateCmd.Flags().Bool("allow-deny-all", false, "Allow creating a policy with no steps (or an explicit deny-all) — bypasses the empty-steps guard on purpose")
 	annotateRequired(policiesCreateCmd, "display-name", "policy-type")
+	markMutating(policiesCreateCmd)
 	policiesCmd.AddCommand(policiesCreateCmd)
 }

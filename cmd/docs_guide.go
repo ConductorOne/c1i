@@ -28,7 +28,7 @@ create a new one:
     c1i apps list
     # pick the target app's "id" from the list -> APP_ID
     # or, to start fresh:
-    APP_ID=$(c1i apps create --display-name "My MCP Apps" | jq -r .app.id)
+    APP_ID=$(c1i apps create --display-name "My MCP Apps" | jq -er .id)
 
 ## 2a. HOSTED: find a catalog entry
 
@@ -77,10 +77,12 @@ EXTERNAL:
       --display-name "My Server" --server-url https://your-mcp-server.example/mcp \
       --transport streamable-http --auth bearer-token --bearer-token "$TOKEN"
 
-The command prints the created server as pretty JSON — note its
-"connectorId":
+The command prints the created server as pretty JSON, unwrapped like
+"mcp servers get"; its id is .connectorId (there is no .id). Capture it with
+jq -er, which fails on a --dry-run preview where jq -r exits 0 with null: pipe
+either register command above to "jq -er .connectorId" and keep the result as
 
-    CONNECTOR_ID=<connectorId from the response>
+    CONNECTOR_ID=<the .connectorId it prints>
 
 Registering triggers tool discovery automatically; newly discovered tools
 land in state MCP_TOOL_STATE_PENDING_REVIEW and are not yet callable.
@@ -93,8 +95,9 @@ For each tool you want the gateway to proxy:
 
     c1i mcp tools approve "$TOOL_ID" --app-id "$APP_ID" --connector-id "$CONNECTOR_ID"
 
-A tool left in PENDING_REVIEW is never proxied. To explicitly block one
-instead of approving it, pass --state disabled to "mcp tools approve".
+Each id prints one compact JSON line (the tool: .id, .state) on stdout, even
+for a single id. A tool left in PENDING_REVIEW is never proxied. To explicitly
+block one instead of approving it, pass --state disabled to "mcp tools approve".
 
 ## 6. Verify
 
@@ -133,12 +136,10 @@ role and permissions instead.
 
 ## 1. Create the toolset
 
-    c1i mcp toolsets create --app-id "$APP_ID" --connector-id "$CONNECTOR_ID" \
-      --display-name "Everyone toolset" --description "Baseline MCP tools for all users"
+    TOOLSET_ID=$(c1i mcp toolsets create --app-id "$APP_ID" --connector-id "$CONNECTOR_ID" --display-name "Everyone toolset" --description "Baseline MCP tools for all users" | jq -er .id)
 
-Note the returned "id":
-
-    TOOLSET_ID=<id from the response>
+The toolset prints unwrapped like "mcp toolsets get", so its id is .id; jq -er
+fails on a --dry-run preview where jq -r exits 0 with null.
 
 ## 2. Bind approved tools to it
 
@@ -176,9 +177,9 @@ profile they can see rejects every request below outright with 403 "target
 user is not allowed to request that resource", before any task is filed;
 matching the entitlement's grantPolicyId to the app's default via "c1i api"
 does not fix it. Put it in a published, visible-to-everyone access profile
-(read the profile id from .requestCatalogView.requestCatalog.id):
+(the create prints the profile; its id is .id):
 
-    c1i access-profiles create --display-name "<name>" --published --visible-to-everyone
+    PROFILE_ID=$(c1i access-profiles create --display-name "<name>" --published --visible-to-everyone | jq -er .id)
     c1i access-profiles requestable-entitlements add "$PROFILE_ID" --app-id "$APP_ID" --entitlement-id "$ENTITLEMENT_ID"
     c1i access-profiles requestable-entitlements list "$PROFILE_ID"
 
@@ -394,11 +395,9 @@ via toolset sync).
 
 ### 1. Create the app
 
-    c1i apps create --display-name "Acme Payroll" --description "Manually-managed payroll access"
+    APP_ID=$(c1i apps create --display-name "Acme Payroll" --description "Manually-managed payroll access" | jq -er .id)
 
-Prints the created app as pretty JSON under an "app" key. Capture its id:
-
-    APP_ID=<id from the response>
+Prints the created app as pretty JSON; its id is .id.
 
 A fresh app already carries one system-builtin entitlement ("Access") and one
 default resource type ("Credential") — it is not entirely empty, just empty
@@ -411,7 +410,7 @@ of anything specific to what you're about to model.
 
 "--wait" polls "GET .../ownerids" until the owner set equals the ids you
 passed (or times out) and prints "Owners provisioned on app ... after ..." to
-stderr; stdout is the API's JSON response.
+stderr; stdout is the API's JSON response, {}.
 ` + ownerAsyncWaitNote + `
 See "Verify" below for why "apps get"'s "appOwners" field is not the way
 to check this.
@@ -428,12 +427,12 @@ type, so creating one is three POSTs. "entitlements create" sends all three:
     c1i entitlements create --app-id "$APP_ID" \
       --display-name "Payroll admin" --resource-type-display-name "Payroll role" \
       --slug member --alias payroll_admin --owner-id "$OWNER_USER_ID"
-    ENT_ID=<appEntitlementView.appEntitlement.id from the response>
+    ENT_ID=<.id from the response>  # capture with jq -er .id
 
 The response echoes the ids of the other two objects in that same payload:
 
-    RT_ID=<appEntitlementView.appEntitlement.appResourceTypeId from the response>
-    RES_ID=<appEntitlementView.appEntitlement.appResourceId from the response>
+    RT_ID=<.appResourceTypeId from the response>
+    RES_ID=<.appResourceId from the response>
 
 Reuse them for the next entitlement rather than minting a duplicate resource
 type per entitlement:
@@ -610,7 +609,9 @@ you'd take it back.
 
        c1i requests create grant --app-id "$APP_ID" --entitlement-id "$ENTITLEMENT_ID" --user-id "$USER_ID" --description "<why>"
 
-   Prints task_id=... state=...; capture it as TASK_ID. A 403 here (target
+   Prints the task as JSON; capture "jq -er .id" as TASK_ID (.state is a
+   snapshot from creation, not the outcome; re-read with requests get).
+   A 403 here (target
    user is not allowed to request that resource) means the entitlement
    isn't reachable through any request catalog for this user — a
    console/catalog setting, not something a flag fixes. This is common, not
@@ -630,7 +631,7 @@ you'd take it back.
 
        c1i requests create revoke --app-id "$APP_ID" --entitlement-id "$ENTITLEMENT_ID" --user-id "$USER_ID" --description "<why>"
 
-   Capture the new task id and resolve it exactly like the grant above.
+   Capture the new task id (.id) and resolve it exactly like the grant above.
 
 ## Verify
 
@@ -750,8 +751,11 @@ output of "c1i requests create grant"/"revoke".
 
        c1i tasks deny "$TASK_ID" --comment "not needed"
 
-   Both resolve --policy-step-id to the current step automatically (step
-   2's policy.current.id) — pass it explicitly only if that lookup fails or
+   Both print the task (.id, with .state as it was before the action, so
+   re-read the task before acting on it). Both resolve
+   --policy-step-id to the current step automatically (step
+   2's policy.current.id), reporting "Resolved policy step: <id>" on stderr
+   — pass it explicitly only if that lookup fails or
    you deliberately want a non-current step. tasks approve errors if no
    current step can be resolved (approve requires one); tasks deny
    proceeds without one when it can't be derived — denying a task in an

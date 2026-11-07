@@ -13,6 +13,7 @@ type (
 	PathError         = transport.PathError
 	RedirectError     = transport.RedirectError
 	RedirectLoopError = transport.RedirectLoopError
+	AttemptError      = transport.AttemptError
 )
 
 // AuthError wraps failures to load credentials or mint a token — i.e. the

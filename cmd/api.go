@@ -144,10 +144,13 @@ an intended non-GET REST write.`,
 		// would build for the first page (before any page token is added), and
 		// runs before newClient so a preview needs no credentials.
 		if dryRunActive() && method != "GET" {
-			var previewBody any
-			// A DELETE only reaches here with body != "" when --allow-delete-body
-			// was set (the guard above rejects the combination otherwise), so
-			// this still previews "no body" for a plain DELETE.
+			// A preview is never projected.
+			if err := refuseMutationFields(cmd); err != nil {
+				return err
+			}
+			// The exact bytes the first request would send: a DELETE only
+			// has a body with --allow-delete-body (rejected above otherwise).
+			var raw []byte
 			if method != "DELETE" || body != "" {
 				bodyObj := map[string]any{}
 				if body != "" {
@@ -158,9 +161,18 @@ an intended non-GET REST write.`,
 						return errNullBody
 					}
 				}
-				previewBody = bodyObj
+				raw = []byte(body)
+				if method != "DELETE" {
+					if raw, err = json.Marshal(bodyObj); err != nil {
+						return fmt.Errorf("encoding request body: %w", err)
+					}
+				}
 			}
-			return printDryRun(cmd, method, path, previewBody)
+			req, err := prepareMutation(baseURL, mutation{Method: method, Path: path, RawBody: raw})
+			if err != nil {
+				return err
+			}
+			return writeMutationPreview(cmd, baseURL, []previewRequest{req})
 		}
 
 		c, err := newAPIClient(cmd, baseURL)
@@ -263,8 +275,8 @@ an intended non-GET REST write.`,
 				// advances it aborts (see paginationCursorGuard), which is
 				// still a clear failure rather than this silent one.
 				if tok := nextPageTokenOf(data); tok != "" {
-					_, _ = fmt.Fprintf(cmd.ErrOrStderr(),
-						"Warning: %s returned a partial result — more pages exist and c1i is discarding the cursor to them. Pass --paginate to fetch the rest (which emits NDJSON rows rather than a single JSON object).\n", path)
+					notice(cmd, noticeInfo, fmt.Sprintf(
+						"Warning: %s returned a partial result — more pages exist and c1i is discarding the cursor to them. Pass --paginate to fetch the rest (which emits NDJSON rows rather than a single JSON object).", path), nil)
 				}
 				return writeObject(cmd, data)
 			}

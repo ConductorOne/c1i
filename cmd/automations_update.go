@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"fmt"
+	"net/http"
 	"strings"
 
 	"github.com/ConductorOne/c1i/internal/client"
@@ -31,7 +32,11 @@ comma-separated; spaces around them are trimmed. Masking "triggers" replaces
 the published triggers and increments currentVersion; isDraft and
 draftTriggers stay as they were. An unknown camelCase path is a 400,
 "invalid update_mask"; a snake_case path is a 400, "FieldMask.paths contains
-invalid path" (both exit 2).`,
+invalid path" (both exit 2).
+
+Prints the automation as pretty JSON, unwrapped like "automations get": the
+id is .id. The response's webhookCapabilityUrl and webhookHmacSecret stay
+top-level siblings.`,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		body, err := buildAutomationUpdateBody(cmd, args[0])
@@ -39,26 +44,9 @@ invalid path" (both exit 2).`,
 			return &usageError{err}
 		}
 
-		baseURL, err := GetBaseURL()
-		if err != nil {
-			return err
-		}
-
 		path := client.Path("/api/v1/automations/%s", args[0])
-		if dryRunActive() {
-			return printDryRun(cmd, "POST", path, body)
-		}
-
-		c, err := newClient(cmd, baseURL)
-		if err != nil {
-			return fmt.Errorf("authentication failed: %w", err)
-		}
-		data, err := c.Post(cmd.Context(), path, body)
-		if err != nil {
-			return fmt.Errorf("API error: %w", err)
-		}
-
-		return writeRawObject(cmd, data)
+		return sendMutation(cmd, mutation{Method: http.MethodPost, Path: path, Body: body},
+			secretBearing(secretAutomationWebhook))
 	},
 }
 
@@ -132,5 +120,6 @@ func init() {
 	f.Bool("enabled", false, "Enable (--enabled) or disable (--enabled=false) the automation (omit to leave unchanged)")
 	f.String("body-file", "", "Automation JSON object, sent verbatim (file, or \"-\" for stdin); requires --update-mask; mutually exclusive with the flags above")
 	f.String("update-mask", "", "Comma-separated Automation field paths to update (required with --body-file; derived otherwise)")
+	markMutating(automationsUpdateCmd)
 	automationsCmd.AddCommand(automationsUpdateCmd)
 }

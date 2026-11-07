@@ -1,8 +1,8 @@
 package cmd
 
 import (
-	"encoding/json"
 	"fmt"
+	"net/http"
 
 	"github.com/ConductorOne/c1i/internal/client"
 	"github.com/spf13/cobra"
@@ -14,14 +14,12 @@ var mcpBindingsDeleteCmd = &cobra.Command{
 	Long: `Remove one or more MCP tools (--tool-id, repeatable) from a toolset.
 
 Uses the POST .../tool_bindings/delete action route because the tool IDs travel
-in the request body; HTTP DELETE doesn't reliably support that.`,
+in the request body; HTTP DELETE doesn't reliably support that.
+
+Prints the API's response, which is {}; exit 0 is the success signal. Honors
+--dry-run.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		if err := requireNonEmpty(cmd, "app-id", "connector-id", "toolset-id"); err != nil {
-			return err
-		}
-
-		baseURL, err := GetBaseURL()
-		if err != nil {
 			return err
 		}
 
@@ -44,24 +42,7 @@ in the request body; HTTP DELETE doesn't reliably support that.`,
 		}
 
 		path := client.Path("/api/v1/apps/%s/connectors/%s/mcp_toolsets/%s/tool_bindings/delete", appID, connectorID, toolsetID)
-		if dryRunActive() {
-			return printDryRun(cmd, "POST", path, body)
-		}
-
-		c, err := newClient(cmd, baseURL)
-		if err != nil {
-			return fmt.Errorf("authentication failed: %w", err)
-		}
-		if _, err := c.Post(cmd.Context(), path, body); err != nil {
-			return fmt.Errorf("API error: %w", err)
-		}
-
-		out := map[string]any{
-			"unbound":    len(toolIDs),
-			"toolset_id": toolsetID,
-			"tool_ids":   toolIDs,
-		}
-		return wrapOutputErr(json.NewEncoder(cmd.OutOrStdout()).Encode(out))
+		return sendMutation(cmd, mutation{Method: http.MethodPost, Path: path, Body: body})
 	},
 }
 
@@ -71,5 +52,6 @@ func init() {
 	mcpBindingsDeleteCmd.Flags().String("toolset-id", "", "MCP toolset (access profile) ID")
 	addRepeatableStringFlag(mcpBindingsDeleteCmd, "tool-id", "MCP tool ID to unbind (repeatable; max 100)")
 	markRequired(mcpBindingsDeleteCmd, "app-id", "connector-id", "toolset-id", "tool-id")
+	markMutating(mcpBindingsDeleteCmd)
 	mcpBindingsCmd.AddCommand(mcpBindingsDeleteCmd)
 }

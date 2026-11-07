@@ -115,11 +115,11 @@ func Run() int {
 		stop() // after the first signal, let a second Ctrl-C hit the default handler (hard-kill)
 	}()
 
-	err := rootCmd.ExecuteContext(ctx)
+	ran, err := rootCmd.ExecuteContextC(ctx)
 	if err == nil {
 		return exitOK
 	}
-	writeError(os.Stderr, err, viper.GetString("error_format"))
+	writeError(os.Stderr, err, viper.GetString("error_format"), ran)
 	return exitCode(err)
 }
 
@@ -166,10 +166,55 @@ func attachSubcommandGuards(c *cobra.Command) {
 	}
 }
 
+// appliedState is a mutation error's `applied`: whether the change reached
+// the server. It renders as false, true or "unknown".
+type appliedState int
+
+const (
+	appliedFalse appliedState = iota
+	appliedTrue
+	appliedUnknown
+)
+
+func (a appliedState) MarshalJSON() ([]byte, error) {
+	switch a {
+	case appliedTrue:
+		return []byte("true"), nil
+	case appliedUnknown:
+		return []byte(`"unknown"`), nil
+	default:
+		return []byte("false"), nil
+	}
+}
+
+// batchSummary is the summary a batch's final error carries.
+type batchSummary struct {
+	Succeeded    int
+	Failed       int
+	NotAttempted []string
+}
+
+// mutationError is every error cmd/mutation.go returns. A non-zero exit
+// overrides classification: a batch summary wraps no per-id error.
+type mutationError struct {
+	err     error
+	applied appliedState
+	steps   []stepResult
+	exit    int
+	batch   *batchSummary
+}
+
+func (e *mutationError) Error() string { return e.err.Error() }
+func (e *mutationError) Unwrap() error { return e.err }
+
 // exitCode classifies err into a stable process exit code.
 func exitCode(err error) int {
 	if err == nil {
 		return exitOK
+	}
+	var me *mutationError
+	if errors.As(err, &me) && me.exit != 0 {
+		return me.exit
 	}
 	var apiErr *client.APIError
 	if errors.As(err, &apiErr) {
@@ -270,19 +315,25 @@ func isCobraUsageError(err error) bool {
 	return false
 }
 
-// writeError renders err to w. With format=="json" it emits a single JSON object
+// writeError renders err to w. With format=="json" it emits one JSON object
 // ({error, and for API errors status/method/path/body}); otherwise the familiar
-// "Error: <msg>" text line.
-func writeError(w io.Writer, err error, format string) {
+// "Error: <msg>" text line. ran is the command that ran: a mutating one's
+// errors carry `applied`, false unless the helper's error says otherwise.
+func writeError(w io.Writer, err error, format string, ran *cobra.Command) {
 	if f, _ := errorFormatFlag.parse(format); f == "json" {
-		obj := map[string]any{"error": displayError(err).Error()}
-		var apiErr *client.APIError
-		if errors.As(err, &apiErr) {
-			obj["status"] = apiErr.StatusCode
-			obj["method"] = apiErr.Method
-			obj["path"] = apiErr.Path
-			if apiErr.Body != "" {
-				obj["body"] = rawJSONOrString(apiErr.Body)
+		obj := errorObject(err)
+		if isMutating(ran) {
+			obj["applied"] = appliedFalse
+			if me := (*mutationError)(nil); errors.As(err, &me) {
+				obj["applied"] = me.applied
+				if me.steps != nil {
+					obj["steps"] = me.steps
+				}
+				if me.batch != nil {
+					obj["succeeded"] = me.batch.Succeeded
+					obj["failed"] = me.batch.Failed
+					obj["notAttempted"] = me.batch.NotAttempted
+				}
 			}
 		}
 		if b, mErr := json.Marshal(obj); mErr == nil {
@@ -291,6 +342,38 @@ func writeError(w io.Writer, err error, format string) {
 		}
 	}
 	_, _ = fmt.Fprintf(w, "Error: %v\n", displayError(err))
+}
+
+// errorObject is err's JSON form, without `applied`.
+func errorObject(err error) map[string]any {
+	obj := map[string]any{"error": displayError(err).Error()}
+	var apiErr *client.APIError
+	if errors.As(err, &apiErr) {
+		obj["status"] = apiErr.StatusCode
+		obj["method"] = apiErr.Method
+		obj["path"] = apiErr.Path
+		if apiErr.Body != "" {
+			obj["body"] = rawJSONOrString(apiErr.Body)
+		}
+	}
+	return obj
+}
+
+// writeBatchItemError reports one batch id's failure as it happens: a per-id
+// object in JSON mode; in text mode "<noun> <id>: <err>", only when batching,
+// since a lone id's error is the one returned.
+func writeBatchItemError(cmd *cobra.Command, noun, id string, err error, applied appliedState, many bool) {
+	w := cmd.ErrOrStderr()
+	if stderrIsJSON() {
+		obj := errorObject(err)
+		obj["id"] = id
+		obj["applied"] = applied
+		writeJSONLine(w, obj)
+		return
+	}
+	if many {
+		_, _ = fmt.Fprintf(w, "%s %s: %v\n", noun, id, displayError(err))
+	}
 }
 
 // displayError returns the error to print. A *client.PathError never reaches

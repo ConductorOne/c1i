@@ -135,9 +135,9 @@ last_executed_at, args.`,
 
 		if emitted == 0 {
 			if manualPaging {
-				_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "no automations on this page call function %s (--page-token scans one page only)\n", functionID)
+				notice(cmd, noticeInfo, fmt.Sprintf("no automations on this page call function %s (--page-token scans one page only)", functionID), nil)
 			} else {
-				_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "no automations call function %s\n", functionID)
+				notice(cmd, noticeInfo, fmt.Sprintf("no automations call function %s", functionID), nil)
 			}
 		}
 		return nil

@@ -3,6 +3,7 @@ package cmd
 import (
 	"encoding/json"
 	"fmt"
+	"net/http"
 
 	"github.com/spf13/cobra"
 )
@@ -34,6 +35,9 @@ func spBindingRow(b spBinding) map[string]any {
 var spBindingsAddCmd = &cobra.Command{
 	Use:   "add",
 	Short: "Bind a subject to a service principal (idempotent)",
+	Long: `Bind a subject to a service principal (idempotent).
+
+Prints the API's response, which is {}; exit 0 is the success signal.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		if err := requireNonEmpty(cmd, "service-principal-id"); err != nil {
 			return err
@@ -43,33 +47,17 @@ var spBindingsAddCmd = &cobra.Command{
 			return err
 		}
 		spID, _ := cmd.Flags().GetString("service-principal-id")
-		baseURL, err := GetBaseURL()
-		if err != nil {
-			return err
-		}
-
 		body := map[string]any{"subject": subject, "servicePrincipalId": spID}
-		if dryRunActive() {
-			return printDryRun(cmd, "POST", spBindingsPath, body)
-		}
-
-		c, err := newServicePrincipalsClient(cmd, baseURL)
-		if err != nil {
-			return fmt.Errorf("authentication failed: %w", err)
-		}
-		if _, err := c.Post(cmd.Context(), spBindingsPath, body); err != nil {
-			return fmt.Errorf("API error: %w", err)
-		}
-		if _, err := fmt.Fprintf(cmd.OutOrStdout(), "Bound subject to service principal: id=%s\n", spID); err != nil {
-			return wrapOutputErr(err)
-		}
-		return nil
+		return sendMutation(cmd, mutation{Method: http.MethodPost, Path: spBindingsPath, Body: body})
 	},
 }
 
 var spBindingsDeleteCmd = &cobra.Command{
 	Use:   "delete",
 	Short: "Remove a subject's binding to a service principal (idempotent)",
+	Long: `Remove a subject's binding to a service principal (idempotent).
+
+Prints the API's response, which is {}; exit 0 is the success signal.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		if err := requireNonEmpty(cmd, "service-principal-id"); err != nil {
 			return err
@@ -79,27 +67,8 @@ var spBindingsDeleteCmd = &cobra.Command{
 			return err
 		}
 		spID, _ := cmd.Flags().GetString("service-principal-id")
-		baseURL, err := GetBaseURL()
-		if err != nil {
-			return err
-		}
-
 		body := map[string]any{"subject": subject, "servicePrincipalId": spID}
-		if dryRunActive() {
-			return printDryRun(cmd, "POST", spBindingsDeletePath, body)
-		}
-
-		c, err := newServicePrincipalsClient(cmd, baseURL)
-		if err != nil {
-			return fmt.Errorf("authentication failed: %w", err)
-		}
-		if _, err := c.Post(cmd.Context(), spBindingsDeletePath, body); err != nil {
-			return fmt.Errorf("API error: %w", err)
-		}
-		if _, err := fmt.Fprintf(cmd.OutOrStdout(), "Removed binding to service principal: id=%s\n", spID); err != nil {
-			return wrapOutputErr(err)
-		}
-		return nil
+		return sendMutation(cmd, mutation{Method: http.MethodPost, Path: spBindingsDeletePath, Body: body})
 	},
 }
 
@@ -186,6 +155,7 @@ func init() {
 		c.Flags().String("service-principal-id", "", "Service principal ID (required)")
 		markRequired(c, "service-principal-id")
 		addBindingSubjectFlags(c)
+		markMutating(c)
 	}
 
 	addBindingSubjectFlags(spBindingsListCmd)

@@ -19,6 +19,8 @@ type APIError struct {
 	Path       string
 	StatusCode int
 	Body       string
+	// PriorSent: an earlier, retried attempt reached the server.
+	PriorSent bool
 }
 
 func (e *APIError) Error() string {

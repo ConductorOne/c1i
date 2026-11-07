@@ -89,7 +89,7 @@ func TestAppsSetOwnersFailsOnOutputWriteError(t *testing.T) {
 	appsSetOwnersCmd.SetOut(failingWriter{})
 	appsSetOwnersCmd.SetErr(io.Discard)
 	appsSetOwnersCmd.SetContext(context.Background())
-	assertOutputWriteFailure(t, appsSetOwnersCmd.RunE(appsSetOwnersCmd, []string{"app1"}))
+	assertMutationWriteFailure(t, appsSetOwnersCmd.RunE(appsSetOwnersCmd, []string{"app1"}), "PUT /api/v1/apps/app1/owners")
 }
 
 // TestAppsSetOwnersChecksUsersExist: the apps owners PUT accepts an unknown
@@ -133,8 +133,12 @@ func TestAppsSetOwnersChecksUsersExist(t *testing.T) {
 		if err != nil {
 			t.Fatalf("RunE: %v", err)
 		}
-		want := "[dry-run] PUT /api/v1/apps/app1/owners\n{\n  \"userIds\": [\n    \"u1\",\n    \"u2\"\n  ]\n}\n"
-		if out != want {
+		if want := `"body": {
+        "userIds": [
+          "u1",
+          "u2"
+        ]
+      }`; !strings.Contains(out, want) {
 			t.Errorf("dry-run preview =\n%s\nwant\n%s", out, want)
 		}
 	})

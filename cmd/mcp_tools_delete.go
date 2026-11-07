@@ -1,7 +1,7 @@
 package cmd
 
 import (
-	"fmt"
+	"net/http"
 
 	"github.com/ConductorOne/c1i/internal/client"
 	"github.com/spf13/cobra"
@@ -15,15 +15,13 @@ hidden from listings and unbound from any toolsets.
 
 Note: tools normally transition to MCP_TOOL_STATE_REMOVED automatically during
 sync when they disappear from the upstream MCP server. Use "mcp tools approve
---state=disabled" to block a tool without deleting it.`,
+--state=disabled" to block a tool without deleting it.
+
+Prints the API's response, which is {}; exit 0 is the success signal. Honors
+--dry-run.`,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		if err := requireNonEmpty(cmd, "app-id", "connector-id"); err != nil {
-			return err
-		}
-
-		baseURL, err := GetBaseURL()
-		if err != nil {
 			return err
 		}
 
@@ -32,22 +30,7 @@ sync when they disappear from the upstream MCP server. Use "mcp tools approve
 		id := args[0]
 
 		path := client.Path("/api/v1/apps/%s/connectors/%s/mcp_tools/%s", appID, connectorID, id)
-		if dryRunActive() {
-			return printDryRun(cmd, "DELETE", path, nil)
-		}
-
-		c, err := newClient(cmd, baseURL)
-		if err != nil {
-			return fmt.Errorf("authentication failed: %w", err)
-		}
-		if _, err := c.Delete(cmd.Context(), path); err != nil {
-			return fmt.Errorf("API error: %w", err)
-		}
-
-		if _, err := fmt.Fprintf(cmd.OutOrStdout(), "Deleted tool: id=%s\n", id); err != nil {
-			return wrapOutputErr(err)
-		}
-		return nil
+		return sendMutation(cmd, mutation{Method: http.MethodDelete, Path: path})
 	},
 }
 
@@ -55,5 +38,6 @@ func init() {
 	mcpToolsDeleteCmd.Flags().String("app-id", "", "Application ID")
 	mcpToolsDeleteCmd.Flags().String("connector-id", "", "Connector ID")
 	markRequired(mcpToolsDeleteCmd, "app-id", "connector-id")
+	markMutating(mcpToolsDeleteCmd)
 	mcpToolsCmd.AddCommand(mcpToolsDeleteCmd)
 }

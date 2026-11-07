@@ -9,7 +9,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"reflect"
-	"strings"
 	"testing"
 
 	"github.com/spf13/cobra"
@@ -63,6 +62,8 @@ func runWebhookCmd(t *testing.T, srv *httptest.Server, cmd *cobra.Command, args 
 
 const webhookEnvelope = `{"webhook":{"id":"wh-1","displayName":"zz-webhook-a","url":"https://hooks.example.com/x"}}`
 
+const webhookDoc = "{\n  \"id\": \"wh-1\",\n  \"displayName\": \"zz-webhook-a\",\n  \"url\": \"https://hooks.example.com/x\"\n}\n"
+
 func TestWebhooksCreateSendsEveryWritableField(t *testing.T) {
 	withCatalogDryRun(t, false)
 	srv, reqs := webhooksServer(t, webhookEnvelope)
@@ -111,8 +112,8 @@ func TestWebhooksCreateOmitsUnsetOptionals(t *testing.T) {
 	}
 }
 
-// The create confirmation must survive a session-wide --fields that names
-// nothing in it.
+// A mutation prints the unwrapped response, never projected: a session-wide
+// C1I_FIELDS that names nothing in it is ignored.
 func TestWebhooksMutationsPrintUnprojected(t *testing.T) {
 	withCatalogDryRun(t, false)
 	cases := []struct {
@@ -121,10 +122,12 @@ func TestWebhooksMutationsPrintUnprojected(t *testing.T) {
 		args  []string
 		flags map[string]string
 		resp  string
+		want  string
 	}{
-		{"create", webhooksCreateCmd, nil, map[string]string{"display-name": "zz-webhook-a", "destination-url": "https://hooks.example.com/x"}, webhookEnvelope},
-		{"update", webhooksUpdateCmd, []string{"wh-1"}, map[string]string{"description": "d2"}, webhookEnvelope},
-		{"test", webhooksTestCmd, []string{"wh-1"}, nil, `{"webhook":{"id":"inst-1","webhookId":"wh-1","state":"WEBHOOK_STATE_PENDING"}}`},
+		{"create", webhooksCreateCmd, nil, map[string]string{"display-name": "zz-webhook-a", "destination-url": "https://hooks.example.com/x"}, webhookEnvelope, webhookDoc},
+		{"update", webhooksUpdateCmd, []string{"wh-1"}, map[string]string{"description": "d2"}, webhookEnvelope, webhookDoc},
+		{"test", webhooksTestCmd, []string{"wh-1"}, nil, `{"webhook":{"id":"inst-1","webhookId":"wh-1","state":"WEBHOOK_STATE_PENDING"}}`,
+			"{\n  \"id\": \"inst-1\",\n  \"webhookId\": \"wh-1\",\n  \"state\": \"WEBHOOK_STATE_PENDING\"\n}\n"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -134,14 +137,8 @@ func TestWebhooksMutationsPrintUnprojected(t *testing.T) {
 			if err != nil {
 				t.Fatalf("RunE: %v", err)
 			}
-			var got map[string]any
-			if err := json.Unmarshal([]byte(out), &got); err != nil {
-				t.Fatalf("output not JSON: %v\n%s", err, out)
-			}
-			var want map[string]any
-			_ = json.Unmarshal([]byte(tc.resp), &want)
-			if !reflect.DeepEqual(got, want) {
-				t.Errorf("output = %#v\nwant the raw response %#v", got, want)
+			if out != tc.want {
+				t.Errorf("stdout = %q\nwant the unwrapped response %q", out, tc.want)
 			}
 		})
 	}
@@ -312,31 +309,31 @@ func TestWebhooksIDCommandsEscapePath(t *testing.T) {
 	}
 }
 
-func TestWebhooksDeletePrintsConfirmation(t *testing.T) {
+func TestWebhooksDeletePrintsAPIResponse(t *testing.T) {
 	withCatalogDryRun(t, false)
 	srv, _ := webhooksServer(t, `{}`)
 	out, err := runWebhookCmd(t, srv, webhooksDeleteCmd, []string{"wh-1"}, nil)
 	if err != nil {
 		t.Fatalf("RunE: %v", err)
 	}
-	if out != "Deleted webhook: id=wh-1\n" {
-		t.Errorf("output = %q", out)
+	if out != "{}\n" {
+		t.Errorf("output = %q, want the API's {}", out)
 	}
 }
 
 func TestWebhooksDryRunSendsNothing(t *testing.T) {
 	withCatalogDryRun(t, true)
 	cases := []struct {
-		name  string
-		cmd   *cobra.Command
-		args  []string
-		flags map[string]string
-		head  string
+		name        string
+		cmd         *cobra.Command
+		args        []string
+		flags       map[string]string
+		method, url string
 	}{
-		{"create", webhooksCreateCmd, nil, map[string]string{"display-name": "zz-webhook-a", "destination-url": "https://hooks.example.com/x"}, "[dry-run] POST /api/v1/webhooks\n"},
-		{"update", webhooksUpdateCmd, []string{"wh 1"}, map[string]string{"description": "d2"}, "[dry-run] POST /api/v1/webhooks/wh%201\n"},
-		{"delete", webhooksDeleteCmd, []string{"wh 1"}, nil, "[dry-run] DELETE /api/v1/webhooks/wh%201\n"},
-		{"test", webhooksTestCmd, []string{"wh 1"}, nil, "[dry-run] POST /api/v1/webhooks/wh%201/test\n"},
+		{"create", webhooksCreateCmd, nil, map[string]string{"display-name": "zz-webhook-a", "destination-url": "https://hooks.example.com/x"}, "POST", "https://example.invalid/api/v1/webhooks"},
+		{"update", webhooksUpdateCmd, []string{"wh 1"}, map[string]string{"description": "d2"}, "POST", "https://example.invalid/api/v1/webhooks/wh%201"},
+		{"delete", webhooksDeleteCmd, []string{"wh 1"}, nil, "DELETE", "https://example.invalid/api/v1/webhooks/wh%201"},
+		{"test", webhooksTestCmd, []string{"wh 1"}, nil, "POST", "https://example.invalid/api/v1/webhooks/wh%201/test"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -348,8 +345,9 @@ func TestWebhooksDryRunSendsNothing(t *testing.T) {
 			if len(*reqs) != 0 {
 				t.Errorf("dry-run sent %d request(s)", len(*reqs))
 			}
-			if !strings.HasPrefix(out, tc.head) {
-				t.Errorf("output = %q, want prefix %q", out, tc.head)
+			pr := previewDoc(t, out)
+			if len(pr) != 1 || pr[0]["method"] != tc.method || pr[0]["url"] != tc.url {
+				t.Errorf("output = %q, want one %s %s", out, tc.method, tc.url)
 			}
 		})
 	}

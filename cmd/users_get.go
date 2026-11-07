@@ -54,6 +54,14 @@ func requireExistingUsers(ctx context.Context, c *client.Client, flag string, id
 	return nil
 }
 
+// existingUsersCheck is requireExistingUsers as a mutation's pre-send read;
+// a dry run skips it.
+func existingUsersCheck(flag string, ids []string) preRead {
+	return preRead{Run: func(ctx context.Context, c *client.Client, _ *mutation) ([]resolvedID, error) {
+		return nil, requireExistingUsers(ctx, c, flag, ids)
+	}}
+}
+
 func init() {
 	usersCmd.AddCommand(usersGetCmd)
 }

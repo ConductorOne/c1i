@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"fmt"
+	"net/http"
 
 	"github.com/ConductorOne/c1i/internal/client"
 	"github.com/spf13/cobra"
@@ -50,7 +51,7 @@ var accessProfilesBundleAutomationCreateCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		return postBundleAutomation(cmd, args[0], "/create", body)
+		return sendMutation(cmd, mutation{Method: http.MethodPost, Path: bundleAutomationPath(args[0]) + "/create", Body: body, Unwrap: byID("requestCatalogId")})
 	},
 }
 
@@ -63,7 +64,7 @@ var accessProfilesBundleAutomationSetCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		return postBundleAutomation(cmd, args[0], "", body)
+		return sendMutation(cmd, mutation{Method: http.MethodPost, Path: bundleAutomationPath(args[0]), Body: body, Unwrap: byID("requestCatalogId")})
 	},
 }
 
@@ -72,24 +73,7 @@ var accessProfilesBundleAutomationDeleteCmd = &cobra.Command{
 	Short: "Delete an access profile's bundle automation (pretty JSON)",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		path := bundleAutomationPath(args[0])
-		if dryRunActive() {
-			return printDryRun(cmd, "DELETE", path, nil)
-		}
-
-		baseURL, err := GetBaseURL()
-		if err != nil {
-			return err
-		}
-		c, err := newClient(cmd, baseURL)
-		if err != nil {
-			return fmt.Errorf("authentication failed: %w", err)
-		}
-		data, err := c.Delete(cmd.Context(), path)
-		if err != nil {
-			return fmt.Errorf("API error: %w", err)
-		}
-		return writeRawObject(cmd, data)
+		return sendMutation(cmd, mutation{Method: http.MethodDelete, Path: bundleAutomationPath(args[0])})
 	},
 }
 
@@ -98,7 +82,7 @@ var accessProfilesBundleAutomationResumeCmd = &cobra.Command{
 	Short: "Resume a paused access profile bundle automation (pretty JSON)",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		return postBundleAutomation(cmd, args[0], "/resume", map[string]any{})
+		return sendMutation(cmd, mutation{Method: http.MethodPost, Path: bundleAutomationPath(args[0]) + "/resume", Body: map[string]any{}, Unwrap: byID("requestCatalogId")})
 	},
 }
 
@@ -119,33 +103,12 @@ var accessProfilesBundleAutomationRunCmd = &cobra.Command{
 			}
 			body["refs"] = refs
 		}
-		return postBundleAutomation(cmd, args[0], "/run", body)
+		return sendMutation(cmd, mutation{Method: http.MethodPost, Path: bundleAutomationPath(args[0]) + "/run", Body: body, Unwrap: byID("requestCatalogId")})
 	},
 }
 
 func bundleAutomationPath(accessProfileID string) string {
 	return client.Path("/api/v1/catalogs/%s/bundle_automation", accessProfileID)
-}
-
-func postBundleAutomation(cmd *cobra.Command, accessProfileID, action string, body map[string]any) error {
-	path := bundleAutomationPath(accessProfileID) + action
-	if dryRunActive() {
-		return printDryRun(cmd, "POST", path, body)
-	}
-
-	baseURL, err := GetBaseURL()
-	if err != nil {
-		return err
-	}
-	c, err := newClient(cmd, baseURL)
-	if err != nil {
-		return fmt.Errorf("authentication failed: %w", err)
-	}
-	data, err := c.Post(cmd.Context(), path, body)
-	if err != nil {
-		return fmt.Errorf("API error: %w", err)
-	}
-	return writeRawObject(cmd, data)
 }
 
 func readBundleAutomationBody(cmd *cobra.Command) (map[string]any, error) {
@@ -209,6 +172,15 @@ func init() {
 	accessProfilesBundleAutomationSetCmd.Flags().String("body-file", "", "Bundle automation JSON object (file, or \"-\" for stdin)")
 	accessProfilesBundleAutomationRunCmd.Flags().String("refs-file", "", "JSON array of AppEntitlementRef objects to run (file, or \"-\" for stdin)")
 
+	for _, c := range []*cobra.Command{
+		accessProfilesBundleAutomationCreateCmd,
+		accessProfilesBundleAutomationSetCmd,
+		accessProfilesBundleAutomationDeleteCmd,
+		accessProfilesBundleAutomationResumeCmd,
+		accessProfilesBundleAutomationRunCmd,
+	} {
+		markMutating(c)
+	}
 	accessProfilesBundleAutomationCmd.AddCommand(
 		accessProfilesBundleAutomationGetCmd,
 		accessProfilesBundleAutomationCreateCmd,

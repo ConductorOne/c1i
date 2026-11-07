@@ -1,17 +1,10 @@
 package cmd
 
-import (
-	"fmt"
-
-	"github.com/spf13/cobra"
-)
+import "github.com/spf13/cobra"
 
 var tasksProcessAction = taskAction{
 	verb: "process",
 	step: stepUnused,
-	confirm: func(id, _, _ string) string {
-		return fmt.Sprintf("Queued task for processing: task_id=%s\n", id)
-	},
 }
 
 var tasksProcessCmd = &cobra.Command{
@@ -27,14 +20,16 @@ On a healthy task nothing observable changes: state, current policy step and
 history are all identical afterwards. The stalled case was not reproduced, so
 treat any effect there as unverified.
 
-The confirmation reports only the task id: the action endpoints echo the task's
-state from before the action, and processing is asynchronous, so re-read the
-task with "c1i requests get <task-id>" to see the result.`,
+Prints the task as pretty JSON, unwrapped like "tasks get": the id is .id.
+Its .state is the task from before the action, not the outcome; re-read with
+"c1i tasks get <task-id>" before acting on it. --fields is a usage error on a
+mutation; extract with jq -er, which fails on a --dry-run preview.`,
 	Args: cobra.ExactArgs(1),
 	RunE: tasksProcessAction.runTaskAction,
 }
 
 func init() {
 	// No --comment: the ProcessNow request body carries only expandMask.
+	markMutating(tasksProcessCmd)
 	tasksCmd.AddCommand(tasksProcessCmd)
 }

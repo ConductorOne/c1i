@@ -3,6 +3,7 @@ package cmd
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -28,6 +29,7 @@ func enableBundleAutomationDryRun(t *testing.T) {
 	t.Helper()
 	orig := viper.GetBool("dry_run")
 	viper.Set("dry_run", true)
+	t.Setenv("C1I_URL", "https://example.invalid") // a preview resolves the URL first
 	t.Cleanup(func() { viper.Set("dry_run", orig) })
 }
 
@@ -114,9 +116,16 @@ func TestBundleAutomationMutationsDryRun(t *testing.T) {
 				t.Fatalf("RunE: %v", err)
 			}
 
-			wantRequest := fmt.Sprintf("[dry-run] %s /api/v1/catalogs/profile%%2Fwith%%20space/bundle_automation%s", tt.method, tt.suffix)
-			if got := out.String(); !strings.Contains(got, wantRequest) {
-				t.Errorf("dry-run output %q does not contain request %q", got, wantRequest)
+			var preview struct {
+				DryRun   bool `json:"dryRun"`
+				Requests []struct{ Method, URL string }
+			}
+			if err := json.Unmarshal(out.Bytes(), &preview); err != nil || !preview.DryRun || len(preview.Requests) != 1 {
+				t.Fatalf("dry-run output is not a one-request preview: %q (%v)", out.String(), err)
+			}
+			wantURL := "https://example.invalid/api/v1/catalogs/profile%2Fwith%20space/bundle_automation" + tt.suffix
+			if r := preview.Requests[0]; r.Method != tt.method || r.URL != wantURL {
+				t.Errorf("preview request = %s %s, want %s %s", r.Method, r.URL, tt.method, wantURL)
 			}
 			for _, want := range tt.contains {
 				if got := out.String(); !strings.Contains(got, want) {

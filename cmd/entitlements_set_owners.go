@@ -44,5 +44,6 @@ func init() {
 	entitlementsSetOwnersCmd.Flags().String("app-id", "", "Application ID the entitlement belongs to")
 	markRequired(entitlementsSetOwnersCmd, "app-id")
 	addSetOwnersFlags(entitlementsSetOwnersCmd)
+	markMutating(entitlementsSetOwnersCmd)
 	entitlementsCmd.AddCommand(entitlementsSetOwnersCmd)
 }

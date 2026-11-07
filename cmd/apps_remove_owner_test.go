@@ -55,10 +55,10 @@ func TestAppsRemoveOwnerDryRunPreviewsRequestWithoutSending(t *testing.T) {
 	}
 
 	got := out.String()
-	if !strings.Contains(got, "[dry-run] DELETE /api/v1/apps/app1/owners/user1") {
-		t.Errorf("missing expected dry-run request line, got %q", got)
+	if !strings.Contains(got, `"method": "DELETE",`) || !strings.Contains(got, `"url": "https://example.invalid/api/v1/apps/app1/owners/user1"`) {
+		t.Errorf("missing expected dry-run request, got %q", got)
 	}
-	if strings.Contains(got, "{") {
+	if strings.Contains(got, `"body"`) {
 		t.Errorf("remove-owner has no request body; dry-run should not print one, got %q", got)
 	}
 }

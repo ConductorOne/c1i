@@ -1,7 +1,7 @@
 package cmd
 
 import (
-	"fmt"
+	"net/http"
 	"time"
 
 	"github.com/ConductorOne/c1i/internal/client"
@@ -36,37 +36,15 @@ polls).`,
 			return err
 		}
 
-		baseURL, err := GetBaseURL()
-		if err != nil {
-			return err
-		}
-
 		appID, _ := cmd.Flags().GetString("app-id")
 		entitlementID, _ := cmd.Flags().GetString("entitlement-id")
 		userID := args[0]
 
 		path := client.Path("/api/v1/apps/%s/entitlements/%s/owners", appID, entitlementID)
-		body := map[string]any{"userId": userID}
-		if dryRunActive() {
-			return printDryRun(cmd, "POST", path, body)
-		}
-
-		c, err := newClient(cmd, baseURL)
-		if err != nil {
-			return fmt.Errorf("authentication failed: %w", err)
-		}
-		data, err := c.Post(cmd.Context(), path, body)
-		if err != nil {
-			return fmt.Errorf("API error: %w", err)
-		}
-		if err := writeRawObject(cmd, data); err != nil {
-			return err
-		}
-
-		if !wait {
-			return nil
-		}
-		return runEntitlementOwnersWait(cmd, c, appID, entitlementID, untilPresent([]string{userID}), waitTimeout)
+		return sendMutation(cmd, mutation{Method: http.MethodPost, Path: path, Body: map[string]any{"userId": userID}},
+			withWait(func(c *client.Client) waitOp[[]string] {
+				return entitlementOwnersWaitOp(c, appID, entitlementID, untilPresent([]string{userID}), waitTimeout)
+			}, wait))
 	},
 }
 
@@ -75,5 +53,6 @@ func init() {
 	entitlementsAddOwnerCmd.Flags().String("entitlement-id", "", "Entitlement ID to add the owner to")
 	markRequired(entitlementsAddOwnerCmd, "app-id", "entitlement-id")
 	addWaitFlags(entitlementsAddOwnerCmd, "GET .../ownerids until the owner appears", 4*time.Minute)
+	markMutating(entitlementsAddOwnerCmd)
 	entitlementsCmd.AddCommand(entitlementsAddOwnerCmd)
 }

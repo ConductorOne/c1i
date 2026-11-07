@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/http"
 	"strings"
 
 	"github.com/ConductorOne/c1i/internal/client"
@@ -48,15 +49,14 @@ The update_mask is derived from the fields you supply — e.g. --auth bearer-tok
 masks "bearerToken"; --server-url masks "url". Pass --update-mask with comma-separated
 proto field paths to override. Note the mask uses the auth oneof case name
 ("bearerToken", "customHeader", "basicAuth", "oauth2", "none"), not the
-"hostedConfig"/"externalConfig" wrapper.`,
+"hostedConfig"/"externalConfig" wrapper.
+
+Prints the updated server, unwrapped like "mcp servers get" (id: .connectorId).
+For a hosted server without --catalog-id, c1i first looks the catalog id up
+(also on --dry-run) and reports "Resolved catalog id: <id>" on stderr.`,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		if err := requireNonEmpty(cmd, "app-id", "type"); err != nil {
-			return err
-		}
-
-		baseURL, err := GetBaseURL()
-		if err != nil {
 			return err
 		}
 
@@ -71,7 +71,7 @@ proto field paths to override. Note the mask uses the auth oneof case name
 
 		var cfg map[string]any
 		var wrapperKey string
-		typ, err = serverTypeFlag.parse(typ)
+		typ, err := serverTypeFlag.parse(typ)
 		if err != nil {
 			return err
 		}
@@ -105,23 +105,20 @@ proto field paths to override. Note the mask uses the auth oneof case name
 		}
 
 		// A hosted config must always carry mcp_server_catalog_id (proto
-		// min_len:1), even when only rotating auth. When --catalog-id wasn't
-		// supplied, resolve it from the server and inject it WITHOUT adding it to
-		// the mask (it's a required-field carrier, not a change) — mirroring the
-		// admin UI, which always sends the server's stored catalog id. The lookup
-		// means a hosted preview authenticates (as `tasks approve --dry-run` does).
-		var c *client.Client
+		// min_len:1) even when only rotating auth. Resolve it when --catalog-id
+		// is absent and inject it without adding it to the mask. The lookup
+		// authenticates, including on --dry-run.
+		var opts []mutationOpt
 		if wrapperKey == "hostedConfig" && len(cfg) > 0 {
 			if _, ok := cfg["mcpServerCatalogId"]; !ok {
-				c, err = newClient(cmd, baseURL)
-				if err != nil {
-					return fmt.Errorf("authentication failed: %w", err)
-				}
-				catID, err := resolveMCPServerCatalogID(cmd.Context(), c, appID, connectorID)
-				if err != nil {
-					return err
-				}
-				cfg["mcpServerCatalogId"] = catID
+				opts = append(opts, withPreRead(preRead{OnDryRun: true, Run: func(ctx context.Context, c *client.Client, _ *mutation) ([]resolvedID, error) {
+					catID, err := resolveMCPServerCatalogID(ctx, c, appID, connectorID)
+					if err != nil {
+						return nil, err
+					}
+					cfg["mcpServerCatalogId"] = catID
+					return []resolvedID{{Name: "mcpServerCatalogId", Label: "catalog id", ID: catID}}, nil
+				}}))
 			}
 		}
 
@@ -129,22 +126,7 @@ proto field paths to override. Note the mask uses the auth oneof case name
 		body["updateMask"] = mask
 
 		path := client.Path("/api/v1/apps/%s/mcp_servers/%s/credentials", appID, connectorID)
-		if dryRunActive() {
-			return printDryRun(cmd, "POST", path, body)
-		}
-
-		if c == nil {
-			c, err = newClient(cmd, baseURL)
-			if err != nil {
-				return fmt.Errorf("authentication failed: %w", err)
-			}
-		}
-		data, err := c.Post(cmd.Context(), path, body)
-		if err != nil {
-			return fmt.Errorf("API error: %w", err)
-		}
-
-		return writeRawObject(cmd, data)
+		return sendMutation(cmd, mutation{Method: http.MethodPost, Path: path, Body: body, Unwrap: byID("connectorId")}, opts...)
 	},
 }
 
@@ -164,5 +146,6 @@ func init() {
 	addAuthFlags(mcpServersUpdateCredentialsCmd)
 	mcpServersUpdateCredentialsCmd.Flags().String("update-mask", "", "Comma-separated proto field paths to update (default: derived from the fields you supply)")
 	markRequired(mcpServersUpdateCredentialsCmd, "app-id", "type")
+	markMutating(mcpServersUpdateCredentialsCmd)
 	mcpServersCmd.AddCommand(mcpServersUpdateCredentialsCmd)
 }

@@ -1,7 +1,7 @@
 package cmd
 
 import (
-	"fmt"
+	"net/http"
 
 	"github.com/spf13/cobra"
 )
@@ -9,32 +9,16 @@ import (
 var servicePrincipalsDeleteCmd = &cobra.Command{
 	Use:   "delete <sp-id>",
 	Short: "Delete a service principal and all its credentials",
-	Args:  cobra.ExactArgs(1),
+	Long: `Delete a service principal and all its credentials.
+
+Prints the API's response, which is {}; exit 0 is the success signal.`,
+	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		baseURL, err := GetBaseURL()
-		if err != nil {
-			return err
-		}
-
-		path := spPath(args[0])
-		if dryRunActive() {
-			return printDryRun(cmd, "DELETE", path, nil)
-		}
-
-		c, err := newServicePrincipalsClient(cmd, baseURL)
-		if err != nil {
-			return fmt.Errorf("authentication failed: %w", err)
-		}
-		if _, err := c.Delete(cmd.Context(), path); err != nil {
-			return fmt.Errorf("API error: %w", err)
-		}
-		if _, err := fmt.Fprintf(cmd.OutOrStdout(), "Deleted service principal: id=%s\n", args[0]); err != nil {
-			return wrapOutputErr(err)
-		}
-		return nil
+		return sendMutation(cmd, mutation{Method: http.MethodDelete, Path: spPath(args[0])})
 	},
 }
 
 func init() {
+	markMutating(servicePrincipalsDeleteCmd)
 	servicePrincipalsCmd.AddCommand(servicePrincipalsDeleteCmd)
 }

@@ -83,12 +83,13 @@ c1i apps delete <app-id>
 `apps create` needs only `--display-name`; it makes a plain, unmanaged
 container app — the zero state for "make an app, then register MCP servers
 under it". The caller is auto-assigned as an owner, showing up in `apps owners`
-after the usual provisioning lag. The new app comes back as pretty JSON under
-an `app` key, and `--fields` is never applied to mutation output, so read the
-new id from `.app.id` on the full object, not `.id`.
+after the usual provisioning lag. The new app prints as pretty JSON, unwrapped
+like `apps get`, so read its id with `jq -er .id` (`-e` fails on a `--dry-run`
+preview, where `jq -r` exits 0 with `null`). An explicit `--fields` on a
+mutation is a usage error (exit `2`).
 
-`apps update` sends only the fields whose flags you pass, and returns
-`{"app": ...}`. `--grant-policy-id`, `--revoke-policy-id` and
+`apps update` sends only the fields whose flags you pass, and prints the
+updated app the same way. `--grant-policy-id`, `--revoke-policy-id` and
 `--certify-policy-id` bind policies, on `apps create` too (omitted at create,
 the server assigns its default grant and revoke policies and no certify
 policy). Before sending, c1i fetches each policy and refuses (exit `2`,
@@ -107,14 +108,16 @@ accepts an empty mapper with exit `0` but keeps the old one, and the API has
 no way to remove a mapper.
 
 `apps delete` is a soft delete: the app is marked with `deletedAt` rather than
-erased, which is why `apps list` rows carry a `deleted_at` field. Both commands
-honor `--dry-run`.
+erased, which is why `apps list` rows carry a `deleted_at` field. It prints the
+API's response, `{}`; exit `0` is the success signal. Both commands honor
+`--dry-run`.
 
 `apps set-owners` prints the API's JSON response and returns as soon as the
 `PUT` is accepted. Pass `--wait` to block and poll `GET .../ownerids` until the
 owner set equals the requested ids, removals included, or `--wait-timeout`
 (default `4m`) elapses. Its progress lines go to stderr, so stdout stays the
-write's JSON response. A timeout exits `1` even though the write itself was
+write's JSON response. A wait failure reports `"applied": true` under
+`--error-format json`. A timeout exits `1` even though the write itself was
 accepted — provisioning can simply still be in flight, so re-check with
 `apps owners` rather than re-issuing the write. With `--dry-run` the preview
 still only covers the `PUT`; `--wait` never polls.
@@ -142,6 +145,9 @@ c1i accounts list --app-id <id> [--status enabled|disabled|deleted] [--type user
 
 c1i accounts set-owner <app-user-id> --app-id <id> --user-id <id>
 ```
+
+`accounts set-owner` prints the app user as pretty JSON, unwrapped like the
+reads: `jq -er .id` is the account and `.identityUserId` its owner.
 
 ### Entitlements
 
@@ -188,8 +194,8 @@ c1i entitlements update <entitlement-id> --app-id <id> \
 ```
 
 `entitlements delete` is a soft delete (`entitlements get` still returns the
-entitlement, with `deletedAt` set). `apps delete` does not delete an app's
-entitlements, so remove them with this first.
+entitlement, with `deletedAt` set) and prints `{}`. `apps delete` does not
+delete an app's entitlements, so remove them with this first.
 
 `entitlements update` builds the update mask from exactly the flags you pass.
 Each policy id is checked before anything is sent: it must exist, not be
@@ -237,15 +243,18 @@ rather than an owner quietly dropped. `--duration-grant` takes a protobuf
 (`3600s`) or Go (`8h`) whole-number duration (no sign, no decimals), sent in
 seconds; anything else, or an empty one, is a usage error. Omit it for standing access.
 
-`--dry-run` previews all three requests, printing
-`NEW_APP_RESOURCE_TYPE_ID`/`NEW_APP_RESOURCE_ID` where an id only exists after
-a real preceding step. There is no rollback: if a later step fails, the objects
+`--dry-run` previews all three requests in `requests[]`; where an id only
+exists after a real preceding step, `NEW_APP_RESOURCE_TYPE_ID` and
+`NEW_APP_RESOURCE_ID` appear literally in the `url` and `body`, and a stderr
+notice explains them. There is no rollback: if a later step fails, the objects
 the earlier ones created still exist, and the error names them along with the
 flags that reuse them and the create-only flags the retry has to drop. The
-created entitlement comes back as pretty JSON under `appEntitlementView`
-(`--fields` is never applied to mutation output); it echoes
-`appResourceTypeId`/`appResourceId` and expands both objects, so every id the
-command touched is in that one payload.
+created entitlement is printed as pretty JSON, unwrapped like
+`entitlements get` (`jq -er .id`; an explicit `--fields` is a usage error); it
+echoes `appResourceTypeId`/`appResourceId` and expands both objects, so every
+id the command touched is in that one payload. Under `--error-format json` a
+failed run reports `applied` (`true` once any step was written) and a `steps`
+array naming each attempted request.
 
 `entitlements owners` lists an entitlement's owners (same row shape as
 `apps owners`) and is the read that reflects `entitlements add-owner`,
@@ -380,11 +389,12 @@ closed` (exit 2).
 `reassign` sets the step's approvers to the users named by
 `--to-user-id`; repeat the flag to assign several.
 
-`close` and `reassign` never print a task state: `close` reports `task_id`,
-and `reassign` also reports the `policy_step_id` it acted on. The task action
-endpoints return the task as it was *before* the action, so closing an open
-task answers `TASK_STATE_OPEN` — echoing that would report the opposite of what
-happened. Read the task back if you need the post-action state.
+Every task action prints the task unwrapped like `tasks get` (`jq -er .id`),
+plus `ticketActionId` (`taskActionId` on `close`) where the API returns one. The
+endpoints return the task as it was *before* the action, so `.state` is a
+snapshot: closing an open task prints `TASK_STATE_OPEN`. Re-read with `tasks
+get` before acting on it. A policy step c1i looked up for you is reported on
+stderr (`Resolved policy step: <id>`), never in the document.
 
 ### Connectors
 
@@ -425,7 +435,7 @@ c1i automations executions list [--state done|error|pending|...] [--template-id 
 
 Each `automations list` row includes `function_ids` (every distinct function the automation invokes), so `--calls-function` can answer "which automations call function X?". `executions list --state` accepts the short forms (`done`, `error`, `pending`, ...) or the full `AUTOMATION_EXECUTION_STATE_*` enum; state and template filtering are applied client-side, so pair a narrow filter with `--limit` to bound the work.
 
-`automations update` sends only the fields you pass (an explicit `--enabled=false` disables; a blank `--display-name` is refused). For triggers, steps, draft or circuit-breaker fields, pass an Automation object with `--body-file` and list the camelCase fields to change in `--update-mask`. Masking `triggers` replaces the published triggers and increments `currentVersion`; `draftTriggers` and `isDraft` are left as they were. `automations delete` is a soft delete: the automation leaves `automations list`, but `automations get` still returns it.
+`automations update` sends only the fields you pass (an explicit `--enabled=false` disables; a blank `--display-name` is refused). For triggers, steps, draft or circuit-breaker fields, pass an Automation object with `--body-file` and list the camelCase fields to change in `--update-mask`. Masking `triggers` replaces the published triggers and increments `currentVersion`; `draftTriggers` and `isDraft` are left as they were. `automations delete` is a soft delete: the automation leaves `automations list`, but `automations get` still returns it. `automations update` prints the automation unwrapped (`jq -er .id`), with `webhookCapabilityUrl` and `webhookHmacSecret` as top-level siblings; `automations delete` prints `{}`.
 
 `automations list` and `automations executions list` read
 `POST /api/v1/search/automations` and `POST /api/v1/search/automation_executions`
@@ -455,7 +465,8 @@ resourceOwners, agent), and how `rules[]` route a task to one of several
 step sequences by CEL condition. That structure is too deeply nested for a
 flag surface, so `create`/`update` take it from a JSON file (or `-` for
 stdin) via `--steps-file`/`--rules-file`/`--body-file` — the same pattern
-`mcp servers register` uses for its auth config.
+`mcp servers register` uses for its auth config. Only one of the three can
+read stdin (`-`); two exit 2 before reading.
 
 **Client-side guards** (`create` and `update`, before any request is sent,
 exit code 2) exist because several C1 policy API defects are either silent
@@ -479,6 +490,11 @@ or return an opaque `HTTP 500` instead of a `400`:
 wrapper for you — a flat body 400s. The `--steps-file`/`--rules-file`
 convenience flags derive the update mask from what you pass; `--body-file`
 requires an explicit `--update-mask`.
+
+`create`/`update` print the policy unwrapped like `get` (`jq -er .id`); `delete`
+prints `{}`. A `--steps-file` or `--body-file` update that states no
+`policyType` looks the policy's current type up first (nothing is sent if that
+fails); `--dry-run` skips the lookup, so pass `--policy-type` to preview one.
 
 `validate-cel` checks a CEL condition without creating or updating anything.
 Its root variable is `subject` (not `user`); this validates the
@@ -541,7 +557,7 @@ c1i mcp tools history <tool-id> --app-id <id> --connector-id <id> [--page-size N
 c1i mcp toolsets list                   --app-id <id> --connector-id <id> [--page-size N] [--limit N]
 c1i mcp toolsets get                    <toolset-id> --app-id <id> --connector-id <id>
 c1i mcp toolsets create                 --app-id <id> --connector-id <id> --display-name <name> [--description <text>]
-c1i mcp toolsets update                 <toolset-id> --app-id <id> --connector-id <id> [--display-name <name>] [--description <text>]
+c1i mcp toolsets update                 <toolset-id> --app-id <id> --connector-id <id> --display-name <name> [--description <text>]   # server 400s without --display-name: "DisplayName value length must be between 1 and 255 runes"
 c1i mcp toolsets delete                 <toolset-id> --app-id <id> --connector-id <id>
 c1i mcp toolsets get-by-entitlement     <app-entitlement-id> --app-id <id>
 c1i mcp toolsets requestable-connectors <user-id>   # not paginated; returns the full set in one response
@@ -600,7 +616,7 @@ classifier. A tool gate's `filter` must select either `builtInPattern` or
 
 **Auth for `register` / `update-credentials`:** convenience flags cover the simple methods — `--auth none`, `--auth bearer-token --bearer-token TOKEN`, `--auth custom-header --header-name NAME --header-value VALUE`, `--auth basic-auth --basic-auth-username USER --basic-auth-password PASS`. For OAuth2 / AWS SigV4 / Google service-account auth, pass the full config object via `--hosted-config-file` / `--external-config-file` (JSON file, or `-` for stdin) — generate a ready-to-edit skeleton with `--print-config-template --auth <method> [--type hosted]` instead of hand-writing it. Secrets are sealed server-side; reads only ever return `*_configured` booleans, never the values. `--token-sharing shared|per-user` sets the server's token-sharing mode (case-insensitive; `per_user`/`peruser` are also accepted). Per the register help, `per-user` is only valid with `oauth2` in authorization-code or passthrough mode, `bearerToken`, `customHeader`, or `basicAuth`. Note that a read-back can legitimately differ from what you sent: the backend may store a *resolved* OAuth2 grant such as `..._MODE_AUTHORIZATION_CODE` in place of the input mode, so that is a normal round-trip, not a bug. `--source-app-id` names the source app for a connector-backed HOSTED server. `--data-sensitivity`, `--tool-prefix`, `--require-tool-approval` and `--user-id` (repeatable — sets the connector's integration owners) can all be set at `register` time, not only via `update`.
 
-`mcp tools approve` is the standard post-registration step: newly discovered tools (from `register` or `resync-tools`) start in `PENDING_REVIEW`, and an admin approves them for the gateway to proxy calls. It takes one or more tool ids — the API has no batch approve, so each id is a separate request, but one invocation covers a whole toolset (pipe `mcp tools search --app-id <id> --connector-id <id> --state pending --fields id | jq -r .id`). History endpoints return records newest-first.
+`mcp tools approve` is the standard post-registration step: newly discovered tools (from `register` or `resync-tools`) start in `PENDING_REVIEW`, and an admin approves them for the gateway to proxy calls. It takes one or more tool ids — the API has no batch approve, so each id is a separate request, but one invocation covers a whole toolset (pipe `mcp tools search --app-id <id> --connector-id <id> --state pending --fields id | jq -r .id`). It prints one compact JSON line per applied tool (`.id`, `.state`), even for a single id; a failed stdout write aborts the batch, and a partial failure exits with the first failure's code while earlier ids stay applied (under `--error-format json` read each per-id error's `applied` and the summary's `notAttempted`). The other `mcp` mutations print their response unwrapped like the matching `get` (a server's id is `.connectorId`, a toolset's, classifier's and tool gate's is `.id`; `mcp classifiers policy update` prints the singleton policy); deletes, `resync-tools` and `mcp bindings delete` print `{}`, and `mcp bindings create` prints `{"bindings":[…]}` as returned. `mcp servers update-credentials` without `--catalog-id` looks the catalog id up first and reports it on stderr as `Resolved catalog id: …`, also under `--dry-run`. History endpoints return records newest-first.
 
 **`mcp gateway`** closes the configure-then-verify loop: after registering a server and approving its tools, `list-tools` runs the MCP handshake against the live gateway and shows what's actually callable, and `call` invokes a tool and prints its result. The gateway URL defaults to the `-mcp` host derived from `--url` (e.g. `acme.conductor.one` → `acme-mcp.conductor.one/v1`); override with `--gateway-url`. Your standard C1 token is accepted by the gateway, so no extra auth is needed. `call` always prints the full result, but exits `7` (not `0`) when the result itself reports `isError: true` — the call succeeded, the tool didn't.
 
@@ -623,8 +639,11 @@ sent, and the server refuses it with `value must be greater than 0s`.
 you file): by default it shows requests you opened or are the subject of —
 complementing `tasks list`, which is the approver's My Work lens. Use `--user-id`
 to scope to another user or `--all` for every request in the tenant. `requests
-get` fetches a single request (the `task_id` returned by `requests create`) as
+get` fetches a single request (the `.id` printed by `requests create`) as
 pretty JSON, including its current policy step and outcome.
+`requests create grant`/`revoke` print the created task unwrapped like `get`:
+capture it with `jq -er .id`. Its `.state` is a snapshot from creation, not the
+outcome.
 
 ### Findings
 
@@ -667,6 +686,13 @@ selects the app policy or built-in Finding Review policy. `bulk-state` and
 explicit `refs` in the JSON to avoid unexpectedly applying a broad
 `searchRequest`.
 
+Mutations print the finding or rule unwrapped like `get` (`jq -er .id`);
+`routing-rules`/`transformation-rules` `delete` prints `{}`. The exceptions keep
+the API's shape: `bulk-state`/`bulk-create-tasks` print `{"bulkActionId"}`,
+`settings update` prints `{"list":[…]}`, and `create-task` prints
+`{"finding":{…},"taskId":…}`, whose ids are `.taskId` (the created task) and
+`.finding.id`.
+
 The public API intentionally excludes its internal summary, app-NHI, and
 shadow-MCP notification RPCs. `FindingSearchService.GetSearchTerms` is also not
 routed through public REST; it is tracked in [#130](https://github.com/ConductorOne/c1i/issues/130).
@@ -699,7 +725,11 @@ c1i role-mining access-profiles create --body-file <file|->
 inspect `runs latest` for its eventual result. `custom-analysis trigger` returns
 an analysis ID that `custom-analysis get` can poll. The latest custom-analysis
 pointer is scoped to the authenticated user; custom-analysis list and get are
-tenant-scoped. `config update` replaces the entire configuration, so begin with
+tenant-scoped. Mutations print the API's response: `suggestions state` the
+suggestion (`.id`), `config update` the configuration (unwrapped, as
+`config show` prints it), and `trigger` `{"runId"}`; `custom-analysis trigger`
+prints `{"id"}` and `access-profiles create` `{"accessProfileId","celExpression"}`.
+`config update` replaces the entire configuration, so begin with
 `config show`. Access-profile creation persists the profile, entitlement bindings,
 and optional automation as separate service operations; validate its JSON before
 submitting it.
@@ -731,7 +761,8 @@ nested oneof, so the CLI intentionally accepts it through `--body-file` rather
 than a lossy flag surface; at least one `ownerIds` entry is required. `update`
 takes a partial `AccessReview` object, inserts the id, and wraps it with the
 required explicit `--update-mask`. Prepared campaigns cannot change their
-scope or policy.
+scope or policy. `create` and `update` print the campaign unwrapped like `get`
+(`jq -er .id`); `reports generate` prints `{}`.
 
 Report generation is asynchronous: `generate` creates a report record but does
 not return a ready download. Use `reports list` to find its state and
@@ -787,6 +818,11 @@ flags accept short values shown above or the full `REQUEST_CATALOG_*` API enum.
 
 `delete` is a soft delete: the catalog leaves `access-profiles list`, while
 `access-profiles get` still returns it with `deletedAt` populated.
+
+`create` and `update` print the profile unwrapped like `get` (`jq -er .id`;
+the count is `.memberCount`). `bundle-automation create`/`set` print the
+automation (id path `.requestCatalogId`); every delete, `resume`, `run` and
+`requestable-entitlements`/`visibility-entitlements` mutation prints `{}`.
 
 `requestable-entitlements` manages what the profile grants. `add` and `remove`
 scope each entitlement to one `--app-id`; repeat `--entitlement-id` for that
@@ -851,8 +887,8 @@ c1i service-principals delete <sp-id>
 ```
 
 `service-principals` is aliased to `sp`. `create` needs only `--display-name`;
-the new principal comes back as pretty JSON under `servicePrincipal`; read its
-id from `.servicePrincipal.id`.
+the new principal is printed as pretty JSON, unwrapped like
+`service-principals get`; read its id with `jq -er .id`. `delete` prints `{}`.
 
 **Delete is destructive:** `service-principals delete` removes the principal
 and every credential issued for it. Before deleting, inspect the principal with
@@ -861,6 +897,11 @@ and target path; it does not verify that the target exists.
 
 **Credentials** are how a service principal authenticates. The secret is returned
 **once**, at creation, and cannot be retrieved again — capture it then.
+`credentials create` prints the credential unwrapped, with the secret as a
+sibling: `jq -er .id`, `.clientId` and `.clientSecret`. If writing that output
+fails (a full disk, a closed pipe), the command exits `1` with `applied: true`
+and says to revoke the credential and create a new one. `credentials update`
+prints the credential; `revoke`, `bindings add` and `bindings delete` print `{}`.
 
 ```sh
 c1i service-principals credentials list <sp-id>
@@ -944,9 +985,11 @@ has no signing secret, so create returns nothing that can't be read again with
 below 5 to 5 and returns one row more than that, so use `--limit` for an exact
 count.
 
-`webhooks test` queues a delivery and returns the queued instance, under
-`webhook`, with `"state": "WEBHOOK_STATE_PENDING"`, at exit `0`, whether or
-not the URL is reachable. Exit `0` does not mean the endpoint answered.
+`webhooks create` and `update` print the webhook, unwrapped (`jq -er .id`);
+`webhooks delete` prints `{}`. `webhooks test` queues a delivery and returns
+the queued instance with `"state": "WEBHOOK_STATE_PENDING"`, at exit `0`,
+whether or not the URL is reachable. Its `.id` is the delivery and `.webhookId`
+the webhook you tested. Exit `0` does not mean the endpoint answered.
 `webhooks delete` is a soft delete: the webhook leaves `webhooks list`, but
 `webhooks get` still returns it at exit `0` with `deletedAt` set, and deleting
 it again exits `0`.
@@ -1053,6 +1096,19 @@ both print identical output.
 ## Output Conventions
 
 - **List commands** (`users list`, `apps list`, etc.) output NDJSON (one JSON object per line).
+- **Mutations** (create, update, delete, owner changes, task actions,
+  bindings) print the API's response as pretty JSON, unwrapped the same way the
+  matching `get` unwraps it; every other envelope key, `expanded` included,
+  stays as a top-level sibling. **The id path varies by command:** most use
+  `.id`, but an MCP server's is `.connectorId`, a proxy binding's `.srcAppId`,
+  `role-mining trigger` prints `.runId`, `findings bulk-*` `.bulkActionId`,
+  `role-mining access-profiles create` `.accessProfileId`,
+  `findings create-task` `.taskId` and `.finding.id`, and `webhooks test`
+  `.id` (the delivery) and `.webhookId`. Extract an id with `jq -er`, which
+  fails rather than printing `null`. Deletes and other empty responses print
+  `{}`; exit `0` is the success signal. A task's `.state` (`tasks` actions,
+  `requests create`) is the server's snapshot, not the outcome: re-read with
+  `tasks get`. `mcp tools approve` prints one compact JSON line per tool.
 - **`api`** outputs pretty-printed JSON. With `--paginate`, outputs NDJSON (one list item per line). A `200` whose body is not JSON is an error (exit `6`), not a silent pass-through — a `--path` that escapes the API prefix can reach the web app and return HTML, which used to print as though it had succeeded. An empty body still succeeds, since some endpoints answer a write with nothing.
 - **`docs`** commands output NDJSON (`search`, `endpoints`), pretty JSON (`endpoint`, `openapi` is YAML), or plain text (`page`).
 - List commands auto-paginate by default, except the single-request ones the agent guide names under Pagination (the `role-mining` and `findings …-rules` lists warn on stderr when a result is partial). Pass `--page-token` to fetch a single page manually. A page holding only rows already printed is skipped (apart from any rows without an id); a page with any new row is printed whole. If the server's cursor stops advancing, or sends 100 empty pages in a row (`export events` excepted), the command keeps the rows already printed, warns that results are INCOMPLETE, and exits `6`. A page whose rows all lack the id the command reads is an unrecognized response (exit `6`); commands keyed on several fields, such as `grants list` and `entitlements list`, print such rows instead.
@@ -1105,9 +1161,8 @@ the keys you need. It has no external dependency, keeps list output as NDJSON,
 and understands c1i's snake_case/camelCase field variants.
 
 Use `jq` only when the work is more than projection: conditional selection,
-reshaping, aggregation, sorting, or extracting a value from a mutation
-confirmation. `--fields` deliberately never changes create/update/delete
-output.
+reshaping, aggregation, sorting, or extracting a value from mutation output
+(with `jq -er`). `--fields` never changes mutation output.
 
 ```sh
 # Known keys: prefer c1i's built-in projection
@@ -1119,8 +1174,8 @@ c1i functions get <id> --fields id,displayName,publishedCommitId
 # Conditional selection: jq is appropriate
 DELETED_APPS="$(c1i apps list | jq -c 'if .deleted_at then . else empty end')"
 
-# Mutation confirmation: jq is required to extract the returned id
-APP_ID=$(c1i apps create --display-name "Example" | jq -r '.app.id')
+# Mutation output: never projected; extract the id with jq -er
+APP_ID=$(c1i apps create --display-name "Example" | jq -er .id)
 ```
 
 - Comma-separated; use dot-paths (`user.email`) for nested access.
@@ -1138,9 +1193,11 @@ APP_ID=$(c1i apps create --display-name "Example" | jq -r '.app.id')
   for any genuinely nested field, a name that doesn't match at the top level is
   also searched for deeper: the shallowest match wins, and a tie at the same
   depth resolves to the alphabetically first full path, deterministically.
-- Mutation output (`apps create` returns `{"app": ...}`) also keeps the
-  envelope, but is never projected at all — `--fields` cannot blank a success
-  message, so no search happens there.
+- Mutation output is unwrapped the same way, but never projected: an explicit
+  `--fields` on a mutation (even `--fields ""`) is a usage error (exit `2`),
+  checked before anything is sent; `C1I_FIELDS` alone is ignored there. The id
+  path varies by command (`.id`, `.connectorId`, `.srcAppId`, ...); a delete
+  prints `{}`.
 - A `--fields` spec that matches **nothing at all** in the response (a typo, or
   a field that truly doesn't exist) is a usage error (exit `2`), not a silent
   `{}`. This is a zero-match check only: `--fields id,dispalyName` (typo) still
@@ -1181,8 +1238,8 @@ APP_ID=$(c1i apps create --display-name "Example" | jq -r '.app.id')
     combined with `--limit` is one more instance of it, not a new behavior.
 - Missing fields are silently omitted, so requesting a superset is safe.
 - Also settable via `C1I_FIELDS`. Applies to read output — list commands, `api`,
-  and single-object `get` commands. Mutation confirmations (create/update/delete)
-  are never projected, so a session-wide `C1I_FIELDS` can't hide their status.
+  and single-object `get` commands. Mutation output is never projected, so a
+  session-wide `C1I_FIELDS` is ignored there.
 
 ### Errors & exit codes
 
@@ -1201,7 +1258,9 @@ branch on without parsing text:
 | `7` | `mcp gateway call` completed, but the tool itself reported an error (`isError: true` in its result) |
 | `8` | a system beyond C1, or the MCP protocol layer, failed — an upstream connector was unreachable or errored, the gateway itself was unreachable (DNS failure, refused connection), or the gateway returned a protocol-level JSON-RPC error |
 
-Exit `1` with `writing output:` means stdout failed (e.g. a full disk), and the request may already have succeeded server-side: verify before retrying a mutation.
+Exit `1` with `writing output:` means stdout failed (e.g. a full disk). On a
+mutation the message is `<METHOD> <path> succeeded but writing its response
+failed`: the change was applied, so verify before retrying a mutation.
 
 `6` and `8` are both "something remote broke," but they call for different
 responses. `6` means C1 itself is failing, so retrying later is reasonable and
@@ -1269,6 +1328,33 @@ $ c1i api --path /api/v1/apps/<nonexistent-id> --error-format json
 ```
 
 The `body` is embedded as JSON when the API returned JSON, otherwise as a string.
+
+In JSON mode **stderr is NDJSON**: every line is one object. Errors carry
+`"error"` (select them with `jq 'select(.error)'`), warnings and other notices
+`"notice"` and `"kind"`, `--wait` progress `"progress"`, and `--debug` trace
+lines `"debug"`. Text mode is unchanged.
+
+An error from a command that writes also carries `"applied"` (`api` does not:
+c1i can't tell whether an arbitrary call writes):
+
+| `applied` | When |
+|---|---|
+| `false` | Nothing reached the server: a flag or argument error, an explicit `--fields`, a refused id or redirect, a failed pre-send lookup, a failure before the request was written, or an API `4xx` other than `408`/`499` |
+| `"unknown"` | The request may have reached the server: an API `408`/`499` or `5xx`, a transport error or timeout after the request was written, or **any** failure after an earlier attempt was sent and retried (a `DELETE` that gets a `503` and then a `404` is `"unknown"`) |
+| `true` | The change was applied: the response wasn't JSON, printing it failed, or a `--wait` after it failed |
+
+`entitlements create` adds a `"steps"` array naming each attempted request, and
+its `applied` is `true` once any step was written.
+
+`mcp tools approve` reports each failed id as its own object
+(`{"error":…,"id":"<tool-id>","applied":…}`) and ends with a summary object
+that has no `id`:
+`{"error":"approved N of M tools; …","applied":…,"succeeded":N,"failed":K,"notAttempted":[…]}`.
+**A batch can exit non-zero with changes applied:** it exits with the first
+failure's code while the ids before it stay approved, a failed stdout write
+stops it (exit `1`), and `notAttempted` lists the ids it never sent.
+
+Exit codes are unchanged.
 
 ## Configuration
 
@@ -1375,33 +1461,64 @@ there's no known case that needs a longer one.
 
 ### Dry run
 
-`--dry-run` (or `C1I_DRY_RUN=1`) previews a C1 REST mutation — its method, path,
-and pretty-printed JSON body — and returns without sending it:
+`--dry-run` (or `C1I_DRY_RUN=1`) previews a C1 REST mutation and returns
+without sending it. The preview is one JSON object on stdout, the requests in
+send order with the full URL and the exact body:
 
 ```sh
 $ c1i requests create grant --app-id A1 --entitlement-id E1 --user-id U1 --dry-run
-[dry-run] POST /api/v1/task/grant
 {
-  "appEntitlementId": "E1",
-  "appId": "A1",
-  "identityUserId": "U1"
+  "dryRun": true,
+  "requests": [
+    {
+      "method": "POST",
+      "url": "https://tenant.example.invalid/api/v1/task/grant",
+      "body": {
+        "appEntitlementId": "E1",
+        "appId": "A1",
+        "identityUserId": "U1"
+      }
+    }
+  ]
 }
 ```
 
-It applies to every REST write command (`requests create`,
-`tasks approve/deny/comment/close/reassign`, `accounts set-owner`, and the
-REST-backed `mcp` mutations) and to non-GET `api` calls; it never sends that
-mutation. `mcp gateway call` rejects both `--dry-run` and `C1I_DRY_RUN`: c1i
-cannot preview or suppress a gateway tool's side effects, so inspect the tool
-and treat its invocation as live. `auth login` rejects both too: it can't preview
-or suppress storing a credential.
+Its only keys are `dryRun` and `requests` (one entry per request: several for
+`mcp tools approve` with several ids, up to three for `entitlements create`);
+it never has an `id`, and `body` is omitted when the request has none. A
+stderr notice, `dry run: nothing was sent`, accompanies every preview.
 
-Most previews run fully offline — no credentials required. The exceptions are
-`upgrade` (it fetches and verifies the release; see Upgrading),
-`tasks approve`/`deny`/`reassign` (authenticate and read the task to resolve its
-current policy step) and `requests create grant`/`revoke` when `--user-id` is
-omitted (authenticate to resolve it to the caller) — both so the previewed body
-is exact.
+It applies to every REST write command and to non-GET `api` calls, and never
+sends that mutation. `mcp gateway call` rejects both `--dry-run` and
+`C1I_DRY_RUN`: c1i cannot preview or suppress a gateway tool's side effects, so
+inspect the tool and treat its invocation as live. `auth login` rejects both
+too: it can't preview or suppress storing a credential.
+
+A preview resolves the URL first, so it needs one configured (exit `2`
+without), and it applies the same id guard as a real send: an empty, `.` or
+`..` id exits `2`. An explicit `--fields` exits `2` too, since a preview is
+never projected. A preview needs no credentials, except where c1i must look
+something up so the previewed body is exact:
+
+- `tasks approve`, `deny`, `restart`, `skip-step` and `reassign` without
+  `--policy-step-id` read the task to resolve its current policy step;
+- `mcp servers update-credentials` for a hosted server without `--catalog-id`
+  reads the server to resolve its catalog id;
+- `requests create grant`/`revoke` without `--user-id` resolve the caller;
+- `upgrade` fetches and verifies the release (see Upgrading).
+
+Other pre-send checks, such as the policy lookups on `apps` and
+`entitlements` writes, are skipped on a preview. `policies update` skips its
+policy-type lookup too, so a patch that needs the type exits `2` under
+`--dry-run` unless you pass `--policy-type`.
+
+**An inherited `C1I_DRY_RUN=1` turns every write in a script into a
+preview.** The preview has no `id`, so `jq -r .id` prints `null` and the script
+carries on with it. Extract ids with `jq -er`, which fails on a preview:
+
+```sh
+APP_ID=$(c1i apps create --display-name "Example" | jq -er .id) || exit 1
+```
 
 ### Debug tracing
 

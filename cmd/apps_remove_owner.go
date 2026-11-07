@@ -1,7 +1,7 @@
 package cmd
 
 import (
-	"fmt"
+	"net/http"
 
 	"github.com/ConductorOne/c1i/internal/client"
 	"github.com/spf13/cobra"
@@ -22,6 +22,7 @@ chose -- its creator. Check "c1i apps owners <app-id>" first if that matters.
 ` + ownerAsyncNote + `
 Verify with "c1i apps owners <app-id>".
 
+Prints the API's response, which is {}; exit 0 is the success signal.
 Honors --dry-run.`,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
@@ -29,34 +30,17 @@ Honors --dry-run.`,
 			return err
 		}
 
-		baseURL, err := GetBaseURL()
-		if err != nil {
-			return err
-		}
-
 		appID, _ := cmd.Flags().GetString("app-id")
-		userID := args[0]
-
-		path := client.Path("/api/v1/apps/%s/owners/%s", appID, userID)
-		if dryRunActive() {
-			return printDryRun(cmd, "DELETE", path, nil)
-		}
-
-		c, err := newClient(cmd, baseURL)
-		if err != nil {
-			return fmt.Errorf("authentication failed: %w", err)
-		}
-		data, err := c.Delete(cmd.Context(), path)
-		if err != nil {
-			return fmt.Errorf("API error: %w", err)
-		}
-
-		return writeRawObject(cmd, data)
+		return sendMutation(cmd, mutation{
+			Method: http.MethodDelete,
+			Path:   client.Path("/api/v1/apps/%s/owners/%s", appID, args[0]),
+		})
 	},
 }
 
 func init() {
 	appsRemoveOwnerCmd.Flags().String("app-id", "", "Application ID to remove the owner from")
 	markRequired(appsRemoveOwnerCmd, "app-id")
+	markMutating(appsRemoveOwnerCmd)
 	appsCmd.AddCommand(appsRemoveOwnerCmd)
 }

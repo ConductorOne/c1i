@@ -14,7 +14,10 @@ var mcpToolsetsGetByEntitlementCmd = &cobra.Command{
 
 Each toolset creates one AppEntitlement at sync time; this is the reverse
 lookup — given an entitlement ID (e.g. from an access-request task), find
-which toolset it represents.`,
+which toolset it represents.
+
+Prints the toolset as pretty JSON, unwrapped like "mcp toolsets get": the id
+is .id.`,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		if err := requireNonEmpty(cmd, "app-id"); err != nil {

@@ -1,19 +1,12 @@
 package cmd
 
-import (
-	"fmt"
-
-	"github.com/spf13/cobra"
-)
+import "github.com/spf13/cobra"
 
 var tasksDenyAction = taskAction{
 	verb: "deny",
 	// Optional, not required: when the current step cannot be determined the
 	// field is omitted rather than blocking the denial.
 	step: stepOptional,
-	confirm: func(id, state, _ string) string {
-		return fmt.Sprintf("Denied task: task_id=%s state=%s\n", id, state)
-	},
 }
 
 var tasksDenyCmd = &cobra.Command{
@@ -23,7 +16,15 @@ var tasksDenyCmd = &cobra.Command{
 
 --policy-step-id targets a specific step of the task's policy. If omitted, the
 currently executing step is used when it can be derived, and simply left off
-otherwise — deny does not require a step, so it proceeds either way.`,
+otherwise — deny does not require a step, so it proceeds either way.
+
+A step c1i looked up is reported on stderr ("Resolved policy step: <id>"),
+not on stdout.
+
+Prints the task as pretty JSON, unwrapped like "tasks get": the id is .id.
+Its .state is the task from before the action, not the outcome; re-read with
+"c1i tasks get <task-id>" before acting on it. --fields is a usage error on a
+mutation; extract with jq -er, which fails on a --dry-run preview.`,
 	Args: cobra.ExactArgs(1),
 	RunE: tasksDenyAction.runTaskAction,
 }
@@ -31,5 +32,6 @@ otherwise — deny does not require a step, so it proceeds either way.`,
 func init() {
 	tasksDenyCmd.Flags().String("policy-step-id", "", "Policy step to deny (defaults to the task's current step)")
 	tasksDenyCmd.Flags().String("comment", "", "Optional comment")
+	markMutating(tasksDenyCmd)
 	tasksCmd.AddCommand(tasksDenyCmd)
 }

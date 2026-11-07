@@ -58,14 +58,12 @@ func TestAppsAddOwnerDryRunPreviewsRequestWithoutSending(t *testing.T) {
 	}
 
 	got := out.String()
-	if !strings.Contains(got, "[dry-run] POST /api/v1/apps/app1/owners/user1") {
-		t.Errorf("missing expected dry-run request line, got %q", got)
-	}
 	// The preview must match the wire: the endpoint parses the body as a
 	// protobuf message, so the command sends `{}` and a dry-run that showed
 	// nothing would misrepresent the request it is previewing.
-	if !strings.Contains(got, "{}") {
-		t.Errorf("dry-run should preview the %s body the request actually sends, got %q", "{}", got)
+	want := "{\n  \"dryRun\": true,\n  \"requests\": [\n    {\n      \"method\": \"POST\",\n      \"url\": \"https://example.invalid/api/v1/apps/app1/owners/user1\",\n      \"body\": {}\n    }\n  ]\n}\n"
+	if got != want {
+		t.Errorf("dry-run preview = %q, want %q", got, want)
 	}
 }
 

@@ -1,0 +1,2 @@
+tool t2: API error: API POST /api/v1/apps/a1/connectors/cn1/mcp_tools/t2 returned 404: {"code":5}
+Error: approved 1 of 2 tools; 1 failed: API error: API POST /api/v1/apps/a1/connectors/cn1/mcp_tools/t2 returned 404: {"code":5}

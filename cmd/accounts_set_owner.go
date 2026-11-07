@@ -1,8 +1,7 @@
 package cmd
 
 import (
-	"encoding/json"
-	"fmt"
+	"net/http"
 
 	"github.com/ConductorOne/c1i/internal/client"
 	"github.com/spf13/cobra"
@@ -11,53 +10,24 @@ import (
 var accountsSetOwnerCmd = &cobra.Command{
 	Use:   "set-owner <app-user-id>",
 	Short: "Set the identity user (owner) for an app account",
-	Args:  cobra.ExactArgs(1),
-	RunE: func(cmd *cobra.Command, args []string) error {
-		baseURL, err := GetBaseURL()
-		if err != nil {
-			return err
-		}
+	Long: `Set the C1 identity user that owns an app account (app user).
 
+Prints the app user as pretty JSON, unwrapped like the other reads: the id is
+.id and the owner is .identityUserId. --fields is a usage error on a
+mutation. Honors --dry-run.`,
+	Args: cobra.ExactArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
 		appID, _ := cmd.Flags().GetString("app-id")
-		appUserID := args[0]
 		userID, _ := cmd.Flags().GetString("user-id")
 
-		path := client.Path("/api/v1/apps/%s/app_users/%s", appID, appUserID)
+		path := client.Path("/api/v1/apps/%s/app_users/%s", appID, args[0])
 		body := map[string]any{
 			"appUser": map[string]any{
 				"identityUserId": userID,
 			},
 			"updateMask": "identityUserId",
 		}
-
-		if dryRunActive() {
-			return printDryRun(cmd, "POST", path, body)
-		}
-
-		c, err := newClient(cmd, baseURL)
-		if err != nil {
-			return fmt.Errorf("authentication failed: %w", err)
-		}
-
-		data, err := c.Post(cmd.Context(), path, body)
-		if err != nil {
-			return fmt.Errorf("API error: %w", err)
-		}
-
-		var resp struct {
-			AppUser struct {
-				ID             string `json:"id"`
-				IdentityUserID string `json:"identityUserId"`
-			} `json:"appUser"`
-		}
-		if err := json.Unmarshal(data, &resp); err != nil {
-			return fmt.Errorf("failed to parse response: %w", err)
-		}
-
-		if _, err := fmt.Fprintf(cmd.OutOrStdout(), "Set owner: app_user_id=%s identity_user_id=%s\n", resp.AppUser.ID, resp.AppUser.IdentityUserID); err != nil {
-			return wrapOutputErr(err)
-		}
-		return nil
+		return sendMutation(cmd, mutation{Method: http.MethodPost, Path: path, Body: body})
 	},
 }
 
@@ -66,5 +36,6 @@ func init() {
 	accountsSetOwnerCmd.Flags().String("user-id", "", "C1 user ID to set as owner")
 	markRequired(accountsSetOwnerCmd, "app-id")
 	markRequired(accountsSetOwnerCmd, "user-id")
+	markMutating(accountsSetOwnerCmd)
 	accountsCmd.AddCommand(accountsSetOwnerCmd)
 }

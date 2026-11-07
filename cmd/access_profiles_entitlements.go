@@ -74,7 +74,7 @@ var accessProfilesRequestableEntitlementsAddCmd = &cobra.Command{
 		}
 		body := buildRequestableEntitlementsBody(cmd, refs)
 		path := client.Path("/api/v1/catalogs/%s/requestable_entries", args[0])
-		return postAccessProfileEntitlements(cmd, path, body)
+		return sendMutation(cmd, mutation{Method: http.MethodPost, Path: path, Body: body})
 	},
 }
 
@@ -91,7 +91,7 @@ var accessProfilesRequestableEntitlementsRemoveCmd = &cobra.Command{
 			return err
 		}
 		path := client.Path("/api/v1/catalogs/%s/requestable_entries", args[0])
-		return deleteAccessProfileEntitlements(cmd, path, buildRequestableEntitlementsBody(cmd, refs))
+		return sendMutation(cmd, mutation{Method: http.MethodDelete, Path: path, Body: buildRequestableEntitlementsBody(cmd, refs)})
 	},
 }
 
@@ -102,7 +102,9 @@ var accessProfilesRequestableEntitlementsSetCmd = &cobra.Command{
 
 Pass --refs-file with a JSON array of {"appId":"…","id":"…"} objects. Every
 existing requestable entitlement not in that array is removed; pass [] to
-clear the entire set.`,
+clear the entire set.
+
+Prints the API's response, which is {}; exit 0 is the success signal.`,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		refs, err := catalogEntitlementReferencesFromFile(cmd)
@@ -111,7 +113,7 @@ clear the entire set.`,
 		}
 		body := buildRequestableEntitlementsBody(cmd, refs)
 		path := client.Path("/api/v1/catalogs/%s/requestable_entitlements/update", args[0])
-		return postAccessProfileEntitlements(cmd, path, body)
+		return sendMutation(cmd, mutation{Method: http.MethodPost, Path: path, Body: body})
 	},
 }
 
@@ -128,7 +130,7 @@ var accessProfilesVisibilityEntitlementsAddCmd = &cobra.Command{
 			return err
 		}
 		path := client.Path("/api/v1/catalogs/%s/visibility_bindings", args[0])
-		return postAccessProfileEntitlements(cmd, path, buildVisibilityEntitlementsBody(refs))
+		return sendMutation(cmd, mutation{Method: http.MethodPost, Path: path, Body: buildVisibilityEntitlementsBody(refs)})
 	},
 }
 
@@ -145,7 +147,7 @@ var accessProfilesVisibilityEntitlementsRemoveCmd = &cobra.Command{
 			return err
 		}
 		path := client.Path("/api/v1/catalogs/%s/visibility_bindings", args[0])
-		return deleteAccessProfileEntitlements(cmd, path, buildVisibilityEntitlementsBody(refs))
+		return sendMutation(cmd, mutation{Method: http.MethodDelete, Path: path, Body: buildVisibilityEntitlementsBody(refs)})
 	},
 }
 
@@ -295,48 +297,6 @@ func buildVisibilityEntitlementsBody(refs []catalogEntitlementRef) map[string]an
 	return map[string]any{"accessEntitlements": refs}
 }
 
-func postAccessProfileEntitlements(cmd *cobra.Command, path string, body map[string]any) error {
-	if dryRunActive() {
-		return printDryRun(cmd, http.MethodPost, path, body)
-	}
-	baseURL, err := GetBaseURL()
-	if err != nil {
-		return err
-	}
-	c, err := newClient(cmd, baseURL)
-	if err != nil {
-		return fmt.Errorf("authentication failed: %w", err)
-	}
-	data, err := c.Post(cmd.Context(), path, body)
-	if err != nil {
-		return fmt.Errorf("API error: %w", err)
-	}
-	return writeRawObject(cmd, data)
-}
-
-func deleteAccessProfileEntitlements(cmd *cobra.Command, path string, body map[string]any) error {
-	if dryRunActive() {
-		return printDryRun(cmd, http.MethodDelete, path, body)
-	}
-	bodyBytes, err := json.Marshal(body)
-	if err != nil {
-		return err
-	}
-	baseURL, err := GetBaseURL()
-	if err != nil {
-		return err
-	}
-	c, err := newClient(cmd, baseURL)
-	if err != nil {
-		return fmt.Errorf("authentication failed: %w", err)
-	}
-	data, err := c.Request(cmd.Context(), http.MethodDelete, path, bodyBytes, nil)
-	if err != nil {
-		return fmt.Errorf("API error: %w", err)
-	}
-	return writeRawObject(cmd, data)
-}
-
 func init() {
 	for _, cmd := range []*cobra.Command{
 		accessProfilesRequestableEntitlementsAddCmd,
@@ -351,6 +311,15 @@ func init() {
 	accessProfilesRequestableEntitlementsSetCmd.Flags().String("refs-file", "", "JSON array of AppEntitlementRef objects (file, or \"-\" for stdin)")
 	accessProfilesRequestableEntitlementsAddCmd.Flags().Bool("create-requests", false, "Create requests for users in the access profile when adding these entitlements")
 
+	for _, c := range []*cobra.Command{
+		accessProfilesRequestableEntitlementsAddCmd,
+		accessProfilesRequestableEntitlementsRemoveCmd,
+		accessProfilesRequestableEntitlementsSetCmd,
+		accessProfilesVisibilityEntitlementsAddCmd,
+		accessProfilesVisibilityEntitlementsRemoveCmd,
+	} {
+		markMutating(c)
+	}
 	accessProfilesRequestableEntitlementsCmd.AddCommand(
 		accessProfilesRequestableEntitlementsListCmd,
 		accessProfilesRequestableEntitlementIDsListCmd,

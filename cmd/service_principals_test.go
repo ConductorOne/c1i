@@ -18,11 +18,12 @@ import (
 // stubServicePrincipalsClient points the non-list SPC commands at srv.
 func stubServicePrincipalsClient(t *testing.T, srv *httptest.Server) {
 	t.Helper()
-	orig := newServicePrincipalsClient
-	newServicePrincipalsClient = func(_ *cobra.Command, _ string) (*client.Client, error) {
+	stub := func(_ *cobra.Command, _ string) (*client.Client, error) {
 		return client.NewForTesting(srv.URL, srv.Client()), nil
 	}
-	t.Cleanup(func() { newServicePrincipalsClient = orig })
+	orig, origSP := newClient, newServicePrincipalsClient
+	newClient, newServicePrincipalsClient = stub, stub // mutations use newClient, reads the family seam
+	t.Cleanup(func() { newClient, newServicePrincipalsClient = orig, origSP })
 }
 
 func stubListClient(t *testing.T, srv *httptest.Server) {
@@ -245,9 +246,8 @@ func TestServicePrincipalsCreateSendsBody(t *testing.T) {
 	if want := map[string]any{"displayName": "payments"}; !reflect.DeepEqual(gotBody, want) {
 		t.Errorf("body = %#v, want %#v", gotBody, want)
 	}
-	// Mutation output keeps the envelope (writeRawObject), so the id stays nested.
-	if !bytes.Contains(out.Bytes(), []byte(`"id": "sp-1"`)) {
-		t.Errorf("output missing created id: %s", out.String())
+	if want := "{\n  \"id\": \"sp-1\",\n  \"displayName\": \"payments\"\n}\n"; out.String() != want {
+		t.Errorf("stdout = %q, want the unwrapped principal %q", out.String(), want)
 	}
 }
 
@@ -283,8 +283,8 @@ func TestServicePrincipalsCredentialsCreateHitsNestedPath(t *testing.T) {
 	if want := map[string]any{"displayName": "ci"}; !reflect.DeepEqual(gotBody, want) {
 		t.Errorf("body = %#v, want %#v", gotBody, want)
 	}
-	if !bytes.Contains(out.Bytes(), []byte("shh")) {
-		t.Errorf("secret not surfaced in output: %s", out.String())
+	if want := "{\n  \"id\": \"a-b-12345\",\n  \"clientSecret\": \"shh\"\n}\n"; out.String() != want {
+		t.Errorf("stdout = %q, want the unwrapped credential with its secret %q", out.String(), want)
 	}
 }
 

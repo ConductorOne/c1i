@@ -1,17 +1,10 @@
 package cmd
 
-import (
-	"fmt"
-
-	"github.com/spf13/cobra"
-)
+import "github.com/spf13/cobra"
 
 var tasksSkipStepAction = taskAction{
 	verb: "skip-step",
 	step: stepRequired,
-	confirm: func(id, _, stepID string) string {
-		return fmt.Sprintf("Skipped policy step: task_id=%s policy_step_id=%s\n", id, stepID)
-	},
 }
 
 var tasksSkipStepCmd = &cobra.Command{
@@ -27,8 +20,13 @@ authenticates and issues a read against the tenant before previewing. A step
 id captured before another action is stale, and the server answers
 "this action is no longer available".
 
-The confirmation reports the task id and the step skipped, never a state: the
-action endpoints echo the task's state from before the action.`,
+A step c1i looked up is reported on stderr ("Resolved policy step: <id>"),
+not on stdout.
+
+Prints the task as pretty JSON, unwrapped like "tasks get": the id is .id.
+Its .state is the task from before the action, not the outcome; re-read with
+"c1i tasks get <task-id>" before acting on it. --fields is a usage error on a
+mutation; extract with jq -er, which fails on a --dry-run preview.`,
 	Args: cobra.ExactArgs(1),
 	RunE: tasksSkipStepAction.runTaskAction,
 }
@@ -36,5 +34,6 @@ action endpoints echo the task's state from before the action.`,
 func init() {
 	tasksSkipStepCmd.Flags().String("comment", "", "Optional comment")
 	tasksSkipStepCmd.Flags().String("policy-step-id", "", "Policy step to skip (defaults to the task's current step)")
+	markMutating(tasksSkipStepCmd)
 	tasksCmd.AddCommand(tasksSkipStepCmd)
 }

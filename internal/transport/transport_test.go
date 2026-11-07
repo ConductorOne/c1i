@@ -552,7 +552,7 @@ func TestNew_DebugFalseTracesNothingToStderr(t *testing.T) {
 
 // TestNew_DebugTracesToStderr proves New's own wiring — not a hand-built
 // tripper chain, as TestClient_DebugTracesBothHops in redirect_narrow_test.go
-// exercises — actually reaches stderr when WithDebug(true) is passed. This is
+// exercises — actually reaches stderr when WithDebug(os.Stderr) is passed. This is
 // the exact construction path every caller of New goes through (client,
 // login, mcpgateway), so it's the seam that would silently reintroduce "the
 // gateway path traces nothing" if New ever stopped wiring debug through.
@@ -563,7 +563,7 @@ func TestNew_DebugTracesToStderr(t *testing.T) {
 	defer srv.Close()
 
 	trace := captureStderr(t, func() {
-		c := New(srv.Client().Transport, WithDebug(true))
+		c := New(srv.Client().Transport, WithDebug(os.Stderr))
 		if _, err := get(t, c, srv.URL+"/x"); err != nil {
 			t.Fatalf("Do: %v", err)
 		}

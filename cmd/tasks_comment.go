@@ -1,10 +1,6 @@
 package cmd
 
-import (
-	"fmt"
-
-	"github.com/spf13/cobra"
-)
+import "github.com/spf13/cobra"
 
 var tasksCommentAction = taskAction{
 	verb: "comment",
@@ -16,20 +12,24 @@ var tasksCommentAction = taskAction{
 		body["comment"] = comment
 		return nil
 	},
-	confirm: func(id, _, _ string) string {
-		return fmt.Sprintf("Comment added: task_id=%s\n", id)
-	},
 }
 
 var tasksCommentCmd = &cobra.Command{
 	Use:   "comment <task-id>",
 	Short: "Add a comment to a task",
-	Args:  cobra.ExactArgs(1),
-	RunE:  tasksCommentAction.runTaskAction,
+	Long: `Add a comment to a task.
+
+Prints the task as pretty JSON, unwrapped like "tasks get": the id is .id.
+Its .state is the task from before the action, not the outcome; re-read with
+"c1i tasks get <task-id>" before acting on it. --fields is a usage error on a
+mutation; extract with jq -er, which fails on a --dry-run preview.`,
+	Args: cobra.ExactArgs(1),
+	RunE: tasksCommentAction.runTaskAction,
 }
 
 func init() {
 	tasksCommentCmd.Flags().String("comment", "", "Comment text")
 	markRequired(tasksCommentCmd, "comment")
+	markMutating(tasksCommentCmd)
 	tasksCmd.AddCommand(tasksCommentCmd)
 }

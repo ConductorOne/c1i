@@ -191,7 +191,7 @@ func requireBaseURL() (string, URLSource, error) {
 // warnAboutURL prints any ParseURL warnings to stderr, one per line.
 func warnAboutURL(warnings []string) {
 	for _, w := range warnings {
-		_, _ = fmt.Fprintf(os.Stderr, "Warning: %s\n", w)
+		noticeTo(os.Stderr, noticeURLWarning, "Warning: "+w, nil)
 	}
 }
 
@@ -207,7 +207,8 @@ func warnAboutURLSource(baseURL string, source URLSource) {
 	if source != URLSourceConfig {
 		return
 	}
-	_, _ = fmt.Fprintf(os.Stderr, "Warning: no --url flag given; targeting %s (from %s)\n", baseURL, urlSourceLabel(source))
+	noticeTo(os.Stderr, noticeURLDefault, fmt.Sprintf("Warning: no --url flag given; targeting %s (from %s)", baseURL, urlSourceLabel(source)),
+		map[string]any{"url": baseURL, "source": urlSourceToken(source)})
 }
 
 // URLSource indicates where the URL was resolved from.

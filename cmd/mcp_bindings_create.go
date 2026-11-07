@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"fmt"
+	"net/http"
 
 	"github.com/ConductorOne/c1i/internal/client"
 	"github.com/spf13/cobra"
@@ -10,13 +11,10 @@ import (
 var mcpBindingsCreateCmd = &cobra.Command{
 	Use:   "create",
 	Short: "Bind one or more MCP tools to a toolset (pretty JSON)",
+	Long: `Bind one or more MCP tools (--tool-id, repeatable) to a toolset. Prints the
+API's response as returned: {"bindings":[{"mcpToolId":…}]}, with no id of its own.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		if err := requireNonEmpty(cmd, "app-id", "connector-id", "toolset-id"); err != nil {
-			return err
-		}
-
-		baseURL, err := GetBaseURL()
-		if err != nil {
 			return err
 		}
 
@@ -39,20 +37,7 @@ var mcpBindingsCreateCmd = &cobra.Command{
 		}
 
 		path := client.Path("/api/v1/apps/%s/connectors/%s/mcp_toolsets/%s/tool_bindings", appID, connectorID, toolsetID)
-		if dryRunActive() {
-			return printDryRun(cmd, "POST", path, body)
-		}
-
-		c, err := newClient(cmd, baseURL)
-		if err != nil {
-			return fmt.Errorf("authentication failed: %w", err)
-		}
-		data, err := c.Post(cmd.Context(), path, body)
-		if err != nil {
-			return fmt.Errorf("API error: %w", err)
-		}
-
-		return writeRawObject(cmd, data)
+		return sendMutation(cmd, mutation{Method: http.MethodPost, Path: path, Body: body, Unwrap: byID("id")})
 	},
 }
 
@@ -62,5 +47,6 @@ func init() {
 	mcpBindingsCreateCmd.Flags().String("toolset-id", "", "MCP toolset (access profile) ID")
 	addRepeatableStringFlag(mcpBindingsCreateCmd, "tool-id", "MCP tool ID to bind (repeatable; max 100)")
 	markRequired(mcpBindingsCreateCmd, "app-id", "connector-id", "toolset-id", "tool-id")
+	markMutating(mcpBindingsCreateCmd)
 	mcpBindingsCmd.AddCommand(mcpBindingsCreateCmd)
 }

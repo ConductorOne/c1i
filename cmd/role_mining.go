@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"fmt"
+	"net/http"
 
 	"github.com/ConductorOne/c1i/internal/client"
 	"github.com/spf13/cobra"
@@ -14,7 +15,11 @@ var roleMiningCmd = &cobra.Command{
 
 Mutations and searches accept JSON request objects through --body-file so profile
 filters, entitlement selections, and full configuration documents reach C1
-unchanged. Searches that support public REST pagination emit NDJSON.`,
+unchanged. Searches that support public REST pagination emit NDJSON.
+
+A mutation prints the API's response: "suggestions state" the suggestion, and
+"config update" the configuration unwrapped like "config show". The others keep
+their shape (.runId, .id, .accessProfileId); --fields is a usage error.`,
 }
 
 var roleMiningTriggerCmd = &cobra.Command{
@@ -22,7 +27,7 @@ var roleMiningTriggerCmd = &cobra.Command{
 	Short: "Queue an organization role mining analysis (pretty JSON)",
 	Args:  cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, _ []string) error {
-		return postRoleMiningMutation(cmd, "/api/v1/role-mining/trigger", map[string]any{})
+		return sendMutation(cmd, mutation{Method: http.MethodPost, Path: "/api/v1/role-mining/trigger", Body: map[string]any{}})
 	},
 }
 
@@ -64,7 +69,7 @@ var roleMiningSuggestionsStateCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		return postRoleMiningMutation(cmd, client.Path("/api/v1/role-mining/suggestions/%s/state", args[0]), body)
+		return sendMutation(cmd, mutation{Method: http.MethodPost, Path: client.Path("/api/v1/role-mining/suggestions/%s/state", args[0]), Body: body})
 	},
 }
 var roleMiningSuggestionsUsersCmd = &cobra.Command{
@@ -86,7 +91,7 @@ var roleMiningConfigShowCmd = &cobra.Command{
 	Short: "Show role mining configuration (pretty JSON)",
 	Args:  cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, _ []string) error {
-		return getRoleMiningResource(cmd, "/api/v1/role-mining/config", "minCohortSize")
+		return getRoleMiningNamed(cmd, "/api/v1/role-mining/config", "config")
 	},
 }
 var roleMiningConfigUpdateCmd = &cobra.Command{
@@ -98,7 +103,7 @@ var roleMiningConfigUpdateCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		return postRoleMiningMutation(cmd, "/api/v1/role-mining/config", body)
+		return sendMutation(cmd, mutation{Method: http.MethodPost, Path: "/api/v1/role-mining/config", Body: body, Unwrap: named("config")})
 	},
 }
 
@@ -154,7 +159,7 @@ var roleMiningCustomAnalysisTriggerCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		return postRoleMiningMutation(cmd, "/api/v1/role-mining/custom-analysis/trigger", body)
+		return sendMutation(cmd, mutation{Method: http.MethodPost, Path: "/api/v1/role-mining/custom-analysis/trigger", Body: body})
 	},
 }
 var roleMiningCustomAnalysisEvaluateCmd = &cobra.Command{
@@ -166,7 +171,7 @@ var roleMiningCustomAnalysisEvaluateCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		return postRoleMiningMutation(cmd, client.Path("/api/v1/role-mining/custom-analysis/%s/evaluate-entitlement-selection", args[0]), body)
+		return sendMutation(cmd, mutation{Method: http.MethodPost, Path: client.Path("/api/v1/role-mining/custom-analysis/%s/evaluate-entitlement-selection", args[0]), Body: body})
 	},
 }
 
@@ -180,7 +185,7 @@ var roleMiningAccessProfilesCreateCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		return postRoleMiningMutation(cmd, "/api/v1/role-mining/access-profiles", body)
+		return sendMutation(cmd, mutation{Method: http.MethodPost, Path: "/api/v1/role-mining/access-profiles", Body: body})
 	},
 }
 
@@ -196,6 +201,14 @@ func postRoleMiningList(cmd *cobra.Command, path string, request map[string]any,
 }
 
 func getRoleMiningResource(cmd *cobra.Command, path, key string) error {
+	return getRoleMining(cmd, path, func(data []byte) error { return writeResource(cmd, data, key) })
+}
+
+func getRoleMiningNamed(cmd *cobra.Command, path, key string) error {
+	return getRoleMining(cmd, path, func(data []byte) error { return writeNamedResource(cmd, data, key) })
+}
+
+func getRoleMining(cmd *cobra.Command, path string, write func([]byte) error) error {
 	baseURL, err := GetBaseURL()
 	if err != nil {
 		return err
@@ -208,26 +221,7 @@ func getRoleMiningResource(cmd *cobra.Command, path, key string) error {
 	if err != nil {
 		return fmt.Errorf("API error: %w", err)
 	}
-	return writeResource(cmd, data, key)
-}
-
-func postRoleMiningMutation(cmd *cobra.Command, path string, body map[string]any) error {
-	if dryRunActive() {
-		return printDryRun(cmd, "POST", path, body)
-	}
-	baseURL, err := GetBaseURL()
-	if err != nil {
-		return err
-	}
-	c, err := newClient(cmd, baseURL)
-	if err != nil {
-		return fmt.Errorf("authentication failed: %w", err)
-	}
-	data, err := c.Post(cmd.Context(), path, body)
-	if err != nil {
-		return fmt.Errorf("API error: %w", err)
-	}
-	return writeRawObject(cmd, data)
+	return write(data)
 }
 
 func roleMiningSuggestionRow(item map[string]any) map[string]any {
@@ -257,6 +251,9 @@ func roleMiningUserRow(item map[string]any) map[string]any {
 func init() {
 	for _, command := range []*cobra.Command{roleMiningSuggestionsSearchCmd, roleMiningSuggestionsStateCmd, roleMiningSuggestionsUsersCmd, roleMiningConfigUpdateCmd, roleMiningCustomAnalysisTriggerCmd, roleMiningCustomAnalysisEvaluateCmd, roleMiningAccessProfilesCreateCmd} {
 		command.Flags().String("body-file", "", "JSON request object file (or \"-\" for stdin)")
+	}
+	for _, command := range []*cobra.Command{roleMiningTriggerCmd, roleMiningSuggestionsStateCmd, roleMiningConfigUpdateCmd, roleMiningCustomAnalysisTriggerCmd, roleMiningCustomAnalysisEvaluateCmd, roleMiningAccessProfilesCreateCmd} {
+		markMutating(command)
 	}
 	addPaginationFlags(roleMiningSuggestionsSearchCmd)
 	addPaginationFlags(roleMiningSuggestionsUsersCmd)

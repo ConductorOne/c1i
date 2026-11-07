@@ -180,12 +180,12 @@ func findTasksSubcommandOrNil(name string) *cobra.Command {
 	return nil
 }
 
-// TestTaskActionsNeverEchoResponseState extends the guarantee close already
-// had to every action that does not intend to print state: these endpoints
-// return the task as it was BEFORE the action, so echoing it reports the old
-// state as though the action had not happened.
-func TestTaskActionsNeverEchoResponseState(t *testing.T) {
-	for _, name := range []string{"restart", "reset", "skip-step", "process", "close", "comment", "update-grant-duration"} {
+// TestTaskActionsPrintTheUnwrappedTask pins the mutation contract for every
+// action: stdout is exactly the response's task, unwrapped like "tasks get",
+// with no synthesized text. The endpoints return the task as it was BEFORE the
+// action, so .state is the server's snapshot, passed through untouched.
+func TestTaskActionsPrintTheUnwrappedTask(t *testing.T) {
+	for _, name := range []string{"approve", "deny", "restart", "reset", "skip-step", "process", "close", "comment", "update-grant-duration", "reassign"} {
 		t.Run(name, func(t *testing.T) {
 			cmd := findTasksSubcommand(t, name)
 			resetCmds(t, cmd)
@@ -195,23 +195,24 @@ func TestTaskActionsNeverEchoResponseState(t *testing.T) {
 			if name == "update-grant-duration" {
 				_ = cmd.Flags().Set("duration", "3600s")
 			}
+			if name == "reassign" {
+				_ = cmd.Flags().Set("to-user-id", "zz-user")
+			}
 			r := newTaskActionRecorder(t, "TASK_STATE_OPEN", "zz-step-1111111111111111111")
 			out, err := runTaskActionCmd(t, cmd, r.srv, actionTestTaskID)
 			if err != nil {
 				t.Fatalf("%s: %v", name, err)
 			}
-			if strings.Contains(out, "TASK_STATE_OPEN") {
-				t.Errorf("%s echoed the pre-action state: %q", name, out)
-			}
-			if !strings.Contains(out, actionTestTaskID) {
-				t.Errorf("%s did not report the task id: %q", name, out)
+			want := "{\n  \"id\": \"" + actionTestTaskID + "\",\n  \"state\": \"TASK_STATE_OPEN\",\n  \"expanded\": []\n}\n"
+			if out != want {
+				t.Errorf("%s stdout = %q, want %q", name, out, want)
 			}
 		})
 	}
 }
 
 // TestTasksRestartOmitsEmptyPolicyStepField pins that a closed task, which has
-// no current step, does not produce "policy_step_id=" with nothing after it.
+// no current step, sends no policyStepId and prints only the task.
 func TestTasksRestartOmitsEmptyPolicyStepField(t *testing.T) {
 	cmd := findTasksSubcommand(t, "restart")
 	resetCmds(t, cmd)
@@ -220,8 +221,11 @@ func TestTasksRestartOmitsEmptyPolicyStepField(t *testing.T) {
 	if err != nil {
 		t.Fatalf("restart: %v", err)
 	}
-	if strings.Contains(out, "policy_step_id=\n") || strings.HasSuffix(strings.TrimRight(out, "\n"), "policy_step_id=") {
-		t.Errorf("restart printed an empty policy_step_id field: %q", out)
+	if strings.Contains(out, "policy_step_id") || strings.Contains(out, "policyStepId") {
+		t.Errorf("restart printed a policy step field: %q", out)
+	}
+	if got, ok := r.bodies[0]["policyStepId"]; ok {
+		t.Errorf("restart sent policyStepId=%v with no current step", got)
 	}
 }
 
@@ -334,7 +338,7 @@ func TestTaskActionsDryRunNeverSends(t *testing.T) {
 			if len(posted) != 0 {
 				t.Errorf("%s posted during a dry run: %v", name, posted)
 			}
-			if !strings.Contains(out.String(), "[dry-run]") {
+			if !strings.HasPrefix(out.String(), "{\n  \"dryRun\": true") {
 				t.Errorf("%s printed no preview: %q", name, out.String())
 			}
 			if !strings.Contains(out.String(), "/action/"+want.verb) {
@@ -413,7 +417,7 @@ func TestTaskActionsDryRunStillResolvesTheURL(t *testing.T) {
 			if got := exitCode(err); got != exitUsage {
 				t.Errorf("exitCode = %d, want %d (exitUsage); err = %v", got, exitUsage, err)
 			}
-			if strings.Contains(out.String(), "[dry-run]") {
+			if strings.Contains(out.String(), "dryRun") {
 				t.Errorf("tasks %s printed a preview for an unresolvable URL: %q", name, out.String())
 			}
 		})
@@ -459,7 +463,7 @@ func TestStepUnusedActionsPreviewWithoutCredentials(t *testing.T) {
 				if err != nil {
 					t.Fatalf("%s --dry-run needs credentials it should not: %v", name, err)
 				}
-				if !strings.Contains(out.String(), "[dry-run]") {
+				if !strings.HasPrefix(out.String(), "{\n  \"dryRun\": true") {
 					t.Errorf("%s printed no preview: %q", name, out.String())
 				}
 				return

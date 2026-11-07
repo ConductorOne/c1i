@@ -1,10 +1,6 @@
 package cmd
 
-import (
-	"fmt"
-
-	"github.com/spf13/cobra"
-)
+import "github.com/spf13/cobra"
 
 var tasksUpdateGrantDurationAction = taskAction{
 	verb: "update-grant-duration",
@@ -16,9 +12,6 @@ var tasksUpdateGrantDurationAction = taskAction{
 		}
 		body["duration"] = duration
 		return nil
-	},
-	confirm: func(id, _, _ string) string {
-		return fmt.Sprintf("Updated grant duration: task_id=%s\n", id)
 	},
 }
 
@@ -39,8 +32,10 @@ server refuses with:
 The new value lands on the task as "grantDuration"; read it back with
 "c1i requests get <task-id>".
 
-The confirmation reports only the task id: the action endpoints echo the task's
-state from before the action.`,
+Prints the task as pretty JSON, unwrapped like "tasks get": the id is .id.
+Its .state is the task from before the action, not the outcome; re-read with
+"c1i tasks get <task-id>" before acting on it. --fields is a usage error on a
+mutation; extract with jq -er, which fails on a --dry-run preview.`,
 	Args: cobra.ExactArgs(1),
 	RunE: tasksUpdateGrantDurationAction.runTaskAction,
 }
@@ -51,5 +46,6 @@ func init() {
 	addProtoDurationFlag(tasksUpdateGrantDurationCmd, "duration",
 		"Grant duration as a protobuf duration (3600s) or a Go duration (1h), sent in seconds; a sign or decimal (-1h, 1.5h) exits 2")
 	markRequired(tasksUpdateGrantDurationCmd, "duration")
+	markMutating(tasksUpdateGrantDurationCmd)
 	tasksCmd.AddCommand(tasksUpdateGrantDurationCmd)
 }

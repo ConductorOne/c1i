@@ -213,7 +213,7 @@ var (
 		doer := func(limit int64) selfupdate.Doer {
 			return transport.New(nil,
 				transport.WithMaxRetries(viper.GetInt("max_retries")),
-				transport.WithDebug(viper.GetBool("debug")),
+				transport.WithDebug(debugWriter()),
 				transport.WithMaxResponseBytes(limit),
 			)
 		}

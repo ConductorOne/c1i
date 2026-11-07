@@ -3,6 +3,7 @@ package cmd
 import (
 	"encoding/json"
 	"fmt"
+	"net/http"
 
 	"github.com/ConductorOne/c1i/internal/client"
 	"github.com/spf13/cobra"
@@ -16,7 +17,11 @@ var findingsCmd = &cobra.Command{
 Finding create, state, bulk, routing-rule, transformation-rule, and settings
 updates accept JSON files so oneof actions and nested rule documents reach C1
 unchanged. Pass --body-file - to read JSON from standard input. Search commands
-auto-paginate and emit NDJSON; get and mutation commands print one JSON object.`,
+auto-paginate and emit NDJSON; get and mutation commands print one JSON object.
+Mutations print the finding or rule unwrapped like get (id is .id; use jq -er).
+bulk-state and bulk-create-tasks print {"bulkActionId"}, settings update prints
+{"list":[...]}, and create-task prints {"finding":{...},"taskId":...}: its ids
+are .taskId (the created task) and .finding.id. Deletes print {}.`,
 }
 
 var findingsSearchCmd = &cobra.Command{
@@ -50,7 +55,7 @@ var findingsCreateCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		return postFindingsMutation(cmd, "/api/v1/findings", body)
+		return sendMutation(cmd, mutation{Method: http.MethodPost, Path: "/api/v1/findings", Body: body})
 	},
 }
 
@@ -62,7 +67,7 @@ var findingsStateCmd = &cobra.Command{
 			return err
 		}
 		body["findingId"] = args[0]
-		return postFindingsMutation(cmd, client.Path("/api/v1/findings/%s/state", args[0]), body)
+		return sendMutation(cmd, mutation{Method: http.MethodPost, Path: client.Path("/api/v1/findings/%s/state", args[0]), Body: body})
 	},
 }
 
@@ -74,7 +79,7 @@ var findingsAssigneeCmd = &cobra.Command{
 			return err
 		}
 		body["findingId"] = args[0]
-		return postFindingsMutation(cmd, client.Path("/api/v1/findings/%s/assignee", args[0]), body)
+		return sendMutation(cmd, mutation{Method: http.MethodPost, Path: client.Path("/api/v1/findings/%s/assignee", args[0]), Body: body})
 	},
 }
 
@@ -89,7 +94,7 @@ var findingsCreateTaskCmd = &cobra.Command{
 		if policyID != "" {
 			body["policyId"] = policyID
 		}
-		return postFindingsMutation(cmd, client.Path("/api/v1/findings/%s/task", args[0]), body)
+		return sendMutation(cmd, mutation{Method: http.MethodPost, Path: client.Path("/api/v1/findings/%s/task", args[0]), Body: body, Unwrap: raw()})
 	},
 }
 
@@ -100,7 +105,7 @@ var findingsBulkStateCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		return postFindingsMutation(cmd, "/api/v1/findings/bulk/state", body)
+		return sendMutation(cmd, mutation{Method: http.MethodPost, Path: "/api/v1/findings/bulk/state", Body: body})
 	},
 }
 
@@ -111,7 +116,7 @@ var findingsBulkCreateTasksCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		return postFindingsMutation(cmd, "/api/v1/findings/bulk/tasks", body)
+		return sendMutation(cmd, mutation{Method: http.MethodPost, Path: "/api/v1/findings/bulk/tasks", Body: body})
 	},
 }
 
@@ -129,7 +134,7 @@ func newFindingRulesCmd(name, short, path, key string, row listRowFn) *cobra.Com
 		if err != nil {
 			return err
 		}
-		return postFindingsMutation(cmd, path, map[string]any{key: object})
+		return sendMutation(cmd, mutation{Method: http.MethodPost, Path: path, Body: map[string]any{key: object}})
 	}}
 	update := &cobra.Command{Use: "update <rule-id>", Short: "Update a rule from JSON (pretty JSON)", Args: cobra.ExactArgs(1), RunE: func(cmd *cobra.Command, args []string) error {
 		object, err := readRequiredJSONObject(cmd, "body-file")
@@ -137,13 +142,16 @@ func newFindingRulesCmd(name, short, path, key string, row listRowFn) *cobra.Com
 			return err
 		}
 		object["id"] = args[0]
-		return postFindingsMutation(cmd, client.Path(path+"/%s/update", args[0]), map[string]any{key: object})
+		return sendMutation(cmd, mutation{Method: http.MethodPost, Path: client.Path(path+"/%s/update", args[0]), Body: map[string]any{key: object}})
 	}}
 	deleteCmd := &cobra.Command{Use: "delete <rule-id>", Short: "Delete a rule (pretty JSON)", Args: cobra.ExactArgs(1), RunE: func(cmd *cobra.Command, args []string) error {
-		return deleteFindingsMutation(cmd, client.Path(path+"/%s", args[0]))
+		return sendMutation(cmd, mutation{Method: http.MethodDelete, Path: client.Path(path+"/%s", args[0])})
 	}}
 	for _, command := range []*cobra.Command{create, update} {
 		command.Flags().String("body-file", "", "JSON resource object file (or \"-\" for stdin)")
+	}
+	for _, command := range []*cobra.Command{create, update, deleteCmd} {
+		markMutating(command)
 	}
 	group.AddCommand(list, get, create, update, deleteCmd)
 	return group
@@ -161,7 +169,7 @@ var findingsSettingsUpdateCmd = &cobra.Command{Use: "update", Short: "Atomically
 	if err != nil {
 		return err
 	}
-	return postFindingsMutation(cmd, "/api/v1/findings/settings/update", body)
+	return sendMutation(cmd, mutation{Method: http.MethodPost, Path: "/api/v1/findings/settings/update", Body: body})
 }}
 
 var findingsAuditsCmd = &cobra.Command{Use: "audits", Short: "Search finding audit events"}
@@ -229,8 +237,8 @@ func getFixedList(cmd *cobra.Command, path string, row listRowFn) error {
 	// These routes don't paginate today, so a cursor isn't followed; it still
 	// must not pass as a complete result.
 	if next != "" {
-		_, _ = fmt.Fprintf(cmd.ErrOrStderr(),
-			"Warning: GET %s returned a partial result — the server reported more pages, which c1i does not fetch for this command.\n", path)
+		notice(cmd, noticeInfo, fmt.Sprintf(
+			"Warning: GET %s returned a partial result — the server reported more pages, which c1i does not fetch for this command.", path), nil)
 	}
 	return nil
 }
@@ -354,44 +362,6 @@ func getFindingsRaw(cmd *cobra.Command, path string) error {
 	return writeRawObject(cmd, data)
 }
 
-func postFindingsMutation(cmd *cobra.Command, path string, body map[string]any) error {
-	if dryRunActive() {
-		return printDryRun(cmd, "POST", path, body)
-	}
-	baseURL, err := GetBaseURL()
-	if err != nil {
-		return err
-	}
-	c, err := newClient(cmd, baseURL)
-	if err != nil {
-		return fmt.Errorf("authentication failed: %w", err)
-	}
-	data, err := c.Post(cmd.Context(), path, body)
-	if err != nil {
-		return fmt.Errorf("API error: %w", err)
-	}
-	return writeRawObject(cmd, data)
-}
-
-func deleteFindingsMutation(cmd *cobra.Command, path string) error {
-	if dryRunActive() {
-		return printDryRun(cmd, "DELETE", path, nil)
-	}
-	baseURL, err := GetBaseURL()
-	if err != nil {
-		return err
-	}
-	c, err := newClient(cmd, baseURL)
-	if err != nil {
-		return fmt.Errorf("authentication failed: %w", err)
-	}
-	data, err := c.Delete(cmd.Context(), path)
-	if err != nil {
-		return fmt.Errorf("API error: %w", err)
-	}
-	return writeRawObject(cmd, data)
-}
-
 func readOptionalJSONObject(cmd *cobra.Command, flag string) (map[string]any, error) {
 	file, _ := cmd.Flags().GetString(flag)
 	if file == "" {
@@ -452,6 +422,9 @@ func init() {
 	addPaginationFlags(findingsSearchCmd)
 	addPaginationFlags(findingsAuditsSearchCmd)
 	addPaginationFlags(findingsShadowMCPOccurrencesSearchCmd)
+	for _, command := range []*cobra.Command{findingsCreateCmd, findingsStateCmd, findingsAssigneeCmd, findingsCreateTaskCmd, findingsBulkStateCmd, findingsBulkCreateTasksCmd, findingsSettingsUpdateCmd} {
+		markMutating(command)
+	}
 	findingsCreateTaskCmd.Flags().String("policy-id", "", "Optional remediation policy ID")
 	findingsSettingsUpdateCmd.Flags().String("body-file", "", "JSON request object file (or \"-\" for stdin)")
 	findingsSettingsCmd.AddCommand(findingsSettingsShowCmd, findingsSettingsUpdateCmd)

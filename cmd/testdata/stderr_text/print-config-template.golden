@@ -1,0 +1,3 @@
+# external none config template. Replace <placeholders>, then:
+#   c1i mcp servers register --app-id APP --type external --display-name NAME --external-config-file config.json
+# Fields with <angle-brackets> are placeholders; enum/URL values are examples. Secrets are sealed server-side.

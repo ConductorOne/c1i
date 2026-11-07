@@ -41,7 +41,7 @@ func TestAccessReviewMutationsDryRun(t *testing.T) {
 		{
 			name: "create", cmd: accessReviewsCreateCmd,
 			setFlags: func(t *testing.T) { setAccessReviewFlag(t, accessReviewsCreateCmd, "body-file", createFile) },
-			contains: []string{"[dry-run] POST /api/v1/access_review", `"ownerIds"`},
+			contains: []string{`"url": "https://example.invalid/api/v1/access_review"`, `"ownerIds"`},
 		},
 		{
 			name: "update", cmd: accessReviewsUpdateCmd, args: []string{"review/1"},
@@ -49,12 +49,12 @@ func TestAccessReviewMutationsDryRun(t *testing.T) {
 				setAccessReviewFlag(t, accessReviewsUpdateCmd, "body-file", updateFile)
 				setAccessReviewFlag(t, accessReviewsUpdateCmd, "update-mask", "description")
 			},
-			contains: []string{"[dry-run] POST /api/v1/access_review/review%2F1", `"accessReview"`, `"id": "review/1"`, `"updateMask": "description"`},
+			contains: []string{`"url": "https://example.invalid/api/v1/access_review/review%2F1"`, `"accessReview"`, `"id": "review/1"`, `"updateMask": "description"`},
 		},
 		{
 			name: "generate CSV report", cmd: accessReviewReportsGenerateCmd, args: []string{"review-1"},
 			setFlags: func(t *testing.T) { setAccessReviewFlag(t, accessReviewReportsGenerateCmd, "format", "csv") },
-			contains: []string{"[dry-run] POST /api/v1/access_review/review-1/report", `"format": "ACCESS_REVIEW_REPORT_FORMAT_CSV"`},
+			contains: []string{`"url": "https://example.invalid/api/v1/access_review/review-1/report"`, `"format": "ACCESS_REVIEW_REPORT_FORMAT_CSV"`},
 		},
 	}
 

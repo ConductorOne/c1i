@@ -1,7 +1,7 @@
 package cmd
 
 import (
-	"fmt"
+	"net/http"
 
 	"github.com/ConductorOne/c1i/internal/client"
 	"github.com/spf13/cobra"
@@ -26,6 +26,7 @@ owner.
 ` + ownerAsyncNote + `
 Verify with "c1i entitlements owners <entitlement-id> --app-id <app-id>".
 
+Prints the API's response, which is {}; exit 0 is the success signal.
 Honors --dry-run.`,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
@@ -33,29 +34,10 @@ Honors --dry-run.`,
 			return err
 		}
 
-		baseURL, err := GetBaseURL()
-		if err != nil {
-			return err
-		}
-
 		appID, _ := cmd.Flags().GetString("app-id")
 		entitlementID, _ := cmd.Flags().GetString("entitlement-id")
-
 		path := client.Path("/api/v1/apps/%s/entitlements/%s/owners/%s", appID, entitlementID, args[0])
-		if dryRunActive() {
-			return printDryRun(cmd, "DELETE", path, nil)
-		}
-
-		c, err := newClient(cmd, baseURL)
-		if err != nil {
-			return fmt.Errorf("authentication failed: %w", err)
-		}
-		data, err := c.Delete(cmd.Context(), path)
-		if err != nil {
-			return fmt.Errorf("API error: %w", err)
-		}
-
-		return writeRawObject(cmd, data)
+		return sendMutation(cmd, mutation{Method: http.MethodDelete, Path: path})
 	},
 }
 
@@ -63,5 +45,6 @@ func init() {
 	entitlementsRemoveOwnerCmd.Flags().String("app-id", "", "Application ID the entitlement belongs to")
 	entitlementsRemoveOwnerCmd.Flags().String("entitlement-id", "", "Entitlement ID to remove the owner from")
 	markRequired(entitlementsRemoveOwnerCmd, "app-id", "entitlement-id")
+	markMutating(entitlementsRemoveOwnerCmd)
 	entitlementsCmd.AddCommand(entitlementsRemoveOwnerCmd)
 }

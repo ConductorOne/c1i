@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/http"
 	"time"
 
 	"github.com/ConductorOne/c1i/internal/client"
@@ -86,36 +87,9 @@ func runOwnerSetPut(cmd *cobra.Command, path string, waitFor func(*client.Client
 	if err != nil {
 		return err
 	}
-
-	baseURL, err := GetBaseURL()
-	if err != nil {
-		return err
-	}
-
-	body := buildSetOwnersBody(userIDs)
-	if dryRunActive() {
-		return printDryRun(cmd, "PUT", path, body)
-	}
-
-	c, err := newClient(cmd, baseURL)
-	if err != nil {
-		return fmt.Errorf("authentication failed: %w", err)
-	}
-	if err := requireExistingUsers(cmd.Context(), c, "user-id", userIDs); err != nil {
-		return err
-	}
-	data, err := c.Put(cmd.Context(), path, body)
-	if err != nil {
-		return fmt.Errorf("API error: %w", err)
-	}
-	if err := writeRawObject(cmd, data); err != nil {
-		return err
-	}
-
-	if !wait {
-		return nil
-	}
-	return runOwnerIDsWait(cmd, waitFor(c, untilEqual(userIDs), waitTimeout))
+	return sendMutation(cmd, mutation{Method: http.MethodPut, Path: path, Body: buildSetOwnersBody(userIDs)},
+		withPreRead(existingUsersCheck("user-id", userIDs)),
+		withWait(func(c *client.Client) waitOp[[]string] { return waitFor(c, untilEqual(userIDs), waitTimeout) }, wait))
 }
 
 // appOwnersWaitOp polls an app's ownerids until done accepts them.
@@ -186,5 +160,6 @@ func addSetOwnersFlags(cmd *cobra.Command) {
 
 func init() {
 	addSetOwnersFlags(appsSetOwnersCmd)
+	markMutating(appsSetOwnersCmd)
 	appsCmd.AddCommand(appsSetOwnersCmd)
 }

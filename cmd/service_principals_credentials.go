@@ -3,6 +3,7 @@ package cmd
 import (
 	"encoding/json"
 	"fmt"
+	"net/http"
 	"strconv"
 	"strings"
 
@@ -157,7 +158,12 @@ marks it revoked. "service-principals credentials list" omits it.`,
 var spCredentialsCreateCmd = &cobra.Command{
 	Use:   "create <sp-id>",
 	Short: "Create a client credential (the secret is shown once, at creation)",
-	Args:  cobra.ExactArgs(1),
+	Long: `Create a client credential. The secret is shown once, at creation.
+
+Prints the credential as pretty JSON, unwrapped like
+"service-principals credentials get": the id is .id, and .clientId and
+.clientSecret sit beside it. Capture .clientSecret now; it cannot be read again.`,
+	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		if _, err := requireNonEmptyIfSet(cmd, "display-name"); err != nil {
 			return err
@@ -165,29 +171,12 @@ var spCredentialsCreateCmd = &cobra.Command{
 		if err := requireNonEmpty(cmd, "display-name"); err != nil {
 			return err
 		}
-		baseURL, err := GetBaseURL()
-		if err != nil {
-			return err
-		}
-
 		body, err := buildSPCredentialCreateBody(cmd)
 		if err != nil {
 			return err
 		}
-		path := spCredentialsPath(args[0])
-		if dryRunActive() {
-			return printDryRun(cmd, "POST", path, body)
-		}
-
-		c, err := newServicePrincipalsClient(cmd, baseURL)
-		if err != nil {
-			return fmt.Errorf("authentication failed: %w", err)
-		}
-		data, err := c.Post(cmd.Context(), path, body)
-		if err != nil {
-			return fmt.Errorf("API error: %w", err)
-		}
-		return writeRawObject(cmd, data)
+		return sendMutation(cmd, mutation{Method: http.MethodPost, Path: spCredentialsPath(args[0]), Body: body},
+			secretBearing(secretSPCredential))
 	},
 }
 
@@ -225,7 +214,11 @@ func buildSPCredentialCreateBody(cmd *cobra.Command) (map[string]any, error) {
 var spCredentialsUpdateCmd = &cobra.Command{
 	Use:   "update <credential-id>",
 	Short: "Update a client credential's display name",
-	Args:  cobra.ExactArgs(1),
+	Long: `Update a client credential's display name.
+
+Prints the credential as pretty JSON, unwrapped like
+"service-principals credentials get": the id is .id.`,
+	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		if _, err := requireNonEmptyIfSet(cmd, "display-name"); err != nil {
 			return err
@@ -246,62 +239,27 @@ var spCredentialsUpdateCmd = &cobra.Command{
 			return &usageError{fmt.Errorf("nothing to update: pass --display-name")}
 		}
 
-		baseURL, err := GetBaseURL()
-		if err != nil {
-			return err
-		}
-
 		body := map[string]any{
 			"credential": cred,
 			"updateMask": strings.Join(paths, ","),
 		}
-		path := spCredentialPath(spID, args[0])
-		if dryRunActive() {
-			return printDryRun(cmd, "PATCH", path, body)
-		}
-
-		c, err := newServicePrincipalsClient(cmd, baseURL)
-		if err != nil {
-			return fmt.Errorf("authentication failed: %w", err)
-		}
-		data, err := c.Patch(cmd.Context(), path, body)
-		if err != nil {
-			return fmt.Errorf("API error: %w", err)
-		}
-		return writeRawObject(cmd, data)
+		return sendMutation(cmd, mutation{Method: http.MethodPatch, Path: spCredentialPath(spID, args[0]), Body: body})
 	},
 }
 
 var spCredentialsRevokeCmd = &cobra.Command{
 	Use:   "revoke <credential-id>",
 	Short: "Revoke (delete) a client credential",
-	Args:  cobra.ExactArgs(1),
+	Long: `Revoke (delete) a client credential.
+
+Prints the API's response, which is {}; exit 0 is the success signal.`,
+	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		if err := requireNonEmpty(cmd, "service-principal-id"); err != nil {
 			return err
 		}
 		spID, _ := cmd.Flags().GetString("service-principal-id")
-		baseURL, err := GetBaseURL()
-		if err != nil {
-			return err
-		}
-
-		path := spCredentialPath(spID, args[0])
-		if dryRunActive() {
-			return printDryRun(cmd, "DELETE", path, nil)
-		}
-
-		c, err := newServicePrincipalsClient(cmd, baseURL)
-		if err != nil {
-			return fmt.Errorf("authentication failed: %w", err)
-		}
-		if _, err := c.Delete(cmd.Context(), path); err != nil {
-			return fmt.Errorf("API error: %w", err)
-		}
-		if _, err := fmt.Fprintf(cmd.OutOrStdout(), "Revoked credential: id=%s service_principal_id=%s\n", args[0], spID); err != nil {
-			return wrapOutputErr(err)
-		}
-		return nil
+		return sendMutation(cmd, mutation{Method: http.MethodDelete, Path: spCredentialPath(spID, args[0])})
 	},
 }
 
@@ -324,6 +282,10 @@ func init() {
 	markRequired(spCredentialsCreateCmd, "display-name")
 
 	spCredentialsUpdateCmd.Flags().String("display-name", "", "New display name ("+displayNameRule+")")
+
+	for _, c := range []*cobra.Command{spCredentialsCreateCmd, spCredentialsUpdateCmd, spCredentialsRevokeCmd} {
+		markMutating(c)
+	}
 
 	spCredentialsCmd.AddCommand(
 		spCredentialsListCmd,
