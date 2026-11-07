@@ -364,7 +364,10 @@ U+200B) exits 2 on every create and update, before any request is sent.
 
 One command sends more than one write: `entitlements create` POSTs a resource
 type, a resource, then the entitlement, skipping the steps whose id you supply
-via `--resource-type-id`/`--resource-id`. Its `--dry-run` previews all three.
+via `--resource-type-id`/`--resource-id`. Its `--dry-run` previews all three in
+`requests[]`, with `NEW_APP_RESOURCE_TYPE_ID`/`NEW_APP_RESOURCE_ID` literal in
+the url and body. It prints the entitlement unwrapped (`jq -er .id`); on a
+failure `applied` is `true` once any step was written, and `steps` lists them.
 There is no rollback, so a failure part-way through leaves the earlier objects
 behind; the error names them, the flags that reuse them, and the create-only
 flags the retry has to drop, and re-running without those flags creates
@@ -539,7 +542,10 @@ resource with `--resource-id` likewise means you drop
   its credentials): `service-principals get` then exits `4`. `users get
   <sp-id>` still shows `"status": "DELETED"` and `deletedAt`.
   `service-principals credentials revoke` is soft: `credentials get` still
-  returns the credential at exit `0` with no field marking it.
+  returns the credential at exit `0` with no field marking it. Creates and
+  updates print the object unwrapped (`jq -er .id`); `credentials create` adds
+  `.clientSecret`, shown once, so never log it. Deletes, `revoke` and
+  `bindings add|delete` print `{}`.
 - `automations update <automation-id> --enabled` succeeds on an automation
   with `isDraft: true`, and `isDraft` stays `true`. `--body-file` with
   `--update-mask triggers` replaces the published `triggers` and increments
@@ -547,7 +553,9 @@ resource with `--resource-id` likewise means you drop
   unknown camelCase mask path is a `400`, `invalid update_mask`; a snake_case
   one is a `400`, `FieldMask.paths contains invalid path`. A malformed id is a
   `400` (`value does not match regex pattern "^[a-zA-Z0-9]{27}$"`, exit `2`),
-  not a `404`.
+  not a `404`. `automations update` prints the automation unwrapped
+  (`jq -er .id`) with `webhookCapabilityUrl`/`webhookHmacSecret` as top-level
+  siblings; `automations delete` prints `{}`.
 - `webhooks create` and `webhooks update` take the endpoint as
   `--destination-url` (`--url` is the global tenant flag), and it must be an
   absolute `https://` URL with a host (an IPv6 literal host is refused); a
@@ -555,6 +563,8 @@ resource with `--resource-id` likewise means you drop
   invisible-only), exits `2` before sending. `webhooks test <webhook-id>` only
   queues a delivery: it exits `0` with `"state": "WEBHOOK_STATE_PENDING"`
   whether or not the URL is reachable.
+  Its `.id` is the delivery and `.webhookId` the webhook; `webhooks create`
+  and `update` print the webhook (`jq -er .id`), `delete` prints `{}`.
   `webhooks delete` is soft: `webhooks get` still returns the webhook at exit
   `0` with `deletedAt` set, and `webhooks list` omits it. `webhooks update` on
   a deleted webhook exits `0` and changes it, and it stays deleted.

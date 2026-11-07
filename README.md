@@ -146,6 +146,9 @@ c1i accounts list --app-id <id> [--status enabled|disabled|deleted] [--type user
 c1i accounts set-owner <app-user-id> --app-id <id> --user-id <id>
 ```
 
+`accounts set-owner` prints the app user as pretty JSON, unwrapped like the
+reads: `jq -er .id` is the account and `.identityUserId` its owner.
+
 ### Entitlements
 
 ```sh
@@ -191,8 +194,8 @@ c1i entitlements update <entitlement-id> --app-id <id> \
 ```
 
 `entitlements delete` is a soft delete (`entitlements get` still returns the
-entitlement, with `deletedAt` set). `apps delete` does not delete an app's
-entitlements, so remove them with this first.
+entitlement, with `deletedAt` set) and prints `{}`. `apps delete` does not
+delete an app's entitlements, so remove them with this first.
 
 `entitlements update` builds the update mask from exactly the flags you pass.
 Each policy id is checked before anything is sent: it must exist, not be
@@ -240,15 +243,18 @@ rather than an owner quietly dropped. `--duration-grant` takes a protobuf
 (`3600s`) or Go (`8h`) whole-number duration (no sign, no decimals), sent in
 seconds; anything else, or an empty one, is a usage error. Omit it for standing access.
 
-`--dry-run` previews all three requests, printing
-`NEW_APP_RESOURCE_TYPE_ID`/`NEW_APP_RESOURCE_ID` where an id only exists after
-a real preceding step. There is no rollback: if a later step fails, the objects
+`--dry-run` previews all three requests in `requests[]`; where an id only
+exists after a real preceding step, `NEW_APP_RESOURCE_TYPE_ID` and
+`NEW_APP_RESOURCE_ID` appear literally in the `url` and `body`, and a stderr
+notice explains them. There is no rollback: if a later step fails, the objects
 the earlier ones created still exist, and the error names them along with the
 flags that reuse them and the create-only flags the retry has to drop. The
-created entitlement comes back as pretty JSON under `appEntitlementView`
-(`--fields` is never applied to mutation output); it echoes
-`appResourceTypeId`/`appResourceId` and expands both objects, so every id the
-command touched is in that one payload.
+created entitlement is printed as pretty JSON, unwrapped like
+`entitlements get` (`jq -er .id`; an explicit `--fields` is a usage error); it
+echoes `appResourceTypeId`/`appResourceId` and expands both objects, so every
+id the command touched is in that one payload. Under `--error-format json` a
+failed run reports `applied` (`true` once any step was written) and a `steps`
+array naming each attempted request.
 
 `entitlements owners` lists an entitlement's owners (same row shape as
 `apps owners`) and is the read that reflects `entitlements add-owner`,
@@ -428,7 +434,7 @@ c1i automations executions list [--state done|error|pending|...] [--template-id 
 
 Each `automations list` row includes `function_ids` (every distinct function the automation invokes), so `--calls-function` can answer "which automations call function X?". `executions list --state` accepts the short forms (`done`, `error`, `pending`, ...) or the full `AUTOMATION_EXECUTION_STATE_*` enum; state and template filtering are applied client-side, so pair a narrow filter with `--limit` to bound the work.
 
-`automations update` sends only the fields you pass (an explicit `--enabled=false` disables; a blank `--display-name` is refused). For triggers, steps, draft or circuit-breaker fields, pass an Automation object with `--body-file` and list the camelCase fields to change in `--update-mask`. Masking `triggers` replaces the published triggers and increments `currentVersion`; `draftTriggers` and `isDraft` are left as they were. `automations delete` is a soft delete: the automation leaves `automations list`, but `automations get` still returns it.
+`automations update` sends only the fields you pass (an explicit `--enabled=false` disables; a blank `--display-name` is refused). For triggers, steps, draft or circuit-breaker fields, pass an Automation object with `--body-file` and list the camelCase fields to change in `--update-mask`. Masking `triggers` replaces the published triggers and increments `currentVersion`; `draftTriggers` and `isDraft` are left as they were. `automations delete` is a soft delete: the automation leaves `automations list`, but `automations get` still returns it. `automations update` prints the automation unwrapped (`jq -er .id`), with `webhookCapabilityUrl` and `webhookHmacSecret` as top-level siblings; `automations delete` prints `{}`.
 
 `automations list` and `automations executions list` read
 `POST /api/v1/search/automations` and `POST /api/v1/search/automation_executions`
@@ -854,8 +860,8 @@ c1i service-principals delete <sp-id>
 ```
 
 `service-principals` is aliased to `sp`. `create` needs only `--display-name`;
-the new principal comes back as pretty JSON under `servicePrincipal`; read its
-id from `.servicePrincipal.id`.
+the new principal is printed as pretty JSON, unwrapped like
+`service-principals get`; read its id with `jq -er .id`. `delete` prints `{}`.
 
 **Delete is destructive:** `service-principals delete` removes the principal
 and every credential issued for it. Before deleting, inspect the principal with
@@ -864,6 +870,11 @@ and target path; it does not verify that the target exists.
 
 **Credentials** are how a service principal authenticates. The secret is returned
 **once**, at creation, and cannot be retrieved again — capture it then.
+`credentials create` prints the credential unwrapped, with the secret as a
+sibling: `jq -er .id`, `.clientId` and `.clientSecret`. If writing that output
+fails (a full disk, a closed pipe), the command exits `1` with `applied: true`
+and says to revoke the credential and create a new one. `credentials update`
+prints the credential; `revoke`, `bindings add` and `bindings delete` print `{}`.
 
 ```sh
 c1i service-principals credentials list <sp-id>
@@ -947,9 +958,11 @@ has no signing secret, so create returns nothing that can't be read again with
 below 5 to 5 and returns one row more than that, so use `--limit` for an exact
 count.
 
-`webhooks test` queues a delivery and returns the queued instance, under
-`webhook`, with `"state": "WEBHOOK_STATE_PENDING"`, at exit `0`, whether or
-not the URL is reachable. Exit `0` does not mean the endpoint answered.
+`webhooks create` and `update` print the webhook, unwrapped (`jq -er .id`);
+`webhooks delete` prints `{}`. `webhooks test` queues a delivery and returns
+the queued instance with `"state": "WEBHOOK_STATE_PENDING"`, at exit `0`,
+whether or not the URL is reachable. Its `.id` is the delivery and `.webhookId`
+the webhook you tested. Exit `0` does not mean the endpoint answered.
 `webhooks delete` is a soft delete: the webhook leaves `webhooks list`, but
 `webhooks get` still returns it at exit `0` with `deletedAt` set, and deleting
 it again exits `0`.
