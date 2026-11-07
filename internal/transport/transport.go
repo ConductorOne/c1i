@@ -7,10 +7,11 @@ import (
 	"io"
 	"math/rand"
 	"net/http"
-	"os"
+	"net/http/httptrace"
 	"runtime/debug"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"time"
 )
 
@@ -129,6 +130,9 @@ type Response struct {
 	StatusCode int
 	Header     http.Header
 	Body       []byte
+	// PriorSent reports that an earlier, retried attempt reached the server,
+	// so a failure status here does not prove nothing was applied.
+	PriorSent bool
 }
 
 // Client sends HTTP requests with a fixed, unforgettable set of protections:
@@ -146,7 +150,7 @@ type Client struct {
 
 type buildConfig struct {
 	maxRetries   int
-	debug        bool
+	debug        io.Writer
 	timeout      time.Duration
 	nonRetryable func(error) bool
 	maxRespBytes int64
@@ -166,11 +170,11 @@ func WithMaxRetries(n int) Option {
 	return func(c *buildConfig) { c.maxRetries = n }
 }
 
-// WithDebug enables HTTP wire tracing to stderr: each request's method and URL,
-// then the response status and elapsed time (including every retry attempt).
-// Headers and bodies are never logged, so credentials don't leak.
-func WithDebug(enabled bool) Option {
-	return func(c *buildConfig) { c.debug = enabled }
+// WithDebug traces each attempt to w: the request's method and URL, then the
+// response status and elapsed time. A nil w disables tracing. Headers and
+// bodies are never logged, so credentials don't leak.
+func WithDebug(w io.Writer) Option {
+	return func(c *buildConfig) { c.debug = w }
 }
 
 // WithTimeout overrides DefaultTimeout for a single attempt.
@@ -221,8 +225,8 @@ func New(base http.RoundTripper, opts ...Option) *Client {
 	}
 
 	inner := http.RoundTripper(&userAgentTripper{next: base})
-	if cfg.debug {
-		inner = &debugTripper{next: inner, out: os.Stderr}
+	if cfg.debug != nil {
+		inner = &debugTripper{next: inner, out: cfg.debug}
 	}
 	tripper := http.RoundTripper(&redirectTripper{next: inner})
 
@@ -250,27 +254,58 @@ func New(base http.RoundTripper, opts ...Option) *Client {
 // (http.NewRequestWithContext sets GetBody for the bytes.Reader/strings.Reader
 // bodies this CLI uses).
 func (c *Client) Do(req *http.Request) (*Response, error) {
-	if p := req.URL.EscapedPath(); pathHasBadSegment(p) {
-		return nil, &PathError{Method: req.Method, Path: p}
+	if err := CheckPath(req.Method, req.URL.EscapedPath()); err != nil {
+		return nil, err
 	}
 	return c.sendWithRetry(req)
 }
 
+// CheckPath is the empty/dot-segment guard Do applies, exported so a caller
+// can refuse a request it will never send (a --dry-run preview) identically.
+func CheckPath(method, escapedPath string) error {
+	if pathHasBadSegment(escapedPath) {
+		return &PathError{Method: method, Path: escapedPath}
+	}
+	return nil
+}
+
+// AttemptError wraps every error Do returns once an attempt has started.
+// Sent is set exactly when the final attempt's request headers were written
+// (httptrace WroteHeaders); PriorSent when any earlier attempt's were. It is
+// transparent: Error and Unwrap defer to Err.
+type AttemptError struct {
+	Err       error
+	Sent      bool
+	PriorSent bool
+}
+
+func (e *AttemptError) Error() string { return e.Err.Error() }
+func (e *AttemptError) Unwrap() error { return e.Err }
+
 func (c *Client) sendWithRetry(req *http.Request) (*Response, error) {
 	ctx := req.Context()
+	priorSent := false
 	for attempt := 0; ; attempt++ {
 		if attempt > 0 && req.GetBody != nil {
 			body, err := req.GetBody()
 			if err != nil {
-				return nil, fmt.Errorf("rewinding request body for retry: %w", err)
+				return nil, &AttemptError{Err: fmt.Errorf("rewinding request body for retry: %w", err), PriorSent: priorSent}
 			}
 			req.Body = body
 		}
 
-		resp, err := c.httpClient.Do(req) // #nosec G704 -- req.URL is the operator's own --url/config target, not attacker-supplied input to an internal request
+		// WroteHeaders may fire on the transport's write goroutine.
+		var sent atomic.Bool
+		trace := &httptrace.ClientTrace{WroteHeaders: func() { sent.Store(true) }}
+		attemptReq := req.WithContext(httptrace.WithClientTrace(ctx, trace))
+		fail := func(err error) error {
+			return &AttemptError{Err: err, Sent: sent.Load(), PriorSent: priorSent}
+		}
+
+		resp, err := c.httpClient.Do(attemptReq) // #nosec G704 -- req.URL is the operator's own --url/config target, not attacker-supplied input to an internal request
 		if err != nil {
 			if c.nonRetryable != nil && c.nonRetryable(err) {
-				return nil, err
+				return nil, fail(err)
 			}
 			// A redirect refusal/loop (see redirectTripper) is permanent for a
 			// given request shape -- retrying would just redirect the same way
@@ -278,30 +313,32 @@ func (c *Client) sendWithRetry(req *http.Request) (*Response, error) {
 			// budget on it.
 			var redirErr *RedirectError
 			if errors.As(err, &redirErr) {
-				return nil, redirErr
+				return nil, fail(redirErr)
 			}
 			var redirLoopErr *RedirectLoopError
 			if errors.As(err, &redirLoopErr) {
-				return nil, redirLoopErr
+				return nil, fail(redirLoopErr)
 			}
 			// Transport-level failure (connection reset, timeout, ...). We
 			// can't tell whether the server processed the request, so only
 			// retry idempotent methods.
 			if retrySafe(req.Method, req.URL.EscapedPath()) && attempt < c.maxRetries {
+				priorSent = priorSent || sent.Load()
 				if serr := sleepFn(ctx, nextBackoff(attempt, nil)); serr != nil {
-					return nil, serr
+					return nil, &AttemptError{Err: serr, PriorSent: priorSent}
 				}
 				continue
 			}
-			return nil, err
+			return nil, fail(err)
 		}
 
 		body, readErr := c.readBody(resp.Body)
 		_ = resp.Body.Close()
 
 		if isRetryableStatus(req.Method, req.URL.EscapedPath(), resp.StatusCode) && attempt < c.maxRetries {
+			priorSent = priorSent || sent.Load()
 			if serr := sleepFn(ctx, nextBackoff(attempt, resp)); serr != nil {
-				return nil, serr
+				return nil, &AttemptError{Err: serr, PriorSent: priorSent}
 			}
 			continue
 		}
@@ -313,9 +350,9 @@ func (c *Client) sendWithRetry(req *http.Request) (*Response, error) {
 		// though, the body IS the result, so a read failure there must
 		// surface as an error.
 		if resp.StatusCode >= 200 && resp.StatusCode < 300 && readErr != nil {
-			return nil, readErr
+			return nil, fail(readErr)
 		}
-		return &Response{StatusCode: resp.StatusCode, Header: resp.Header, Body: body}, nil
+		return &Response{StatusCode: resp.StatusCode, Header: resp.Header, Body: body, PriorSent: priorSent}, nil
 	}
 }
 

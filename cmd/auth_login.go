@@ -222,7 +222,7 @@ func loginWithBrowser(cmd *cobra.Command, in *lineReader, baseURL string, scope 
 	// instead of silently hanging or giving up after one try.
 	opts := []transport.Option{
 		transport.WithMaxRetries(viper.GetInt("max_retries")),
-		transport.WithDebug(viper.GetBool("debug")),
+		transport.WithDebug(debugWriter(cmd)),
 	}
 
 	code, err := login.StartDeviceFlow(ctx, baseURL, opts...)

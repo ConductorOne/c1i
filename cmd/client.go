@@ -13,7 +13,7 @@ import (
 var newClient = func(cmd *cobra.Command, baseURL string) (*client.Client, error) {
 	return client.New(cmd.Context(), baseURL,
 		client.WithMaxRetries(viper.GetInt("max_retries")),
-		client.WithDebug(viper.GetBool("debug")),
+		client.WithDebug(debugWriter(cmd)),
 	)
 }
 

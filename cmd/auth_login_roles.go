@@ -162,7 +162,7 @@ type menuRole struct {
 var newCredentialClient = func(cmd *cobra.Command, baseURL, clientID, clientSecret string) (*client.Client, error) {
 	return client.NewWithCredentials(cmd.Context(), baseURL, clientID, clientSecret,
 		client.WithMaxRetries(viper.GetInt("max_retries")),
-		client.WithDebug(viper.GetBool("debug")),
+		client.WithDebug(debugWriter(cmd)),
 	)
 }
 

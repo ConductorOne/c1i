@@ -33,7 +33,7 @@ The token is not written to disk; a new one is minted on each invocation.`,
 
 		tok, err := client.Token(cmd.Context(), baseURL,
 			client.WithMaxRetries(viper.GetInt("max_retries")),
-			client.WithDebug(viper.GetBool("debug")),
+			client.WithDebug(debugWriter(cmd)),
 		)
 		if err != nil {
 			// Only frame genuine auth failures (bad/missing credentials, a

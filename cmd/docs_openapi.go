@@ -195,7 +195,7 @@ func fetchOpenAPISpec(cmd *cobra.Command) ([]byte, error) {
 
 	hc := transport.New(openAPIBase,
 		transport.WithMaxRetries(openAPIRetries(cachePath)),
-		transport.WithDebug(viper.GetBool("debug")),
+		transport.WithDebug(debugWriter(cmd)),
 		transport.WithMaxResponseBytes(maxOpenAPISpecBytes),
 	)
 	resp, err := hc.Do(req)

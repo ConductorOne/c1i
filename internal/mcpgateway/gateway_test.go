@@ -1072,7 +1072,7 @@ func TestMaxRetriesAffectsGatewayRetries(t *testing.T) {
 	})
 }
 
-// TestDebugTracesGatewayRequest proves transport.WithDebug(true), threaded
+// TestDebugTracesGatewayRequest proves transport.WithDebug(os.Stderr), threaded
 // through New, traces a gateway request to stderr — the wiring
 // cmd/mcp_gateway.go's newGatewayClient relies on for `c1i mcp gateway
 // list-tools --debug` to emit anything at all. Before this package used
@@ -1094,7 +1094,7 @@ func TestDebugTracesGatewayRequest(t *testing.T) {
 	os.Stderr = w
 	t.Cleanup(func() { os.Stderr = orig })
 
-	c := New(srv.URL, "test-token", srv.Client(), transport.WithDebug(true))
+	c := New(srv.URL, "test-token", srv.Client(), transport.WithDebug(os.Stderr))
 	if err := c.Initialize(context.Background()); err != nil {
 		t.Fatalf("Initialize: %v", err)
 	}
