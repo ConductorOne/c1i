@@ -22,6 +22,7 @@ chose -- its creator. Check "c1i apps owners <app-id>" first if that matters.
 ` + ownerAsyncNote + `
 Verify with "c1i apps owners <app-id>".
 
+Prints the API's response, which is {}; exit 0 is the success signal.
 Honors --dry-run.`,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {

@@ -15,7 +15,10 @@ var servicePrincipalsUpdateCmd = &cobra.Command{
 
 A blank --display-name (empty, whitespace or invisible-only) exits 2,
 nothing sent. Sent as is, the server stores "" as an empty name and keeps
-"  " verbatim.`,
+"  " verbatim.
+
+Prints the service principal as pretty JSON, unwrapped like
+"service-principals get": the id is .id.`,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		if _, err := requireNonEmptyIfSet(cmd, "display-name"); err != nil {

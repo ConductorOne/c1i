@@ -9,6 +9,10 @@ import (
 var servicePrincipalsCreateCmd = &cobra.Command{
 	Use:   "create",
 	Short: "Create a service principal",
+	Long: `Create a service principal.
+
+Prints the service principal as pretty JSON, unwrapped like
+"service-principals get": the id is .id.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		if _, err := requireNonEmptyIfSet(cmd, "display-name"); err != nil {
 			return err

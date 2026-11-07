@@ -58,7 +58,10 @@ var mcpClassifiersCreateCmd = &cobra.Command{
 
 Pass the Classifier object (not the CreateClassifierRequest wrapper) with
 --body-file. displayName is required by C1. Rules are evaluated in listed order,
-first match wins; leave a new rule's id empty for C1 to assign it.`,
+first match wins; leave a new rule's id empty for C1 to assign it.
+
+Prints the classifier as pretty JSON, unwrapped like "mcp classifiers get":
+the id is .id.`,
 	Args: cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, _ []string) error {
 		classifier, err := readRequiredJSONObject(cmd, "body-file")
@@ -78,7 +81,10 @@ positional id overrides any id in the file. Use camelCase proto field paths;
 for example, --update-mask description,defaultOutcome.
 
 Including rules in --update-mask replaces every rule in evaluation order. Read
-and preserve the existing classifier first when changing rules.`,
+and preserve the existing classifier first when changing rules.
+
+Prints the classifier as pretty JSON, unwrapped like "mcp classifiers get":
+the id is .id.`,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		body, err := readClassifierUpdateBody(cmd, args[0])
@@ -121,7 +127,10 @@ var mcpClassifierBindingsCreateCmd = &cobra.Command{
 Pass the ClassifierBinding object (not the CreateClassifierBindingRequest
 wrapper) through --body-file. surface and classifierId are required. targetId
 identifies the applicable agent or gateway target when the selected surface
-uses one.`,
+uses one.
+
+Prints the binding as pretty JSON, without its {"binding": …} wrapper: the id
+is .id.`,
 	Args: cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, _ []string) error {
 		binding, err := readRequiredJSONObject(cmd, "body-file")
@@ -184,7 +193,10 @@ var mcpClassifierTemplatesInstantiateCmd = &cobra.Command{
 
 --body-file is optional. When supplied, pass optional request fields:
 templateVersion, displayName, and params. Required params are declared by
-"templates get" and validated by C1.`,
+"templates get" and validated by C1.
+
+Prints the classifier as pretty JSON, unwrapped like "mcp classifiers get":
+the id is .id.`,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		body, err := readOptionalClassifierJSONObject(cmd, "body-file")
@@ -202,7 +214,10 @@ var mcpClassifierTemplatesAddRuleCmd = &cobra.Command{
 
 --body-file is optional. It may contain templateVersion, ruleIndex,
 insertIndex, and params. The positional classifier and template IDs are
-canonical. ruleIndex defaults to 0; insertIndex at or past the end appends.`,
+canonical. ruleIndex defaults to 0; insertIndex at or past the end appends.
+
+Prints the classifier as pretty JSON, unwrapped like "mcp classifiers get":
+the id is .id.`,
 	Args: cobra.ExactArgs(2),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		body, err := readOptionalClassifierJSONObject(cmd, "body-file")
@@ -234,7 +249,10 @@ var mcpClassifierPolicyUpdateCmd = &cobra.Command{
 	Long: `Update the tenant's singleton agent classifier policy using a partial
 AgentClassifierPolicy JSON object and --update-mask. The policy is implicitly
 created by its first update. Including rules in the mask replaces the entire
-first-match-wins cascade in the supplied order.`,
+first-match-wins cascade in the supplied order.
+
+Prints the updated policy as pretty JSON, unwrapped like
+"mcp classifiers policy show".`,
 	Args: cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, _ []string) error {
 		body, err := readMaskedClassifierObject(cmd, "policy", "")
@@ -291,7 +309,10 @@ var mcpClassifierToolGatesCreateCmd = &cobra.Command{
 
 displayName and grantPolicyId are required. filter may set a CEL expression or
 a built-in pattern, but never both; C1 resolves a built-in pattern to its CEL
-expression.`,
+expression.
+
+Prints the tool gate as pretty JSON, unwrapped like
+"mcp classifiers tool-gates get": the id is .id.`,
 	Args: cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, _ []string) error {
 		body, err := readRequiredJSONObject(cmd, "body-file")

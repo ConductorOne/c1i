@@ -62,7 +62,10 @@ var entitlementsProxyBindingsCreateCmd = &cobra.Command{
 var entitlementsProxyBindingsDeleteCmd = &cobra.Command{
 	Use:   "delete",
 	Short: "Delete an entitlement proxy binding",
-	Args:  cobra.NoArgs,
+	Long: `Delete an entitlement proxy binding.
+
+Prints the API's response, which is {}; exit 0 is the success signal.`,
+	Args: cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, _ []string) error {
 		path, err := proxyBindingPath(cmd)
 		if err != nil {

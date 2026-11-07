@@ -158,7 +158,12 @@ marks it revoked. "service-principals credentials list" omits it.`,
 var spCredentialsCreateCmd = &cobra.Command{
 	Use:   "create <sp-id>",
 	Short: "Create a client credential (the secret is shown once, at creation)",
-	Args:  cobra.ExactArgs(1),
+	Long: `Create a client credential. The secret is shown once, at creation.
+
+Prints the credential as pretty JSON, unwrapped like
+"service-principals credentials get": the id is .id, and .clientId and
+.clientSecret sit beside it. Capture .clientSecret now; it cannot be read again.`,
+	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		if _, err := requireNonEmptyIfSet(cmd, "display-name"); err != nil {
 			return err
@@ -209,7 +214,11 @@ func buildSPCredentialCreateBody(cmd *cobra.Command) (map[string]any, error) {
 var spCredentialsUpdateCmd = &cobra.Command{
 	Use:   "update <credential-id>",
 	Short: "Update a client credential's display name",
-	Args:  cobra.ExactArgs(1),
+	Long: `Update a client credential's display name.
+
+Prints the credential as pretty JSON, unwrapped like
+"service-principals credentials get": the id is .id.`,
+	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		if _, err := requireNonEmptyIfSet(cmd, "display-name"); err != nil {
 			return err
@@ -241,7 +250,10 @@ var spCredentialsUpdateCmd = &cobra.Command{
 var spCredentialsRevokeCmd = &cobra.Command{
 	Use:   "revoke <credential-id>",
 	Short: "Revoke (delete) a client credential",
-	Args:  cobra.ExactArgs(1),
+	Long: `Revoke (delete) a client credential.
+
+Prints the API's response, which is {}; exit 0 is the success signal.`,
+	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		if err := requireNonEmpty(cmd, "service-principal-id"); err != nil {
 			return err

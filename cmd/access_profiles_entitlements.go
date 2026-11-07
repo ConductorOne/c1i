@@ -102,7 +102,9 @@ var accessProfilesRequestableEntitlementsSetCmd = &cobra.Command{
 
 Pass --refs-file with a JSON array of {"appId":"…","id":"…"} objects. Every
 existing requestable entitlement not in that array is removed; pass [] to
-clear the entire set.`,
+clear the entire set.
+
+Prints the API's response, which is {}; exit 0 is the success signal.`,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		refs, err := catalogEntitlementReferencesFromFile(cmd)

@@ -35,6 +35,9 @@ func spBindingRow(b spBinding) map[string]any {
 var spBindingsAddCmd = &cobra.Command{
 	Use:   "add",
 	Short: "Bind a subject to a service principal (idempotent)",
+	Long: `Bind a subject to a service principal (idempotent).
+
+Prints the API's response, which is {}; exit 0 is the success signal.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		if err := requireNonEmpty(cmd, "service-principal-id"); err != nil {
 			return err
@@ -52,6 +55,9 @@ var spBindingsAddCmd = &cobra.Command{
 var spBindingsDeleteCmd = &cobra.Command{
 	Use:   "delete",
 	Short: "Remove a subject's binding to a service principal (idempotent)",
+	Long: `Remove a subject's binding to a service principal (idempotent).
+
+Prints the API's response, which is {}; exit 0 is the success signal.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		if err := requireNonEmpty(cmd, "service-principal-id"); err != nil {
 			return err
