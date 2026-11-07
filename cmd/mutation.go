@@ -294,20 +294,20 @@ func sendMutationBatch(cmd *cobra.Command, ms []mutation, idKey string, label fu
 	if err != nil {
 		return notApplied(err)
 	}
+	// R17: any failure before the first send reports the offending id and
+	// lists every id as not attempted, with that failure's own exit code.
+	unsent := func(i int, err error) error {
+		writeBatchItemError(cmd, o.batchNoun, labels[i], err, appliedFalse, len(ms) > 1)
+		return &mutationError{err: err, applied: appliedFalse, exit: exitCode(err), batch: &batchSummary{NotAttempted: labels}}
+	}
 	var c *client.Client
 	reqs := make([]previewRequest, len(ms))
 	for i := range ms {
 		if c, err = runPreReadsWith(cmd, baseURL, &ms[i], o, c); err != nil {
-			return notApplied(err)
+			return unsent(i, err)
 		}
 		if reqs[i], err = prepareMutation(baseURL, ms[i]); err != nil {
-			writeBatchItemError(cmd, o.batchNoun, labels[i], err, appliedFalse, len(ms) > 1)
-			return &mutationError{
-				err:     err,
-				applied: appliedFalse,
-				exit:    exitUsage,
-				batch:   &batchSummary{NotAttempted: labels},
-			}
+			return unsent(i, err)
 		}
 	}
 	if dryRunActive() {
