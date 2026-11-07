@@ -51,22 +51,23 @@ func (a taskAction) runTaskAction(cmd *cobra.Command, args []string) error {
 	if a.step == stepUnused {
 		return sendMutation(cmd, m)
 	}
-	return sendMutation(cmd, m, withPreRead(a.stepLookup(cmd, taskID)))
+	// An explicit step needs no lookup, so a preview needs no credentials.
+	if explicit, _ := cmd.Flags().GetString("policy-step-id"); explicit != "" {
+		body["policyStepId"] = explicit
+		return sendMutation(cmd, m)
+	}
+	return sendMutation(cmd, m, withPreRead(a.stepLookup(taskID)))
 }
 
-// stepLookup resolves the policy step before the send, on a dry run too. The
-// id is reported on stderr only when c1i, not --policy-step-id, chose it.
-func (a taskAction) stepLookup(cmd *cobra.Command, taskID string) preRead {
+// stepLookup resolves the current policy step before the send, on a dry run
+// too, and reports it on stderr.
+func (a taskAction) stepLookup(taskID string) preRead {
 	return preRead{OnDryRun: true, Run: func(ctx context.Context, c *client.Client, m *mutation) ([]resolvedID, error) {
-		explicit, _ := cmd.Flags().GetString("policy-step-id")
-		stepID, err := resolvePolicyStepID(ctx, c, taskID, explicit, a.step == stepRequired)
+		stepID, err := resolvePolicyStepID(ctx, c, taskID, "", a.step == stepRequired)
 		if err != nil || stepID == "" {
 			return nil, err
 		}
 		m.Body.(map[string]any)["policyStepId"] = stepID
-		if explicit != "" {
-			return nil, nil
-		}
 		return []resolvedID{{Name: "policyStepId", Label: "policy step", ID: stepID}}, nil
 	}}
 }
