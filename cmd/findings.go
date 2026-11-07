@@ -355,12 +355,12 @@ func getFindingsRaw(cmd *cobra.Command, path string) error {
 }
 
 func postFindingsMutation(cmd *cobra.Command, path string, body map[string]any) error {
-	if dryRunActive() {
-		return printDryRun(cmd, "POST", path, body)
-	}
 	baseURL, err := GetBaseURL()
 	if err != nil {
 		return err
+	}
+	if dryRunActive() {
+		return printDryRun(cmd, "POST", path, body)
 	}
 	c, err := newClient(cmd, baseURL)
 	if err != nil {
@@ -374,12 +374,12 @@ func postFindingsMutation(cmd *cobra.Command, path string, body map[string]any) 
 }
 
 func deleteFindingsMutation(cmd *cobra.Command, path string) error {
-	if dryRunActive() {
-		return printDryRun(cmd, "DELETE", path, nil)
-	}
 	baseURL, err := GetBaseURL()
 	if err != nil {
 		return err
+	}
+	if dryRunActive() {
+		return printDryRun(cmd, "DELETE", path, nil)
 	}
 	c, err := newClient(cmd, baseURL)
 	if err != nil {

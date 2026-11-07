@@ -28,6 +28,7 @@ func enableBundleAutomationDryRun(t *testing.T) {
 	t.Helper()
 	orig := viper.GetBool("dry_run")
 	viper.Set("dry_run", true)
+	t.Setenv("C1I_URL", "https://example.invalid") // a preview resolves the URL first
 	t.Cleanup(func() { viper.Set("dry_run", orig) })
 }
 

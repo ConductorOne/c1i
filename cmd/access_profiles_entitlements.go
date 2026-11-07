@@ -296,12 +296,12 @@ func buildVisibilityEntitlementsBody(refs []catalogEntitlementRef) map[string]an
 }
 
 func postAccessProfileEntitlements(cmd *cobra.Command, path string, body map[string]any) error {
-	if dryRunActive() {
-		return printDryRun(cmd, http.MethodPost, path, body)
-	}
 	baseURL, err := GetBaseURL()
 	if err != nil {
 		return err
+	}
+	if dryRunActive() {
+		return printDryRun(cmd, http.MethodPost, path, body)
 	}
 	c, err := newClient(cmd, baseURL)
 	if err != nil {
@@ -315,14 +315,14 @@ func postAccessProfileEntitlements(cmd *cobra.Command, path string, body map[str
 }
 
 func deleteAccessProfileEntitlements(cmd *cobra.Command, path string, body map[string]any) error {
+	baseURL, err := GetBaseURL()
+	if err != nil {
+		return err
+	}
 	if dryRunActive() {
 		return printDryRun(cmd, http.MethodDelete, path, body)
 	}
 	bodyBytes, err := json.Marshal(body)
-	if err != nil {
-		return err
-	}
-	baseURL, err := GetBaseURL()
 	if err != nil {
 		return err
 	}

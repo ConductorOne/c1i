@@ -212,12 +212,12 @@ func getRoleMiningResource(cmd *cobra.Command, path, key string) error {
 }
 
 func postRoleMiningMutation(cmd *cobra.Command, path string, body map[string]any) error {
-	if dryRunActive() {
-		return printDryRun(cmd, "POST", path, body)
-	}
 	baseURL, err := GetBaseURL()
 	if err != nil {
 		return err
+	}
+	if dryRunActive() {
+		return printDryRun(cmd, "POST", path, body)
 	}
 	c, err := newClient(cmd, baseURL)
 	if err != nil {

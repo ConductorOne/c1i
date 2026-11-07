@@ -73,13 +73,12 @@ var accessProfilesBundleAutomationDeleteCmd = &cobra.Command{
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		path := bundleAutomationPath(args[0])
-		if dryRunActive() {
-			return printDryRun(cmd, "DELETE", path, nil)
-		}
-
 		baseURL, err := GetBaseURL()
 		if err != nil {
 			return err
+		}
+		if dryRunActive() {
+			return printDryRun(cmd, "DELETE", path, nil)
 		}
 		c, err := newClient(cmd, baseURL)
 		if err != nil {
@@ -129,13 +128,12 @@ func bundleAutomationPath(accessProfileID string) string {
 
 func postBundleAutomation(cmd *cobra.Command, accessProfileID, action string, body map[string]any) error {
 	path := bundleAutomationPath(accessProfileID) + action
-	if dryRunActive() {
-		return printDryRun(cmd, "POST", path, body)
-	}
-
 	baseURL, err := GetBaseURL()
 	if err != nil {
 		return err
+	}
+	if dryRunActive() {
+		return printDryRun(cmd, "POST", path, body)
 	}
 	c, err := newClient(cmd, baseURL)
 	if err != nil {
