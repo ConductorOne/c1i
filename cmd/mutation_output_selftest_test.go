@@ -184,6 +184,47 @@ func zzDefaultDo(req *http.Request) {
 	_, _ = http.DefaultClient.Do(req)
 }
 
+func zzRenamedPrintln(c *cobra.Command, _ []string) error {
+	c.Println("Deleted app")
+	return sendMutation(c, mutation{})
+}
+
+func zzRenamedPrintf(c *cobra.Command, _ []string) error {
+	c.Printf("x")
+	return sendMutation(c, mutation{})
+}
+
+func zzRenamedWriter(c *cobra.Command, _ []string) error {
+	fmt.Fprintln(c.OutOrStdout(), "x")
+	return sendMutation(c, mutation{})
+}
+
+func zzClosureRenamed(c *cobra.Command, _ []string) error {
+	f := func() { c.Print("x") }
+	f()
+	return sendMutation(c, mutation{})
+}
+
+func zzHTTPGet() {
+	_, _ = http.Get("https://example.invalid")
+}
+
+func zzHTTPHead() {
+	_, _ = http.Head("https://example.invalid")
+}
+
+func zzHTTPPostForm() {
+	_, _ = http.PostForm("https://example.invalid", nil)
+}
+
+func zzRoundTrip(rt http.RoundTripper, req *http.Request) {
+	_, _ = rt.RoundTrip(req)
+}
+
+func zzClientDo(hc *http.Client, req *http.Request) {
+	_, _ = hc.Do(req)
+}
+
 func zzNewClientMethod(c interface{ PostJSON() }) {
 	c.PostJSON()
 }
@@ -338,6 +379,22 @@ func TestEnforcementCatchesViolations(t *testing.T) {
 	t.Run("http.DefaultClient.Do", func(t *testing.T) {
 		wantViolation(t, ruleAViolations(ix), "zz_synthetic.go:zzDefaultDo")
 	})
+	for _, fn := range []string{"zzHTTPGet", "zzHTTPHead", "zzHTTPPostForm", "zzRoundTrip", "zzClientDo"} {
+		t.Run("net/http send "+fn, func(t *testing.T) {
+			wantViolation(t, ruleAViolations(ix), "zz_synthetic.go:"+fn)
+		})
+	}
+	for fn, what := range map[string]string{
+		"zzRenamedPrintln": "c.Println",
+		"zzRenamedPrintf":  "c.Printf",
+		"zzRenamedWriter":  "fmt.Fprintln to stdout",
+		"zzClosureRenamed": "c.Print",
+	} {
+		t.Run("renamed command param "+fn, func(t *testing.T) {
+			l, rep := synthLeaf(t, ix, fn, true)
+			wantViolation(t, leafViolations(l, rep), what)
+		})
+	}
 	t.Run("new exported client method", func(t *testing.T) {
 		wantViolation(t, ruleAViolations(ix), "zz_synthetic.go:zzNewClientMethod")
 	})

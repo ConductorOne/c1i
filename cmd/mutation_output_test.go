@@ -226,6 +226,9 @@ func outOfScope(_, key string, x *ast.SelectorExpr) bool {
 // readOnlyClientMethods, or Do on any receiver, as a call or a method value.
 // Only net/http's Request type is exempt.
 func (ix *srcIndex) isMutatingSelector(x *ast.SelectorExpr) bool {
+	if isHTTPPackageSend(x) {
+		return true
+	}
 	if !ix.mutating[x.Sel.Name] {
 		return false
 	}
@@ -233,10 +236,19 @@ func (ix *srcIndex) isMutatingSelector(x *ast.SelectorExpr) bool {
 	return !ok || pkg.Name != "http" || x.Sel.Name != "Request"
 }
 
+// httpSendFuncs are net/http package-level functions that send a request.
+var httpSendFuncs = map[string]bool{"Get": true, "Head": true, "Post": true, "PostForm": true}
+
+// isHTTPPackageSend matches http.Get/Head/Post/PostForm.
+func isHTTPPackageSend(x *ast.SelectorExpr) bool {
+	pkg, ok := x.X.(*ast.Ident)
+	return ok && pkg.Name == "http" && httpSendFuncs[x.Sel.Name]
+}
+
 // mutatingMethods derives the mutating selector names from the exported API
 // of the client packages.
 func (ix *srcIndex) mutatingMethods() map[string]bool {
-	out := map[string]bool{"Do": true}
+	out := map[string]bool{"Do": true, "RoundTrip": true}
 	for path, f := range ix.files {
 		if !isUnder(path, []string{"internal/client/", "internal/transport/"}) {
 			continue
@@ -328,6 +340,7 @@ func (w *walker) walkWith(root ast.Node, mode walkMode, deferred map[ast.Node]bo
 		locals[f] = true
 	}
 	_, exempt := nonMutatingOutputModes[w.ix.declKey[root]]
+	cobraParams := w.ix.cobraParamNames(root)
 	var stack []ast.Node
 	ast.Inspect(root, func(n ast.Node) bool {
 		if n == nil {
@@ -357,7 +370,7 @@ func (w *walker) walkWith(root ast.Node, mode walkMode, deferred map[ast.Node]bo
 					w.rep.nonTail = append(w.rep.nonTail, finding{pos, id.Name + " is not a tail call (return " + id.Name + "(...))"})
 				}
 			}
-			if what := forbiddenCall(x, locals, w.ix, exempt, mode); what != "" {
+			if what := forbiddenCall(x, locals, cobraParams, w.ix, exempt, mode); what != "" {
 				w.rep.forbidden = append(w.rep.forbidden, finding{pos, what})
 			}
 		case *ast.SelectorExpr:
@@ -661,7 +674,7 @@ var outputFuncs = map[string]bool{"writeObject": true, "writeResource": true, "w
 
 // forbiddenCall reports a §5.2 output form in call, and in modeDirect a
 // read too. An exempt declaration (nonMutatingOutputModes) may write stdout.
-func forbiddenCall(call *ast.CallExpr, locals map[string]bool, ix *srcIndex, exempt bool, mode walkMode) string {
+func forbiddenCall(call *ast.CallExpr, locals map[string]bool, cobraParams map[string]bool, ix *srcIndex, exempt bool, mode walkMode) string {
 	if id, ok := call.Fun.(*ast.Ident); ok && outputFuncs[id.Name] {
 		return id.Name + " (mutation output goes through the helper)"
 	}
@@ -680,14 +693,56 @@ func forbiddenCall(call *ast.CallExpr, locals map[string]bool, ix *srcIndex, exe
 		case exempt:
 		case pkg != nil && pkg.Name == "fmt" && strings.HasPrefix(name, "Print"):
 			return "fmt." + name + " (stdout)"
-		case pkg != nil && pkg.Name == "cmd" && strings.HasPrefix(name, "Print"):
-			return "cmd." + name
+		case pkg != nil && cobraParams[pkg.Name] && strings.HasPrefix(name, "Print"):
+			return pkg.Name + "." + name
 		}
 		if mode == modeDirect && name == "Get" && len(call.Args) == 3 {
 			return "a .Get read outside withPreRead/withWait"
 		}
 	}
 	return ""
+}
+
+// cobraParamNames names the parameters of type *cobra.Command declared by the
+// top-level decl containing root (and the FuncLits inside it), whatever they
+// are called.
+func (ix *srcIndex) cobraParamNames(root ast.Node) map[string]bool {
+	out := map[string]bool{}
+	collect := func(ft *ast.FuncType) {
+		if ft.Params == nil {
+			return
+		}
+		for _, f := range ft.Params.List {
+			if types.ExprString(f.Type) != "*cobra.Command" {
+				continue
+			}
+			for _, n := range f.Names {
+				out[n.Name] = true
+			}
+		}
+	}
+	scan := func(n ast.Node) {
+		ast.Inspect(n, func(n ast.Node) bool {
+			switch x := n.(type) {
+			case *ast.FuncDecl:
+				collect(x.Type)
+			case *ast.FuncLit:
+				collect(x.Type)
+			}
+			return true
+		})
+	}
+	scan(root)
+	for _, f := range ix.files {
+		if f.Pos() <= root.Pos() && root.Pos() < f.End() {
+			for _, d := range f.Decls {
+				if d.Pos() <= root.Pos() && root.Pos() < d.End() {
+					scan(d)
+				}
+			}
+		}
+	}
+	return out
 }
 
 // ---- runtime command -> RunE source ----
@@ -758,6 +813,12 @@ func (ix *srcIndex) methodValue(name string) ast.Node {
 }
 
 // ---- the tests ----
+
+// Residual limits of Rules A and B (they catch drift, not evasion). Not
+// followed: method values (out := cmd.OutOrStdout; out()) and writers injected
+// through constructor parameters into struct fields. The mutationTable
+// behavioural test, which checks exact stdout for every mutating command, is
+// the backstop for both.
 
 // TestMutationsWriteOnlyThroughHelper is Rule B: a command is mutating when
 // its RunE closure reaches sendMutation*; it must be marked, tail-call the
