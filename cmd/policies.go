@@ -88,19 +88,22 @@ func readJSONBytes(cmd *cobra.Command, path string) ([]byte, error) {
 	return os.ReadFile(path) // #nosec G304 -- user-supplied --*-file path is intentional
 }
 
-// readJSONArrayFile reads a JSON array from path (file or "-" for stdin).
-// Used for --steps-file (a PolicySteps.steps array) and --rules-file (a
-// Rule array) — both are arrays at the top level, unlike --body-file /
-// --hosted-config-file elsewhere in this codebase, which read a JSON object
-// (see readConfigFile in cmd/mcp_servers_config.go).
-func readJSONArrayFile(cmd *cobra.Command, path string) ([]any, error) {
+// readJSONArrayFile reads a JSON array from path (file or "-" for stdin), the
+// array counterpart of readConfigFile. Errors name --<flag>. A top-level null
+// is rejected: json.Unmarshal turns it into a nil slice without an error,
+// which would be sent as an explicit null.
+func readJSONArrayFile(cmd *cobra.Command, flag, path string) ([]any, error) {
+	label := "--" + flag
 	data, err := readJSONBytes(cmd, path)
 	if err != nil {
-		return nil, &usageError{fmt.Errorf("reading file: %w", err)}
+		return nil, &usageError{fmt.Errorf("reading %s: %w", label, err)}
 	}
 	var arr []any
 	if err := json.Unmarshal(data, &arr); err != nil {
-		return nil, &usageError{fmt.Errorf("parsing as a JSON array: %w", err)}
+		return nil, &usageError{fmt.Errorf("parsing %s as JSON array: %w", label, err)}
+	}
+	if arr == nil {
+		return nil, &usageError{fmt.Errorf("%s must contain a JSON array, not null", label)}
 	}
 	return arr, nil
 }

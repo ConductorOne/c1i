@@ -125,9 +125,9 @@ func buildCreatePolicyBody(cmd *cobra.Command) (map[string]any, error) {
 	}
 
 	if stepsFile, _ := cmd.Flags().GetString("steps-file"); stepsFile != "" {
-		steps, err := readJSONArrayFile(cmd, stepsFile)
+		steps, err := readJSONArrayFile(cmd, "steps-file", stepsFile)
 		if err != nil {
-			return nil, fmt.Errorf("reading --steps-file: %w", err)
+			return nil, err
 		}
 		key, err := policyStepsKey(policyType)
 		if err != nil {
@@ -137,9 +137,9 @@ func buildCreatePolicyBody(cmd *cobra.Command) (map[string]any, error) {
 	}
 
 	if rulesFile, _ := cmd.Flags().GetString("rules-file"); rulesFile != "" {
-		rules, err := readJSONArrayFile(cmd, rulesFile)
+		rules, err := readJSONArrayFile(cmd, "rules-file", rulesFile)
 		if err != nil {
-			return nil, fmt.Errorf("reading --rules-file: %w", err)
+			return nil, err
 		}
 		body["rules"] = rules
 	}

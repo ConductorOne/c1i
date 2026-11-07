@@ -330,10 +330,11 @@ func TestOtherInputFilesBadInputIsUsage(t *testing.T) {
 	for name, path := range map[string]string{
 		"invalid JSON": writeTempJSON(t, "bad.json", `[nope`),
 		"object":       writeTempJSON(t, "obj.json", `{}`),
+		"null":         writeTempJSON(t, "null.json", `null`),
 		"missing file": missing,
 	} {
 		t.Run("array file/"+name, func(t *testing.T) {
-			_, err := readJSONArrayFile(&cobra.Command{}, path)
+			_, err := readJSONArrayFile(&cobra.Command{}, "steps-file", path)
 			if exitCode(err) != exitUsage {
 				t.Errorf("err = %v (exit %d), want exit %d", err, exitCode(err), exitUsage)
 			}

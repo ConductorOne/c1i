@@ -224,9 +224,9 @@ func buildUpdatePolicyPatch(cmd *cobra.Command, resolveFallbackPolicyType func()
 	}
 	if cmd.Flags().Changed("steps-file") {
 		stepsFile, _ := cmd.Flags().GetString("steps-file")
-		steps, stepsErr := readJSONArrayFile(cmd, stepsFile)
+		steps, stepsErr := readJSONArrayFile(cmd, "steps-file", stepsFile)
 		if stepsErr != nil {
-			return nil, "", fmt.Errorf("reading --steps-file: %w", stepsErr)
+			return nil, "", stepsErr
 		}
 		policyType, _ := policy["policyType"].(string)
 		if policyType == "" {
@@ -244,9 +244,9 @@ func buildUpdatePolicyPatch(cmd *cobra.Command, resolveFallbackPolicyType func()
 	}
 	if cmd.Flags().Changed("rules-file") {
 		rulesFile, _ := cmd.Flags().GetString("rules-file")
-		rules, rulesErr := readJSONArrayFile(cmd, rulesFile)
+		rules, rulesErr := readJSONArrayFile(cmd, "rules-file", rulesFile)
 		if rulesErr != nil {
-			return nil, "", fmt.Errorf("reading --rules-file: %w", rulesErr)
+			return nil, "", rulesErr
 		}
 		policy["rules"] = rules
 		paths = append(paths, "rules")

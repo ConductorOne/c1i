@@ -111,6 +111,10 @@ credentials fails instead of using the working directory. With a relative
   MCP server `--*-config-file` flags, and `--steps-file`, `--rules-file` and
   `--refs-file`. A `null` body file, which could panic, is refused the same
   way, and the error names the flag.
+- A `--steps-file` or `--rules-file` containing JSON `null` now exits `2`
+  before any request on `policies create` and `policies update`. A `null`
+  `--rules-file` sent `"rules": null` with exit 0, and a `null`
+  `--steps-file` was refused as an empty step list.
 - `apps set-owners --wait` exits 1 (`writing output:`) when its success line
   can't be written to stdout, instead of 0; the owners were already set.
 - **A failed write to stdout now exits `1`** (e.g. a full disk) instead of

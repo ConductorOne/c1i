@@ -251,12 +251,9 @@ func catalogEntitlementReferencesFromFile(cmd *cobra.Command) ([]catalogEntitlem
 	if refsFile == "" {
 		return nil, &usageError{fmt.Errorf("--refs-file is required")}
 	}
-	refs, err := readJSONArrayFile(cmd, refsFile)
+	refs, err := readJSONArrayFile(cmd, "refs-file", refsFile)
 	if err != nil {
-		return nil, fmt.Errorf("reading --refs-file: %w", err)
-	}
-	if refs == nil {
-		return nil, &usageError{fmt.Errorf("--refs-file must contain a JSON array")}
+		return nil, err
 	}
 	if err := validateAppEntitlementRefs(refs, "refs"); err != nil {
 		return nil, err
