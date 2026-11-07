@@ -16,12 +16,30 @@ import (
 // fast.
 var ownerWaitInterval = 12 * time.Second
 
-// Owner help text states provisioning lag only through these, with no
-// measured range: it varies by tenant and server version.
+// Owner help text and the --wait timeout state provisioning lag only through
+// these, with no measured range: it varies by tenant and server version.
+// README.md, cmd/agents.md and the docs guide quote ownerAsyncWaitNote
+// (TestOwnerAsyncNoteInDocs).
 const (
-	ownerAsyncClause   = "Owner changes are applied asynchronously and can take several minutes to\nappear"
+	ownerAsyncLag      = "can take several minutes to appear"
+	ownerAsyncClause   = "Owner changes are applied asynchronously and\n" + ownerAsyncLag
 	ownerAsyncNote     = ownerAsyncClause + "."
 	ownerAsyncWaitNote = ownerAsyncClause + "; pass --wait to block until they do."
+)
+
+// The paragraphs both set-owners commands share, so the families can't drift.
+const (
+	setOwnersLookupNote = `Before the PUT, each distinct --user-id is looked up with GET
+/api/v1/users/{id}; an unknown one exits 2 naming it, and nothing is sent.
+--dry-run skips the lookups. A repeated --user-id is sent once.`
+
+	setOwnersWaitNote = `Pass --wait to block and poll GET .../ownerids until the owner set equals
+the requested ids -- additions landed and replaced owners gone -- or
+--wait-timeout elapses; a timeout exits 1, though the write was accepted.
+Prints the API's JSON response; --wait's progress lines go to stderr.
+
+Honors --dry-run (with --wait, dry-run still only previews the PUT; it never
+polls).`
 )
 
 var appsSetOwnersCmd = &cobra.Command{
@@ -30,25 +48,17 @@ var appsSetOwnersCmd = &cobra.Command{
 	Long: `Set the complete list of owners for an app via PUT .../owners, replacing
 any existing owners. Provide one or more --user-id (C1 user IDs, 27 chars each).
 
-Before the PUT, each distinct --user-id is looked up with GET
-/api/v1/users/{id}; an unknown one exits 2 naming it, and nothing is sent.
+` + setOwnersLookupNote + `
 The API itself accepts an unknown id (exit 0) and stores it: GET .../ownerids
 lists it but "apps owners" does not, so a set naming only such ids leaves the
-app with no real owners. --dry-run skips the lookups. A repeated --user-id
-is sent once.
+app with no real owners.
 
 ` + ownerAsyncWaitNote + `
 Verify with "c1i apps owners <app-id>". Don't check ownership via the
 "appOwners" field in "apps get": it read [] on every app checked, including
 those GET .../ownerids reported owners for.
 
-Pass --wait to block and poll GET .../ownerids until the owner set equals
-the requested ids -- additions landed and replaced owners gone -- or
---wait-timeout elapses; a timeout exits 1, though the write was accepted.
-Prints the API's JSON response; --wait's progress lines go to stderr.
-
-Honors --dry-run (with --wait, dry-run still only previews the PUT; it never
-polls).`,
+` + setOwnersWaitNote,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		appID := args[0]
@@ -140,7 +150,7 @@ func ownerIDsWaitOp(c *client.Client, ownerIDsPath string, done func([]string) b
 		Timeout:  timeout,
 		Subject:  "owners to provision on " + target,
 		Success:  "Owners provisioned on " + target,
-		Slow:     "provisioning can take several minutes",
+		Slow:     "owner changes " + ownerAsyncLag,
 		Recheck:  recheck,
 	}
 }
@@ -167,9 +177,14 @@ func buildSetOwnersBody(userIDs []string) map[string]any {
 	return map[string]any{"userIds": userIDs}
 }
 
+// addSetOwnersFlags registers the flags every set-owners command shares.
+func addSetOwnersFlags(cmd *cobra.Command) {
+	addRepeatableStringFlag(cmd, "user-id", "C1 user ID to set as owner (repeatable; replaces the full owner list)")
+	markRequired(cmd, "user-id")
+	addWaitFlags(cmd, "GET .../ownerids until the owner set equals the requested ids (removals included)", 4*time.Minute)
+}
+
 func init() {
-	addRepeatableStringFlag(appsSetOwnersCmd, "user-id", "C1 user ID to set as owner (repeatable; replaces the full owner list)")
-	markRequired(appsSetOwnersCmd, "user-id")
-	addWaitFlags(appsSetOwnersCmd, "GET .../ownerids until the owner set equals the requested ids (removals included)", 4*time.Minute)
+	addSetOwnersFlags(appsSetOwnersCmd)
 	appsCmd.AddCommand(appsSetOwnersCmd)
 }

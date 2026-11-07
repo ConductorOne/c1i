@@ -374,7 +374,7 @@ func TestWaitForOwnersTimesOutOverHTTP(t *testing.T) {
 		t.Fatal("wait returned nil, want a timeout error")
 	}
 	want := "timed out after 30ms waiting for owners to provision on app app1; " +
-		"this is not necessarily a failure — provisioning can take several minutes, " +
+		"this is not necessarily a failure — owner changes can take several minutes to appear, " +
 		"check again later with: c1i apps owners app1"
 	if err.Error() != want {
 		t.Errorf("timeout error =\n%q\nwant\n%q", err.Error(), want)

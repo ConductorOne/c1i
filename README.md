@@ -127,10 +127,11 @@ sending nothing (`--dry-run` skips the lookups). A repeated `--user-id` is
 sent once.
 
 `apps owners` is the read that reflects what `apps add-owner`,
-`apps remove-owner` and `apps set-owners` write. Owner changes are applied asynchronously and can take several minutes to appear. It returns zero rows at exit 0
-for a well-formed but nonexistent app id, so an empty result can also mean
-"wrong id". `apps add-owner` and `apps remove-owner` change one owner at a
-time; two `add-owner` calls issued at once were both observed to land.
+`apps remove-owner` and `apps set-owners` write. Owner changes are applied
+asynchronously and can take several minutes to appear. It returns zero rows
+at exit 0 for a well-formed but nonexistent app id, so an empty result can
+also mean "wrong id". `apps add-owner` and `apps remove-owner` change one
+owner at a time; two `add-owner` calls issued at once were both observed to land.
 `apps set-owners` replaces the whole list with exactly the ids you pass, so an
 owner added between your read and your write is silently removed.
 
@@ -241,8 +242,9 @@ command touched is in that one payload.
 
 `entitlements owners` lists an entitlement's owners (same row shape as
 `apps owners`) and is the read that reflects `entitlements add-owner`,
-`remove-owner` and `set-owners`. Owner changes are applied asynchronously and can take several minutes to appear; pass `--wait` to block until they do. `--wait`
-polls `GET .../ownerids` until the change lands, or `--wait-timeout`
+`remove-owner` and `set-owners`. Owner changes are applied asynchronously
+and can take several minutes to appear; pass --wait to block until they do.
+`--wait` polls `GET .../ownerids` until the change lands, or `--wait-timeout`
 (default `4m`) elapses: on `add-owner` until the owner appears, on
 `set-owners` until the owner set equals the requested ids, removals
 included. A timeout exits `1`, though the write was accepted. Its progress
