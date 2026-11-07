@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/spf13/cobra"
 )
@@ -212,30 +211,15 @@ func buildSPCredentialCreateBody(cmd *cobra.Command) (map[string]any, error) {
 	if len(cidrs) > 0 {
 		body["allowSourceCidrs"] = cidrs
 	}
-	if expires, _ := cmd.Flags().GetString("expires"); expires != "" {
-		d, err := time.ParseDuration(expires)
-		if err != nil {
-			return nil, &usageError{fmt.Errorf("invalid --expires %q: %w", expires, err)}
-		}
-		if d <= 0 {
-			return nil, &usageError{fmt.Errorf("--expires must be positive, got %q", expires)}
-		}
-		// ProtoJSON allows nanosecond precision; fixed-width decimals preserve it.
-		body["expires"] = formatProtoJSONDuration(d)
+	if v, ok, err := protoDurationFlag(cmd, "expires"); err != nil {
+		return nil, err
+	} else if ok {
+		body["expires"] = v
 	}
 	if requireDPoP, _ := cmd.Flags().GetBool("require-dpop"); requireDPoP {
 		body["requireDpop"] = true
 	}
 	return body, nil
-}
-
-func formatProtoJSONDuration(d time.Duration) string {
-	seconds := d / time.Second
-	nanoseconds := d % time.Second
-	if nanoseconds == 0 {
-		return fmt.Sprintf("%ds", seconds)
-	}
-	return fmt.Sprintf("%d.%09ds", seconds, nanoseconds)
 }
 
 var spCredentialsUpdateCmd = &cobra.Command{
@@ -335,7 +319,7 @@ func init() {
 	spCredentialsCreateCmd.Flags().String("display-name", "", "Display name for the new credential ("+displayNameRule+")")
 	addRepeatableStringFlag(spCredentialsCreateCmd, "scoped-role", "Restrict the credential to a role ID from \"c1i roles list\" (repeatable)")
 	addRepeatableStringFlag(spCredentialsCreateCmd, "allow-cidr", "Restrict the credential to a source CIDR (repeatable)")
-	spCredentialsCreateCmd.Flags().String("expires", "", "Time until the credential expires as a Go duration, e.g. 720h; the server accepts the range (0s, 4320h] (up to 180 days)")
+	addProtoDurationFlag(spCredentialsCreateCmd, "expires", "Time until the credential expires as a protobuf duration (2592000s) or a Go duration (720h), sent in seconds; a sign or decimal (-1h, 1.5h) exits 2; the server accepts the range (0s, 4320h] (up to 180 days)")
 	spCredentialsCreateCmd.Flags().Bool("require-dpop", false, "Require DPoP proof-of-possession for token exchange")
 	markRequired(spCredentialsCreateCmd, "display-name")
 

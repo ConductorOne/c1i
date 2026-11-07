@@ -154,6 +154,99 @@ func TestRequestsCreateGrantDefaultsUserIDToSelf(t *testing.T) {
 	}
 }
 
+// TestRequestsCreateGrantDurationConvertsGoForm: the API parses grantDuration
+// as a google.protobuf.Duration and 400s "8h", so --duration is converted to
+// seconds. Zero is left to the server; negative, decimal and empty
+// values never send.
+func TestRequestsCreateGrantDurationConvertsGoForm(t *testing.T) {
+	cases := []struct {
+		in, want string
+		wantSent bool
+	}{
+		{in: "8h", want: "28800s", wantSent: true},
+		{in: " 1h30m ", want: "5400s", wantSent: true},
+		{in: "86400s", want: "86400s", wantSent: true},
+		{in: "0s", want: "0s", wantSent: true},
+		{in: "-1s"},
+		{in: "1.5h"},
+		{in: ""},
+		{in: "7d"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.in, func(t *testing.T) {
+			var gotBody map[string]any
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
+				body, _ := io.ReadAll(r.Body)
+				_ = json.Unmarshal(body, &gotBody)
+				_, _ = fmt.Fprint(w, `{"taskView":{"task":{"id":"task-1","state":"PENDING"}}}`)
+			}))
+			defer srv.Close()
+
+			resetCmdFlags(t, requestsCreateGrantCmd)
+			stubNewGrantClient(t, srv)
+			t.Setenv("C1I_URL", "https://example.invalid")
+			origDryRun := viper.GetBool("dry_run")
+			viper.Set("dry_run", false)
+			t.Cleanup(func() { viper.Set("dry_run", origDryRun) })
+
+			_ = requestsCreateGrantCmd.Flags().Set("app-id", "app1")
+			_ = requestsCreateGrantCmd.Flags().Set("entitlement-id", "ent1")
+			_ = requestsCreateGrantCmd.Flags().Set("user-id", "zz-user")
+			_ = requestsCreateGrantCmd.Flags().Set("duration", tc.in)
+			requestsCreateGrantCmd.SetOut(io.Discard)
+			requestsCreateGrantCmd.SetContext(context.Background())
+
+			err := requestsCreateGrantCmd.RunE(requestsCreateGrantCmd, nil)
+			if !tc.wantSent {
+				if code := exitCode(err); code != exitUsage {
+					t.Errorf("exit = %d, want %d (err: %v)", code, exitUsage, err)
+				}
+				if gotBody != nil {
+					t.Errorf("a request was sent: %v", gotBody)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("RunE: %v", err)
+			}
+			if got := gotBody["grantDuration"]; got != tc.want {
+				t.Errorf("grantDuration = %v, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
+// TestRequestsCreateGrantDryRunPreviewsZeroDuration: zero is not refused
+// client-side, so the preview carries it as the real call would.
+func TestRequestsCreateGrantDryRunPreviewsZeroDuration(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		t.Errorf("unexpected request under --dry-run: %s %s", r.Method, r.URL.Path)
+	}))
+	defer srv.Close()
+	resetCmdFlags(t, requestsCreateGrantCmd)
+	stubNewGrantClient(t, srv)
+	t.Setenv("C1I_URL", "https://example.invalid")
+	origDryRun := viper.GetBool("dry_run")
+	viper.Set("dry_run", true)
+	t.Cleanup(func() { viper.Set("dry_run", origDryRun) })
+
+	_ = requestsCreateGrantCmd.Flags().Set("app-id", "app1")
+	_ = requestsCreateGrantCmd.Flags().Set("entitlement-id", "ent1")
+	_ = requestsCreateGrantCmd.Flags().Set("user-id", "zz-user")
+	_ = requestsCreateGrantCmd.Flags().Set("duration", "0s")
+	var out bytes.Buffer
+	requestsCreateGrantCmd.SetOut(&out)
+	requestsCreateGrantCmd.SetContext(context.Background())
+
+	if err := requestsCreateGrantCmd.RunE(requestsCreateGrantCmd, nil); err != nil {
+		t.Fatalf("RunE: %v", err)
+	}
+	if !strings.Contains(out.String(), `"grantDuration": "0s"`) {
+		t.Errorf("dry-run preview = %q, want grantDuration \"0s\"", out.String())
+	}
+}
+
 // TestRequestsCreateGrantExplicitUserIDSkipsSelfResolution is a regression
 // guard alongside the default-to-self test: an explicit --user-id must be
 // sent as-is, without ever calling introspect.
