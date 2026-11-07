@@ -28,9 +28,8 @@ via --hosted-config-file.
                 baseline entry, e.g.:
                   [{"approval":{"users":{"userIds":["u1"]}}}]
                 This CLI wraps it under the correct policySteps map key for
-                you (see the policyStepsKey doc comment for why the key
-                matters: it is the lowercase type word "grant"/"revoke"/
-                "certify", NOT the enum name).
+                you; the key is the lowercase type word "grant"/"revoke"/
+                "certify", NOT the enum name.
   --rules-file  a JSON ARRAY of {"condition": "<CEL>", "stepKey": "<key>"}
                 (or the deprecated {"condition":"...", "policyKey":"..."})
                 routing rules, evaluated top to bottom; first match wins.

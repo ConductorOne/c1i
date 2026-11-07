@@ -531,11 +531,11 @@ resource with `--resource-id` likewise means you drop
   exit `0` with `deletedAt` set. So a `deleted_at` in an `access-profiles list`
   row is null in practice — don't read the null as "not deleted", check with a
   get.
-- `service-principals delete` and `service-principals credentials revoke` are
-  soft: `get` and `credentials get` still return the record at exit `0` with no
-  field marking it (the principal's `user.status` stays `ENABLED`). Only the
-  lists omit them; `users get <sp-id>` shows `"status": "DELETED"` and
-  `deletedAt`.
+- `service-principals delete` removes the principal (README: it also removes
+  its credentials): `service-principals get` then exits `4`. `users get
+  <sp-id>` still shows `"status": "DELETED"` and `deletedAt`.
+  `service-principals credentials revoke` is soft: `credentials get` still
+  returns the credential at exit `0` with no field marking it.
 - `automations update <automation-id> --enabled` succeeds on an automation
   with `isDraft: true`, and `isDraft` stays `true`. `--body-file` with
   `--update-mask triggers` replaces the published `triggers` and increments

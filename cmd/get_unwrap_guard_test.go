@@ -99,6 +99,15 @@ func getUnwrapCases() []getUnwrapCase {
 			payloadPath: []string{"taskView", "task"},
 		},
 		{
+			name:        "tasks get",
+			cmd:         tasksGetCmd,
+			args:        []string{"task-1"},
+			idKey:       "id",
+			body:        `{"taskView":{"task":{"id":"task-1","state":"TASK_STATE_OPEN"},"userPath":"","appPath":"","objectPermissions":null},"expanded":[{"id":"ent-1"}]}`,
+			wantKeys:    []string{"id", "state", "userPath", "appPath", "objectPermissions", "expanded"},
+			payloadPath: []string{"taskView", "task"},
+		},
+		{
 			name:        "entitlements get",
 			cmd:         entitlementsGetCmd,
 			args:        []string{"ent-1"},

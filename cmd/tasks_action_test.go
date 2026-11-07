@@ -76,7 +76,7 @@ var taskActionExpectations = map[string]struct {
 }
 
 // nonActionTaskSubcommands are the tasks subcommands that are not action POSTs.
-var nonActionTaskSubcommands = map[string]bool{"list": true}
+var nonActionTaskSubcommands = map[string]bool{"list": true, "get": true}
 
 // TestEveryTaskActionIsPinned requires a row for every action in the tree.
 func TestEveryTaskActionIsPinned(t *testing.T) {

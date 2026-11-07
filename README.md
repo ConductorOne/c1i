@@ -148,6 +148,7 @@ c1i accounts set-owner <app-user-id> --app-id <id> --user-id <id>
 ```sh
 c1i entitlements list [--app-id <id>] [--query <text>] [--page-size N] [--page-token TOKEN] [--limit N]
 c1i entitlements get <entitlement-id> --app-id <id>
+c1i entitlements delete <entitlement-id> --app-id <id>
 c1i entitlements owners <entitlement-id> --app-id <id> [--page-size N] [--page-token TOKEN] [--limit N]
 c1i entitlements add-owner <user-id> --app-id <id> --entitlement-id <id> [--wait] [--wait-timeout 4m]
 c1i entitlements remove-owner <user-id> --app-id <id> --entitlement-id <id>
@@ -185,6 +186,10 @@ c1i entitlements update <entitlement-id> --app-id <id> \
   [--unbind-policy grant|revoke|certify|emergency-grant] \
   [--duration-grant 8h | --duration-unset]
 ```
+
+`entitlements delete` is a soft delete (`entitlements get` still returns the
+entitlement, with `deletedAt` set). `apps delete` does not delete an app's
+entitlements, so remove them with this first.
 
 `entitlements update` builds the update mask from exactly the flags you pass.
 Each policy id is checked before anything is sent: it must exist, not be
@@ -328,6 +333,7 @@ Absent timestamps are `null`, never `""`.
 
 ```sh
 c1i tasks list [--state open|closed] [--query <text>] [--assigned-to-me] [--page-size N] [--page-token TOKEN] [--limit N]
+c1i tasks get <task-id>
 c1i tasks approve <task-id> [--policy-step-id <id>] [--comment <text>]
 c1i tasks deny <task-id> [--policy-step-id <id>] [--comment <text>]
 c1i tasks comment <task-id> --comment <text>
@@ -570,7 +576,7 @@ c1i mcp classifiers tool-gates update              <tool-gate-id> --body-file to
 c1i mcp classifiers tool-gates delete              <tool-gate-id>
 
 # Gateway (verify end to end: list and invoke tools over the live MCP gateway)
-c1i mcp gateway list-tools [--full] [--gateway-url <url>]
+c1i mcp gateway list-tools [--full] [--limit N] [--gateway-url <url>]
 c1i mcp gateway call <tool-name> [--args '{"k":"v"}'] [--gateway-url <url>]
 ```
 

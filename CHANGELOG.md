@@ -67,6 +67,13 @@ exits:
 
 ### Added
 
+- `tasks get <task-id>` reads a single task, the same endpoint as `requests
+  get`.
+- `entitlements delete <entitlement-id> --app-id` deletes an app entitlement
+  (soft: `entitlements get` still returns it with `deletedAt` set) and honors
+  `--dry-run`. `apps delete` leaves an app's entitlements live.
+- `mcp gateway list-tools --limit N` prints only the first N tools; a
+  negative value exits 2 and 0 means all.
 - `entitlements owners <entitlement-id> --app-id` lists an entitlement's
   owners (NDJSON, auto-paginating). `entitlements add-owner <user-id>` and
   `entitlements remove-owner <user-id>` (both `--app-id --entitlement-id`)
@@ -167,6 +174,15 @@ exits:
 
 ### Fixed
 
+- `docs guide configure-new-app` and `request-access` said c1i has no command
+  to make an entitlement requestable or to read access-profile membership.
+  They now give the recipe (a published, visible-to-everyone access profile
+  plus `access-profiles requestable-entitlements add`) and point at
+  `requestable-entitlements list`. The `configure-new-app` guide also said
+  `apps get` on a deleted app exits 4; it exits 0 with `deletedAt` set.
+- `docs agents` no longer calls its doc "short", and its `service-principals
+  delete` note matches live behavior: `get` on a deleted principal exits 4.
+- `policies create --help` no longer sends readers to a source-code comment.
 - An empty, whitespace-only or invisible-only (e.g. U+200B, U+FEFF)
   `--display-name` now exits `2` before any request on every `update` and
   `create` that takes one, including `service-principals credentials`. `apps`,
