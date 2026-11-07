@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"net/url"
 	"strings"
-	"time"
 
 	"github.com/ConductorOne/c1i/internal/client"
 	"github.com/spf13/cobra"
@@ -48,7 +47,7 @@ func webhookFieldFlags(cmd *cobra.Command, update bool) {
 	cmd.Flags().String("display-name", "", verb+" display name ("+keep+displayNameRule+")")
 	cmd.Flags().String("destination-url", "", verb+" destination URL ("+keep+"https only, with a host; an IPv6 literal host is refused; else exit 2)")
 	cmd.Flags().String("description", "", verb+" description ("+keep+"an empty value clears it)")
-	cmd.Flags().String("callback-timeout", "", verb+` time to wait for an asynchronous callback, as a Go duration (e.g. 10m) (`+keep+`0 to 720h; a negative value exits 2 before sending; over 720h, update returns "callback_timeout must be between 0 and 30 days" and create "value must be inside range [0s, 720h0m0s]")`)
+	cmd.Flags().String("callback-timeout", "", verb+` time to wait for an asynchronous callback, as a Go (10m) or protobuf (600s) duration, sent in seconds (`+keep+`0 to 720h; a negative value exits 2 before sending; over 720h, update returns "callback_timeout must be between 0 and 30 days" and create "value must be inside range [0s, 720h0m0s]")`)
 }
 
 // webhookFields reads the changed field flags into a Webhook body and the
@@ -77,16 +76,10 @@ func webhookFields(cmd *cobra.Command) (map[string]any, []string, error) {
 		fields["url"] = v
 		paths = append(paths, "url")
 	}
-	if cmd.Flags().Changed("callback-timeout") {
-		v, _ := cmd.Flags().GetString("callback-timeout")
-		d, err := time.ParseDuration(strings.TrimSpace(v))
-		if err != nil {
-			return nil, nil, &usageError{fmt.Errorf("invalid --callback-timeout %q: %w", v, err)}
-		}
-		if d < 0 {
-			return nil, nil, &usageError{fmt.Errorf("--callback-timeout must not be negative, got %q", v)}
-		}
-		fields["callbackTimeout"] = formatProtoJSONDuration(d)
+	if v, ok, err := protoDurationFlag(cmd, "callback-timeout", true); err != nil {
+		return nil, nil, err
+	} else if ok {
+		fields["callbackTimeout"] = v
 		paths = append(paths, "callbackTimeout")
 	}
 	return fields, paths, nil

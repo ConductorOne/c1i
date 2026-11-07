@@ -17,6 +17,10 @@ attempt. When the config directory resolves to a relative path (a relative
 credentials fails instead of using the working directory. With a relative
 `HOME`, `~/.c1i.yaml` is ignored.
 
+`service-principals credentials create --expires ""` now exits 2 instead of
+being ignored, and `tasks update-grant-duration
+--duration 0s` exits 2 instead of storing a zero grant duration.
+
 ### Added
 
 - `entitlements owners <entitlement-id> --app-id` lists an entitlement's
@@ -78,6 +82,16 @@ credentials fails instead of using the working directory. With a relative
 
 ### Changed
 
+- Every duration flag sent to the API (`--duration-grant`, `requests create
+  grant --duration`, `tasks update-grant-duration --duration`, `--expires`,
+  `--callback-timeout`) takes a Go (`8h`, `1m30.5s`) or protobuf (`3600s`)
+  duration, ignores surrounding whitespace, and is sent as seconds with any
+  fraction's trailing zeros trimmed (`1.5s`, was `1.500000000s` on
+  `--expires` and `--callback-timeout`). `requests create grant --duration`
+  and `tasks update-grant-duration --duration` previously passed the value
+  through, so `24h` failed with `invalid google.protobuf.Duration value
+  "24h"`; it is now sent as `86400s`. A negative or unparseable value, and
+  zero except on `--callback-timeout`, exits `2` before sending.
 - `golang.org/x/term` moves to 0.47.0 and `golang.org/x/sys` to 0.49.0.
 - `golang.org/x/crypto` is pinned to the untagged
   `v0.58.1-0.20261009181718-2f1f834330b2`, which fixes GO-2026-5932; c1i does

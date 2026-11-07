@@ -341,8 +341,9 @@ with `action not permitted`. Read the task's own list with
 `restart` re-runs the current approval step; `reset` restarts the whole policy.
 Neither reopens a closed task. `process` changes nothing observable on a
 healthy task — it is intended for one that has stalled, which was not
-reproduced here. `update-grant-duration` takes a
-protobuf duration (`3600s`, not `1h`) and only applies before the task reaches
+reproduced here. `update-grant-duration` takes a Go
+(`1h`) or protobuf (`3600s`) duration, sent in seconds; zero exits `2`, since
+the server stores `0s` without complaint. It only applies before the task reaches
 provisioning, after which the server answers `cannot update grant duration for
 a ticket in a provision step`; the value lands as `grantDuration`.
 
@@ -596,9 +597,9 @@ c1i requests get <request-id>
 ```
 
 On `create`, `--user-id` defaults to the authenticated user when omitted.
-`requests create grant --duration` takes a protobuf duration in seconds
-(`86400s`), like `tasks update-grant-duration --duration`. A Go-style `24h` or
-`7d` is refused by the server with `invalid google.protobuf.Duration value "24h"`.
+`requests create grant --duration` takes a Go (`24h`) or protobuf (`86400s`)
+duration, like `tasks update-grant-duration --duration`, and sends it in
+seconds. It must be positive; `7d` is not a Go duration and exits `2`.
 
 `requests list` is the requester lens on access requests (the grant/revoke tasks
 you file): by default it shows requests you opened or are the subject of —
@@ -856,7 +857,8 @@ on a revoked credential still return the record, exit 0, with no field marking
 it (the principal's embedded `user.status` stays `ENABLED`). Only the lists
 omit them; `users get <sp-id>` shows `"status": "DELETED"` and `deletedAt`.
 
-`--expires` takes a positive Go duration (e.g. `720h`). The server accepts the
+`--expires` takes a positive Go (`720h`) or protobuf (`2592000s`) duration,
+sent in seconds; an empty `--expires ""` exits `2`. The server accepts the
 range `(0s, 4320h]` — up to 180 days — rejecting more with `value must be inside
 range (0s, 4320h0m0s]`. Fractional seconds are preserved.
 
@@ -909,7 +911,8 @@ is a `400`, `invalid url: restricted destination` (exit `2`).
 A blank `--display-name` exits `2` on create and update, as described under
 [Display names](#display-names); the server would store one on update.
 
-`--callback-timeout` takes a Go duration from `0` to `720h`. A negative one
+`--callback-timeout` takes a Go (`10m`) or protobuf (`600s`) duration from `0`
+to `720h`, sent in seconds. A negative one
 exits `2` before a request is sent; over `720h`, update returns
 `callback_timeout must be between 0 and 30 days`. `update` sends only the flags
 you pass and masks exactly those, and with no field flag it exits `2`; an empty

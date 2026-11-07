@@ -165,7 +165,8 @@ must be preserved; read first and use the explicit `--update-mask` for updates.
 Role ids for `service-principals credentials create --scoped-role` and
 `auth login --scoped-role` come from `c1i roles list` (NDJSON; README lists the
 fields); `c1i roles get <role-id>` adds a role's `serviceRoles` and
-`permissions`.
+`permissions`. `service-principals credentials create --expires` takes a
+positive Go (`720h`) or protobuf (`2592000s`) duration; an empty one exits `2`.
 
 The cobra tree never drifts from what's implemented. Step down it with
 `--help` at each level:
@@ -462,13 +463,14 @@ resource with `--resource-id` likewise means you drop
 - `restart` re-runs the current approval step (one new history entry); `reset`
   restarts the whole policy (four, measured). Neither reopens a closed task --
   the state stays `TASK_STATE_CLOSED`. `process` changes nothing observable on
-  a healthy task. `update-grant-duration` needs a protobuf duration (`3600s`,
-  not `1h`) and only works before provisioning, after which the server says
+  a healthy task. `update-grant-duration` takes a Go (`1h`) or protobuf
+  (`3600s`) duration, sent in seconds, and refuses zero (exit `2`); it only
+  works before provisioning, after which the server says
   `cannot update grant duration for a ticket in a provision step`; the value
   lands as `grantDuration`.
-- `requests create grant --duration` also needs a protobuf duration (`86400s`);
-  `24h` or `7d` is refused with `invalid google.protobuf.Duration value` (exit
-  2). The value lands on the task as `grantDuration`.
+- `requests create grant --duration` likewise takes `24h` or `86400s`, sent in
+  seconds; zero and `7d` exit `2` before sending. The value lands on the task
+  as `grantDuration`.
 - Entitlement ids are unique only within an app — some system-builtin
   entitlements reuse the same id across every app that has one. Always key
   on `(app_id, id)` together, never `id` alone.
@@ -477,8 +479,8 @@ resource with `--resource-id` likewise means you drop
   required; omitting them 400s on the id regex. `entitlements create` handles
   this for you.
 - `entitlements create` and `entitlements update` take a Go duration for
-  `--duration-grant` (`8h`) as well as `3600s`, unlike `requests create grant
-  --duration` and `update-grant-duration`. `--emergency-grant-policy-id`
+  `--duration-grant` (`8h`) as well as `3600s`, like every duration flag that
+  goes to the API. `--emergency-grant-policy-id`
   takes a grant policy, checked client-side (the server checks only when the
   same call enables emergency grants). `--emergency-grant-enabled` needs
   `--emergency-grant-policy-id` in the same call even when one is already
@@ -532,8 +534,9 @@ resource with `--resource-id` likewise means you drop
   a deleted webhook exits `0` and changes it, and it stays deleted.
   `webhooks list` pages exceed `--page-size` (a size below 5 is raised to 5,
   plus one row), so use `--limit` for an exact count. `webhooks update` with
-  no field flag exits `2`. `--callback-timeout` takes a Go duration from `0`
-  to `720h`: a negative one exits `2` before sending, and over `720h` update
+  no field flag exits `2`. `--callback-timeout` takes a Go (`10m`) or
+  protobuf (`600s`) duration from `0` to `720h`: a negative one exits `2`
+  before sending, and over `720h` update
   returns `callback_timeout must be between 0 and 30 days`. A webhook has no
   signing secret.
 - `automations delete <automation-id>` is soft: the automation leaves

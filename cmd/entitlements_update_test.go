@@ -104,6 +104,7 @@ func TestEntitlementsUpdateBodyPerFlag(t *testing.T) {
 			"emergencyGrantPolicyId,emergencyGrantEnabled",
 		},
 		{"duration go form", map[string]string{"duration-grant": "1h30m"}, map[string]any{"durationGrant": "5400s"}, "durationGrant"},
+		{"duration whitespace trimmed", map[string]string{"duration-grant": " 8h "}, map[string]any{"durationGrant": "28800s"}, "durationGrant"},
 		{"duration seconds form", map[string]string{"duration-grant": "3600s"}, map[string]any{"durationGrant": "3600s"}, "durationGrant"},
 		{"duration fractional", map[string]string{"duration-grant": "1.5s"}, map[string]any{"durationGrant": "1.5s"}, "durationGrant"},
 		{"duration fractional minutes", map[string]string{"duration-grant": "1m30.5s"}, map[string]any{"durationGrant": "90.5s"}, "durationGrant"},

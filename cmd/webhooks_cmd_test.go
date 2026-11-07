@@ -247,6 +247,12 @@ func TestWebhooksUpdateMaskFromChangedFlags(t *testing.T) {
 			webhook: map[string]any{"id": id, "callbackTimeout": "0s"},
 			mask:    "callbackTimeout",
 		},
+		{
+			name:    "fractional timeout trims trailing zeros",
+			flags:   map[string]string{"callback-timeout": " 1.5s "},
+			webhook: map[string]any{"id": id, "callbackTimeout": "1.5s"},
+			mask:    "callbackTimeout",
+		},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

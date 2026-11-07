@@ -524,7 +524,7 @@ func TestEntitlementCreateDurationGrantWireKey(t *testing.T) {
 // --duration-grant like update does: Go forms are converted to seconds and a
 // non-positive or unparseable value is a usage error.
 func TestEntitlementCreateDurationGrantAcceptsGoDuration(t *testing.T) {
-	for in, want := range map[string]string{"8h": "28800s", "3600s": "3600s", "1m30.5s": "90.5s"} {
+	for in, want := range map[string]string{"8h": "28800s", " 8h ": "28800s", "3600s": "3600s", "1m30.5s": "90.5s"} {
 		p := mustPlan(t, "--app-id", "app1", "--display-name", "e", "--duration-grant", in)
 		if got := p.entitlementBody["durationGrant"]; got != want {
 			t.Errorf("--duration-grant %s: durationGrant = %v, want %s", in, got, want)

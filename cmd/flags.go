@@ -561,26 +561,36 @@ func repeatableStringFlag(cmd *cobra.Command, name string) ([]string, error) {
 	return values, nil
 }
 
-// grantDurationFlag reads a max-grant-duration flag. It accepts a protobuf
-// ("3600s") or Go ("8h") duration and returns it in seconds, the only form the
-// API parses; ok is false when the flag was not passed. Non-positive values
-// are refused because the server stores them without complaint.
-func grantDurationFlag(cmd *cobra.Command, name string) (string, bool, error) {
+// protoDurationFlag reads a flag the API parses as a google.protobuf.Duration.
+// It accepts a Go ("8h", "1m30.5s") or protobuf ("3600s") duration and returns
+// it in seconds, the only form the API parses; set is false when the flag was
+// not passed. Negative values, and zero unless allowZero, are usage errors.
+func protoDurationFlag(cmd *cobra.Command, name string, allowZero bool) (value string, set bool, err error) {
 	if !cmd.Flags().Changed(name) {
 		return "", false, nil
 	}
 	raw, _ := cmd.Flags().GetString(name)
-	d, err := time.ParseDuration(raw)
+	d, err := time.ParseDuration(strings.TrimSpace(raw))
 	if err != nil {
-		return "", false, &usageError{fmt.Errorf("--%s: %w", name, err)}
+		return "", false, &usageError{fmt.Errorf("invalid --%s %q: %w", name, raw, err)}
 	}
-	if d <= 0 {
-		return "", false, &usageError{fmt.Errorf("--%s must be positive, got %s", name, raw)}
+	if d < 0 || (d == 0 && !allowZero) {
+		rule := "positive"
+		if allowZero {
+			rule = "zero or positive"
+		}
+		return "", false, &usageError{fmt.Errorf("--%s must be %s, got %q", name, rule, raw)}
 	}
+	return formatProtoDuration(d), true, nil
+}
+
+// formatProtoDuration renders d in protobuf JSON form: integer seconds plus
+// any nanosecond fraction, trailing zeros trimmed.
+func formatProtoDuration(d time.Duration) string {
 	// Integer arithmetic: float64 seconds drops nanoseconds on large values.
 	secs := strconv.FormatInt(int64(d/time.Second), 10)
 	if ns := int64(d % time.Second); ns != 0 {
 		secs += "." + strings.TrimRight(fmt.Sprintf("%09d", ns), "0")
 	}
-	return secs + "s", true, nil
+	return secs + "s"
 }

@@ -246,7 +246,7 @@ func buildEntitlementCreatePlan(cmd *cobra.Command) (*entitlementCreatePlan, err
 			p.entitlementBody[key] = v
 		}
 	}
-	if v, ok, err := grantDurationFlag(cmd, "duration-grant"); err != nil {
+	if v, ok, err := protoDurationFlag(cmd, "duration-grant", false); err != nil {
 		return nil, err
 	} else if ok {
 		p.entitlementBody["durationGrant"] = v

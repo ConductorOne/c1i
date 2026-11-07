@@ -130,7 +130,7 @@ func buildEntitlementUpdateBody(cmd *cobra.Command, appID, id string) (map[strin
 	if f.Changed("duration-grant") && f.Changed("duration-unset") {
 		return nil, &usageError{fmt.Errorf("--duration-grant and --duration-unset are mutually exclusive: both set the entitlement's max_grant_duration")}
 	}
-	if v, ok, err := grantDurationFlag(cmd, "duration-grant"); err != nil {
+	if v, ok, err := protoDurationFlag(cmd, "duration-grant", false); err != nil {
 		return nil, err
 	} else if ok {
 		ent["durationGrant"] = v

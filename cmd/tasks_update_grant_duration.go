@@ -10,7 +10,7 @@ var tasksUpdateGrantDurationAction = taskAction{
 	verb: "update-grant-duration",
 	step: stepUnused,
 	extraBody: func(cmd *cobra.Command, body map[string]any) error {
-		duration, err := requireNonEmptyIfSet(cmd, "duration")
+		duration, _, err := protoDurationFlag(cmd, "duration", false)
 		if err != nil {
 			return err
 		}
@@ -27,9 +27,9 @@ var tasksUpdateGrantDurationCmd = &cobra.Command{
 	Short: "Change the grant duration a task will provision",
 	Long: `Change how long the access a grant task provisions will last.
 
---duration takes a protobuf duration, not a Go one: seconds with an "s"
-suffix, e.g. 3600s. "1h" is refused by the server with:
-  invalid google.protobuf.Duration value "1h"
+--duration takes a Go (1h) or protobuf (3600s) duration and is sent in
+seconds, the only form the API parses. It must be positive: the server stores
+"0s" without complaint.
 
 The task must still be at an approval step. Once it reaches provisioning the
 server refuses with:
@@ -48,7 +48,7 @@ func init() {
 	// No --comment: the UpdateGrantDuration request body carries only duration
 	// and expandMask.
 	tasksUpdateGrantDurationCmd.Flags().String("duration", "",
-		`Grant duration as a protobuf duration, e.g. 3600s; "1h" is refused`)
+		"Grant duration as a protobuf duration (3600s) or a Go duration (1h), sent in seconds; must be positive")
 	markRequired(tasksUpdateGrantDurationCmd, "duration")
 	tasksCmd.AddCommand(tasksUpdateGrantDurationCmd)
 }
