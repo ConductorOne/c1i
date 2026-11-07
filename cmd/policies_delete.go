@@ -1,7 +1,7 @@
 package cmd
 
 import (
-	"fmt"
+	"net/http"
 
 	"github.com/ConductorOne/c1i/internal/client"
 	"github.com/spf13/cobra"
@@ -25,29 +25,11 @@ policy because ..."), so no dangling reference is left behind. Verified
 against platform source (assertNotReferenced).`,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		baseURL, err := GetBaseURL()
-		if err != nil {
-			return err
-		}
-
-		path := client.Path("/api/v1/policies/%s", args[0])
-		if dryRunActive() {
-			return printDryRun(cmd, "DELETE", path, nil)
-		}
-
-		c, err := newPoliciesClient(cmd, baseURL)
-		if err != nil {
-			return fmt.Errorf("authentication failed: %w", err)
-		}
-		data, err := c.Delete(cmd.Context(), path)
-		if err != nil {
-			return fmt.Errorf("API error: %w", err)
-		}
-
-		return writeRawObject(cmd, data)
+		return sendMutation(cmd, mutation{Method: http.MethodDelete, Path: client.Path("/api/v1/policies/%s", args[0])})
 	},
 }
 
 func init() {
+	markMutating(policiesDeleteCmd)
 	policiesCmd.AddCommand(policiesDeleteCmd)
 }

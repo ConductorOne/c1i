@@ -3,6 +3,7 @@ package cmd
 import (
 	"encoding/json"
 	"fmt"
+	"net/http"
 	"strconv"
 	"strings"
 
@@ -65,7 +66,7 @@ with --body-file; use "-" to read it from standard input.`,
 		if err := validateCampaignOwners(body); err != nil {
 			return err
 		}
-		return postAccessReview(cmd, "/api/v1/access_review", body)
+		return sendMutation(cmd, mutation{Method: http.MethodPost, Path: "/api/v1/access_review", Body: body})
 	},
 }
 
@@ -87,10 +88,10 @@ are required. The command inserts the campaign id and wraps the request.`,
 			return &usageError{fmt.Errorf("--update-mask is required")}
 		}
 		campaign["id"] = args[0]
-		return postAccessReview(cmd, client.Path("/api/v1/access_review/%s", args[0]), map[string]any{
+		return sendMutation(cmd, mutation{Method: http.MethodPost, Path: client.Path("/api/v1/access_review/%s", args[0]), Body: map[string]any{
 			"accessReview": campaign,
 			"updateMask":   mask,
-		})
+		}})
 	},
 }
 
@@ -126,7 +127,7 @@ its time-limited downloadUrl. Use --format for JSON, CSV, or XLSX, or
 			}
 			body["format"] = mapped
 		}
-		return postAccessReview(cmd, client.Path("/api/v1/access_review/%s/report", args[0]), body)
+		return sendMutation(cmd, mutation{Method: http.MethodPost, Path: client.Path("/api/v1/access_review/%s/report", args[0]), Body: body})
 	},
 }
 
@@ -236,25 +237,6 @@ func validateCampaignOwners(body map[string]any) error {
 	return nil
 }
 
-func postAccessReview(cmd *cobra.Command, path string, body map[string]any) error {
-	baseURL, err := GetBaseURL()
-	if err != nil {
-		return err
-	}
-	if dryRunActive() {
-		return printDryRun(cmd, "POST", path, body)
-	}
-	c, err := newClient(cmd, baseURL)
-	if err != nil {
-		return fmt.Errorf("authentication failed: %w", err)
-	}
-	data, err := c.Post(cmd.Context(), path, body)
-	if err != nil {
-		return fmt.Errorf("API error: %w", err)
-	}
-	return writeRawObject(cmd, data)
-}
-
 var reportFormatFlag = enumFlag{flag: "format", prefix: "ACCESS_REVIEW_REPORT_FORMAT_", unknown: enumReject, values: []enumValue{
 	{name: "json", api: "ACCESS_REVIEW_REPORT_FORMAT_JSON"},
 	{name: "csv", api: "ACCESS_REVIEW_REPORT_FORMAT_CSV"},
@@ -268,6 +250,9 @@ func init() {
 	accessReviewReportsGenerateCmd.Flags().String("format", "", "Report format: "+reportFormatFlag.usage()+" (mutually exclusive with --body-file)")
 	accessReviewReportsGenerateCmd.Flags().String("body-file", "", "Full GenerateAccessReviewReport request JSON object (file or \"-\" for stdin; mutually exclusive with --format)")
 
+	for _, command := range []*cobra.Command{accessReviewsCreateCmd, accessReviewsUpdateCmd, accessReviewReportsGenerateCmd} {
+		markMutating(command)
+	}
 	accessReviewReportsCmd.AddCommand(accessReviewReportsListCmd, accessReviewReportsGenerateCmd)
 	accessReviewsCmd.AddCommand(accessReviewsListCmd, accessReviewsGetCmd, accessReviewsCreateCmd, accessReviewsUpdateCmd, accessReviewReportsCmd)
 	rootCmd.AddCommand(accessReviewsCmd)

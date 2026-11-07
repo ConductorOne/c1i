@@ -1,8 +1,10 @@
 package cmd
 
 import (
+	"context"
 	"errors"
 	"fmt"
+	"net/http"
 	"strings"
 
 	"github.com/ConductorOne/c1i/internal/client"
@@ -52,120 +54,89 @@ skip the lookup.`,
 			return err
 		}
 		id := args[0]
-		allowDenyAll, _ := cmd.Flags().GetBool("allow-deny-all")
+		m := mutation{Method: http.MethodPost, Path: client.Path("/api/v1/policies/%s", id)}
 
-		baseURL, err := GetBaseURL()
-		if err != nil {
+		// A first pass with a resolver that only reports "type needed" builds
+		// the body offline whenever the patch states its own policyType.
+		body, err := buildPolicyUpdateBody(cmd, id, func() (string, error) { return "", errPolicyTypeNeeded })
+		if err == nil {
+			m.Body = body
+			return sendMutation(cmd, m)
+		}
+		if !errors.Is(err, errPolicyTypeNeeded) {
 			return err
 		}
-
-		// Lazily fetches the existing policy's type, whenever the patch ends
-		// up carrying policySteps without an explicit policyType of its own
-		// (needed both to resolve --steps-file's baseline map key, and to
-		// give the policyType-dependent guards below something to check —
-		// omitting it let an update slip an agent step past every one of
-		// them straight through to the server). Memoized so a plain
-		// display-name/description update never pays for it, and a
-		// policySteps-carrying update only pays for it once regardless of
-		// which flag/file path produced the patch.
-		resolver := &policyTypeResolver{baseURL: baseURL}
-
-		policy, mask, err := buildUpdatePolicyPatch(cmd, func() (string, error) { return resolver.resolve(cmd, id) })
-		if err != nil {
-			// A fetch failure (auth/not-found/rate-limited/server) reaches
-			// here already classified — surface it as-is so exitCode can map
-			// it correctly (3/4/5/6), rather than flattening it to exitUsage.
-			// Anything else from buildUpdatePolicyPatch (bad flag combo,
-			// unreadable/unparsable file, an unmappable --policy-type) is a
-			// genuine usage problem and becomes exitUsage as before.
-			var apiErr *client.APIError
-			var authErr *client.AuthError
-			if errors.As(err, &apiErr) || errors.As(err, &authErr) {
-				return err
-			}
-			return &usageError{err}
-		}
-
-		effectivePolicyType, _ := policy["policyType"].(string)
-		if effectivePolicyType == "" {
-			if _, hasSteps := policy["policySteps"].(map[string]any); hasSteps {
-				effectivePolicyType, err = resolver.resolve(cmd, id)
-				if err != nil {
-					return err // classified fetch failure — do not wrap in usageError
-				}
-				if effectivePolicyType == "" {
-					return &usageError{fmt.Errorf("this update sets policySteps but no policyType was given and the existing policy at %q has no resolvable type — pass --policy-type explicitly so the policyType-dependent guards (and the server) know what they're validating", id)}
-				}
-			}
-		}
-		if err := validateUpdatePatch(policy, effectivePolicyType, allowDenyAll); err != nil {
-			return err
-		}
-
-		policy["id"] = id
-		body := map[string]any{"policy": policy, "updateMask": mask}
-
-		path := client.Path("/api/v1/policies/%s", id)
 		if dryRunActive() {
-			return printDryRun(cmd, "POST", path, body)
+			return &usageError{errors.New("--dry-run skips the lookup of the policy's current type, which this patch needs: pass --policy-type")}
 		}
-
-		c := resolver.client
-		if c == nil {
-			c, err = newPoliciesClient(cmd, baseURL)
-			if err != nil {
-				return fmt.Errorf("authentication failed: %w", err)
-			}
-		}
-		data, err := c.Post(cmd.Context(), path, body)
-		if err != nil {
-			return fmt.Errorf("API error: %w", err)
-		}
-
-		return writeRawObject(cmd, data)
+		return sendMutation(cmd, m, withPreRead(preRead{Run: func(ctx context.Context, c *client.Client, m *mutation) ([]resolvedID, error) {
+			r := &policyTypeResolver{client: c}
+			body, err := buildPolicyUpdateBody(cmd, id, func() (string, error) { return r.resolve(ctx, id) })
+			m.Body = body
+			return nil, err
+		}}))
 	},
 }
 
-// policyTypeResolver lazily fetches and memoizes a policy's current type
-// (and client) across the several call sites in RunE and
-// buildUpdatePolicyPatch that may need it for the same update. A failed
-// fetch is memoized alongside the value, so a second caller sees the same
-// classified error rather than an empty type that would look like "resolved
-// to nothing" and downgrade a real 401/404 to exit 2. Not safe for
-// concurrent use; RunE calls it sequentially.
-type policyTypeResolver struct {
-	baseURL string
-	client  *client.Client
-	value   string
-	err     error
-	done    bool
+var errPolicyTypeNeeded = errors.New("policy type lookup needed")
+
+// buildPolicyUpdateBody builds and guards the wrapped update body. resolve
+// supplies the policy's current type when the patch carries policySteps
+// without one of its own.
+func buildPolicyUpdateBody(cmd *cobra.Command, id string, resolve func() (string, error)) (map[string]any, error) {
+	allowDenyAll, _ := cmd.Flags().GetBool("allow-deny-all")
+	policy, mask, err := buildUpdatePolicyPatch(cmd, resolve)
+	if err != nil {
+		// A classified fetch failure keeps its exit code; anything else is usage.
+		var apiErr *client.APIError
+		var authErr *client.AuthError
+		if errors.As(err, &apiErr) || errors.As(err, &authErr) {
+			return nil, err
+		}
+		return nil, &usageError{err}
+	}
+
+	effectivePolicyType, _ := policy["policyType"].(string)
+	if effectivePolicyType == "" {
+		if _, hasSteps := policy["policySteps"].(map[string]any); hasSteps {
+			effectivePolicyType, err = resolve()
+			if err != nil {
+				return nil, err
+			}
+			if effectivePolicyType == "" {
+				return nil, &usageError{fmt.Errorf("this update sets policySteps but no policyType was given and the existing policy at %q has no resolvable type — pass --policy-type explicitly so the policyType-dependent guards (and the server) know what they're validating", id)}
+			}
+		}
+	}
+	if err := validateUpdatePatch(policy, effectivePolicyType, allowDenyAll); err != nil {
+		return nil, err
+	}
+
+	policy["id"] = id
+	return map[string]any{"policy": policy, "updateMask": mask}, nil
 }
 
-// resolve returns the policy's type, fetching and memoizing it (value and
-// error alike) on the first call.
-func (r *policyTypeResolver) resolve(cmd *cobra.Command, id string) (string, error) {
-	if r.done {
-		return r.value, r.err
+// policyTypeResolver memoizes a policy's current type, failure included, so a
+// second caller sees the same classified error instead of an empty type that
+// would downgrade a real 401/404 to exit 2.
+type policyTypeResolver struct {
+	client *client.Client
+	value  string
+	err    error
+	done   bool
+}
+
+func (r *policyTypeResolver) resolve(ctx context.Context, id string) (string, error) {
+	if !r.done {
+		r.done = true
+		r.value, r.err = fetchPolicyType(ctx, r.client, id)
 	}
-	r.done = true
-	if r.client == nil {
-		c, err := newPoliciesClient(cmd, r.baseURL)
-		if err != nil {
-			r.err = fmt.Errorf("authentication failed: %w", err)
-			return "", r.err
-		}
-		r.client = c
-	}
-	r.value, r.err = fetchPolicyType(cmd, r.client, id)
 	return r.value, r.err
 }
 
-// fetchPolicyType looks up an existing policy's policyType. Called via
-// policyTypeResolver.resolve whenever an update's patch carries policySteps
-// without its own policyType, regardless of whether that patch came from
-// --steps-file or --body-file.
-func fetchPolicyType(cmd *cobra.Command, c *client.Client, id string) (string, error) {
-	meta, err := fetchPolicyMeta(cmd.Context(), c, id)
+// fetchPolicyType looks up an existing policy's policyType.
+func fetchPolicyType(ctx context.Context, c *client.Client, id string) (string, error) {
+	meta, err := fetchPolicyMeta(ctx, c, id)
 	if err != nil {
 		return "", fmt.Errorf("resolving the policy's current type (pass --policy-type to skip this lookup): %w", err)
 	}
@@ -270,5 +241,6 @@ func init() {
 	policiesUpdateCmd.Flags().String("body-file", "", "Full Policy JSON object, verbatim (file, or \"-\" for stdin); requires --update-mask; mutually exclusive with the flags above")
 	policiesUpdateCmd.Flags().String("update-mask", "", "Comma-separated field paths to update (required with --body-file; ignored/derived otherwise)")
 	policiesUpdateCmd.Flags().Bool("allow-deny-all", false, "Allow leaving/setting a policy with no steps — bypasses the empty-steps guard on purpose")
+	markMutating(policiesUpdateCmd)
 	policiesCmd.AddCommand(policiesUpdateCmd)
 }

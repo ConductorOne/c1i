@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"fmt"
+	"net/http"
 
 	"github.com/spf13/cobra"
 )
@@ -72,25 +73,7 @@ ExpressionApproval.expressions run in — see its --help).`,
 			return err
 		}
 
-		baseURL, err := GetBaseURL()
-		if err != nil {
-			return err
-		}
-
-		if dryRunActive() {
-			return printDryRun(cmd, "POST", "/api/v1/policies", body)
-		}
-
-		c, err := newPoliciesClient(cmd, baseURL)
-		if err != nil {
-			return fmt.Errorf("authentication failed: %w", err)
-		}
-		data, err := c.Post(cmd.Context(), "/api/v1/policies", body)
-		if err != nil {
-			return fmt.Errorf("API error: %w", err)
-		}
-
-		return writeRawObject(cmd, data)
+		return sendMutation(cmd, mutation{Method: http.MethodPost, Path: "/api/v1/policies", Body: body})
 	},
 }
 
@@ -165,5 +148,6 @@ func init() {
 	policiesCreateCmd.Flags().String("body-file", "", "Full CreatePolicyRequest JSON body, verbatim (file, or \"-\" for stdin); mutually exclusive with the flags above")
 	policiesCreateCmd.Flags().Bool("allow-deny-all", false, "Allow creating a policy with no steps (or an explicit deny-all) — bypasses the empty-steps guard on purpose")
 	annotateRequired(policiesCreateCmd, "display-name", "policy-type")
+	markMutating(policiesCreateCmd)
 	policiesCmd.AddCommand(policiesCreateCmd)
 }

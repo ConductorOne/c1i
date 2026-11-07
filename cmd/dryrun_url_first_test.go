@@ -21,11 +21,7 @@ func TestDryRunHelpersNeedURL(t *testing.T) {
 
 	body := map[string]any{}
 	helpers := map[string]func(*cobra.Command) error{
-		"postFindingsMutation":            func(c *cobra.Command) error { return postFindingsMutation(c, "/api/v1/x", body) },
-		"deleteFindingsMutation":          func(c *cobra.Command) error { return deleteFindingsMutation(c, "/api/v1/x") },
-		"postAccessReview":                func(c *cobra.Command) error { return postAccessReview(c, "/api/v1/x", body) },
 		"postClassifierMutation":          func(c *cobra.Command) error { return postClassifierMutation(c, "/api/v1/x", body) },
-		"postRoleMiningMutation":          func(c *cobra.Command) error { return postRoleMiningMutation(c, "/api/v1/x", body) },
 		"postBundleAutomation":            func(c *cobra.Command) error { return postBundleAutomation(c, "ap", "/run", body) },
 		"postAccessProfileEntitlements":   func(c *cobra.Command) error { return postAccessProfileEntitlements(c, "/api/v1/x", body) },
 		"deleteAccessProfileEntitlements": func(c *cobra.Command) error { return deleteAccessProfileEntitlements(c, "/api/v1/x", body) },

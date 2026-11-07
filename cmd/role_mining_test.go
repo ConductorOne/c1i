@@ -33,12 +33,12 @@ func TestRoleMiningMutationsDryRun(t *testing.T) {
 		bodyFile string
 		want     []string
 	}{
-		{"trigger", roleMiningTriggerCmd, nil, "", []string{"[dry-run] POST /api/v1/role-mining/trigger", "{}"}},
-		{"suggestion state", roleMiningSuggestionsStateCmd, []string{"suggestion/1"}, state, []string{"[dry-run] POST /api/v1/role-mining/suggestions/suggestion%2F1/state", `"state": "SUGGESTION_STATE_DISMISSED"`}},
-		{"config update", roleMiningConfigUpdateCmd, nil, config, []string{"[dry-run] POST /api/v1/role-mining/config", `"minCohortSize": 10`}},
-		{"custom analysis trigger", roleMiningCustomAnalysisTriggerCmd, nil, analysis, []string{"[dry-run] POST /api/v1/role-mining/custom-analysis/trigger", `"profileFilters"`}},
-		{"selection evaluation", roleMiningCustomAnalysisEvaluateCmd, []string{"analysis/1"}, evaluation, []string{"[dry-run] POST /api/v1/role-mining/custom-analysis/analysis%2F1/evaluate-entitlement-selection", `"minimumCoverageBasisPoints": 8000`}},
-		{"access profile create", roleMiningAccessProfilesCreateCmd, nil, profile, []string{"[dry-run] POST /api/v1/role-mining/access-profiles", `"displayName": "Engineering"`}},
+		{"trigger", roleMiningTriggerCmd, nil, "", []string{`"url": "https://example.invalid/api/v1/role-mining/trigger"`, "{}"}},
+		{"suggestion state", roleMiningSuggestionsStateCmd, []string{"suggestion/1"}, state, []string{`"url": "https://example.invalid/api/v1/role-mining/suggestions/suggestion%2F1/state"`, `"state": "SUGGESTION_STATE_DISMISSED"`}},
+		{"config update", roleMiningConfigUpdateCmd, nil, config, []string{`"url": "https://example.invalid/api/v1/role-mining/config"`, `"minCohortSize": 10`}},
+		{"custom analysis trigger", roleMiningCustomAnalysisTriggerCmd, nil, analysis, []string{`"url": "https://example.invalid/api/v1/role-mining/custom-analysis/trigger"`, `"profileFilters"`}},
+		{"selection evaluation", roleMiningCustomAnalysisEvaluateCmd, []string{"analysis/1"}, evaluation, []string{`"url": "https://example.invalid/api/v1/role-mining/custom-analysis/analysis%2F1/evaluate-entitlement-selection"`, `"minimumCoverageBasisPoints": 8000`}},
+		{"access profile create", roleMiningAccessProfilesCreateCmd, nil, profile, []string{`"url": "https://example.invalid/api/v1/role-mining/access-profiles"`, `"displayName": "Engineering"`}},
 	}
 
 	for _, tt := range cases {

@@ -17,17 +17,18 @@ import (
 	"github.com/spf13/viper"
 )
 
-// stubPoliciesClient swaps newPoliciesClient to return a *client.Client
+// stubPoliciesClient swaps newClient (what sendMutation builds with) and newPoliciesClient (the reads) to return a *client.Client
 // wired (via client.NewForTesting) to a real httptest.Server, bypassing
 // newClient's OAuth mint, restoring the original when the test ends. Mirrors
 // cmd/requests_create_test.go's stubNewGrantClient.
 func stubPoliciesClient(t *testing.T, srv *httptest.Server) {
 	t.Helper()
-	orig := newPoliciesClient
-	newPoliciesClient = func(_ *cobra.Command, _ string) (*client.Client, error) {
+	stub := func(_ *cobra.Command, _ string) (*client.Client, error) {
 		return client.NewForTesting(srv.URL, srv.Client()), nil
 	}
-	t.Cleanup(func() { newPoliciesClient = orig })
+	orig, origPolicies := newClient, newPoliciesClient
+	newClient, newPoliciesClient = stub, stub
+	t.Cleanup(func() { newClient, newPoliciesClient = orig, origPolicies })
 }
 
 func withRealDryRun(t *testing.T) {
@@ -389,16 +390,6 @@ func TestPoliciesUpdateBodyFileWithoutPolicyStepsNeverFetchesPolicyType(t *testi
 	}
 }
 
-// newResolverTestCmd builds a bare *cobra.Command with a context, enough for
-// policyTypeResolver.resolve (which only needs cmd.Context() and, via
-// newPoliciesClient, cmd itself — stubbed below to ignore it).
-func newResolverTestCmd(t *testing.T) *cobra.Command {
-	t.Helper()
-	cmd := &cobra.Command{Use: "test"}
-	cmd.SetContext(context.Background())
-	return cmd
-}
-
 // TestPolicyTypeResolverMemoizesFetchFailure is the load-bearing regression
 // test for the fix: a fetch failure (404 here) must be memoized alongside
 // the (empty) value, so a second resolve() call sees the SAME classified
@@ -417,10 +408,10 @@ func TestPolicyTypeResolverMemoizesFetchFailure(t *testing.T) {
 	defer srv.Close()
 	stubPoliciesClient(t, srv)
 
-	resolver := &policyTypeResolver{baseURL: srv.URL}
-	cmd := newResolverTestCmd(t)
+	resolver := &policyTypeResolver{client: client.NewForTesting(srv.URL, srv.Client())}
+	ctx := context.Background()
 
-	val1, err1 := resolver.resolve(cmd, "zz-does-not-exist")
+	val1, err1 := resolver.resolve(ctx, "zz-does-not-exist")
 	if err1 == nil {
 		t.Fatal("expected the first resolve() to return the 404 as an error")
 	}
@@ -428,7 +419,7 @@ func TestPolicyTypeResolverMemoizesFetchFailure(t *testing.T) {
 		t.Errorf("value on a failed fetch = %q, want empty", val1)
 	}
 
-	val2, err2 := resolver.resolve(cmd, "zz-does-not-exist")
+	val2, err2 := resolver.resolve(ctx, "zz-does-not-exist")
 	if err2 != err1 {
 		t.Errorf("second resolve() returned a different error: %v (first: %v)", err2, err1)
 	}
@@ -465,10 +456,10 @@ func TestPolicyTypeResolverMemoizesSuccess(t *testing.T) {
 	defer srv.Close()
 	stubPoliciesClient(t, srv)
 
-	resolver := &policyTypeResolver{baseURL: srv.URL}
-	cmd := newResolverTestCmd(t)
+	resolver := &policyTypeResolver{client: client.NewForTesting(srv.URL, srv.Client())}
+	ctx := context.Background()
 
-	val1, err1 := resolver.resolve(cmd, "zz-c1i-test-policy-resolver")
+	val1, err1 := resolver.resolve(ctx, "zz-c1i-test-policy-resolver")
 	if err1 != nil {
 		t.Fatalf("first resolve(): %v", err1)
 	}
@@ -476,7 +467,7 @@ func TestPolicyTypeResolverMemoizesSuccess(t *testing.T) {
 		t.Fatalf("first resolve() value = %q, want POLICY_TYPE_GRANT", val1)
 	}
 
-	val2, err2 := resolver.resolve(cmd, "zz-c1i-test-policy-resolver")
+	val2, err2 := resolver.resolve(ctx, "zz-c1i-test-policy-resolver")
 	if err2 != nil {
 		t.Fatalf("second resolve(): %v", err2)
 	}
@@ -486,44 +477,6 @@ func TestPolicyTypeResolverMemoizesSuccess(t *testing.T) {
 
 	if requestCount != 1 {
 		t.Errorf("server received %d requests, want exactly 1 (no re-fetch on the second resolve() call)", requestCount)
-	}
-}
-
-// TestPolicyTypeResolverMemoizesClientConstructionFailure covers the other
-// failure point: newPoliciesClient itself (not the fetch) failing, e.g. bad
-// credentials. A second resolve() call must not retry building the client
-// either — it counts calls to newPoliciesClient directly since this failure
-// never reaches a server.
-func TestPolicyTypeResolverMemoizesClientConstructionFailure(t *testing.T) {
-	var buildCount int
-	orig := newPoliciesClient
-	newPoliciesClient = func(_ *cobra.Command, _ string) (*client.Client, error) {
-		buildCount++
-		return nil, errors.New("no credentials configured")
-	}
-	t.Cleanup(func() { newPoliciesClient = orig })
-
-	resolver := &policyTypeResolver{baseURL: "http://unused.invalid"}
-	cmd := newResolverTestCmd(t)
-
-	val1, err1 := resolver.resolve(cmd, "zz-any-id")
-	if err1 == nil {
-		t.Fatal("expected the first resolve() to surface the client-construction failure")
-	}
-	if val1 != "" {
-		t.Errorf("value on a client-construction failure = %q, want empty", val1)
-	}
-
-	val2, err2 := resolver.resolve(cmd, "zz-any-id")
-	if err2 != err1 {
-		t.Errorf("second resolve() returned a different error: %v (first: %v)", err2, err1)
-	}
-	if val2 != "" {
-		t.Errorf("second resolve() value = %q, want empty", val2)
-	}
-
-	if buildCount != 1 {
-		t.Errorf("newPoliciesClient was called %d times, want exactly 1 (no re-attempt building the client)", buildCount)
 	}
 }
 
