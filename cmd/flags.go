@@ -574,15 +574,16 @@ func addProtoDurationFlag(cmd *cobra.Command, name, usage string) {
 	_ = cmd.Flags().SetAnnotation(name, protoDurationAnnotation, []string{"true"})
 }
 
-// wholeDuration is Go's duration syntax restricted to whole-number
-// components: no decimal point or exponent, so ParseDuration is exact.
-var wholeDuration = regexp.MustCompile(`^[-+]?(0|([0-9]+(ns|us|µs|μs|ms|s|m|h))+)$`)
+// wholeDuration is Go's duration syntax restricted to unsigned whole-number
+// components without leading zeros, so ParseDuration is exact and never
+// negative.
+var wholeDuration = regexp.MustCompile(`^(0|((0|[1-9][0-9]*)(ns|us|µs|μs|ms|s|m|h))+)$`)
 
 // protoDurationFlag reads a flag registered by addProtoDurationFlag. It
 // accepts a whole-number Go ("8h", "1h30m") or protobuf ("3600s") duration and
 // returns it in seconds, the only form the API parses; set is false when the
 // flag was not passed. Zero is sent: range limits are the server's call.
-// Decimals and negatives are usage errors.
+// A sign, a decimal or a leading zero is a usage error.
 func protoDurationFlag(cmd *cobra.Command, name string) (value string, set bool, err error) {
 	f := cmd.Flags().Lookup(name)
 	if f == nil || f.Annotations[protoDurationAnnotation] == nil {
@@ -594,14 +595,11 @@ func protoDurationFlag(cmd *cobra.Command, name string) (value string, set bool,
 	raw := f.Value.String()
 	trimmed := strings.TrimSpace(raw)
 	if !wholeDuration.MatchString(trimmed) {
-		return "", false, &usageError{fmt.Errorf("--%s must be a whole-number duration such as 8h or 1h30m (decimals are not supported), got %q", name, raw)}
+		return "", false, &usageError{fmt.Errorf("--%s must be a whole-number duration such as 8h or 1h30m (no sign, no decimals), got %q", name, raw)}
 	}
 	d, err := time.ParseDuration(trimmed)
 	if err != nil {
 		return "", false, &usageError{fmt.Errorf("invalid --%s %q: %w", name, raw, err)}
-	}
-	if d < 0 {
-		return "", false, &usageError{fmt.Errorf("--%s must not be negative, got %q", name, raw)}
 	}
 	return formatProtoDuration(d), true, nil
 }

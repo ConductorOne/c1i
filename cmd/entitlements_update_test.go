@@ -159,7 +159,7 @@ func TestEntitlementsUpdateUsageErrors(t *testing.T) {
 		{"duration grant and unset", map[string]string{"duration-grant": "1h", "duration-unset": "true"}, "mutually exclusive"},
 		{"duration unset false", map[string]string{"duration-unset": "false"}, "--duration-unset"},
 		{"duration unparseable", map[string]string{"duration-grant": "soon"}, "--duration-grant"},
-		{"duration negative", map[string]string{"duration-grant": "-1m"}, "must not be negative"},
+		{"duration negative", map[string]string{"duration-grant": "-1m"}, "whole-number duration"},
 		{"duration decimal", map[string]string{"duration-grant": "1.5h"}, "whole-number duration"},
 		{"emergency enabled without policy", map[string]string{"emergency-grant-enabled": "true"}, "emergency grant policy id must be set if emergency grant is enabled"},
 		{"emergency enabled with policy unbound", map[string]string{"emergency-grant-enabled": "true", "unbind-policy": "emergency-grant"}, "emergency grant policy id must be set if emergency grant is enabled"},

@@ -28,9 +28,9 @@ var tasksUpdateGrantDurationCmd = &cobra.Command{
 	Long: `Change how long the access a grant task provisions will last.
 
 --duration takes a whole-number Go (1h, 1h30m) or protobuf (3600s) duration
-and is sent in seconds, the only form the API parses. A decimal (1.5h) or
-negative value exits 2 before sending; "0s" is sent, and the server has been seen storing it without
-complaint.
+(no sign, no decimals) and is sent in seconds, the only form the API parses;
+-1h or 1.5h exits 2 before sending. "0s" is sent, and the server has been seen
+storing it without complaint.
 
 The task must still be at an approval step. Once it reaches provisioning the
 server refuses with:
@@ -49,7 +49,7 @@ func init() {
 	// No --comment: the UpdateGrantDuration request body carries only duration
 	// and expandMask.
 	addProtoDurationFlag(tasksUpdateGrantDurationCmd, "duration",
-		"Grant duration as a protobuf duration (3600s) or a Go duration (1h), sent in seconds; a decimal (1.5h) or negative value exits 2")
+		"Grant duration as a protobuf duration (3600s) or a Go duration (1h), sent in seconds; a sign or decimal (-1h, 1.5h) exits 2")
 	markRequired(tasksUpdateGrantDurationCmd, "duration")
 	tasksCmd.AddCommand(tasksUpdateGrantDurationCmd)
 }

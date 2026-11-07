@@ -169,9 +169,9 @@ fields); `c1i roles get <role-id>` adds a role's `serviceRoles` and
 
 Every flag sent to the API as a duration (`--duration-grant`, `--duration`,
 `--expires`, `--callback-timeout`) takes a whole-number Go (`8h`, `1h30m`) or
-protobuf (`28800s`) duration and is sent in seconds. An empty, decimal
-(`1.5h`) or negative value exits `2` before sending; zero is sent, and the
-server decides.
+protobuf (`28800s`) duration, with no sign and no decimals, and is sent in
+seconds. Anything else (`-1h`, `+1h`, `1.5h`, `01h`, empty) exits `2` before
+sending; zero is sent, and the server decides.
 
 The cobra tree never drifts from what's implemented. Step down it with
 `--help` at each level:
@@ -540,8 +540,8 @@ resource with `--resource-id` likewise means you drop
   `webhooks list` pages exceed `--page-size` (a size below 5 is raised to 5,
   plus one row), so use `--limit` for an exact count. `webhooks update` with
   no field flag exits `2`. `--callback-timeout` takes a whole-number Go
-  (`10m`) or protobuf (`600s`) duration from `0` to `720h`: a decimal or
-  negative one exits `2` before sending, and over `720h` update returns
+  (`10m`) or protobuf (`600s`) duration (no sign, no decimals) from `0` to
+  `720h`: anything else exits `2` before sending, and over `720h` update returns
   `callback_timeout must be between 0 and 30 days`. A webhook has no
   signing secret.
 - `automations delete <automation-id>` is soft: the automation leaves

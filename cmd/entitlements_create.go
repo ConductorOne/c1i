@@ -70,7 +70,7 @@ usage error. Likewise, pass --resource-id to reuse a resource and drop
 Omitting --duration-grant leaves the entitlement at standing access
 (durationUnset in the response). It takes a whole-number protobuf (3600s) or
 Go (8h, 1h30m) duration, sent in seconds since the API parses only that form.
-A decimal (1.5h) or negative value exits 2 before sending; zero is sent as
+No sign, no decimals: -1h or 1.5h exits 2 before sending. Zero is sent as
 "0s".
 
 Each --<kind>-policy-id is checked before the first create: it must name an
@@ -457,7 +457,7 @@ func addEntitlementCreateFlags(cmd *cobra.Command) {
 	f.String("description", "", "Description for the new entitlement")
 	f.String("slug", "", "Slug for the new entitlement (e.g. member)")
 	f.String("alias", "", "Alias for the new entitlement; exact-match queryable")
-	addProtoDurationFlag(cmd, "duration-grant", "Maximum grant duration as a protobuf duration, e.g. 3600s; a Go duration such as 8h is converted to seconds; a decimal (1.5h) or negative value exits 2; omit for standing access")
+	addProtoDurationFlag(cmd, "duration-grant", "Maximum grant duration as a protobuf duration, e.g. 3600s; a Go duration such as 8h is converted to seconds; a sign or decimal (-1h, 1.5h) exits 2; omit for standing access")
 	registerPolicyIDFlags(cmd, entitlementPolicyKinds, " (omit to leave unset)")
 	// StringArray, not StringSlice: the slice parser drops an empty value
 	// outright, so `--owner-id "" --owner-id U` would lose the empty one

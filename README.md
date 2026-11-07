@@ -189,10 +189,11 @@ call even when one is already stored (the server's `emergency grant policy id
 must be set if emergency grant is enabled`), so it is refused at exit `2`
 without one, or alongside `--unbind-policy emergency-grant`. Unbinding the
 emergency policy while emergency grants stay enabled is accepted by the server.
-`--duration-grant` takes a whole-number Go duration (`8h`, `1h30m`, `3600s`)
-and is sent in seconds; a decimal (`1.5h`) or negative one exits `2`, and `0s`
-is sent and was stored by the server without complaint. `--duration-unset`
-removes the limit, and the two are mutually exclusive. A blank `--display-name` is refused:
+`--duration-grant` takes a whole-number Go duration (`8h`, `1h30m`, `3600s`;
+no sign, no decimals) and is sent in seconds; `-1h` or `1.5h` exits `2`, and
+`0s` is sent and was stored by the server without complaint. `--duration-unset`
+removes the limit, and the two are mutually exclusive. A blank `--display-name`
+is refused:
 the server would accept "" and restore the entitlement's original name.
 `entitlements create` checks its policy flags the same way before its first
 `POST`, so a bad policy creates nothing.
@@ -219,8 +220,8 @@ Reusing a resource with `--resource-id` likewise means you drop
 `--resource-display-name`. `--owner-id` is repeatable and goes inline in the
 create request, so no follow-up call is needed; an empty one is a usage error
 rather than an owner quietly dropped. `--duration-grant` takes a protobuf
-(`3600s`) or Go (`8h`) whole-number duration, sent in seconds; a decimal,
-negative or empty one is a usage error. Omit it for standing access.
+(`3600s`) or Go (`8h`) whole-number duration (no sign, no decimals), sent in
+seconds; anything else, or an empty one, is a usage error. Omit it for standing access.
 
 `--dry-run` previews all three requests, printing
 `NEW_APP_RESOURCE_TYPE_ID`/`NEW_APP_RESOURCE_ID` where an id only exists after
@@ -343,10 +344,9 @@ with `action not permitted`. Read the task's own list with
 Neither reopens a closed task. `process` changes nothing observable on a
 healthy task — it is intended for one that has stalled, which was not
 reproduced here. `update-grant-duration` takes a whole-number Go (`1h`) or
-protobuf (`3600s`) duration, sent in seconds; a decimal or negative one exits
-`2`, and `0s` is sent and was stored by the server without complaint. It only
-applies before the task reaches
-provisioning, after which the server answers `cannot update grant duration for
+protobuf (`3600s`) duration (no sign, no decimals), sent in seconds; `-1h` or
+`1.5h` exits `2`, and `0s` is sent and was stored by the server without
+complaint. It only applies before the task reaches provisioning, after which the server answers `cannot update grant duration for
 a ticket in a provision step`; the value lands as `grantDuration`.
 
 `escalate`, `update-request-data` and `approve-with-step-up` are not wrapped;
@@ -601,8 +601,8 @@ c1i requests get <request-id>
 On `create`, `--user-id` defaults to the authenticated user when omitted.
 `requests create grant --duration` takes a whole-number Go (`24h`) or protobuf
 (`86400s`) duration, like `tasks update-grant-duration --duration`, and sends
-it in seconds. A negative one exits `2`; `0s` is sent, and the server refuses it with
-`value must be greater than 0s`. A decimal (`1.5h`) or `7d` exits `2`.
+it in seconds. No sign, no decimals: `-1h`, `1.5h` or `7d` exits `2`. `0s` is
+sent, and the server refuses it with `value must be greater than 0s`.
 
 `requests list` is the requester lens on access requests (the grant/revoke tasks
 you file): by default it shows requests you opened or are the subject of —
@@ -861,7 +861,8 @@ it (the principal's embedded `user.status` stays `ENABLED`). Only the lists
 omit them; `users get <sp-id>` shows `"status": "DELETED"` and `deletedAt`.
 
 `--expires` takes a whole-number Go (`720h`) or protobuf (`2592000s`)
-duration, sent in seconds; an empty, decimal or negative one exits `2`. The
+duration (no sign, no decimals), sent in seconds; anything else, or an empty
+one, exits `2`. The
 server accepts the range `(0s, 4320h]` — up to 180 days — rejecting `0s` or
 more with `value must be inside range (0s, 4320h0m0s]`.
 
@@ -915,8 +916,8 @@ A blank `--display-name` exits `2` on create and update, as described under
 [Display names](#display-names); the server would store one on update.
 
 `--callback-timeout` takes a whole-number Go (`10m`) or protobuf (`600s`)
-duration from `0` to `720h`, sent in seconds. A decimal or negative one exits
-`2` before a request is sent; over `720h`, update returns `callback_timeout
+duration (no sign, no decimals) from `0` to `720h`, sent in seconds; `-1m` or
+`1.5m` exits `2` before a request is sent; over `720h`, update returns `callback_timeout
 must be between 0 and 30 days`.
 `update` sends only the flags you pass and masks exactly those, and with no
 field flag it exits `2`; an empty `--description` clears it. Updating a

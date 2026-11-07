@@ -23,9 +23,11 @@ exits:
 - `service-principals credentials create --expires ""` and `requests create
   grant --duration ""` exit 2; the empty value used to be left out of the
   request.
-- A negative value exits 2 before sending on every such flag. `requests
-  create grant --duration` and `tasks update-grant-duration --duration` used
-  to send it, and the server's 400 exited 2 after the round trip.
+- A sign exits 2 before sending on every such flag: `-1h`, `-0s` and `+1h`
+  alike. `requests create grant --duration` and `tasks update-grant-duration
+  --duration` used to send a negative value, and the server's 400 exited 2
+  after the round trip; the other flags already refused negatives.
+- A leading zero (`01h`, `00h`) exits 2 on every such flag.
 - Decimal durations now exit 2 on every such flag: write `1h30m`, not `1.5h`,
   and `1s500ms`, not `1.5s`. `--duration-grant`, `--expires` and
   `--callback-timeout` used to accept them, and `requests create grant
