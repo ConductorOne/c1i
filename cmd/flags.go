@@ -3,6 +3,7 @@ package cmd
 import (
 	"encoding/json"
 	"fmt"
+	"math"
 	"math/big"
 	"regexp"
 	"strconv"
@@ -575,14 +576,16 @@ func addProtoDurationFlag(cmd *cobra.Command, name, usage string) {
 	_ = cmd.Flags().SetAnnotation(name, protoDurationAnnotation, []string{"true"})
 }
 
-// durationComponent matches one number-unit pair of an already-parsed Go
-// duration; group 1 is the fraction's digits, group 2 the unit.
-var durationComponent = regexp.MustCompile(`[0-9]*(?:\.([0-9]*))?(ns|us|µs|μs|ms|s|m|h)`)
+// durationComponent matches one number-unit pair of a duration that
+// time.ParseDuration has already accepted; group 1 is the number.
+var durationComponent = regexp.MustCompile(`([0-9]*(?:\.[0-9]*)?)(ns|us|µs|μs|ms|s|m|h)`)
 
 var durationUnitNanos = map[string]int64{
 	"ns": 1, "us": 1e3, "µs": 1e3, "μs": 1e3, "ms": 1e6,
 	"s": 1e9, "m": 60e9, "h": 3600e9,
 }
+
+var maxDurationNanos = big.NewRat(math.MaxInt64, 1)
 
 // protoDurationFlag reads a flag registered by addProtoDurationFlag. It
 // accepts a Go ("8h", "1m30.5s") or protobuf ("3600s") duration and returns it
@@ -599,6 +602,8 @@ func protoDurationFlag(cmd *cobra.Command, name string) (value string, set bool,
 	}
 	raw := f.Value.String()
 	trimmed := strings.TrimSpace(raw)
+	// ParseDuration defines the syntax; its value is not used, since it
+	// parses fractions in floating point and can land a nanosecond off.
 	d, err := time.ParseDuration(trimmed)
 	if err != nil {
 		return "", false, &usageError{fmt.Errorf("invalid --%s %q: %w", name, raw, err)}
@@ -606,28 +611,40 @@ func protoDurationFlag(cmd *cobra.Command, name string) (value string, set bool,
 	if d < 0 {
 		return "", false, &usageError{fmt.Errorf("--%s must not be negative, got %q", name, raw)}
 	}
-	for _, m := range durationComponent.FindAllStringSubmatch(trimmed, -1) {
-		if !wholeNanoseconds(m[1], durationUnitNanos[m[2]]) {
-			return "", false, &usageError{fmt.Errorf("--%s %q is finer than a nanosecond, the most the API keeps", name, raw)}
-		}
+	nanos, err := exactDurationNanos(trimmed)
+	if err != nil {
+		return "", false, &usageError{fmt.Errorf("--%s %q %w", name, raw, err)}
 	}
-	return formatProtoDuration(d), true, nil
+	return formatProtoDuration(time.Duration(nanos)), true, nil
 }
 
-// wholeNanoseconds reports whether 0.<frac> of a unit worth unitNanos is a
-// whole number of nanoseconds.
-func wholeNanoseconds(frac string, unitNanos int64) bool {
-	frac = strings.TrimRight(frac, "0")
-	if frac == "" {
-		return true
+// exactDurationNanos evaluates an unsigned or "+"-signed duration that
+// time.ParseDuration accepted, in exact decimal arithmetic.
+func exactDurationNanos(s string) (int64, error) {
+	s = strings.TrimPrefix(s, "+")
+	if s == "0" {
+		return 0, nil
 	}
-	n, ok := new(big.Int).SetString(frac, 10)
-	if !ok {
-		return false
+	total := new(big.Rat)
+	for _, m := range durationComponent.FindAllStringSubmatch(s, -1) {
+		num := m[1]
+		if strings.HasPrefix(num, ".") {
+			num = "0" + num
+		}
+		num = strings.TrimSuffix(num, ".")
+		v, ok := new(big.Rat).SetString(num)
+		if !ok {
+			return 0, fmt.Errorf("has an unreadable number %q", m[1])
+		}
+		total.Add(total, v.Mul(v, big.NewRat(durationUnitNanos[m[2]], 1)))
 	}
-	n.Mul(n, big.NewInt(unitNanos))
-	pow := new(big.Int).Exp(big.NewInt(10), big.NewInt(int64(len(frac))), nil)
-	return new(big.Int).Mod(n, pow).Sign() == 0
+	if !total.IsInt() {
+		return 0, fmt.Errorf("is finer than a nanosecond, the most the API keeps")
+	}
+	if total.Cmp(maxDurationNanos) > 0 {
+		return 0, fmt.Errorf("is longer than the longest duration, 2562047h47m16.854775807s")
+	}
+	return total.Num().Int64(), nil
 }
 
 // formatProtoDuration renders d in protobuf JSON form: integer seconds plus

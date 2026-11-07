@@ -915,12 +915,13 @@ A blank `--display-name` exits `2` on create and update, as described under
 [Display names](#display-names); the server would store one on update.
 
 `--callback-timeout` takes a Go (`10m`) or protobuf (`600s`) duration from `0`
-to `720h`, sent in seconds. A negative one exits `2` before a request is sent; over `720h`, update returns
-`callback_timeout must be between 0 and 30 days`. `update` sends only the flags
-you pass and masks exactly those, and with no field flag it exits `2`; an empty
-`--description` clears it. Updating a soft-deleted webhook exits `0` and changes it, and it
-stays deleted. A webhook has no signing secret, so create returns nothing that
-can't be read again with `get`.
+to `720h`, sent in seconds. A negative one exits `2` before a request is sent;
+over `720h`, update returns `callback_timeout must be between 0 and 30 days`.
+`update` sends only the flags you pass and masks exactly those, and with no
+field flag it exits `2`; an empty `--description` clears it. Updating a
+soft-deleted webhook exits `0` and changes it, and it stays deleted. A webhook
+has no signing secret, so create returns nothing that can't be read again with
+`get`.
 
 `webhooks list` pages are larger than `--page-size`: the server raises a size
 below 5 to 5 and returns one row more than that, so use `--limit` for an exact

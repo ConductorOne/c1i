@@ -1,9 +1,13 @@
 package cmd
 
 import (
+	"math"
+	"math/big"
+	"math/rand"
 	"regexp"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
@@ -60,6 +64,16 @@ func TestProtoDurationFlag(t *testing.T) {
 		{name: "minute fraction that is whole nanoseconds", in: "0.0000000001m", want: "0.000000006s"},
 		{name: "max int64", in: "2562047h47m16.854775807s", want: "9223372036.854775807s"},
 		{name: "whitespace trimmed", in: " \t8h\n", want: "28800s"},
+		// time.ParseDuration lands each of these a nanosecond short.
+		{name: "float-misparsed hours 1", in: "70.91758459991000h", want: "255303.304559676s"},
+		{name: "float-misparsed hours 2", in: "33.57013783261000h", want: "120852.496197396s"},
+		{name: "float-misparsed hours 3", in: "8.47661702844250h", want: "30515.821302393s"},
+		{name: "float-misparsed hours 4", in: "50.53582406065500h", want: "181928.966618358s"},
+		{name: "exact only in decimal", in: "0.1h", want: "360s"},
+		{name: "exact only in decimal, minutes", in: "0.3m", want: "18s"},
+		{name: "multi-component fractions", in: "1.5h30.25m0.5s", want: "7215.5s"},
+		{name: "plus sign and mixed units", in: "+1h1ns", want: "3600.000000001s"},
+		{name: "negative zero is zero", in: "-0s", want: "0s"},
 		{name: "zero sent", in: "0s", want: "0s"},
 		{name: "bare zero sent", in: "0", want: "0s"},
 		{name: "negative refused", in: "-1m", wantErr: "--d must not be negative"},
@@ -99,6 +113,69 @@ func TestProtoDurationFlag(t *testing.T) {
 				t.Errorf("got (%q, %v), want (%q, true)", got, set, tc.want)
 			}
 		})
+	}
+}
+
+// TestProtoDurationFlagMatchesExactDecimal: for random accepted inputs, the
+// seconds sent equal the input's exact decimal value, and an input that is
+// not a whole number of nanoseconds (or overflows) is refused, never rounded.
+func TestProtoDurationFlagMatchesExactDecimal(t *testing.T) {
+	units := []struct {
+		name  string
+		nanos int64
+	}{{"ns", 1}, {"us", 1e3}, {"µs", 1e3}, {"ms", 1e6}, {"s", 1e9}, {"m", 60e9}, {"h", 3600e9}}
+	digits := func(r *rand.Rand, n int) string {
+		b := make([]byte, n)
+		for i := range b {
+			b[i] = byte('0' + r.Intn(10))
+		}
+		return string(b)
+	}
+	r := rand.New(rand.NewSource(1))
+	checked := 0
+	for i := 0; i < 50000; i++ {
+		var in strings.Builder
+		exact := new(big.Rat)
+		for c := 1 + r.Intn(3); c > 0; c-- {
+			u := units[r.Intn(len(units))]
+			whole, frac := digits(r, 1+r.Intn(3)), digits(r, r.Intn(16))
+			if r.Intn(3) == 0 {
+				// Every remaining digit a nanosecond can hold, padded with
+				// zeros: the shape ParseDuration's float path misreads.
+				frac = strings.TrimRight(frac, "0") + strings.Repeat("0", r.Intn(4))
+			}
+			num := whole
+			if frac != "" {
+				num += "." + frac
+			}
+			in.WriteString(num + u.name)
+			v, _ := new(big.Rat).SetString(num)
+			exact.Add(exact, v.Mul(v, big.NewRat(u.nanos, 1)))
+		}
+		if _, err := time.ParseDuration(in.String()); err != nil {
+			continue // outside the accepted syntax/range; not this test's concern
+		}
+		cmd := newProtoDurationTestCmd()
+		_ = cmd.Flags().Set("d", in.String())
+		got, _, err := protoDurationFlag(cmd, "d")
+		representable := exact.IsInt() && exact.Cmp(big.NewRat(math.MaxInt64, 1)) <= 0
+		if !representable {
+			if exitCode(err) != exitUsage {
+				t.Fatalf("%q (exact %s ns): got (%q, %v), want a usage error", in.String(), exact.FloatString(3), got, err)
+			}
+			continue
+		}
+		if err != nil {
+			t.Fatalf("%q: %v", in.String(), err)
+		}
+		sent, ok := new(big.Rat).SetString(strings.TrimSuffix(got, "s"))
+		if !ok || sent.Mul(sent, big.NewRat(1e9, 1)).Cmp(exact) != 0 {
+			t.Fatalf("%q: sent %q, want %s ns exactly", in.String(), got, exact.FloatString(0))
+		}
+		checked++
+	}
+	if checked < 1000 {
+		t.Fatalf("only %d inputs checked; the generator is broken", checked)
 	}
 }
 
