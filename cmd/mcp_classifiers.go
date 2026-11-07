@@ -65,7 +65,7 @@ first match wins; leave a new rule's id empty for C1 to assign it.`,
 		if err != nil {
 			return err
 		}
-		return postClassifierMutation(cmd, "/api/v1/classifiers", map[string]any{"classifier": classifier}, named("classifier"))
+		return sendMutation(cmd, mutation{Method: http.MethodPost, Path: "/api/v1/classifiers", Body: map[string]any{"classifier": classifier}, Unwrap: named("classifier")})
 	},
 }
 
@@ -85,7 +85,7 @@ and preserve the existing classifier first when changing rules.`,
 		if err != nil {
 			return err
 		}
-		return postClassifierMutation(cmd, client.Path("/api/v1/classifiers/%s", args[0]), body, named("classifier"))
+		return sendMutation(cmd, mutation{Method: http.MethodPost, Path: client.Path("/api/v1/classifiers/%s", args[0]), Body: body, Unwrap: named("classifier")})
 	},
 }
 
@@ -94,7 +94,7 @@ var mcpClassifiersDeleteCmd = &cobra.Command{
 	Short: "Delete a classifier (pretty JSON)",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		return postClassifierMutation(cmd, client.Path("/api/v1/classifiers/%s/delete", args[0]), map[string]any{}, byID("id"))
+		return sendMutation(cmd, mutation{Method: http.MethodPost, Path: client.Path("/api/v1/classifiers/%s/delete", args[0]), Body: map[string]any{}, Unwrap: byID("id")})
 	},
 }
 
@@ -128,7 +128,7 @@ uses one.`,
 		if err != nil {
 			return err
 		}
-		return postClassifierMutation(cmd, "/api/v1/classifier_bindings", map[string]any{"binding": binding}, named("binding"))
+		return sendMutation(cmd, mutation{Method: http.MethodPost, Path: "/api/v1/classifier_bindings", Body: map[string]any{"binding": binding}, Unwrap: named("binding")})
 	},
 }
 
@@ -137,7 +137,7 @@ var mcpClassifierBindingsDeleteCmd = &cobra.Command{
 	Short: "Delete a classifier binding (pretty JSON)",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		return postClassifierMutation(cmd, client.Path("/api/v1/classifier_bindings/%s/delete", args[0]), map[string]any{}, byID("id"))
+		return sendMutation(cmd, mutation{Method: http.MethodPost, Path: client.Path("/api/v1/classifier_bindings/%s/delete", args[0]), Body: map[string]any{}, Unwrap: byID("id")})
 	},
 }
 
@@ -191,7 +191,7 @@ templateVersion, displayName, and params. Required params are declared by
 		if err != nil {
 			return err
 		}
-		return postClassifierMutation(cmd, client.Path("/api/v1/classifier_templates/%s/instantiate", args[0]), body, named("classifier"))
+		return sendMutation(cmd, mutation{Method: http.MethodPost, Path: client.Path("/api/v1/classifier_templates/%s/instantiate", args[0]), Body: body, Unwrap: named("classifier")})
 	},
 }
 
@@ -210,7 +210,7 @@ canonical. ruleIndex defaults to 0; insertIndex at or past the end appends.`,
 			return err
 		}
 		body["templateId"] = args[1]
-		return postClassifierMutation(cmd, client.Path("/api/v1/classifiers/%s/rules/from_template", args[0]), body, named("classifier"))
+		return sendMutation(cmd, mutation{Method: http.MethodPost, Path: client.Path("/api/v1/classifiers/%s/rules/from_template", args[0]), Body: body, Unwrap: named("classifier")})
 	},
 }
 
@@ -241,7 +241,7 @@ first-match-wins cascade in the supplied order.`,
 		if err != nil {
 			return err
 		}
-		return postClassifierMutation(cmd, "/api/v1/settings/ai-governance/agent-classifier-policy", body, named("policy"))
+		return sendMutation(cmd, mutation{Method: http.MethodPost, Path: "/api/v1/settings/ai-governance/agent-classifier-policy", Body: body, Unwrap: named("policy")})
 	},
 }
 
@@ -298,7 +298,7 @@ expression.`,
 		if err != nil {
 			return err
 		}
-		return postClassifierMutation(cmd, "/api/v1/tool_gates", body, named("toolGate"))
+		return sendMutation(cmd, mutation{Method: http.MethodPost, Path: "/api/v1/tool_gates", Body: body, Unwrap: named("toolGate")})
 	},
 }
 
@@ -311,7 +311,7 @@ var mcpClassifierToolGatesUpdateCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		return postClassifierMutation(cmd, client.Path("/api/v1/tool_gates/%s", args[0]), body, named("toolGate"))
+		return sendMutation(cmd, mutation{Method: http.MethodPost, Path: client.Path("/api/v1/tool_gates/%s", args[0]), Body: body, Unwrap: named("toolGate")})
 	},
 }
 
@@ -320,7 +320,7 @@ var mcpClassifierToolGatesDeleteCmd = &cobra.Command{
 	Short: "Delete a tool gate (pretty JSON)",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		return postClassifierMutation(cmd, client.Path("/api/v1/tool_gates/%s/delete", args[0]), map[string]any{}, byID("id"))
+		return sendMutation(cmd, mutation{Method: http.MethodPost, Path: client.Path("/api/v1/tool_gates/%s/delete", args[0]), Body: map[string]any{}, Unwrap: byID("id")})
 	},
 }
 
@@ -426,10 +426,6 @@ func getClassifierResourceWithParams(cmd *cobra.Command, path string, params map
 		return fmt.Errorf("API error: %w", err)
 	}
 	return writeNamedResource(cmd, data, key)
-}
-
-func postClassifierMutation(cmd *cobra.Command, path string, body map[string]any, unwrap unwrapRule) error {
-	return sendMutation(cmd, mutation{Method: http.MethodPost, Path: path, Body: body, Unwrap: unwrap})
 }
 
 func readOptionalClassifierJSONObject(cmd *cobra.Command, flag string) (map[string]any, error) {

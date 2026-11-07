@@ -51,7 +51,7 @@ var accessProfilesBundleAutomationCreateCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		return postBundleAutomation(cmd, args[0], "/create", body)
+		return sendMutation(cmd, mutation{Method: http.MethodPost, Path: bundleAutomationPath(args[0]) + "/create", Body: body, Unwrap: byID("requestCatalogId")})
 	},
 }
 
@@ -64,7 +64,7 @@ var accessProfilesBundleAutomationSetCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		return postBundleAutomation(cmd, args[0], "", body)
+		return sendMutation(cmd, mutation{Method: http.MethodPost, Path: bundleAutomationPath(args[0]), Body: body, Unwrap: byID("requestCatalogId")})
 	},
 }
 
@@ -82,7 +82,7 @@ var accessProfilesBundleAutomationResumeCmd = &cobra.Command{
 	Short: "Resume a paused access profile bundle automation (pretty JSON)",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		return postBundleAutomation(cmd, args[0], "/resume", map[string]any{})
+		return sendMutation(cmd, mutation{Method: http.MethodPost, Path: bundleAutomationPath(args[0]) + "/resume", Body: map[string]any{}, Unwrap: byID("requestCatalogId")})
 	},
 }
 
@@ -103,21 +103,12 @@ var accessProfilesBundleAutomationRunCmd = &cobra.Command{
 			}
 			body["refs"] = refs
 		}
-		return postBundleAutomation(cmd, args[0], "/run", body)
+		return sendMutation(cmd, mutation{Method: http.MethodPost, Path: bundleAutomationPath(args[0]) + "/run", Body: body, Unwrap: byID("requestCatalogId")})
 	},
 }
 
 func bundleAutomationPath(accessProfileID string) string {
 	return client.Path("/api/v1/catalogs/%s/bundle_automation", accessProfileID)
-}
-
-func postBundleAutomation(cmd *cobra.Command, accessProfileID, action string, body map[string]any) error {
-	return sendMutation(cmd, mutation{
-		Method: http.MethodPost,
-		Path:   bundleAutomationPath(accessProfileID) + action,
-		Body:   body,
-		Unwrap: byID("requestCatalogId"),
-	})
 }
 
 func readBundleAutomationBody(cmd *cobra.Command) (map[string]any, error) {

@@ -74,7 +74,7 @@ var accessProfilesRequestableEntitlementsAddCmd = &cobra.Command{
 		}
 		body := buildRequestableEntitlementsBody(cmd, refs)
 		path := client.Path("/api/v1/catalogs/%s/requestable_entries", args[0])
-		return postAccessProfileEntitlements(cmd, path, body)
+		return sendMutation(cmd, mutation{Method: http.MethodPost, Path: path, Body: body})
 	},
 }
 
@@ -91,7 +91,7 @@ var accessProfilesRequestableEntitlementsRemoveCmd = &cobra.Command{
 			return err
 		}
 		path := client.Path("/api/v1/catalogs/%s/requestable_entries", args[0])
-		return deleteAccessProfileEntitlements(cmd, path, buildRequestableEntitlementsBody(cmd, refs))
+		return sendMutation(cmd, mutation{Method: http.MethodDelete, Path: path, Body: buildRequestableEntitlementsBody(cmd, refs)})
 	},
 }
 
@@ -111,7 +111,7 @@ clear the entire set.`,
 		}
 		body := buildRequestableEntitlementsBody(cmd, refs)
 		path := client.Path("/api/v1/catalogs/%s/requestable_entitlements/update", args[0])
-		return postAccessProfileEntitlements(cmd, path, body)
+		return sendMutation(cmd, mutation{Method: http.MethodPost, Path: path, Body: body})
 	},
 }
 
@@ -128,7 +128,7 @@ var accessProfilesVisibilityEntitlementsAddCmd = &cobra.Command{
 			return err
 		}
 		path := client.Path("/api/v1/catalogs/%s/visibility_bindings", args[0])
-		return postAccessProfileEntitlements(cmd, path, buildVisibilityEntitlementsBody(refs))
+		return sendMutation(cmd, mutation{Method: http.MethodPost, Path: path, Body: buildVisibilityEntitlementsBody(refs)})
 	},
 }
 
@@ -145,7 +145,7 @@ var accessProfilesVisibilityEntitlementsRemoveCmd = &cobra.Command{
 			return err
 		}
 		path := client.Path("/api/v1/catalogs/%s/visibility_bindings", args[0])
-		return deleteAccessProfileEntitlements(cmd, path, buildVisibilityEntitlementsBody(refs))
+		return sendMutation(cmd, mutation{Method: http.MethodDelete, Path: path, Body: buildVisibilityEntitlementsBody(refs)})
 	},
 }
 
@@ -293,14 +293,6 @@ func buildRequestableEntitlementsBody(cmd *cobra.Command, refs []catalogEntitlem
 
 func buildVisibilityEntitlementsBody(refs []catalogEntitlementRef) map[string]any {
 	return map[string]any{"accessEntitlements": refs}
-}
-
-func postAccessProfileEntitlements(cmd *cobra.Command, path string, body map[string]any) error {
-	return sendMutation(cmd, mutation{Method: http.MethodPost, Path: path, Body: body})
-}
-
-func deleteAccessProfileEntitlements(cmd *cobra.Command, path string, body map[string]any) error {
-	return sendMutation(cmd, mutation{Method: http.MethodDelete, Path: path, Body: body})
 }
 
 func init() {
