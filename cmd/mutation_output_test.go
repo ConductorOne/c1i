@@ -947,3 +947,36 @@ func staleOutputExemptions(ix *srcIndex) []string {
 	sort.Strings(out)
 	return out
 }
+
+// rawUnwrapUsers may print a response unchanged (§3.4: the only sibling
+// collision); every other command unwraps like its family's read.
+var rawUnwrapUsers = map[string]bool{"cmd/findings.go:findingsCreateTaskCmd": true}
+
+func rawUnwrapViolations(ix *srcIndex) []string {
+	var out []string
+	for path, f := range ix.files {
+		if path == "cmd/mutation.go" {
+			continue
+		}
+		ast.Inspect(f, func(n ast.Node) bool {
+			c, ok := n.(*ast.CallExpr)
+			if !ok {
+				return true
+			}
+			if id, ok := c.Fun.(*ast.Ident); ok && id.Name == "raw" && len(c.Args) == 0 {
+				if key := ix.enclosingKey(path, c.Pos()); !rawUnwrapUsers[key] {
+					out = append(out, fmt.Sprintf("%s: raw() in %s; only findings create-task prints its response unwrapped", ix.fset.Position(c.Pos()), key))
+				}
+			}
+			return true
+		})
+	}
+	sort.Strings(out)
+	return out
+}
+
+func TestOnlyFindingsCreateTaskUsesRawUnwrap(t *testing.T) {
+	for _, v := range rawUnwrapViolations(loadSrcIndex(t, nil)) {
+		t.Error(v)
+	}
+}

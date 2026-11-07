@@ -37,7 +37,7 @@ API's response as returned: {"bindings":[{"mcpToolId":…}]}, with no id of its 
 		}
 
 		path := client.Path("/api/v1/apps/%s/connectors/%s/mcp_toolsets/%s/tool_bindings", appID, connectorID, toolsetID)
-		return sendMutation(cmd, mutation{Method: http.MethodPost, Path: path, Body: body, Unwrap: raw()})
+		return sendMutation(cmd, mutation{Method: http.MethodPost, Path: path, Body: body, Unwrap: byID("id")})
 	},
 }
 
