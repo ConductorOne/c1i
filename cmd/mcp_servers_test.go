@@ -16,29 +16,6 @@ import (
 	"github.com/spf13/cobra"
 )
 
-func TestMapServerEnums(t *testing.T) {
-	cases := []struct {
-		fn       func(string) string
-		in, want string
-	}{
-		{mapServerType, "hosted", "MCP_SERVER_TYPE_HOSTED"},
-		{mapServerType, "EXTERNAL", "MCP_SERVER_TYPE_EXTERNAL"},
-		{mapServerType, "passthrough", "passthrough"}, // unknown passes through
-		{mapDataSensitivity, "confidential", "MCP_SERVER_DATA_SENSITIVITY_CONFIDENTIAL"},
-		{mapDataSensitivity, "Public", "MCP_SERVER_DATA_SENSITIVITY_PUBLIC"},
-		{mapTransportType, "sse", "MCP_SERVER_TRANSPORT_TYPE_SSE"},
-		{mapTransportType, "streamable-http", "MCP_SERVER_TRANSPORT_TYPE_STREAMABLE_HTTP"},
-		{mapTransportType, "http", "MCP_SERVER_TRANSPORT_TYPE_STREAMABLE_HTTP"},
-		{mapTokenSharing, "per-user", "MCP_SERVER_TOKEN_SHARING_PER_USER"},
-		{mapTokenSharing, "shared", "MCP_SERVER_TOKEN_SHARING_SHARED"},
-	}
-	for _, c := range cases {
-		if got := c.fn(c.in); got != c.want {
-			t.Errorf("map(%q) = %q, want %q", c.in, got, c.want)
-		}
-	}
-}
-
 func TestServerRowAndCount(t *testing.T) {
 	raw := `{"connectorId":"c1","appId":"a1","displayName":"Datadog","serverType":"MCP_SERVER_TYPE_HOSTED","dataSensitivity":"MCP_SERVER_DATA_SENSITIVITY_INTERNAL","authMethod":"MCP_SERVER_AUTH_METHOD_BEARER_TOKEN","mcpServerCatalogId":"cat1","toolPrefix":"dd","createdAt":"2026-01-02T03:04:05Z"}`
 	var v serverView

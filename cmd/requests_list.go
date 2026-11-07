@@ -16,7 +16,7 @@ type requestSearchFilters struct {
 	scopeUserID   string // opener-or-subject scope; empty means tenant-wide (--all)
 	appID         string
 	entitlementID string
-	state         string // user-facing value (open/closed); mapped to the API enum
+	state         string // TASK_STATE_* enum, or "" for no filter
 	typ           string // "", "grant", or "revoke"
 }
 
@@ -48,7 +48,7 @@ func buildRequestSearchBody(f requestSearchFilters) map[string]any {
 		body["appEntitlementIds"] = []string{f.entitlementID}
 	}
 	if f.state != "" {
-		body["taskStates"] = []string{mapTaskState(f.state)}
+		body["taskStates"] = []string{f.state}
 	}
 	return body
 }
@@ -76,15 +76,15 @@ tenant.
 		entitlementID, _ := cmd.Flags().GetString("entitlement-id")
 		userID, _ := cmd.Flags().GetString("user-id")
 		all, _ := cmd.Flags().GetBool("all")
-		state, _ := cmd.Flags().GetString("state")
 		typeFlag, _ := cmd.Flags().GetString("type")
 		typ := strings.ToLower(strings.TrimSpace(typeFlag))
 
 		if typ != "" && typ != "grant" && typ != "revoke" {
 			return &usageError{fmt.Errorf(`--type must be "grant" or "revoke"`)}
 		}
-		if err := validateTaskState(state); err != nil {
-			return &usageError{err}
+		state, err := parseTaskState(cmd)
+		if err != nil {
+			return err
 		}
 		if userID != "" && all {
 			return &usageError{fmt.Errorf("--user-id and --all are mutually exclusive")}
@@ -183,7 +183,7 @@ func init() {
 	requestsListCmd.Flags().Bool("all", false, "List every access request in the tenant, not just yours")
 	requestsListCmd.Flags().String("app-id", "", "Filter to requests targeting this application")
 	requestsListCmd.Flags().String("entitlement-id", "", "Filter to requests for this entitlement")
-	requestsListCmd.Flags().String("state", "", "Filter by state: open, closed")
+	requestsListCmd.Flags().String("state", "", "Filter by state: "+taskStateFlag.usage())
 	requestsListCmd.Flags().String("type", "", `Filter by request type: "grant" or "revoke" (default: both)`)
 	addPaginationFlags(requestsListCmd)
 	requestsCmd.AddCommand(requestsListCmd)

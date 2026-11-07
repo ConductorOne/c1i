@@ -54,8 +54,11 @@ nothing sent. Sent as is, the server stores "" as an empty name and keeps
 			paths = append(paths, "description")
 		}
 		if cmd.Flags().Changed("data-sensitivity") {
-			v, _ := cmd.Flags().GetString("data-sensitivity")
-			server["dataSensitivity"] = mapDataSensitivity(v)
+			v, err := dataSensitivityFlag.parse(mustGetString(cmd, "data-sensitivity"))
+			if err != nil {
+				return err
+			}
+			server["dataSensitivity"] = v
 			paths = append(paths, "dataSensitivity")
 		}
 		if cmd.Flags().Changed("tool-prefix") {
@@ -105,7 +108,7 @@ func init() {
 	mcpServersUpdateCmd.Flags().String("app-id", "", "Application ID")
 	mcpServersUpdateCmd.Flags().String("display-name", "", "New display name (omit to leave unchanged; "+displayNameRule+")")
 	mcpServersUpdateCmd.Flags().String("description", "", "New description")
-	mcpServersUpdateCmd.Flags().String("data-sensitivity", "", "New data sensitivity: public, internal, confidential, restricted")
+	mcpServersUpdateCmd.Flags().String("data-sensitivity", "", "New data sensitivity: "+dataSensitivityFlag.usage())
 	mcpServersUpdateCmd.Flags().String("tool-prefix", "", "New tool-name prefix")
 	mcpServersUpdateCmd.Flags().Bool("require-tool-approval", false, "Per-server override for tool auto-approval")
 	markRequired(mcpServersUpdateCmd, "app-id")

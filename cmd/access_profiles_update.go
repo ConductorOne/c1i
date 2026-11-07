@@ -60,7 +60,10 @@ func buildAccessProfileUpdateBody(cmd *cobra.Command, id string) (map[string]any
 		return nil, err
 	}
 	catalog := map[string]any{"id": id}
-	paths := addCatalogChangedFields(cmd, catalog)
+	paths, err := addCatalogChangedFields(cmd, catalog)
+	if err != nil {
+		return nil, err
+	}
 	if len(paths) == 0 {
 		return nil, fmt.Errorf("nothing to update: pass a writable access-profile field")
 	}
@@ -77,8 +80,8 @@ func init() {
 	f.Bool("published", false, "Publish or unpublish the access profile (omit to leave unchanged)")
 	f.Bool("visible-to-everyone", false, "Set whether every user can see the access profile (omit to leave unchanged)")
 	f.Bool("request-bundle", false, "Set whether all profile entitlements can be requested together (omit to leave unchanged)")
-	f.String("enrollment-behavior", "", "Enrollment request-policy behavior: bypass, enforce, unspecified, or a full REQUEST_CATALOG_ENROLLMENT_BEHAVIOR_* enum (omit to leave unchanged)")
-	f.String("unenrollment-behavior", "", "Unenrollment behavior: leave-access-as-is, revoke-all, revoke-unjustified, unspecified, or a full REQUEST_CATALOG_UNENROLLMENT_BEHAVIOR_* enum (omit to leave unchanged)")
-	f.String("unenrollment-entitlement-behavior", "", "Unenrollment entitlement revoke-policy behavior: bypass, enforce, unspecified, or a full REQUEST_CATALOG_UNENROLLMENT_ENTITLEMENT_BEHAVIOR_* enum (omit to leave unchanged)")
+	f.String("enrollment-behavior", "", "Enrollment request-policy behavior: "+catalogEnrollmentFlag.usage()+" (omit to leave unchanged)")
+	f.String("unenrollment-behavior", "", "Unenrollment behavior: "+catalogUnenrollmentFlag.usage()+" (omit to leave unchanged)")
+	f.String("unenrollment-entitlement-behavior", "", "Unenrollment entitlement revoke-policy behavior: "+catalogUnenrollmentEntitlementFlag.usage()+" (omit to leave unchanged)")
 	accessProfilesCmd.AddCommand(accessProfilesUpdateCmd)
 }

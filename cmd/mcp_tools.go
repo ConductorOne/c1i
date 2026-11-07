@@ -1,8 +1,6 @@
 package cmd
 
 import (
-	"strings"
-
 	"github.com/spf13/cobra"
 )
 
@@ -15,38 +13,17 @@ func init() {
 	mcpCmd.AddCommand(mcpToolsCmd)
 }
 
-// mapToolState translates a user-friendly --state value to the API enum.
-// Input is case-insensitive so `--state approved` and `APPROVED` both work.
-func mapToolState(s string) string {
-	switch strings.ToLower(s) {
-	case "pending", "pending_review":
-		return "MCP_TOOL_STATE_PENDING_REVIEW"
-	case "approved":
-		return "MCP_TOOL_STATE_APPROVED"
-	case "disabled":
-		return "MCP_TOOL_STATE_DISABLED"
-	case "removed":
-		return "MCP_TOOL_STATE_REMOVED"
-	default:
-		return s
-	}
-}
+var toolStateFlag = enumFlag{flag: "state", prefix: "MCP_TOOL_STATE_", unknown: enumPassPrefixed, values: []enumValue{
+	{name: "pending", api: "MCP_TOOL_STATE_PENDING_REVIEW"},
+	{name: "approved", api: "MCP_TOOL_STATE_APPROVED"},
+	{name: "disabled", api: "MCP_TOOL_STATE_DISABLED"},
+	{name: "removed", api: "MCP_TOOL_STATE_REMOVED"},
+}}
 
-// mapToolClassification translates a user-friendly --classification value to
-// the API enum. Input is case-insensitive.
-func mapToolClassification(s string) string {
-	switch strings.ToLower(s) {
-	case "read":
-		return "TOOL_CLASSIFICATION_READ"
-	case "write":
-		return "TOOL_CLASSIFICATION_WRITE"
-	case "destructive":
-		return "TOOL_CLASSIFICATION_DESTRUCTIVE"
-	case "sensitive":
-		return "TOOL_CLASSIFICATION_SENSITIVE"
-	case "dangerous":
-		return "TOOL_CLASSIFICATION_DANGEROUS"
-	default:
-		return s
-	}
-}
+var toolClassificationFlag = enumFlag{flag: "classification", prefix: "TOOL_CLASSIFICATION_", unknown: enumPassPrefixed, values: []enumValue{
+	{name: "read", api: "TOOL_CLASSIFICATION_READ"},
+	{name: "write", api: "TOOL_CLASSIFICATION_WRITE"},
+	{name: "destructive", api: "TOOL_CLASSIFICATION_DESTRUCTIVE"},
+	{name: "sensitive", api: "TOOL_CLASSIFICATION_SENSITIVE"},
+	{name: "dangerous", api: "TOOL_CLASSIFICATION_DANGEROUS"},
+}}

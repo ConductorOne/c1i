@@ -192,6 +192,43 @@ func TestValidationGuardsExitUsage(t *testing.T) {
 			wantMsg: "invalid --identity-matching",
 			cmds:    []*cobra.Command{appsCreateCmd},
 		},
+		// enumFlag tables reject an unknown short name before any request.
+		{
+			name:    "accounts list: unknown --status",
+			args:    []string{"accounts", "list", "--app-id", "a", "--status", "bogus"},
+			wantMsg: "invalid --status",
+			cmds:    []*cobra.Command{accountsListCmd},
+		},
+		{
+			name:    "automations executions list: unknown --state",
+			args:    []string{"automations", "executions", "list", "--state", "bogus"},
+			wantMsg: "invalid --state",
+			cmds:    []*cobra.Command{automationsExecutionsListCmd},
+		},
+		{
+			name:    "mcp tools search: unknown --classification",
+			args:    []string{"mcp", "tools", "search", "--app-id", "a", "--connector-id", "c", "--classification", "bogus"},
+			wantMsg: "invalid --classification",
+			cmds:    []*cobra.Command{mcpToolsSearchCmd},
+		},
+		{
+			name:    "mcp servers search: unknown --tool-state",
+			args:    []string{"mcp", "servers", "search", "--app-id", "a", "--tool-state", "bogus"},
+			wantMsg: "invalid --tool-state",
+			cmds:    []*cobra.Command{mcpServersSearchCmd},
+		},
+		{
+			name:    "mcp servers register: unknown --type",
+			args:    []string{"mcp", "servers", "register", "--app-id", "a", "--display-name", "d", "--type", "passthrough"},
+			wantMsg: "invalid --type",
+			cmds:    []*cobra.Command{mcpServersRegisterCmd},
+		},
+		{
+			name:    "mcp servers update-credentials: full --type name, nothing to update",
+			args:    []string{"mcp", "servers", "update-credentials", "conn-1", "--app-id", "a", "--type", "mcp_server_type_external"},
+			wantMsg: "or --external-config-file",
+			cmds:    []*cobra.Command{mcpServersUpdateCredentialsCmd},
+		},
 		{
 			name:    "entitlements update: nothing to update",
 			args:    []string{"entitlements", "update", "ent-1", "--app-id", "a"},

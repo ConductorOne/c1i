@@ -5,35 +5,6 @@ import (
 	"testing"
 )
 
-func TestMapSortDirection(t *testing.T) {
-	cases := map[string]struct {
-		want    string
-		wantErr bool
-	}{
-		"":       {want: "SORT_DIRECTION_ASC"},
-		"asc":    {want: "SORT_DIRECTION_ASC"},
-		"ASC":    {want: "SORT_DIRECTION_ASC"},
-		"desc":   {want: "SORT_DIRECTION_DESC"},
-		" Desc ": {want: "SORT_DIRECTION_DESC"},
-		"newest": {wantErr: true},
-	}
-	for in, tc := range cases {
-		got, err := mapSortDirection(in)
-		if tc.wantErr {
-			if err == nil {
-				t.Errorf("mapSortDirection(%q) = %q, want error", in, got)
-			}
-			continue
-		}
-		if err != nil {
-			t.Errorf("mapSortDirection(%q) unexpected error: %v", in, err)
-		}
-		if got != tc.want {
-			t.Errorf("mapSortDirection(%q) = %q, want %q", in, got, tc.want)
-		}
-	}
-}
-
 func TestExportEventsBody(t *testing.T) {
 	// Minimal body: only pageSize; optional filters omitted when empty.
 	got := exportEventsBody(50, "", "", "", "", "")

@@ -89,28 +89,12 @@ var appStringFields = []struct{ flag, key string }{
 }
 
 // UNSPECIFIED is deliberately absent: an update to it exits 0 but leaves the
-// current value in place.
-var appIdentityMatchingValues = map[string]string{
-	"strict":       "APP_USER_IDENTITY_MATCHING_STRICT",
-	"display-name": "APP_USER_IDENTITY_MATCHING_DISPLAY_NAME",
-	"custom":       "APP_USER_IDENTITY_MATCHING_CUSTOM",
-}
-
-// mapIdentityMatching maps --identity-matching to the API enum.
-// '-' and '_' are interchangeable, as in mapPolicyType.
-func mapIdentityMatching(raw string) (string, error) {
-	v := strings.ToLower(strings.ReplaceAll(strings.TrimSpace(raw), "_", "-"))
-	if api, ok := appIdentityMatchingValues[v]; ok {
-		return api, nil
-	}
-	full := strings.ToUpper(strings.ReplaceAll(v, "-", "_"))
-	for _, api := range appIdentityMatchingValues {
-		if full == api {
-			return api, nil
-		}
-	}
-	return "", fmt.Errorf("invalid --identity-matching %q: want strict, display-name, custom, or the full APP_USER_IDENTITY_MATCHING_* name of one of them", raw)
-}
+// current value in place. That is also why unknowns are rejected.
+var identityMatchingFlag = enumFlag{flag: "identity-matching", prefix: "APP_USER_IDENTITY_MATCHING_", unknown: enumReject, values: []enumValue{
+	{name: "strict", api: "APP_USER_IDENTITY_MATCHING_STRICT"},
+	{name: "display-name", api: "APP_USER_IDENTITY_MATCHING_DISPLAY_NAME"},
+	{name: "custom", api: "APP_USER_IDENTITY_MATCHING_CUSTOM"},
+}}
 
 // readAppUserMapperFile reads --app-user-mapper-file. Unknown keys pass
 // through verbatim, like every other --*-file object flag.
@@ -161,8 +145,7 @@ func buildAppUpdateBody(cmd *cobra.Command, id string) (map[string]any, error) {
 	}
 	paths = append(paths, policyPaths...)
 	if cmd.Flags().Changed("identity-matching") {
-		v, _ := cmd.Flags().GetString("identity-matching")
-		api, err := mapIdentityMatching(v)
+		api, err := identityMatchingFlag.parse(mustGetString(cmd, "identity-matching"))
 		if err != nil {
 			return nil, err
 		}
@@ -194,7 +177,7 @@ func init() {
 	f.String("description", "", "New description; pass an empty value to clear it (omit to leave unchanged)")
 	registerPolicyIDFlags(appsUpdateCmd, appPolicyKinds, " (omit to leave unchanged)")
 	registerUnbindPolicyFlag(appsUpdateCmd, appPolicyKinds)
-	f.String("identity-matching", "", "How app users are matched to C1.ai users: strict, display-name, custom, or a full APP_USER_IDENTITY_MATCHING_* value (omit to leave unchanged)")
+	f.String("identity-matching", "", "How app users are matched to C1.ai users: "+identityMatchingFlag.usage()+" (omit to leave unchanged)")
 	f.String("app-user-mapper-file", "", `JSON object {"mappingCases":[{"userKeyCel":...,"appUserKeyCel":...}]} that replaces the whole app user mapper (file, or "-" for stdin)`)
 	appsCmd.AddCommand(appsUpdateCmd)
 }

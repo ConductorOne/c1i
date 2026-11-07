@@ -587,26 +587,6 @@ func TestPolicyStepsKey_ErrorsOnUnsupportedType(t *testing.T) {
 	}
 }
 
-// ---- mapPolicyType ----
-
-func TestMapPolicyType(t *testing.T) {
-	cases := map[string]string{
-		"grant":           "POLICY_TYPE_GRANT",
-		"GRANT":           "POLICY_TYPE_GRANT",
-		"revoke":          "POLICY_TYPE_REVOKE",
-		"certify":         "POLICY_TYPE_CERTIFY",
-		"access_request":  "POLICY_TYPE_ACCESS_REQUEST",
-		"access-request":  "POLICY_TYPE_ACCESS_REQUEST",
-		"provision":       "POLICY_TYPE_PROVISION",
-		"POLICY_TYPE_FOO": "POLICY_TYPE_FOO", // unrecognized: pass through
-	}
-	for in, want := range cases {
-		if got := mapPolicyType(in); got != want {
-			t.Errorf("mapPolicyType(%q) = %q, want %q", in, got, want)
-		}
-	}
-}
-
 // ---- validateCreateBody / validateUpdatePatch integration ----
 
 func TestValidateCreateBody_FiresWithNoPolicySteps(t *testing.T) {

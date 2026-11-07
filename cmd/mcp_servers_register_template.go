@@ -69,10 +69,6 @@ func authArmTemplate(mode string) (map[string]any, error) {
 // pipes to a file), with human guidance on stderr. It performs no auth and no
 // network I/O.
 func printConfigTemplate(cmd *cobra.Command) error {
-	serverType, _ := cmd.Flags().GetString("type")
-	if serverType == "" {
-		serverType = "hosted"
-	}
 	auth, _ := cmd.Flags().GetString("auth")
 
 	// Bad --auth / --type are user-input problems: wrap as usageError so they
@@ -81,6 +77,16 @@ func printConfigTemplate(cmd *cobra.Command) error {
 	arm, err := authArmTemplate(auth)
 	if err != nil {
 		return &usageError{err}
+	}
+	typ, err := serverTypeFlag.parse(mustGetString(cmd, "type"))
+	if err != nil {
+		return err
+	}
+	serverType := "hosted"
+	if typ == "MCP_SERVER_TYPE_EXTERNAL" {
+		serverType = "external"
+	} else if typ != "" && typ != "MCP_SERVER_TYPE_HOSTED" {
+		serverType = typ
 	}
 
 	cfg := map[string]any{}

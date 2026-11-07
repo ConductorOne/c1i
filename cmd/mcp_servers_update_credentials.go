@@ -71,11 +71,15 @@ proto field paths to override. Note the mask uses the auth oneof case name
 
 		var cfg map[string]any
 		var wrapperKey string
-		switch strings.ToLower(typ) {
-		case "hosted":
+		typ, err = serverTypeFlag.parse(typ)
+		if err != nil {
+			return err
+		}
+		switch typ {
+		case "MCP_SERVER_TYPE_HOSTED":
 			cfg, err = buildHostedConfig(cmd)
 			wrapperKey = "hostedConfig"
-		case "external":
+		case "MCP_SERVER_TYPE_EXTERNAL":
 			cfg, err = buildExternalConfig(cmd)
 			wrapperKey = "externalConfig"
 		default:
@@ -90,7 +94,7 @@ proto field paths to override. Note the mask uses the auth oneof case name
 		// the backend nothing to apply. Require the caller to supply what to set.
 		// An explicit --update-mask is trusted as intent.
 		if len(cfg) == 0 && mask == "" {
-			return &usageError{fmt.Errorf("nothing to update: supply the new config via the auth flags (--auth/--bearer-token/…), --config-field, --server-url, or --%s-config-file", strings.ToLower(typ))}
+			return &usageError{fmt.Errorf("nothing to update: supply the new config via the auth flags (--auth/--bearer-token/…), --config-field, --server-url, or --%s-config-file", strings.TrimSuffix(wrapperKey, "Config"))}
 		}
 		// Derive the mask from the fields the caller set, BEFORE the catalog-id
 		// injection below. The update_mask must name the proto paths inside the
@@ -146,7 +150,7 @@ proto field paths to override. Note the mask uses the auth oneof case name
 
 func init() {
 	mcpServersUpdateCredentialsCmd.Flags().String("app-id", "", "Application ID")
-	mcpServersUpdateCredentialsCmd.Flags().String("type", "", "Config shape (must match the server): hosted or external")
+	mcpServersUpdateCredentialsCmd.Flags().String("type", "", "Config shape (must match the server): "+serverTypeFlag.usage())
 	// HOSTED config
 	mcpServersUpdateCredentialsCmd.Flags().String("catalog-id", "", "Catalog entry ID (HOSTED)")
 	mcpServersUpdateCredentialsCmd.Flags().String("source-app-id", "", "Source app ID (HOSTED)")
@@ -154,7 +158,7 @@ func init() {
 	mcpServersUpdateCredentialsCmd.Flags().String("hosted-config-file", "", "Full hostedConfig JSON (file or \"-\" for stdin)")
 	// EXTERNAL config
 	mcpServersUpdateCredentialsCmd.Flags().String("server-url", "", "External MCP server URL (EXTERNAL)")
-	mcpServersUpdateCredentialsCmd.Flags().String("transport", "", "Transport: streamable-http or sse (EXTERNAL)")
+	mcpServersUpdateCredentialsCmd.Flags().String("transport", "", "Transport: "+transportTypeFlag.usage()+" (EXTERNAL)")
 	mcpServersUpdateCredentialsCmd.Flags().String("external-config-file", "", "Full externalConfig JSON (file or \"-\" for stdin)")
 	// Shared auth
 	addAuthFlags(mcpServersUpdateCredentialsCmd)

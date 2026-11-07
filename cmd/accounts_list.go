@@ -3,7 +3,6 @@ package cmd
 import (
 	"encoding/json"
 	"fmt"
-	"strings"
 
 	"github.com/spf13/cobra"
 )
@@ -27,8 +26,14 @@ var accountsListCmd = &cobra.Command{
 		}
 
 		appID, _ := cmd.Flags().GetString("app-id")
-		status, _ := cmd.Flags().GetString("status")
-		appUserType, _ := cmd.Flags().GetString("type")
+		status, err := appUserStatusFlag.parse(mustGetString(cmd, "status"))
+		if err != nil {
+			return err
+		}
+		appUserType, err := appUserTypeFlag.parse(mustGetString(cmd, "type"))
+		if err != nil {
+			return err
+		}
 		unmappedOnly, _ := cmd.Flags().GetBool("unmapped-only")
 		query, _ := cmd.Flags().GetString("query")
 		requestedPageSize := pageSizeFlag(cmd)
@@ -58,10 +63,10 @@ var accountsListCmd = &cobra.Command{
 				body["query"] = query
 			}
 			if status != "" {
-				body["appUserStatuses"] = []string{mapAppUserStatus(status)}
+				body["appUserStatuses"] = []string{status}
 			}
 			if appUserType != "" {
-				body["appUserTypes"] = []string{mapAppUserType(appUserType)}
+				body["appUserTypes"] = []string{appUserType}
 			}
 
 			data, err := c.Post(cmd.Context(), "/api/v1/search/app_users", body)
@@ -134,8 +139,8 @@ var accountsListCmd = &cobra.Command{
 
 func init() {
 	accountsListCmd.Flags().String("app-id", "", "Application ID")
-	accountsListCmd.Flags().String("status", "", "Filter: enabled, disabled, deleted")
-	accountsListCmd.Flags().String("type", "", "Filter: user, service_account, system_account")
+	accountsListCmd.Flags().String("status", "", "Filter: "+appUserStatusFlag.usage())
+	accountsListCmd.Flags().String("type", "", "Filter: "+appUserTypeFlag.usage())
 	accountsListCmd.Flags().Bool("unmapped-only", false, "Only show accounts with no linked identity user")
 	accountsListCmd.Flags().String("query", "", "Fuzzy search on display name")
 	addPaginationFlags(accountsListCmd)
@@ -143,30 +148,14 @@ func init() {
 	accountsCmd.AddCommand(accountsListCmd)
 }
 
-// mapAppUserStatus is case-insensitive; both `--status enabled` and `ENABLED` work.
-func mapAppUserStatus(s string) string {
-	switch strings.ToLower(s) {
-	case "enabled":
-		return "STATUS_ENABLED"
-	case "disabled":
-		return "STATUS_DISABLED"
-	case "deleted":
-		return "STATUS_DELETED"
-	default:
-		return s
-	}
-}
+var appUserStatusFlag = enumFlag{flag: "status", prefix: "STATUS_", unknown: enumPassPrefixed, values: []enumValue{
+	{name: "enabled", api: "STATUS_ENABLED"},
+	{name: "disabled", api: "STATUS_DISABLED"},
+	{name: "deleted", api: "STATUS_DELETED"},
+}}
 
-// mapAppUserType is case-insensitive.
-func mapAppUserType(s string) string {
-	switch strings.ToLower(s) {
-	case "user":
-		return "APP_USER_TYPE_USER"
-	case "service_account":
-		return "APP_USER_TYPE_SERVICE_ACCOUNT"
-	case "system_account":
-		return "APP_USER_TYPE_SYSTEM_ACCOUNT"
-	default:
-		return s
-	}
-}
+var appUserTypeFlag = enumFlag{flag: "type", prefix: "APP_USER_TYPE_", unknown: enumPassPrefixed, values: []enumValue{
+	{name: "user", api: "APP_USER_TYPE_USER"},
+	{name: "service_account", api: "APP_USER_TYPE_SERVICE_ACCOUNT"},
+	{name: "system_account", api: "APP_USER_TYPE_SYSTEM_ACCOUNT"},
+}}

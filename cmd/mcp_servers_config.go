@@ -43,7 +43,7 @@ func addAuthFlags(cmd *cobra.Command) {
 	cmd.Flags().String("header-value", "", "Custom header value (with --auth custom-header)")
 	cmd.Flags().String("basic-auth-username", "", "Basic-auth username (with --auth basic-auth)")
 	cmd.Flags().String("basic-auth-password", "", "Basic-auth password (with --auth basic-auth)")
-	cmd.Flags().String("token-sharing", "", "Token sharing: shared or per-user")
+	cmd.Flags().String("token-sharing", "", "Token sharing: "+tokenSharingFlag.usage())
 	cmd.Flags().Bool("require-tool-approval", false, "Per-server override for tool auto-approval (omit to leave unset)")
 }
 
@@ -84,8 +84,10 @@ func applySharedAuthFields(cmd *cobra.Command, cfg map[string]any) error {
 	for k, v := range arm {
 		cfg[k] = v
 	}
-	if ts, _ := cmd.Flags().GetString("token-sharing"); ts != "" {
-		cfg["tokenSharing"] = mapTokenSharing(ts)
+	if ts, err := tokenSharingFlag.parse(mustGetString(cmd, "token-sharing")); err != nil {
+		return err
+	} else if ts != "" {
+		cfg["tokenSharing"] = ts
 	}
 	if cmd.Flags().Changed("require-tool-approval") {
 		on, _ := cmd.Flags().GetBool("require-tool-approval")
@@ -191,8 +193,10 @@ func buildExternalConfig(cmd *cobra.Command) (map[string]any, error) {
 	if url, _ := cmd.Flags().GetString("server-url"); url != "" {
 		cfg["url"] = url
 	}
-	if transport, _ := cmd.Flags().GetString("transport"); transport != "" {
-		cfg["transportType"] = mapTransportType(transport)
+	if transport, err := transportTypeFlag.parse(mustGetString(cmd, "transport")); err != nil {
+		return nil, err
+	} else if transport != "" {
+		cfg["transportType"] = transport
 	}
 	if err := applySharedAuthFields(cmd, cfg); err != nil {
 		return nil, err

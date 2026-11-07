@@ -1053,6 +1053,18 @@ An empty occurrence is a usage error (exit 2), rejected before any request, so
 an unset shell variable cannot silently shorten a list or remove a credential
 restriction. Contrast `--fields`, which *is* comma-separated.
 
+### Enum flags
+
+A flag that takes a named value (`--state`, `--status`, `--type`,
+`--policy-type`, `--sort`, ...) ignores case and surrounding whitespace,
+treats `-` and `_` as the same, and also takes the full API name in any case
+(`--state pending-review`, `--state mcp_tool_state_approved`). Its `--help`
+lists the short names. An unknown value is a usage error (exit 2), rejected
+before any request. Where `--help` says "or any `PREFIX_*` value", a value
+carrying that prefix is sent as is, so an enum newer than c1i still works.
+`users list --status` is the exception: its API enum has no prefix, so any
+value is sent and the server judges it.
+
 ### Display names
 
 A blank `--display-name` (empty, whitespace or invisible-only, such as a lone

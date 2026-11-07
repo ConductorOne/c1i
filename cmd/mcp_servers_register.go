@@ -2,7 +2,6 @@ package cmd
 
 import (
 	"fmt"
-	"strings"
 
 	"github.com/ConductorOne/c1i/internal/client"
 	"github.com/spf13/cobra"
@@ -105,19 +104,24 @@ requires --app-id. Approve discovered tools afterward with
 // path the live request takes.
 func buildRegisterBody(cmd *cobra.Command) (map[string]any, error) {
 	appID, _ := cmd.Flags().GetString("app-id")
-	typ, _ := cmd.Flags().GetString("type")
+	typ, err := serverTypeFlag.parse(mustGetString(cmd, "type"))
+	if err != nil {
+		return nil, err
+	}
 	displayName, _ := cmd.Flags().GetString("display-name")
 
 	body := map[string]any{
 		"appId":       appID,
-		"serverType":  mapServerType(typ),
+		"serverType":  typ,
 		"displayName": displayName,
 	}
 	if v, _ := cmd.Flags().GetString("description"); v != "" {
 		body["description"] = v
 	}
-	if v, _ := cmd.Flags().GetString("data-sensitivity"); v != "" {
-		body["dataSensitivity"] = mapDataSensitivity(v)
+	if v, err := dataSensitivityFlag.parse(mustGetString(cmd, "data-sensitivity")); err != nil {
+		return nil, err
+	} else if v != "" {
+		body["dataSensitivity"] = v
 	}
 	if v, _ := cmd.Flags().GetString("tool-prefix"); v != "" {
 		body["toolPrefix"] = v
@@ -130,8 +134,8 @@ func buildRegisterBody(cmd *cobra.Command) (map[string]any, error) {
 		body["userIds"] = ids
 	}
 
-	switch strings.ToLower(typ) {
-	case "hosted":
+	switch typ {
+	case "MCP_SERVER_TYPE_HOSTED":
 		cfg, err := buildHostedConfig(cmd)
 		if err != nil {
 			return nil, err
@@ -142,7 +146,7 @@ func buildRegisterBody(cmd *cobra.Command) (map[string]any, error) {
 			}
 		}
 		body["hostedConfig"] = cfg
-	case "external":
+	case "MCP_SERVER_TYPE_EXTERNAL":
 		cfg, err := buildExternalConfig(cmd)
 		if err != nil {
 			return nil, err
@@ -162,10 +166,10 @@ func buildRegisterBody(cmd *cobra.Command) (map[string]any, error) {
 
 func init() {
 	mcpServersRegisterCmd.Flags().String("app-id", "", "Application ID to register under")
-	mcpServersRegisterCmd.Flags().String("type", "", "Server type: hosted or external")
+	mcpServersRegisterCmd.Flags().String("type", "", "Server type: "+serverTypeFlag.usage())
 	mcpServersRegisterCmd.Flags().String("display-name", "", "Display name ("+displayNameRule+")")
 	mcpServersRegisterCmd.Flags().String("description", "", "Description")
-	mcpServersRegisterCmd.Flags().String("data-sensitivity", "", "Data sensitivity: public, internal, confidential, restricted")
+	mcpServersRegisterCmd.Flags().String("data-sensitivity", "", "Data sensitivity: "+dataSensitivityFlag.usage())
 	mcpServersRegisterCmd.Flags().String("tool-prefix", "", "Prefix for exposed tool names")
 	addRepeatableStringFlag(mcpServersRegisterCmd, "user-id", "Integration owner user ID (repeatable)")
 	// HOSTED config
@@ -175,7 +179,7 @@ func init() {
 	mcpServersRegisterCmd.Flags().String("hosted-config-file", "", "Full hostedConfig JSON (file or \"-\" for stdin)")
 	// EXTERNAL config
 	mcpServersRegisterCmd.Flags().String("server-url", "", "External MCP server URL (EXTERNAL)")
-	mcpServersRegisterCmd.Flags().String("transport", "", "Transport: streamable-http or sse (EXTERNAL)")
+	mcpServersRegisterCmd.Flags().String("transport", "", "Transport: "+transportTypeFlag.usage()+" (EXTERNAL)")
 	mcpServersRegisterCmd.Flags().String("external-config-file", "", "Full externalConfig JSON (file or \"-\" for stdin)")
 	// Config-template generator (no auth / no network)
 	mcpServersRegisterCmd.Flags().Bool("print-config-template", false, "Print a ready-to-edit config skeleton for the --auth method (use with --auth and --type) instead of registering")
