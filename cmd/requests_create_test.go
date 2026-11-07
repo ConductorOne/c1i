@@ -156,7 +156,8 @@ func TestRequestsCreateGrantDefaultsUserIDToSelf(t *testing.T) {
 
 // TestRequestsCreateGrantDurationConvertsGoForm: the API parses grantDuration
 // as a google.protobuf.Duration and 400s "8h", so --duration is converted to
-// seconds; zero (which the server refuses) and an empty value never send.
+// seconds. Zero is left to the server; negative, sub-nanosecond and empty
+// values never send.
 func TestRequestsCreateGrantDurationConvertsGoForm(t *testing.T) {
 	cases := []struct {
 		in, want string
@@ -165,7 +166,9 @@ func TestRequestsCreateGrantDurationConvertsGoForm(t *testing.T) {
 		{in: "8h", want: "28800s", wantSent: true},
 		{in: " 1m30.5s ", want: "90.5s", wantSent: true},
 		{in: "86400s", want: "86400s", wantSent: true},
-		{in: "0s"},
+		{in: "0s", want: "0s", wantSent: true},
+		{in: "-1s"},
+		{in: "1.0000000001s"},
 		{in: ""},
 		{in: "7d"},
 	}
@@ -211,6 +214,36 @@ func TestRequestsCreateGrantDurationConvertsGoForm(t *testing.T) {
 				t.Errorf("grantDuration = %v, want %q", got, tc.want)
 			}
 		})
+	}
+}
+
+// TestRequestsCreateGrantDryRunPreviewsZeroDuration: zero is not refused
+// client-side, so the preview carries it as the real call would.
+func TestRequestsCreateGrantDryRunPreviewsZeroDuration(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		t.Errorf("unexpected request under --dry-run: %s %s", r.Method, r.URL.Path)
+	}))
+	defer srv.Close()
+	resetCmdFlags(t, requestsCreateGrantCmd)
+	stubNewGrantClient(t, srv)
+	t.Setenv("C1I_URL", "https://example.invalid")
+	origDryRun := viper.GetBool("dry_run")
+	viper.Set("dry_run", true)
+	t.Cleanup(func() { viper.Set("dry_run", origDryRun) })
+
+	_ = requestsCreateGrantCmd.Flags().Set("app-id", "app1")
+	_ = requestsCreateGrantCmd.Flags().Set("entitlement-id", "ent1")
+	_ = requestsCreateGrantCmd.Flags().Set("user-id", "zz-user")
+	_ = requestsCreateGrantCmd.Flags().Set("duration", "0s")
+	var out bytes.Buffer
+	requestsCreateGrantCmd.SetOut(&out)
+	requestsCreateGrantCmd.SetContext(context.Background())
+
+	if err := requestsCreateGrantCmd.RunE(requestsCreateGrantCmd, nil); err != nil {
+		t.Fatalf("RunE: %v", err)
+	}
+	if !strings.Contains(out.String(), `"grantDuration": "0s"`) {
+		t.Errorf("dry-run preview = %q, want grantDuration \"0s\"", out.String())
 	}
 }
 

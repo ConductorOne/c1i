@@ -40,8 +40,9 @@ policy while emergency grants stay enabled, so pass
 --emergency-grant-enabled=false alongside --unbind-policy emergency-grant.
 
 --duration-grant sets the maximum grant duration. It takes a Go duration (8h,
-90m, 3600s) and is sent in seconds; 8h reads back as "28800s". It must be
-positive: the server stores "0s" and "-60s" without complaint. --duration-unset
+90m, 3600s) and is sent in seconds; 8h reads back as "28800s". A negative
+value exits 2 before sending, since the server stores "-60s" without complaint;
+"0s" is sent, and the server has been seen storing it too. --duration-unset
 removes the limit (standing access). The server holds the two as one choice and
 refuses both together, so passing both is a usage error.
 
@@ -130,7 +131,7 @@ func buildEntitlementUpdateBody(cmd *cobra.Command, appID, id string) (map[strin
 	if f.Changed("duration-grant") && f.Changed("duration-unset") {
 		return nil, &usageError{fmt.Errorf("--duration-grant and --duration-unset are mutually exclusive: both set the entitlement's max_grant_duration")}
 	}
-	if v, ok, err := protoDurationFlag(cmd, "duration-grant", false); err != nil {
+	if v, ok, err := protoDurationFlag(cmd, "duration-grant"); err != nil {
 		return nil, err
 	} else if ok {
 		ent["durationGrant"] = v
@@ -161,7 +162,7 @@ func init() {
 	registerPolicyIDFlags(entitlementsUpdateCmd, entitlementPolicyKinds, " (omit to leave unchanged)")
 	registerUnbindPolicyFlag(entitlementsUpdateCmd, entitlementPolicyKinds)
 	f.Bool("emergency-grant-enabled", false, "Enable or disable emergency grants; enabling requires --emergency-grant-policy-id in the same call")
-	f.String("duration-grant", "", "Maximum grant duration as a protobuf duration, e.g. 3600s; a Go duration such as 8h is converted to seconds")
+	addProtoDurationFlag(entitlementsUpdateCmd, "duration-grant", "Maximum grant duration as a protobuf duration, e.g. 3600s; a Go duration such as 8h is converted to seconds; a negative value exits 2")
 	f.Bool("duration-unset", false, "Remove the maximum grant duration (standing access) instead of setting one (a protobuf duration like 3600s or a Go duration like 8h); excludes --duration-grant")
 	markRequired(entitlementsUpdateCmd, "app-id")
 	entitlementsCmd.AddCommand(entitlementsUpdateCmd)

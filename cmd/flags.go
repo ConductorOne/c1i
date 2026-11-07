@@ -3,6 +3,8 @@ package cmd
 import (
 	"encoding/json"
 	"fmt"
+	"math/big"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -561,27 +563,71 @@ func repeatableStringFlag(cmd *cobra.Command, name string) ([]string, error) {
 	return values, nil
 }
 
-// protoDurationFlag reads a flag the API parses as a google.protobuf.Duration.
-// It accepts a Go ("8h", "1m30.5s") or protobuf ("3600s") duration and returns
-// it in seconds, the only form the API parses; set is false when the flag was
-// not passed. Negative values, and zero unless allowZero, are usage errors.
-func protoDurationFlag(cmd *cobra.Command, name string, allowZero bool) (value string, set bool, err error) {
-	if !cmd.Flags().Changed(name) {
+// protoDurationAnnotation marks a flag registered by addProtoDurationFlag;
+// protoDurationFlag refuses to read any other, so a walk of the command tree
+// finds every such flag.
+const protoDurationAnnotation = "c1i_proto_duration"
+
+// addProtoDurationFlag registers a string flag the API parses as a
+// google.protobuf.Duration. Read it with protoDurationFlag.
+func addProtoDurationFlag(cmd *cobra.Command, name, usage string) {
+	cmd.Flags().String(name, "", usage)
+	_ = cmd.Flags().SetAnnotation(name, protoDurationAnnotation, []string{"true"})
+}
+
+// durationComponent matches one number-unit pair of an already-parsed Go
+// duration; group 1 is the fraction's digits, group 2 the unit.
+var durationComponent = regexp.MustCompile(`[0-9]*(?:\.([0-9]*))?(ns|us|µs|μs|ms|s|m|h)`)
+
+var durationUnitNanos = map[string]int64{
+	"ns": 1, "us": 1e3, "µs": 1e3, "μs": 1e3, "ms": 1e6,
+	"s": 1e9, "m": 60e9, "h": 3600e9,
+}
+
+// protoDurationFlag reads a flag registered by addProtoDurationFlag. It
+// accepts a Go ("8h", "1m30.5s") or protobuf ("3600s") duration and returns it
+// in seconds, the only form the API parses; set is false when the flag was not
+// passed. Zero is sent: range limits are the server's call. A negative value,
+// and one finer than a nanosecond (which would be truncated), are usage errors.
+func protoDurationFlag(cmd *cobra.Command, name string) (value string, set bool, err error) {
+	f := cmd.Flags().Lookup(name)
+	if f == nil || f.Annotations[protoDurationAnnotation] == nil {
+		return "", false, fmt.Errorf("--%s was not registered with addProtoDurationFlag", name)
+	}
+	if !f.Changed {
 		return "", false, nil
 	}
-	raw, _ := cmd.Flags().GetString(name)
-	d, err := time.ParseDuration(strings.TrimSpace(raw))
+	raw := f.Value.String()
+	trimmed := strings.TrimSpace(raw)
+	d, err := time.ParseDuration(trimmed)
 	if err != nil {
 		return "", false, &usageError{fmt.Errorf("invalid --%s %q: %w", name, raw, err)}
 	}
-	if d < 0 || (d == 0 && !allowZero) {
-		rule := "positive"
-		if allowZero {
-			rule = "zero or positive"
+	if d < 0 {
+		return "", false, &usageError{fmt.Errorf("--%s must not be negative, got %q", name, raw)}
+	}
+	for _, m := range durationComponent.FindAllStringSubmatch(trimmed, -1) {
+		if !wholeNanoseconds(m[1], durationUnitNanos[m[2]]) {
+			return "", false, &usageError{fmt.Errorf("--%s %q is finer than a nanosecond, the most the API keeps", name, raw)}
 		}
-		return "", false, &usageError{fmt.Errorf("--%s must be %s, got %q", name, rule, raw)}
 	}
 	return formatProtoDuration(d), true, nil
+}
+
+// wholeNanoseconds reports whether 0.<frac> of a unit worth unitNanos is a
+// whole number of nanoseconds.
+func wholeNanoseconds(frac string, unitNanos int64) bool {
+	frac = strings.TrimRight(frac, "0")
+	if frac == "" {
+		return true
+	}
+	n, ok := new(big.Int).SetString(frac, 10)
+	if !ok {
+		return false
+	}
+	n.Mul(n, big.NewInt(unitNanos))
+	pow := new(big.Int).Exp(big.NewInt(10), big.NewInt(int64(len(frac))), nil)
+	return new(big.Int).Mod(n, pow).Sign() == 0
 }
 
 // formatProtoDuration renders d in protobuf JSON form: integer seconds plus

@@ -163,8 +163,18 @@ func TestBuildSPCredentialCreateBody(t *testing.T) {
 			wantErr: true,
 		},
 		{
-			name:    "non-positive duration is a usage error",
-			flags:   map[string][]string{"display-name": {"ci"}, "expires": {"0s"}},
+			name:  "zero expires is sent for the server to judge",
+			flags: map[string][]string{"display-name": {"ci"}, "expires": {"0s"}},
+			want:  map[string]any{"displayName": "ci", "expires": "0s"},
+		},
+		{
+			name:    "negative expires is a usage error",
+			flags:   map[string][]string{"display-name": {"ci"}, "expires": {"-1s"}},
+			wantErr: true,
+		},
+		{
+			name:    "expires finer than a nanosecond is a usage error",
+			flags:   map[string][]string{"display-name": {"ci"}, "expires": {"1.0000000001s"}},
 			wantErr: true,
 		},
 		{

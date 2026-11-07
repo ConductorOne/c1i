@@ -46,9 +46,9 @@ var requestsCreateGrantCmd = &cobra.Command{
 	Long: `Create a grant access request.
 
 --duration takes a Go (24h) or protobuf (86400s) duration and is sent in
-seconds, the only form the API parses. It must be positive; the server refuses
-zero with "value must be greater than 0s". "7d" is not a Go duration and exits
-2 before sending.`,
+seconds, the only form the API parses. A negative value exits 2 before
+sending; zero is sent, and the server refuses it with "value must be greater
+than 0s". "7d" is not a Go duration and exits 2 before sending.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		baseURL, err := GetBaseURL()
 		if err != nil {
@@ -58,7 +58,7 @@ zero with "value must be greater than 0s". "7d" is not a Go duration and exits
 		appID, _ := cmd.Flags().GetString("app-id")
 		entitlementID, _ := cmd.Flags().GetString("entitlement-id")
 		userID, _ := cmd.Flags().GetString("user-id")
-		duration, _, err := protoDurationFlag(cmd, "duration", false)
+		duration, _, err := protoDurationFlag(cmd, "duration")
 		if err != nil {
 			return err
 		}
@@ -131,8 +131,8 @@ func init() {
 	requestsCreateGrantCmd.Flags().String("app-id", "", "Application ID")
 	requestsCreateGrantCmd.Flags().String("entitlement-id", "", "Entitlement ID")
 	requestsCreateGrantCmd.Flags().String("user-id", "", "User ID (defaults to self if omitted)")
-	requestsCreateGrantCmd.Flags().String("duration", "",
-		"Grant duration as a protobuf duration (86400s) or a Go duration (24h), sent in seconds; must be positive")
+	addProtoDurationFlag(requestsCreateGrantCmd, "duration",
+		"Grant duration as a protobuf duration (86400s) or a Go duration (24h), sent in seconds; a negative value exits 2")
 	requestsCreateGrantCmd.Flags().String("description", "", "Justification or description")
 	requestsCreateGrantCmd.Flags().Bool("emergency", false, "Request emergency access")
 	markRequired(requestsCreateGrantCmd, "app-id")

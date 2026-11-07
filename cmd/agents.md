@@ -165,8 +165,12 @@ must be preserved; read first and use the explicit `--update-mask` for updates.
 Role ids for `service-principals credentials create --scoped-role` and
 `auth login --scoped-role` come from `c1i roles list` (NDJSON; README lists the
 fields); `c1i roles get <role-id>` adds a role's `serviceRoles` and
-`permissions`. `service-principals credentials create --expires` takes a
-positive Go (`720h`) or protobuf (`2592000s`) duration; an empty one exits `2`.
+`permissions`.
+
+Every flag sent to the API as a duration (`--duration-grant`, `--duration`,
+`--expires`, `--callback-timeout`) takes a Go (`8h`) or protobuf (`28800s`)
+duration and is sent in seconds. An empty, negative or finer-than-nanosecond
+value exits `2` before sending; zero is sent, and the server decides.
 
 The cobra tree never drifts from what's implemented. Step down it with
 `--help` at each level:
@@ -464,13 +468,13 @@ resource with `--resource-id` likewise means you drop
   restarts the whole policy (four, measured). Neither reopens a closed task --
   the state stays `TASK_STATE_CLOSED`. `process` changes nothing observable on
   a healthy task. `update-grant-duration` takes a Go (`1h`) or protobuf
-  (`3600s`) duration, sent in seconds, and refuses zero (exit `2`); it only
+  (`3600s`) duration (the server stored `0s` without complaint); it only
   works before provisioning, after which the server says
   `cannot update grant duration for a ticket in a provision step`; the value
   lands as `grantDuration`.
-- `requests create grant --duration` likewise takes `24h` or `86400s`, sent in
-  seconds; zero and `7d` exit `2` before sending. The value lands on the task
-  as `grantDuration`.
+- `requests create grant --duration` likewise takes `24h` or `86400s`; the
+  server refuses `0s` with `value must be greater than 0s`. The value lands on
+  the task as `grantDuration`.
 - Entitlement ids are unique only within an app — some system-builtin
   entitlements reuse the same id across every app that has one. Always key
   on `(app_id, id)` together, never `id` alone.

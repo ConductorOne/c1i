@@ -521,16 +521,16 @@ func TestEntitlementCreateDurationGrantWireKey(t *testing.T) {
 }
 
 // TestEntitlementCreateDurationGrantAcceptsGoDuration pins that create parses
-// --duration-grant like update does: Go forms are converted to seconds and a
-// non-positive or unparseable value is a usage error.
+// --duration-grant like update does: Go forms are converted to seconds, zero
+// is sent, and a negative, sub-nanosecond or unparseable value is a usage error.
 func TestEntitlementCreateDurationGrantAcceptsGoDuration(t *testing.T) {
-	for in, want := range map[string]string{"8h": "28800s", " 8h ": "28800s", "3600s": "3600s", "1m30.5s": "90.5s"} {
+	for in, want := range map[string]string{"8h": "28800s", " 8h ": "28800s", "3600s": "3600s", "1m30.5s": "90.5s", "0s": "0s"} {
 		p := mustPlan(t, "--app-id", "app1", "--display-name", "e", "--duration-grant", in)
 		if got := p.entitlementBody["durationGrant"]; got != want {
 			t.Errorf("--duration-grant %s: durationGrant = %v, want %s", in, got, want)
 		}
 	}
-	for _, in := range []string{"0s", "-1m", "soon", ""} {
+	for _, in := range []string{"-1m", "1.0000000001s", "soon", ""} {
 		cmd := newEntitlementCreateCmd(t, "--app-id", "app1", "--display-name", "e", "--duration-grant", in)
 		_, err := buildEntitlementCreatePlan(cmd)
 		var ue *usageError

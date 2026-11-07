@@ -17,9 +17,22 @@ attempt. When the config directory resolves to a relative path (a relative
 credentials fails instead of using the working directory. With a relative
 `HOME`, `~/.c1i.yaml` is ignored.
 
-`service-principals credentials create --expires ""` now exits 2 instead of
-being ignored, and `tasks update-grant-duration
---duration 0s` exits 2 instead of storing a zero grant duration.
+Duration flags sent to the API now share one parser, which changes these
+exits:
+
+- `service-principals credentials create --expires ""` and `requests create
+  grant --duration ""` exit 2; the empty value used to be left out of the
+  request.
+- A negative value exits 2 before sending on every such flag. `requests
+  create grant --duration` and `tasks update-grant-duration --duration` used
+  to send it, and the server's 400 exited 2 after the round trip.
+- A value finer than a nanosecond (`1.0000000001s`, `1.5ns`) exits 2 on every
+  such flag; `--duration-grant`, `--expires` and `--callback-timeout`
+  truncated it, and the other two sent it as typed.
+- `entitlements create` and `entitlements update --duration-grant 0s` are
+  sent instead of exiting 2, and the server stores `0s`. `--expires 0s` is
+  sent instead of exiting 2, and the server refuses it with exit 2.
+- `--expires` and `--callback-timeout` send `1.5s` instead of `1.500000000s`.
 
 ### Added
 
@@ -90,8 +103,7 @@ being ignored, and `tasks update-grant-duration
   `--expires` and `--callback-timeout`). `requests create grant --duration`
   and `tasks update-grant-duration --duration` previously passed the value
   through, so `24h` failed with `invalid google.protobuf.Duration value
-  "24h"`; it is now sent as `86400s`. A negative or unparseable value, and
-  zero except on `--callback-timeout`, exits `2` before sending.
+  "24h"`; it is now sent as `86400s`.
 - `golang.org/x/term` moves to 0.47.0 and `golang.org/x/sys` to 0.49.0.
 - `golang.org/x/crypto` is pinned to the untagged
   `v0.58.1-0.20261009181718-2f1f834330b2`, which fixes GO-2026-5932; c1i does
