@@ -345,8 +345,8 @@ func runOwnersWait(t *testing.T, srv *httptest.Server, appID string, want []stri
 }
 
 // TestWaitForOwnersConvergesOverHTTP drives the wired end-to-end wait: the
-// ownerids response starts empty and converges, and the messages must be
-// exactly the ones set-owners printed before the wait loop was extracted.
+// ownerids response starts empty and converges, and pins the progress and
+// success lines.
 func TestWaitForOwnersConvergesOverHTTP(t *testing.T) {
 	srv := ownerIDsServer(t, "/api/v1/apps/app1/ownerids", []string{
 		`{"userIds":[]}`,
@@ -553,5 +553,56 @@ func TestUntilEqual(t *testing.T) {
 		if got := untilEqual(tc.want)(tc.got); got != tc.ok {
 			t.Errorf("untilEqual(%v)(%v) = %v, want %v", tc.want, tc.got, got, tc.ok)
 		}
+	}
+}
+
+// TestUntilPresent pins add-owner's --wait condition: every wanted id must
+// appear; extras, order and duplicates don't matter; an empty want is met.
+func TestUntilPresent(t *testing.T) {
+	cases := []struct {
+		name string
+		want []string
+		got  []string
+		ok   bool
+	}{
+		{"empty want", nil, []string{"a"}, true},
+		{"exact match", []string{"a"}, []string{"a"}, true},
+		{"extras ok", []string{"a"}, []string{"a", "b"}, true},
+		{"order irrelevant", []string{"a", "b"}, []string{"b", "a", "c"}, true},
+		{"duplicates irrelevant", []string{"a", "a"}, []string{"a"}, true},
+		{"missing one", []string{"a", "b"}, []string{"a"}, false},
+		{"got empty", []string{"a"}, nil, false},
+		{"both empty", nil, nil, true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := untilPresent(tc.want)(tc.got); got != tc.ok {
+				t.Errorf("untilPresent(%v)(%v) = %v, want %v", tc.want, tc.got, got, tc.ok)
+			}
+		})
+	}
+}
+
+// TestRunOwnerIDsWaitWritesToStderr: an owner write's stdout is its JSON
+// response, so every wait line must go to stderr.
+func TestRunOwnerIDsWaitWritesToStderr(t *testing.T) {
+	srv := ownerIDsServer(t, "/api/v1/apps/app1/ownerids", []string{`{"userIds":[]}`, `{"userIds":[]}`, `{"userIds":["u1"]}`})
+	c := client.NewForTesting(srv.URL, srv.Client())
+	op := appOwnersWaitOp(c, "app1", untilEqual([]string{"u1"}), 10*time.Second)
+	op.Interval = 5 * time.Millisecond
+	cmd := &cobra.Command{Use: "test"}
+	var stdout, stderr bytes.Buffer
+	cmd.SetOut(&stdout)
+	cmd.SetErr(&stderr)
+	cmd.SetContext(context.Background())
+	if err := runOwnerIDsWait(cmd, op); err != nil {
+		t.Fatalf("runOwnerIDsWait: %v", err)
+	}
+	if stdout.Len() != 0 {
+		t.Errorf("stdout = %q, want nothing", stdout.String())
+	}
+	if !strings.Contains(stderr.String(), "Still waiting for owners to provision on app app1 (") ||
+		!strings.Contains(stderr.String(), "Owners provisioned on app app1 after ") {
+		t.Errorf("stderr missing the progress or success line:\n%s", stderr.String())
 	}
 }

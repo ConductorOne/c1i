@@ -27,11 +27,12 @@ Before the PUT, each distinct --user-id is looked up with GET
 /api/v1/users/{id}; an unknown one exits 2 naming it, and nothing is sent.
 The API itself accepts an unknown id (exit 0) and stores it: GET .../ownerids
 lists it but "apps owners" does not, so a set naming only such ids leaves the
-app with no real owners. --dry-run skips the lookups.
+app with no real owners. --dry-run skips the lookups. A repeated --user-id
+is sent once.
 
 Owner changes are provisioned ASYNCHRONOUSLY: this call returns as soon as
-the request is accepted, but the change takes a couple of minutes to show up
-in GET .../ownerids. Verify with "c1i apps owners <app-id>". Don't check
+the request is accepted, and the change showed up anywhere from about 1s to
+135s later. Verify with "c1i apps owners <app-id>". Don't check
 ownership via the "appOwners" field in "apps get": it read [] on every app
 checked, including those GET .../ownerids reported owners for.
 
@@ -44,50 +45,61 @@ Honors --dry-run (with --wait, dry-run still only previews the PUT; it never
 polls).`,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		userIDs, err := repeatableStringFlag(cmd, "user-id")
-		if err != nil {
-			return err
-		}
-		if len(userIDs) == 0 {
-			return &usageError{fmt.Errorf("at least one --user-id is required")}
-		}
-		wait, waitTimeout, err := waitFlagValues(cmd)
-		if err != nil {
-			return err
-		}
-
-		baseURL, err := GetBaseURL()
-		if err != nil {
-			return err
-		}
-
 		appID := args[0]
-		path := client.Path("/api/v1/apps/%s/owners", appID)
-		body := buildSetOwnersBody(userIDs)
-		if dryRunActive() {
-			return printDryRun(cmd, "PUT", path, body)
-		}
-
-		c, err := newClient(cmd, baseURL)
-		if err != nil {
-			return fmt.Errorf("authentication failed: %w", err)
-		}
-		if err := requireExistingUsers(cmd.Context(), c, "user-id", userIDs); err != nil {
-			return err
-		}
-		data, err := c.Put(cmd.Context(), path, body)
-		if err != nil {
-			return fmt.Errorf("API error: %w", err)
-		}
-		if err := writeRawObject(cmd, data); err != nil {
-			return err
-		}
-
-		if !wait {
-			return nil
-		}
-		return runOwnerIDsWait(cmd, appOwnersWaitOp(c, appID, untilEqual(userIDs), waitTimeout))
+		return runOwnerSetPut(cmd, client.Path("/api/v1/apps/%s/owners", appID),
+			func(c *client.Client, done func([]string) bool, timeout time.Duration) waitOp[[]string] {
+				return appOwnersWaitOp(c, appID, done, timeout)
+			})
 	},
+}
+
+// runOwnerSetPut is the body of every set-owners command: it PUTs the
+// --user-id list to path, prints the response, and with --wait polls the
+// op waitFor builds until the owner set equals the request.
+func runOwnerSetPut(cmd *cobra.Command, path string, waitFor func(*client.Client, func([]string) bool, time.Duration) waitOp[[]string]) error {
+	userIDs, err := repeatableStringFlag(cmd, "user-id")
+	if err != nil {
+		return err
+	}
+	if len(userIDs) == 0 {
+		return &usageError{fmt.Errorf("at least one --user-id is required")}
+	}
+	// The entitlement owners PUT 500s on a repeated id.
+	userIDs = dedupe(userIDs)
+	wait, waitTimeout, err := waitFlagValues(cmd)
+	if err != nil {
+		return err
+	}
+
+	baseURL, err := GetBaseURL()
+	if err != nil {
+		return err
+	}
+
+	body := buildSetOwnersBody(userIDs)
+	if dryRunActive() {
+		return printDryRun(cmd, "PUT", path, body)
+	}
+
+	c, err := newClient(cmd, baseURL)
+	if err != nil {
+		return fmt.Errorf("authentication failed: %w", err)
+	}
+	if err := requireExistingUsers(cmd.Context(), c, "user-id", userIDs); err != nil {
+		return err
+	}
+	data, err := c.Put(cmd.Context(), path, body)
+	if err != nil {
+		return fmt.Errorf("API error: %w", err)
+	}
+	if err := writeRawObject(cmd, data); err != nil {
+		return err
+	}
+
+	if !wait {
+		return nil
+	}
+	return runOwnerIDsWait(cmd, waitFor(c, untilEqual(userIDs), waitTimeout))
 }
 
 // appOwnersWaitOp polls an app's ownerids until done accepts them.

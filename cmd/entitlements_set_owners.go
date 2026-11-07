@@ -1,7 +1,6 @@
 package cmd
 
 import (
-	"fmt"
 	"time"
 
 	"github.com/ConductorOne/c1i/internal/client"
@@ -41,52 +40,12 @@ polls).`,
 		if err := requireNonEmpty(cmd, "app-id"); err != nil {
 			return err
 		}
-		userIDs, err := repeatableStringFlag(cmd, "user-id")
-		if err != nil {
-			return err
-		}
-		if len(userIDs) == 0 {
-			return &usageError{fmt.Errorf("at least one --user-id is required")}
-		}
-		// The API 500s on a repeated id.
-		userIDs = dedupe(userIDs)
-		wait, waitTimeout, err := waitFlagValues(cmd)
-		if err != nil {
-			return err
-		}
-
-		baseURL, err := GetBaseURL()
-		if err != nil {
-			return err
-		}
-
 		appID, _ := cmd.Flags().GetString("app-id")
 		entitlementID := args[0]
-		path := client.Path("/api/v1/apps/%s/entitlements/%s/owners", appID, entitlementID)
-		body := buildSetOwnersBody(userIDs)
-		if dryRunActive() {
-			return printDryRun(cmd, "PUT", path, body)
-		}
-
-		c, err := newClient(cmd, baseURL)
-		if err != nil {
-			return fmt.Errorf("authentication failed: %w", err)
-		}
-		if err := requireExistingUsers(cmd.Context(), c, "user-id", userIDs); err != nil {
-			return err
-		}
-		data, err := c.Put(cmd.Context(), path, body)
-		if err != nil {
-			return fmt.Errorf("API error: %w", err)
-		}
-		if err := writeRawObject(cmd, data); err != nil {
-			return err
-		}
-
-		if !wait {
-			return nil
-		}
-		return runEntitlementOwnersWait(cmd, c, appID, entitlementID, untilEqual(userIDs), waitTimeout)
+		return runOwnerSetPut(cmd, client.Path("/api/v1/apps/%s/entitlements/%s/owners", appID, entitlementID),
+			func(c *client.Client, done func([]string) bool, timeout time.Duration) waitOp[[]string] {
+				return entitlementOwnersWaitOp(c, appID, entitlementID, done, timeout)
+			})
 	},
 }
 

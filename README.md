@@ -123,11 +123,13 @@ The API accepts an `apps set-owners` user id that matches no user at exit `0`
 and stores it (`GET .../ownerids` lists it, `apps owners` does not), so a set
 naming only unknown ids leaves no real owners; `set-owners` therefore looks
 up each distinct `--user-id` first and exits `2` naming an unknown one,
-sending nothing (`--dry-run` skips the lookups).
+sending nothing (`--dry-run` skips the lookups). A repeated `--user-id` is
+sent once.
 
 `apps owners` is the read that reflects what `apps add-owner`,
-`apps remove-owner` and `apps set-owners` write, and lags a write by roughly
-45-150s (owner provisioning is asynchronous). It returns zero rows at exit 0
+`apps remove-owner` and `apps set-owners` write; owner provisioning is
+asynchronous, and writes showed up anywhere from about 1s to 135s after being
+accepted. It returns zero rows at exit 0
 for a well-formed but nonexistent app id, so an empty result can also mean
 "wrong id". `apps add-owner` and `apps remove-owner` change one owner at a
 time; two `add-owner` calls issued at once were both observed to land.

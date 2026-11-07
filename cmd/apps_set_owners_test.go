@@ -68,7 +68,7 @@ func TestAppsSetOwnersPrintsJSON(t *testing.T) {
 		if out != "{}\n" {
 			t.Errorf("stdout = %q, want only the write's JSON response", out)
 		}
-		if !strings.Contains(errOut, "Owners provisioned on app app1 after ") {
+		if !strings.HasPrefix(errOut, "Owners provisioned on app app1 after ") {
 			t.Errorf("stderr missing the success line:\n%s", errOut)
 		}
 		w := withoutUserLookups(seen())
@@ -93,7 +93,8 @@ func TestAppsSetOwnersFailsOnOutputWriteError(t *testing.T) {
 }
 
 // TestAppsSetOwnersChecksUsersExist: the apps owners PUT accepts an unknown
-// user id and stores it as an owner no user matches.
+// user id and stores it as an owner no user matches. Ids are deduped like
+// entitlements set-owners', whose PUT 500s on a repeat.
 func TestAppsSetOwnersChecksUsersExist(t *testing.T) {
 	t.Run("unknown user is exit 2 naming it, and no PUT is sent", func(t *testing.T) {
 		_, seen := entOwnerServerUsers(t, []string{`{"userIds":[]}`}, map[string]int{"ghost": http.StatusNotFound})
@@ -110,7 +111,7 @@ func TestAppsSetOwnersChecksUsersExist(t *testing.T) {
 			t.Errorf("sent %+v after a failed lookup; want nothing", w)
 		}
 	})
-	t.Run("a repeated id is looked up once", func(t *testing.T) {
+	t.Run("a repeated id is looked up and sent once", func(t *testing.T) {
 		_, seen := entOwnerServer(t, `{"userIds":[]}`)
 		if _, _, err := runEntOwnerCmd(t, appsSetOwnersCmd,
 			map[string][]string{"user-id": {"u1", "u2", "u1"}}, "app1"); err != nil {
@@ -118,6 +119,23 @@ func TestAppsSetOwnersChecksUsersExist(t *testing.T) {
 		}
 		if got := userLookups(seen()); strings.Join(got, ",") != "u1,u2" {
 			t.Errorf("looked up %v, want [u1 u2]", got)
+		}
+		w := withoutUserLookups(seen())
+		if len(w) != 1 || w[0].body != `{"userIds":["u1","u2"]}` {
+			t.Errorf("writes = %+v, want one PUT of [u1 u2]", w)
+		}
+	})
+	t.Run("dry-run sends a repeated id once", func(t *testing.T) {
+		withDryRun(t)
+		entOwnerServer(t, `{"userIds":[]}`)
+		out, _, err := runEntOwnerCmd(t, appsSetOwnersCmd,
+			map[string][]string{"user-id": {"u1", "u2", "u1"}}, "app1")
+		if err != nil {
+			t.Fatalf("RunE: %v", err)
+		}
+		want := "[dry-run] PUT /api/v1/apps/app1/owners\n{\n  \"userIds\": [\n    \"u1\",\n    \"u2\"\n  ]\n}\n"
+		if out != want {
+			t.Errorf("dry-run preview =\n%s\nwant\n%s", out, want)
 		}
 	})
 	t.Run("dry-run does no lookups", func(t *testing.T) {

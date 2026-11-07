@@ -17,8 +17,8 @@ attempt. When the config directory resolves to a relative path (a relative
 credentials fails instead of using the working directory. With a relative
 `HOME`, `~/.c1i.yaml` is ignored.
 
-`apps set-owners` now prints the API's JSON response on stdout, like every
-other owner write, instead of the line `Set N owner(s) on app ...`; with
+`apps set-owners` now prints the API's JSON response on stdout, like the
+other apps and entitlement owner commands, instead of the line `Set N owner(s) on app ...`; with
 `--wait`, the progress and `Owners provisioned on app ...` lines move to
 stderr. A script that matched the old text should check the exit code or
 parse the JSON instead. `apps set-owners --wait` now waits until the owner
@@ -90,7 +90,7 @@ before.
   exits `2` naming an unknown one, sending nothing (`--dry-run` skips the
   lookups): the API accepts an unknown id at exit `0` and stores it as an
   owner no user matches, so a set naming only unknown ids leaves no real
-  owners. `--wait` now waits until the
+  owners. A repeated `--user-id` is sent once. `--wait` now waits until the
   owner set equals the request, removals included, instead of returning as
   soon as the requested ids are present. It prints the API's JSON response,
   with `--wait` progress on stderr (see Upgrading).

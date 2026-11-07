@@ -405,12 +405,8 @@ of anything specific to what you're about to model.
 "--wait" polls "GET .../ownerids" until the owner set equals the ids you
 passed (or times out) and prints "Owners provisioned on app ... after ..." to
 stderr; stdout is the API's JSON response. Without "--wait", the PUT
-returns immediately but the owner takes roughly 96-129s to show up in
-"GET .../ownerids" -- four measured "set-owners" writes, a fifth still
-pending at 108s. Read through "apps owners" instead, and across
-"set-owners", "add-owner", "remove-owner" and the owner "apps create"
-assigns, the spread is wider: 45-150s --
-see "Verify" below for why "apps get"'s "appOwners" field is not the way to
+returns immediately and the owner showed up anywhere from about 1s to 135s
+later -- see "Verify" below for why "apps get"'s "appOwners" field is not the way to
 check this.
 
 Note "set-owners" REPLACES the list with exactly the ids you pass, and

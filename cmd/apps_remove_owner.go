@@ -20,8 +20,8 @@ owner you know about can still leave the app owned by someone you never
 chose -- its creator. Check "c1i apps owners <app-id>" first if that matters.
 
 Owner changes are provisioned ASYNCHRONOUSLY: this call returns as soon as
-the request is accepted, but the removal takes roughly 45-150s to show
-up. Verify with "c1i apps owners <app-id>".
+the request is accepted, and the removal showed up anywhere from about 1s
+to 135s later. Verify with "c1i apps owners <app-id>".
 
 Honors --dry-run.`,
 	Args: cobra.ExactArgs(1),
