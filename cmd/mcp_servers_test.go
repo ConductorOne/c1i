@@ -334,7 +334,7 @@ func TestOtherInputFilesBadInputIsUsage(t *testing.T) {
 		"missing file": missing,
 	} {
 		t.Run("array file/"+name, func(t *testing.T) {
-			_, err := readJSONArrayFile(&cobra.Command{}, "steps-file", path)
+			_, err := readJSONFile[[]any](&cobra.Command{}, "steps-file", path)
 			if exitCode(err) != exitUsage {
 				t.Errorf("err = %v (exit %d), want exit %d", err, exitCode(err), exitUsage)
 			}

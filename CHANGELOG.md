@@ -106,15 +106,12 @@ credentials fails instead of using the working directory. With a relative
   every method. The API resolves such a segment to the parent or collection,
   and a write could reach the wrong handler with no redirect for the client to
   refuse.
-- An input file that is missing, malformed or the wrong JSON shape now exits
-  `2` (usage) instead of `1`: every `--body-file` (including `api`'s), the
-  MCP server `--*-config-file` flags, and `--steps-file`, `--rules-file` and
-  `--refs-file`. A `null` body file, which could panic, is refused the same
-  way, and the error names the flag.
-- A `--steps-file` or `--rules-file` containing JSON `null` now exits `2`
-  before any request on `policies create` and `policies update`. A `null`
-  `--rules-file` sent `"rules": null` with exit 0, and a `null`
-  `--steps-file` was refused as an empty step list.
+- An input file that is missing, malformed, JSON `null` or the wrong JSON
+  shape now exits `2` (usage) before any request, and the error names the
+  flag: every `--body-file` (including `api`'s), the MCP server
+  `--*-config-file` flags, and `--steps-file`, `--rules-file` and
+  `--refs-file`. These exited `1`; a `null` body file could panic, and a
+  `null` `--rules-file` sent `"rules": null` with exit 0.
 - `apps set-owners --wait` exits 1 (`writing output:`) when its success line
   can't be written to stdout, instead of 0; the owners were already set.
 - **A failed write to stdout now exits `1`** (e.g. a full disk) instead of

@@ -80,7 +80,7 @@ func mapPolicyType(s string) string {
 }
 
 // readJSONBytes reads raw bytes from path, or stdin when path is "-".
-// Shared by every --*-file flag in the policies command family.
+// Shared by every --*-file JSON flag (via readJSONFile).
 func readJSONBytes(cmd *cobra.Command, path string) ([]byte, error) {
 	if path == "-" {
 		return io.ReadAll(cmd.InOrStdin())
@@ -88,24 +88,28 @@ func readJSONBytes(cmd *cobra.Command, path string) ([]byte, error) {
 	return os.ReadFile(path) // #nosec G304 -- user-supplied --*-file path is intentional
 }
 
-// readJSONArrayFile reads a JSON array from path (file or "-" for stdin), the
-// array counterpart of readConfigFile. Errors name --<flag>. A top-level null
-// is rejected: json.Unmarshal turns it into a nil slice without an error,
-// which would be sent as an explicit null.
-func readJSONArrayFile(cmd *cobra.Command, flag, path string) ([]any, error) {
+// readJSONFile reads a JSON array or object from path (file or "-" for
+// stdin). Every failure is a usage error naming --<flag>. A top-level null is
+// rejected: json.Unmarshal turns it into a nil value without an error, which
+// would be sent as an explicit null or written into.
+func readJSONFile[T []any | map[string]any](cmd *cobra.Command, flag, path string) (T, error) {
 	label := "--" + flag
+	kind := "object"
+	if _, ok := any(T(nil)).([]any); ok {
+		kind = "array"
+	}
 	data, err := readJSONBytes(cmd, path)
 	if err != nil {
 		return nil, &usageError{fmt.Errorf("reading %s: %w", label, err)}
 	}
-	var arr []any
-	if err := json.Unmarshal(data, &arr); err != nil {
-		return nil, &usageError{fmt.Errorf("parsing %s as JSON array: %w", label, err)}
+	var v T
+	if err := json.Unmarshal(data, &v); err != nil {
+		return nil, &usageError{fmt.Errorf("parsing %s as JSON %s: %w", label, kind, err)}
 	}
-	if arr == nil {
-		return nil, &usageError{fmt.Errorf("%s must contain a JSON array, not null", label)}
+	if v == nil {
+		return nil, &usageError{fmt.Errorf("%s must contain a JSON %s, not null", label, kind)}
 	}
-	return arr, nil
+	return v, nil
 }
 
 // policyListItem is the subset of the Policy message (c1.api.policy.v1.Policy)

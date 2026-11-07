@@ -110,7 +110,7 @@ var accessProfilesBundleAutomationRunCmd = &cobra.Command{
 		body := map[string]any{}
 		refsFile, _ := cmd.Flags().GetString("refs-file")
 		if refsFile != "" {
-			refs, err := readJSONArrayFile(cmd, "refs-file", refsFile)
+			refs, err := readJSONFile[[]any](cmd, "refs-file", refsFile)
 			if err != nil {
 				return err
 			}
@@ -153,7 +153,7 @@ func readBundleAutomationBody(cmd *cobra.Command) (map[string]any, error) {
 	if bodyFile == "" {
 		return nil, &usageError{fmt.Errorf("--body-file is required")}
 	}
-	body, err := readConfigFile(cmd, "body-file", bodyFile)
+	body, err := readJSONFile[map[string]any](cmd, "body-file", bodyFile)
 	if err != nil {
 		return nil, err
 	}
