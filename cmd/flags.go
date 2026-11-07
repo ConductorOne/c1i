@@ -3,8 +3,6 @@ package cmd
 import (
 	"encoding/json"
 	"fmt"
-	"math"
-	"math/big"
 	"regexp"
 	"strconv"
 	"strings"
@@ -576,22 +574,15 @@ func addProtoDurationFlag(cmd *cobra.Command, name, usage string) {
 	_ = cmd.Flags().SetAnnotation(name, protoDurationAnnotation, []string{"true"})
 }
 
-// durationComponent matches one number-unit pair of a duration that
-// time.ParseDuration has already accepted; group 1 is the number.
-var durationComponent = regexp.MustCompile(`([0-9]*(?:\.[0-9]*)?)(ns|us|µs|μs|ms|s|m|h)`)
-
-var durationUnitNanos = map[string]int64{
-	"ns": 1, "us": 1e3, "µs": 1e3, "μs": 1e3, "ms": 1e6,
-	"s": 1e9, "m": 60e9, "h": 3600e9,
-}
-
-var maxDurationNanos = big.NewRat(math.MaxInt64, 1)
+// wholeDuration is Go's duration syntax restricted to whole-number
+// components: no decimal point or exponent, so ParseDuration is exact.
+var wholeDuration = regexp.MustCompile(`^[-+]?(0|([0-9]+(ns|us|µs|μs|ms|s|m|h))+)$`)
 
 // protoDurationFlag reads a flag registered by addProtoDurationFlag. It
-// accepts a Go ("8h", "1m30.5s") or protobuf ("3600s") duration and returns it
-// in seconds, the only form the API parses; set is false when the flag was not
-// passed. Zero is sent: range limits are the server's call. A negative value,
-// and one finer than a nanosecond (which would be truncated), are usage errors.
+// accepts a whole-number Go ("8h", "1h30m") or protobuf ("3600s") duration and
+// returns it in seconds, the only form the API parses; set is false when the
+// flag was not passed. Zero is sent: range limits are the server's call.
+// Decimals and negatives are usage errors.
 func protoDurationFlag(cmd *cobra.Command, name string) (value string, set bool, err error) {
 	f := cmd.Flags().Lookup(name)
 	if f == nil || f.Annotations[protoDurationAnnotation] == nil {
@@ -602,8 +593,9 @@ func protoDurationFlag(cmd *cobra.Command, name string) (value string, set bool,
 	}
 	raw := f.Value.String()
 	trimmed := strings.TrimSpace(raw)
-	// ParseDuration defines the syntax; its value is not used, since it
-	// parses fractions in floating point and can land a nanosecond off.
+	if !wholeDuration.MatchString(trimmed) {
+		return "", false, &usageError{fmt.Errorf("--%s must be a whole-number duration such as 8h or 1h30m (decimals are not supported), got %q", name, raw)}
+	}
 	d, err := time.ParseDuration(trimmed)
 	if err != nil {
 		return "", false, &usageError{fmt.Errorf("invalid --%s %q: %w", name, raw, err)}
@@ -611,40 +603,7 @@ func protoDurationFlag(cmd *cobra.Command, name string) (value string, set bool,
 	if d < 0 {
 		return "", false, &usageError{fmt.Errorf("--%s must not be negative, got %q", name, raw)}
 	}
-	nanos, err := exactDurationNanos(trimmed)
-	if err != nil {
-		return "", false, &usageError{fmt.Errorf("--%s %q %w", name, raw, err)}
-	}
-	return formatProtoDuration(time.Duration(nanos)), true, nil
-}
-
-// exactDurationNanos evaluates an unsigned or "+"-signed duration that
-// time.ParseDuration accepted, in exact decimal arithmetic.
-func exactDurationNanos(s string) (int64, error) {
-	s = strings.TrimPrefix(s, "+")
-	if s == "0" {
-		return 0, nil
-	}
-	total := new(big.Rat)
-	for _, m := range durationComponent.FindAllStringSubmatch(s, -1) {
-		num := m[1]
-		if strings.HasPrefix(num, ".") {
-			num = "0" + num
-		}
-		num = strings.TrimSuffix(num, ".")
-		v, ok := new(big.Rat).SetString(num)
-		if !ok {
-			return 0, fmt.Errorf("has an unreadable number %q", m[1])
-		}
-		total.Add(total, v.Mul(v, big.NewRat(durationUnitNanos[m[2]], 1)))
-	}
-	if !total.IsInt() {
-		return 0, fmt.Errorf("is finer than a nanosecond, the most the API keeps")
-	}
-	if total.Cmp(maxDurationNanos) > 0 {
-		return 0, fmt.Errorf("is longer than the longest duration, 2562047h47m16.854775807s")
-	}
-	return total.Num().Int64(), nil
+	return formatProtoDuration(d), true, nil
 }
 
 // formatProtoDuration renders d in protobuf JSON form: integer seconds plus

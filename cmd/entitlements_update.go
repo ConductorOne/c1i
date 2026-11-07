@@ -39,9 +39,9 @@ This command refuses that at exit 2 before sending, including alongside
 policy while emergency grants stay enabled, so pass
 --emergency-grant-enabled=false alongside --unbind-policy emergency-grant.
 
---duration-grant sets the maximum grant duration. It takes a Go duration (8h,
-90m, 3600s) and is sent in seconds; 8h reads back as "28800s". A negative
-value exits 2 before sending, since the server stores "-60s" without complaint;
+--duration-grant sets the maximum grant duration. It takes a whole-number Go
+duration (8h, 1h30m, 3600s) and is sent in seconds; 8h reads back as "28800s".
+A decimal (1.5h) exits 2. A negative value exits 2 before sending, since the server stores "-60s" without complaint;
 "0s" is sent, and the server has been seen storing it too. --duration-unset
 removes the limit (standing access). The server holds the two as one choice and
 refuses both together, so passing both is a usage error.
@@ -162,7 +162,7 @@ func init() {
 	registerPolicyIDFlags(entitlementsUpdateCmd, entitlementPolicyKinds, " (omit to leave unchanged)")
 	registerUnbindPolicyFlag(entitlementsUpdateCmd, entitlementPolicyKinds)
 	f.Bool("emergency-grant-enabled", false, "Enable or disable emergency grants; enabling requires --emergency-grant-policy-id in the same call")
-	addProtoDurationFlag(entitlementsUpdateCmd, "duration-grant", "Maximum grant duration as a protobuf duration, e.g. 3600s; a Go duration such as 8h is converted to seconds; a negative value exits 2")
+	addProtoDurationFlag(entitlementsUpdateCmd, "duration-grant", "Maximum grant duration as a protobuf duration, e.g. 3600s; a Go duration such as 8h is converted to seconds; a decimal (1.5h) or negative value exits 2")
 	f.Bool("duration-unset", false, "Remove the maximum grant duration (standing access) instead of setting one (a protobuf duration like 3600s or a Go duration like 8h); excludes --duration-grant")
 	markRequired(entitlementsUpdateCmd, "app-id")
 	entitlementsCmd.AddCommand(entitlementsUpdateCmd)

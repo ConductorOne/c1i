@@ -168,9 +168,10 @@ fields); `c1i roles get <role-id>` adds a role's `serviceRoles` and
 `permissions`.
 
 Every flag sent to the API as a duration (`--duration-grant`, `--duration`,
-`--expires`, `--callback-timeout`) takes a Go (`8h`) or protobuf (`28800s`)
-duration and is sent in seconds. An empty, negative or finer-than-nanosecond
-value exits `2` before sending; zero is sent, and the server decides.
+`--expires`, `--callback-timeout`) takes a whole-number Go (`8h`, `1h30m`) or
+protobuf (`28800s`) duration and is sent in seconds. An empty, decimal
+(`1.5h`) or negative value exits `2` before sending; zero is sent, and the
+server decides.
 
 The cobra tree never drifts from what's implemented. Step down it with
 `--help` at each level:
@@ -467,8 +468,8 @@ resource with `--resource-id` likewise means you drop
 - `restart` re-runs the current approval step (one new history entry); `reset`
   restarts the whole policy (four, measured). Neither reopens a closed task --
   the state stays `TASK_STATE_CLOSED`. `process` changes nothing observable on
-  a healthy task. `update-grant-duration` takes a Go (`1h`) or protobuf
-  (`3600s`) duration (the server stored `0s` without complaint); it only
+  a healthy task. `update-grant-duration` takes a whole-number Go (`1h`)
+  or protobuf (`3600s`) duration (the server stored `0s` without complaint); it only
   works before provisioning, after which the server says
   `cannot update grant duration for a ticket in a provision step`; the value
   lands as `grantDuration`.
@@ -538,10 +539,10 @@ resource with `--resource-id` likewise means you drop
   a deleted webhook exits `0` and changes it, and it stays deleted.
   `webhooks list` pages exceed `--page-size` (a size below 5 is raised to 5,
   plus one row), so use `--limit` for an exact count. `webhooks update` with
-  no field flag exits `2`. `--callback-timeout` takes a Go (`10m`) or
-  protobuf (`600s`) duration from `0` to `720h`: a negative one exits `2`
-  before sending, and over `720h` update
-  returns `callback_timeout must be between 0 and 30 days`. A webhook has no
+  no field flag exits `2`. `--callback-timeout` takes a whole-number Go
+  (`10m`) or protobuf (`600s`) duration from `0` to `720h`: a decimal or
+  negative one exits `2` before sending, and over `720h` update returns
+  `callback_timeout must be between 0 and 30 days`. A webhook has no
   signing secret.
 - `automations delete <automation-id>` is soft: the automation leaves
   `automations list`, but `automations get` still returns it at exit `0` with

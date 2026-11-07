@@ -319,7 +319,7 @@ func init() {
 	spCredentialsCreateCmd.Flags().String("display-name", "", "Display name for the new credential ("+displayNameRule+")")
 	addRepeatableStringFlag(spCredentialsCreateCmd, "scoped-role", "Restrict the credential to a role ID from \"c1i roles list\" (repeatable)")
 	addRepeatableStringFlag(spCredentialsCreateCmd, "allow-cidr", "Restrict the credential to a source CIDR (repeatable)")
-	addProtoDurationFlag(spCredentialsCreateCmd, "expires", "Time until the credential expires as a protobuf duration (2592000s) or a Go duration (720h), sent in seconds; a negative value exits 2; the server accepts the range (0s, 4320h] (up to 180 days)")
+	addProtoDurationFlag(spCredentialsCreateCmd, "expires", "Time until the credential expires as a protobuf duration (2592000s) or a Go duration (720h), sent in seconds; a decimal (1.5h) or negative value exits 2; the server accepts the range (0s, 4320h] (up to 180 days)")
 	spCredentialsCreateCmd.Flags().Bool("require-dpop", false, "Require DPoP proof-of-possession for token exchange")
 	markRequired(spCredentialsCreateCmd, "display-name")
 

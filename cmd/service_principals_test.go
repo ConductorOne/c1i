@@ -117,18 +117,18 @@ func TestBuildSPCredentialCreateBody(t *testing.T) {
 			want: map[string]any{"displayName": "ci", "expires": "2592000s"},
 		},
 		{
-			name: "fractional expires preserves nanoseconds",
+			name: "sub-second expires preserves nanoseconds",
 			flags: map[string][]string{
 				"display-name": {"ci"},
-				"expires":      {"1.000000001s"},
+				"expires":      {"1s1ns"},
 			},
 			want: map[string]any{"displayName": "ci", "expires": "1.000000001s"},
 		},
 		{
-			name: "fractional expires trims trailing zeros",
+			name: "sub-second expires trims trailing zeros",
 			flags: map[string][]string{
 				"display-name": {"ci"},
-				"expires":      {" 1.5s "},
+				"expires":      {" 1s500ms "},
 			},
 			want: map[string]any{"displayName": "ci", "expires": "1.5s"},
 		},
@@ -173,8 +173,8 @@ func TestBuildSPCredentialCreateBody(t *testing.T) {
 			wantErr: true,
 		},
 		{
-			name:    "expires finer than a nanosecond is a usage error",
-			flags:   map[string][]string{"display-name": {"ci"}, "expires": {"1.0000000001s"}},
+			name:    "decimal expires is a usage error",
+			flags:   map[string][]string{"display-name": {"ci"}, "expires": {"0.5s"}},
 			wantErr: true,
 		},
 		{

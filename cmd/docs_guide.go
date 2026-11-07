@@ -465,8 +465,9 @@ object which now already exists is refused. "--dry-run" previews all three
 requests.
 
 Omitting --duration-grant defaults the entitlement to standing access
-(durationUnset). For time-boxed access pass a Go or protobuf duration, e.g.
-"--duration-grant 8h" or "--duration-grant 3600s"; c1i sends it in seconds.
+(durationUnset). For time-boxed access pass a whole-number Go or protobuf
+duration, e.g. "--duration-grant 8h" or "--duration-grant 3600s"; c1i sends it
+in seconds. Decimals such as "1.5h" exit 2; write "1h30m".
 
 ## Verify
 

@@ -26,13 +26,16 @@ exits:
 - A negative value exits 2 before sending on every such flag. `requests
   create grant --duration` and `tasks update-grant-duration --duration` used
   to send it, and the server's 400 exited 2 after the round trip.
-- A value finer than a nanosecond (`1.0000000001s`, `1.5ns`) exits 2 on every
-  such flag; `--duration-grant`, `--expires` and `--callback-timeout`
-  truncated it, and the other two sent it as typed.
+- Decimal durations now exit 2 on every such flag: write `1h30m`, not `1.5h`,
+  and `1s500ms`, not `1.5s`. `--duration-grant`, `--expires` and
+  `--callback-timeout` used to accept them, and `requests create grant
+  --duration` and `tasks update-grant-duration --duration` used to send a
+  protobuf decimal such as `3600.5s` as typed.
 - `entitlements create` and `entitlements update --duration-grant 0s` are
   sent instead of exiting 2, and the server stores `0s`. `--expires 0s` is
   sent instead of exiting 2, and the server refuses it with exit 2.
-- `--expires` and `--callback-timeout` send `1.5s` instead of `1.500000000s`.
+- `--expires` and `--callback-timeout` send a sub-second value such as
+  `1s500ms` as `1.5s` instead of `1.500000000s`.
 
 ### Added
 
@@ -97,10 +100,9 @@ exits:
 
 - Every duration flag sent to the API (`--duration-grant`, `requests create
   grant --duration`, `tasks update-grant-duration --duration`, `--expires`,
-  `--callback-timeout`) takes a Go (`8h`, `1m30.5s`) or protobuf (`3600s`)
-  duration, ignores surrounding whitespace, and is sent as seconds with any
-  fraction's trailing zeros trimmed (`1.5s`, was `1.500000000s` on
-  `--expires` and `--callback-timeout`). `requests create grant --duration`
+  `--callback-timeout`) takes a whole-number Go (`8h`, `1h30m`) or protobuf
+  (`3600s`) duration, ignores surrounding whitespace, and is sent as seconds
+  with any sub-second fraction's trailing zeros trimmed. `requests create grant --duration`
   and `tasks update-grant-duration --duration` previously passed the value
   through, so `24h` failed with `invalid google.protobuf.Duration value
   "24h"`; it is now sent as `86400s`.

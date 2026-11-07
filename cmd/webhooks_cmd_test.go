@@ -200,7 +200,7 @@ func TestWebhooksUsageErrorsSendNothing(t *testing.T) {
 		{"update whitespace name", webhooksUpdateCmd, []string{"wh-1"}, map[string]string{"display-name": " \t"}},
 		{"update bad timeout", webhooksUpdateCmd, []string{"wh-1"}, map[string]string{"callback-timeout": "soon"}},
 		{"update negative timeout", webhooksUpdateCmd, []string{"wh-1"}, map[string]string{"callback-timeout": "-1ns"}},
-		{"update timeout finer than a nanosecond", webhooksUpdateCmd, []string{"wh-1"}, map[string]string{"callback-timeout": "1.0000000001s"}},
+		{"update decimal timeout", webhooksUpdateCmd, []string{"wh-1"}, map[string]string{"callback-timeout": "1.5s"}},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -250,8 +250,8 @@ func TestWebhooksUpdateMaskFromChangedFlags(t *testing.T) {
 			mask:    "callbackTimeout",
 		},
 		{
-			name:    "fractional timeout trims trailing zeros",
-			flags:   map[string]string{"callback-timeout": " 1.5s "},
+			name:    "sub-second timeout, whitespace trimmed",
+			flags:   map[string]string{"callback-timeout": " 1s500ms "},
 			webhook: map[string]any{"id": id, "callbackTimeout": "1.5s"},
 			mask:    "callbackTimeout",
 		},

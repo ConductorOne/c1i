@@ -156,7 +156,7 @@ func TestRequestsCreateGrantDefaultsUserIDToSelf(t *testing.T) {
 
 // TestRequestsCreateGrantDurationConvertsGoForm: the API parses grantDuration
 // as a google.protobuf.Duration and 400s "8h", so --duration is converted to
-// seconds. Zero is left to the server; negative, sub-nanosecond and empty
+// seconds. Zero is left to the server; negative, decimal and empty
 // values never send.
 func TestRequestsCreateGrantDurationConvertsGoForm(t *testing.T) {
 	cases := []struct {
@@ -164,11 +164,11 @@ func TestRequestsCreateGrantDurationConvertsGoForm(t *testing.T) {
 		wantSent bool
 	}{
 		{in: "8h", want: "28800s", wantSent: true},
-		{in: " 1m30.5s ", want: "90.5s", wantSent: true},
+		{in: " 1h30m ", want: "5400s", wantSent: true},
 		{in: "86400s", want: "86400s", wantSent: true},
 		{in: "0s", want: "0s", wantSent: true},
 		{in: "-1s"},
-		{in: "1.0000000001s"},
+		{in: "1.5h"},
 		{in: ""},
 		{in: "7d"},
 	}

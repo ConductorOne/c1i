@@ -45,9 +45,9 @@ var requestsCreateGrantCmd = &cobra.Command{
 	Short: "Create a grant access request",
 	Long: `Create a grant access request.
 
---duration takes a Go (24h) or protobuf (86400s) duration and is sent in
-seconds, the only form the API parses. A negative value exits 2 before
-sending; zero is sent, and the server refuses it with "value must be greater
+--duration takes a whole-number Go (24h, 1h30m) or protobuf (86400s) duration
+and is sent in seconds, the only form the API parses. A decimal (1.5h) or
+negative value exits 2 before sending; zero is sent, and the server refuses it with "value must be greater
 than 0s". "7d" is not a Go duration and exits 2 before sending.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		baseURL, err := GetBaseURL()
@@ -132,7 +132,7 @@ func init() {
 	requestsCreateGrantCmd.Flags().String("entitlement-id", "", "Entitlement ID")
 	requestsCreateGrantCmd.Flags().String("user-id", "", "User ID (defaults to self if omitted)")
 	addProtoDurationFlag(requestsCreateGrantCmd, "duration",
-		"Grant duration as a protobuf duration (86400s) or a Go duration (24h), sent in seconds; a negative value exits 2")
+		"Grant duration as a protobuf duration (86400s) or a Go duration (24h), sent in seconds; a decimal (1.5h) or negative value exits 2")
 	requestsCreateGrantCmd.Flags().String("description", "", "Justification or description")
 	requestsCreateGrantCmd.Flags().Bool("emergency", false, "Request emergency access")
 	markRequired(requestsCreateGrantCmd, "app-id")

@@ -47,7 +47,7 @@ func webhookFieldFlags(cmd *cobra.Command, update bool) {
 	cmd.Flags().String("display-name", "", verb+" display name ("+keep+displayNameRule+")")
 	cmd.Flags().String("destination-url", "", verb+" destination URL ("+keep+"https only, with a host; an IPv6 literal host is refused; else exit 2)")
 	cmd.Flags().String("description", "", verb+" description ("+keep+"an empty value clears it)")
-	addProtoDurationFlag(cmd, "callback-timeout", verb+` time to wait for an asynchronous callback, as a protobuf duration (600s) or a Go duration (10m), sent in seconds (`+keep+`0 to 720h; a negative value exits 2 before sending; over 720h, update returns "callback_timeout must be between 0 and 30 days" and create "value must be inside range [0s, 720h0m0s]")`)
+	addProtoDurationFlag(cmd, "callback-timeout", verb+` time to wait for an asynchronous callback, as a protobuf duration (600s) or a Go duration (10m), sent in seconds (`+keep+`0 to 720h; a decimal (1.5h) or negative value exits 2 before sending; over 720h, update returns "callback_timeout must be between 0 and 30 days" and create "value must be inside range [0s, 720h0m0s]")`)
 }
 
 // webhookFields reads the changed field flags into a Webhook body and the

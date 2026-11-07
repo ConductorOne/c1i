@@ -364,7 +364,7 @@ func TestTasksUpdateGrantDurationSendsDurationKey(t *testing.T) {
 
 // TestTasksUpdateGrantDurationConvertsGoForm: the server 400s "1h", so a Go
 // duration is converted to seconds. Zero is the server's call; a negative or
-// sub-nanosecond value never sends.
+// decimal value never sends.
 func TestTasksUpdateGrantDurationConvertsGoForm(t *testing.T) {
 	cmd := findTasksSubcommand(t, "update-grant-duration")
 	for in, want := range map[string]string{"8h": "28800s", " 90m ": "5400s", "3600s": "3600s", "0s": "0s"} {
@@ -378,7 +378,7 @@ func TestTasksUpdateGrantDurationConvertsGoForm(t *testing.T) {
 			t.Errorf(`--duration %q: body["duration"] = %v, want %q`, in, got, want)
 		}
 	}
-	for _, in := range []string{"-1h", "1.0000000001s", "7d"} {
+	for _, in := range []string{"-1h", "1.5h", "7d"} {
 		resetCmds(t, cmd)
 		_ = cmd.Flags().Set("duration", in)
 		r := newTaskActionRecorder(t, "TASK_STATE_OPEN", "zz-step-1111111111111111111")
