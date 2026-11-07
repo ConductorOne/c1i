@@ -117,12 +117,20 @@ func TestBuildSPCredentialCreateBody(t *testing.T) {
 			want: map[string]any{"displayName": "ci", "expires": "2592000s"},
 		},
 		{
-			name: "fractional expires preserves nanoseconds",
+			name: "sub-second expires preserves nanoseconds",
 			flags: map[string][]string{
 				"display-name": {"ci"},
-				"expires":      {"1.5s"},
+				"expires":      {"1s1ns"},
 			},
-			want: map[string]any{"displayName": "ci", "expires": "1.500000000s"},
+			want: map[string]any{"displayName": "ci", "expires": "1.000000001s"},
+		},
+		{
+			name: "sub-second expires trims trailing zeros",
+			flags: map[string][]string{
+				"display-name": {"ci"},
+				"expires":      {" 1s500ms "},
+			},
+			want: map[string]any{"displayName": "ci", "expires": "1.5s"},
 		},
 		{
 			name: "roles, cidrs and dpop",
@@ -155,8 +163,23 @@ func TestBuildSPCredentialCreateBody(t *testing.T) {
 			wantErr: true,
 		},
 		{
-			name:    "non-positive duration is a usage error",
-			flags:   map[string][]string{"display-name": {"ci"}, "expires": {"0s"}},
+			name:  "zero expires is sent for the server to judge",
+			flags: map[string][]string{"display-name": {"ci"}, "expires": {"0s"}},
+			want:  map[string]any{"displayName": "ci", "expires": "0s"},
+		},
+		{
+			name:    "negative expires is a usage error",
+			flags:   map[string][]string{"display-name": {"ci"}, "expires": {"-1s"}},
+			wantErr: true,
+		},
+		{
+			name:    "decimal expires is a usage error",
+			flags:   map[string][]string{"display-name": {"ci"}, "expires": {"0.5s"}},
+			wantErr: true,
+		},
+		{
+			name:    "empty expires is a usage error, not omitted",
+			flags:   map[string][]string{"display-name": {"ci"}, "expires": {""}},
 			wantErr: true,
 		},
 	}

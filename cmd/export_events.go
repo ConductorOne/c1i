@@ -9,18 +9,18 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// mapSortDirection converts the user-facing --sort value to the API enum.
-// Empty defaults to ascending (chronological), which is the natural order for
-// archiving and for incremental sync via --since-event-uid.
-func mapSortDirection(s string) (string, error) {
-	switch strings.ToLower(strings.TrimSpace(s)) {
-	case "", "asc":
+var sortDirectionFlag = enumFlag{flag: "sort", prefix: "SORT_DIRECTION_", unknown: enumReject, values: []enumValue{
+	{name: "asc", api: "SORT_DIRECTION_ASC"},
+	{name: "desc", api: "SORT_DIRECTION_DESC"},
+}}
+
+// parseSortDirection reads --sort. Blank is ascending (chronological), the
+// natural order for archiving and for incremental sync via --since-event-uid.
+func parseSortDirection(s string) (string, error) {
+	if strings.TrimSpace(s) == "" {
 		return "SORT_DIRECTION_ASC", nil
-	case "desc":
-		return "SORT_DIRECTION_DESC", nil
-	default:
-		return "", fmt.Errorf(`--sort must be "asc" or "desc"`)
 	}
+	return sortDirectionFlag.parse(s)
 }
 
 // exportEventsBody builds the /api/v1/systemlog/events request body. Kept
@@ -86,9 +86,9 @@ them to an external system.
 		if err := validateRFC3339("--until", until); err != nil {
 			return err
 		}
-		sortDirection, err := mapSortDirection(sortFlag)
+		sortDirection, err := parseSortDirection(sortFlag)
 		if err != nil {
-			return &usageError{err}
+			return err
 		}
 
 		baseURL, err := GetBaseURL()
@@ -169,7 +169,7 @@ func init() {
 	exportEventsCmd.Flags().String("since", "", "Only events at or after this RFC3339 time (e.g. 2026-07-01T00:00:00Z)")
 	exportEventsCmd.Flags().String("until", "", "Only events before this RFC3339 time")
 	exportEventsCmd.Flags().String("since-event-uid", "", "Resume after this event UID (incremental sync)")
-	exportEventsCmd.Flags().String("sort", "asc", "Chronological order: asc (oldest first) or desc")
+	exportEventsCmd.Flags().String("sort", "asc", "Sort order (asc is oldest first): "+sortDirectionFlag.usage())
 	addPaginationFlags(exportEventsCmd)
 	exportCmd.AddCommand(exportEventsCmd)
 }

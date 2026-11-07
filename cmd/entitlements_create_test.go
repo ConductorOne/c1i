@@ -435,6 +435,9 @@ func TestResourceTypeKindsAreDocumented(t *testing.T) {
 		"guideConfigureNewApp":       guideConfigureNewApp,
 	}
 	for name, doc := range docs {
+		if name == "--resource-type flag usage" {
+			doc = enumKey(doc) // generated from the table's short names
+		}
 		for _, kind := range resourceTypeKinds {
 			if !strings.Contains(doc, kind) {
 				t.Errorf("%s does not name the %q resource type kind", name, kind)
@@ -444,7 +447,7 @@ func TestResourceTypeKindsAreDocumented(t *testing.T) {
 
 	// The default must be one of them, or --help promises a value that 400s.
 	def := entitlementsCreateCmd.Flags().Lookup("resource-type").DefValue
-	if !slices.Contains(resourceTypeKinds, def) {
+	if api, err := resourceTypeFlag.parse(def); err != nil || !slices.Contains(resourceTypeKinds, api) {
 		t.Errorf("--resource-type defaults to %q, which is not in resourceTypeKinds", def)
 	}
 }
@@ -521,16 +524,16 @@ func TestEntitlementCreateDurationGrantWireKey(t *testing.T) {
 }
 
 // TestEntitlementCreateDurationGrantAcceptsGoDuration pins that create parses
-// --duration-grant like update does: Go forms are converted to seconds and a
-// non-positive or unparseable value is a usage error.
+// --duration-grant like update does: Go forms are converted to seconds, zero
+// is sent, and a negative, decimal or unparseable value is a usage error.
 func TestEntitlementCreateDurationGrantAcceptsGoDuration(t *testing.T) {
-	for in, want := range map[string]string{"8h": "28800s", "3600s": "3600s", "1m30.5s": "90.5s"} {
+	for in, want := range map[string]string{"8h": "28800s", " 8h ": "28800s", "3600s": "3600s", "1h30m": "5400s", "0s": "0s"} {
 		p := mustPlan(t, "--app-id", "app1", "--display-name", "e", "--duration-grant", in)
 		if got := p.entitlementBody["durationGrant"]; got != want {
 			t.Errorf("--duration-grant %s: durationGrant = %v, want %s", in, got, want)
 		}
 	}
-	for _, in := range []string{"0s", "-1m", "soon", ""} {
+	for _, in := range []string{"-1m", "1.5h", "soon", ""} {
 		cmd := newEntitlementCreateCmd(t, "--app-id", "app1", "--display-name", "e", "--duration-grant", in)
 		_, err := buildEntitlementCreatePlan(cmd)
 		var ue *usageError
@@ -562,24 +565,6 @@ func TestEntitlementCreatePolicyFlags(t *testing.T) {
 		cmd := newEntitlementCreateCmd(t, "--app-id", "app1", "--display-name", "e", "--"+flag, "")
 		if _, err := buildEntitlementCreatePlan(cmd); err == nil || !strings.Contains(err.Error(), "--"+flag+" requires a non-empty value") {
 			t.Errorf("--%s \"\": err = %v, want a non-empty-value usage error", flag, err)
-		}
-	}
-}
-
-// TestNormalizeResourceType pins case/separator normalization, and that an
-// unknown value is passed through for the server to rule on rather than being
-// rejected against a list that can go stale.
-func TestNormalizeResourceType(t *testing.T) {
-	cases := map[string]string{
-		"custom":        "CUSTOM",
-		"CUSTOM":        "CUSTOM",
-		"profile-type":  "PROFILE_TYPE",
-		"profile_type":  "PROFILE_TYPE",
-		"something_new": "SOMETHING_NEW",
-	}
-	for in, want := range cases {
-		if got := normalizeResourceType(in); got != want {
-			t.Errorf("normalizeResourceType(%q) = %q, want %q", in, got, want)
 		}
 	}
 }

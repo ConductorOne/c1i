@@ -57,27 +57,13 @@ func init() {
 // newAPIClient use.
 var newPoliciesClient = newClient
 
-// mapPolicyType translates a user-friendly --policy-type value to the API
-// enum. Input is case-insensitive and accepts '-' or '_' as the word
-// separator. Unrecognized input is passed through unchanged so the raw enum
-// name (or a deliberately-invalid value, to be caught by validatePolicyType)
-// still works.
-func mapPolicyType(s string) string {
-	switch strings.ToLower(strings.NewReplacer("-", "_").Replace(s)) {
-	case "grant":
-		return "POLICY_TYPE_GRANT"
-	case "revoke":
-		return "POLICY_TYPE_REVOKE"
-	case "certify":
-		return "POLICY_TYPE_CERTIFY"
-	case "access_request", "accessrequest":
-		return "POLICY_TYPE_ACCESS_REQUEST"
-	case "provision":
-		return "POLICY_TYPE_PROVISION"
-	default:
-		return s
-	}
-}
+var policyTypeFlag = enumFlag{flag: "policy-type", prefix: "POLICY_TYPE_", unknown: enumPassPrefixed, values: []enumValue{
+	{name: "grant", api: "POLICY_TYPE_GRANT"},
+	{name: "revoke", api: "POLICY_TYPE_REVOKE"},
+	{name: "certify", api: "POLICY_TYPE_CERTIFY"},
+	{name: "access-request", api: "POLICY_TYPE_ACCESS_REQUEST", aliases: []string{"accessrequest"}},
+	{name: "provision", api: "POLICY_TYPE_PROVISION"},
+}}
 
 // readJSONBytes reads raw bytes from path, or stdin when path is "-".
 // Shared by every --*-file JSON flag (via readJSONFile).

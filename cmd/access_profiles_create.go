@@ -2,7 +2,6 @@ package cmd
 
 import (
 	"fmt"
-	"strings"
 
 	"github.com/spf13/cobra"
 )
@@ -41,7 +40,10 @@ Example:
 			return err
 		}
 
-		body := buildAccessProfileCreateBody(cmd)
+		body, err := buildAccessProfileCreateBody(cmd)
+		if err != nil {
+			return err
+		}
 
 		if dryRunActive() {
 			return printDryRun(cmd, "POST", "/api/v1/catalogs", body)
@@ -65,13 +67,13 @@ Example:
 // The same fields are valid on both create and update.
 var catalogStringFlags = []struct {
 	flag, key string
-	mapValue  func(string) string
+	enum      *enumFlag
 }{
-	{"display-name", "displayName", func(v string) string { return v }},
-	{"description", "description", func(v string) string { return v }},
-	{"enrollment-behavior", "enrollmentBehavior", mapCatalogEnrollmentBehavior},
-	{"unenrollment-behavior", "unenrollmentBehavior", mapCatalogUnenrollmentBehavior},
-	{"unenrollment-entitlement-behavior", "unenrollmentEntitlementBehavior", mapCatalogUnenrollmentEntitlementBehavior},
+	{"display-name", "displayName", nil},
+	{"description", "description", nil},
+	{"enrollment-behavior", "enrollmentBehavior", &catalogEnrollmentFlag},
+	{"unenrollment-behavior", "unenrollmentBehavior", &catalogUnenrollmentFlag},
+	{"unenrollment-entitlement-behavior", "unenrollmentEntitlementBehavior", &catalogUnenrollmentEntitlementFlag},
 }
 
 // catalogBoolFlags maps the boolean RequestCatalog fields exposed as flags to
@@ -84,12 +86,18 @@ var catalogBoolFlags = []struct{ flag, key string }{
 
 // addCatalogChangedFields applies every explicitly supplied writable scalar
 // field to catalog and returns the corresponding FieldMask paths in flag order.
-func addCatalogChangedFields(cmd *cobra.Command, catalog map[string]any) []string {
+func addCatalogChangedFields(cmd *cobra.Command, catalog map[string]any) ([]string, error) {
 	var paths []string
 	for _, sf := range catalogStringFlags {
 		if cmd.Flags().Changed(sf.flag) {
-			v, _ := cmd.Flags().GetString(sf.flag)
-			catalog[sf.key] = sf.mapValue(v)
+			v := mustGetString(cmd, sf.flag)
+			if sf.enum != nil {
+				var err error
+				if v, err = sf.enum.parse(v); err != nil {
+					return nil, err
+				}
+			}
+			catalog[sf.key] = v
 			paths = append(paths, sf.key)
 		}
 	}
@@ -100,58 +108,38 @@ func addCatalogChangedFields(cmd *cobra.Command, catalog map[string]any) []strin
 			paths = append(paths, bf.key)
 		}
 	}
-	return paths
+	return paths, nil
 }
 
-func mapCatalogEnrollmentBehavior(v string) string {
-	switch strings.ToLower(v) {
-	case "unspecified":
-		return "REQUEST_CATALOG_ENROLLMENT_BEHAVIOR_UNSPECIFIED"
-	case "bypass", "bypass-entitlement-request-policy", "bypass_entitlement_request_policy":
-		return "REQUEST_CATALOG_ENROLLMENT_BEHAVIOR_BYPASS_ENTITLEMENT_REQUEST_POLICY"
-	case "enforce", "enforce-entitlement-request-policy", "enforce_entitlement_request_policy":
-		return "REQUEST_CATALOG_ENROLLMENT_BEHAVIOR_ENFORCE_ENTITLEMENT_REQUEST_POLICY"
-	default:
-		return v
-	}
-}
+var catalogEnrollmentFlag = enumFlag{flag: "enrollment-behavior", prefix: "REQUEST_CATALOG_ENROLLMENT_BEHAVIOR_", unknown: enumPassPrefixed, values: []enumValue{
+	{name: "bypass", api: "REQUEST_CATALOG_ENROLLMENT_BEHAVIOR_BYPASS_ENTITLEMENT_REQUEST_POLICY", aliases: []string{"REQUEST_CATALOG_ENROLLMENT_BEHAVIOR_BYPASS"}},
+	{name: "enforce", api: "REQUEST_CATALOG_ENROLLMENT_BEHAVIOR_ENFORCE_ENTITLEMENT_REQUEST_POLICY", aliases: []string{"REQUEST_CATALOG_ENROLLMENT_BEHAVIOR_ENFORCE"}},
+	{name: "unspecified", api: "REQUEST_CATALOG_ENROLLMENT_BEHAVIOR_UNSPECIFIED"},
+}}
 
-func mapCatalogUnenrollmentBehavior(v string) string {
-	switch strings.ToLower(v) {
-	case "unspecified":
-		return "REQUEST_CATALOG_UNENROLLMENT_BEHAVIOR_UNSPECIFIED"
-	case "leave-access-as-is", "leave_access_as_is":
-		return "REQUEST_CATALOG_UNENROLLMENT_BEHAVIOR_LEAVE_ACCESS_AS_IS"
-	case "revoke-all", "revoke_all":
-		return "REQUEST_CATALOG_UNENROLLMENT_BEHAVIOR_REVOKE_ALL"
-	case "revoke-unjustified", "revoke_unjustified":
-		return "REQUEST_CATALOG_UNENROLLMENT_BEHAVIOR_REVOKE_UNJUSTIFIED"
-	default:
-		return v
-	}
-}
+var catalogUnenrollmentFlag = enumFlag{flag: "unenrollment-behavior", prefix: "REQUEST_CATALOG_UNENROLLMENT_BEHAVIOR_", unknown: enumPassPrefixed, values: []enumValue{
+	{name: "leave-access-as-is", api: "REQUEST_CATALOG_UNENROLLMENT_BEHAVIOR_LEAVE_ACCESS_AS_IS"},
+	{name: "revoke-all", api: "REQUEST_CATALOG_UNENROLLMENT_BEHAVIOR_REVOKE_ALL"},
+	{name: "revoke-unjustified", api: "REQUEST_CATALOG_UNENROLLMENT_BEHAVIOR_REVOKE_UNJUSTIFIED"},
+	{name: "unspecified", api: "REQUEST_CATALOG_UNENROLLMENT_BEHAVIOR_UNSPECIFIED"},
+}}
 
-func mapCatalogUnenrollmentEntitlementBehavior(v string) string {
-	switch strings.ToLower(v) {
-	case "unspecified":
-		return "REQUEST_CATALOG_UNENROLLMENT_ENTITLEMENT_BEHAVIOR_UNSPECIFIED"
-	case "bypass":
-		return "REQUEST_CATALOG_UNENROLLMENT_ENTITLEMENT_BEHAVIOR_BYPASS"
-	case "enforce":
-		return "REQUEST_CATALOG_UNENROLLMENT_ENTITLEMENT_BEHAVIOR_ENFORCE"
-	default:
-		return v
-	}
-}
+var catalogUnenrollmentEntitlementFlag = enumFlag{flag: "unenrollment-entitlement-behavior", prefix: "REQUEST_CATALOG_UNENROLLMENT_ENTITLEMENT_BEHAVIOR_", unknown: enumPassPrefixed, values: []enumValue{
+	{name: "bypass", api: "REQUEST_CATALOG_UNENROLLMENT_ENTITLEMENT_BEHAVIOR_BYPASS"},
+	{name: "enforce", api: "REQUEST_CATALOG_UNENROLLMENT_ENTITLEMENT_BEHAVIOR_ENFORCE"},
+	{name: "unspecified", api: "REQUEST_CATALOG_UNENROLLMENT_ENTITLEMENT_BEHAVIOR_UNSPECIFIED"},
+}}
 
 // buildAccessProfileCreateBody assembles the Create request body from flags. Pure (no
 // network / auth) so the dry-run preview and unit tests exercise the same body
 // the live request sends.
-func buildAccessProfileCreateBody(cmd *cobra.Command) map[string]any {
+func buildAccessProfileCreateBody(cmd *cobra.Command) (map[string]any, error) {
 	displayName, _ := cmd.Flags().GetString("display-name")
 	body := map[string]any{"displayName": displayName}
-	addCatalogChangedFields(cmd, body)
-	return body
+	if _, err := addCatalogChangedFields(cmd, body); err != nil {
+		return nil, err
+	}
+	return body, nil
 }
 
 func init() {
@@ -161,9 +149,9 @@ func init() {
 	f.Bool("published", false, "Create the access profile already published (omit to leave it unset)")
 	f.Bool("visible-to-everyone", false, "Let every user see the access profile regardless of its access entitlements; while set, the API refuses to add new ones (\"catalog is visible to everyone, cannot add access entitlements\") (omit to leave it unset)")
 	f.Bool("request-bundle", false, "Allow requesting every entitlement in the profile at once; the API spec notes \"Your tenant must have the bundles feature to use this\" (omit to leave it unset)")
-	f.String("enrollment-behavior", "", "Enrollment request-policy behavior: bypass, enforce, unspecified, or a full REQUEST_CATALOG_ENROLLMENT_BEHAVIOR_* enum (omit to leave it unset)")
-	f.String("unenrollment-behavior", "", "Unenrollment behavior: leave-access-as-is, revoke-all, revoke-unjustified, unspecified, or a full REQUEST_CATALOG_UNENROLLMENT_BEHAVIOR_* enum (omit to leave it unset)")
-	f.String("unenrollment-entitlement-behavior", "", "Unenrollment entitlement revoke-policy behavior: bypass, enforce, unspecified, or a full REQUEST_CATALOG_UNENROLLMENT_ENTITLEMENT_BEHAVIOR_* enum (omit to leave it unset)")
+	f.String("enrollment-behavior", "", "Enrollment request-policy behavior: "+catalogEnrollmentFlag.usage()+" (omit to leave it unset)")
+	f.String("unenrollment-behavior", "", "Unenrollment behavior: "+catalogUnenrollmentFlag.usage()+" (omit to leave it unset)")
+	f.String("unenrollment-entitlement-behavior", "", "Unenrollment entitlement revoke-policy behavior: "+catalogUnenrollmentEntitlementFlag.usage()+" (omit to leave it unset)")
 	markRequired(accessProfilesCreateCmd, "display-name")
 	accessProfilesCmd.AddCommand(accessProfilesCreateCmd)
 }

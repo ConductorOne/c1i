@@ -3,7 +3,6 @@ package cmd
 import (
 	"encoding/json"
 	"fmt"
-	"strings"
 
 	"github.com/spf13/cobra"
 )
@@ -31,7 +30,10 @@ row's origin prints) to pick origins.`,
 
 		query, _ := cmd.Flags().GetString("query")
 		email, _ := cmd.Flags().GetString("email")
-		status, _ := cmd.Flags().GetString("status")
+		status, err := userStatusFlag.parse(mustGetString(cmd, "status"))
+		if err != nil {
+			return err
+		}
 		requestedPageSize := pageSizeFlag(cmd)
 		pageToken, _ := cmd.Flags().GetString("page-token")
 		manualPaging := cmd.Flags().Changed("page-token")
@@ -65,7 +67,7 @@ row's origin prints) to pick origins.`,
 				body["email"] = email
 			}
 			if status != "" {
-				body["userStatuses"] = []string{mapUserStatus(status)}
+				body["userStatuses"] = []string{status}
 			}
 			if len(origins) > 0 {
 				body["origins"] = origins
@@ -138,41 +140,31 @@ row's origin prints) to pick origins.`,
 func init() {
 	usersListCmd.Flags().String("query", "", "Fuzzy search on name or email")
 	usersListCmd.Flags().String("email", "", "Exact email match")
-	usersListCmd.Flags().String("status", "", "Filter by status: enabled, disabled, deleted")
-	addRepeatableStringFlag(usersListCmd, "origin", "Filter by origin: directory, local, system, all, or a USER_ORIGIN_* value (repeatable; default: the server's, directory only)")
+	usersListCmd.Flags().String("status", "", "Filter by status: "+userStatusFlag.usage())
+	addRepeatableStringFlag(usersListCmd, "origin", "Filter by origin: "+userOriginFlag.usage()+" (repeatable; default: the server's, directory only)")
 	addPaginationFlags(usersListCmd)
 	usersCmd.AddCommand(usersListCmd)
 }
 
-// mapUserStatus translates the user-friendly --status value to the
-// enum the search/users API accepts. The API enum values are bare
-// (ENABLED / DISABLED / DELETED), not prefixed. Input is case-insensitive
-// so `--status enabled` and `--status ENABLED` both work.
-func mapUserStatus(s string) string {
-	switch strings.ToLower(s) {
-	case "enabled":
-		return "ENABLED"
-	case "disabled":
-		return "DISABLED"
-	case "deleted":
-		return "DELETED"
-	default:
-		return s
-	}
-}
+// userStatusFlag: the search/users enum is bare (ENABLED, not
+// STATUS_ENABLED like app_users), so there is no prefix to pass a newer value
+// through on.
+var userStatusFlag = enumFlag{flag: "status", unknown: enumPassAny, values: []enumValue{
+	{name: "enabled", api: "ENABLED"},
+	{name: "disabled", api: "DISABLED"},
+	{name: "deleted", api: "DELETED"},
+}}
 
-// userOriginValues maps --origin values to the search API's enum, in the
-// order "all" expands to.
-var userOriginValues = []struct{ flag, api string }{
-	{"directory", "USER_ORIGIN_DIRECTORY"},
-	{"local", "USER_ORIGIN_LOCAL"},
-	{"system", "USER_ORIGIN_SYSTEM"},
-}
+// userOriginFlag lists origins in the order "all" expands to.
+var userOriginFlag = enumFlag{flag: "origin", prefix: "USER_ORIGIN_", unknown: enumPassPrefixed, keywords: []string{"all"}, values: []enumValue{
+	{name: "directory", api: "USER_ORIGIN_DIRECTORY"},
+	{name: "local", api: "USER_ORIGIN_LOCAL"},
+	{name: "system", api: "USER_ORIGIN_SYSTEM"},
+}}
 
-// userOrigins reads --origin (case-insensitive) into the API enum, deduped and
-// in a stable order; nil when unset, so the server's default applies. A
-// USER_ORIGIN_* name passes through as-is, so a row's origin value round-trips
-// and an enum value newer than c1i reaches the server.
+// userOrigins reads --origin into the API enum, deduped and in a stable
+// order; nil when unset, so the server's default applies. A USER_ORIGIN_*
+// name passes through, so a row's origin value round-trips.
 func userOrigins(cmd *cobra.Command) ([]string, error) {
 	values, err := repeatableStringFlag(cmd, "origin")
 	if err != nil || len(values) == 0 {
@@ -181,27 +173,23 @@ func userOrigins(cmd *cobra.Command) ([]string, error) {
 	want := map[string]bool{}
 	var extra []string
 	for _, raw := range values {
-		v := strings.ToLower(strings.TrimSpace(raw))
-		if strings.HasPrefix(v, "user_origin_") {
-			if api := strings.ToUpper(v); !want[api] {
-				want[api] = true
-				extra = append(extra, api)
+		api, err := userOriginFlag.parse(raw)
+		if err != nil {
+			return nil, err
+		}
+		if api == "all" {
+			for _, o := range userOriginFlag.values {
+				want[o.api] = true
 			}
 			continue
 		}
-		known := v == "all"
-		for _, o := range userOriginValues {
-			if v == "all" || v == o.flag {
-				want[o.api] = true
-				known = true
-			}
-		}
-		if !known {
-			return nil, &usageError{fmt.Errorf("invalid --origin %q: want directory, local, system, all, or a USER_ORIGIN_* value", raw)}
+		if !want[api] {
+			want[api] = true
+			extra = append(extra, api)
 		}
 	}
 	var out []string
-	for _, o := range userOriginValues {
+	for _, o := range userOriginFlag.values {
 		if want[o.api] {
 			out = append(out, o.api)
 			delete(want, o.api)

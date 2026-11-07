@@ -3,6 +3,7 @@ package cmd
 import (
 	"encoding/json"
 	"fmt"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -561,26 +562,55 @@ func repeatableStringFlag(cmd *cobra.Command, name string) ([]string, error) {
 	return values, nil
 }
 
-// grantDurationFlag reads a max-grant-duration flag. It accepts a protobuf
-// ("3600s") or Go ("8h") duration and returns it in seconds, the only form the
-// API parses; ok is false when the flag was not passed. Non-positive values
-// are refused because the server stores them without complaint.
-func grantDurationFlag(cmd *cobra.Command, name string) (string, bool, error) {
-	if !cmd.Flags().Changed(name) {
+// protoDurationAnnotation marks a flag registered by addProtoDurationFlag;
+// protoDurationFlag refuses to read any other, so a walk of the command tree
+// finds every such flag.
+const protoDurationAnnotation = "c1i_proto_duration"
+
+// addProtoDurationFlag registers a string flag the API parses as a
+// google.protobuf.Duration. Read it with protoDurationFlag.
+func addProtoDurationFlag(cmd *cobra.Command, name, usage string) {
+	cmd.Flags().String(name, "", usage)
+	_ = cmd.Flags().SetAnnotation(name, protoDurationAnnotation, []string{"true"})
+}
+
+// wholeDuration is Go's duration syntax restricted to unsigned whole-number
+// components without leading zeros, so ParseDuration is exact and never
+// negative.
+var wholeDuration = regexp.MustCompile(`^(0|((0|[1-9][0-9]*)(ns|us|µs|μs|ms|s|m|h))+)$`)
+
+// protoDurationFlag reads a flag registered by addProtoDurationFlag. It
+// accepts a whole-number Go ("8h", "1h30m") or protobuf ("3600s") duration and
+// returns it in seconds, the only form the API parses; set is false when the
+// flag was not passed. Zero is sent: range limits are the server's call.
+// A sign, a decimal or a leading zero is a usage error.
+func protoDurationFlag(cmd *cobra.Command, name string) (value string, set bool, err error) {
+	f := cmd.Flags().Lookup(name)
+	if f == nil || f.Annotations[protoDurationAnnotation] == nil {
+		return "", false, fmt.Errorf("--%s was not registered with addProtoDurationFlag", name)
+	}
+	if !f.Changed {
 		return "", false, nil
 	}
-	raw, _ := cmd.Flags().GetString(name)
-	d, err := time.ParseDuration(raw)
+	raw := f.Value.String()
+	trimmed := strings.TrimSpace(raw)
+	if !wholeDuration.MatchString(trimmed) {
+		return "", false, &usageError{fmt.Errorf("--%s must be a whole-number duration such as 8h or 1h30m (no sign, no decimals), got %q", name, raw)}
+	}
+	d, err := time.ParseDuration(trimmed)
 	if err != nil {
-		return "", false, &usageError{fmt.Errorf("--%s: %w", name, err)}
+		return "", false, &usageError{fmt.Errorf("invalid --%s %q: %w", name, raw, err)}
 	}
-	if d <= 0 {
-		return "", false, &usageError{fmt.Errorf("--%s must be positive, got %s", name, raw)}
-	}
+	return formatProtoDuration(d), true, nil
+}
+
+// formatProtoDuration renders d in protobuf JSON form: integer seconds plus
+// any nanosecond fraction, trailing zeros trimmed.
+func formatProtoDuration(d time.Duration) string {
 	// Integer arithmetic: float64 seconds drops nanoseconds on large values.
 	secs := strconv.FormatInt(int64(d/time.Second), 10)
 	if ns := int64(d % time.Second); ns != 0 {
 		secs += "." + strings.TrimRight(fmt.Sprintf("%09d", ns), "0")
 	}
-	return secs + "s", true, nil
+	return secs + "s"
 }

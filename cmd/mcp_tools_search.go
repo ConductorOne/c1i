@@ -16,11 +16,11 @@ var mcpToolsSearchCmd = &cobra.Command{
 			return err
 		}
 
-		states, err := repeatableStringFlag(cmd, "state")
+		states, err := parseRepeatableEnum(cmd, toolStateFlag)
 		if err != nil {
 			return err
 		}
-		classes, err := repeatableStringFlag(cmd, "classification")
+		classes, err := parseRepeatableEnum(cmd, toolClassificationFlag)
 		if err != nil {
 			return err
 		}
@@ -65,18 +65,10 @@ var mcpToolsSearchCmd = &cobra.Command{
 				body["query"] = query
 			}
 			if len(states) > 0 {
-				mapped := make([]string, 0, len(states))
-				for _, s := range states {
-					mapped = append(mapped, mapToolState(s))
-				}
-				body["stateFilter"] = mapped
+				body["stateFilter"] = states
 			}
 			if len(classes) > 0 {
-				mapped := make([]string, 0, len(classes))
-				for _, s := range classes {
-					mapped = append(mapped, mapToolClassification(s))
-				}
-				body["classificationFilter"] = mapped
+				body["classificationFilter"] = classes
 			}
 
 			path := client.Path("/api/v1/apps/%s/connectors/%s/mcp_tools/search", appID, connectorID)
@@ -134,8 +126,8 @@ func init() {
 	mcpToolsSearchCmd.Flags().String("app-id", "", "Application ID")
 	mcpToolsSearchCmd.Flags().String("connector-id", "", "Connector ID")
 	mcpToolsSearchCmd.Flags().String("query", "", "Fuzzy search on tool_name or display_name")
-	addRepeatableStringFlag(mcpToolsSearchCmd, "state", "Filter by state (repeatable): pending, approved, disabled, removed")
-	addRepeatableStringFlag(mcpToolsSearchCmd, "classification", "Filter by classification (repeatable): read, write, destructive, sensitive, dangerous")
+	addRepeatableStringFlag(mcpToolsSearchCmd, "state", "Filter by state (repeatable): "+toolStateFlag.usage())
+	addRepeatableStringFlag(mcpToolsSearchCmd, "classification", "Filter by classification (repeatable): "+toolClassificationFlag.usage())
 	addPaginationFlags(mcpToolsSearchCmd)
 	markRequired(mcpToolsSearchCmd, "app-id", "connector-id")
 	mcpToolsCmd.AddCommand(mcpToolsSearchCmd)

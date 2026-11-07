@@ -362,6 +362,36 @@ func TestTasksUpdateGrantDurationSendsDurationKey(t *testing.T) {
 	}
 }
 
+// TestTasksUpdateGrantDurationConvertsGoForm: the server 400s "1h", so a Go
+// duration is converted to seconds. Zero is the server's call; a negative or
+// decimal value never sends.
+func TestTasksUpdateGrantDurationConvertsGoForm(t *testing.T) {
+	cmd := findTasksSubcommand(t, "update-grant-duration")
+	for in, want := range map[string]string{"8h": "28800s", " 90m ": "5400s", "3600s": "3600s", "0s": "0s"} {
+		resetCmds(t, cmd)
+		_ = cmd.Flags().Set("duration", in)
+		r := newTaskActionRecorder(t, "TASK_STATE_OPEN", "zz-step-1111111111111111111")
+		if _, err := runTaskActionCmd(t, cmd, r.srv, actionTestTaskID); err != nil {
+			t.Fatalf("--duration %q: %v", in, err)
+		}
+		if got := r.bodies[0]["duration"]; got != want {
+			t.Errorf(`--duration %q: body["duration"] = %v, want %q`, in, got, want)
+		}
+	}
+	for _, in := range []string{"-1h", "1.5h", "7d"} {
+		resetCmds(t, cmd)
+		_ = cmd.Flags().Set("duration", in)
+		r := newTaskActionRecorder(t, "TASK_STATE_OPEN", "zz-step-1111111111111111111")
+		_, err := runTaskActionCmd(t, cmd, r.srv, actionTestTaskID)
+		if got := exitCode(err); got != exitUsage {
+			t.Errorf("--duration %q: exit = %d, want %d (err: %v)", in, got, exitUsage, err)
+		}
+		if len(r.paths) != 0 {
+			t.Errorf("--duration %q: a request was sent: %v", in, r.paths)
+		}
+	}
+}
+
 // TestTaskActionsDryRunStillResolvesTheURL: a bad --url must fail even under
 // --dry-run. The other dry-run tests pass a valid URL, so only this sees it.
 func TestTaskActionsDryRunStillResolvesTheURL(t *testing.T) {

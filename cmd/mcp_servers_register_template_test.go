@@ -57,7 +57,7 @@ func TestAuthArmTemplate(t *testing.T) {
 }
 
 // TestAuthArmTemplateOAuth2ModeEnum pins the fully-prefixed enum value, matching
-// the wire format the rest of the CLI uses (see mapTokenSharing et al.).
+// the wire format the rest of the CLI uses (see tokenSharingFlag et al.).
 func TestAuthArmTemplateOAuth2ModeEnum(t *testing.T) {
 	arm, err := authArmTemplate("oauth2")
 	if err != nil {

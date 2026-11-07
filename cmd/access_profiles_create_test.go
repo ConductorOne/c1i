@@ -26,7 +26,10 @@ func TestBuildCatalogCreateBodyMinimal(t *testing.T) {
 	cmd := newCatalogCreateFlagCmd()
 	_ = cmd.Flags().Set("display-name", "Engineering")
 
-	got := buildAccessProfileCreateBody(cmd)
+	got, err := buildAccessProfileCreateBody(cmd)
+	if err != nil {
+		t.Fatalf("buildAccessProfileCreateBody: %v", err)
+	}
 	want := map[string]any{"displayName": "Engineering"}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("body = %v, want %v", got, want)
@@ -49,7 +52,10 @@ func TestBuildCatalogCreateBodyFull(t *testing.T) {
 		}
 	}
 
-	got := buildAccessProfileCreateBody(cmd)
+	got, err := buildAccessProfileCreateBody(cmd)
+	if err != nil {
+		t.Fatalf("buildAccessProfileCreateBody: %v", err)
+	}
 	want := map[string]any{
 		"displayName":       "Engineering",
 		"description":       "eng access",
@@ -73,7 +79,10 @@ func TestBuildCatalogCreateBodySendsExplicitFalse(t *testing.T) {
 		t.Fatalf("set --published: %v", err)
 	}
 
-	got := buildAccessProfileCreateBody(cmd)
+	got, err := buildAccessProfileCreateBody(cmd)
+	if err != nil {
+		t.Fatalf("buildAccessProfileCreateBody: %v", err)
+	}
 	want := map[string]any{"displayName": "Engineering", "published": false}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("body = %v, want %v", got, want)
@@ -89,7 +98,10 @@ func TestBuildCatalogCreateBodyExplicitEmptyDescription(t *testing.T) {
 	_ = cmd.Flags().Set("display-name", "Engineering")
 	_ = cmd.Flags().Set("description", "")
 
-	got := buildAccessProfileCreateBody(cmd)
+	got, err := buildAccessProfileCreateBody(cmd)
+	if err != nil {
+		t.Fatalf("buildAccessProfileCreateBody: %v", err)
+	}
 	want := map[string]any{"displayName": "Engineering", "description": ""}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("body = %v, want %v", got, want)

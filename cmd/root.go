@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
 	"unicode/utf8"
 
 	"github.com/ConductorOne/c1i/internal/client"
@@ -109,13 +108,17 @@ func validateFlagsUTF8(cmd *cobra.Command) error {
 }
 
 func validateErrorFormat(f string) error {
-	switch strings.ToLower(f) {
-	case "", "text", "json":
+	if f == "" {
 		return nil
-	default:
-		return &usageError{fmt.Errorf("invalid --error-format %q: must be \"text\" or \"json\"", f)}
 	}
+	_, err := errorFormatFlag.parse(f)
+	return err
 }
+
+var errorFormatFlag = enumFlag{flag: "error-format", unknown: enumReject, values: []enumValue{
+	{name: "text", api: "text"},
+	{name: "json", api: "json"},
+}}
 
 func init() {
 	cobra.OnInitialize(initConfig)
@@ -135,7 +138,7 @@ func init() {
 	_ = viper.BindPFlag("max_retries", rootCmd.PersistentFlags().Lookup("max-retries"))
 	_ = viper.BindEnv("max_retries", "C1I_MAX_RETRIES")
 
-	rootCmd.PersistentFlags().String("error-format", "text", "Error output format: text or json")
+	rootCmd.PersistentFlags().String("error-format", "text", "Error output format: "+errorFormatFlag.usage())
 	_ = viper.BindPFlag("error_format", rootCmd.PersistentFlags().Lookup("error-format"))
 	_ = viper.BindEnv("error_format", "C1I_ERROR_FORMAT")
 
