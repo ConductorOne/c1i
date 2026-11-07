@@ -1,7 +1,7 @@
 package cmd
 
 import (
-	"fmt"
+	"net/http"
 
 	"github.com/spf13/cobra"
 )
@@ -25,11 +25,12 @@ each id exists and has the flag's type (exit 2 otherwise, nothing sent);
 --dry-run skips the check. An empty policy id is a usage error.
 --identity-matching takes the same values as on "apps update".
 
-The created app is returned as pretty JSON under an "app" key (--fields is not
-applied to mutation output, so parse the id from the full object).
+Prints the created app as pretty JSON, unwrapped like "apps get": the id is
+.id. --fields is a usage error on a mutation; extract with jq -er, which fails
+on a --dry-run preview instead of printing null.
 
 Example:
-  APP_ID=$(c1i apps create --display-name "Google Workspace" | jq -r .app.id)
+  APP_ID=$(c1i apps create --display-name "Google Workspace" | jq -er .id)
   c1i mcp servers register --app-id "$APP_ID" --type hosted ...`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		if _, err := requireNonEmptyIfSet(cmd, "display-name"); err != nil {
@@ -43,29 +44,8 @@ Example:
 		if err != nil {
 			return &usageError{err}
 		}
-
-		baseURL, err := GetBaseURL()
-		if err != nil {
-			return err
-		}
-
-		if dryRunActive() {
-			return printDryRun(cmd, "POST", "/api/v1/apps", body)
-		}
-
-		c, err := newClient(cmd, baseURL)
-		if err != nil {
-			return fmt.Errorf("authentication failed: %w", err)
-		}
-		if err := validatePolicyBindings(cmd.Context(), cmd, c, appPolicyKinds); err != nil {
-			return err
-		}
-		data, err := c.Post(cmd.Context(), "/api/v1/apps", body)
-		if err != nil {
-			return fmt.Errorf("API error: %w", err)
-		}
-
-		return writeRawObject(cmd, data)
+		return sendMutation(cmd, mutation{Method: http.MethodPost, Path: "/api/v1/apps", Body: body},
+			withPreRead(policyBindingsCheck(cmd, appPolicyKinds)))
 	},
 }
 
@@ -98,5 +78,6 @@ func init() {
 	registerPolicyIDFlags(appsCreateCmd, appPolicyKinds, " (omit for the server's default)")
 	appsCreateCmd.Flags().String("identity-matching", "", "How app users are matched to C1.ai users: "+identityMatchingFlag.usage())
 	markRequired(appsCreateCmd, "display-name")
+	markMutating(appsCreateCmd)
 	appsCmd.AddCommand(appsCreateCmd)
 }

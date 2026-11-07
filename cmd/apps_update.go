@@ -3,6 +3,7 @@ package cmd
 import (
 	"encoding/json"
 	"fmt"
+	"net/http"
 	"strings"
 
 	"github.com/ConductorOne/c1i/internal/client"
@@ -12,7 +13,8 @@ import (
 var appsUpdateCmd = &cobra.Command{
 	Use:   "update <app-id>",
 	Short: "Update an app's name, description, policies, or identity matching (pretty JSON)",
-	Long: `Update writable app fields.
+	Long: `Update writable app fields. Prints the updated app, unwrapped like
+"apps get" (the id is .id).
 
 The API requires {"app": {"id": "...", ...}, "updateMask": "..."}. The update
 mask is derived exactly from the flags you pass: an omitted flag is left
@@ -54,30 +56,8 @@ offers no way to remove a mapper.`,
 		if err != nil {
 			return &usageError{err}
 		}
-
-		baseURL, err := GetBaseURL()
-		if err != nil {
-			return err
-		}
-
-		path := client.Path("/api/v1/apps/%s", args[0])
-		if dryRunActive() {
-			return printDryRun(cmd, "POST", path, body)
-		}
-
-		c, err := newClient(cmd, baseURL)
-		if err != nil {
-			return fmt.Errorf("authentication failed: %w", err)
-		}
-		if err := validatePolicyBindings(cmd.Context(), cmd, c, appPolicyKinds); err != nil {
-			return err
-		}
-		data, err := c.Post(cmd.Context(), path, body)
-		if err != nil {
-			return fmt.Errorf("API error: %w", err)
-		}
-
-		return writeRawObject(cmd, data)
+		return sendMutation(cmd, mutation{Method: http.MethodPost, Path: client.Path("/api/v1/apps/%s", args[0]), Body: body},
+			withPreRead(policyBindingsCheck(cmd, appPolicyKinds)))
 	},
 }
 
@@ -177,6 +157,7 @@ func init() {
 	f.String("description", "", "New description; pass an empty value to clear it (omit to leave unchanged)")
 	registerPolicyIDFlags(appsUpdateCmd, appPolicyKinds, " (omit to leave unchanged)")
 	registerUnbindPolicyFlag(appsUpdateCmd, appPolicyKinds)
+	markMutating(appsUpdateCmd)
 	f.String("identity-matching", "", "How app users are matched to C1.ai users: "+identityMatchingFlag.usage()+" (omit to leave unchanged)")
 	f.String("app-user-mapper-file", "", `JSON object {"mappingCases":[{"userKeyCel":...,"appUserKeyCel":...}]} that replaces the whole app user mapper (file, or "-" for stdin)`)
 	appsCmd.AddCommand(appsUpdateCmd)

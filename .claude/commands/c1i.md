@@ -92,7 +92,8 @@ the gateway, `mcpgateway.TransportError` (unreachable) and
 `mcpgateway.PaginationError` (a `tools/list` cursor that never ends); plus package-`cmd`
 wrappers `usageError`, `toolExecutionError`, `nonJSONResponseError`,
 `stuckPaginationCursorError` (a list's cursor stopped
-advancing), `upstreamError`, and `helperLeftError`.
+advancing), `upstreamError`, `helperLeftError`, and `mutationError` (a
+mutation's error, carrying `applied`).
 
 ## Documentation
 

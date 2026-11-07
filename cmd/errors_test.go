@@ -166,7 +166,7 @@ func TestExitCodeConstantsArePinned(t *testing.T) {
 
 func TestWriteErrorText(t *testing.T) {
 	var buf bytes.Buffer
-	writeError(&buf, errors.New("boom"), "text")
+	writeError(&buf, errors.New("boom"), "text", nil)
 	if got := buf.String(); got != "Error: boom\n" {
 		t.Errorf("text error = %q", got)
 	}
@@ -175,7 +175,7 @@ func TestWriteErrorText(t *testing.T) {
 func TestWriteErrorFormatCaseInsensitive(t *testing.T) {
 	for _, f := range []string{"json", "JSON", "Json"} {
 		var buf bytes.Buffer
-		writeError(&buf, errors.New("boom"), f)
+		writeError(&buf, errors.New("boom"), f, nil)
 		var got map[string]any
 		if err := json.Unmarshal(buf.Bytes(), &got); err != nil {
 			t.Errorf("format %q did not produce JSON: %s", f, buf.String())
@@ -186,7 +186,7 @@ func TestWriteErrorFormatCaseInsensitive(t *testing.T) {
 func TestWriteErrorJSON(t *testing.T) {
 	var buf bytes.Buffer
 	apiErr := &client.APIError{Method: "GET", Path: "/api/v1/x", StatusCode: 404, Body: `{"message":"not found"}`}
-	writeError(&buf, fmt.Errorf("API error: %w", apiErr), "json")
+	writeError(&buf, fmt.Errorf("API error: %w", apiErr), "json", nil)
 
 	var got map[string]any
 	if err := json.Unmarshal(buf.Bytes(), &got); err != nil {
@@ -225,7 +225,7 @@ func TestWriteErrorTextPathErrorDropsInheritedPrefix(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			var buf bytes.Buffer
-			writeError(&buf, tc.err, "text")
+			writeError(&buf, tc.err, "text", nil)
 			got := buf.String()
 			if strings.Contains(got, "API error:") {
 				t.Errorf("message still carries the false API error: claim: %q", got)
@@ -244,7 +244,7 @@ func TestWriteErrorTextPathErrorDropsInheritedPrefix(t *testing.T) {
 func TestWriteErrorTextRedirectErrorDropsInheritedPrefix(t *testing.T) {
 	var buf bytes.Buffer
 	redirErr := &client.RedirectError{Method: "GET", URL: "https://x/api/v1/users/%2F", StatusCode: 301, Location: "/api/v1/users/"}
-	writeError(&buf, fmt.Errorf("API error: %w", redirErr), "text")
+	writeError(&buf, fmt.Errorf("API error: %w", redirErr), "text", nil)
 	got := buf.String()
 	if strings.Contains(got, "API error:") {
 		t.Errorf("message still carries the false API error: claim: %q", got)
@@ -261,7 +261,7 @@ func TestWriteErrorTextRedirectErrorDropsInheritedPrefix(t *testing.T) {
 func TestWriteErrorTextRedirectLoopErrorDropsInheritedPrefix(t *testing.T) {
 	var buf bytes.Buffer
 	loopErr := &client.RedirectLoopError{Method: "GET", URL: "https://x/api/v1/users/abc", Hops: 5}
-	writeError(&buf, fmt.Errorf("API error: %w", loopErr), "text")
+	writeError(&buf, fmt.Errorf("API error: %w", loopErr), "text", nil)
 	got := buf.String()
 	if strings.Contains(got, "API error:") {
 		t.Errorf("message still carries the false API error: claim: %q", got)
@@ -278,7 +278,7 @@ func TestWriteErrorTextRedirectLoopErrorDropsInheritedPrefix(t *testing.T) {
 func TestWriteErrorTextAPIErrorKeepsPrefix(t *testing.T) {
 	var buf bytes.Buffer
 	apiErr := &client.APIError{Method: "GET", Path: "/api/v1/x", StatusCode: 404, Body: `{"message":"not found"}`}
-	writeError(&buf, fmt.Errorf("API error: %w", apiErr), "text")
+	writeError(&buf, fmt.Errorf("API error: %w", apiErr), "text", nil)
 	got := buf.String()
 	if !strings.Contains(got, "API error:") {
 		t.Errorf("wrapped API error lost its inherited prefix: %q", got)
@@ -295,7 +295,7 @@ func TestWriteErrorTextAPIErrorKeepsPrefix(t *testing.T) {
 func TestWriteErrorJSONAPIErrorKeepsPrefix(t *testing.T) {
 	var buf bytes.Buffer
 	apiErr := &client.APIError{Method: "GET", Path: "/api/v1/x", StatusCode: 404, Body: `{"message":"not found"}`}
-	writeError(&buf, fmt.Errorf("API error: %w", apiErr), "json")
+	writeError(&buf, fmt.Errorf("API error: %w", apiErr), "json", nil)
 
 	var got map[string]any
 	if err := json.Unmarshal(buf.Bytes(), &got); err != nil {
@@ -312,7 +312,7 @@ func TestWriteErrorJSONAPIErrorKeepsPrefix(t *testing.T) {
 func TestWriteErrorTextAuthErrorKeepsPrefix(t *testing.T) {
 	var buf bytes.Buffer
 	authErr := &client.AuthError{Err: errors.New("no creds")}
-	writeError(&buf, fmt.Errorf("authentication failed: %w", authErr), "text")
+	writeError(&buf, fmt.Errorf("authentication failed: %w", authErr), "text", nil)
 	got := buf.String()
 	if !strings.Contains(got, "authentication failed:") {
 		t.Errorf("wrapped auth error lost its inherited prefix: %q", got)
@@ -324,7 +324,7 @@ func TestWriteErrorTextAuthErrorKeepsPrefix(t *testing.T) {
 func TestWriteErrorJSONAuthErrorKeepsPrefix(t *testing.T) {
 	var buf bytes.Buffer
 	authErr := &client.AuthError{Err: errors.New("no creds")}
-	writeError(&buf, fmt.Errorf("authentication failed: %w", authErr), "json")
+	writeError(&buf, fmt.Errorf("authentication failed: %w", authErr), "json", nil)
 
 	var got map[string]any
 	if err := json.Unmarshal(buf.Bytes(), &got); err != nil {
@@ -338,7 +338,7 @@ func TestWriteErrorJSONAuthErrorKeepsPrefix(t *testing.T) {
 
 func TestWriteErrorJSONNonJSONBody(t *testing.T) {
 	var buf bytes.Buffer
-	writeError(&buf, &client.APIError{Method: "GET", Path: "/x", StatusCode: 500, Body: "upstream exploded"}, "json")
+	writeError(&buf, &client.APIError{Method: "GET", Path: "/x", StatusCode: 500, Body: "upstream exploded"}, "json", nil)
 	var got map[string]any
 	if err := json.Unmarshal(buf.Bytes(), &got); err != nil {
 		t.Fatalf("not JSON: %v", err)

@@ -1,7 +1,7 @@
 package cmd
 
 import (
-	"fmt"
+	"net/http"
 
 	"github.com/ConductorOne/c1i/internal/client"
 	"github.com/spf13/cobra"
@@ -32,39 +32,22 @@ Honors --dry-run.`,
 			return err
 		}
 
-		baseURL, err := GetBaseURL()
-		if err != nil {
-			return err
-		}
-
 		appID, _ := cmd.Flags().GetString("app-id")
-		userID := args[0]
-
-		path := client.Path("/api/v1/apps/%s/owners/%s", appID, userID)
 		// Everything the endpoint needs is in the path, but it still parses
-		// the body as a protobuf message: a nil body marshals to `null` and
-		// earns a 400 ("unexpected token null"), verified live. Send `{}`.
-		body := addOwnerEmptyBody()
-		if dryRunActive() {
-			return printDryRun(cmd, "POST", path, body)
-		}
-
-		c, err := newClient(cmd, baseURL)
-		if err != nil {
-			return fmt.Errorf("authentication failed: %w", err)
-		}
-		data, err := c.Post(cmd.Context(), path, body)
-		if err != nil {
-			return fmt.Errorf("API error: %w", err)
-		}
-
-		return writeRawObject(cmd, data)
+		// the body as a protobuf message: a `null` body earns a 400
+		// ("unexpected token null"), verified live. Send `{}`.
+		return sendMutation(cmd, mutation{
+			Method: http.MethodPost,
+			Path:   client.Path("/api/v1/apps/%s/owners/%s", appID, args[0]),
+			Body:   addOwnerEmptyBody(),
+		})
 	},
 }
 
 func init() {
 	appsAddOwnerCmd.Flags().String("app-id", "", "Application ID to add the owner to")
 	markRequired(appsAddOwnerCmd, "app-id")
+	markMutating(appsAddOwnerCmd)
 	appsCmd.AddCommand(appsAddOwnerCmd)
 }
 

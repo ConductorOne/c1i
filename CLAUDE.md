@@ -203,9 +203,14 @@ tracked root file outside its allowlist. Stage explicit paths rather than `-A`.
   and `TestRepeatableStringFlagsGoThroughSharedRegistrar` fail on a
   hand-registration.
 - **Output:** list rows go through the `newEmitter(...)`/`.Encode` emitter;
-  single-object reads through `writeObject`; **mutation confirmations**
-  (create/update/delete) through `writeRawObject` (never projected, so a
-  session-wide `C1I_FIELDS` can't blank a success message). A `--fields` that matches
+  single-object reads through `writeObject`; **mutations** through
+  `sendMutation`/`sendMutationBatch`/`sendMutationSequence` (`cmd/mutation.go`),
+  which own the send, pre-send reads, `--wait`, the `--dry-run` preview, and the
+  output: the response unwrapped like the family's read, never projected (an
+  explicit `--fields` is exit 2). Call `markMutating` in the command's `init`.
+  `TestMutationsWriteOnlyThroughHelper` enforces this. Every stderr line goes
+  through `cmd/stderr.go` (`notice`, `progress`) or `cmd/errors.go`, so
+  `--error-format json` makes stderr NDJSON. A `--fields` that matches
   no key anywhere in the result is a usage error (exit 2), enforced in two
   separate places: the list path counts matches across rows via rootCmd's
   `PersistentPreRunE`/`PersistentPostRunE`, and `writeObject` checks the
@@ -235,8 +240,8 @@ tracked root file outside its allowlist. Stage explicit paths rather than `-A`.
   `usageError`, `toolExecutionError`, `nonJSONResponseError`,
   `stuckPaginationCursorError` (a list's cursor stopped advancing),
   and `upstreamError` wrappers, for failures with no natural
-  client-level type, and `helperLeftError` (a login's undeleted temporary
-  credential, always 1) — to exit codes:
+  client-level type, `helperLeftError` (a login's leftover credential, always
+  1), and `mutationError` (`applied`, from `AttemptError`) — to exit codes:
 
   | Code | Meaning |
   |------|---------|

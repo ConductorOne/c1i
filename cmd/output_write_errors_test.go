@@ -29,6 +29,21 @@ type failingWriter struct{}
 
 func (failingWriter) Write([]byte) (int, error) { return 0, errStdoutFull }
 
+// assertMutationWriteFailure is assertOutputWriteFailure for a mutation,
+// whose write failure happens after the change was applied.
+func assertMutationWriteFailure(t *testing.T, err error, request string) {
+	t.Helper()
+	if err == nil {
+		t.Fatal("RunE returned nil although every write to stdout failed")
+	}
+	if !errors.Is(err, errStdoutFull) || exitCode(err) != exitError {
+		t.Errorf("error %v (exit %d) does not wrap the write error with exit 1", err, exitCode(err))
+	}
+	if want := request + " succeeded but writing its response failed: "; !strings.HasPrefix(err.Error(), want) {
+		t.Errorf("error %q, want prefix %q", err, want)
+	}
+}
+
 func assertOutputWriteFailure(t *testing.T, err error) {
 	t.Helper()
 	if err == nil {
@@ -118,10 +133,11 @@ func TestTextOutputFailsOnOutputWriteError(t *testing.T) {
 		args     []string
 		reset    []*cobra.Command
 		requests int32
+		mutation string // the applied request a failed write reports
 	}{
 		{name: "version", args: []string{"version"}},
 		{name: "docs guide list", args: []string{"docs", "guide"}},
-		{name: "apps delete", args: []string{"apps", "delete", "app-x"}, reset: []*cobra.Command{appsDeleteCmd}, requests: 1},
+		{name: "apps delete", args: []string{"apps", "delete", "app-x"}, reset: []*cobra.Command{appsDeleteCmd}, requests: 1, mutation: "DELETE /api/v1/apps/app-x"},
 		{name: "automations delete", args: []string{"automations", "delete", "auto-x"}, reset: []*cobra.Command{automationsDeleteCmd}, requests: 1},
 		{
 			name:     "mcp tools delete",
@@ -170,7 +186,11 @@ func TestTextOutputFailsOnOutputWriteError(t *testing.T) {
 			t.Cleanup(func() { leaf.SetOut(nil) })
 			rootCmd.SetArgs(tc.args)
 			err := rootCmd.ExecuteContext(context.Background())
-			assertOutputWriteFailure(t, err)
+			if tc.mutation != "" {
+				assertMutationWriteFailure(t, err, tc.mutation)
+			} else {
+				assertOutputWriteFailure(t, err)
+			}
 			if got := requests.Load(); got != tc.requests {
 				t.Errorf("server received %d requests, want %d", got, tc.requests)
 			}
@@ -329,8 +349,10 @@ var stdoutPromptExempt = map[string]bool{
 var writerParamExempt = map[string]string{
 	"errors.go:writeError":             "the final error, written to stderr with nowhere left to report a failure; trusts its one caller to pass os.Stderr",
 	"functions_source.go:hardenOutDir": "a permissions notice on stderr; trusts its one caller to pass cmd.ErrOrStderr()",
+	"stderr.go:noticeTo":               "a stderr notice; its callers pass stderr (TestStderrWritesOnlyThroughHelpers)",
+	"stderr.go:progress":               "a --wait progress line; runWait passes stderr",
+	"stderr.go:writeJSONLine":          "one JSON-mode stderr line; only stderr.go and errors.go call it",
 	"upgrade.go:upgradeProgress":       "progress on stdout; trusts every caller to follow it with a checked result write",
-	"wait.go:waitProgress":             "progress while polling; trusts its one caller, runWait, to check the stdout success line that follows",
 }
 
 // TestNoDiscardedOutputWriteErrors fails on any `_ = x.Encode(...)`,

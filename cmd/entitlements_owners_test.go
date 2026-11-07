@@ -227,7 +227,7 @@ func TestEntitlementOwnerWritesDryRun(t *testing.T) {
 		{"remove-owner", entitlementsRemoveOwnerCmd, map[string][]string{"app-id": {"app1"}, "entitlement-id": {"ent1"}}, []string{"u1"},
 			[]string{"[dry-run] DELETE /api/v1/apps/app1/entitlements/ent1/owners/u1\n"}, "{"},
 		{"set-owners", entitlementsSetOwnersCmd, map[string][]string{"app-id": {"app1"}, "user-id": {"u1"}, "wait": {"true"}, "wait-timeout": {"2s"}}, []string{"ent1"},
-			[]string{"[dry-run] PUT /api/v1/apps/app1/entitlements/ent1/owners\n", `"userIds": [`}, ""},
+			[]string{`"method": "PUT",`, `"url": "https://example.invalid/api/v1/apps/app1/entitlements/ent1/owners",`, `"userIds": [`}, ""},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

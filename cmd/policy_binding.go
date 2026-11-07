@@ -118,6 +118,14 @@ func applyPolicyUpdates(cmd *cobra.Command, kinds []policyKind, obj map[string]a
 	return paths, nil
 }
 
+// policyBindingsCheck is validatePolicyBindings as a mutation's pre-send read;
+// a dry run skips it.
+func policyBindingsCheck(cmd *cobra.Command, kinds []policyKind) preRead {
+	return preRead{Run: func(ctx context.Context, c *client.Client, _ *mutation) ([]resolvedID, error) {
+		return nil, validatePolicyBindings(ctx, cmd, c, kinds)
+	}}
+}
+
 // validatePolicyBindings checks that every policy id being bound names an
 // existing, undeleted policy of the slot's type. Each distinct id is fetched
 // once; an unbind is never looked up. Non-404 failures keep their own class.

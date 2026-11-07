@@ -213,7 +213,7 @@ func TestAppsUpdateDryRunSendsNothing(t *testing.T) {
 	if err := appsUpdateCmd.RunE(appsUpdateCmd, []string{"app-1"}); err != nil {
 		t.Fatalf("RunE: %v", err)
 	}
-	if !strings.Contains(out.String(), "[dry-run] POST /api/v1/apps/app-1") || !strings.Contains(out.String(), `"updateMask": "grantPolicyId"`) {
+	if !strings.Contains(out.String(), `"url": "https://example.invalid/api/v1/apps/app-1"`) || !strings.Contains(out.String(), `"updateMask": "grantPolicyId"`) {
 		t.Errorf("dry-run output = %q", out.String())
 	}
 }

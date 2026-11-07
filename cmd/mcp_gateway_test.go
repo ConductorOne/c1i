@@ -221,7 +221,7 @@ func TestGatewayJSONRPCErrorExitCodes(t *testing.T) {
 			}
 
 			var buf bytes.Buffer
-			writeError(&buf, wrapped, "json")
+			writeError(&buf, wrapped, "json", nil)
 			var jsonOut map[string]any
 			if err := json.Unmarshal(buf.Bytes(), &jsonOut); err != nil {
 				t.Fatalf("code %d: --error-format json output not valid JSON: %v (%s)", tc.code, err, buf.String())
