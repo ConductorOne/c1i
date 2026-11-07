@@ -138,7 +138,7 @@ owner added between your read and your write is silently removed.
 ### Accounts
 
 ```sh
-c1i accounts list --app-id <id> [--status enabled|disabled|deleted] [--type user|service_account|system_account] [--unmapped-only] [--query <text>] [--page-size N] [--page-token TOKEN] [--limit N]
+c1i accounts list --app-id <id> [--status enabled|disabled|deleted] [--type user|service-account|system-account] [--unmapped-only] [--query <text>] [--page-size N] [--page-token TOKEN] [--limit N]
 
 c1i accounts set-owner <app-user-id> --app-id <id> --user-id <id>
 ```
@@ -198,9 +198,11 @@ call even when one is already stored (the server's `emergency grant policy id
 must be set if emergency grant is enabled`), so it is refused at exit `2`
 without one, or alongside `--unbind-policy emergency-grant`. Unbinding the
 emergency policy while emergency grants stay enabled is accepted by the server.
-`--duration-grant` takes a Go duration (`8h`, `3600s`) and is sent in seconds;
-it must be positive. `--duration-unset` removes the limit, and the two are
-mutually exclusive. A blank `--display-name` is refused:
+`--duration-grant` takes a whole-number Go duration (`8h`, `1h30m`, `3600s`;
+no sign, no decimals) and is sent in seconds; `-1h` or `1.5h` exits `2`, and
+`0s` is sent and was stored by the server without complaint. `--duration-unset`
+removes the limit, and the two are mutually exclusive. A blank `--display-name`
+is refused:
 the server would accept "" and restore the entitlement's original name.
 `entitlements create` checks its policy flags the same way before its first
 `POST`, so a bad policy creates nothing.
@@ -227,8 +229,8 @@ Reusing a resource with `--resource-id` likewise means you drop
 `--resource-display-name`. `--owner-id` is repeatable and goes inline in the
 create request, so no follow-up call is needed; an empty one is a usage error
 rather than an owner quietly dropped. `--duration-grant` takes a protobuf
-(`3600s`) or Go (`8h`) duration, sent in seconds, and must be positive; an
-empty one is a usage error. Omit it for standing access.
+(`3600s`) or Go (`8h`) whole-number duration (no sign, no decimals), sent in
+seconds; anything else, or an empty one, is a usage error. Omit it for standing access.
 
 `--dry-run` previews all three requests, printing
 `NEW_APP_RESOURCE_TYPE_ID`/`NEW_APP_RESOURCE_ID` where an id only exists after
@@ -350,9 +352,10 @@ with `action not permitted`. Read the task's own list with
 `restart` re-runs the current approval step; `reset` restarts the whole policy.
 Neither reopens a closed task. `process` changes nothing observable on a
 healthy task — it is intended for one that has stalled, which was not
-reproduced here. `update-grant-duration` takes a
-protobuf duration (`3600s`, not `1h`) and only applies before the task reaches
-provisioning, after which the server answers `cannot update grant duration for
+reproduced here. `update-grant-duration` takes a whole-number Go (`1h`) or
+protobuf (`3600s`) duration (no sign, no decimals), sent in seconds; `-1h` or
+`1.5h` exits `2`, and `0s` is sent and was stored by the server without
+complaint. It only applies before the task reaches provisioning, after which the server answers `cannot update grant duration for
 a ticket in a provision step`; the value lands as `grantDuration`.
 
 `escalate`, `update-request-data` and `approve-with-step-up` are not wrapped;
@@ -605,9 +608,10 @@ c1i requests get <request-id>
 ```
 
 On `create`, `--user-id` defaults to the authenticated user when omitted.
-`requests create grant --duration` takes a protobuf duration in seconds
-(`86400s`), like `tasks update-grant-duration --duration`. A Go-style `24h` or
-`7d` is refused by the server with `invalid google.protobuf.Duration value "24h"`.
+`requests create grant --duration` takes a whole-number Go (`24h`) or protobuf
+(`86400s`) duration, like `tasks update-grant-duration --duration`, and sends
+it in seconds. No sign, no decimals: `-1h`, `1.5h` or `7d` exits `2`. `0s` is
+sent, and the server refuses it with `value must be greater than 0s`.
 
 `requests list` is the requester lens on access requests (the grant/revoke tasks
 you file): by default it shows requests you opened or are the subject of —
@@ -865,9 +869,11 @@ on a revoked credential still return the record, exit 0, with no field marking
 it (the principal's embedded `user.status` stays `ENABLED`). Only the lists
 omit them; `users get <sp-id>` shows `"status": "DELETED"` and `deletedAt`.
 
-`--expires` takes a positive Go duration (e.g. `720h`). The server accepts the
-range `(0s, 4320h]` — up to 180 days — rejecting more with `value must be inside
-range (0s, 4320h0m0s]`. Fractional seconds are preserved.
+`--expires` takes a whole-number Go (`720h`) or protobuf (`2592000s`)
+duration (no sign, no decimals), sent in seconds; anything else, or an empty
+one, exits `2`. The
+server accepts the range `(0s, 4320h]` — up to 180 days — rejecting `0s` or
+more with `value must be inside range (0s, 4320h0m0s]`.
 
 `--scoped-role` and `--allow-cidr` are repeatable and restrict the credential to
 those role ids / source CIDRs. Repeat either flag for multiple values. An empty
@@ -918,13 +924,15 @@ is a `400`, `invalid url: restricted destination` (exit `2`).
 A blank `--display-name` exits `2` on create and update, as described under
 [Display names](#display-names); the server would store one on update.
 
-`--callback-timeout` takes a Go duration from `0` to `720h`. A negative one
-exits `2` before a request is sent; over `720h`, update returns
-`callback_timeout must be between 0 and 30 days`. `update` sends only the flags
-you pass and masks exactly those, and with no field flag it exits `2`; an empty
-`--description` clears it. Updating a soft-deleted webhook exits `0` and changes it, and it
-stays deleted. A webhook has no signing secret, so create returns nothing that
-can't be read again with `get`.
+`--callback-timeout` takes a whole-number Go (`10m`) or protobuf (`600s`)
+duration (no sign, no decimals) from `0` to `720h`, sent in seconds; `-1m` or
+`1.5m` exits `2` before a request is sent; over `720h`, update returns `callback_timeout
+must be between 0 and 30 days`.
+`update` sends only the flags you pass and masks exactly those, and with no
+field flag it exits `2`; an empty `--description` clears it. Updating a
+soft-deleted webhook exits `0` and changes it, and it stays deleted. A webhook
+has no signing secret, so create returns nothing that can't be read again with
+`get`.
 
 `webhooks list` pages are larger than `--page-size`: the server raises a size
 below 5 to 5 and returns one row more than that, so use `--limit` for an exact
@@ -1061,6 +1069,23 @@ sets `region` to `us1,env=prod` and the server may accept it.
 An empty occurrence is a usage error (exit 2), rejected before any request, so
 an unset shell variable cannot silently shorten a list or remove a credential
 restriction. Contrast `--fields`, which *is* comma-separated.
+
+### Enum flags
+
+Every flag that takes a named value (`--state`, `--status`, `--type`,
+`--policy-type`, `--sort`, `--auth`, `--unbind-policy`, `--error-format`,
+`--method`, ...) parses it the same way: ASCII case and surrounding
+whitespace are ignored, `-` and `_` are the same, and the full API name is
+accepted in any case (`--state pending-review`, `--state
+mcp_tool_state_approved`). Its `--help` lists the short names. An unknown or
+non-ASCII value is a usage error (exit 2), rejected before any request.
+
+Where `--help` says "or any `PREFIX_*` value", a value carrying that prefix
+is sent upper-cased with `-` changed to `_`, so an enum newer than c1i still
+works. Two flags whose API enums have no prefix, `users list --status` and
+`entitlements create --resource-type`, send any ASCII value that way. The
+only values rewritten to a different enum are these listed aliases:
+`MCP_TOOL_STATE_PENDING` is sent as `MCP_TOOL_STATE_PENDING_REVIEW`, and `REQUEST_CATALOG_ENROLLMENT_BEHAVIOR_BYPASS`/`_ENFORCE` as their `..._ENTITLEMENT_REQUEST_POLICY` names. No other prefixed value is ever remapped.
 
 ### Display names
 

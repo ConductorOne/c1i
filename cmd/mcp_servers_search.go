@@ -39,7 +39,10 @@ TSDB read each) so you can spot idle servers.`,
 
 		appID, _ := cmd.Flags().GetString("app-id")
 		query, _ := cmd.Flags().GetString("query")
-		toolState, _ := cmd.Flags().GetString("tool-state")
+		toolState, err := toolStateFlag.as("tool-state").parse(mustGetString(cmd, "tool-state"))
+		if err != nil {
+			return err
+		}
 		includeLastCalled, _ := cmd.Flags().GetBool("include-last-called-at")
 		requestedPageSize := pageSizeFlag(cmd)
 		pageToken, _ := cmd.Flags().GetString("page-token")
@@ -68,7 +71,7 @@ TSDB read each) so you can spot idle servers.`,
 				body["query"] = query
 			}
 			if toolState != "" {
-				body["toolState"] = mapToolState(toolState)
+				body["toolState"] = toolState
 			}
 			if includeLastCalled {
 				body["includeLastCalledAt"] = true
@@ -128,7 +131,7 @@ TSDB read each) so you can spot idle servers.`,
 func init() {
 	mcpServersSearchCmd.Flags().String("app-id", "", "Application ID")
 	mcpServersSearchCmd.Flags().String("query", "", "Fuzzy search on display_name")
-	mcpServersSearchCmd.Flags().String("tool-state", "", "Tool state to count: pending, approved, disabled, removed. Without it, tool_count is omitted (the server does not compute a count)")
+	mcpServersSearchCmd.Flags().String("tool-state", "", "Tool state to count: "+toolStateFlag.usage()+". Without it, tool_count is omitted (the server does not compute a count)")
 	mcpServersSearchCmd.Flags().Bool("include-last-called-at", false, "Populate last_called_at per row (extra read per server)")
 	addPaginationFlags(mcpServersSearchCmd)
 	markRequired(mcpServersSearchCmd, "app-id")

@@ -23,9 +23,9 @@ var tasksListCmd = &cobra.Command{
 		}
 
 		query, _ := cmd.Flags().GetString("query")
-		state, _ := cmd.Flags().GetString("state")
-		if err := validateTaskState(state); err != nil {
-			return &usageError{err}
+		state, err := parseTaskState(cmd)
+		if err != nil {
+			return err
 		}
 		assignedToMe, _ := cmd.Flags().GetBool("assigned-to-me")
 		requestedPageSize := pageSizeFlag(cmd)
@@ -67,7 +67,7 @@ var tasksListCmd = &cobra.Command{
 				body["query"] = query
 			}
 			if state != "" {
-				body["taskStates"] = []string{mapTaskState(state)}
+				body["taskStates"] = []string{state}
 			}
 			if myUserID != "" {
 				body["myWorkUserIds"] = []string{myUserID}
@@ -112,38 +112,25 @@ var tasksListCmd = &cobra.Command{
 
 func init() {
 	tasksListCmd.Flags().String("query", "", "Search task display name or description")
-	tasksListCmd.Flags().String("state", "", "Filter by state: open, closed")
+	tasksListCmd.Flags().String("state", "", "Filter by state: "+taskStateFlag.usage())
 	tasksListCmd.Flags().Bool("assigned-to-me", false, "Only show tasks assigned to me")
 	addPaginationFlags(tasksListCmd)
 	tasksCmd.AddCommand(tasksListCmd)
 }
 
-// validateTaskState rejects a --state value that isn't a recognized filter, so a
-// typo fails with a clear usage error instead of a raw gateway 400 on the
-// taskStates enum. An empty value means "no state filter" and is allowed. Shared
-// by `tasks list` and `requests list`.
-func validateTaskState(s string) error {
-	switch strings.ToLower(strings.TrimSpace(s)) {
-	case "", "open", "closed":
-		return nil
-	default:
-		return fmt.Errorf(`--state must be "open" or "closed"`)
-	}
-}
+var taskStateFlag = enumFlag{flag: "state", prefix: "TASK_STATE_", unknown: enumReject, values: []enumValue{
+	{name: "open", api: "TASK_STATE_OPEN"},
+	{name: "closed", api: "TASK_STATE_CLOSED"},
+}}
 
-// mapTaskState normalizes the user-friendly --state value to the API enum.
-// Input is case-insensitive (and surrounding whitespace is ignored) so
-// `--state open` and `--state OPEN` both work. Call validateTaskState first to
-// reject unrecognized values.
-func mapTaskState(s string) string {
-	switch strings.ToLower(strings.TrimSpace(s)) {
-	case "open":
-		return "TASK_STATE_OPEN"
-	case "closed":
-		return "TASK_STATE_CLOSED"
-	default:
-		return s
+// parseTaskState reads --state for `tasks list` and `requests list`; blank
+// means no filter.
+func parseTaskState(cmd *cobra.Command) (string, error) {
+	v := mustGetString(cmd, "state")
+	if strings.TrimSpace(v) == "" {
+		return "", nil
 	}
+	return taskStateFlag.parse(v)
 }
 
 // finalOutcome returns the outcome string only when it represents a real

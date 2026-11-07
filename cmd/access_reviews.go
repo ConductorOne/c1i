@@ -120,9 +120,9 @@ its time-limited downloadUrl. Use --format for JSON, CSV, or XLSX, or
 				return err
 			}
 		} else if format != "" {
-			mapped, err := mapAccessReviewReportFormat(format)
+			mapped, err := reportFormatFlag.parse(format)
 			if err != nil {
-				return &usageError{err}
+				return err
 			}
 			body["format"] = mapped
 		}
@@ -220,7 +220,7 @@ func readRequiredJSONObject(cmd *cobra.Command, flag string) (map[string]any, er
 	if file == "" {
 		return nil, &usageError{fmt.Errorf("--%s is required", flag)}
 	}
-	return readConfigFile(cmd, flag, file)
+	return readJSONFile[map[string]any](cmd, flag, file)
 }
 
 func validateCampaignOwners(body map[string]any) error {
@@ -255,24 +255,17 @@ func postAccessReview(cmd *cobra.Command, path string, body map[string]any) erro
 	return writeRawObject(cmd, data)
 }
 
-func mapAccessReviewReportFormat(format string) (string, error) {
-	switch strings.ToLower(strings.TrimSpace(format)) {
-	case "json":
-		return "ACCESS_REVIEW_REPORT_FORMAT_JSON", nil
-	case "csv":
-		return "ACCESS_REVIEW_REPORT_FORMAT_CSV", nil
-	case "xlsx":
-		return "ACCESS_REVIEW_REPORT_FORMAT_XLSX", nil
-	default:
-		return "", fmt.Errorf(`--format must be "json", "csv", or "xlsx"`)
-	}
-}
+var reportFormatFlag = enumFlag{flag: "format", prefix: "ACCESS_REVIEW_REPORT_FORMAT_", unknown: enumReject, values: []enumValue{
+	{name: "json", api: "ACCESS_REVIEW_REPORT_FORMAT_JSON"},
+	{name: "csv", api: "ACCESS_REVIEW_REPORT_FORMAT_CSV"},
+	{name: "xlsx", api: "ACCESS_REVIEW_REPORT_FORMAT_XLSX"},
+}}
 
 func init() {
 	accessReviewsCreateCmd.Flags().String("body-file", "", "Full CreateAccessReview request JSON object (required; file or \"-\" for stdin)")
 	accessReviewsUpdateCmd.Flags().String("body-file", "", "Partial AccessReview JSON object (required; file or \"-\" for stdin)")
 	accessReviewsUpdateCmd.Flags().String("update-mask", "", "Comma-separated campaign fields to update (required)")
-	accessReviewReportsGenerateCmd.Flags().String("format", "", "Report format: json, csv, or xlsx (mutually exclusive with --body-file)")
+	accessReviewReportsGenerateCmd.Flags().String("format", "", "Report format: "+reportFormatFlag.usage()+" (mutually exclusive with --body-file)")
 	accessReviewReportsGenerateCmd.Flags().String("body-file", "", "Full GenerateAccessReviewReport request JSON object (file or \"-\" for stdin; mutually exclusive with --format)")
 
 	accessReviewReportsCmd.AddCommand(accessReviewReportsListCmd, accessReviewReportsGenerateCmd)

@@ -40,61 +40,28 @@ func init() {
 	mcpCmd.AddCommand(mcpServersCmd)
 }
 
-// mapServerType translates a user-friendly --type value to the API enum.
-// Input is case-insensitive.
-func mapServerType(s string) string {
-	switch strings.ToLower(s) {
-	case "hosted":
-		return "MCP_SERVER_TYPE_HOSTED"
-	case "external":
-		return "MCP_SERVER_TYPE_EXTERNAL"
-	default:
-		return s
-	}
-}
+// serverTypeFlag is closed: every consumer builds a HOSTED or EXTERNAL config.
+var serverTypeFlag = enumFlag{flag: "type", prefix: "MCP_SERVER_TYPE_", unknown: enumReject, values: []enumValue{
+	{name: "hosted", api: "MCP_SERVER_TYPE_HOSTED"},
+	{name: "external", api: "MCP_SERVER_TYPE_EXTERNAL"},
+}}
 
-// mapDataSensitivity translates a user-friendly --data-sensitivity value to the
-// API enum. Input is case-insensitive.
-func mapDataSensitivity(s string) string {
-	switch strings.ToLower(s) {
-	case "public":
-		return "MCP_SERVER_DATA_SENSITIVITY_PUBLIC"
-	case "internal":
-		return "MCP_SERVER_DATA_SENSITIVITY_INTERNAL"
-	case "confidential":
-		return "MCP_SERVER_DATA_SENSITIVITY_CONFIDENTIAL"
-	case "restricted":
-		return "MCP_SERVER_DATA_SENSITIVITY_RESTRICTED"
-	default:
-		return s
-	}
-}
+var dataSensitivityFlag = enumFlag{flag: "data-sensitivity", prefix: "MCP_SERVER_DATA_SENSITIVITY_", unknown: enumPassPrefixed, values: []enumValue{
+	{name: "public", api: "MCP_SERVER_DATA_SENSITIVITY_PUBLIC"},
+	{name: "internal", api: "MCP_SERVER_DATA_SENSITIVITY_INTERNAL"},
+	{name: "confidential", api: "MCP_SERVER_DATA_SENSITIVITY_CONFIDENTIAL"},
+	{name: "restricted", api: "MCP_SERVER_DATA_SENSITIVITY_RESTRICTED"},
+}}
 
-// mapTransportType translates a user-friendly --transport value to the API
-// enum. Input is case-insensitive.
-func mapTransportType(s string) string {
-	switch strings.ToLower(s) {
-	case "streamable-http", "streamable_http", "http":
-		return "MCP_SERVER_TRANSPORT_TYPE_STREAMABLE_HTTP"
-	case "sse":
-		return "MCP_SERVER_TRANSPORT_TYPE_SSE"
-	default:
-		return s
-	}
-}
+var transportTypeFlag = enumFlag{flag: "transport", prefix: "MCP_SERVER_TRANSPORT_TYPE_", unknown: enumPassPrefixed, values: []enumValue{
+	{name: "streamable-http", api: "MCP_SERVER_TRANSPORT_TYPE_STREAMABLE_HTTP", aliases: []string{"http"}},
+	{name: "sse", api: "MCP_SERVER_TRANSPORT_TYPE_SSE"},
+}}
 
-// mapTokenSharing translates a user-friendly --token-sharing value to the API
-// enum. Input is case-insensitive.
-func mapTokenSharing(s string) string {
-	switch strings.ToLower(s) {
-	case "shared":
-		return "MCP_SERVER_TOKEN_SHARING_SHARED"
-	case "per-user", "per_user", "peruser":
-		return "MCP_SERVER_TOKEN_SHARING_PER_USER"
-	default:
-		return s
-	}
-}
+var tokenSharingFlag = enumFlag{flag: "token-sharing", prefix: "MCP_SERVER_TOKEN_SHARING_", unknown: enumPassPrefixed, values: []enumValue{
+	{name: "shared", api: "MCP_SERVER_TOKEN_SHARING_SHARED"},
+	{name: "per-user", api: "MCP_SERVER_TOKEN_SHARING_PER_USER", aliases: []string{"peruser"}},
+}}
 
 // flexInt64 unmarshals an int64 that the API may encode either as a JSON
 // number or, per canonical proto3 JSON for 64-bit ints, as a quoted string.

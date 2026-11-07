@@ -57,30 +57,16 @@ func init() {
 // newAPIClient use.
 var newPoliciesClient = newClient
 
-// mapPolicyType translates a user-friendly --policy-type value to the API
-// enum. Input is case-insensitive and accepts '-' or '_' as the word
-// separator. Unrecognized input is passed through unchanged so the raw enum
-// name (or a deliberately-invalid value, to be caught by validatePolicyType)
-// still works.
-func mapPolicyType(s string) string {
-	switch strings.ToLower(strings.NewReplacer("-", "_").Replace(s)) {
-	case "grant":
-		return "POLICY_TYPE_GRANT"
-	case "revoke":
-		return "POLICY_TYPE_REVOKE"
-	case "certify":
-		return "POLICY_TYPE_CERTIFY"
-	case "access_request", "accessrequest":
-		return "POLICY_TYPE_ACCESS_REQUEST"
-	case "provision":
-		return "POLICY_TYPE_PROVISION"
-	default:
-		return s
-	}
-}
+var policyTypeFlag = enumFlag{flag: "policy-type", prefix: "POLICY_TYPE_", unknown: enumPassPrefixed, values: []enumValue{
+	{name: "grant", api: "POLICY_TYPE_GRANT"},
+	{name: "revoke", api: "POLICY_TYPE_REVOKE"},
+	{name: "certify", api: "POLICY_TYPE_CERTIFY"},
+	{name: "access-request", api: "POLICY_TYPE_ACCESS_REQUEST", aliases: []string{"accessrequest"}},
+	{name: "provision", api: "POLICY_TYPE_PROVISION"},
+}}
 
 // readJSONBytes reads raw bytes from path, or stdin when path is "-".
-// Shared by every --*-file flag in the policies command family.
+// Shared by every --*-file JSON flag (via readJSONFile).
 func readJSONBytes(cmd *cobra.Command, path string) ([]byte, error) {
 	if path == "-" {
 		return io.ReadAll(cmd.InOrStdin())
@@ -88,21 +74,28 @@ func readJSONBytes(cmd *cobra.Command, path string) ([]byte, error) {
 	return os.ReadFile(path) // #nosec G304 -- user-supplied --*-file path is intentional
 }
 
-// readJSONArrayFile reads a JSON array from path (file or "-" for stdin).
-// Used for --steps-file (a PolicySteps.steps array) and --rules-file (a
-// Rule array) — both are arrays at the top level, unlike --body-file /
-// --hosted-config-file elsewhere in this codebase, which read a JSON object
-// (see readConfigFile in cmd/mcp_servers_config.go).
-func readJSONArrayFile(cmd *cobra.Command, path string) ([]any, error) {
+// readJSONFile reads a JSON array or object from path (file or "-" for
+// stdin). Every failure is a usage error naming --<flag>. A top-level null is
+// rejected: json.Unmarshal turns it into a nil value without an error, which
+// would be sent as an explicit null or written into.
+func readJSONFile[T []any | map[string]any](cmd *cobra.Command, flag, path string) (T, error) {
+	label := "--" + flag
+	kind := "object"
+	if _, ok := any(T(nil)).([]any); ok {
+		kind = "array"
+	}
 	data, err := readJSONBytes(cmd, path)
 	if err != nil {
-		return nil, &usageError{fmt.Errorf("reading file: %w", err)}
+		return nil, &usageError{fmt.Errorf("reading %s: %w", label, err)}
 	}
-	var arr []any
-	if err := json.Unmarshal(data, &arr); err != nil {
-		return nil, &usageError{fmt.Errorf("parsing as a JSON array: %w", err)}
+	var v T
+	if err := json.Unmarshal(data, &v); err != nil {
+		return nil, &usageError{fmt.Errorf("parsing %s as JSON %s: %w", label, kind, err)}
 	}
-	return arr, nil
+	if v == nil {
+		return nil, &usageError{fmt.Errorf("%s must contain a JSON %s, not null", label, kind)}
+	}
+	return v, nil
 }
 
 // policyListItem is the subset of the Policy message (c1.api.policy.v1.Policy)

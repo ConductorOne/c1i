@@ -197,7 +197,7 @@ func buildUpdatePolicyPatch(cmd *cobra.Command, resolveFallbackPolicyType func()
 		if mask == "" {
 			return nil, "", fmt.Errorf("--update-mask is required together with --body-file")
 		}
-		policy, err = readConfigFile(cmd, "body-file", bodyFile)
+		policy, err = readJSONFile[map[string]any](cmd, "body-file", bodyFile)
 		if err != nil {
 			return nil, "", err
 		}
@@ -218,15 +218,18 @@ func buildUpdatePolicyPatch(cmd *cobra.Command, resolveFallbackPolicyType func()
 		paths = append(paths, "description")
 	}
 	if cmd.Flags().Changed("policy-type") {
-		v, _ := cmd.Flags().GetString("policy-type")
-		policy["policyType"] = mapPolicyType(v)
+		v, err := policyTypeFlag.parse(mustGetString(cmd, "policy-type"))
+		if err != nil {
+			return nil, "", err
+		}
+		policy["policyType"] = v
 		paths = append(paths, "policyType")
 	}
 	if cmd.Flags().Changed("steps-file") {
 		stepsFile, _ := cmd.Flags().GetString("steps-file")
-		steps, stepsErr := readJSONArrayFile(cmd, stepsFile)
+		steps, stepsErr := readJSONFile[[]any](cmd, "steps-file", stepsFile)
 		if stepsErr != nil {
-			return nil, "", fmt.Errorf("reading --steps-file: %w", stepsErr)
+			return nil, "", stepsErr
 		}
 		policyType, _ := policy["policyType"].(string)
 		if policyType == "" {
@@ -244,9 +247,9 @@ func buildUpdatePolicyPatch(cmd *cobra.Command, resolveFallbackPolicyType func()
 	}
 	if cmd.Flags().Changed("rules-file") {
 		rulesFile, _ := cmd.Flags().GetString("rules-file")
-		rules, rulesErr := readJSONArrayFile(cmd, rulesFile)
+		rules, rulesErr := readJSONFile[[]any](cmd, "rules-file", rulesFile)
 		if rulesErr != nil {
-			return nil, "", fmt.Errorf("reading --rules-file: %w", rulesErr)
+			return nil, "", rulesErr
 		}
 		policy["rules"] = rules
 		paths = append(paths, "rules")
@@ -261,7 +264,7 @@ func buildUpdatePolicyPatch(cmd *cobra.Command, resolveFallbackPolicyType func()
 func init() {
 	policiesUpdateCmd.Flags().String("display-name", "", "New display name (omit to leave unchanged; "+displayNameRule+")")
 	policiesUpdateCmd.Flags().String("description", "", "New description")
-	policiesUpdateCmd.Flags().String("policy-type", "", "New policy type: grant, revoke, certify (rarely changed)")
+	policiesUpdateCmd.Flags().String("policy-type", "", "New policy type: "+policyTypeFlag.usage()+" (rarely changed)")
 	policiesUpdateCmd.Flags().String("steps-file", "", "JSON array: replaces the baseline policySteps.steps content (file, or \"-\" for stdin)")
 	policiesUpdateCmd.Flags().String("rules-file", "", "JSON array: replaces rules[] (file, or \"-\" for stdin)")
 	policiesUpdateCmd.Flags().String("body-file", "", "Full Policy JSON object, verbatim (file, or \"-\" for stdin); requires --update-mask; mutually exclusive with the flags above")

@@ -116,7 +116,7 @@ func TestCatalogEntitlementSetRejectsNullReferenceFile(t *testing.T) {
 	}
 
 	_, err := catalogEntitlementReferencesFromFile(accessProfilesRequestableEntitlementsSetCmd)
-	if err == nil || !strings.Contains(err.Error(), "must contain a JSON array") {
+	if err == nil || !strings.Contains(err.Error(), "--refs-file must contain a JSON array, not null") {
 		t.Errorf("error = %v, want a JSON-array usage error", err)
 	}
 }

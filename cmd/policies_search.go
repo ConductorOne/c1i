@@ -30,7 +30,7 @@ tenant's auto-approval policy portably. --display-name is no substitute:
 it only ignores case, and the names differ by more than that between tenants
 ("Auto-approval" in one, "Auto approval" in the next).`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		policyTypes, err := repeatableStringFlag(cmd, "policy-type")
+		policyTypes, err := parseRepeatableEnum(cmd, policyTypeFlag)
 		if err != nil {
 			return err
 		}
@@ -83,11 +83,7 @@ it only ignores case, and the names differ by more than that between tenants
 				body["includeDeleted"] = true
 			}
 			if len(policyTypes) > 0 {
-				mapped := make([]string, len(policyTypes))
-				for i, t := range policyTypes {
-					mapped[i] = mapPolicyType(t)
-				}
-				body["policyTypes"] = mapped
+				body["policyTypes"] = policyTypes
 			}
 			if len(excludeIDs) > 0 {
 				body["excludePolicyIds"] = excludeIDs
@@ -138,7 +134,7 @@ it only ignores case, and the names differ by more than that between tenants
 func init() {
 	policiesSearchCmd.Flags().String("query", "", "Fuzzy search on display name and description")
 	policiesSearchCmd.Flags().String("display-name", "", "Exact-ish (case-insensitive) display name match")
-	addRepeatableStringFlag(policiesSearchCmd, "policy-type", "Filter by policy type: grant, revoke, certify, ... (repeatable)")
+	addRepeatableStringFlag(policiesSearchCmd, "policy-type", "Filter by policy type: "+policyTypeFlag.usage()+" (repeatable)")
 	policiesSearchCmd.Flags().Bool("include-deleted", false, "Include soft-deleted policies")
 	addRepeatableStringFlag(policiesSearchCmd, "exclude-policy-id", "Policy ID to exclude from results (repeatable)")
 	// The lower default is this endpoint's own; the rest is context the shared

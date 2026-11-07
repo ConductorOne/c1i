@@ -41,16 +41,17 @@ func registerPolicyIDFlags(cmd *cobra.Command, kinds []policyKind, suffix string
 	}
 }
 
-func kindNames(kinds []policyKind) string {
-	names := make([]string, len(kinds))
-	for i, k := range kinds {
-		names[i] = k.kind
+// unbindPolicyFlag builds the --unbind-policy table from a resource's kinds.
+func unbindPolicyFlag(kinds []policyKind) enumFlag {
+	e := enumFlag{flag: "unbind-policy", unknown: enumReject}
+	for _, k := range kinds {
+		e.values = append(e.values, enumValue{name: k.kind, api: k.kind})
 	}
-	return strings.Join(names, ", ")
+	return e
 }
 
 func registerUnbindPolicyFlag(cmd *cobra.Command, kinds []policyKind) {
-	addRepeatableStringFlag(cmd, "unbind-policy", "Unbind a policy: "+kindNames(kinds)+" (repeatable)")
+	addRepeatableStringFlag(cmd, "unbind-policy", "Unbind a policy: "+unbindPolicyFlag(kinds).usage()+" (repeatable)")
 }
 
 // policyIDFlag reads a policy-id flag; a passed-but-blank value is a usage
@@ -88,20 +89,12 @@ func applyPolicyIDs(cmd *cobra.Command, kinds []policyKind, obj map[string]any) 
 // applyPolicyUpdates sets or unbinds each policy slot on obj and returns the
 // mask paths, in kind order.
 func applyPolicyUpdates(cmd *cobra.Command, kinds []policyKind, obj map[string]any) ([]string, error) {
-	raw, err := repeatableStringFlag(cmd, "unbind-policy")
+	raw, err := parseRepeatableEnum(cmd, unbindPolicyFlag(kinds))
 	if err != nil {
 		return nil, err
 	}
 	unbind := map[string]bool{}
-	for _, r := range raw {
-		v := strings.ToLower(strings.ReplaceAll(strings.TrimSpace(r), "_", "-"))
-		known := false
-		for _, k := range kinds {
-			known = known || k.kind == v
-		}
-		if !known {
-			return nil, &usageError{fmt.Errorf("invalid --unbind-policy %q: want %s", r, kindNames(kinds))}
-		}
+	for _, v := range raw {
 		unbind[v] = true
 	}
 	var paths []string

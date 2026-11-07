@@ -107,14 +107,17 @@ func buildCreatePolicyBody(cmd *cobra.Command) (map[string]any, error) {
 		if usingFlags {
 			return nil, fmt.Errorf("--body-file is mutually exclusive with --display-name/--description/--policy-type/--steps-file/--rules-file")
 		}
-		return readConfigFile(cmd, "body-file", bodyFile)
+		return readJSONFile[map[string]any](cmd, "body-file", bodyFile)
 	}
 
 	displayName, _ := cmd.Flags().GetString("display-name")
 	if displayName == "" {
 		return nil, fmt.Errorf("--display-name is required (or pass --body-file)")
 	}
-	policyType := mapPolicyType(mustGetString(cmd, "policy-type"))
+	policyType, err := policyTypeFlag.parse(mustGetString(cmd, "policy-type"))
+	if err != nil {
+		return nil, err
+	}
 
 	body := map[string]any{
 		"displayName": displayName,
@@ -125,9 +128,9 @@ func buildCreatePolicyBody(cmd *cobra.Command) (map[string]any, error) {
 	}
 
 	if stepsFile, _ := cmd.Flags().GetString("steps-file"); stepsFile != "" {
-		steps, err := readJSONArrayFile(cmd, stepsFile)
+		steps, err := readJSONFile[[]any](cmd, "steps-file", stepsFile)
 		if err != nil {
-			return nil, fmt.Errorf("reading --steps-file: %w", err)
+			return nil, err
 		}
 		key, err := policyStepsKey(policyType)
 		if err != nil {
@@ -137,9 +140,9 @@ func buildCreatePolicyBody(cmd *cobra.Command) (map[string]any, error) {
 	}
 
 	if rulesFile, _ := cmd.Flags().GetString("rules-file"); rulesFile != "" {
-		rules, err := readJSONArrayFile(cmd, rulesFile)
+		rules, err := readJSONFile[[]any](cmd, "rules-file", rulesFile)
 		if err != nil {
-			return nil, fmt.Errorf("reading --rules-file: %w", err)
+			return nil, err
 		}
 		body["rules"] = rules
 	}
@@ -157,7 +160,7 @@ func mustGetString(cmd *cobra.Command, name string) string {
 func init() {
 	policiesCreateCmd.Flags().String("display-name", "", "Display name for the new policy ("+displayNameRule+")")
 	policiesCreateCmd.Flags().String("description", "", "Description for the new policy")
-	policiesCreateCmd.Flags().String("policy-type", "", "Policy type: grant, revoke, certify (access_request is deprecated; provision is server-internal)")
+	policiesCreateCmd.Flags().String("policy-type", "", "Policy type: "+policyTypeFlag.usage()+" (access-request is deprecated; provision is server-internal)")
 	policiesCreateCmd.Flags().String("steps-file", "", "JSON array: the baseline policySteps.steps content (file, or \"-\" for stdin)")
 	policiesCreateCmd.Flags().String("rules-file", "", "JSON array of routing rules: [{\"condition\":\"<CEL>\",\"stepKey\":\"<key>\"}] (file, or \"-\" for stdin)")
 	policiesCreateCmd.Flags().String("body-file", "", "Full CreatePolicyRequest JSON body, verbatim (file, or \"-\" for stdin); mutually exclusive with the flags above")

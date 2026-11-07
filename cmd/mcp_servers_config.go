@@ -1,10 +1,8 @@
 package cmd
 
 import (
-	"encoding/json"
 	"fmt"
-	"io"
-	"os"
+	"slices"
 	"sort"
 	"strings"
 
@@ -37,13 +35,13 @@ func deriveCredentialUpdateMask(cfg map[string]any) string {
 // OAuth2 / AWS SigV4 / Google service-account configs go through the
 // --hosted-config-file / --external-config-file JSON escape hatch instead.
 func addAuthFlags(cmd *cobra.Command) {
-	cmd.Flags().String("auth", "", "Auth method: none, bearer-token, custom-header, basic-auth (OAuth2/AWS/Google go via --*-config-file)")
+	cmd.Flags().String("auth", "", "Auth method: "+authFlag.usage()+" (OAuth2/AWS/Google go via --*-config-file)")
 	cmd.Flags().String("bearer-token", "", "Bearer token value (with --auth bearer-token)")
 	cmd.Flags().String("header-name", "", "Custom header name (with --auth custom-header)")
 	cmd.Flags().String("header-value", "", "Custom header value (with --auth custom-header)")
 	cmd.Flags().String("basic-auth-username", "", "Basic-auth username (with --auth basic-auth)")
 	cmd.Flags().String("basic-auth-password", "", "Basic-auth password (with --auth basic-auth)")
-	cmd.Flags().String("token-sharing", "", "Token sharing: shared or per-user")
+	cmd.Flags().String("token-sharing", "", "Token sharing: "+tokenSharingFlag.usage())
 	cmd.Flags().Bool("require-tool-approval", false, "Per-server override for tool auto-approval (omit to leave unset)")
 }
 
@@ -52,27 +50,47 @@ func addAuthFlags(cmd *cobra.Command) {
 // members serialize flat into the parent config object, so the returned map is
 // meant to be merged into the hosted/external config.
 func authArmFromFlags(cmd *cobra.Command) (map[string]any, error) {
-	auth, _ := cmd.Flags().GetString("auth")
-	switch strings.ToLower(auth) {
-	case "":
+	auth := mustGetString(cmd, "auth")
+	if auth == "" {
 		return nil, nil
-	case "none":
-		return map[string]any{"none": map[string]any{}}, nil
-	case "bearer-token", "bearer":
+	}
+	arm, err := authFlag.parse(auth)
+	if err != nil {
+		return nil, &usageError{fmt.Errorf("unsupported --auth %q: use %s (OAuth2/AWS/Google go via --hosted-config-file / --external-config-file)", auth, authFlag.usage())}
+	}
+	switch arm {
+	case "bearerToken":
 		token, _ := cmd.Flags().GetString("bearer-token")
-		return map[string]any{"bearerToken": map[string]any{"token": token}}, nil
-	case "custom-header":
+		return map[string]any{arm: map[string]any{"token": token}}, nil
+	case "customHeader":
 		name, _ := cmd.Flags().GetString("header-name")
 		value, _ := cmd.Flags().GetString("header-value")
-		return map[string]any{"customHeader": map[string]any{"headerName": name, "headerValue": value}}, nil
-	case "basic-auth", "basic":
+		return map[string]any{arm: map[string]any{"headerName": name, "headerValue": value}}, nil
+	case "basicAuth":
 		user, _ := cmd.Flags().GetString("basic-auth-username")
 		pass, _ := cmd.Flags().GetString("basic-auth-password")
-		return map[string]any{"basicAuth": map[string]any{"username": user, "password": pass}}, nil
-	default:
-		return nil, &usageError{fmt.Errorf("unsupported --auth %q: use none, bearer-token, custom-header, or basic-auth (OAuth2/AWS/Google go via --hosted-config-file / --external-config-file)", auth)}
+		return map[string]any{arm: map[string]any{"username": user, "password": pass}}, nil
+	default: // none
+		return map[string]any{arm: map[string]any{}}, nil
 	}
 }
+
+// authFlag lists the --auth methods the convenience flags can fill in; api
+// is the config's oneof arm.
+var authFlag = enumFlag{flag: "auth", unknown: enumReject, values: []enumValue{
+	{name: "none", api: "none"},
+	{name: "bearer-token", api: "bearerToken", aliases: []string{"bearer"}},
+	{name: "custom-header", api: "customHeader"},
+	{name: "basic-auth", api: "basicAuth", aliases: []string{"basic"}},
+}}
+
+// authTemplateFlag adds the methods only a config file can carry, for
+// --print-config-template.
+var authTemplateFlag = enumFlag{flag: "auth", unknown: enumReject, values: append(slices.Clone(authFlag.values),
+	enumValue{name: "oauth2", api: "oauth2"},
+	enumValue{name: "aws-sigv4", api: "awsSigv4", aliases: []string{"aws"}},
+	enumValue{name: "google-service-account", api: "googleServiceAccount", aliases: []string{"google"}},
+)}
 
 // applySharedAuthFields merges the auth arm, token-sharing, and
 // require-tool-approval flags into a config object built from flags.
@@ -84,8 +102,10 @@ func applySharedAuthFields(cmd *cobra.Command, cfg map[string]any) error {
 	for k, v := range arm {
 		cfg[k] = v
 	}
-	if ts, _ := cmd.Flags().GetString("token-sharing"); ts != "" {
-		cfg["tokenSharing"] = mapTokenSharing(ts)
+	if ts, err := tokenSharingFlag.parse(mustGetString(cmd, "token-sharing")); err != nil {
+		return err
+	} else if ts != "" {
+		cfg["tokenSharing"] = ts
 	}
 	if cmd.Flags().Changed("require-tool-approval") {
 		on, _ := cmd.Flags().GetBool("require-tool-approval")
@@ -96,31 +116,6 @@ func applySharedAuthFields(cmd *cobra.Command, cfg map[string]any) error {
 		}
 	}
 	return nil
-}
-
-// readConfigFile loads a JSON object from path (or stdin when path is "-") into
-// a generic map. Errors name --<flag>. A top-level null is rejected: json.Unmarshal turns it
-// into a nil map without an error, and callers write into the result.
-func readConfigFile(cmd *cobra.Command, flag, path string) (map[string]any, error) {
-	label := "--" + flag
-	var data []byte
-	var err error
-	if path == "-" {
-		data, err = io.ReadAll(cmd.InOrStdin())
-	} else {
-		data, err = os.ReadFile(path) // #nosec G304 -- user-supplied config-file path is intentional
-	}
-	if err != nil {
-		return nil, &usageError{fmt.Errorf("reading %s: %w", label, err)}
-	}
-	var cfg map[string]any
-	if err := json.Unmarshal(data, &cfg); err != nil {
-		return nil, &usageError{fmt.Errorf("parsing %s as JSON object: %w", label, err)}
-	}
-	if cfg == nil {
-		return nil, &usageError{fmt.Errorf("%s must contain a JSON object, not null", label)}
-	}
-	return cfg, nil
 }
 
 // sharedAuthFlagsChanged reports whether any convenience auth flag (from
@@ -150,7 +145,7 @@ func buildHostedConfig(cmd *cobra.Command) (map[string]any, error) {
 		if usingFlags {
 			return nil, &usageError{fmt.Errorf("--hosted-config-file is mutually exclusive with --catalog-id/--source-app-id/--config-field and the auth flags (--auth/--bearer-token/--token-sharing/…)")}
 		}
-		return readConfigFile(cmd, "hosted-config-file", file)
+		return readJSONFile[map[string]any](cmd, "hosted-config-file", file)
 	}
 
 	cfg := map[string]any{}
@@ -184,15 +179,17 @@ func buildExternalConfig(cmd *cobra.Command) (map[string]any, error) {
 		if usingFlags {
 			return nil, &usageError{fmt.Errorf("--external-config-file is mutually exclusive with --server-url/--transport and the auth flags (--auth/--bearer-token/--token-sharing/…)")}
 		}
-		return readConfigFile(cmd, "external-config-file", file)
+		return readJSONFile[map[string]any](cmd, "external-config-file", file)
 	}
 
 	cfg := map[string]any{}
 	if url, _ := cmd.Flags().GetString("server-url"); url != "" {
 		cfg["url"] = url
 	}
-	if transport, _ := cmd.Flags().GetString("transport"); transport != "" {
-		cfg["transportType"] = mapTransportType(transport)
+	if transport, err := transportTypeFlag.parse(mustGetString(cmd, "transport")); err != nil {
+		return nil, err
+	} else if transport != "" {
+		cfg["transportType"] = transport
 	}
 	if err := applySharedAuthFields(cmd, cfg); err != nil {
 		return nil, err

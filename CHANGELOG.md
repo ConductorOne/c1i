@@ -25,6 +25,46 @@ parse the JSON instead. `apps set-owners --wait` now waits until the owner
 set equals the request, so a set that removes an owner can wait longer than
 before.
 
+Named-value flags now refuse more input before sending anything, each with
+exit 2. `automations executions list --state <unknown>` used to print nothing
+and exit 0. An unknown short value for `accounts list --status`/`--type`,
+`--policy-type`, the `mcp tools` and `mcp servers` enum flags and the
+`access-profiles` behavior flags used to reach the server (which answered
+400) or be printed by `--dry-run`. A whitespace-only value, and any non-ASCII
+value (such as a lookalike `ı` or `ſ`), is refused on every such flag. A value
+carrying the flag's API prefix is still sent, upper-cased with `-` turned to
+`_`; `mcp servers --type` is the exception and takes only `hosted` or
+`external`. Three typed values are now rewritten, where 0.9.1 sent them as
+typed and the server answered 400: `MCP_TOOL_STATE_PENDING` becomes
+`MCP_TOOL_STATE_PENDING_REVIEW`, and
+`REQUEST_CATALOG_ENROLLMENT_BEHAVIOR_BYPASS`/`_ENFORCE` become their
+`..._ENTITLEMENT_REQUEST_POLICY` names. These listed aliases are the only
+rewrites; no other prefixed value is remapped. `users list --status` sends
+an unknown value upper-cased with `-` turned to `_`, where it sent it as
+typed.
+
+Duration flags sent to the API now share one parser, which changes these
+exits:
+
+- `service-principals credentials create --expires ""` and `requests create
+  grant --duration ""` exit 2; the empty value used to be left out of the
+  request.
+- A sign exits 2 before sending on every such flag: `-1h`, `-0s` and `+1h`
+  alike. `requests create grant --duration` and `tasks update-grant-duration
+  --duration` used to send a negative value, and the server's 400 exited 2
+  after the round trip; the other flags already refused negatives.
+- A leading zero (`01h`, `00h`) exits 2 on every such flag.
+- Decimal durations now exit 2 on every such flag: write `1h30m`, not `1.5h`,
+  and `1s500ms`, not `1.5s`. `--duration-grant`, `--expires` and
+  `--callback-timeout` used to accept them, and `requests create grant
+  --duration` and `tasks update-grant-duration --duration` used to send a
+  protobuf decimal such as `3600.5s` as typed.
+- `entitlements create` and `entitlements update --duration-grant 0s` are
+  sent instead of exiting 2, and the server stores `0s`. `--expires 0s` is
+  sent instead of exiting 2, and the server refuses it with exit 2.
+- `--expires` and `--callback-timeout` send a sub-second value such as
+  `1s500ms` as `1.5s` instead of `1.500000000s`.
+
 ### Added
 
 - `entitlements owners <entitlement-id> --app-id` lists an entitlement's
@@ -99,6 +139,21 @@ before.
   by tenant and server version: "Owner changes are applied asynchronously
   and can take several minutes to appear; pass --wait to block until they
   do." The `--wait` timeout message says the same.
+- Every named-value flag now parses the same way, including `--auth`,
+  `--unbind-policy`, `requests list --type`, `--error-format`, `api --method`
+  and `entitlements create --resource-type`: ASCII case and surrounding
+  whitespace are ignored, `-` and `_` are interchangeable, and the full API
+  name is accepted in any case (`--state pending-review`,
+  `--sort SORT_DIRECTION_DESC`). `--help` value lists are generated from one
+  table per flag. See "Upgrading from 0.9.1" for the exit-code changes.
+- Every duration flag sent to the API (`--duration-grant`, `requests create
+  grant --duration`, `tasks update-grant-duration --duration`, `--expires`,
+  `--callback-timeout`) takes a whole-number Go (`8h`, `1h30m`) or protobuf
+  (`3600s`) duration, ignores surrounding whitespace, and is sent as seconds
+  with any sub-second fraction's trailing zeros trimmed. `requests create grant --duration`
+  and `tasks update-grant-duration --duration` previously passed the value
+  through, so `24h` failed with `invalid google.protobuf.Duration value
+  "24h"`; it is now sent as `86400s`.
 - `golang.org/x/term` moves to 0.47.0 and `golang.org/x/sys` to 0.49.0.
 - `golang.org/x/crypto` is pinned to the untagged
   `v0.58.1-0.20261009181718-2f1f834330b2`, which fixes GO-2026-5932; c1i does
@@ -127,13 +182,14 @@ before.
   every method. The API resolves such a segment to the parent or collection,
   and a write could reach the wrong handler with no redirect for the client to
   refuse.
-- An input file that is missing, malformed or the wrong JSON shape now exits
-  `2` (usage) instead of `1`: every `--body-file` (including `api`'s), the
-  MCP server `--*-config-file` flags, and `--steps-file`, `--rules-file` and
-  `--refs-file`. A `null` body file, which could panic, is refused the same
-  way, and the error names the flag.
 - `apps set-owners` exits 1 (`writing output:`) when its response can't be
   written to stdout, instead of 0; the owners were already set.
+- An input file that is missing, malformed, JSON `null` or the wrong JSON
+  shape now exits `2` (usage) before any request, and the error names the
+  flag: every `--body-file` (including `api`'s), the MCP server
+  `--*-config-file` flags, and `--steps-file`, `--rules-file` and
+  `--refs-file`. These exited `1`; a `null` body file could panic, and a
+  `null` `--rules-file` sent `"rules": null` with exit 0.
 - **A failed write to stdout now exits `1`** (e.g. a full disk) instead of
   `0`; list commands stop paging at the first failed row.
 - **Every auto-paginating command now stops on a stuck cursor** instead of

@@ -39,11 +39,12 @@ classification, visibility).`,
 
 		appID, _ := cmd.Flags().GetString("app-id")
 		connectorID, _ := cmd.Flags().GetString("connector-id")
-		state, _ := cmd.Flags().GetString("state")
+		state, err := toolStateFlag.parse(mustGetString(cmd, "state"))
+		if err != nil {
+			return err
+		}
 		if state == "" {
 			state = "MCP_TOOL_STATE_APPROVED"
-		} else {
-			state = mapToolState(state)
 		}
 		// MCP_TOOL_STATE_REMOVED is reserved for sync's "no longer exists in
 		// upstream MCP server" soft-delete signal. Letting an admin set it by
@@ -140,7 +141,7 @@ classification, visibility).`,
 func init() {
 	mcpToolsApproveCmd.Flags().String("app-id", "", "Application ID")
 	mcpToolsApproveCmd.Flags().String("connector-id", "", "Connector ID")
-	mcpToolsApproveCmd.Flags().String("state", "", "Target state (default approved): pending, approved, disabled")
+	mcpToolsApproveCmd.Flags().String("state", "", "Target state (default approved): "+toolStateFlag.without("removed").usage())
 	markRequired(mcpToolsApproveCmd, "app-id", "connector-id")
 	mcpToolsCmd.AddCommand(mcpToolsApproveCmd)
 }
