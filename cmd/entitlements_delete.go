@@ -14,8 +14,8 @@ var entitlementsDeleteCmd = &cobra.Command{
 --app-id is required in addition to the entitlement ID. Honors --dry-run.
 
 The delete is soft: "entitlements get" still returns the entitlement at exit
-0 with deletedAt set. Deleting an app does not delete its entitlements: they
-stay live (deletedAt null), which is why this command exists.
+0 with deletedAt set. "apps delete" leaves an app's entitlements live, so
+delete them with this first.
 
 Prints the server's response as pretty JSON (--fields is not applied to
 mutation output).
