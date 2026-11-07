@@ -23,10 +23,8 @@ The API itself accepts an unknown id (exit 0) and drops it: a set naming only
 such an id left the entitlement with no owners. --dry-run skips the lookups.
 A repeated --user-id is sent once: the API answers a duplicate with a 500.
 
-Owner changes are provisioned ASYNCHRONOUSLY: this call returns as soon as
-the request is accepted, and the change showed up anywhere from about 1s to
-135s later. Verify with "c1i entitlements owners <entitlement-id> --app-id
-<app-id>".
+` + ownerAsyncWaitNote + `
+Verify with "c1i entitlements owners <entitlement-id> --app-id <app-id>".
 
 Pass --wait to block and poll GET .../ownerids until the owner set equals
 the requested ids -- additions landed and replaced owners gone -- or

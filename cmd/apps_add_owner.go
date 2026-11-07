@@ -22,9 +22,8 @@ taken moments earlier and any owner added in between is silently removed
 at least one before you ever run this -- this adds to that set, it doesn't
 start one.
 
-Owner changes are provisioned ASYNCHRONOUSLY: this call returns as soon as
-the request is accepted, and the new owner showed up anywhere from about
-1s to 135s later. Verify with "c1i apps owners <app-id>".
+` + ownerAsyncNote + `
+Verify with "c1i apps owners <app-id>".
 
 Honors --dry-run.`,
 	Args: cobra.ExactArgs(1),

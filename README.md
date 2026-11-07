@@ -127,9 +127,7 @@ sending nothing (`--dry-run` skips the lookups). A repeated `--user-id` is
 sent once.
 
 `apps owners` is the read that reflects what `apps add-owner`,
-`apps remove-owner` and `apps set-owners` write; owner provisioning is
-asynchronous, and writes showed up anywhere from about 1s to 135s after being
-accepted. It returns zero rows at exit 0
+`apps remove-owner` and `apps set-owners` write. Owner changes are applied asynchronously and can take several minutes to appear. It returns zero rows at exit 0
 for a well-formed but nonexistent app id, so an empty result can also mean
 "wrong id". `apps add-owner` and `apps remove-owner` change one owner at a
 time; two `add-owner` calls issued at once were both observed to land.
@@ -243,8 +241,7 @@ command touched is in that one payload.
 
 `entitlements owners` lists an entitlement's owners (same row shape as
 `apps owners`) and is the read that reflects `entitlements add-owner`,
-`remove-owner` and `set-owners`. Owner provisioning is asynchronous: writes
-showed up anywhere from about 1s to 135s after being accepted. `--wait`
+`remove-owner` and `set-owners`. Owner changes are applied asynchronously and can take several minutes to appear; pass `--wait` to block until they do. `--wait`
 polls `GET .../ownerids` until the change lands, or `--wait-timeout`
 (default `4m`) elapses: on `add-owner` until the owner appears, on
 `set-owners` until the owner set equals the requested ids, removals

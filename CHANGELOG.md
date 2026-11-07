@@ -94,6 +94,10 @@ before.
   owner set equals the request, removals included, instead of returning as
   soon as the requested ids are present. It prints the API's JSON response,
   with `--wait` progress on stderr (see Upgrading).
+- Apps and entitlement owner help, README, `cmd/agents.md` and the
+  configure-new-app guide no longer quote a provisioning range, which varies
+  by tenant and server version: "Owner changes are applied asynchronously and can take several minutes to appear; pass `--wait` to block until
+  they do."
 - `golang.org/x/term` moves to 0.47.0 and `golang.org/x/sys` to 0.49.0.
 - `golang.org/x/crypto` is pinned to the untagged
   `v0.58.1-0.20261009181718-2f1f834330b2`, which fixes GO-2026-5932; c1i does

@@ -45,9 +45,9 @@ var appsOwnersCmd = &cobra.Command{
 	Short: "List an app's owners (NDJSON output)",
 	Long: `List the owners of an app via GET .../owners -- the read that reflects what
 "apps set-owners"/"apps add-owner"/"apps remove-owner" write. Use this to
-verify a write: owner provisioning is asynchronous, and a write showed up
-here anywhere from about 1s to 135s after it was accepted, so an owner added
-moments ago may not appear yet.
+verify a write.
+` + ownerAsyncNote + `
+An owner added moments ago may not appear yet.
 
 Expect at least one owner on most apps even before you ever run "add-owner"
 or "set-owners": "apps create" auto-assigns its caller as an owner.

@@ -23,10 +23,8 @@ owner". A user who was an owner and has already been removed exits 0.
 Unlike "set-owners", which refuses an empty list, this can remove the last
 owner.
 
-Owner changes are provisioned ASYNCHRONOUSLY: this call returns as soon as
-the request is accepted, and the change showed up anywhere from about 1s to
-135s later. Verify with "c1i entitlements owners <entitlement-id> --app-id
-<app-id>".
+` + ownerAsyncNote + `
+Verify with "c1i entitlements owners <entitlement-id> --app-id <app-id>".
 
 Honors --dry-run.`,
 	Args: cobra.ExactArgs(1),

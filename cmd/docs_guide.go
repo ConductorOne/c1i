@@ -404,10 +404,10 @@ of anything specific to what you're about to model.
 
 "--wait" polls "GET .../ownerids" until the owner set equals the ids you
 passed (or times out) and prints "Owners provisioned on app ... after ..." to
-stderr; stdout is the API's JSON response. Without "--wait", the PUT
-returns immediately and the owner showed up anywhere from about 1s to 135s
-later -- see "Verify" below for why "apps get"'s "appOwners" field is not the way to
-check this.
+stderr; stdout is the API's JSON response.
+` + ownerAsyncWaitNote + `
+See "Verify" below for why "apps get"'s "appOwners" field is not the way
+to check this.
 
 Note "set-owners" REPLACES the list with exactly the ids you pass, and
 "apps create" auto-assigns its caller as an owner: passing only "$OWNER_USER_ID"
@@ -487,7 +487,7 @@ already reported success. Check the owner list instead:
 
     c1i apps owners "$APP_ID"
 
-Expect a row with id "$OWNER_USER_ID" within a couple of minutes. NDJSON,
+Expect a row with id "$OWNER_USER_ID" once provisioning lands. NDJSON,
 auto-paginated -- pipe to jq to isolate the one row you're looking for.
 
 "--wait" polls a different read of the same owner data (".../ownerids"), so it

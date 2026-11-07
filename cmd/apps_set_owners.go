@@ -10,12 +10,19 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// ownerWaitInterval is how often --wait re-polls GET .../ownerids. Long
-// enough to avoid hammering the API during a provisioning window observed
-// at 96-129s across four converged writes (a fifth was still pending at
-// 108s), short enough that --wait-timeout still feels responsive. A var so a
-// test can poll fast.
+// ownerWaitInterval is how often --wait re-polls GET .../ownerids: slow
+// enough not to hammer the API through a minutes-long provisioning window,
+// fast enough that --wait-timeout stays responsive. A var so a test can poll
+// fast.
 var ownerWaitInterval = 12 * time.Second
+
+// Owner help text states provisioning lag only through these, with no
+// measured range: it varies by tenant and server version.
+const (
+	ownerAsyncClause   = "Owner changes are applied asynchronously and can take several minutes to\nappear"
+	ownerAsyncNote     = ownerAsyncClause + "."
+	ownerAsyncWaitNote = ownerAsyncClause + "; pass --wait to block until they do."
+)
 
 var appsSetOwnersCmd = &cobra.Command{
 	Use:   "set-owners <app-id>",
@@ -30,11 +37,10 @@ lists it but "apps owners" does not, so a set naming only such ids leaves the
 app with no real owners. --dry-run skips the lookups. A repeated --user-id
 is sent once.
 
-Owner changes are provisioned ASYNCHRONOUSLY: this call returns as soon as
-the request is accepted, and the change showed up anywhere from about 1s to
-135s later. Verify with "c1i apps owners <app-id>". Don't check
-ownership via the "appOwners" field in "apps get": it read [] on every app
-checked, including those GET .../ownerids reported owners for.
+` + ownerAsyncWaitNote + `
+Verify with "c1i apps owners <app-id>". Don't check ownership via the
+"appOwners" field in "apps get": it read [] on every app checked, including
+those GET .../ownerids reported owners for.
 
 Pass --wait to block and poll GET .../ownerids until the owner set equals
 the requested ids -- additions landed and replaced owners gone -- or

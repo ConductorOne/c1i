@@ -18,11 +18,10 @@ Adding a user who is already an owner exits 0.
 
 An unknown user, entitlement or app exits 4.
 
-Owner changes are provisioned ASYNCHRONOUSLY: this call returns as soon as
-the request is accepted, and the new owner showed up anywhere from about 1s
-to 135s later. Verify with "c1i entitlements owners <entitlement-id> --app-id
-<app-id>", or pass --wait to poll GET .../ownerids until the owner appears
-(or --wait-timeout elapses; a timeout exits 1, though the write was accepted).
+` + ownerAsyncWaitNote + `
+Verify with "c1i entitlements owners <entitlement-id> --app-id <app-id>".
+--wait polls GET .../ownerids until the owner appears (or --wait-timeout
+elapses; a timeout exits 1, though the write was accepted).
 Prints the API's JSON response; --wait's progress lines go to stderr.
 
 Honors --dry-run (with --wait, dry-run still only previews the POST; it never
