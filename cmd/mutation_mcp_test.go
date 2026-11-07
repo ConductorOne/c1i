@@ -1,7 +1,6 @@
 package cmd
 
 import (
-	"bytes"
 	"encoding/json"
 	"net/http"
 	"strings"
@@ -67,15 +66,6 @@ func mcpMutationCases() []mcpMutationCase {
 			`{"profile":{"id":"ts1","displayName":"zz"}}`, `{"id":"ts1","displayName":"zz"}`},
 		{"toolsets delete", static("mcp", "toolsets", "delete", "ts1", scope, "--connector-id=cn1"), `{}`, `{}`},
 	}
-}
-
-func indentJSON(t *testing.T, compact string) string {
-	t.Helper()
-	var buf bytes.Buffer
-	if err := json.Indent(&buf, []byte(compact), "", "  "); err != nil {
-		t.Fatal(err)
-	}
-	return buf.String() + "\n"
 }
 
 // Each command prints its family's read shape, byte for byte, and nothing
