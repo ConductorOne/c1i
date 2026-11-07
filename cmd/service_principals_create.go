@@ -1,7 +1,7 @@
 package cmd
 
 import (
-	"fmt"
+	"net/http"
 
 	"github.com/spf13/cobra"
 )
@@ -16,33 +16,15 @@ var servicePrincipalsCreateCmd = &cobra.Command{
 		if err := requireNonEmpty(cmd, "display-name"); err != nil {
 			return err
 		}
-		baseURL, err := GetBaseURL()
-		if err != nil {
-			return err
-		}
-
 		displayName, _ := cmd.Flags().GetString("display-name")
 		body := map[string]any{"displayName": displayName}
-
-		if dryRunActive() {
-			return printDryRun(cmd, "POST", "/api/v1/service_principals", body)
-		}
-
-		c, err := newServicePrincipalsClient(cmd, baseURL)
-		if err != nil {
-			return fmt.Errorf("authentication failed: %w", err)
-		}
-		data, err := c.Post(cmd.Context(), "/api/v1/service_principals", body)
-		if err != nil {
-			return fmt.Errorf("API error: %w", err)
-		}
-
-		return writeRawObject(cmd, data)
+		return sendMutation(cmd, mutation{Method: http.MethodPost, Path: "/api/v1/service_principals", Body: body})
 	},
 }
 
 func init() {
 	servicePrincipalsCreateCmd.Flags().String("display-name", "", "Display name for the new service principal ("+displayNameRule+")")
 	markRequired(servicePrincipalsCreateCmd, "display-name")
+	markMutating(servicePrincipalsCreateCmd)
 	servicePrincipalsCmd.AddCommand(servicePrincipalsCreateCmd)
 }

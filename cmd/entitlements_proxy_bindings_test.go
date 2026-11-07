@@ -3,7 +3,6 @@ package cmd
 import (
 	"bytes"
 	"context"
-	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -37,6 +36,7 @@ func TestProxyBindingMutationsDryRunUseEscapedDirectionalPath(t *testing.T) {
 	origDryRun := viper.GetBool("dry_run")
 	viper.Set("dry_run", true)
 	t.Cleanup(func() { viper.Set("dry_run", origDryRun) })
+	t.Setenv("C1I_URL", "https://example.invalid")
 
 	for _, tt := range []struct {
 		name   string
@@ -58,12 +58,13 @@ func TestProxyBindingMutationsDryRunUseEscapedDirectionalPath(t *testing.T) {
 				t.Fatalf("RunE: %v", err)
 			}
 
-			want := fmt.Sprintf("[dry-run] %s /api/v1/apps/source%%2Fapp%%20%%3F%%23/source%%2Fentitlement%%20%%3F%%23/bindings/destination%%2Fapp%%20%%3F%%23/destination%%2Fentitlement%%20%%3F%%23", tt.method)
-			if !strings.Contains(out.String(), want) {
-				t.Errorf("dry-run output %q does not contain %q", out.String(), want)
+			reqs := previewDoc(t, out.String())
+			wantURL := "https://example.invalid/api/v1/apps/source%2Fapp%20%3F%23/source%2Fentitlement%20%3F%23/bindings/destination%2Fapp%20%3F%23/destination%2Fentitlement%20%3F%23"
+			if len(reqs) != 1 || reqs[0]["method"] != tt.method || reqs[0]["url"] != wantURL {
+				t.Errorf("dry-run output %q does not preview %s %s", out.String(), tt.method, wantURL)
 			}
-			if tt.method == http.MethodPost && !strings.Contains(out.String(), "{}") {
-				t.Errorf("create dry-run output %q does not contain empty request object", out.String())
+			if body, has := reqs[0]["body"]; tt.method == http.MethodPost && (!has || len(body.(map[string]any)) != 0) || tt.method == http.MethodDelete && has {
+				t.Errorf("body = %v, want {} on create and none on delete", body)
 			}
 		})
 	}

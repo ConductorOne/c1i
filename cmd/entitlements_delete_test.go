@@ -31,7 +31,8 @@ func TestEntitlementsDeleteDryRunSendsNothing(t *testing.T) {
 	if len(*reqs) != 0 {
 		t.Errorf("dry-run sent %d request(s)", len(*reqs))
 	}
-	if !strings.HasPrefix(out, "[dry-run] DELETE /api/v1/apps/app-1/entitlements/ent-1\n") {
+	pr := previewDoc(t, out)
+	if len(pr) != 1 || pr[0]["method"] != "DELETE" || !strings.HasSuffix(pr[0]["url"].(string), "/api/v1/apps/app-1/entitlements/ent-1") {
 		t.Errorf("output = %q", out)
 	}
 }

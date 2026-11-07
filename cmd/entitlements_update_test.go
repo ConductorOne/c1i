@@ -213,7 +213,7 @@ func TestEntitlementsUpdateDryRunSendsNothing(t *testing.T) {
 	if err != nil {
 		t.Fatalf("RunE: %v", err)
 	}
-	for _, want := range []string{"[dry-run] POST /api/v1/apps/app-1/entitlements/ent-1\n", `"grantPolicyId": "pol-g"`, `"updateMask": "grantPolicyId"`} {
+	for _, want := range []string{`"url": "https://example.invalid/api/v1/apps/app-1/entitlements/ent-1"`, `"grantPolicyId": "pol-g"`, `"updateMask": "grantPolicyId"`} {
 		if !strings.Contains(out, want) {
 			t.Errorf("dry-run output missing %q:\n%s", want, out)
 		}

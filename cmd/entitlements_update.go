@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"fmt"
+	"net/http"
 	"strings"
 
 	"github.com/ConductorOne/c1i/internal/client"
@@ -51,8 +52,8 @@ A blank --display-name (empty, whitespace or invisible-only) exits 2,
 nothing sent. Sent as is, the server accepts "" but restores the
 entitlement's original name instead of failing. --description "" clears it.
 
-Prints the server's response as pretty JSON (--fields is not applied to
-mutation output).
+Prints the updated entitlement as pretty JSON, unwrapped like "entitlements
+get": the id is .id. --fields is a usage error on a mutation.
 
 Example:
   c1i entitlements update <entitlement-id> --app-id <app-id> \
@@ -70,29 +71,9 @@ Example:
 			return err
 		}
 
-		baseURL, err := GetBaseURL()
-		if err != nil {
-			return err
-		}
-
 		path := client.Path("/api/v1/apps/%s/entitlements/%s", appID, id)
-		if dryRunActive() {
-			return printDryRun(cmd, "POST", path, body)
-		}
-
-		c, err := newClient(cmd, baseURL)
-		if err != nil {
-			return fmt.Errorf("authentication failed: %w", err)
-		}
-		if err := validatePolicyBindings(cmd.Context(), cmd, c, entitlementPolicyKinds); err != nil {
-			return err
-		}
-		data, err := c.Post(cmd.Context(), path, body)
-		if err != nil {
-			return fmt.Errorf("API error: %w", err)
-		}
-
-		return writeRawObject(cmd, data)
+		return sendMutation(cmd, mutation{Method: http.MethodPost, Path: path, Body: body},
+			withPreRead(policyBindingsCheck(cmd, entitlementPolicyKinds)))
 	},
 }
 
@@ -166,5 +147,6 @@ func init() {
 	addProtoDurationFlag(entitlementsUpdateCmd, "duration-grant", "Maximum grant duration as a protobuf duration, e.g. 3600s; a Go duration such as 8h is converted to seconds; a sign or decimal (-1h, 1.5h) exits 2")
 	f.Bool("duration-unset", false, "Remove the maximum grant duration (standing access) instead of setting one (a protobuf duration like 3600s or a Go duration like 8h); excludes --duration-grant")
 	markRequired(entitlementsUpdateCmd, "app-id")
+	markMutating(entitlementsUpdateCmd)
 	entitlementsCmd.AddCommand(entitlementsUpdateCmd)
 }

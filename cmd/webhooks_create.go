@@ -1,7 +1,7 @@
 package cmd
 
 import (
-	"fmt"
+	"net/http"
 
 	"github.com/spf13/cobra"
 )
@@ -18,36 +18,21 @@ Refused with exit 2 before a request is sent:
     strips an IPv6 literal's brackets)
   - a --callback-timeout with a sign or decimal
 
-No secret is returned. Honors --dry-run.`,
+No secret is returned. Prints the webhook, unwrapped like "webhooks get": the
+id is .id. Honors --dry-run.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		body, _, err := webhookFields(cmd)
 		if err != nil {
 			return err
 		}
 
-		baseURL, err := GetBaseURL()
-		if err != nil {
-			return err
-		}
-		if dryRunActive() {
-			return printDryRun(cmd, "POST", webhooksPath, body)
-		}
-
-		c, err := newClient(cmd, baseURL)
-		if err != nil {
-			return fmt.Errorf("authentication failed: %w", err)
-		}
-		data, err := c.Post(cmd.Context(), webhooksPath, body)
-		if err != nil {
-			return fmt.Errorf("API error: %w", err)
-		}
-
-		return writeRawObject(cmd, data)
+		return sendMutation(cmd, mutation{Method: http.MethodPost, Path: webhooksPath, Body: body})
 	},
 }
 
 func init() {
 	webhookFieldFlags(webhooksCreateCmd, false)
 	markRequired(webhooksCreateCmd, "display-name", "destination-url")
+	markMutating(webhooksCreateCmd)
 	webhooksCmd.AddCommand(webhooksCreateCmd)
 }

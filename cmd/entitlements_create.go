@@ -2,7 +2,9 @@ package cmd
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
+	"net/http"
 	"strings"
 
 	"github.com/ConductorOne/c1i/internal/client"
@@ -103,10 +105,12 @@ flags that reuse them, and the create-only flags a retry has to drop (a reused
 id makes those a usage error), verbatim:
   (already created: re-run with --resource-type-id <id>, dropping --resource-type-display-name, to reuse instead of duplicating)
 
-Prints the created entitlement as pretty JSON under "appEntitlementView"
-(--fields is not applied to mutation output). The response echoes
-appResourceTypeId/appResourceId and expands both objects, so every id this
-command touched is in that one payload.
+Prints the created entitlement as pretty JSON, unwrapped like "entitlements
+get": the id is .id. The response echoes appResourceTypeId/appResourceId and
+expands both objects, so every id this command touched is in that one payload.
+--fields is a usage error on a mutation. A --dry-run preview carries
+NEW_APP_RESOURCE_TYPE_ID / NEW_APP_RESOURCE_ID literally in its URLs and
+bodies; extract ids with jq -er, which fails on a preview.
 
 Example:
   c1i entitlements create --app-id "$APP_ID" \
@@ -127,25 +131,10 @@ Example:
 			return err
 		}
 
-		baseURL, err := GetBaseURL()
-		if err != nil {
-			return err
-		}
-
-		if dryRunActive() {
-			return plan.previewRequests(cmd)
-		}
-
-		c, err := newClient(cmd, baseURL)
-		if err != nil {
-			return fmt.Errorf("authentication failed: %w", err)
-		}
-		// Before step 1, so a bad policy leaves no resource type behind.
-		if err := validatePolicyBindings(cmd.Context(), cmd, c, entitlementPolicyKinds); err != nil {
-			return err
-		}
-
-		return plan.run(cmd, c)
+		// The policy check runs before step 1, so a bad policy leaves no
+		// resource type behind.
+		return sendMutationSequence(cmd, plan.steps(), plan.placeholderNote(),
+			withPreRead(policyBindingsCheck(cmd, entitlementPolicyKinds)))
 	},
 }
 
@@ -328,39 +317,97 @@ func (p *entitlementCreatePlan) fullEntitlementBody(resourceTypeID, resourceID s
 	return body
 }
 
-// run issues the planned requests in order and prints the entitlement the last
-// one returns.
-func (p *entitlementCreatePlan) run(cmd *cobra.Command, c *client.Client) error {
-	ctx := cmd.Context()
-
-	resourceTypeID := p.resourceTypeID
+// steps is the create sequence; a step is omitted when the caller supplied
+// that object's id. The last step's response is the printed document.
+func (p *entitlementCreatePlan) steps() []mutationStep {
+	var steps []mutationStep
 	if p.resourceTypeBody != nil {
-		data, err := c.Post(ctx, p.resourceTypesPath(), p.resourceTypeBody)
-		if err != nil {
-			return fmt.Errorf("API error creating the app resource type: %w", err)
-		}
-		if resourceTypeID, err = createdObjectID(data, "appResourceType"); err != nil {
-			return err
-		}
+		steps = append(steps, mutationStep{
+			Build: func([]string) mutation {
+				return mutation{Method: http.MethodPost, Path: p.resourceTypesPath(), Body: p.resourceTypeBody}
+			},
+			Placeholder: newResourceTypeIDPlaceholder,
+			ResultID:    func(data []byte) (string, error) { return createdObjectID(data, "appResourceType") },
+			WrapErr: func(err error, _ []string) error {
+				return stepAPIError(err, "the app resource type", "")
+			},
+		})
 	}
-
-	resourceID := p.resourceID
 	if p.resourceBody != nil {
-		data, err := c.Post(ctx, p.resourcesPath(resourceTypeID), p.resourceBody)
-		if err != nil {
-			return fmt.Errorf("API error creating the app resource%s: %w", p.createdSoFar(resourceTypeID, ""), err)
-		}
-		if resourceID, err = createdObjectID(data, "appResource"); err != nil {
-			return err
-		}
+		steps = append(steps, mutationStep{
+			Build: func(ids []string) mutation {
+				typeID, _ := p.knownIDs(ids)
+				return mutation{Method: http.MethodPost, Path: p.resourcesPath(typeID), Body: p.resourceBody}
+			},
+			Placeholder: newResourceIDPlaceholder,
+			ResultID:    func(data []byte) (string, error) { return createdObjectID(data, "appResource") },
+			WrapErr: func(err error, ids []string) error {
+				typeID, _ := p.knownIDs(ids)
+				return stepAPIError(err, "the app resource", p.createdSoFar(typeID, ""))
+			},
+		})
 	}
+	return append(steps, mutationStep{
+		Build: func(ids []string) mutation {
+			typeID, resID := p.knownIDs(ids)
+			return mutation{Method: http.MethodPost, Path: p.entitlementsPath(), Body: p.fullEntitlementBody(typeID, resID)}
+		},
+		WrapErr: func(err error, ids []string) error {
+			typeID, resID := p.knownIDs(ids)
+			return stepAPIError(err, "the entitlement", p.createdSoFar(typeID, resID))
+		},
+	})
+}
 
-	data, err := c.Post(ctx, p.entitlementsPath(), p.fullEntitlementBody(resourceTypeID, resourceID))
-	if err != nil {
-		return fmt.Errorf("API error creating the entitlement%s: %w", p.createdSoFar(resourceTypeID, resourceID), err)
+// knownIDs returns the resource type and resource ids so far: supplied ones,
+// and created ones taken from ids in step order.
+func (p *entitlementCreatePlan) knownIDs(ids []string) (typeID, resourceID string) {
+	typeID, resourceID = p.resourceTypeID, p.resourceID
+	i := 0
+	next := func() string {
+		if i < len(ids) {
+			i++
+			return ids[i-1]
+		}
+		return ""
 	}
+	if p.resourceTypeBody != nil {
+		typeID = next()
+	}
+	if p.resourceBody != nil {
+		resourceID = next()
+	}
+	return typeID, resourceID
+}
 
-	return writeRawObject(cmd, data)
+// stepAPIError renames the helper's "API error: ..." to name the failed step,
+// keeping the cause in the chain; any other error is returned as is.
+func stepAPIError(err error, what, createdSoFar string) error {
+	inner := errors.Unwrap(err)
+	if inner == nil || !strings.HasPrefix(err.Error(), "API error: ") {
+		return err
+	}
+	return fmt.Errorf("API error creating %s%s: %w", what, createdSoFar, inner)
+}
+
+// placeholderNote explains the preview's stand-in ids (on stderr); "" when the
+// caller supplied both ids.
+func (p *entitlementCreatePlan) placeholderNote() string {
+	var used []string
+	if p.resourceTypeBody != nil {
+		used = append(used, newResourceTypeIDPlaceholder)
+	}
+	if p.resourceBody != nil {
+		used = append(used, newResourceIDPlaceholder)
+	}
+	if len(used) == 0 {
+		return ""
+	}
+	subject := "stands in for an id"
+	if len(used) > 1 {
+		subject = "stand in for ids"
+	}
+	return fmt.Sprintf("requests are sent in order; %s %s the preceding response returns", strings.Join(used, "/"), subject)
 }
 
 // createdSoFar names the objects THIS invocation created before failing, the
@@ -387,45 +434,6 @@ func (p *entitlementCreatePlan) createdSoFar(resourceTypeID, resourceID string) 
 		msg += ", dropping " + strings.Join(drop, " ") + ","
 	}
 	return msg + " to reuse instead of duplicating)"
-}
-
-// previewRequests previews every request in the sequence, not just the first —
-// two of the three are writes the caller would otherwise not see coming.
-func (p *entitlementCreatePlan) previewRequests(cmd *cobra.Command) error {
-	resourceTypeID, resourceID := p.resourceTypeID, p.resourceID
-
-	var used []string
-	if p.resourceTypeBody != nil {
-		resourceTypeID = newResourceTypeIDPlaceholder
-		used = append(used, newResourceTypeIDPlaceholder)
-	}
-	if p.resourceBody != nil {
-		resourceID = newResourceIDPlaceholder
-		used = append(used, newResourceIDPlaceholder)
-	}
-	if len(used) > 0 {
-		subject := "stands in for an id"
-		if len(used) > 1 {
-			subject = "stand in for ids"
-		}
-		if _, err := fmt.Fprintf(cmd.OutOrStdout(),
-			"[dry-run] requests are sent in order; %s %s the preceding response returns\n",
-			strings.Join(used, "/"), subject); err != nil {
-			return wrapOutputErr(err)
-		}
-	}
-
-	if p.resourceTypeBody != nil {
-		if err := printDryRun(cmd, "POST", p.resourceTypesPath(), p.resourceTypeBody); err != nil {
-			return err
-		}
-	}
-	if p.resourceBody != nil {
-		if err := printDryRun(cmd, "POST", p.resourcesPath(resourceTypeID), p.resourceBody); err != nil {
-			return err
-		}
-	}
-	return printDryRun(cmd, "POST", p.entitlementsPath(), p.fullEntitlementBody(resourceTypeID, resourceID))
 }
 
 // createdObjectID pulls <key>.id out of a create response. A 200 that carries
@@ -477,5 +485,6 @@ func addEntitlementCreateFlags(cmd *cobra.Command) {
 
 func init() {
 	addEntitlementCreateFlags(entitlementsCreateCmd)
+	markMutating(entitlementsCreateCmd)
 	entitlementsCmd.AddCommand(entitlementsCreateCmd)
 }
