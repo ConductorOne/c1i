@@ -74,11 +74,8 @@ falls through to whatever the config file names.
 - `--debug` / `C1I_DEBUG` — trace HTTP method/URL/status/timing to stderr
   (never headers or bodies).
 
-`--debug` and `--max-retries` take effect only on the paths built on the shared
-transport (REST, `mcp gateway`, `auth login`, `upgrade`, `docs openapi`,
-`docs endpoints`, `docs endpoint`). They are inert on `docs search` and
-`docs page`, which issue their own HTTP, so no trace there does not mean no
-request was sent.
+`--debug` and `--max-retries` take effect on every command that sends HTTP
+(REST, `mcp gateway`, `auth login`, `upgrade` and all `docs` commands).
 
 ## Errors & exit codes
 
@@ -92,7 +89,7 @@ request was sent.
 | 5 | API `429` (rate limited) |
 | 6 | C1 failed: API `5xx`, a `200` with a body that isn't JSON, a redirect loop (`RedirectLoopError`), a stuck pagination cursor, or a list page in a shape the command doesn't recognize |
 | 7 | MCP tool call completed but the tool itself reported `isError: true` |
-| 8 | a system beyond C1, or the MCP protocol layer, failed (includes an unreachable gateway) |
+| 8 | a system beyond C1, or the MCP protocol layer, failed (includes an unreachable gateway, or a `mcp servers test-connection` that reports `reachable: false`) |
 
 Typed internally and classified in one place, `cmd/errors.go`: from the client,
 `APIError`, `AuthError`, `PathError`, `RedirectError`, `RedirectLoopError`; from

@@ -4,19 +4,49 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
 
+	"github.com/ConductorOne/c1i/internal/transport"
 	"github.com/spf13/cobra"
 )
 
-const (
+// The Mintlify URLs are vars so tests can point them at an httptest server.
+var (
 	mintlifySearchURL = "https://api.mintlify.com/discovery/v1/search/conductorone"
 	mintlifyPageURL   = "https://api.mintlify.com/discovery/v1/page/conductorone"
-	docsBaseURL       = "https://conductorone.com/docs/"
+)
+
+const (
+	docsBaseURL = "https://conductorone.com/docs/"
 	// Mintlify assistant keys are public client-side keys.
 	mintlifyKey = "mint_dsc_UzPuRdxe4P9NF2x387upse"
 )
+
+// postDocs POSTs payload to a Mintlify endpoint and returns the 200 body. Any
+// failure is a docs-site failure, not C1's, so it exits 8 whatever the status.
+func postDocs(cmd *cobra.Command, url string, payload any, what string) ([]byte, error) {
+	reqBody, err := json.Marshal(payload)
+	if err != nil {
+		return nil, err
+	}
+	req, err := http.NewRequestWithContext(cmd.Context(), http.MethodPost, url, bytes.NewReader(reqBody))
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+mintlifyKey)
+
+	// Both endpoints only read, so a 5xx is safe to retry.
+	hc := transport.New(nil, append(globalTransportOptions(), transport.WithReadOnly())...)
+	resp, err := hc.Do(req)
+	if err != nil {
+		return nil, externalServiceError(err, "%s request failed", what)
+	}
+	if resp.StatusCode != http.StatusOK {
+		return nil, externalServiceError(fmt.Errorf("HTTP %d: %s", resp.StatusCode, resp.Body), "%s API failed", what)
+	}
+	return resp.Body, nil
+}
 
 var docsSearchCmd = &cobra.Command{
 	Use:   "search <query>",
@@ -43,31 +73,9 @@ Examples:
 			query += " " + a
 		}
 
-		reqBody, _ := json.Marshal(map[string]any{
-			"query":    query,
-			"pageSize": 10,
-		})
-
-		req, err := http.NewRequestWithContext(cmd.Context(), http.MethodPost, mintlifySearchURL, bytes.NewReader(reqBody))
+		body, err := postDocs(cmd, mintlifySearchURL, map[string]any{"query": query, "pageSize": 10}, "search")
 		if err != nil {
 			return err
-		}
-		req.Header.Set("Content-Type", "application/json")
-		req.Header.Set("Authorization", "Bearer "+mintlifyKey)
-
-		resp, err := http.DefaultClient.Do(req)
-		if err != nil {
-			return fmt.Errorf("search request failed: %w", err)
-		}
-		defer func() { _ = resp.Body.Close() }()
-
-		body, err := io.ReadAll(resp.Body)
-		if err != nil {
-			return err
-		}
-
-		if resp.StatusCode != http.StatusOK {
-			return fmt.Errorf("search API returned %d: %s", resp.StatusCode, string(body))
 		}
 
 		var results []struct {
@@ -78,7 +86,7 @@ Examples:
 			} `json:"metadata"`
 		}
 		if err := json.Unmarshal(body, &results); err != nil {
-			return fmt.Errorf("failed to parse response: %w", err)
+			return externalServiceError(err, "failed to parse response")
 		}
 
 		enc := newEmitter(cmd)
@@ -114,30 +122,9 @@ Examples:
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 
-		reqBody, _ := json.Marshal(map[string]string{
-			"path": args[0],
-		})
-
-		req, err := http.NewRequestWithContext(cmd.Context(), http.MethodPost, mintlifyPageURL, bytes.NewReader(reqBody))
+		body, err := postDocs(cmd, mintlifyPageURL, map[string]string{"path": args[0]}, "page")
 		if err != nil {
 			return err
-		}
-		req.Header.Set("Content-Type", "application/json")
-		req.Header.Set("Authorization", "Bearer "+mintlifyKey)
-
-		resp, err := http.DefaultClient.Do(req)
-		if err != nil {
-			return fmt.Errorf("page request failed: %w", err)
-		}
-		defer func() { _ = resp.Body.Close() }()
-
-		body, err := io.ReadAll(resp.Body)
-		if err != nil {
-			return err
-		}
-
-		if resp.StatusCode != http.StatusOK {
-			return fmt.Errorf("page API returned %d: %s", resp.StatusCode, string(body))
 		}
 
 		var page struct {
@@ -145,7 +132,7 @@ Examples:
 			Content string `json:"content"`
 		}
 		if err := json.Unmarshal(body, &page); err != nil {
-			return fmt.Errorf("failed to parse response: %w", err)
+			return externalServiceError(err, "failed to parse response")
 		}
 
 		_, err = fmt.Fprintln(cmd.OutOrStdout(), page.Content)

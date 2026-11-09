@@ -21,7 +21,6 @@ import (
 	"github.com/ConductorOne/c1i/internal/login"
 	"github.com/ConductorOne/c1i/internal/transport"
 	"github.com/spf13/cobra"
-	"github.com/spf13/viper"
 )
 
 const (
@@ -160,10 +159,7 @@ type menuRole struct {
 // newCredentialClient builds a client for credentials that aren't stored (the
 // helper, or a new credential before it is stored); a var so tests can stub it.
 var newCredentialClient = func(cmd *cobra.Command, baseURL, clientID, clientSecret string) (*client.Client, error) {
-	return client.NewWithCredentials(cmd.Context(), baseURL, clientID, clientSecret,
-		client.WithMaxRetries(viper.GetInt("max_retries")),
-		client.WithDebug(debugWriter()),
-	)
+	return client.NewWithCredentials(cmd.Context(), baseURL, clientID, clientSecret, globalClientOptions()...)
 }
 
 // helperLeftError reports a helper credential login could not delete. It has

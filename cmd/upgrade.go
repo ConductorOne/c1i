@@ -14,7 +14,6 @@ import (
 	"github.com/ConductorOne/c1i/internal/selfupdate"
 	"github.com/ConductorOne/c1i/internal/transport"
 	"github.com/spf13/cobra"
-	"github.com/spf13/viper"
 	"golang.org/x/mod/module"
 )
 
@@ -52,7 +51,7 @@ verifies the release and prints what it would replace, installing nothing.
 		dist := newUpgradeClient()
 		idx, err := dist.Index(cmd.Context())
 		if err != nil {
-			return distError(err, "reading release channels")
+			return externalServiceError(err, "reading release channels")
 		}
 		target := idx.Channels[channel]
 		if target == "" {
@@ -121,7 +120,7 @@ verifies the release and prints what it would replace, installing nothing.
 		}
 		manifest, manifestBytes, err := dist.ManifestRaw(cmd.Context(), entry.Manifest)
 		if err != nil {
-			return distError(err, "reading the %q manifest", target)
+			return externalServiceError(err, "reading the %q manifest", target)
 		}
 		if cmp, ok := selfupdate.CompareVersions(manifest.Semver, target); !ok || cmp != 0 {
 			return &upstreamError{fmt.Errorf("manifest for %q reports version %q; refusing the mismatch", target, manifest.Semver)}
@@ -131,18 +130,18 @@ verifies the release and prints what it would replace, installing nothing.
 		}
 		sig, err := dist.GetBytes(cmd.Context(), entry.Signature)
 		if err != nil {
-			return distError(err, "fetching the %q manifest signature", target)
+			return externalServiceError(err, "fetching the %q manifest signature", target)
 		}
 		cert, err := dist.GetBytes(cmd.Context(), entry.Certificate)
 		if err != nil {
-			return distError(err, "fetching the %q manifest certificate", target)
+			return externalServiceError(err, "fetching the %q manifest certificate", target)
 		}
 		rekorBundle, err := dist.GetBytes(cmd.Context(), manifest.SignatureBundleHref)
 		if err != nil {
-			return distError(err, "fetching the %q manifest Rekor bundle", target)
+			return externalServiceError(err, "fetching the %q manifest Rekor bundle", target)
 		}
 		if err := dist.VerifyManifest(cmd.Context(), manifestBytes, sig, cert, rekorBundle, manifest.Semver); err != nil {
-			return distError(err, "verifying the %q release", target)
+			return externalServiceError(err, "verifying the %q release", target)
 		}
 
 		asset, ok := manifest.Assets[selfupdate.PlatformKey()]
@@ -195,7 +194,7 @@ verifies the release and prints what it would replace, installing nothing.
 		upgradeProgress(out, "Downloading %s...\n", asset.Filename)
 		bin, err := dist.FetchBinary(cmd.Context(), asset)
 		if err != nil {
-			return distError(err, "downloading %s", target)
+			return externalServiceError(err, "downloading %s", target)
 		}
 		if err := selfupdate.ReplaceExecutable(execPath, bin); err != nil {
 			return fmt.Errorf("installing into %s: %w", installDir, err)
@@ -211,11 +210,7 @@ verifies the release and prints what it would replace, installing nothing.
 var (
 	newUpgradeClient = func() *selfupdate.Client {
 		doer := func(limit int64) selfupdate.Doer {
-			return transport.New(nil,
-				transport.WithMaxRetries(viper.GetInt("max_retries")),
-				transport.WithDebug(debugWriter()),
-				transport.WithMaxResponseBytes(limit),
-			)
+			return transport.New(nil, append(globalTransportOptions(), transport.WithMaxResponseBytes(limit))...)
 		}
 		return &selfupdate.Client{HTTP: doer(selfupdate.MaxMetadataBytes), Download: doer(selfupdate.MaxArtifactBytes)}
 	}
@@ -254,12 +249,13 @@ func writeUpgradeReport(cmd *cobra.Command, current, target, channel string, ava
 	return writeObject(cmd, data)
 }
 
-// distError classifies a failure fetching or verifying a release, or fetching
-// the OpenAPI spec, as upstream (8), except that a 404, 429 or 5xx keeps its
-// own exit code. Neither host needs auth or takes input from the caller, so for
-// a refused redirect, a bad path, or any other 4xx the status is dropped and
-// the exit code is 8.
-func distError(err error, format string, args ...any) error {
+// externalServiceError classifies a failure talking to a service beyond C1 (the
+// release host, the OpenAPI spec host, the docs site) as upstream (8), except
+// that a 404, 429 or 5xx keeps its own exit code. None of these hosts needs
+// auth or takes input from the caller, so for a refused redirect, a redirect
+// loop, a bad path, or any other 4xx the status is dropped and the exit code
+// is 8.
+func externalServiceError(err error, format string, args ...any) error {
 	msg := fmt.Sprintf(format, args...)
 	var apiErr *client.APIError
 	if errors.As(err, &apiErr) {
@@ -270,7 +266,8 @@ func distError(err error, format string, args ...any) error {
 	}
 	var redirErr *client.RedirectError
 	var pathErr *client.PathError
-	if errors.As(err, &redirErr) || errors.As(err, &pathErr) {
+	var loopErr *client.RedirectLoopError
+	if errors.As(err, &redirErr) || errors.As(err, &pathErr) || errors.As(err, &loopErr) {
 		return &upstreamError{fmt.Errorf("%s: %v", msg, err)}
 	}
 	return &upstreamError{fmt.Errorf("%s: %w", msg, err)}

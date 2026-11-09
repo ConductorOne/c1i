@@ -178,6 +178,21 @@ exits:
 - `--expires` and `--callback-timeout` send a sub-second value such as
   `1s500ms` as `1.5s` instead of `1.500000000s`.
 
+**`docs search` and `docs page` exit 8 when the docs site fails.** An
+unreachable site, a non-200, an unparseable body and a redirect loop used to
+exit 1; they now exit 8, whatever the status.
+
+With no cached spec to fall back on, a redirect loop on `docs openapi`,
+`docs endpoints` and `docs endpoint` now exits 8, not 6; so does one on
+`upgrade`.
+
+**`mcp servers test-connection` exits 8 when the server is unreachable.** 0.9.2
+exited 0 with `{"reachable":false,…}`. It still prints the same JSON, then
+exits 8; stderr says `MCP server is unreachable: <failureReason>`. An object
+whose `reachable` is not the boolean `true` counts as unreachable (exit 8), and
+a 200 body that is not a JSON object now exits 6 (it used to exit 0). Check the
+exit code, not just `reachable`.
+
 ### Added
 
 - `tasks get <task-id>` reads a single task, the same endpoint as `requests
@@ -247,6 +262,8 @@ exits:
 
 ### Changed
 
+- `mcp servers test-connection` exits 8 instead of 0 when the probe reports the
+  server unreachable (see Upgrading).
 - `apps add-owner|remove-owner` take the app id as the positional and the
   user as `--user-id`; their `--app-id` flag is removed (see "Upgrading from
   0.9.2"). Every owner command in a family now shares one positional.
@@ -285,6 +302,9 @@ exits:
 
 ### Fixed
 
+- `--debug` and `--max-retries` now work on `docs search` and `docs page`,
+  which also gain the path and redirect guards and retry a 5xx. One helper now
+  builds those options for every client, so no command can skip them.
 - `docs guide configure-new-app` and `request-access` said c1i has no command
   to make an entitlement requestable or to read access-profile membership.
   They now give the recipe (a published, visible-to-everyone access profile

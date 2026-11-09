@@ -540,7 +540,7 @@ c1i mcp servers update             <connector-id> --app-id <id> [--display-name 
 c1i mcp servers update-credentials <connector-id> --app-id <id> --type hosted|external [--auth ...] [--update-mask <paths>]
 c1i mcp servers delete             <connector-id> --app-id <id>
 c1i mcp servers resync-tools       <connector-id> --app-id <id>   # EXTERNAL only; 400 on HOSTED
-c1i mcp servers test-connection    (--server-url <url> [--transport ...] [--auth ...] | <connector-id> --app-id <id>)   # EXTERNAL only; 400 on HOSTED
+c1i mcp servers test-connection    (--server-url <url> [--transport ...] [--auth ...] | <connector-id> --app-id <id>)   # EXTERNAL only; 400 on HOSTED; exits 8 when unreachable (JSON still printed)
 c1i mcp servers discover-oidc      --issuer-url <url>
 c1i mcp servers catalog list       [--query <text>] [--page-size N] [--limit N]
 c1i mcp servers catalog get        <catalog-id>
@@ -1085,7 +1085,7 @@ c1i docs guide
 c1i docs guide register-mcp-server
 ```
 
-`docs openapi`, `docs endpoints`, and `docs endpoint` use the current public API contract at `https://www.c1.ai/api/openapi.yaml`, including MCP server, tool, and toolset operations. The spec is cached for 24 hours at `~/.c1i/cache/api-openapi.yaml`; fetch failures fall back to that cache, however old, with a one-line warning on stderr naming its age. A response over 32 MiB counts as a failed fetch. With a cache to fall back on, a fetch makes one attempt unless you set `--max-retries` or `C1I_MAX_RETRIES`. With no cache, a failed fetch exits `4` for a `404`, `5` for a `429`, `6` for a `5xx` or a redirect loop, and `8` for anything else, such as an unreachable host or a refused redirect.
+`docs openapi`, `docs endpoints`, and `docs endpoint` use the current public API contract at `https://www.c1.ai/api/openapi.yaml`, including MCP server, tool, and toolset operations. The spec is cached for 24 hours at `~/.c1i/cache/api-openapi.yaml`; fetch failures fall back to that cache, however old, with a one-line warning on stderr naming its age. A response over 32 MiB counts as a failed fetch. With a cache to fall back on, a fetch makes one attempt unless you set `--max-retries` or `C1I_MAX_RETRIES`. With no cache, a failed fetch exits `4` for a `404`, `5` for a `429`, `6` for a `5xx`, and `8` for anything else, such as an unreachable host, a refused redirect or a redirect loop.
 
 `docs search` is a semantic search with no relevance threshold: every query returns up to 10 nearest matches, so even a nonsense query comes back with plausible-looking hits. A returned hit is not proof a concept exists, and an unexpected hit is not proof the thing you searched for is absent — read the snippet, or fetch the page with `docs page`, to judge. To check whether an API endpoint exists, use `docs endpoints --filter`, which has a real no-match.
 
@@ -1259,7 +1259,7 @@ branch on without parsing text:
 | `5` | API returned `429` (rate limited — back off and retry) |
 | `6` | C1 failed: the API returned `5xx`, a redirect chain never settled, it answered `200` with a body that isn't JSON, a list command's pagination cursor stopped advancing, or a list page in a shape the command doesn't recognize |
 | `7` | `mcp gateway call` completed, but the tool itself reported an error (`isError: true` in its result) |
-| `8` | a system beyond C1, or the MCP protocol layer, failed — an upstream connector was unreachable or errored, the gateway itself was unreachable (DNS failure, refused connection), or the gateway returned a protocol-level JSON-RPC error |
+| `8` | a system beyond C1, or the MCP protocol layer, failed — an upstream connector was unreachable or errored, the gateway itself was unreachable (DNS failure, refused connection), `mcp servers test-connection` reported an EXTERNAL server unreachable (its JSON is still printed), or the gateway returned a protocol-level JSON-RPC error |
 
 Exit `1` with `writing output:` means stdout failed (e.g. a full disk). On a
 mutation the message is `<METHOD> <path> succeeded but writing its response
@@ -1303,14 +1303,11 @@ follow would hand your bearer token to whatever host the redirect named.
 A chain of allowed redirects that doesn't settle within five hops fails as a
 remote error (exit `6`) rather than looping.
 
-This applies to every command built on the shared transport: the REST client,
-the MCP gateway, the login handshake, `upgrade`, and `docs openapi`,
-`docs endpoints` and `docs endpoint`, so the path and redirect guards, `--debug`
-tracing, and `--max-retries` cover all of them, not just REST commands
-(`upgrade` and those `docs` commands map a refused redirect to exit `8`).
-**None of those four** applies to `docs search` and `docs page`, which call
-Go's default HTTP client directly: no path or redirect guard there, and
-`--debug` and `--max-retries` are both inert.
+This applies to every command that sends HTTP: the REST client, the MCP
+gateway, the login handshake, `upgrade` and every `docs` command, so the path
+and redirect guards, `--debug` tracing, and `--max-retries` cover all of them,
+not just REST commands (`upgrade` and the `docs` commands map a refused
+redirect to exit `8`, and `docs search`/`docs page` map any failure to `8`).
 
 One narrower carve-out inside login: the device-flow token poll forces its own
 retry count to zero, because RFC 8628's polling interval already *is* that
@@ -1701,8 +1698,8 @@ then prints what it would download and replace; it takes no lock, doesn't
 prompt, and installs nothing.
 
 `upgrade` treats the distribution center as a system beyond C1: a dist `404`,
-`429`, or `5xx` exits `4`, `5`, or `6` and a same-path redirect loop `6`, but
-any other dist `4xx`, a refused redirect, a non-JSON `200`, or a TUF, signature,
+`429`, or `5xx` exits `4`, `5`, or `6`, but
+any other dist `4xx`, a refused redirect, a redirect loop, a non-JSON `200`, or a TUF, signature,
 or checksum failure exits `8`.
 
 The channel list (`index.json`) and its yank flags are not signed, so a

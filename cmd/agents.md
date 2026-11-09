@@ -110,17 +110,14 @@ object per failed id (with `"id"`) and a final summary with no `id`, carrying
 JSON is for the detail, not the classification.
 
 `--debug` and `--max-retries` cover `mcp gateway`, `auth login` (except its
-device-code polling, which never retries), `upgrade`, `docs openapi`,
-`docs endpoints` and `docs endpoint` as well as the REST commands: the gateway
-client threads both into its bearer mint and its JSON-RPC calls. On a
+device-code polling, which never retries), `upgrade` and every `docs` command
+as well as the REST commands: the gateway client threads both into its bearer
+mint and its JSON-RPC calls. On a
 `mcp gateway call` that hangs or fails oddly, `--debug` is the fastest way to
 see which request stopped.
 
-They do **not** reach `docs search` or `docs page`. Those bypass the shared
-transport for Go's default HTTP client, so `--debug` prints nothing and
-`--max-retries` is ignored. Silent `--debug` output there means the flag
-never reached that path, NOT that no request was sent — don't read it as
-evidence either way when a `docs` command comes back empty.
+A `docs search` or `docs page` failure (an unreachable docs site, a non-200,
+an unparseable body) exits `8`, whatever the status.
 
 Nor do the fetching `docs` commands call the same place, which matters for
 egress rules and for why one can fail while another works: `docs openapi`,
@@ -134,7 +131,7 @@ for a nonsense query: never read a result as proof a concept exists, or an
 unexpected result as proof it is absent. `docs endpoints --filter` DOES have a
 true no-match. If a spec fetch fails, an expired cache is served with a
 one-line `Warning:` on stderr naming its age; with no cache, it exits 4 for a
-404, 5 for a 429, 6 for a 5xx or a redirect loop, and 8 otherwise. With a cache
+404, 5 for a 429, 6 for a 5xx, and 8 otherwise. With a cache
 to fall back on, the fetch makes one attempt unless you set `--max-retries` or
 `C1I_MAX_RETRIES`.
 
@@ -308,7 +305,7 @@ APP_ID=$(c1i apps create --display-name "Example" | jq -er .id)
 | 5 | API `429` | back off and retry |
 | 6 | C1 failed: API `5xx`, a `200` with a body that isn't JSON, a redirect chain that never settles, a stuck pagination cursor, or a list page in a shape the command doesn't recognize | retryable, except a stuck cursor or unrecognized page, which persists: the printed rows (if any) are real but incomplete. On a write, a `5xx` is `applied: "unknown"` and a non-JSON `200` is `applied: true`: re-read before re-sending |
 | 7 | `mcp gateway call` succeeded but the tool reported `isError: true` | inspect the printed result, not just the code |
-| 8 | a system beyond C1, or the protocol layer, failed — including a gateway that is unreachable (DNS failure, refused connection) | retrying the same call usually repeats it. For a connector failure, check the server with `mcp servers get <connector-id> --app-id <id>` and `mcp servers test-connection`; the upstream may be unreachable or its credentials expired. For a protocol error, it's a version mismatch or a c1i bug — report it, don't work around it |
+| 8 | a system beyond C1, or the protocol layer, failed — including a gateway that is unreachable (DNS failure, refused connection) or `mcp servers test-connection` reporting an EXTERNAL server unreachable (the JSON is still printed) | retrying the same call usually repeats it. For a connector failure, check the server with `mcp servers get <connector-id> --app-id <id>` and `mcp servers test-connection`; the upstream may be unreachable or its credentials expired. For a protocol error, it's a version mismatch or a c1i bug — report it, don't work around it |
 
 Exit 1 with `writing output:` means stdout failed (e.g. a full disk). On a
 write the message is
@@ -558,7 +555,9 @@ resource with `--resource-id` likewise means you drop
   stored; `--unbind-policy emergency-grant` alone leaves an entitlement that
   has emergency grants enabled still enabled, with no policy.
 - `mcp servers test-connection` returns `toolCount` as a JSON string, not a
-  number. The `tool_count` in NDJSON list rows is a real number.
+  number. The `tool_count` in NDJSON list rows is a real number. It exits `8`
+  when the server is unreachable (`reachable` is not `true`), after printing
+  the same JSON, so check the exit code before reading `toolCount`.
 - `mcp servers search` only includes `tool_count` when you pass
   `--tool-state`; the API doesn't compute a count without a state filter, so
   a filterless search omits the key rather than showing a 0 that would look
@@ -641,8 +640,8 @@ checks the install directory is writable, then prints what it would download
 and replace; it takes no lock, doesn't prompt, and installs nothing.
 
 Exit codes treat the distribution center as a system beyond C1: a dist `404`,
-`429`, or `5xx` exits 4, 5, or 6 and a same-path redirect loop 6, but any other
-dist `4xx`, a refused redirect, a non-JSON `200`, or a TUF, signature, or
+`429`, or `5xx` exits 4, 5, or 6, but any other
+dist `4xx`, a refused redirect, a redirect loop, a non-JSON `200`, or a TUF, signature, or
 checksum failure exits 8.
 
 ## Carry forward
