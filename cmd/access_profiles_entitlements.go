@@ -259,6 +259,8 @@ func catalogEntitlementReferencesFromFile(cmd *cobra.Command) ([]catalogEntitlem
 
 func validateAppEntitlementRefs(refs []any, field string) error {
 	for i, value := range refs {
+		// The !ok arm stays for --body-file's nested entitlementRefs, which
+		// readJSONFile does not element-check.
 		ref, ok := value.(map[string]any)
 		if !ok || len(ref) != 2 {
 			return &usageError{fmt.Errorf("%s[%d] must be an AppEntitlementRef with exactly appId and id", field, i)}

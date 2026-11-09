@@ -215,7 +215,7 @@ func validateRuleOutcomes(rules []any) error {
 	for i, r := range rules {
 		rule, ok := r.(map[string]any)
 		if !ok {
-			continue
+			continue // kept: --body-file rules[] elements are not checked by readJSONFile
 		}
 		_, hasStepKey := rule["stepKey"]
 		_, hasPolicyID := rule["policyId"]

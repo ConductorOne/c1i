@@ -15,7 +15,8 @@ func TestReadJSONFile(t *testing.T) {
 		array            bool
 		want             string // "" means success
 	}{
-		{name: "array ok", body: `[1]`, array: true},
+		{name: "array ok", body: `[{"a":1}]`, array: true},
+		{name: "array number element", body: `[1]`, array: true, want: "--x-file element 0 must be a JSON object, not a number"},
 		{name: "empty array ok", body: `[]`, array: true},
 		{name: "object ok", body: `{"a":1}`},
 		{name: "empty object ok", body: `{}`},
