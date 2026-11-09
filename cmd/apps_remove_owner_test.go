@@ -10,26 +10,26 @@ import (
 	"github.com/spf13/viper"
 )
 
-// TestAppsRemoveOwnerRequiresAppID mirrors TestAppsAddOwnerRequiresAppID: a
-// missing/empty --app-id must be rejected as a usage error (exit 2) before
+// TestAppsRemoveOwnerRequiresUserID mirrors TestAppsAddOwnerRequiresUserID: a
+// missing --user-id must be rejected as a usage error (exit 2) before
 // any network call is attempted.
-func TestAppsRemoveOwnerRequiresAppID(t *testing.T) {
+func TestAppsRemoveOwnerRequiresUserID(t *testing.T) {
 	resetCmdFlags(t, appsRemoveOwnerCmd)
 
 	var out bytes.Buffer
 	appsRemoveOwnerCmd.SetOut(&out)
 	appsRemoveOwnerCmd.SetContext(context.Background())
 
-	err := appsRemoveOwnerCmd.RunE(appsRemoveOwnerCmd, []string{"user1"})
+	err := appsRemoveOwnerCmd.RunE(appsRemoveOwnerCmd, []string{"app1"})
 	if err == nil {
-		t.Fatal("expected an error when --app-id is unset")
+		t.Fatal("expected an error when --user-id is unset")
 	}
 	var ue *usageError
 	if !errors.As(err, &ue) {
 		t.Errorf("error %v is not a *usageError", err)
 	}
-	if !strings.Contains(err.Error(), "--app-id") {
-		t.Errorf("expected error to mention --app-id, got %v", err)
+	if !strings.Contains(err.Error(), "--user-id") {
+		t.Errorf("expected error to mention --user-id, got %v", err)
 	}
 }
 
@@ -44,13 +44,13 @@ func TestAppsRemoveOwnerDryRunPreviewsRequestWithoutSending(t *testing.T) {
 	viper.Set("dry_run", true)
 	t.Cleanup(func() { viper.Set("dry_run", orig) })
 
-	_ = appsRemoveOwnerCmd.Flags().Set("app-id", "app1")
+	_ = appsRemoveOwnerCmd.Flags().Set("user-id", "user1")
 
 	var out bytes.Buffer
 	appsRemoveOwnerCmd.SetOut(&out)
 	appsRemoveOwnerCmd.SetContext(context.Background())
 
-	if err := appsRemoveOwnerCmd.RunE(appsRemoveOwnerCmd, []string{"user1"}); err != nil {
+	if err := appsRemoveOwnerCmd.RunE(appsRemoveOwnerCmd, []string{"app1"}); err != nil {
 		t.Fatalf("RunE: %v", err)
 	}
 

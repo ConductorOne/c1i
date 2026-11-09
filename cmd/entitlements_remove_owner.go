@@ -8,9 +8,9 @@ import (
 )
 
 var entitlementsRemoveOwnerCmd = &cobra.Command{
-	Use:   "remove-owner <user-id>",
+	Use:   "remove-owner <entitlement-id>",
 	Short: "Remove one owner from an entitlement",
-	Long: `Remove a single user as an owner of an app entitlement via
+	Long: `Remove the --user-id user as an owner of an app entitlement via
 DELETE .../owners/{user_id}. Unlike "entitlements set-owners", which replaces
 the whole list with exactly the ids you pass, this removes one owner without
 touching the rest of the list -- so it cannot drop an owner someone else
@@ -27,24 +27,26 @@ owner.
 Verify with "c1i entitlements owners <entitlement-id> --app-id <app-id>".
 
 Prints the API's response, which is {}; exit 0 is the success signal.
-Honors --dry-run.`,
+Honors --dry-run.
+
+One owner per call; to change several at once use "entitlements set-owners".`,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		if err := requireNonEmpty(cmd, "app-id", "entitlement-id"); err != nil {
+		if err := requireNonEmpty(cmd, "app-id", "user-id"); err != nil {
 			return err
 		}
 
 		appID, _ := cmd.Flags().GetString("app-id")
-		entitlementID, _ := cmd.Flags().GetString("entitlement-id")
-		path := client.Path("/api/v1/apps/%s/entitlements/%s/owners/%s", appID, entitlementID, args[0])
+		userID, _ := cmd.Flags().GetString("user-id")
+		path := client.Path("/api/v1/apps/%s/entitlements/%s/owners/%s", appID, args[0], userID)
 		return sendMutation(cmd, mutation{Method: http.MethodDelete, Path: path})
 	},
 }
 
 func init() {
 	entitlementsRemoveOwnerCmd.Flags().String("app-id", "", "Application ID the entitlement belongs to")
-	entitlementsRemoveOwnerCmd.Flags().String("entitlement-id", "", "Entitlement ID to remove the owner from")
-	markRequired(entitlementsRemoveOwnerCmd, "app-id", "entitlement-id")
+	entitlementsRemoveOwnerCmd.Flags().String("user-id", "", "C1 user ID to remove as owner")
+	markRequired(entitlementsRemoveOwnerCmd, "app-id", "user-id")
 	markMutating(entitlementsRemoveOwnerCmd)
 	entitlementsCmd.AddCommand(entitlementsRemoveOwnerCmd)
 }

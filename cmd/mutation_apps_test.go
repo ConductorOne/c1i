@@ -138,7 +138,7 @@ func TestAppsMutationApplied(t *testing.T) {
 		{name: "non-JSON 2xx", args: []string{"apps", "create", "--display-name", "zz"}, route: fixedReply(200, `<html>`), exit: exitServer, applied: true},
 		{name: "stdout write fails", args: []string{"apps", "delete", "app-1"}, route: fixedReply(200, `{}`), out: failingWriter{}, exit: exitError, applied: true},
 		{name: "Args error", args: []string{"apps", "delete"}, noServer: true, exit: exitUsage, applied: false},
-		{name: "requireNonEmpty", args: []string{"apps", "add-owner", "u1", "--app-id", ""}, noServer: true, exit: exitUsage, applied: false},
+		{name: "requireNonEmpty", args: []string{"apps", "add-owner", "app-1", "--user-id", ""}, noServer: true, exit: exitUsage, applied: false},
 		{name: "bad body file", args: []string{"apps", "update", "app-1", "--app-user-mapper-file", "/nonexistent/x.json"}, noServer: true, exit: exitUsage, applied: false},
 	}
 	for _, tc := range cases {

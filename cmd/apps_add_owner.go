@@ -8,9 +8,9 @@ import (
 )
 
 var appsAddOwnerCmd = &cobra.Command{
-	Use:   "add-owner <user-id>",
+	Use:   "add-owner <app-id>",
 	Short: "Add one owner to an app",
-	Long: `Add a single user as an app owner via POST .../owners/{user_id}. Unlike
+	Long: `Add the --user-id user as an owner of an app via POST .../owners/{user_id}. Unlike
 "apps set-owners", which replaces the whole list with exactly the ids you
 pass, this adds one owner without touching the rest of the list. Two
 add-owner calls issued at the same time were both observed to land.
@@ -23,31 +23,34 @@ at least one before you ever run this -- this adds to that set, it doesn't
 start one.
 
 ` + ownerAsyncNote + `
+An unknown app id exits 4.
 Verify with "c1i apps owners <app-id>".
 
 Prints the API's response, which is {}; exit 0 is the success signal.
-Honors --dry-run.`,
+Honors --dry-run.
+
+One owner per call; to change several at once use "apps set-owners".`,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		if err := requireNonEmpty(cmd, "app-id"); err != nil {
+		if err := requireNonEmpty(cmd, "user-id"); err != nil {
 			return err
 		}
 
-		appID, _ := cmd.Flags().GetString("app-id")
+		userID, _ := cmd.Flags().GetString("user-id")
 		// Everything the endpoint needs is in the path, but it still parses
 		// the body as a protobuf message: a `null` body earns a 400
 		// ("unexpected token null"), verified live. Send `{}`.
 		return sendMutation(cmd, mutation{
 			Method: http.MethodPost,
-			Path:   client.Path("/api/v1/apps/%s/owners/%s", appID, args[0]),
+			Path:   client.Path("/api/v1/apps/%s/owners/%s", args[0], userID),
 			Body:   addOwnerEmptyBody(),
 		})
 	},
 }
 
 func init() {
-	appsAddOwnerCmd.Flags().String("app-id", "", "Application ID to add the owner to")
-	markRequired(appsAddOwnerCmd, "app-id")
+	appsAddOwnerCmd.Flags().String("user-id", "", "C1 user ID to add as owner")
+	markRequired(appsAddOwnerCmd, "user-id")
 	markMutating(appsAddOwnerCmd)
 	appsCmd.AddCommand(appsAddOwnerCmd)
 }

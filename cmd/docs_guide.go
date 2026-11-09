@@ -417,7 +417,8 @@ to check this.
 
 Note "set-owners" REPLACES the list with exactly the ids you pass, and
 "apps create" auto-assigns its caller as an owner: passing only "$OWNER_USER_ID"
-here removes yourself. Use "apps add-owner" instead to add without replacing.
+here removes yourself. Use "apps add-owner <app-id> --user-id <id>" instead to add without
+replacing.
 
 ### 3. Create a custom entitlement to grant
 
@@ -513,7 +514,8 @@ matters.
   exits 4).
 - "apps owners <id>" returns nothing at exit 0 for a well-formed but wrong
   app id -> that endpoint answers 200 with an empty list -> confirm with
-  "c1i apps get <id>" or "apps add-owner", both of which exit 4.
+  "c1i apps get <id>" or "apps add-owner <id> --user-id <uid>", both of which
+  exit 4.
 - "c1i apps get <id>" on a never-existed app -> 404 -> exit 4; on a deleted
   app it exits 0 with deletedAt set, so check deletedAt, not the exit code.
 - Building a SaaS-backed connector (Salesforce, Okta, Google Workspace, ...)

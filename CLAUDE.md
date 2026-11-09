@@ -156,6 +156,10 @@ tracked root file outside its allowlist. Stage explicit paths rather than `-A`.
     **more than one** id such as `mcp tools list --app-id --connector-id`);
     creates (`create`, `register`); and relationship/multi-id ops
     (`mcp bindings *`).
+  - **Membership verbs** (`owners`, `set-owners`, `add-owner`, `remove-owner`)
+    take the collection owner's id (app/entitlement) positionally; the member
+    (`--user-id`) is always a flag, so every owner verb in a family shares one
+    positional. `TestOwnerCommandsSharePositional` enforces it.
   - Never use a bare generic `--id` flag for a resource's own id — it must be
     the positional. Parent-scope ids keep descriptive flag names.
   This mirrors `users/apps/entitlements/automations/functions/requests get

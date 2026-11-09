@@ -109,6 +109,14 @@ wrapper key. New commands (see Added) follow the same contract.
 `apps set-owners --wait` now waits until the owner set equals the request,
 so a set that removes an owner can wait longer than before.
 
+**`apps add-owner` and `apps remove-owner` take the app as the positional.**
+The user is now `--user-id`, one per call (use `set-owners` for many), like
+every owner command. The old shape exits `2` and sends nothing; requests and
+output are unchanged.
+
+- `apps add-owner <user-id> --app-id <id>` → `apps add-owner <app-id> --user-id <id>`
+- `apps remove-owner <user-id> --app-id <id>` → `apps remove-owner <app-id> --user-id <id>`
+
 Exit codes and value types that change, each described under Fixed:
 
 - An input-file error (missing, malformed, `null` or the wrong shape) exits 2,
@@ -171,9 +179,9 @@ exits:
 - `mcp gateway list-tools --limit N` prints only the first N tools; a
   negative value exits 2 and 0 means all.
 - `entitlements owners <entitlement-id> --app-id` lists an entitlement's
-  owners (NDJSON, auto-paginating). `entitlements add-owner <user-id>` and
-  `entitlements remove-owner <user-id>` (both `--app-id --entitlement-id`)
-  change one owner; `entitlements set-owners <entitlement-id> --app-id
+  owners (NDJSON, auto-paginating). `entitlements add-owner <entitlement-id>`
+  and `entitlements remove-owner <entitlement-id>` (both `--app-id
+  --user-id`) change one owner; `entitlements set-owners <entitlement-id> --app-id
   --user-id ...` replaces the list and refuses an empty one; it looks up each
   user first and exits `2` on an unknown one, which the API would accept and
   silently drop, possibly leaving no owners. It sends a repeated `--user-id`
@@ -230,6 +238,9 @@ exits:
 
 ### Changed
 
+- `apps add-owner|remove-owner` take the app id as the positional and the
+  user as `--user-id`; their `--app-id` flag is removed (see "Upgrading from
+  0.9.2"). Every owner command in a family now shares one positional.
 - `apps set-owners` looks up each distinct `--user-id` before the `PUT` and
   exits `2` naming an unknown one, sending nothing (`--dry-run` skips the
   lookups): the API accepts an unknown id at exit `0` and stores it as an
