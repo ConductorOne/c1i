@@ -156,9 +156,8 @@ exits:
   `--callback-timeout` used to accept them, and `requests create grant
   --duration` and `tasks update-grant-duration --duration` used to send a
   protobuf decimal such as `3600.5s` as typed.
-- `entitlements create --duration-grant 0s` is
-  sent instead of exiting 2, and the server stores `0s`. `--expires 0s` is
-  sent instead of exiting 2, and the server refuses it with exit 2.
+- `--expires 0s` is sent instead of exiting 2, and the server refuses it
+  with exit 2.
 - `--expires` and `--callback-timeout` send a sub-second value such as
   `1s500ms` as `1.5s` instead of `1.500000000s`.
 
