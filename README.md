@@ -1303,14 +1303,11 @@ follow would hand your bearer token to whatever host the redirect named.
 A chain of allowed redirects that doesn't settle within five hops fails as a
 remote error (exit `6`) rather than looping.
 
-This applies to every command built on the shared transport: the REST client,
-the MCP gateway, the login handshake, `upgrade`, and `docs openapi`,
-`docs endpoints` and `docs endpoint`, so the path and redirect guards, `--debug`
-tracing, and `--max-retries` cover all of them, not just REST commands
-(`upgrade` and those `docs` commands map a refused redirect to exit `8`).
-**None of those four** applies to `docs search` and `docs page`, which call
-Go's default HTTP client directly: no path or redirect guard there, and
-`--debug` and `--max-retries` are both inert.
+This applies to every command that sends HTTP: the REST client, the MCP
+gateway, the login handshake, `upgrade` and every `docs` command, so the path
+and redirect guards, `--debug` tracing, and `--max-retries` cover all of them,
+not just REST commands (`upgrade` and the `docs` commands map a refused
+redirect to exit `8`, and `docs search`/`docs page` map any failure to `8`).
 
 One narrower carve-out inside login: the device-flow token poll forces its own
 retry count to zero, because RFC 8628's polling interval already *is* that

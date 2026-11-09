@@ -74,11 +74,8 @@ falls through to whatever the config file names.
 - `--debug` / `C1I_DEBUG` — trace HTTP method/URL/status/timing to stderr
   (never headers or bodies).
 
-`--debug` and `--max-retries` take effect only on the paths built on the shared
-transport (REST, `mcp gateway`, `auth login`, `upgrade`, `docs openapi`,
-`docs endpoints`, `docs endpoint`). They are inert on `docs search` and
-`docs page`, which issue their own HTTP, so no trace there does not mean no
-request was sent.
+`--debug` and `--max-retries` take effect on every command that sends HTTP
+(REST, `mcp gateway`, `auth login`, `upgrade` and all `docs` commands).
 
 ## Errors & exit codes
 

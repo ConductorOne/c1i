@@ -112,8 +112,8 @@ tracked root file outside its allowlist. Stage explicit paths rather than `-A`.
   `--max-retries` / `C1I_MAX_RETRIES` (default `client.DefaultMaxRetries`),
   `--error-format` / `C1I_ERROR_FORMAT` (`text`|`json`), `--dry-run` /
   `C1I_DRY_RUN` (preview a mutating request without sending it), `--debug` /
-  `C1I_DEBUG` (trace HTTP requests to stderr). `--debug` and `--max-retries`
-  are inert on `docs search` and `docs page` — see README for behavior.
+  `C1I_DEBUG` (trace HTTP requests to stderr). They reach every command that
+  sends HTTP, `docs search` and `docs page` included.
 
 ### Patterns to follow when adding/changing commands
 
@@ -323,21 +323,16 @@ a package, verify each of these against the new code:
   `http.Client` follows a 3xx transparently. An id of `""`, `"/"`, `"."` or
   `".."` reaching the collection endpoint by either path is the shape that produced
   the silent "returned the whole list with exit 0" bug.
-- **Thread `--debug` and `--max-retries` yourself — nothing does it for you.**
-  `transport.New` *accepts* both as options but sources neither: it defaults to
-  `DefaultMaxRetries` and debug-off and reads nothing ambient, so
-  `transport.New(base)` with no options ships tracing that shows nothing and a
-  retry count the flag can't change. Every caller passes them by hand —
-  `cmd/client.go:15-16` (the single viper read every REST command inherits via
-  `newClient`), `internal/client` from its own config, and `cmd/mcp_gateway.go`,
-  `cmd/auth_login.go`, `cmd/auth_token.go`, `cmd/upgrade.go`,
-  `cmd/docs_openapi.go` from viper. The deliberate exception is `auth login`'s
-  device-flow polling leg, where `PollForToken` forces `WithMaxRetries(0)`: the
-  RFC 8628 poll interval is that call's retry strategy. The accidental one is
-  `docs search` and `docs page` (`cmd/docs_search.go`), which call
-  `http.DefaultClient.Do` directly: both flags are inert at those two call
-  sites, no path or redirect guard applies, and they return bare `fmt.Errorf`
-  rather than a classifiable error. Don't add a third.
+- **Thread `--debug` and `--max-retries` through `globalTransportOptions()`
+  (or `globalClientOptions()` for `internal/client`), both in `cmd/client.go`.**
+  `transport.New` sources neither flag: with no options it ships tracing that
+  shows nothing and a retry count the flag can't change. Build every
+  non-REST client as `transport.New(base, globalTransportOptions()...)`; a
+  later option overrides an earlier one (`docs openapi` appends its retry
+  count). The one deliberate exception is `auth login`'s device-flow poll,
+  where `PollForToken` forces `WithMaxRetries(0)`: the RFC 8628 poll interval is
+  that call's retry strategy. `TestNoHTTPOutsideTransport` fails on any file
+  that sends HTTP without the shared transport.
 
 When implementing a wire protocol or stream parser (JSON-RPC, SSE, MCP, …), code
 and test against the **full input space the spec permits**, not just the shape a

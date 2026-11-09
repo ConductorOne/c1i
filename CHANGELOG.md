@@ -178,6 +178,10 @@ exits:
 - `--expires` and `--callback-timeout` send a sub-second value such as
   `1s500ms` as `1.5s` instead of `1.500000000s`.
 
+**`docs search` and `docs page` exit 8 when the docs site fails.** An
+unreachable site, a non-200 and an unparseable body used to exit 1; they now
+exit 8, whatever the status.
+
 ### Added
 
 - `tasks get <task-id>` reads a single task, the same endpoint as `requests
@@ -285,6 +289,9 @@ exits:
 
 ### Fixed
 
+- `--debug` and `--max-retries` now work on `docs search` and `docs page`,
+  which also gain the path and redirect guards and retry a 5xx. One helper
+  now builds those options for every client, so no command can skip them.
 - `docs guide configure-new-app` and `request-access` said c1i has no command
   to make an entitlement requestable or to read access-profile membership.
   They now give the recipe (a published, visible-to-everyone access profile

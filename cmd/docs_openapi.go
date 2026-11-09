@@ -193,18 +193,18 @@ func fetchOpenAPISpec(cmd *cobra.Command) ([]byte, error) {
 		return nil, err
 	}
 
-	hc := transport.New(openAPIBase,
+	// Later options win, so the retry override follows the global ones.
+	hc := transport.New(openAPIBase, append(globalTransportOptions(),
 		transport.WithMaxRetries(openAPIRetries(cachePath)),
-		transport.WithDebug(debugWriter()),
 		transport.WithMaxResponseBytes(maxOpenAPISpecBytes),
-	)
+	)...)
 	resp, err := hc.Do(req)
 	if err != nil {
-		return staleOpenAPISpec(cmd, cachePath, distError(err, "fetching OpenAPI spec"))
+		return staleOpenAPISpec(cmd, cachePath, externalServiceError(err, "fetching OpenAPI spec"))
 	}
 	if resp.StatusCode != http.StatusOK {
 		apiErr := &client.APIError{Method: req.Method, Path: req.URL.Path, StatusCode: resp.StatusCode}
-		return staleOpenAPISpec(cmd, cachePath, distError(apiErr, "fetching OpenAPI spec"))
+		return staleOpenAPISpec(cmd, cachePath, externalServiceError(apiErr, "fetching OpenAPI spec"))
 	}
 	data := resp.Body
 	// A captive portal answers 200 with HTML, and caching that would serve it
@@ -212,7 +212,7 @@ func fetchOpenAPISpec(cmd *cobra.Command) ([]byte, error) {
 	var doc map[string]any
 	err = yaml.Unmarshal(data, &doc)
 	if _, ok := doc["paths"]; err != nil || !ok {
-		return staleOpenAPISpec(cmd, cachePath, distError(fmt.Errorf("%s did not return an OpenAPI document", openapiURL), "fetching OpenAPI spec"))
+		return staleOpenAPISpec(cmd, cachePath, externalServiceError(fmt.Errorf("%s did not return an OpenAPI document", openapiURL), "fetching OpenAPI spec"))
 	}
 
 	if cachePath != "" {

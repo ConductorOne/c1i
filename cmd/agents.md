@@ -110,17 +110,14 @@ object per failed id (with `"id"`) and a final summary with no `id`, carrying
 JSON is for the detail, not the classification.
 
 `--debug` and `--max-retries` cover `mcp gateway`, `auth login` (except its
-device-code polling, which never retries), `upgrade`, `docs openapi`,
-`docs endpoints` and `docs endpoint` as well as the REST commands: the gateway
+device-code polling, which never retries), `upgrade` and every `docs` command
+as well as the REST commands: the gateway
 client threads both into its bearer mint and its JSON-RPC calls. On a
 `mcp gateway call` that hangs or fails oddly, `--debug` is the fastest way to
 see which request stopped.
 
-They do **not** reach `docs search` or `docs page`. Those bypass the shared
-transport for Go's default HTTP client, so `--debug` prints nothing and
-`--max-retries` is ignored. Silent `--debug` output there means the flag
-never reached that path, NOT that no request was sent — don't read it as
-evidence either way when a `docs` command comes back empty.
+A `docs search` or `docs page` failure (an unreachable docs site, a non-200,
+an unparseable body) exits `8`, whatever the status.
 
 Nor do the fetching `docs` commands call the same place, which matters for
 egress rules and for why one can fail while another works: `docs openapi`,

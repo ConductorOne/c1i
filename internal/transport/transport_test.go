@@ -645,3 +645,30 @@ func TestDo_EscapedSlashInIDNotRetried(t *testing.T) {
 		t.Fatalf("status = %d, calls = %d; want 503 and 1 (update must not be re-sent)", resp.StatusCode, len(*bodies))
 	}
 }
+
+// A read-only client retries a 503 on a POST that retrySafe would refuse.
+func TestWithReadOnlyRetriesPOST(t *testing.T) {
+	deterministicBackoff(t)
+	for _, readOnly := range []bool{false, true} {
+		var hits int
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			hits++
+			if hits == 1 {
+				w.WriteHeader(http.StatusServiceUnavailable)
+			}
+		}))
+		opts := []Option{WithMaxRetries(1)}
+		if readOnly {
+			opts = append(opts, WithReadOnly())
+		}
+		req, _ := http.NewRequest(http.MethodPost, srv.URL+"/q", strings.NewReader("{}"))
+		resp, err := New(nil, opts...).Do(req)
+		srv.Close()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if want := map[bool]int{false: 503, true: 200}[readOnly]; resp.StatusCode != want {
+			t.Errorf("readOnly=%v: status %d, want %d", readOnly, resp.StatusCode, want)
+		}
+	}
+}

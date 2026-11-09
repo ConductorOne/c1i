@@ -16,7 +16,6 @@ import (
 	"github.com/ConductorOne/c1i/internal/login"
 	"github.com/ConductorOne/c1i/internal/transport"
 	"github.com/spf13/cobra"
-	"github.com/spf13/viper"
 	"golang.org/x/term"
 )
 
@@ -217,13 +216,7 @@ func loginWithBrowser(cmd *cobra.Command, in *lineReader, baseURL string, scope 
 	ctx := cmd.Context()
 	out := cmd.OutOrStdout()
 
-	// The same --debug/--max-retries flags every REST command reads, so a
-	// hung or flaky auth host traces and retries like the rest of the CLI
-	// instead of silently hanging or giving up after one try.
-	opts := []transport.Option{
-		transport.WithMaxRetries(viper.GetInt("max_retries")),
-		transport.WithDebug(debugWriter()),
-	}
+	opts := globalTransportOptions()
 
 	code, err := login.StartDeviceFlow(ctx, baseURL, opts...)
 	if err != nil {

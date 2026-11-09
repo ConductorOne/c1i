@@ -146,6 +146,7 @@ type Client struct {
 	maxRetries   int
 	nonRetryable func(error) bool
 	maxRespBytes int64
+	readOnly     bool
 }
 
 type buildConfig struct {
@@ -154,6 +155,7 @@ type buildConfig struct {
 	timeout      time.Duration
 	nonRetryable func(error) bool
 	maxRespBytes int64
+	readOnly     bool
 }
 
 // Option configures a Client at construction time.
@@ -175,6 +177,13 @@ func WithMaxRetries(n int) Option {
 // bodies are never logged, so credentials don't leak.
 func WithDebug(w io.Writer) Option {
 	return func(c *buildConfig) { c.debug = w }
+}
+
+// WithReadOnly declares every request through the Client read-only, so a POST
+// that only carries a query (a docs search) is retried like a GET. Leave it off
+// for any client that can send a mutation.
+func WithReadOnly() Option {
+	return func(c *buildConfig) { c.readOnly = true }
 }
 
 // WithTimeout overrides DefaultTimeout for a single attempt.
@@ -235,6 +244,7 @@ func New(base http.RoundTripper, opts ...Option) *Client {
 		maxRetries:   cfg.maxRetries,
 		nonRetryable: cfg.nonRetryable,
 		maxRespBytes: cfg.maxRespBytes,
+		readOnly:     cfg.readOnly,
 	}
 }
 
@@ -322,7 +332,7 @@ func (c *Client) sendWithRetry(req *http.Request) (*Response, error) {
 			// Transport-level failure (connection reset, timeout, ...). We
 			// can't tell whether the server processed the request, so only
 			// retry idempotent methods.
-			if retrySafe(req.Method, req.URL.EscapedPath()) && attempt < c.maxRetries {
+			if (c.readOnly || retrySafe(req.Method, req.URL.EscapedPath())) && attempt < c.maxRetries {
 				priorSent = priorSent || sent.Load()
 				if serr := sleepFn(ctx, nextBackoff(attempt, nil)); serr != nil {
 					return nil, &AttemptError{Err: serr, PriorSent: priorSent}
@@ -335,7 +345,7 @@ func (c *Client) sendWithRetry(req *http.Request) (*Response, error) {
 		body, readErr := c.readBody(resp.Body)
 		_ = resp.Body.Close()
 
-		if isRetryableStatus(req.Method, req.URL.EscapedPath(), resp.StatusCode) && attempt < c.maxRetries {
+		if statusRetryable(resp.StatusCode, c.readOnly || retrySafe(req.Method, req.URL.EscapedPath())) && attempt < c.maxRetries {
 			priorSent = priorSent || sent.Load()
 			if serr := sleepFn(ctx, nextBackoff(attempt, resp)); serr != nil {
 				return nil, &AttemptError{Err: serr, PriorSent: priorSent}
@@ -403,6 +413,11 @@ func retrySafe(method, path string) bool {
 // rejected before processing. The transient 5xx codes are retried only when
 // retrySafe. 501/505 and 4xx (other than 429) are never retried.
 func isRetryableStatus(method, path string, code int) bool {
+	return statusRetryable(code, retrySafe(method, path))
+}
+
+// statusRetryable is isRetryableStatus once retry-safety is already decided.
+func statusRetryable(code int, safe bool) bool {
 	switch code {
 	case http.StatusTooManyRequests: // 429
 		return true
@@ -410,7 +425,7 @@ func isRetryableStatus(method, path string, code int) bool {
 		http.StatusBadGateway,         // 502
 		http.StatusServiceUnavailable, // 503
 		http.StatusGatewayTimeout:     // 504
-		return retrySafe(method, path)
+		return safe
 	default:
 		return false
 	}
