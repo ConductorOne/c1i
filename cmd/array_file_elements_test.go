@@ -169,6 +169,32 @@ func TestBodyFilePolicyStepsShape(t *testing.T) {
 	}
 }
 
+// TestBodyFilePolicyStepsNonBaselineEntry pins the one shape 0.9.2 sent: a
+// non-object entry under a key other than the policy type's own.
+func TestBodyFilePolicyStepsNonBaselineEntry(t *testing.T) {
+	const want = `--body-file policySteps["revoke"] must be a JSON object, not a string`
+	body := `{"displayName":"x","policyType":"POLICY_TYPE_GRANT","policySteps":{"grant":{"steps":[{"approval":{"users":{"userIds":["u1"]}}}]},"revoke":"x"}}`
+	for _, cmdArgs := range [][]string{{"policies", "create"}, {"policies", "update", "p1", "--update-mask", "policySteps"}} {
+		for _, dry := range []bool{false, true} {
+			t.Run(fmt.Sprintf("%s/dry=%v", cmdArgs[1], dry), func(t *testing.T) {
+				t.Setenv("C1I_URL", mutTestURL)
+				srv := newMutServer(t, fixedReply(200, `{}`))
+				args := append(append([]string{}, cmdArgs...), "--body-file", writeTempFile(t, body))
+				if dry {
+					args = append(args, "--dry-run")
+				}
+				res := runMutationCLI(t, srv.srv, 0, nil, args...)
+				if res.exit != exitUsage || !strings.Contains(res.stderr, want) {
+					t.Errorf("exit %d, stderr %q; want exit %d naming %q", res.exit, res.stderr, exitUsage, want)
+				}
+				if n := len(srv.requests()); n != 0 {
+					t.Errorf("sent %d requests, want 0", n)
+				}
+			})
+		}
+	}
+}
+
 func TestRulesFileFromStdinElementsMustBeObjects(t *testing.T) {
 	t.Setenv("C1I_URL", mutTestURL)
 	srv := newMutServer(t, fixedReply(200, `{}`))
