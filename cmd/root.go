@@ -184,7 +184,7 @@ func init() {
 	})
 	rootCmd.PersistentFlags().String("url", "", "C1 tenant URL; https required. Precedence: --url, C1I_URL, then ~/.c1i.yaml")
 	_ = viper.BindPFlag("url", rootCmd.PersistentFlags().Lookup("url"))
-	_ = viper.BindEnv("url", "C1I_URL")
+	_ = viper.BindEnv("url", urlEnvVar)
 
 	rootCmd.PersistentFlags().String("fields", "", "Comma-separated JSON fields to keep in read output (dot-paths); prefer over jq for simple projection")
 	_ = viper.BindPFlag("fields", rootCmd.PersistentFlags().Lookup("fields"))
@@ -263,9 +263,15 @@ func warnAboutURLSource(baseURL string, source URLSource) {
 	if source != URLSourceConfig {
 		return
 	}
-	noticeTo(os.Stderr, noticeURLDefault, fmt.Sprintf("Warning: no --url flag given; targeting %s (from %s)", baseURL, urlSourceLabel(source)),
+	noticeTo(os.Stderr, noticeURLDefault, fmt.Sprintf(urlDefaultWarningFmt, baseURL, urlSourceLabel(source)),
 		map[string]any{"url": baseURL, "source": urlSourceToken(source)})
 }
+
+// urlEnvVar and urlDefaultWarningFmt are quoted by cmd/agents.md; a test pins them.
+const (
+	urlEnvVar            = "C1I_URL"
+	urlDefaultWarningFmt = "Warning: no --url flag given; targeting %s (from %s)"
+)
 
 // URLSource indicates where the URL was resolved from.
 type URLSource int
@@ -327,7 +333,7 @@ func GetBaseURLWithSource() (string, URLSource, error) {
 	if f := rootCmd.PersistentFlags().Lookup("url"); f != nil && f.Changed {
 		return parse(f.Value.String(), URLSourceFlag)
 	}
-	if v := os.Getenv("C1I_URL"); v != "" {
+	if v := os.Getenv(urlEnvVar); v != "" {
 		return parse(v, URLSourceEnv)
 	}
 	if v := viper.GetString("url"); v != "" {
