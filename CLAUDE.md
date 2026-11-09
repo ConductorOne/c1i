@@ -188,8 +188,8 @@ tracked root file outside its allowlist. Stage explicit paths rather than `-A`.
   `hasVisibleRune`) exits 2 before any request. `validateBlankFlags` and
   `validateBlankArgs` run in the root `PersistentPreRunE`; add no per-command
   check. `requireNonEmpty` stays only where the command itself requires a flag
-  cobra does not (`annotateRequired`, or required in one mode). A flag where blank means something goes in
-  `blankFlagExemptions` with a reason.
+  cobra does not (`annotateRequired`, or required in one mode). There is no
+  exemption list; a flag-specific hint goes in a `blankHintAnnotation`.
   `TestBlankIDAndRequiredFlagsExitUsage` and `TestBlankPositionalsExitUsage`
   walk the tree.
 - **A new flag must be named in a top-level doc (enforced convention):**

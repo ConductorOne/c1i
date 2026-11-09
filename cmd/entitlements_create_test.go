@@ -589,12 +589,6 @@ func TestEntitlementCreatePolicyFlags(t *testing.T) {
 		t.Errorf("entitlement body = %v, want %v", p.entitlementBody, want)
 	}
 
-	for _, flag := range []string{"grant-policy-id", "revoke-policy-id", "certify-policy-id", "emergency-grant-policy-id"} {
-		cmd := newEntitlementCreateCmd(t, "--app-id", "app1", "--display-name", "e", "--"+flag, "")
-		if _, err := buildEntitlementCreatePlan(cmd); err == nil || !strings.Contains(err.Error(), "--"+flag+" requires a non-empty value") {
-			t.Errorf("--%s \"\": err = %v, want a non-empty-value usage error", flag, err)
-		}
-	}
 }
 
 // TestEntitlementCreateRetryRemediationIsAccepted pins that the retry the

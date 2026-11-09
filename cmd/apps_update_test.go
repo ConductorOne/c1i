@@ -52,7 +52,6 @@ func TestBuildAppUpdateBodyExactPatchAndMask(t *testing.T) {
 			wantApp: map[string]any{"certifyPolicyId": "cp"}, wantMask: "certifyPolicyId"},
 		{name: "unbind policy", flags: [][2]string{{"unbind-policy", "grant"}},
 			wantApp: map[string]any{"grantPolicyId": ""}, wantMask: "grantPolicyId"},
-		{name: "empty policy id is refused", flags: [][2]string{{"grant-policy-id", ""}}, wantError: "--grant-policy-id requires a non-empty value"},
 		{name: "identity matching short", flags: [][2]string{{"identity-matching", "STRICT"}},
 			wantApp: map[string]any{"identityMatching": "APP_USER_IDENTITY_MATCHING_STRICT"}, wantMask: "identityMatching"},
 		{name: "identity matching underscore separator", flags: [][2]string{{"identity-matching", "display_name"}},

@@ -9,7 +9,8 @@ import (
 	"github.com/spf13/pflag"
 )
 
-var blankValues = []string{"  ", "\u200b"}
+// "" is the unset-shell-variable case; --flag "" sets the flag, unlike omitting it.
+var blankValues = []string{"", "  ", "\u200b"}
 
 // blankCheckCommands returns every runnable command in the real tree except
 // cobra's own help/completion machinery.
@@ -63,7 +64,7 @@ func blankArgs(t *testing.T, c *cobra.Command, blankFlag, value string) []string
 }
 
 // TestBlankIDAndRequiredFlagsExitUsage walks the whole command tree: every
-// string flag that is required or id-shaped (and not exempt) must exit 2 on a
+// string flag that is required or id-shaped must exit 2 on a
 // blank value with nothing sent. One central rule (validateBlankFlags)
 // provides this; a per-command check is never needed.
 func TestBlankIDAndRequiredFlagsExitUsage(t *testing.T) {
@@ -72,9 +73,6 @@ func TestBlankIDAndRequiredFlagsExitUsage(t *testing.T) {
 	for _, c := range blankCheckCommands() {
 		c.Flags().VisitAll(func(f *pflag.Flag) {
 			if f.Value.Type() != "string" || (!isRequiredFlag(f) && !strings.HasSuffix(f.Name, "-id")) {
-				return
-			}
-			if _, ok := blankFlagExemptions[f.Name]; ok {
 				return
 			}
 			for _, v := range blankValues {
@@ -147,5 +145,42 @@ func TestBlankPredicateIsOneEverywhere(t *testing.T) {
 	}
 	if _, err := repeatableStringFlag(cmd, "r"); err == nil {
 		t.Error("repeatableStringFlag accepted an invisible-only value")
+	}
+}
+
+// The policy-id flags are blank-checked centrally like any *-id flag; only the
+// update commands, which have --unbind-policy, add the unbind hint.
+func TestBlankPolicyIDFlagsExitUsageWithHint(t *testing.T) {
+	t.Setenv("C1I_URL", mutTestURL)
+	cases := []struct {
+		args  []string
+		kinds []policyKind
+		hint  bool
+	}{
+		{[]string{"apps", "create", "--display-name", "x"}, appPolicyKinds, false},
+		{[]string{"apps", "update", "abc"}, appPolicyKinds, true},
+		{[]string{"entitlements", "create", "--app-id", "a", "--display-name", "x"}, entitlementPolicyKinds, false},
+		{[]string{"entitlements", "update", "abc", "--app-id", "a"}, entitlementPolicyKinds, true},
+	}
+	for _, tc := range cases {
+		for _, k := range tc.kinds {
+			for _, v := range blankValues {
+				t.Run(fmt.Sprintf("%s --%s %q", strings.Join(tc.args[:2], " "), k.flag, v), func(t *testing.T) {
+					srv := newMutServer(t, fixedReply(200, "{}"))
+					args := append(append([]string(nil), tc.args...), "--"+k.flag, v)
+					res := runMutationCLI(t, srv.srv, 0, nil, args...)
+					want := "flag --" + k.flag + " requires a non-empty value"
+					if res.exit != exitUsage || res.err == nil || !strings.Contains(res.err.Error(), want) {
+						t.Fatalf("exit = %d, err = %v, want exit 2 containing %q", res.exit, res.err, want)
+					}
+					if got := strings.Contains(res.err.Error(), "--unbind-policy "+k.kind); got != tc.hint {
+						t.Errorf("unbind hint present = %v, want %v: %v", got, tc.hint, res.err)
+					}
+					if got := srv.requests(); len(got) != 0 {
+						t.Errorf("requests sent: %v", got)
+					}
+				})
+			}
+		}
 	}
 }

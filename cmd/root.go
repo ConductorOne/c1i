@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -134,21 +135,10 @@ func isCompletionRequest(cmd *cobra.Command) bool {
 	return cmd.Name() == cobra.ShellCompRequestCmd || cmd.Name() == cobra.ShellCompNoDescRequestCmd
 }
 
-// blankFlagExemptions maps an id-shaped or required string flag name to why
-// validateBlankFlags skips it. No blank value means anything; these flags
-// refuse it themselves with a better message.
-var blankFlagExemptions = map[string]string{
-	"grant-policy-id":           policyIDBlankReason,
-	"revoke-policy-id":          policyIDBlankReason,
-	"certify-policy-id":         policyIDBlankReason,
-	"emergency-grant-policy-id": policyIDBlankReason,
-}
-
-const policyIDBlankReason = "policyIDFlag (policy_binding.go) refuses blank and hints at --unbind-policy"
-
 // validateBlankFlags rejects a set string flag that is required or id-shaped
 // (name ends in -id) and has no visible character. Without it `--app-id " "`
-// drops the scope and over-fetches, or addresses the wrong object.
+// drops the scope and over-fetches, or addresses the wrong object. A
+// blankHintAnnotation on the flag is appended to the message.
 func validateBlankFlags(cmd *cobra.Command) error {
 	if isCompletionRequest(cmd) {
 		return nil
@@ -161,10 +151,14 @@ func validateBlankFlags(cmd *cobra.Command) error {
 		if f.Annotations[requiredAnnotation] == nil && !strings.HasSuffix(f.Name, "-id") {
 			return
 		}
-		if _, ok := blankFlagExemptions[f.Name]; ok || hasVisibleRune(f.Value.String()) {
+		if hasVisibleRune(f.Value.String()) {
 			return
 		}
-		err = &usageError{fmt.Errorf("flag --%s requires a non-empty value", f.Name)}
+		msg := fmt.Sprintf("flag --%s requires a non-empty value", f.Name)
+		if h := f.Annotations[blankHintAnnotation]; len(h) > 0 {
+			msg += "; " + h[0]
+		}
+		err = &usageError{errors.New(msg)}
 	})
 	return err
 }

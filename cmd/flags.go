@@ -29,6 +29,10 @@ func markRequired(cmd *cobra.Command, names ...string) {
 // validateBlankFlags reads it, so a required flag is detected one way.
 const requiredAnnotation = "c1i_required"
 
+// blankHintAnnotation holds text validateBlankFlags appends to a flag's
+// blank-value error.
+const blankHintAnnotation = "c1i_blank_hint"
+
 // annotateRequired appends "(required)" to each named flag's usage WITHOUT
 // enabling cobra's pre-run required-flag validation. Use it when a command has
 // an escape-hatch flag (e.g. register's --print-config-template) that is valid
@@ -465,8 +469,9 @@ func requireNonEmpty(cmd *cobra.Command, names ...string) error {
 	}
 }
 
-// displayNameRule is the one wording for every --display-name: blank is
-// refused by requireNonEmptyIfSet, so a create/update exits 2 before sending.
+// displayNameRule is the one wording for every --display-name: blank exits 2
+// before sending (centrally on creates, where it is required;
+// requireNonEmptyIfSet on the optional update flag).
 const displayNameRule = "cannot be blank: empty, whitespace or invisible-only"
 
 // requireNonEmptyIfSet errors when a flag was passed with no visible
