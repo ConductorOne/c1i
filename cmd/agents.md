@@ -283,8 +283,6 @@ Choose the simplest output tool:
   or extracting a value from mutation output (use `jq -er`, which fails on a
   missing id or a `--dry-run` preview where `jq -r` exits 0 with `null`).
 
-`user_count` is the platform's stored count, not a live tally: on some apps it differs from the number of `accounts list --app-id <app-id>` rows. To size a change, count those rows (or `grants list --app-id`), not `user_count`.
-
 ```sh
 # Known keys: prefer c1i's built-in projection
 c1i users list --fields id,email
@@ -294,6 +292,8 @@ DELETED_APPS="$(c1i apps list | jq -c 'if .deleted_at then . else empty end')"
 # Mutation output: never projected; extract the id with jq -er
 APP_ID=$(c1i apps create --display-name "Example" | jq -er .id)
 ```
+
+`user_count` is the platform's stored count, not a live tally: on some apps it differs from the number of `accounts list --app-id <app-id>` rows. To size a change, count those rows, not `user_count`.
 
 ## Exit codes
 

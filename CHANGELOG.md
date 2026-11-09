@@ -16,12 +16,6 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `v0.58.1-0.20261009181718-2f1f834330b2`, which fixes GO-2026-5932; c1i does
   not call the affected code, and no tagged release has the fix yet.
 
-### Fixed
-
-- `requests list --entitlement-id` without `--app-id` now exits 2. An
-  entitlement id repeats across apps, so the filter returned requests from
-  every app sharing it; `grants list` already required the pair.
-
 ### Upgrading from 0.9.2
 
 **Mutations now print the API's response, unwrapped the same way `get`
@@ -199,6 +193,10 @@ whose `reachable` is not the boolean `true` counts as unreachable (exit 8), and
 a 200 body that is not a JSON object now exits 6 (it used to exit 0). Check the
 exit code, not just `reachable`.
 
+`requests list --entitlement-id` now needs `--app-id`, or it exits 2: an
+entitlement id repeats across apps, and the id alone matched requests from
+every app that shares it.
+
 ### Added
 
 - `tasks get <task-id>` reads a single task, the same endpoint as `requests
@@ -308,6 +306,9 @@ exit code, not just `reachable`.
 
 ### Fixed
 
+- `requests list --entitlement-id` without `--app-id` returned requests from
+  every app sharing that entitlement id; it now requires `--app-id`, as
+  `grants list` already did.
 - `--debug` and `--max-retries` now work on `docs search` and `docs page`,
   which also gain the path and redirect guards and retry a 5xx. One helper now
   builds those options for every client, so no command can skip them.

@@ -413,8 +413,8 @@ func collectErrorsAsTypes(t *testing.T, path, funcName string) []errorsAsType {
 // type that determines the process exit code must be named — by its bare
 // identifier ("APIError", "TransportError", "usageError", ...), anywhere in
 // the file, regardless of whether a document qualifies it with its package
-// or which sentence carries it — in CLAUDE.md, the
-// document that enumerates the typed-error list. Matching is deliberately whole-file rather than scoped to a
+// or which sentence carries it — in CLAUDE.md, the document that enumerates
+// the typed-error list. Matching is deliberately whole-file rather than scoped to a
 // specific heading/bullet: CLAUDE.md's prose around this list is expected to
 // get reworded and rewrapped over time, and a guard tied to today's sentence
 // structure would break on the next rewrite even though the docs still name
