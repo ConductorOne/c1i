@@ -6,16 +6,24 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
-### Upgrading from 0.9.1
+### Security
+
+- `github.com/go-jose/go-jose/v4` moves to 4.1.9, which fixes six published
+  advisories (GHSA-mgcc-cww5-fp2q, GHSA-r39w-98wm-9pp6, GHSA-27pc-rm86-68pq,
+  GHSA-p9j4-2j95-j4rv, GHSA-v6h2-qj3f-2h6v and GHSA-c67m-wr4h-2ccg), and
+  `golang.org/x/net` to 0.62.0, which fixes GO-2026-6860 and GO-2026-6866.
+- `golang.org/x/crypto` is pinned to the untagged
+  `v0.58.1-0.20261009181718-2f1f834330b2`, which fixes GO-2026-5932; c1i does
+  not call the affected code, and no tagged release has the fix yet.
+
+### Upgrading from 0.9.2
 
 **Mutations now print the API's response, unwrapped the same way `get`
 unwraps it.** This is the breaking change in this release, and it is meant to
 be the only one for mutation output. Every create, update, delete, owner
-change, task action and binding command prints JSON. Of the 101 mutating
-commands in 0.9.1, 26 move from a text line to JSON (14 print an object, 12
-print `{}`), 41 drop a wrapper, `mcp bindings delete` drops its synthesized
-object, and 33 print exactly what they did. `entitlements delete` and
-`tasks get` are new (see Added) and follow the same contract.
+change, task action and binding command prints JSON: commands that printed a
+text line now print JSON, and commands that wrapped the response drop the
+wrapper key. New commands (see Added) follow the same contract.
 
 - **Drop the wrapper key from your paths, and read the id from the path the
   command documents:**
@@ -24,10 +32,8 @@ object, and 33 print exactly what they did. `entitlements delete` and
   - `access-reviews create|update`: `.accessReview.accessReview.id` → `.id`
   - `accounts set-owner`: `app_user_id=…` → `.id`; `identity_user_id=…` →
     `.identityUserId`
-  - `apps create|update`: `.app.id` → `.id`
-  - `automations update`: `.automation.id` → `.id`
-  - `entitlements create|update`: `.appEntitlementView.appEntitlement.id` →
-    `.id`
+  - `apps create`: `.app.id` → `.id`
+  - `entitlements create`: `.appEntitlementView.appEntitlement.id` → `.id`
   - `entitlements proxy-bindings create`:
     `.appProxyEntitlementView.appProxyEntitlement.srcAppId` → `.srcAppId`
     (likewise `.srcAppEntitlementId`, `.dstAppId`, `.dstAppEntitlementId`)
@@ -50,9 +56,6 @@ object, and 33 print exactly what they did. `entitlements delete` and
   - `service-principals create|update`: `.servicePrincipal.id` → `.id`;
     `credentials create|update`: `.credential.id` → `.id`,
     `.credential.clientId` → `.clientId`
-  - `webhooks create|update`: `.webhook.id` → `.id`; `webhooks test`:
-    `.webhook.id` → `.id` (the delivery), `.webhook.webhookId` →
-    `.webhookId` (the webhook)
 
   **Not every response has an `id`:**
   - `role-mining trigger`: `.runId`
@@ -60,6 +63,8 @@ object, and 33 print exactly what they did. `entitlements delete` and
   - `findings bulk-*`: `.bulkActionId`
   - `findings create-task`: unchanged, `.taskId` and `.finding.id`
   - `mcp bindings create`: `.bindings[]`
+  - `findings settings update`: `.list[]`
+  - `role-mining custom-analysis trigger`: `.id`
 
   Nothing is dropped: every other envelope key, including `expanded`, is a
   top-level field, and `.clientSecret` is where it was.
@@ -101,17 +106,21 @@ object, and 33 print exactly what they did. `entitlements delete` and
     - The `apps set-owners --wait` lines move from stdout to stderr.
     - The `entitlements create` dry-run note moves from stdout to stderr.
 
-With no cached spec, a failed `docs openapi`, `docs endpoints` or
-`docs endpoint` now exits 4, 5, 6 or 8 instead of 1, and a 429, a transient
-5xx or a network error is retried up to 4 times by default, so an unreachable
-host takes several seconds to fail; `--max-retries 0` restores a single
-attempt. When the config directory resolves to a relative path (a relative
-`HOME`, `%AppData%` or `XDG_CONFIG_HOME`), every command that needs stored
-credentials fails instead of using the working directory. With a relative
-`HOME`, `~/.c1i.yaml` is ignored.
-
 `apps set-owners --wait` now waits until the owner set equals the request,
 so a set that removes an owner can wait longer than before.
+
+Exit codes and value types that change, each described under Fixed:
+
+- An input-file error (missing, malformed, `null` or the wrong shape) exits 2,
+  not 1.
+- An id of `.` or `..` exits 2 and sends nothing, for every method.
+- A blank or invisible-only `--display-name` exits 2, not 0.
+- A failed write to stdout exits 1, not 0.
+- A stuck pagination cursor exits 6, not an endless loop.
+- A `200` list page that is HTML, an array, empty or truncated exits 6, not 1.
+- `mcp gateway list-tools` with a cursor that never ends exits 8, not 1.
+- `api --paginate` with a misspelled `--list-key` exits 2, not 0.
+- `last_executed_at` is `null`, not `""`, for a never-run automation.
 
 Named-value flags now refuse more input before sending anything, each with
 exit 2. `automations executions list --state <unknown>` used to print nothing
@@ -122,7 +131,7 @@ and exit 0. An unknown short value for `accounts list --status`/`--type`,
 value (such as a lookalike `ı` or `ſ`), is refused on every such flag. A value
 carrying the flag's API prefix is still sent, upper-cased with `-` turned to
 `_`; `mcp servers --type` is the exception and takes only `hosted` or
-`external`. Three typed values are now rewritten, where 0.9.1 sent them as
+`external`. Three typed values are now rewritten, where 0.9.2 sent them as
 typed and the server answered 400: `MCP_TOOL_STATE_PENDING` becomes
 `MCP_TOOL_STATE_PENDING_REVIEW`, and
 `REQUEST_CATALOG_ENROLLMENT_BEHAVIOR_BYPASS`/`_ENFORCE` become their
@@ -147,7 +156,7 @@ exits:
   `--callback-timeout` used to accept them, and `requests create grant
   --duration` and `tasks update-grant-duration --duration` used to send a
   protobuf decimal such as `3600.5s` as typed.
-- `entitlements create` and `entitlements update --duration-grant 0s` are
+- `entitlements create --duration-grant 0s` is
   sent instead of exiting 2, and the server stores `0s`. `--expires 0s` is
   sent instead of exiting 2, and the server refuses it with exit 2.
 - `--expires` and `--callback-timeout` send a sub-second value such as
@@ -187,8 +196,9 @@ exits:
   must exist, not be deleted, and be of the slot's type; the emergency slot
   takes a grant policy), otherwise exit `2` and nothing is sent; an empty
   policy id is exit `2`. Create's `--duration-grant` now also accepts a
-  Go duration (`8h`) and refuses a non-positive one at exit 2; an empty
-  `--duration-grant ""`, previously ignored, now exits 2 too.
+  Go duration (`8h`); `0s` is accepted and sent, and a negative or
+  signed value, a decimal one or an empty `--duration-grant ""` (previously
+  ignored) exits 2.
 - `users list --origin directory|local|system|all` (repeatable; a
   `USER_ORIGIN_*` value is also accepted) filters by user origin;
   `--origin all` lists every user, including the local-origin and system users
@@ -225,10 +235,8 @@ exits:
   exits `2` naming an unknown one, sending nothing (`--dry-run` skips the
   lookups): the API accepts an unknown id at exit `0` and stores it as an
   owner no user matches, so a set naming only unknown ids leaves no real
-  owners. A repeated `--user-id` is sent once. `--wait` now waits until the
-  owner set equals the request, removals included, instead of returning as
-  soon as the requested ids are present. It prints the API's JSON response,
-  with `--wait` progress on stderr (see Upgrading).
+  owners. A repeated `--user-id` is sent once. It prints the API's JSON
+  response, with `--wait` progress on stderr (see Upgrading).
 - Apps and entitlement owner help, README, `cmd/agents.md` and the
   configure-new-app guide no longer quote a provisioning range, which varies
   by tenant and server version: "Owner changes are applied asynchronously
@@ -240,7 +248,7 @@ exits:
   whitespace are ignored, `-` and `_` are interchangeable, and the full API
   name is accepted in any case (`--state pending-review`,
   `--sort SORT_DIRECTION_DESC`). `--help` value lists are generated from one
-  table per flag. See "Upgrading from 0.9.1" for the exit-code changes.
+  table per flag. See "Upgrading from 0.9.2" for the exit-code changes.
 - Every duration flag sent to the API (`--duration-grant`, `requests create
   grant --duration`, `tasks update-grant-duration --duration`, `--expires`,
   `--callback-timeout`) takes a whole-number Go (`8h`, `1h30m`) or protobuf
@@ -249,16 +257,12 @@ exits:
   and `tasks update-grant-duration --duration` previously passed the value
   through, so `24h` failed with `invalid google.protobuf.Duration value
   "24h"`; it is now sent as `86400s`.
-- `golang.org/x/term` moves to 0.47.0 and `golang.org/x/sys` to 0.49.0.
-- `golang.org/x/crypto` is pinned to the untagged
-  `v0.58.1-0.20261009181718-2f1f834330b2`, which fixes GO-2026-5932; c1i does
-  not call the affected code, and no tagged release has the fix yet.
 - `github.com/spf13/pflag` moves to 1.1.0: `--help` shows boolean flags as
   `--debug[=true|false]`, and a bad integer, boolean or duration value reads
   `must be an integer`, `must be true or false` or `must be a duration like
   "30s" or "5m"` instead of a Go parse error. Exit codes are unchanged.
-- `github.com/go-jose/go-jose/v4` moves to 4.1.9 and
-  `github.com/sigstore/sigstore` to 1.11.3.
+- `github.com/sigstore/sigstore` moves to 1.11.3, `sigstore-go` to 1.4.0,
+  `go.yaml.in/yaml/v3` to 3.0.6 and `golang.org/x/mod` to 0.42.0.
 
 ### Fixed
 
@@ -290,8 +294,6 @@ exits:
   every method. The API resolves such a segment to the parent or collection,
   and a write could reach the wrong handler with no redirect for the client to
   refuse.
-- `apps set-owners` exits 1 (`writing output:`) when its response can't be
-  written to stdout, instead of 0; the owners were already set.
 - An input file that is missing, malformed, JSON `null` or the wrong JSON
   shape now exits `2` (usage) before any request, and the error names the
   flag: every `--body-file` (including `api`'s), the MCP server
@@ -299,31 +301,39 @@ exits:
   `--refs-file`. These exited `1`; a `null` body file could panic, and a
   `null` `--rules-file` sent `"rules": null` with exit 0.
 - **A failed write to stdout now exits `1`** (e.g. a full disk) instead of
-  `0`; list commands stop paging at the first failed row.
+  `0`; list commands stop paging at the first failed row. A mutation such as
+  `apps set-owners` exits 1 too, though its change was already applied.
 - **Every auto-paginating command now stops on a stuck cursor** instead of
-  looping forever, exiting `6`: on a repeated `nextPageToken`; for rows with
-  an id, on repeated pages of rows already seen; and (except `export events`)
-  after 100,000 pages in a row bring no new row, which for id-less rows such
-  as the MCP history lists means any 100,000 pages. This covers every list
-  command, `grants list --wait`, and the `auth login` role menu; previously
-  only `automations`/`functions` lists and `api --paginate` had the guard. A
-  `mcp gateway list-tools` cursor that never ends now exits `8` rather than
-  `1`.
+  looping forever, keeps the rows already printed, warns on stderr that
+  results are INCOMPLETE and exits `6`. A cursor counts as stuck on a
+  repeated `nextPageToken`; on two pages in a row of rows already seen (for
+  rows with an id, 25 or more rows in all); after 100 empty pages in a row;
+  and after 100,000 pages in a row with no new row. `export events` is exempt
+  from the last two. This covers every list command, `grants list --wait`,
+  `api --paginate` and the `auth login` role menu. A page of rows already
+  printed is skipped even when it also holds a row without an id, and a page
+  whose rows all lack the id the command reads exits `6` instead of printing
+  unchecked rows; `grants list`, the entitlement lists and `automations
+  executions list`, whose ids can legitimately be missing, still print such
+  rows. `api --paginate` holds an isolated page of already-seen items and
+  prints it once a later page brings a new item, the list ends, or a later
+  request fails (the exit code stays the failure's). `mcp gateway list-tools`
+  with a cursor that never ends now exits `8` rather than `1`. A `200` page
+  whose body is HTML, an array, empty or truncated exits `6`, not `1`, and an
+  `api --paginate --list-key` field that isn't an array exits `2`.
+  `grants list` now reads a grant's account and entitlement ids from the
+  binding when the expanded objects are missing.
 
-- **A stuck cursor could still re-print rows or run for 100,000 pages.** A
-  page of rows already printed is now skipped even when it also holds a row
-  without an id (only that row is printed), and 100 empty pages in a row end
-  a list with exit `6` (`export events` excepted). A page whose rows all lack
-  the id the command reads now exits `6` instead of printing unchecked rows;
-  `grants list`, the entitlement lists and `automations executions list`,
-  whose ids can legitimately be missing, still print such rows. `grants list`
-  now reads a grant's account and entitlement ids from the binding when the
-  expanded objects are missing. `api --paginate` no longer drops an isolated
-  page of items it has already seen; it prints it once a later page brings a
-  new item, the list ends, or a later request fails (the exit code stays the
-  failure's). A `200` page whose body is HTML, an array, empty or truncated
-  now exits `6`, not `1`, and a `--list-key` field that isn't an array exits
-  `2`.
+- **`automations list`, `automations executions list`, `functions usage`,
+  `functions list` and `functions commits` could loop forever**, re-printing
+  the same rows: on a large enough result set, `/api/v1/automations`,
+  `/api/v1/automation_executions`, `/api/v1/functions` and
+  `/api/v1/functions/{id}/commits` ignore `page_size`/`page_token` and return
+  the first page under a fresh `nextPageToken` every time. `automations
+  list`, `automations executions list` and `functions usage` now read `POST
+  /api/v1/search/automations` and `POST /api/v1/search/automation_executions`,
+  which page correctly, with output rows unchanged. `functions list` and
+  `functions commits` stop on a stuck cursor as described above.
 
 - **`role-mining suggestions|runs|custom-analysis list` and
   `findings routing-rules|transformation-rules list` would drop a page
@@ -338,20 +348,51 @@ exits:
   `/search` or `/list`, is now retried like a GET; every such route is a
   read. Other `POST`s are still retried only on 429.
 
-- **`automations list`, `automations executions list`, `functions list`,
-  `functions commits`, `functions usage`, and `api --paginate` could loop
-  forever**, re-printing the same rows: on a large enough result set,
-  `/api/v1/automations`, `/api/v1/automation_executions`,
-  `/api/v1/functions`, and `/api/v1/functions/{id}/commits` ignore
-  `page_size`/`page_token` and return the first page under a fresh
-  `nextPageToken` every time. `automations list`, `automations executions
-  list`, and `functions usage` now read `POST /api/v1/search/automations` and
-  `POST /api/v1/search/automation_executions`, which page correctly, with
-  output rows unchanged. `functions list`, `functions commits`, and
-  `api --paginate` stop when the cursor stops advancing (the same token
-  twice, or two pages in a row of rows already seen), keep the rows already
-  printed, warn on stderr that results are INCOMPLETE, and exit `6`; the
-  search-backed commands keep the same guard as a backstop.
+- **`functions usage` overclaimed with `--page-token`.** It scans only that
+  page, yet printed "no automations call function X"; it now says no
+  automation on this page calls it. A never-run automation's
+  `last_executed_at` is now `null` instead of `""`.
+
+- **`tasks list` and `requests list` emitted a row of empty values** for a
+  result with no `task` object. Such a result is now skipped, as
+  `automations executions list` already does.
+
+- **`api --paginate --list-key` with a misspelled key printed nothing and
+  exited 0.** A key missing from a page that has other array fields is now a
+  usage error (exit `2`) naming them, until the key has appeared once; after
+  that, a page that omits it adds no rows. A page with no array fields is
+  still an empty result.
+
+- The docs no longer say every list command auto-paginates; they name the
+  single-request ones and their stderr `partial result` warning.
+
+- `users list` help and the README now say its search route returns only
+  directory-origin users by default, omitting local-origin and
+  system users.
+
+## [0.9.2] - 2026-10-21
+
+### Security
+
+- Builds with Go 1.27.3. `crypto/x509` Verify now filters out chains through a
+  small set of distrusted intermediate CAs.
+
+### Upgrading from 0.9.1
+
+With no cached spec, a failed `docs openapi`, `docs endpoints` or
+`docs endpoint` now exits 4, 5, 6 or 8 instead of 1, and a 429, a transient
+5xx or a network error is retried up to 4 times by default, so an unreachable
+host takes several seconds to fail; `--max-retries 0` restores a single
+attempt. When the config directory resolves to a relative path (a relative
+`HOME`, `%AppData%` or `XDG_CONFIG_HOME`), every command that needs stored
+credentials fails instead of using the working directory. With a relative
+`HOME`, `~/.c1i.yaml` is ignored.
+
+### Changed
+
+- `golang.org/x/term` moves to 0.47.0 and `golang.org/x/sys` to 0.49.0.
+
+### Fixed
 
 - **`--debug` and `--max-retries` did nothing on `docs openapi`,
   `docs endpoints` and `docs endpoint`.** The spec fetch now uses the shared
@@ -390,28 +431,6 @@ exits:
 
 - The README's uninstall steps now say where each install method puts the
   binary, and that the Linux config directory follows `XDG_CONFIG_HOME`.
-
-- **`functions usage` overclaimed with `--page-token`.** It scans only that
-  page, yet printed "no automations call function X"; it now says no
-  automation on this page calls it. A never-run automation's
-  `last_executed_at` is now `null` instead of `""`.
-
-- **`tasks list` and `requests list` emitted a row of empty values** for a
-  result with no `task` object. Such a result is now skipped, as
-  `automations executions list` already does.
-
-- **`api --paginate --list-key` with a misspelled key printed nothing and
-  exited 0.** A key missing from a page that has other array fields is now a
-  usage error (exit `2`) naming them, until the key has appeared once; after
-  that, a page that omits it adds no rows. A page with no array fields is
-  still an empty result.
-
-- The docs no longer say every list command auto-paginates; they name the
-  single-request ones and their stderr `partial result` warning.
-
-- `users list` help and the README now say its search route returns only
-  directory-origin users by default, omitting local-origin and
-  system users.
 
 ## [0.9.1] - 2026-10-09
 
@@ -2332,7 +2351,8 @@ First changelog entry; releases through v0.1.5 predate this file (see the
 
 - CI enforces `gofmt` via golangci-lint; module-wide formatting normalized.
 
-[Unreleased]: https://github.com/ConductorOne/c1i/compare/v0.9.1...HEAD
+[Unreleased]: https://github.com/ConductorOne/c1i/compare/v0.9.2...HEAD
+[0.9.2]: https://github.com/ConductorOne/c1i/releases/tag/v0.9.2
 [0.9.1]: https://github.com/ConductorOne/c1i/releases/tag/v0.9.1
 [0.9.0]: https://github.com/ConductorOne/c1i/releases/tag/v0.9.0
 [0.8.0]: https://github.com/ConductorOne/c1i/releases/tag/v0.8.0

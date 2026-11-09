@@ -92,7 +92,7 @@ apply it for a whole session; the flag wins for a single invocation.
 |---|---|---|
 | `--url` | `C1I_URL` | tenant host — see above |
 | `--fields` | `C1I_FIELDS` | comma-separated dot-paths to keep in JSON output — see "Reading output" |
-| `--dry-run` | `C1I_DRY_RUN` | preview a C1 REST mutation as one JSON object (`.requests[]`: method, URL, body); it never has an `id`; unsupported for `mcp gateway call` and `auth login` |
+| `--dry-run` | `C1I_DRY_RUN` | preview a C1 REST mutation as one JSON object (`.requests[]`: method, URL, body); it never has an `id` (`upgrade --dry-run` prints plain `[dry-run]` text instead); unsupported for `mcp gateway call` and `auth login` |
 | `--debug` | `C1I_DEBUG` | trace API HTTP requests (method, URL, status, timing) to stderr |
 | `--max-retries` | `C1I_MAX_RETRIES` | retries for transient API failures (`429`/`5xx`); `0` disables |
 | `--error-format` | `C1I_ERROR_FORMAT` | `text` (default) or `json` |
@@ -100,7 +100,7 @@ apply it for a whole session; the flag wins for a single invocation.
 `--error-format json` is the one worth setting by default if you parse
 failures: stderr becomes NDJSON. Error objects carry `"error"` (select them
 with `jq 'select(.error)'`) plus `status`, `method`, `path`, and the response
-`body` when the failure came from the API; notices carry `"notice"`, `--wait`
+`body` when the failure came from the API; notices carry `"notice"` and a `"kind"` (such as `dryRun`), `--wait`
 progress `"progress"`, and `--debug` lines `"debug"`. A write command's error
 also carries `"applied"`: `true`, `false`, or `"unknown"` (the request may
 have reached the server, including when a retried attempt was sent before the
@@ -364,11 +364,12 @@ the server returns.
 
 `--dry-run` (or `C1I_DRY_RUN`) previews a C1 REST mutation without sending
 it: one JSON object, `{"dryRun":true,"requests":[{"method","url","body"}]}`,
-never with an `id`, plus a stderr notice. It needs a configured URL (exit 2
+never with an `id`, plus a stderr notice (`upgrade --dry-run` instead prints plain
+`[dry-run]` text lines). It needs a configured URL (exit 2
 without) and refuses an empty, `.` or `..` id (exit 2) as a real send does. It
 needs no credentials unless c1i must look something up for an exact body: a
 task action's current policy step without `--policy-step-id`, a hosted MCP
-server's catalog id without `--catalog-id`, or the caller for
+server's catalog id (`mcp servers update-credentials` without `--catalog-id`), or the caller for
 `requests create` without `--user-id`. `mcp gateway call` rejects it: c1i
 cannot preview or suppress a tool's side effects, so inspect the tool first
 and treat its call as live. `auth login` rejects it too.

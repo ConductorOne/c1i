@@ -59,16 +59,18 @@ falls through to whatever the config file names.
   unwrapped like its `get` (deletes print `{}`); read its id with `jq -er` from
   the path the command documents (`.id`, `.connectorId`, `.srcAppId`, ...).
 - `--max-retries=N` / `C1I_MAX_RETRIES` (default 4, `0` disables) — retries
-  429 (any method) and 5xx/network errors (idempotent GET/PUT/DELETE only)
+  429 (any method) and 5xx/network errors (idempotent GET/PUT/DELETE and
+  read-only search/list POSTs only)
   with backoff, honoring `Retry-After`.
 - `--error-format=text|json` / `C1I_ERROR_FORMAT` — `json` makes stderr
   NDJSON: errors carry `"error"` (and `"applied"` on a write), notices
-  `"notice"`, progress `"progress"`, `--debug` lines `"debug"`.
+  `"notice"` with a `"kind"`, progress `"progress"`, `--debug` lines `"debug"`.
 - `--dry-run` / `C1I_DRY_RUN` — preview a C1 REST mutation without sending
   it, as one JSON object (`{"dryRun":true,"requests":[…]}`, never an `id`)
   plus a stderr notice; it needs a URL, and `mcp gateway call` and
   `auth login` reject it. `upgrade
-  --dry-run` verifies the release and installs nothing.
+  --dry-run` is the exception: plain `[dry-run]` text lines, it verifies the
+  release and installs nothing.
 - `--debug` / `C1I_DEBUG` — trace HTTP method/URL/status/timing to stderr
   (never headers or bodies).
 
