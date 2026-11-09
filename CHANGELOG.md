@@ -182,10 +182,15 @@ exits:
 unreachable site, a non-200 and an unparseable body used to exit 1; they now
 exit 8, whatever the status.
 
+A redirect loop on `docs openapi`, `docs endpoints`, `docs endpoint` and
+`upgrade` now exits 8, not 6.
+
 **`mcp servers test-connection` exits 8 when the server is unreachable.** 0.9.2
 exited 0 with `{"reachable":false,…}`. It still prints the same JSON, then
-exits 8; stderr says `MCP server is unreachable: <failureReason>`. Check the exit code, not just
-`reachable`.
+exits 8; stderr says `MCP server is unreachable: <failureReason>`. An object
+whose `reachable` is not the boolean `true` counts as unreachable (exit 8), and
+a 200 body that is not a JSON object now exits 6 (it used to exit 0, or 8 for
+`null`). Check the exit code, not just `reachable`.
 
 ### Added
 
@@ -297,9 +302,8 @@ exits 8; stderr says `MCP server is unreachable: <failureReason>`. Check the exi
 ### Fixed
 
 - `--debug` and `--max-retries` now work on `docs search` and `docs page`,
-  which also gain the path and redirect guards and retry a 5xx. A redirect
-  loop on those and on `upgrade` now exits 8, not 6. One helper
-  now builds those options for every client, so no command can skip them.
+  which also gain the path and redirect guards and retry a 5xx. One helper now
+  builds those options for every client, so no command can skip them.
 - `docs guide configure-new-app` and `request-access` said c1i has no command
   to make an entitlement requestable or to read access-profile membership.
   They now give the recipe (a published, visible-to-everyone access profile

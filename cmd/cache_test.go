@@ -535,6 +535,10 @@ func TestOpenAPIFailureExitCodesWithoutCache(t *testing.T) {
 			return &http.Response{StatusCode: http.StatusForbidden, Body: http.NoBody, Request: r}, nil
 		}, exitUpstream},
 		"not a spec": {serveSpec(notASpec[0]), exitUpstream},
+		"redirect loop": {func(r *http.Request) (*http.Response, error) {
+			h := http.Header{"Location": {r.URL.String()}}
+			return &http.Response{StatusCode: http.StatusFound, Header: h, Body: http.NoBody, Request: r}, nil
+		}, exitUpstream},
 	} {
 		t.Run(name, func(t *testing.T) {
 			useTempHome(t)
