@@ -80,6 +80,8 @@ c1i apps set-owners <app-id> --user-id <id> [--user-id <id> ...] [--wait] [--wai
 c1i apps delete <app-id>
 ```
 
+`user_count` is the platform's stored count, not a live tally: on some apps it differs from the number of `accounts list --app-id <app-id>` rows. To size a change, count those rows (or `grants list --app-id`), not `user_count`.
+
 `apps create` needs only `--display-name`; it makes a plain, unmanaged
 container app — the zero state for "make an app, then register MCP servers
 under it". The caller is auto-assigned as an owner, showing up in `apps owners`
