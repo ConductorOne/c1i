@@ -911,10 +911,12 @@ c1i service-principals credentials update <credential-id> --service-principal-id
 c1i service-principals credentials revoke <credential-id> --service-principal-id <sp-id>
 ```
 
-Delete and revoke are soft: `get` on a deleted principal and `credentials get`
-on a revoked credential still return the record, exit 0, with no field marking
-it (the principal's embedded `user.status` stays `ENABLED`). Only the lists
-omit them; `users get <sp-id>` shows `"status": "DELETED"` and `deletedAt`.
+A principal's delete is reflected immediately: `service-principals get` exits
+`4` and the lists omit it; `users get <sp-id>` shows `"status": "DELETED"` and
+`deletedAt`.
+
+Revoke is soft: `credentials get` on a revoked credential still returns the
+record, exit 0, with no field marking it. Only the lists omit it.
 
 `--expires` takes a whole-number Go (`720h`) or protobuf (`2592000s`)
 duration (no sign, no decimals), sent in seconds; anything else, or an empty
@@ -1086,7 +1088,7 @@ c1i docs guide register-mcp-server
 
 `docs search` is a semantic search with no relevance threshold: every query returns up to 10 nearest matches, so even a nonsense query comes back with plausible-looking hits. A returned hit is not proof a concept exists, and an unexpected hit is not proof the thing you searched for is absent — read the snippet, or fetch the page with `docs page`, to judge. To check whether an API endpoint exists, use `docs endpoints --filter`, which has a real no-match.
 
-`docs guide` is embedded static content (no network call), unlike `docs search` / `docs page` which hit the C1 documentation site. Guides ship in two families: registering and operating MCP servers (`register-mcp-server`, `assign-toolset-everyone`, `test-mcp-gateway`, `delegate-entitlement-provisioning`) and everyday app/access-request workflows (`configure-new-app`, `request-access`, `inspect-and-approve-task`). Run `c1i docs guide` with no argument for the full, current list.
+`docs guide` is embedded static content (no network call), unlike `docs search` / `docs page` which hit the C1 documentation site. Guides ship in two families: registering and operating MCP servers (`register-mcp-server`, `assign-toolset-everyone`, `test-mcp-gateway`) and everyday app/access-request workflows (`configure-new-app`, `request-access`, `inspect-and-approve-task`, `delegate-entitlement-provisioning`). Run `c1i docs guide` with no argument for the full, current list.
 
 `docs skill` is kept as an alias of `docs agents` for backward compatibility;
 both print identical output.
@@ -1463,7 +1465,9 @@ there's no known case that needs a longer one.
 
 `--dry-run` (or `C1I_DRY_RUN=1`) previews a C1 REST mutation and returns
 without sending it. The preview is one JSON object on stdout, the requests in
-send order with the full URL and the exact body:
+send order with the full URL and the exact body (`upgrade --dry-run` is the
+exception: it prints plain `[dry-run]` text lines, since it sends no C1 API
+mutation):
 
 ```sh
 $ c1i requests create grant --app-id A1 --entitlement-id E1 --user-id U1 --dry-run

@@ -598,8 +598,8 @@ you'd take it back.
 ## Steps
 
 1. Preview the request before sending it (no task is created). "--user-id"
-   defaults to the caller if omitted; "--dry-run" still authenticates, since
-   it resolves self when "--user-id" is omitted:
+   defaults to the caller if omitted; "--dry-run" authenticates only when
+   "--user-id" is omitted, to resolve self:
 
        c1i requests create grant --app-id "$APP_ID" --entitlement-id "$ENTITLEMENT_ID" --user-id "$USER_ID" --description "<why>" --dry-run
 
@@ -693,9 +693,8 @@ const guideInspectAndApproveTask = `# Inspect and approve a task
 
 Read the policy step governing an open access-request task, confirm you're
 actually authorized to act on it, then approve, deny, or comment on it.
-This does not cover authoring or editing a policy — c1i has no first-class
-command for that; only "c1i api" reaches /api/v1/policies (see the policy
-gap report).
+This does not cover authoring or editing a policy; see "c1i policies
+create|update" ("c1i policies --help").
 
 ## Prerequisites
 
