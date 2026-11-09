@@ -20,9 +20,6 @@ Prints the toolset as pretty JSON, unwrapped like "mcp toolsets get": the id
 is .id.`,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		if err := requireNonEmpty(cmd, "app-id"); err != nil {
-			return err
-		}
 
 		baseURL, err := GetBaseURL()
 		if err != nil {

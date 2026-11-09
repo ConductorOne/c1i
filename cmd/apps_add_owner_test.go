@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
 	"strings"
 	"testing"
 
@@ -16,22 +15,18 @@ import (
 // C1I_URL is set here, so if the command reached newClient it would fail on
 // URL resolution instead, which would misreport as a different failure mode.
 func TestAppsAddOwnerRequiresUserID(t *testing.T) {
-	resetCmdFlags(t, appsAddOwnerCmd)
-
-	var out bytes.Buffer
-	appsAddOwnerCmd.SetOut(&out)
-	appsAddOwnerCmd.SetContext(context.Background())
-
-	err := appsAddOwnerCmd.RunE(appsAddOwnerCmd, []string{"app1"})
+	// Through the root, where cobra enforces the required flag; a bare RunE
+	// no longer re-checks it.
+	res := runMutationCLI(t, nil, 0, nil, "apps", "add-owner", "app1")
+	err := res.err
 	if err == nil {
 		t.Fatal("expected an error when --user-id is unset")
 	}
-	var ue *usageError
-	if !errors.As(err, &ue) {
-		t.Errorf("error %v is not a *usageError", err)
+	if res.exit != exitUsage {
+		t.Errorf("exit = %d, want %d (usage)", res.exit, exitUsage)
 	}
-	if !strings.Contains(err.Error(), "--user-id") {
-		t.Errorf("expected error to mention --user-id, got %v", err)
+	if !strings.Contains(err.Error(), "user-id") {
+		t.Errorf("expected error to mention user-id, got %v", err)
 	}
 }
 

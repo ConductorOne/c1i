@@ -15,9 +15,6 @@ var mcpBindingsByToolsCmd = &cobra.Command{
 emit one NDJSON record per tool with the toolsets it is bound to. Tools with
 no bindings are still emitted with an empty toolsets array.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		if err := requireNonEmpty(cmd, "app-id", "connector-id"); err != nil {
-			return err
-		}
 
 		baseURL, err := GetBaseURL()
 		if err != nil {

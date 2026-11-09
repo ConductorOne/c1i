@@ -124,12 +124,15 @@ func TestClassifierMutationsDryRunUsePublicRequestShapes(t *testing.T) {
 }
 
 func TestClassifierUpdatesRequireExplicitMask(t *testing.T) {
-	resetCmdFlags(t, mcpClassifiersUpdateCmd)
-	setClassifierFlag(t, mcpClassifiersUpdateCmd, "body-file", writeClassifierJSON(t, "classifier.json", `{"description":"updated"}`))
-	mcpClassifiersUpdateCmd.SetContext(context.Background())
-	err := mcpClassifiersUpdateCmd.RunE(mcpClassifiersUpdateCmd, []string{"classifier-1"})
-	if err == nil || !strings.Contains(err.Error(), "--update-mask is required") {
-		t.Errorf("error = %v, want missing update mask", err)
+	t.Setenv("C1I_URL", mutTestURL)
+	file := writeClassifierJSON(t, "classifier.json", `{"description":"updated"}`)
+	srv := newMutServer(t, fixedReply(200, "{}"))
+	res := runMutationCLI(t, srv.srv, 0, nil, "mcp", "classifiers", "update", "classifier-1", "--body-file", file)
+	if res.exit != exitUsage || res.err == nil || !strings.Contains(res.err.Error(), `required flag(s) "update-mask" not set`) {
+		t.Errorf("exit = %d, err = %v, want exit 2 for the missing update mask", res.exit, res.err)
+	}
+	if got := srv.requests(); len(got) != 0 {
+		t.Errorf("requests sent: %v", got)
 	}
 }
 

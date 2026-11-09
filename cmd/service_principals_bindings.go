@@ -39,9 +39,6 @@ var spBindingsAddCmd = &cobra.Command{
 
 Prints the API's response, which is {}; exit 0 is the success signal.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		if err := requireNonEmpty(cmd, "service-principal-id"); err != nil {
-			return err
-		}
 		subject, err := bindingSubject(cmd)
 		if err != nil {
 			return err
@@ -59,9 +56,6 @@ var spBindingsDeleteCmd = &cobra.Command{
 
 Prints the API's response, which is {}; exit 0 is the success signal.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		if err := requireNonEmpty(cmd, "service-principal-id"); err != nil {
-			return err
-		}
 		subject, err := bindingSubject(cmd)
 		if err != nil {
 			return err
@@ -152,7 +146,7 @@ func init() {
 	servicePrincipalsCmd.AddCommand(spBindingsCmd)
 
 	for _, c := range []*cobra.Command{spBindingsAddCmd, spBindingsDeleteCmd} {
-		c.Flags().String("service-principal-id", "", "Service principal ID (required)")
+		c.Flags().String("service-principal-id", "", "Service principal ID")
 		markRequired(c, "service-principal-id")
 		addBindingSubjectFlags(c)
 		markMutating(c)

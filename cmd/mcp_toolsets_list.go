@@ -13,9 +13,6 @@ var mcpToolsetsListCmd = &cobra.Command{
 	Use:   "list",
 	Short: "List MCP toolsets for a connector (NDJSON output)",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		if err := requireNonEmpty(cmd, "app-id", "connector-id"); err != nil {
-			return err
-		}
 
 		baseURL, err := GetBaseURL()
 		if err != nil {

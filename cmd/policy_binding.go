@@ -51,25 +51,20 @@ func unbindPolicyFlag(kinds []policyKind) enumFlag {
 }
 
 func registerUnbindPolicyFlag(cmd *cobra.Command, kinds []policyKind) {
+	for _, k := range kinds {
+		_ = cmd.Flags().SetAnnotation(k.flag, blankHintAnnotation, []string{"to unbind, use --unbind-policy " + k.kind})
+	}
 	addRepeatableStringFlag(cmd, "unbind-policy", "Unbind a policy: "+unbindPolicyFlag(kinds).usage()+" (repeatable)")
 }
 
-// policyIDFlag reads a policy-id flag; a passed-but-blank value is a usage
-// error, since an unset shell variable would otherwise unbind the policy.
+// policyIDFlag reads a policy-id flag. The root pre-run (validateBlankFlags)
+// refuses a blank value, with the unbind hint where one applies; builders rely on it.
 func policyIDFlag(cmd *cobra.Command, k policyKind) (string, bool, error) {
 	if !cmd.Flags().Changed(k.flag) {
 		return "", false, nil
 	}
 	v, _ := cmd.Flags().GetString(k.flag)
-	v = strings.TrimSpace(v)
-	if v == "" {
-		msg := fmt.Sprintf("--%s requires a non-empty value", k.flag)
-		if cmd.Flags().Lookup("unbind-policy") != nil {
-			msg += "; to unbind, use --unbind-policy " + k.kind
-		}
-		return "", false, &usageError{errors.New(msg)}
-	}
-	return v, true, nil
+	return strings.TrimSpace(v), true, nil
 }
 
 // applyPolicyIDs sets each passed policy-id flag on obj (create: no unbind).

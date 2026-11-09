@@ -25,9 +25,6 @@ result here is either "no owners" or "wrong id"; "entitlements get" on the
 same ids exits 4 and can tell you which.`,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		if err := requireNonEmpty(cmd, "app-id"); err != nil {
-			return err
-		}
 		appID, _ := cmd.Flags().GetString("app-id")
 		return listOwners(cmd, client.Path("/api/v1/apps/%s/entitlements/%s/owners", appID, args[0]))
 	},

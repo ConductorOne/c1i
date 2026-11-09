@@ -24,9 +24,6 @@ Prints the API's response, which is {}; exit 0 is the success signal. Honors
 --dry-run.`,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		if err := requireNonEmpty(cmd, "app-id"); err != nil {
-			return err
-		}
 
 		appID, _ := cmd.Flags().GetString("app-id")
 		connectorID := args[0]

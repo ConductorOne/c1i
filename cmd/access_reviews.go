@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
-	"strings"
 
 	"github.com/ConductorOne/c1i/internal/client"
 	"github.com/spf13/cobra"
@@ -87,9 +86,6 @@ unwrapped like "access-reviews get".`,
 			return err
 		}
 		mask, _ := cmd.Flags().GetString("update-mask")
-		if strings.TrimSpace(mask) == "" {
-			return &usageError{fmt.Errorf("--update-mask is required")}
-		}
 		campaign["id"] = args[0]
 		return sendMutation(cmd, mutation{Method: http.MethodPost, Path: client.Path("/api/v1/access_review/%s", args[0]), Body: map[string]any{
 			"accessReview": campaign,
@@ -249,7 +245,8 @@ var reportFormatFlag = enumFlag{flag: "format", prefix: "ACCESS_REVIEW_REPORT_FO
 func init() {
 	accessReviewsCreateCmd.Flags().String("body-file", "", "Full CreateAccessReview request JSON object (required; file or \"-\" for stdin)")
 	accessReviewsUpdateCmd.Flags().String("body-file", "", "Partial AccessReview JSON object (required; file or \"-\" for stdin)")
-	accessReviewsUpdateCmd.Flags().String("update-mask", "", "Comma-separated campaign fields to update (required)")
+	accessReviewsUpdateCmd.Flags().String("update-mask", "", "Comma-separated campaign fields to update")
+	markRequired(accessReviewsUpdateCmd, "update-mask")
 	accessReviewReportsGenerateCmd.Flags().String("format", "", "Report format: "+reportFormatFlag.usage()+" (mutually exclusive with --body-file)")
 	accessReviewReportsGenerateCmd.Flags().String("body-file", "", "Full GenerateAccessReviewReport request JSON object (file or \"-\" for stdin; mutually exclusive with --format)")
 

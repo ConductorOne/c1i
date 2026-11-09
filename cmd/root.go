@@ -1,9 +1,11 @@
 package cmd
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"unicode/utf8"
 
 	"github.com/ConductorOne/c1i/internal/client"
@@ -49,6 +51,12 @@ For raw API exploration, also with no authentication required:
 			return err
 		}
 		if err := validateFlagsUTF8(cmd); err != nil {
+			return err
+		}
+		if err := validateBlankArgs(cmd, args); err != nil {
+			return err
+		}
+		if err := validateBlankFlags(cmd); err != nil {
 			return err
 		}
 		if err := validateCountFlags(cmd); err != nil {
@@ -103,6 +111,54 @@ func validateFlagsUTF8(cmd *cobra.Command) error {
 		if v := f.Value.String(); !utf8.ValidString(v) {
 			err = &usageError{fmt.Errorf("--%s value %q is not valid UTF-8", f.Name, v)}
 		}
+	})
+	return err
+}
+
+// validateBlankArgs rejects a positional with no visible character: ExactArgs
+// accepts "" and " ", and an id built from one addresses the collection.
+func validateBlankArgs(cmd *cobra.Command, args []string) error {
+	if isCompletionRequest(cmd) {
+		return nil
+	}
+	for _, a := range args {
+		if !hasVisibleRune(a) {
+			return &usageError{fmt.Errorf("argument %q is blank: it must contain a visible character", a)}
+		}
+	}
+	return nil
+}
+
+// isCompletionRequest reports whether cmd is cobra's hidden __complete, whose
+// args legitimately include the empty word being completed.
+func isCompletionRequest(cmd *cobra.Command) bool {
+	return cmd.Name() == cobra.ShellCompRequestCmd || cmd.Name() == cobra.ShellCompNoDescRequestCmd
+}
+
+// validateBlankFlags rejects a set string flag that is required or id-shaped
+// (name ends in -id) and has no visible character. Without it `--app-id " "`
+// drops the scope and over-fetches, or addresses the wrong object. A
+// blankHintAnnotation on the flag is appended to the message.
+func validateBlankFlags(cmd *cobra.Command) error {
+	if isCompletionRequest(cmd) {
+		return nil
+	}
+	var err error
+	cmd.Flags().VisitAll(func(f *pflag.Flag) {
+		if err != nil || !f.Changed || f.Value.Type() != "string" {
+			return
+		}
+		if f.Annotations[requiredAnnotation] == nil && !strings.HasSuffix(f.Name, "-id") {
+			return
+		}
+		if hasVisibleRune(f.Value.String()) {
+			return
+		}
+		msg := fmt.Sprintf("flag --%s requires a non-empty value", f.Name)
+		if h := f.Annotations[blankHintAnnotation]; len(h) > 0 {
+			msg += "; " + h[0]
+		}
+		err = &usageError{errors.New(msg)}
 	})
 	return err
 }

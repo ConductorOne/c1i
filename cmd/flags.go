@@ -18,13 +18,20 @@ import (
 // from `--help` that a flag must be set. Use this everywhere instead of
 // calling MarkFlagRequired directly.
 func markRequired(cmd *cobra.Command, names ...string) {
+	annotateRequired(cmd, names...)
 	for _, n := range names {
-		if f := cmd.Flags().Lookup(n); f != nil && !strings.Contains(f.Usage, "(required)") {
-			f.Usage = strings.TrimRight(f.Usage, ". ") + " (required)"
-		}
 		_ = cmd.MarkFlagRequired(n)
 	}
 }
+
+// requiredAnnotation tags every flag documented "(required)", whether cobra
+// enforces its presence (markRequired) or the command does (annotateRequired).
+// validateBlankFlags reads it, so a required flag is detected one way.
+const requiredAnnotation = "c1i_required"
+
+// blankHintAnnotation holds text validateBlankFlags appends to a flag's
+// blank-value error.
+const blankHintAnnotation = "c1i_blank_hint"
 
 // annotateRequired appends "(required)" to each named flag's usage WITHOUT
 // enabling cobra's pre-run required-flag validation. Use it when a command has
@@ -35,8 +42,11 @@ func markRequired(cmd *cobra.Command, names ...string) {
 // (via requireNonEmpty).
 func annotateRequired(cmd *cobra.Command, names ...string) {
 	for _, n := range names {
-		if f := cmd.Flags().Lookup(n); f != nil && !strings.Contains(f.Usage, "(required)") {
-			f.Usage = strings.TrimRight(f.Usage, ". ") + " (required)"
+		if f := cmd.Flags().Lookup(n); f != nil {
+			if !strings.Contains(f.Usage, "(required)") {
+				f.Usage = strings.TrimRight(f.Usage, ". ") + " (required)"
+			}
+			_ = cmd.Flags().SetAnnotation(n, requiredAnnotation, []string{"true"})
 		}
 	}
 }
@@ -437,23 +447,15 @@ func scopedRowID(parts ...string) string {
 	return strings.Join(parts, "\x00")
 }
 
-// requireNonEmpty errors when any of the named string flags has an empty
-// value. Cobra's required-flag enforcement only checks that the flag was
-// set, not that the value is non-empty — so `--app-id ""` silently passes.
-// On commands like `accounts list`, that bypass causes the request to be
-// sent without any app filter, which pulls every account in the tenant.
-//
-// The returned error is a *usageError, so an empty required value maps to the
-// usage exit code (2) — the same as a missing required flag — consistently
-// across every call site. Callers just `return err`; they must not re-wrap it.
-//
-// Call this at the top of RunE for any required string flag whose empty
-// value would over-fetch or otherwise misbehave.
+// requireNonEmpty errors when any named string flag is unset or blank. Use it
+// only for annotateRequired flags, which cobra does not presence-check; a SET
+// blank required or id-shaped flag is already refused by validateBlankFlags.
+// The error is a *usageError (exit 2); callers just `return err`.
 func requireNonEmpty(cmd *cobra.Command, names ...string) error {
 	var missing []string
 	for _, n := range names {
 		v, _ := cmd.Flags().GetString(n)
-		if v == "" {
+		if !hasVisibleRune(v) {
 			missing = append(missing, "--"+n)
 		}
 	}
@@ -467,8 +469,9 @@ func requireNonEmpty(cmd *cobra.Command, names ...string) error {
 	}
 }
 
-// displayNameRule is the one wording for every --display-name: blank is
-// refused by requireNonEmptyIfSet, so a create/update exits 2 before sending.
+// displayNameRule is the one wording for every --display-name: blank exits 2
+// before sending (centrally on creates, where it is required;
+// requireNonEmptyIfSet on the optional update flag).
 const displayNameRule = "cannot be blank: empty, whitespace or invisible-only"
 
 // requireNonEmptyIfSet errors when a flag was passed with no visible
@@ -529,7 +532,7 @@ func repeatableStringFlagError(name string) error {
 }
 
 // repeatableStringFlag reads a flag registered by addRepeatableStringFlag and
-// rejects an empty or whitespace-only occurrence with a *usageError (exit 2).
+// rejects a blank (see hasVisibleRune) occurrence with a *usageError (exit 2).
 //
 // The two rejected shapes need separate checks. A blank inside a repetition
 // survives as an element (`--x "" --x REAL` -> ["", "REAL"]), but a lone
@@ -555,7 +558,7 @@ func repeatableStringFlag(cmd *cobra.Command, name string) ([]string, error) {
 		return nil, repeatableStringFlagError(name)
 	}
 	for _, v := range values {
-		if strings.TrimSpace(v) == "" {
+		if !hasVisibleRune(v) {
 			return nil, repeatableStringFlagError(name)
 		}
 	}

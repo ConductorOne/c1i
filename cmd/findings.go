@@ -87,10 +87,7 @@ var findingsCreateTaskCmd = &cobra.Command{
 	Use: "create-task <finding-id>", Short: "Create a remediation task for a finding (pretty JSON)", Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		body := map[string]any{"findingId": args[0]}
-		policyID, err := requireNonEmptyIfSet(cmd, "policy-id")
-		if err != nil {
-			return err
-		}
+		policyID, _ := cmd.Flags().GetString("policy-id")
 		if policyID != "" {
 			body["policyId"] = policyID
 		}

@@ -163,10 +163,6 @@ func TestEntitlementsUpdateUsageErrors(t *testing.T) {
 		{"duration decimal", map[string]string{"duration-grant": "1.5h"}, "whole-number duration"},
 		{"emergency enabled without policy", map[string]string{"emergency-grant-enabled": "true"}, "emergency grant policy id must be set if emergency grant is enabled"},
 		{"emergency enabled with policy unbound", map[string]string{"emergency-grant-enabled": "true", "unbind-policy": "emergency-grant"}, "emergency grant policy id must be set if emergency grant is enabled"},
-		{"empty grant policy id", map[string]string{"grant-policy-id": ""}, "--grant-policy-id requires a non-empty value"},
-		{"empty revoke policy id", map[string]string{"revoke-policy-id": ""}, "--revoke-policy-id requires a non-empty value"},
-		{"empty certify policy id", map[string]string{"certify-policy-id": ""}, "--certify-policy-id requires a non-empty value"},
-		{"empty emergency policy id", map[string]string{"emergency-grant-policy-id": ""}, "--emergency-grant-policy-id requires a non-empty value"},
 		{"unknown unbind kind", map[string]string{"unbind-policy": "emergency"}, `invalid --unbind-policy "emergency"`},
 		{"set and unbind emergency", map[string]string{"emergency-grant-policy-id": "pol-e", "unbind-policy": "emergency-grant"}, "--emergency-grant-policy-id and --unbind-policy emergency-grant"},
 	}

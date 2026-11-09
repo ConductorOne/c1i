@@ -20,12 +20,6 @@ Prints the toolset, unwrapped like "mcp toolsets get": the id is .id. Extract
 it with jq -er, which fails on a --dry-run preview where jq -r exits 0 with
 null.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		if _, err := requireNonEmptyIfSet(cmd, "display-name"); err != nil {
-			return err
-		}
-		if err := requireNonEmpty(cmd, "app-id", "connector-id", "display-name"); err != nil {
-			return err
-		}
 
 		appID, _ := cmd.Flags().GetString("app-id")
 		connectorID, _ := cmd.Flags().GetString("connector-id")

@@ -30,9 +30,6 @@ polls).
 One owner per call; to change several at once use "entitlements set-owners".`,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		if err := requireNonEmpty(cmd, "app-id", "user-id"); err != nil {
-			return err
-		}
 		wait, waitTimeout, err := waitFlagValues(cmd)
 		if err != nil {
 			return err

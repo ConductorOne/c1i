@@ -65,9 +65,6 @@ var accessProfilesRequestableEntitlementsAddCmd = &cobra.Command{
 	Short: "Add requestable entitlements to an access profile (pretty JSON)",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		if err := requireNonEmpty(cmd, "app-id"); err != nil {
-			return err
-		}
 		refs, err := catalogEntitlementReferences(cmd, true)
 		if err != nil {
 			return err
@@ -83,9 +80,6 @@ var accessProfilesRequestableEntitlementsRemoveCmd = &cobra.Command{
 	Short: "Remove requestable entitlements from an access profile (pretty JSON)",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		if err := requireNonEmpty(cmd, "app-id"); err != nil {
-			return err
-		}
 		refs, err := catalogEntitlementReferences(cmd, true)
 		if err != nil {
 			return err
@@ -122,9 +116,6 @@ var accessProfilesVisibilityEntitlementsAddCmd = &cobra.Command{
 	Short: "Add visibility entitlements to an access profile (pretty JSON)",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		if err := requireNonEmpty(cmd, "app-id"); err != nil {
-			return err
-		}
 		refs, err := catalogEntitlementReferences(cmd, true)
 		if err != nil {
 			return err
@@ -139,9 +130,6 @@ var accessProfilesVisibilityEntitlementsRemoveCmd = &cobra.Command{
 	Short: "Remove visibility entitlements from an access profile (pretty JSON)",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		if err := requireNonEmpty(cmd, "app-id"); err != nil {
-			return err
-		}
 		refs, err := catalogEntitlementReferences(cmd, true)
 		if err != nil {
 			return err

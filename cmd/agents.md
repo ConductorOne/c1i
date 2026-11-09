@@ -302,7 +302,7 @@ APP_ID=$(c1i apps create --display-name "Example" | jq -er .id)
 |---|---|---|
 | 0 | success | — |
 | 1 | generic / unclassified error | inspect the message; on a write, read `applied` (a `--wait` timeout or failed stdout write is `true`) before retrying |
-| 2 | usage error (bad flags/args, an empty, `.` or `..` id, a refused redirect, or any API `4xx` other than `401`/`403`/`404`/`408`/`429`/`499`) | fix the invocation, don't retry as-is — but read the message first: an API `4xx` can also be a state rejection (e.g. `task is closed`) rather than a bad argument |
+| 2 | usage error (bad flags/args, an empty, `.` or `..` id, a blank required or id flag or positional, a refused redirect, or any API `4xx` other than `401`/`403`/`404`/`408`/`429`/`499`) | fix the invocation, don't retry as-is — but read the message first: an API `4xx` can also be a state rejection (e.g. `task is closed`) rather than a bad argument |
 | 3 | not authenticated, or API `401`/`403` | re-authenticate (`c1i auth login`); a scoped credential needs a role that covers the call |
 | 4 | API `404` | stop — the resource/path doesn't exist |
 | 5 | API `429` | back off and retry |

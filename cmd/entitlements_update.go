@@ -60,9 +60,6 @@ Example:
     --grant-policy-id <policy-id> --duration-grant 8h`,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		if err := requireNonEmpty(cmd, "app-id"); err != nil {
-			return err
-		}
 		appID, _ := cmd.Flags().GetString("app-id")
 		id := args[0]
 

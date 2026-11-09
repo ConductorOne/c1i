@@ -18,9 +18,6 @@ value this command takes as its argument and the one "mcp servers list" rows
 emit as connector_id. So read "jq -r .connectorId" here, not ".id".`,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		if err := requireNonEmpty(cmd, "app-id"); err != nil {
-			return err
-		}
 
 		baseURL, err := GetBaseURL()
 		if err != nil {

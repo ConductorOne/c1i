@@ -134,9 +134,6 @@ A revoked credential is still returned, unchanged and with exit 0: no field
 marks it revoked. "service-principals credentials list" omits it.`,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		if err := requireNonEmpty(cmd, "service-principal-id"); err != nil {
-			return err
-		}
 		baseURL, err := GetBaseURL()
 		if err != nil {
 			return err
@@ -165,12 +162,6 @@ Prints the credential as pretty JSON, unwrapped like
 .clientSecret sit beside it. Capture .clientSecret now; it cannot be read again.`,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		if _, err := requireNonEmptyIfSet(cmd, "display-name"); err != nil {
-			return err
-		}
-		if err := requireNonEmpty(cmd, "display-name"); err != nil {
-			return err
-		}
 		body, err := buildSPCredentialCreateBody(cmd)
 		if err != nil {
 			return err
@@ -223,9 +214,6 @@ Prints the credential as pretty JSON, unwrapped like
 		if _, err := requireNonEmptyIfSet(cmd, "display-name"); err != nil {
 			return err
 		}
-		if err := requireNonEmpty(cmd, "service-principal-id"); err != nil {
-			return err
-		}
 		spID, _ := cmd.Flags().GetString("service-principal-id")
 
 		cred := map[string]any{"id": args[0]}
@@ -255,9 +243,6 @@ var spCredentialsRevokeCmd = &cobra.Command{
 Prints the API's response, which is {}; exit 0 is the success signal.`,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		if err := requireNonEmpty(cmd, "service-principal-id"); err != nil {
-			return err
-		}
 		spID, _ := cmd.Flags().GetString("service-principal-id")
 		return sendMutation(cmd, mutation{Method: http.MethodDelete, Path: spCredentialPath(spID, args[0])})
 	},
@@ -270,7 +255,7 @@ func init() {
 
 	// service-principal-id is the parent scope for the single-credential ops.
 	for _, c := range []*cobra.Command{spCredentialsGetCmd, spCredentialsUpdateCmd, spCredentialsRevokeCmd} {
-		c.Flags().String("service-principal-id", "", "Owning service principal ID (required)")
+		c.Flags().String("service-principal-id", "", "Owning service principal ID")
 		markRequired(c, "service-principal-id")
 	}
 

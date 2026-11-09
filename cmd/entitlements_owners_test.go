@@ -196,17 +196,20 @@ func TestEntitlementOwnerWritesRequireScopeFlags(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			_, seen := entOwnerServer(t, `{"userIds":[]}`)
-			_, _, err := runEntOwnerCmd(t, tc.cmd, tc.flags, tc.args...)
-			var ue *usageError
-			if !errors.As(err, &ue) {
-				t.Fatalf("error = %v, want a *usageError (exit 2)", err)
+			// Through the root, with no client available: a built client fails the test.
+			args := append(strings.Fields(strings.TrimPrefix(tc.cmd.CommandPath(), rootCmd.Name()+" ")), tc.args...)
+			for name, vals := range tc.flags {
+				for _, v := range vals {
+					args = append(args, "--"+name, v)
+				}
 			}
-			if !strings.Contains(err.Error(), tc.mention) {
+			res := runMutationCLI(t, nil, 0, nil, args...)
+			err := res.err
+			if res.exit != exitUsage {
+				t.Fatalf("error = %v (exit %d), want a usage error (exit 2)", err, res.exit)
+			}
+			if !strings.Contains(err.Error(), strings.TrimPrefix(tc.mention, "--")) {
 				t.Errorf("error %q does not name %s", err, tc.mention)
-			}
-			if n := len(seen()); n != 0 {
-				t.Errorf("sent %d request(s); a usage error must send nothing", n)
 			}
 		})
 	}

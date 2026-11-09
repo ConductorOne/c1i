@@ -19,9 +19,6 @@ The issuer URL is the base (e.g. "https://accounts.google.com"); C1 appends
 A read: it changes nothing. Prints the API's response as pretty JSON, as
 returned (no envelope is removed); --fields applies.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		if err := requireNonEmpty(cmd, "issuer-url"); err != nil {
-			return err
-		}
 
 		baseURL, err := GetBaseURL()
 		if err != nil {

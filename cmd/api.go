@@ -42,9 +42,6 @@ First-class list commands auto-paginate; api returns one response unless
 warning on stderr. You supply the request method and body; use --dry-run before
 an intended non-GET REST write.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		if err := requireNonEmpty(cmd, "path"); err != nil {
-			return err
-		}
 
 		baseURL, err := GetBaseURL()
 		if err != nil {

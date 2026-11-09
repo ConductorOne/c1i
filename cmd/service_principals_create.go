@@ -14,12 +14,6 @@ var servicePrincipalsCreateCmd = &cobra.Command{
 Prints the service principal as pretty JSON, unwrapped like
 "service-principals get": the id is .id.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		if _, err := requireNonEmptyIfSet(cmd, "display-name"); err != nil {
-			return err
-		}
-		if err := requireNonEmpty(cmd, "display-name"); err != nil {
-			return err
-		}
 		displayName, _ := cmd.Flags().GetString("display-name")
 		body := map[string]any{"displayName": displayName}
 		return sendMutation(cmd, mutation{Method: http.MethodPost, Path: "/api/v1/service_principals", Body: body})

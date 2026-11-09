@@ -23,9 +23,6 @@ Example:
   c1i entitlements delete <entitlement-id> --app-id <app-id>`,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		if err := requireNonEmpty(cmd, "app-id"); err != nil {
-			return err
-		}
 		appID, _ := cmd.Flags().GetString("app-id")
 		return sendMutation(cmd, mutation{Method: http.MethodDelete, Path: client.Path("/api/v1/apps/%s/entitlements/%s", appID, args[0])})
 	},

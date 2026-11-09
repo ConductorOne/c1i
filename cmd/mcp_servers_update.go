@@ -29,9 +29,6 @@ Prints the updated server, unwrapped like "mcp servers get" (id: .connectorId).`
 		if _, err := requireNonEmptyIfSet(cmd, "display-name"); err != nil {
 			return err
 		}
-		if err := requireNonEmpty(cmd, "app-id"); err != nil {
-			return err
-		}
 
 		appID, _ := cmd.Flags().GetString("app-id")
 		connectorID := args[0]
