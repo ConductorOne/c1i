@@ -16,6 +16,12 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `v0.58.1-0.20261009181718-2f1f834330b2`, which fixes GO-2026-5932; c1i does
   not call the affected code, and no tagged release has the fix yet.
 
+### Fixed
+
+- `requests list --entitlement-id` without `--app-id` now exits 2. An
+  entitlement id repeats across apps, so the filter returned requests from
+  every app sharing it; `grants list` already required the pair.
+
 ### Upgrading from 0.9.2
 
 **Mutations now print the API's response, unwrapped the same way `get`

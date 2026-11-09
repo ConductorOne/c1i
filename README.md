@@ -636,6 +636,9 @@ On `create`, `--user-id` defaults to the authenticated user when omitted.
 it in seconds. No sign, no decimals: `-1h`, `1.5h` or `7d` exits `2`. `0s` is
 sent, and the server refuses it with `value must be greater than 0s`.
 
+`requests list --entitlement-id` requires `--app-id`: an entitlement id repeats
+across apps, so the pair is the key.
+
 `requests list` is the requester lens on access requests (the grant/revoke tasks
 you file): by default it shows requests you opened or are the subject of —
 complementing `tasks list`, which is the approver's My Work lens. Use `--user-id`

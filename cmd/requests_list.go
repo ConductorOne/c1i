@@ -91,6 +91,10 @@ tenant.
 			return &usageError{fmt.Errorf("--user-id and --all are mutually exclusive")}
 		}
 
+		if entitlementID != "" && appID == "" {
+			return &usageError{fmt.Errorf("--entitlement-id requires --app-id (entitlements are scoped to an app)")}
+		}
+
 		baseURL, err := GetBaseURL()
 		if err != nil {
 			return err
