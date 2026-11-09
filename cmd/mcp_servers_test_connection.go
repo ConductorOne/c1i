@@ -1,6 +1,8 @@
 package cmd
 
 import (
+	"encoding/json"
+	"errors"
 	"fmt"
 
 	"github.com/spf13/cobra"
@@ -21,7 +23,9 @@ Two modes:
            probe).
 
 EXTERNAL servers only; HOSTED servers return an error ("test connection is only
-supported for external MCP servers").`,
+supported for external MCP servers").
+
+Exits 8 when the server is unreachable; the JSON is still printed.`,
 	Args: cobra.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		baseURL, err := GetBaseURL()
@@ -76,8 +80,29 @@ supported for external MCP servers").`,
 			return fmt.Errorf("API error: %w", err)
 		}
 
-		return writeObject(cmd, data)
+		if err := writeObject(cmd, data); err != nil {
+			return err
+		}
+		return unreachableError(data)
 	},
+}
+
+// unreachableError is the exit-8 error for a probe whose result is not
+// reachable:true (proto3 JSON may omit a false field), nil otherwise. The
+// reachability result is data, so the caller prints it first.
+func unreachableError(data []byte) error {
+	var probe struct {
+		Reachable     bool   `json:"reachable"`
+		FailureReason string `json:"failureReason"`
+	}
+	if json.Unmarshal(data, &probe) != nil || probe.Reachable {
+		return nil
+	}
+	msg := "MCP server is unreachable"
+	if probe.FailureReason != "" {
+		msg += ": " + probe.FailureReason
+	}
+	return &upstreamError{errors.New(msg)}
 }
 
 func init() {

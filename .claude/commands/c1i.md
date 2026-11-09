@@ -89,7 +89,7 @@ falls through to whatever the config file names.
 | 5 | API `429` (rate limited) |
 | 6 | C1 failed: API `5xx`, a `200` with a body that isn't JSON, a redirect loop (`RedirectLoopError`), a stuck pagination cursor, or a list page in a shape the command doesn't recognize |
 | 7 | MCP tool call completed but the tool itself reported `isError: true` |
-| 8 | a system beyond C1, or the MCP protocol layer, failed (includes an unreachable gateway) |
+| 8 | a system beyond C1, or the MCP protocol layer, failed (includes an unreachable gateway, or a `mcp servers test-connection` that reports `reachable: false`) |
 
 Typed internally and classified in one place, `cmd/errors.go`: from the client,
 `APIError`, `AuthError`, `PathError`, `RedirectError`, `RedirectLoopError`; from

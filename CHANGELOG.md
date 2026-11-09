@@ -182,6 +182,11 @@ exits:
 unreachable site, a non-200 and an unparseable body used to exit 1; they now
 exit 8, whatever the status.
 
+**`mcp servers test-connection` exits 8 when the server is unreachable.** 0.9.2
+exited 0 with `{"reachable":false,…}`. It still prints the same JSON, then
+exits 8 with the `failureReason` on stderr; check the exit code, not just
+`reachable`.
+
 ### Added
 
 - `tasks get <task-id>` reads a single task, the same endpoint as `requests
@@ -251,6 +256,8 @@ exit 8, whatever the status.
 
 ### Changed
 
+- `mcp servers test-connection` exits 8 instead of 0 when the probe reports the
+  server unreachable (see Upgrading).
 - `apps add-owner|remove-owner` take the app id as the positional and the
   user as `--user-id`; their `--app-id` flag is removed (see "Upgrading from
   0.9.2"). Every owner command in a family now shares one positional.

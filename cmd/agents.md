@@ -305,7 +305,7 @@ APP_ID=$(c1i apps create --display-name "Example" | jq -er .id)
 | 5 | API `429` | back off and retry |
 | 6 | C1 failed: API `5xx`, a `200` with a body that isn't JSON, a redirect chain that never settles, a stuck pagination cursor, or a list page in a shape the command doesn't recognize | retryable, except a stuck cursor or unrecognized page, which persists: the printed rows (if any) are real but incomplete. On a write, a `5xx` is `applied: "unknown"` and a non-JSON `200` is `applied: true`: re-read before re-sending |
 | 7 | `mcp gateway call` succeeded but the tool reported `isError: true` | inspect the printed result, not just the code |
-| 8 | a system beyond C1, or the protocol layer, failed — including a gateway that is unreachable (DNS failure, refused connection) | retrying the same call usually repeats it. For a connector failure, check the server with `mcp servers get <connector-id> --app-id <id>` and `mcp servers test-connection`; the upstream may be unreachable or its credentials expired. For a protocol error, it's a version mismatch or a c1i bug — report it, don't work around it |
+| 8 | a system beyond C1, or the protocol layer, failed — including a gateway that is unreachable (DNS failure, refused connection) or `mcp servers test-connection` reporting an EXTERNAL server unreachable (the JSON is still printed) | retrying the same call usually repeats it. For a connector failure, check the server with `mcp servers get <connector-id> --app-id <id>` and `mcp servers test-connection`; the upstream may be unreachable or its credentials expired. For a protocol error, it's a version mismatch or a c1i bug — report it, don't work around it |
 
 Exit 1 with `writing output:` means stdout failed (e.g. a full disk). On a
 write the message is
@@ -555,7 +555,9 @@ resource with `--resource-id` likewise means you drop
   stored; `--unbind-policy emergency-grant` alone leaves an entitlement that
   has emergency grants enabled still enabled, with no policy.
 - `mcp servers test-connection` returns `toolCount` as a JSON string, not a
-  number. The `tool_count` in NDJSON list rows is a real number.
+  number. The `tool_count` in NDJSON list rows is a real number. It exits `8`
+  when the server is unreachable (`reachable` is not `true`), after printing
+  the same JSON, so check the exit code before reading `toolCount`.
 - `mcp servers search` only includes `tool_count` when you pass
   `--tool-state`; the API doesn't compute a count without a state filter, so
   a filterless search omits the key rather than showing a 0 that would look

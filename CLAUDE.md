@@ -268,7 +268,7 @@ tracked root file outside its allowlist. Stage explicit paths rather than `-A`.
   | `5` | rate-limited (`429`) |
   | `6` | C1 failed (API `5xx`, a redirect loop, a `200` with a non-JSON body, a stuck pagination cursor, or a list page in a shape the command doesn't recognize) |
   | `7` | tool-execution error (`mcp gateway call` result has `isError: true`) |
-  | `8` | a system beyond C1 or the protocol layer failed (an unreachable gateway, an upstream connector failure, or a protocol-level JSON-RPC error) |
+  | `8` | a system beyond C1 or the protocol layer failed (an unreachable gateway, an upstream connector failure, an EXTERNAL MCP server `test-connection` reports unreachable, or a protocol-level JSON-RPC error) |
 
   Keep 6 and 8 distinct: 6 is worth retrying later, 8 usually is not. Wrap
   client errors with `%w` so `errors.As` can classify them, and wrap a bad

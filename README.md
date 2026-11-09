@@ -540,7 +540,7 @@ c1i mcp servers update             <connector-id> --app-id <id> [--display-name 
 c1i mcp servers update-credentials <connector-id> --app-id <id> --type hosted|external [--auth ...] [--update-mask <paths>]
 c1i mcp servers delete             <connector-id> --app-id <id>
 c1i mcp servers resync-tools       <connector-id> --app-id <id>   # EXTERNAL only; 400 on HOSTED
-c1i mcp servers test-connection    (--server-url <url> [--transport ...] [--auth ...] | <connector-id> --app-id <id>)   # EXTERNAL only; 400 on HOSTED
+c1i mcp servers test-connection    (--server-url <url> [--transport ...] [--auth ...] | <connector-id> --app-id <id>)   # EXTERNAL only; 400 on HOSTED; exits 8 when unreachable (JSON still printed)
 c1i mcp servers discover-oidc      --issuer-url <url>
 c1i mcp servers catalog list       [--query <text>] [--page-size N] [--limit N]
 c1i mcp servers catalog get        <catalog-id>
@@ -1259,7 +1259,7 @@ branch on without parsing text:
 | `5` | API returned `429` (rate limited — back off and retry) |
 | `6` | C1 failed: the API returned `5xx`, a redirect chain never settled, it answered `200` with a body that isn't JSON, a list command's pagination cursor stopped advancing, or a list page in a shape the command doesn't recognize |
 | `7` | `mcp gateway call` completed, but the tool itself reported an error (`isError: true` in its result) |
-| `8` | a system beyond C1, or the MCP protocol layer, failed — an upstream connector was unreachable or errored, the gateway itself was unreachable (DNS failure, refused connection), or the gateway returned a protocol-level JSON-RPC error |
+| `8` | a system beyond C1, or the MCP protocol layer, failed — an upstream connector was unreachable or errored, the gateway itself was unreachable (DNS failure, refused connection), `mcp servers test-connection` reported an EXTERNAL server unreachable (its JSON is still printed), or the gateway returned a protocol-level JSON-RPC error |
 
 Exit `1` with `writing output:` means stdout failed (e.g. a full disk). On a
 mutation the message is `<METHOD> <path> succeeded but writing its response
