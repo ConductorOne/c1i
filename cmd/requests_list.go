@@ -91,6 +91,10 @@ tenant.
 			return &usageError{fmt.Errorf("--user-id and --all are mutually exclusive")}
 		}
 
+		if entitlementID != "" && appID == "" {
+			return &usageError{fmt.Errorf("--entitlement-id requires --app-id (entitlements are scoped to an app)")}
+		}
+
 		baseURL, err := GetBaseURL()
 		if err != nil {
 			return err
@@ -183,7 +187,7 @@ func init() {
 	requestsListCmd.Flags().String("user-id", "", "Scope to requests opened by or about this user (default: you)")
 	requestsListCmd.Flags().Bool("all", false, "List every access request in the tenant, not just yours")
 	requestsListCmd.Flags().String("app-id", "", "Filter to requests targeting this application")
-	requestsListCmd.Flags().String("entitlement-id", "", "Filter to requests for this entitlement")
+	requestsListCmd.Flags().String("entitlement-id", "", "Filter to requests for this entitlement (requires --app-id)")
 	requestsListCmd.Flags().String("state", "", "Filter by state: "+taskStateFlag.usage())
 	requestsListCmd.Flags().String("type", "", "Filter by request type: "+requestTypeFlag.usage()+" (default: both)")
 	addPaginationFlags(requestsListCmd)

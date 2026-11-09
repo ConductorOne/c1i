@@ -31,9 +31,14 @@ func appRow(a appListItem) map[string]any {
 	}
 }
 
+// userCountNote is quoted verbatim by README.md and cmd/agents.md
+// (TestUserCountNoteDocumented).
+const userCountNote = "`user_count` is the platform's stored count, not a live tally: on some apps it differs from the number of `accounts list --app-id <app-id>` rows. To size a change, count those rows, not `user_count`."
+
 var appsListCmd = &cobra.Command{
 	Use:   "list",
 	Short: "List applications (NDJSON output)",
+	Long:  "List applications (NDJSON output).\n\n" + userCountNote,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		baseURL, err := GetBaseURL()
 		if err != nil {

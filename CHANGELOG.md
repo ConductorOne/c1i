@@ -193,6 +193,10 @@ whose `reachable` is not the boolean `true` counts as unreachable (exit 8), and
 a 200 body that is not a JSON object now exits 6 (it used to exit 0). Check the
 exit code, not just `reachable`.
 
+`requests list --entitlement-id` now needs `--app-id`, or it exits 2: an
+entitlement id repeats across apps, and the id alone matched requests from
+every app that shares it.
+
 ### Added
 
 - `tasks get <task-id>` reads a single task, the same endpoint as `requests
@@ -302,6 +306,9 @@ exit code, not just `reachable`.
 
 ### Fixed
 
+- `requests list --entitlement-id` without `--app-id` returned requests from
+  every app sharing that entitlement id; it now requires `--app-id`, as
+  `grants list` already did.
 - `--debug` and `--max-retries` now work on `docs search` and `docs page`,
   which also gain the path and redirect guards and retry a 5xx. One helper now
   builds those options for every client, so no command can skip them.

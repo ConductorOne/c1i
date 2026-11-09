@@ -1,8 +1,15 @@
 package cmd
 
 import (
+	"context"
+	"net/http"
+	"net/http/httptest"
 	"reflect"
 	"testing"
+
+	"github.com/spf13/cobra"
+
+	"github.com/ConductorOne/c1i/internal/client"
 )
 
 // taskTypeKeys returns the sorted set of type keys (grant/revoke/...) present in
@@ -121,4 +128,32 @@ func containsAll(haystack []string, needles ...string) bool {
 		}
 	}
 	return true
+}
+
+// An entitlement id repeats across apps, so --entitlement-id without --app-id
+// would merge requests from every app sharing the id.
+func TestRequestsListEntitlementIDRequiresAppID(t *testing.T) {
+	var requests int
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		requests++
+		_, _ = w.Write([]byte(`{"list":[]}`))
+	}))
+	defer srv.Close()
+	resetCmdFlags(t, requestsListCmd)
+	_ = requestsListCmd.Flags().Set("all", "true")
+	_ = requestsListCmd.Flags().Set("entitlement-id", "ent-1")
+	requestsListCmd.SetContext(context.Background())
+	t.Setenv("C1I_URL", "https://example.invalid")
+	orig := newListClient
+	newListClient = func(_ *cobra.Command, _ string) (*client.Client, error) {
+		return client.NewForTesting(srv.URL, srv.Client()), nil
+	}
+	t.Cleanup(func() { newListClient = orig })
+	err := requestsListCmd.RunE(requestsListCmd, nil)
+	if exitCode(err) != exitUsage {
+		t.Fatalf("err = %v (exit %d), want a usage error (exit 2)", err, exitCode(err))
+	}
+	if requests != 0 {
+		t.Errorf("sent %d requests, want none", requests)
+	}
 }

@@ -17,10 +17,10 @@ import (
 // documents and have drifted repeatedly because an edit to one copy misses
 // the others: the exit-code taxonomy (every exit* constant declared anywhere
 // in package cmd, restated in README.md, cmd/agents.md,
-// .claude/commands/c1i.md, and CLAUDE.md) and the typed-error list (every
-// concrete error type an errors.As check inside exitCode or
-// classifyGatewayError resolves to, restated in CLAUDE.md and
-// .claude/commands/c1i.md).
+// and CLAUDE.md) and the typed-error list (every concrete error type an
+// errors.As check inside exitCode or classifyGatewayError resolves to,
+// restated in CLAUDE.md). .claude/commands/c1i.md carries neither;
+// TestSkillFileDefersToAgentsDoc keeps it that way.
 //
 // Both guards discover their "source of truth" set by parsing the actual Go
 // source with go/parser rather than hardcoding the current constant/type
@@ -207,7 +207,7 @@ func readDocFile(t *testing.T, path string) string {
 
 // TestExitCodeTaxonomyDocumentedEverywhere is Guard 1: every exit* constant
 // declared anywhere in package cmd must appear, by its integer value, in
-// README.md's, cmd/agents.md's, .claude/commands/c1i.md's, and CLAUDE.md's
+// README.md's, cmd/agents.md's, and CLAUDE.md's
 // exit-code tables, AND every code any of those tables names must correspond
 // to a real exit* constant — the source-to-docs direction alone would let a
 // stale or fabricated row (e.g. a leftover "| 99 | ... |" for a code nothing
@@ -228,7 +228,6 @@ func TestExitCodeTaxonomyDocumentedEverywhere(t *testing.T) {
 
 	readmeTable := extractTableBlock(t, "README.md", readDocFile(t, "../README.md"), regexp.MustCompile(`(?m)^### Errors & exit codes$`))
 	agentsTable := extractTableBlock(t, "cmd/agents.md (embedded)", agentsTemplate, regexp.MustCompile(`(?m)^## Exit codes$`))
-	c1iTable := extractTableBlock(t, ".claude/commands/c1i.md", readDocFile(t, "../.claude/commands/c1i.md"), regexp.MustCompile(`(?m)^## Errors & exit codes$`))
 	claudeTable := extractTableBlock(t, "CLAUDE.md", readDocFile(t, "../CLAUDE.md"), claudeErrorsHeadingRe)
 
 	docs := []struct {
@@ -237,7 +236,6 @@ func TestExitCodeTaxonomyDocumentedEverywhere(t *testing.T) {
 	}{
 		{"README.md", codesInTable(t, "README.md", readmeTable)},
 		{"cmd/agents.md (embedded)", codesInTable(t, "cmd/agents.md (embedded)", agentsTable)},
-		{".claude/commands/c1i.md", codesInTable(t, ".claude/commands/c1i.md", c1iTable)},
 		{"CLAUDE.md", codesInTable(t, "CLAUDE.md", claudeTable)},
 	}
 
@@ -415,10 +413,9 @@ func collectErrorsAsTypes(t *testing.T, path, funcName string) []errorsAsType {
 // type that determines the process exit code must be named — by its bare
 // identifier ("APIError", "TransportError", "usageError", ...), anywhere in
 // the file, regardless of whether a document qualifies it with its package
-// or which sentence carries it — in both CLAUDE.md and
-// .claude/commands/c1i.md, the two documents that enumerate the typed-error
-// list. Matching is deliberately whole-file rather than scoped to a
-// specific heading/bullet: CLAUDE.md's prose around this list is expected to
+// or which sentence carries it — in CLAUDE.md, the document that enumerates
+// the typed-error list. Matching is deliberately whole-file rather than scoped
+// to a specific heading/bullet: CLAUDE.md's prose around this list is expected to
 // get reworded and rewrapped over time, and a guard tied to today's sentence
 // structure would break on the next rewrite even though the docs still name
 // every type. (This does mean a type mentioned elsewhere in a document for
@@ -430,7 +427,7 @@ func collectErrorsAsTypes(t *testing.T, path, funcName string) []errorsAsType {
 // classification of *mcpgateway.TransportError happens in two steps:
 // classifyGatewayError (cmd/mcp_gateway.go) reclassifies it into an
 // *upstreamError before cmd/errors.go's exitCode ever sees it — so exitCode
-// alone would miss it even though both documents (correctly) describe it as
+// alone would miss it even though the document (correctly) describes it as
 // part of the classified set.
 func TestTypedErrorListDocumentedEverywhere(t *testing.T) {
 	types := collectErrorsAsTypes(t, "errors.go", "exitCode")
@@ -451,7 +448,6 @@ func TestTypedErrorListDocumentedEverywhere(t *testing.T) {
 		text string
 	}{
 		{"CLAUDE.md", readDocFile(t, "../CLAUDE.md")},
-		{".claude/commands/c1i.md", readDocFile(t, "../.claude/commands/c1i.md")},
 	}
 
 	for _, ty := range deduped {

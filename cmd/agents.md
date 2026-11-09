@@ -293,6 +293,8 @@ DELETED_APPS="$(c1i apps list | jq -c 'if .deleted_at then . else empty end')"
 APP_ID=$(c1i apps create --display-name "Example" | jq -er .id)
 ```
 
+`user_count` is the platform's stored count, not a live tally: on some apps it differs from the number of `accounts list --app-id <app-id>` rows. To size a change, count those rows, not `user_count`.
+
 ## Exit codes
 
 | Code | Meaning | Do this |

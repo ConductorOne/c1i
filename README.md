@@ -80,6 +80,8 @@ c1i apps set-owners <app-id> --user-id <id> [--user-id <id> ...] [--wait] [--wai
 c1i apps delete <app-id>
 ```
 
+`user_count` is the platform's stored count, not a live tally: on some apps it differs from the number of `accounts list --app-id <app-id>` rows. To size a change, count those rows, not `user_count`.
+
 `apps create` needs only `--display-name`; it makes a plain, unmanaged
 container app — the zero state for "make an app, then register MCP servers
 under it". The caller is auto-assigned as an owner, showing up in `apps owners`
@@ -639,7 +641,8 @@ sent, and the server refuses it with `value must be greater than 0s`.
 `requests list` is the requester lens on access requests (the grant/revoke tasks
 you file): by default it shows requests you opened or are the subject of —
 complementing `tasks list`, which is the approver's My Work lens. Use `--user-id`
-to scope to another user or `--all` for every request in the tenant. `requests
+to scope to another user or `--all` for every request in the tenant. `--entitlement-id` requires `--app-id`: an entitlement id
+repeats across apps, so the pair is the key. `requests
 get` fetches a single request (the `.id` printed by `requests create`) as
 pretty JSON, including its current policy step and outcome.
 `requests create grant`/`revoke` print the created task unwrapped like `get`:
