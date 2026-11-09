@@ -123,14 +123,14 @@ func TestExitCode(t *testing.T) {
 }
 
 // TestExitCodeConstantsArePinned guards the published exit-code contract
-// (documented in README.md, cmd/agents.md, and .claude/commands/c1i.md, and
+// (documented in README.md, cmd/agents.md, and CLAUDE.md, and
 // relied on by agents that branch on these integers). A mutation that
 // changed exitUpstream from 8 to 6 survived the full test suite because
 // every assertion compared against the symbolic constant, so both sides
 // moved together. These comparisons use literal integers so a renumbering
 // (or an accidental alias between two codes) shows up here even though every
 // other test still passes; if you're deliberately changing one of these
-// values, update README.md, cmd/agents.md, and .claude/commands/c1i.md too.
+// values, update README.md, cmd/agents.md, and CLAUDE.md too.
 func TestExitCodeConstantsArePinned(t *testing.T) {
 	cases := []struct {
 		name string
@@ -151,7 +151,7 @@ func TestExitCodeConstantsArePinned(t *testing.T) {
 	for _, tc := range cases {
 		if tc.got != tc.want {
 			t.Errorf("%s = %d, want %d -- this is a published exit-code contract "+
-				"(documented in README.md, cmd/agents.md, and .claude/commands/c1i.md) "+
+				"(documented in README.md, cmd/agents.md, and CLAUDE.md) "+
 				"that agents branch on; if this change is deliberate, update those docs too",
 				tc.name, tc.got, tc.want)
 		}
