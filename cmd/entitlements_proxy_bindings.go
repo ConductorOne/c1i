@@ -95,14 +95,11 @@ func init() {
 		entitlementsProxyBindingsCreateCmd,
 		entitlementsProxyBindingsDeleteCmd,
 	} {
-		cmd.Flags().String("source-app-id", "", "Application ID of the source entitlement (required)")
-		cmd.Flags().String("source-entitlement-id", "", "Source entitlement ID (required)")
-		cmd.Flags().String("destination-app-id", "", "Application ID of the destination entitlement (required)")
-		cmd.Flags().String("destination-entitlement-id", "", "Destination entitlement ID (required)")
-		markRequired(cmd, "source-app-id")
-		markRequired(cmd, "source-entitlement-id")
-		markRequired(cmd, "destination-app-id")
-		markRequired(cmd, "destination-entitlement-id")
+		cmd.Flags().String("source-app-id", "", "Application ID of the source entitlement")
+		cmd.Flags().String("source-entitlement-id", "", "Source entitlement ID")
+		cmd.Flags().String("destination-app-id", "", "Application ID of the destination entitlement")
+		cmd.Flags().String("destination-entitlement-id", "", "Destination entitlement ID")
+		markRequired(cmd, "source-app-id", "source-entitlement-id", "destination-app-id", "destination-entitlement-id")
 	}
 	markMutating(entitlementsProxyBindingsCreateCmd)
 	markMutating(entitlementsProxyBindingsDeleteCmd)

@@ -255,7 +255,7 @@ func init() {
 
 	// service-principal-id is the parent scope for the single-credential ops.
 	for _, c := range []*cobra.Command{spCredentialsGetCmd, spCredentialsUpdateCmd, spCredentialsRevokeCmd} {
-		c.Flags().String("service-principal-id", "", "Owning service principal ID (required)")
+		c.Flags().String("service-principal-id", "", "Owning service principal ID")
 		markRequired(c, "service-principal-id")
 	}
 

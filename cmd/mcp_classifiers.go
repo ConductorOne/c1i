@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
-	"strings"
 
 	"github.com/ConductorOne/c1i/internal/client"
 	"github.com/spf13/cobra"
@@ -475,9 +474,6 @@ func readMaskedClassifierObject(cmd *cobra.Command, field, id string) (map[strin
 		return nil, err
 	}
 	mask, _ := cmd.Flags().GetString("update-mask")
-	if strings.TrimSpace(mask) == "" {
-		return nil, &usageError{fmt.Errorf("--update-mask is required")}
-	}
 	if id != "" {
 		object["id"] = id
 	}
@@ -588,7 +584,8 @@ func init() {
 		command.Flags().String("body-file", "", "JSON object file (or \"-\" for stdin)")
 	}
 	for _, command := range []*cobra.Command{mcpClassifiersUpdateCmd, mcpClassifierPolicyUpdateCmd, mcpClassifierToolGatesUpdateCmd} {
-		command.Flags().String("update-mask", "", "Comma-separated camelCase fields to update (required)")
+		command.Flags().String("update-mask", "", "Comma-separated camelCase fields to update")
+		markRequired(command, "update-mask")
 	}
 
 	mcpClassifiersCmd.AddCommand(mcpClassifiersListCmd, mcpClassifiersGetCmd, mcpClassifiersCreateCmd, mcpClassifiersUpdateCmd, mcpClassifiersDeleteCmd)

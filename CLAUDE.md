@@ -191,7 +191,8 @@ tracked root file outside its allowlist. Stage explicit paths rather than `-A`.
   cobra does not (`annotateRequired`, or required in one mode). There is no
   exemption list; a flag-specific hint goes in a `blankHintAnnotation`.
   `TestBlankIDAndRequiredFlagsExitUsage` and `TestBlankPositionalsExitUsage`
-  walk the tree.
+  walk the tree; `TestRequiredUsageMatchesAnnotation` fails a hand-written
+  "(required)" that lacks the annotation.
 - **A new flag must be named in a top-level doc (enforced convention):**
   `TestEveryFlagIsDocumented` (`cmd/flag_docs_coverage_test.go`) walks the tree
   and fails CI on any long flag absent from **both** README.md and

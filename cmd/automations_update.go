@@ -63,14 +63,14 @@ func buildAutomationUpdateBody(cmd *cobra.Command, id string) (map[string]any, e
 		if usingFlags {
 			return nil, fmt.Errorf("--body-file is mutually exclusive with --display-name/--description/--enabled")
 		}
-		if strings.TrimSpace(mask) == "" {
+		if !hasVisibleRune(mask) {
 			return nil, fmt.Errorf("--update-mask is required together with --body-file")
 		}
 		// The server rejects " description" as an invalid path.
 		paths := strings.Split(mask, ",")
 		for i, p := range paths {
 			paths[i] = strings.TrimSpace(p)
-			if paths[i] == "" {
+			if !hasVisibleRune(paths[i]) {
 				return nil, fmt.Errorf("--update-mask %q has an empty path", mask)
 			}
 		}

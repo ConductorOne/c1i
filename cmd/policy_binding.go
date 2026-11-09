@@ -57,8 +57,8 @@ func registerUnbindPolicyFlag(cmd *cobra.Command, kinds []policyKind) {
 	addRepeatableStringFlag(cmd, "unbind-policy", "Unbind a policy: "+unbindPolicyFlag(kinds).usage()+" (repeatable)")
 }
 
-// policyIDFlag reads a policy-id flag. A blank value never gets here:
-// validateBlankFlags refuses it, with the unbind hint where one applies.
+// policyIDFlag reads a policy-id flag. The root pre-run (validateBlankFlags)
+// refuses a blank value, with the unbind hint where one applies; builders rely on it.
 func policyIDFlag(cmd *cobra.Command, k policyKind) (string, bool, error) {
 	if !cmd.Flags().Changed(k.flag) {
 		return "", false, nil

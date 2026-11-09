@@ -146,7 +146,7 @@ func init() {
 	servicePrincipalsCmd.AddCommand(spBindingsCmd)
 
 	for _, c := range []*cobra.Command{spBindingsAddCmd, spBindingsDeleteCmd} {
-		c.Flags().String("service-principal-id", "", "Service principal ID (required)")
+		c.Flags().String("service-principal-id", "", "Service principal ID")
 		markRequired(c, "service-principal-id")
 		addBindingSubjectFlags(c)
 		markMutating(c)
