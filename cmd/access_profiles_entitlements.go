@@ -257,10 +257,13 @@ func catalogEntitlementReferencesFromFile(cmd *cobra.Command) ([]catalogEntitlem
 	return result, nil
 }
 
-func validateAppEntitlementRefs(refs []any, field string) error {
-	for i, value := range refs {
-		ref, ok := value.(map[string]any)
-		if !ok || len(ref) != 2 {
+func validateAppEntitlementRefs(raw []any, field string) error {
+	refs, err := objectElements(field, raw)
+	if err != nil {
+		return err
+	}
+	for i, ref := range refs {
+		if len(ref) != 2 {
 			return &usageError{fmt.Errorf("%s[%d] must be an AppEntitlementRef with exactly appId and id", field, i)}
 		}
 		appID, appOK := ref["appId"].(string)

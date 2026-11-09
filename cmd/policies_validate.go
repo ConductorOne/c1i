@@ -56,9 +56,30 @@ func jsonKindName(v any) string {
 		return "a boolean"
 	case []any:
 		return "an array"
+	case map[string]any:
+		return "an object"
 	default:
 		return fmt.Sprintf("a %T", v)
 	}
+}
+
+// policyStepsEntry returns the steps of one policySteps entry and whether the
+// key is present. A body-file entry that isn't an object, or a present steps
+// that isn't an array, is a usage error; an absent steps is not.
+func policyStepsEntry(key string, v any) (steps []any, present bool, err error) {
+	entry, ok := v.(map[string]any)
+	if !ok {
+		return nil, false, &usageError{fmt.Errorf("--body-file policySteps[%q] must be a JSON object, not %s", key, jsonKindName(v))}
+	}
+	raw, present := entry["steps"]
+	if !present {
+		return nil, false, nil
+	}
+	steps, ok = raw.([]any)
+	if !ok {
+		return nil, true, &usageError{fmt.Errorf("--body-file policySteps[%q].steps must be a JSON array, not %s", key, jsonKindName(raw))}
+	}
+	return steps, true, nil
 }
 
 func hasStepArm(step map[string]any) bool {
@@ -168,12 +189,11 @@ func validatePolicyType(policyType string) error {
 // explicit opt-in to accept the server's silent deny-all default.
 func validatePolicyStepsNonEmpty(policyType string, policySteps map[string]any, allowDenyAll bool) error {
 	for key, v := range policySteps {
-		entry, ok := v.(map[string]any)
-		if !ok {
-			continue
+		arr, present, err := policyStepsEntry(key, v)
+		if err != nil {
+			return err
 		}
-		if raw, present := entry["steps"]; present {
-			arr, _ := raw.([]any)
+		if present {
 			if len(arr) == 0 {
 				return &usageError{fmt.Errorf("policySteps[%q].steps is explicitly empty: the server rejects this with a 400 (%q must contain at least 1 item). Supply a real step, or omit the %q key entirely and pass --allow-deny-all if you intend a deny-all policy", key, "steps", key)}
 			}
@@ -211,12 +231,8 @@ func validatePolicyStepsNonEmpty(policyType string, policySteps map[string]any, 
 // returns a structured PolicyGraphErrorAmbiguous / PolicyGraphErrorEmpty for
 // this (already a clean 400, unlike the bare-error guards above — this
 // check just saves the round trip and gives a clearer message).
-func validateRuleOutcomes(rules []any) error {
-	for i, r := range rules {
-		rule, ok := r.(map[string]any)
-		if !ok {
-			continue
-		}
+func validateRuleOutcomes(rules []map[string]any) error {
+	for i, rule := range rules {
 		_, hasStepKey := rule["stepKey"]
 		_, hasPolicyID := rule["policyId"]
 		_, hasLegacyKey := rule["policyKey"]
@@ -243,15 +259,11 @@ func validateRuleOutcomes(rules []any) error {
 // the same request) — a rule referencing a step key that already exists on
 // the policy server-side, unrelated to this update, isn't something this
 // client-side check can see.
-func validateRuleStepKeys(rules []any, policySteps map[string]any) error {
+func validateRuleStepKeys(rules []map[string]any, policySteps map[string]any) error {
 	if policySteps == nil {
 		return nil
 	}
-	for i, r := range rules {
-		rule, ok := r.(map[string]any)
-		if !ok {
-			continue
-		}
+	for i, rule := range rules {
 		stepKey, _ := rule["stepKey"].(string)
 		if stepKey == "" {
 			continue // policyId outcome, or the deprecated policyKey — not checked here
@@ -270,12 +282,8 @@ func validateRuleStepKeys(rules []any, policySteps map[string]any) error {
 // validateRuleConditions guards an empty rules[].condition 400s with a
 // length-bounds message that doesn't explain the fix — a baseline/catch-all
 // rule needs the literal condition "true", not an empty string.
-func validateRuleConditions(rules []any) error {
-	for i, r := range rules {
-		rule, ok := r.(map[string]any)
-		if !ok {
-			continue
-		}
+func validateRuleConditions(rules []map[string]any) error {
+	for i, rule := range rules {
 		cond, _ := rule["condition"].(string)
 		if strings.TrimSpace(cond) == "" {
 			return &usageError{fmt.Errorf(`rules[%d].condition is empty: the server 400s with a length-bounds error that doesn't explain this — a baseline/catch-all rule needs the literal condition "true", not an empty string`, i)}
@@ -357,21 +365,15 @@ func validateRuleConditions(rules []any) error {
 //     failure action is \"Reassign to users\"").
 func validateApprovalFallback(policySteps map[string]any, policyType string) error {
 	for ptype, v := range policySteps {
-		entry, ok := v.(map[string]any)
-		if !ok {
-			continue
+		rawSteps, _, err := policyStepsEntry(ptype, v)
+		if err != nil {
+			return err
 		}
-		steps, _ := entry["steps"].([]any)
-		for i, s := range steps {
-			step, ok := s.(map[string]any)
-			if !ok {
-				// A string/number/array/null element fails this type
-				// assertion the same way an unset step does, so without an
-				// explicit check it silently "continue"s past the whole
-				// element -- reaching the server as a raw protobuf parse
-				// error instead of this guard's friendly message.
-				return &usageError{fmt.Errorf("policySteps[%q].steps[%d] must be a JSON object (got %s), keyed by one of the recognized arms (approval, provision, accept, reject, wait, form, action)", ptype, i, jsonKindName(s))}
-			}
+		steps, err := objectElements(fmt.Sprintf("--body-file policySteps[%q].steps", ptype), rawSteps)
+		if err != nil {
+			return err
+		}
+		for i, step := range steps {
 			if !hasStepArm(step) {
 				if len(step) == 0 {
 					return &usageError{fmt.Errorf("policySteps[%q].steps[%d]: step is an empty object — the server rejects this with a bare \"policy step is nil\" error (HTTP 500, not 400)", ptype, i)}
@@ -478,7 +480,11 @@ func validateCreateBody(body map[string]any, allowDenyAll bool) error {
 	if err := validateApprovalFallback(policySteps, policyType); err != nil {
 		return err
 	}
-	if rules, ok := body["rules"].([]any); ok {
+	if raw, ok := body["rules"].([]any); ok {
+		rules, err := objectElements("--body-file rules", raw)
+		if err != nil {
+			return err
+		}
 		if err := validateRuleOutcomes(rules); err != nil {
 			return err
 		}
@@ -517,7 +523,11 @@ func validateUpdatePatch(policy map[string]any, fallbackPolicyType string, allow
 			return err
 		}
 	}
-	if rules, ok := policy["rules"].([]any); ok {
+	if raw, ok := policy["rules"].([]any); ok {
+		rules, err := objectElements("--body-file rules", raw)
+		if err != nil {
+			return err
+		}
 		if err := validateRuleOutcomes(rules); err != nil {
 			return err
 		}

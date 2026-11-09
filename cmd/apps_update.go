@@ -92,11 +92,11 @@ func readAppUserMapperFile(cmd *cobra.Command, path string) (map[string]any, err
 		// The server accepts an empty mapper with exit 0 and keeps the old one.
 		return nil, fmt.Errorf("--app-user-mapper-file: mappingCases must be a non-empty array (an empty mapper does not remove the existing one)")
 	}
-	for i, c := range cases {
-		obj, ok := c.(map[string]any)
-		if !ok {
-			return nil, fmt.Errorf("--app-user-mapper-file: mappingCases[%d] must be an object", i)
-		}
+	objs, err := objectElements("--app-user-mapper-file mappingCases", cases)
+	if err != nil {
+		return nil, err
+	}
+	for i, obj := range objs {
 		for _, k := range []string{"userKeyCel", "appUserKeyCel"} {
 			if v, present := obj[k]; present {
 				if _, isStr := v.(string); !isStr {

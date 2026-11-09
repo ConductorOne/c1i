@@ -118,7 +118,7 @@ func TestReadAppUserMapperFileShape(t *testing.T) {
 		{"missing cases", `{}`, "non-empty array"},
 		{"empty cases", `{"mappingCases":[]}`, "non-empty array"},
 		{"cases not array", `{"mappingCases":{}}`, "non-empty array"},
-		{"case not object", `{"mappingCases":["x"]}`, "mappingCases[0] must be an object"},
+		{"case not object", `{"mappingCases":["x"]}`, "mappingCases element 0 must be a JSON object, not a string"},
 		{"cel not string", `{"mappingCases":[{"userKeyCel":1}]}`, "mappingCases[0].userKeyCel must be a string"},
 	}
 	for _, tc := range cases {

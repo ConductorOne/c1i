@@ -97,24 +97,24 @@ func TestValidatePolicyType_NotFiresOnValidType(t *testing.T) {
 // ---- Guard 3: empty rules[].condition ----
 
 func TestValidateRuleConditions_FiresOnEmpty(t *testing.T) {
-	rules := []any{map[string]any{"condition": "", "stepKey": "grant"}}
+	rules := []map[string]any{{"condition": "", "stepKey": "grant"}}
 	requireUsageError(t, validateRuleConditions(rules))
 }
 
 func TestValidateRuleConditions_FiresOnWhitespaceOnly(t *testing.T) {
-	rules := []any{map[string]any{"condition": "   ", "stepKey": "grant"}}
+	rules := []map[string]any{{"condition": "   ", "stepKey": "grant"}}
 	requireUsageError(t, validateRuleConditions(rules))
 }
 
 func TestValidateRuleConditions_NotFiresOnLiteralTrue(t *testing.T) {
-	rules := []any{map[string]any{"condition": "true", "stepKey": "grant"}}
+	rules := []map[string]any{{"condition": "true", "stepKey": "grant"}}
 	if err := validateRuleConditions(rules); err != nil {
 		t.Errorf("expected no error for a baseline literal \"true\" condition, got: %v", err)
 	}
 }
 
 func TestValidateRuleConditions_NotFiresOnRealCondition(t *testing.T) {
-	rules := []any{map[string]any{"condition": `subject.role == "admin"`, "stepKey": "grant"}}
+	rules := []map[string]any{{"condition": `subject.role == "admin"`, "stepKey": "grant"}}
 	if err := validateRuleConditions(rules); err != nil {
 		t.Errorf("expected no error for a real condition, got: %v", err)
 	}
@@ -123,24 +123,24 @@ func TestValidateRuleConditions_NotFiresOnRealCondition(t *testing.T) {
 // ---- Rule outcome oneof (stepKey xor policyKey) ----
 
 func TestValidateRuleOutcomes_FiresOnNeither(t *testing.T) {
-	rules := []any{map[string]any{"condition": "true"}}
+	rules := []map[string]any{{"condition": "true"}}
 	requireUsageError(t, validateRuleOutcomes(rules))
 }
 
 func TestValidateRuleOutcomes_FiresOnBoth(t *testing.T) {
-	rules := []any{map[string]any{"condition": "true", "stepKey": "grant", "policyKey": "grant"}}
+	rules := []map[string]any{{"condition": "true", "stepKey": "grant", "policyKey": "grant"}}
 	requireUsageError(t, validateRuleOutcomes(rules))
 }
 
 func TestValidateRuleOutcomes_NotFiresOnStepKeyOnly(t *testing.T) {
-	rules := []any{map[string]any{"condition": "true", "stepKey": "grant"}}
+	rules := []map[string]any{{"condition": "true", "stepKey": "grant"}}
 	if err := validateRuleOutcomes(rules); err != nil {
 		t.Errorf("expected no error for a rule with only stepKey set, got: %v", err)
 	}
 }
 
 func TestValidateRuleOutcomes_NotFiresOnDeprecatedPolicyKeyOnly(t *testing.T) {
-	rules := []any{map[string]any{"condition": "true", "policyKey": "grant"}}
+	rules := []map[string]any{{"condition": "true", "policyKey": "grant"}}
 	if err := validateRuleOutcomes(rules); err != nil {
 		t.Errorf("expected no error for a rule with only the deprecated policyKey set, got: %v", err)
 	}
@@ -149,13 +149,13 @@ func TestValidateRuleOutcomes_NotFiresOnDeprecatedPolicyKeyOnly(t *testing.T) {
 // ---- rules[].stepKey must reference a real, non-empty policySteps entry ----
 
 func TestValidateRuleStepKeys_FiresOnMismatchedKey(t *testing.T) {
-	rules := []any{map[string]any{"condition": "true", "stepKey": "nonexistent"}}
+	rules := []map[string]any{{"condition": "true", "stepKey": "nonexistent"}}
 	policySteps := map[string]any{"grant": map[string]any{"steps": []any{map[string]any{"reject": map[string]any{}}}}}
 	requireUsageError(t, validateRuleStepKeys(rules, policySteps))
 }
 
 func TestValidateRuleStepKeys_FiresOnKeyWithEmptySteps(t *testing.T) {
-	rules := []any{map[string]any{"condition": "true", "stepKey": "escalated"}}
+	rules := []map[string]any{{"condition": "true", "stepKey": "escalated"}}
 	policySteps := map[string]any{
 		"grant":     map[string]any{"steps": []any{map[string]any{"reject": map[string]any{}}}},
 		"escalated": map[string]any{"steps": []any{}},
@@ -164,7 +164,7 @@ func TestValidateRuleStepKeys_FiresOnKeyWithEmptySteps(t *testing.T) {
 }
 
 func TestValidateRuleStepKeys_NotFiresOnMatchingKey(t *testing.T) {
-	rules := []any{map[string]any{"condition": "true", "stepKey": "escalated"}}
+	rules := []map[string]any{{"condition": "true", "stepKey": "escalated"}}
 	policySteps := map[string]any{
 		"grant":     map[string]any{"steps": []any{map[string]any{"reject": map[string]any{}}}},
 		"escalated": map[string]any{"steps": []any{map[string]any{"approval": map[string]any{"users": map[string]any{"userIds": []any{"u1"}}}}}},
@@ -178,9 +178,9 @@ func TestValidateRuleStepKeys_NotFiresOnPolicyKeyOrPolicyIdOutcome(t *testing.T)
 	// Neither the deprecated policyKey nor a policyId outcome is checked
 	// against policySteps here (policyId routes to a DIFFERENT policy
 	// entirely; policyKey is legacy round-trip only).
-	rules := []any{
-		map[string]any{"condition": "true", "policyKey": "whatever"},
-		map[string]any{"condition": "true", "policyId": "some-other-policy"},
+	rules := []map[string]any{
+		{"condition": "true", "policyKey": "whatever"},
+		{"condition": "true", "policyId": "some-other-policy"},
 	}
 	policySteps := map[string]any{"grant": map[string]any{"steps": []any{map[string]any{"reject": map[string]any{}}}}}
 	if err := validateRuleStepKeys(rules, policySteps); err != nil {
@@ -191,7 +191,7 @@ func TestValidateRuleStepKeys_NotFiresOnPolicyKeyOrPolicyIdOutcome(t *testing.T)
 func TestValidateRuleStepKeys_NotFiresWhenPolicyStepsNotSupplied(t *testing.T) {
 	// On update, rules[] can be changed without policySteps also being
 	// part of the same patch; there's nothing to check against.
-	rules := []any{map[string]any{"condition": "true", "stepKey": "grant"}}
+	rules := []map[string]any{{"condition": "true", "stepKey": "grant"}}
 	if err := validateRuleStepKeys(rules, nil); err != nil {
 		t.Errorf("expected no error when policySteps isn't part of this request, got: %v", err)
 	}

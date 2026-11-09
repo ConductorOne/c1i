@@ -120,7 +120,10 @@ output are unchanged.
 Exit codes and value types that change, each described under Fixed:
 
 - An input-file error (missing, malformed, `null` or the wrong shape) exits 2,
-  not 1.
+  not 1. That includes a non-object element in an array `--*-file` or
+  `--body-file` (`--rules-file '[null]'` was sent by 0.9.2), and a `--body-file`
+  `policySteps` entry that isn't an object under a key other than the policy
+  type's own (0.9.2 sent it).
 - An id of `.` or `..` exits 2 and sends nothing, for every method.
 - A blank or invisible-only `--display-name` exits 2, not 0.
 - A blank required or id flag or positional exits 2, not 0 or a request:
@@ -318,7 +321,9 @@ exits:
   flag: every `--body-file` (including `api`'s), the MCP server
   `--*-config-file` flags, and `--steps-file`, `--rules-file` and
   `--refs-file`. These exited `1`; a `null` body file could panic, and a
-  `null` `--rules-file` sent `"rules": null` with exit 0.
+  `null` `--rules-file` sent `"rules": null` with exit 0. Every element of an
+  array file or `--body-file` array must be a JSON object, and the error names
+  the flag or body location and the zero-based index.
 - **A failed write to stdout now exits `1`** (e.g. a full disk) instead of
   `0`; list commands stop paging at the first failed row. A mutation such as
   `apps set-owners` exits 1 too, though its change was already applied.
