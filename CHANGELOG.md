@@ -302,7 +302,9 @@ every app that shares it.
   `must be an integer`, `must be true or false` or `must be a duration like
   "30s" or "5m"` instead of a Go parse error. Exit codes are unchanged.
 - `github.com/sigstore/sigstore` moves to 1.11.3, `sigstore-go` to 1.4.0,
-  `go.yaml.in/yaml/v3` to 3.0.6 and `golang.org/x/mod` to 0.42.0.
+  `go.yaml.in/yaml/v3` to 3.0.6 and `golang.org/x/mod` to 0.43.0.
+- `golang.org/x/oauth2` moves to 0.38.0 and `golang.org/x/term` to 0.48.0
+  (with `golang.org/x/sys` 0.50.0).
 
 ### Fixed
 
