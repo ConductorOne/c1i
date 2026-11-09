@@ -121,8 +121,9 @@ Exit codes and value types that change, each described under Fixed:
 
 - An input-file error (missing, malformed, `null` or the wrong shape) exits 2,
   not 1. So does an element of a `--steps-file`, `--rules-file` or
-  `--refs-file` array that isn't a JSON object (`[null]`, `["x"]`); 0.9.2
-  sent `--rules-file '[null]'`.
+  `--refs-file` array, or a `rules`, `policySteps` `steps` or
+  `entitlementRefs` array inside a `--body-file`, that has an element that isn't
+  a JSON object (`[null]`, `["x"]`); 0.9.2 sent `--rules-file '[null]'`.
 - An id of `.` or `..` exits 2 and sends nothing, for every method.
 - A blank or invisible-only `--display-name` exits 2, not 0.
 - A blank required or id flag or positional exits 2, not 0 or a request:
@@ -321,8 +322,9 @@ exits:
   `--*-config-file` flags, and `--steps-file`, `--rules-file` and
   `--refs-file`. These exited `1`; a `null` body file could panic, and a
   `null` `--rules-file` sent `"rules": null` with exit 0. In those three array
-  files every element must be a JSON object, and the error names the flag and
-  the zero-based index.
+  files, and in the `rules`, `steps` and `entitlementRefs` arrays of a
+  `--body-file`, every element must be a JSON object, and the error names the
+  flag (or body location) and the zero-based index.
 - **A failed write to stdout now exits `1`** (e.g. a full disk) instead of
   `0`; list commands stop paging at the first failed row. A mutation such as
   `apps set-owners` exits 1 too, though its change was already applied.

@@ -1253,7 +1253,7 @@ branch on without parsing text:
 |------|---------|
 | `0` | success |
 | `1` | generic / unclassified error |
-| `2` | usage error (bad flags or arguments, an empty, `.` or `..` id, a blank required or id flag or positional, a missing, malformed, `null` or wrong-shape `--*-file` input or an array-file element that isn't an object, a refused redirect, or the API returned any `4xx` other than `401`/`403`/`404`/`408`/`429`/`499`) |
+| `2` | usage error (bad flags or arguments, an empty, `.` or `..` id, a blank required or id flag or positional, a missing, malformed, `null` or wrong-shape `--*-file` input or an array element (in an array file or a `--body-file`) that isn't an object, a refused redirect, or the API returned any `4xx` other than `401`/`403`/`404`/`408`/`429`/`499`) |
 | `3` | not authenticated, or API returned `401`/`403` |
 | `4` | API returned `404` (not found) |
 | `5` | API returned `429` (rate limited — back off and retry) |

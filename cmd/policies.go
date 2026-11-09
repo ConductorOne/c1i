@@ -111,13 +111,27 @@ func readJSONFile[T []any | map[string]any](cmd *cobra.Command, flag, path strin
 		return nil, &usageError{fmt.Errorf("%s must contain a JSON %s, not null", label, kind)}
 	}
 	if arr, ok := any(v).([]any); ok {
-		for i, el := range arr {
-			if _, ok := el.(map[string]any); !ok {
-				return nil, &usageError{fmt.Errorf("%s element %d must be a JSON object, not %s", label, i, jsonKindName(el))}
-			}
+		if _, err := objectElements(label, arr); err != nil {
+			return nil, err
 		}
 	}
 	return v, nil
+}
+
+// objectElements returns arr's elements as objects, or a usage error naming
+// label and the first non-object's zero-based index. It is the one place the
+// "array of objects" rule lives: readJSONFile applies it to array files and
+// the policy/bundle-automation validators to arrays nested in a --body-file.
+func objectElements(label string, arr []any) ([]map[string]any, error) {
+	out := make([]map[string]any, len(arr))
+	for i, el := range arr {
+		obj, ok := el.(map[string]any)
+		if !ok {
+			return nil, &usageError{fmt.Errorf("%s element %d must be a JSON object, not %s", label, i, jsonKindName(el))}
+		}
+		out[i] = obj
+	}
+	return out, nil
 }
 
 // policyListItem is the subset of the Policy message (c1.api.policy.v1.Policy)

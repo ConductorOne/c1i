@@ -156,7 +156,7 @@ func validateBundleAutomationBody(body map[string]any) error {
 				if !ok {
 					return &usageError{fmt.Errorf("entitlements.entitlementRefs must be a JSON array")}
 				}
-				if err := validateAppEntitlementRefs(refs, "entitlements.entitlementRefs"); err != nil {
+				if err := validateAppEntitlementRefs(refs, "--body-file entitlements.entitlementRefs"); err != nil {
 					return err
 				}
 			}
