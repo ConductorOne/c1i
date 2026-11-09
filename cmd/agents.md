@@ -456,8 +456,8 @@ resource with `--resource-id` likewise means you drop
   user, which the API would store as an owner no user matches. Entitlement
   owners work the same way:
   read with `c1i entitlements owners <entitlement-id> --app-id <app-id>`,
-  write with `entitlements add-owner`/`remove-owner <user-id> --app-id
-  --entitlement-id` or `entitlements set-owners <entitlement-id> --app-id
+  write with `entitlements add-owner`/`remove-owner <entitlement-id>
+  --app-id --user-id` (one user per call) or `entitlements set-owners <entitlement-id> --app-id
   --user-id ...`. `set-owners` replaces the list and needs at least one
   `--user-id`; an unknown user exits 2 before the write, because the API
   would silently drop it and could leave no owners. `remove-owner` exits 4

@@ -11,27 +11,27 @@ import (
 	"github.com/spf13/viper"
 )
 
-// TestAppsAddOwnerRequiresAppID proves a missing/empty --app-id is rejected
+// TestAppsAddOwnerRequiresUserID proves a missing --user-id is rejected
 // as a usage error (exit 2) before any network call is attempted -- no
 // C1I_URL is set here, so if the command reached newClient it would fail on
 // URL resolution instead, which would misreport as a different failure mode.
-func TestAppsAddOwnerRequiresAppID(t *testing.T) {
+func TestAppsAddOwnerRequiresUserID(t *testing.T) {
 	resetCmdFlags(t, appsAddOwnerCmd)
 
 	var out bytes.Buffer
 	appsAddOwnerCmd.SetOut(&out)
 	appsAddOwnerCmd.SetContext(context.Background())
 
-	err := appsAddOwnerCmd.RunE(appsAddOwnerCmd, []string{"user1"})
+	err := appsAddOwnerCmd.RunE(appsAddOwnerCmd, []string{"app1"})
 	if err == nil {
-		t.Fatal("expected an error when --app-id is unset")
+		t.Fatal("expected an error when --user-id is unset")
 	}
 	var ue *usageError
 	if !errors.As(err, &ue) {
 		t.Errorf("error %v is not a *usageError", err)
 	}
-	if !strings.Contains(err.Error(), "--app-id") {
-		t.Errorf("expected error to mention --app-id, got %v", err)
+	if !strings.Contains(err.Error(), "--user-id") {
+		t.Errorf("expected error to mention --user-id, got %v", err)
 	}
 }
 
@@ -47,13 +47,13 @@ func TestAppsAddOwnerDryRunPreviewsRequestWithoutSending(t *testing.T) {
 	viper.Set("dry_run", true)
 	t.Cleanup(func() { viper.Set("dry_run", orig) })
 
-	_ = appsAddOwnerCmd.Flags().Set("app-id", "app1")
+	_ = appsAddOwnerCmd.Flags().Set("user-id", "user1")
 
 	var out bytes.Buffer
 	appsAddOwnerCmd.SetOut(&out)
 	appsAddOwnerCmd.SetContext(context.Background())
 
-	if err := appsAddOwnerCmd.RunE(appsAddOwnerCmd, []string{"user1"}); err != nil {
+	if err := appsAddOwnerCmd.RunE(appsAddOwnerCmd, []string{"app1"}); err != nil {
 		t.Fatalf("RunE: %v", err)
 	}
 

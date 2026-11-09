@@ -74,8 +74,8 @@ c1i apps get <app-id>
 c1i apps create --display-name <name> [--description <text>] [--grant-policy-id <id>] [--revoke-policy-id <id>] [--certify-policy-id <id>] [--identity-matching strict|display-name|custom]
 c1i apps update <app-id> [--display-name <name>] [--description <text>] [--grant-policy-id <id>] [--revoke-policy-id <id>] [--certify-policy-id <id>] [--unbind-policy grant|revoke|certify]... [--identity-matching strict|display-name|custom] [--app-user-mapper-file <path|->]
 c1i apps owners <app-id> [--page-size N] [--page-token TOKEN] [--limit N]
-c1i apps add-owner <user-id> --app-id <id>
-c1i apps remove-owner <user-id> --app-id <id>
+c1i apps add-owner <app-id> --user-id <id>
+c1i apps remove-owner <app-id> --user-id <id>
 c1i apps set-owners <app-id> --user-id <id> [--user-id <id> ...] [--wait] [--wait-timeout 4m]
 c1i apps delete <app-id>
 ```
@@ -134,7 +134,7 @@ sent once.
 asynchronously and can take several minutes to appear. It returns zero rows
 at exit 0 for a well-formed but nonexistent app id, so an empty result can
 also mean "wrong id". `apps add-owner` and `apps remove-owner` change one
-owner at a time; two `add-owner` calls issued at once were both observed to land.
+owner at a time (a single `--user-id`; use `set-owners` for many); two `add-owner` calls issued at once were both observed to land.
 `apps set-owners` replaces the whole list with exactly the ids you pass, so an
 owner added between your read and your write is silently removed.
 
@@ -156,8 +156,8 @@ c1i entitlements list [--app-id <id>] [--query <text>] [--page-size N] [--page-t
 c1i entitlements get <entitlement-id> --app-id <id>
 c1i entitlements delete <entitlement-id> --app-id <id>
 c1i entitlements owners <entitlement-id> --app-id <id> [--page-size N] [--page-token TOKEN] [--limit N]
-c1i entitlements add-owner <user-id> --app-id <id> --entitlement-id <id> [--wait] [--wait-timeout 4m]
-c1i entitlements remove-owner <user-id> --app-id <id> --entitlement-id <id>
+c1i entitlements add-owner <entitlement-id> --app-id <id> --user-id <id> [--wait] [--wait-timeout 4m]
+c1i entitlements remove-owner <entitlement-id> --app-id <id> --user-id <id>
 c1i entitlements set-owners <entitlement-id> --app-id <id> --user-id <id> [--user-id <id> ...] [--wait] [--wait-timeout 4m]
 
 # Directional entitlement-to-entitlement proxy binding

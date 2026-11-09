@@ -121,7 +121,7 @@ func runEntOwnerCmd(t *testing.T, cmd *cobra.Command, flags map[string][]string,
 // body for each write. The user id goes in add-owner's body (unlike "apps
 // add-owner", which puts it in the path) but in remove-owner's path.
 func TestEntitlementOwnerWritesSendExactRequests(t *testing.T) {
-	scope := map[string][]string{"app-id": {"app/1"}, "entitlement-id": {"ent 1"}}
+	scope := map[string][]string{"app-id": {"app/1"}, "user-id": {"user/1"}}
 	const base = "/api/v1/apps/app%2F1/entitlements/ent%201/owners"
 	cases := []struct {
 		name  string
@@ -134,14 +134,14 @@ func TestEntitlementOwnerWritesSendExactRequests(t *testing.T) {
 			name:  "add-owner",
 			cmd:   entitlementsAddOwnerCmd,
 			flags: scope,
-			args:  []string{"user/1"},
+			args:  []string{"ent 1"},
 			want:  entOwnerRequest{"POST", base, `{"userId":"user/1"}`},
 		},
 		{
 			name:  "remove-owner",
 			cmd:   entitlementsRemoveOwnerCmd,
 			flags: scope,
-			args:  []string{"user/1"},
+			args:  []string{"ent 1"},
 			want:  entOwnerRequest{"DELETE", base + "/user%2F1", ""},
 		},
 		{
@@ -184,10 +184,12 @@ func TestEntitlementOwnerWritesRequireScopeFlags(t *testing.T) {
 		mention string
 	}{
 		{"owners: empty --app-id", entitlementsOwnersCmd, map[string][]string{"app-id": {""}}, []string{"ent1"}, "--app-id"},
-		{"add-owner: empty --app-id", entitlementsAddOwnerCmd, map[string][]string{"app-id": {""}, "entitlement-id": {"ent1"}}, []string{"u1"}, "--app-id"},
-		{"add-owner: empty --entitlement-id", entitlementsAddOwnerCmd, map[string][]string{"app-id": {"app1"}, "entitlement-id": {""}}, []string{"u1"}, "--entitlement-id"},
-		{"remove-owner: empty --app-id", entitlementsRemoveOwnerCmd, map[string][]string{"app-id": {""}, "entitlement-id": {"ent1"}}, []string{"u1"}, "--app-id"},
-		{"remove-owner: empty --entitlement-id", entitlementsRemoveOwnerCmd, map[string][]string{"app-id": {"app1"}, "entitlement-id": {""}}, []string{"u1"}, "--entitlement-id"},
+		{"add-owner: empty --app-id", entitlementsAddOwnerCmd, map[string][]string{"app-id": {""}, "user-id": {"u1"}}, []string{"ent1"}, "--app-id"},
+		{"add-owner: empty --user-id", entitlementsAddOwnerCmd, map[string][]string{"app-id": {"app1"}, "user-id": {""}}, []string{"ent1"}, "--user-id"},
+		{"add-owner: no --user-id", entitlementsAddOwnerCmd, map[string][]string{"app-id": {"app1"}}, []string{"ent1"}, "--user-id"},
+		{"remove-owner: empty --app-id", entitlementsRemoveOwnerCmd, map[string][]string{"app-id": {""}, "user-id": {"u1"}}, []string{"ent1"}, "--app-id"},
+		{"remove-owner: empty --user-id", entitlementsRemoveOwnerCmd, map[string][]string{"app-id": {"app1"}, "user-id": {""}}, []string{"ent1"}, "--user-id"},
+		{"remove-owner: no --user-id", entitlementsRemoveOwnerCmd, map[string][]string{"app-id": {"app1"}}, []string{"ent1"}, "--user-id"},
 		{"set-owners: empty --app-id", entitlementsSetOwnersCmd, map[string][]string{"app-id": {""}, "user-id": {"u1"}}, []string{"ent1"}, "--app-id"},
 		{"set-owners: no --user-id", entitlementsSetOwnersCmd, map[string][]string{"app-id": {"app1"}}, []string{"ent1"}, "--user-id"},
 		{"set-owners: empty --user-id beside a real one", entitlementsSetOwnersCmd, map[string][]string{"app-id": {"app1"}, "user-id": {"", "u1"}}, []string{"ent1"}, "--user-id"},
@@ -222,9 +224,9 @@ func TestEntitlementOwnerWritesDryRun(t *testing.T) {
 		want  []string
 		not   string
 	}{
-		{"add-owner", entitlementsAddOwnerCmd, map[string][]string{"app-id": {"app1"}, "entitlement-id": {"ent1"}, "wait": {"true"}, "wait-timeout": {"2s"}}, []string{"u1"},
+		{"add-owner", entitlementsAddOwnerCmd, map[string][]string{"app-id": {"app1"}, "user-id": {"u1"}, "wait": {"true"}, "wait-timeout": {"2s"}}, []string{"ent1"},
 			[]string{`"method": "POST",`, `"url": "https://example.invalid/api/v1/apps/app1/entitlements/ent1/owners",`, `"userId": "u1"`}, ""},
-		{"remove-owner", entitlementsRemoveOwnerCmd, map[string][]string{"app-id": {"app1"}, "entitlement-id": {"ent1"}}, []string{"u1"},
+		{"remove-owner", entitlementsRemoveOwnerCmd, map[string][]string{"app-id": {"app1"}, "user-id": {"u1"}}, []string{"ent1"},
 			[]string{`"method": "DELETE",`, `"url": "https://example.invalid/api/v1/apps/app1/entitlements/ent1/owners/u1"`}, `"body"`},
 		{"set-owners", entitlementsSetOwnersCmd, map[string][]string{"app-id": {"app1"}, "user-id": {"u1"}, "wait": {"true"}, "wait-timeout": {"2s"}}, []string{"ent1"},
 			[]string{`"method": "PUT",`, `"url": "https://example.invalid/api/v1/apps/app1/entitlements/ent1/owners",`, `"userIds": [`}, ""},
@@ -261,7 +263,7 @@ func TestEntitlementOwnerWritesWaitPollsEntitlementOwnerIDs(t *testing.T) {
 		flags map[string][]string
 		args  []string
 	}{
-		{"add-owner", entitlementsAddOwnerCmd, map[string][]string{"app-id": {"app1"}, "entitlement-id": {"ent1"}, "wait": {"true"}, "wait-timeout": {"2s"}}, []string{"u1"}},
+		{"add-owner", entitlementsAddOwnerCmd, map[string][]string{"app-id": {"app1"}, "user-id": {"u1"}, "wait": {"true"}, "wait-timeout": {"2s"}}, []string{"ent1"}},
 		{"set-owners", entitlementsSetOwnersCmd, map[string][]string{"app-id": {"app1"}, "user-id": {"u1"}, "wait": {"true"}, "wait-timeout": {"2s"}}, []string{"ent1"}},
 	}
 	for _, tc := range cases {
@@ -392,7 +394,7 @@ func TestEntitlementOwnersWaitPredicates(t *testing.T) {
 		{"set-owners removal-only waits for the removal", entitlementsSetOwnersCmd,
 			map[string][]string{"app-id": {"app1"}, "user-id": {"u1"}, "wait": {"true"}, "wait-timeout": {"5s"}}, []string{"ent1"}, 3},
 		{"add-owner waits only for presence", entitlementsAddOwnerCmd,
-			map[string][]string{"app-id": {"app1"}, "entitlement-id": {"ent1"}, "wait": {"true"}, "wait-timeout": {"5s"}}, []string{"u1"}, 1},
+			map[string][]string{"app-id": {"app1"}, "user-id": {"u1"}, "wait": {"true"}, "wait-timeout": {"5s"}}, []string{"ent1"}, 1},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

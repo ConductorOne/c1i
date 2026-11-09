@@ -109,6 +109,17 @@ wrapper key. New commands (see Added) follow the same contract.
 `apps set-owners --wait` now waits until the owner set equals the request,
 so a set that removes an owner can wait longer than before.
 
+**Owner commands take the app or entitlement as the positional.** The user is
+now always `--user-id`, one per call (use `set-owners` for many). The old
+shapes exit `2` and send nothing; requests and output are unchanged.
+
+- `apps add-owner <user-id> --app-id <id>` → `apps add-owner <app-id> --user-id <id>`
+- `apps remove-owner <user-id> --app-id <id>` → `apps remove-owner <app-id> --user-id <id>`
+- `entitlements add-owner <user-id> --app-id <a> --entitlement-id <e>` →
+  `entitlements add-owner <e> --app-id <a> --user-id <id>`
+- `entitlements remove-owner <user-id> --app-id <a> --entitlement-id <e>` →
+  `entitlements remove-owner <e> --app-id <a> --user-id <id>`
+
 Exit codes and value types that change, each described under Fixed:
 
 - An input-file error (missing, malformed, `null` or the wrong shape) exits 2,
@@ -230,6 +241,10 @@ exits:
 
 ### Changed
 
+- `apps add-owner|remove-owner` and `entitlements add-owner|remove-owner`
+  take the app or entitlement id as the positional and the user as
+  `--user-id`, so every owner verb shares one positional. `--entitlement-id`
+  and `apps`' `--app-id` are removed from them (see "Upgrading from 0.9.2").
 - `apps set-owners` looks up each distinct `--user-id` before the `PUT` and
   exits `2` naming an unknown one, sending nothing (`--dry-run` skips the
   lookups): the API accepts an unknown id at exit `0` and stores it as an

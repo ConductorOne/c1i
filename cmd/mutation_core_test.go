@@ -171,7 +171,7 @@ func TestCoreEntitlementsAddOwnerWait(t *testing.T) {
 		return mutReply{body: `{}`}
 	})
 	t.Setenv("C1I_URL", mutTestURL)
-	r := runMutationCLI(t, s.srv, 0, nil, "entitlements", "add-owner", "u1", "--app-id", "app-1", "--entitlement-id", "e-1", "--wait", "--error-format", "json")
+	r := runMutationCLI(t, s.srv, 0, nil, "entitlements", "add-owner", "e-1", "--app-id", "app-1", "--user-id", "u1", "--wait", "--error-format", "json")
 	objs := r.stderrObjects(t)
 	if r.err != nil || r.stdout != "{}\n" || len(objs) != 1 || objs[0]["kind"] != noticeWaitDone {
 		t.Errorf("exit %d stdout %q stderr %q; want {} and one waitDone notice", r.exit, r.stdout, r.stderr)
