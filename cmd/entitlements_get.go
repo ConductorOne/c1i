@@ -16,9 +16,6 @@ var entitlementsGetCmd = &cobra.Command{
 Entitlements are scoped to an app, so --app-id is required in addition to the
 entitlement ID.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		if err := requireNonEmpty(cmd, "app-id"); err != nil {
-			return err
-		}
 
 		baseURL, err := GetBaseURL()
 		if err != nil {

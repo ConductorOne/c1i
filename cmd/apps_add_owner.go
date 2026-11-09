@@ -32,9 +32,6 @@ Honors --dry-run.
 One owner per call; to change several at once use "apps set-owners".`,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		if err := requireNonEmpty(cmd, "user-id"); err != nil {
-			return err
-		}
 
 		userID, _ := cmd.Flags().GetString("user-id")
 		// Everything the endpoint needs is in the path, but it still parses

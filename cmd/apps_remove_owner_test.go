@@ -3,7 +3,6 @@ package cmd
 import (
 	"bytes"
 	"context"
-	"errors"
 	"strings"
 	"testing"
 
@@ -14,22 +13,18 @@ import (
 // missing --user-id must be rejected as a usage error (exit 2) before
 // any network call is attempted.
 func TestAppsRemoveOwnerRequiresUserID(t *testing.T) {
-	resetCmdFlags(t, appsRemoveOwnerCmd)
-
-	var out bytes.Buffer
-	appsRemoveOwnerCmd.SetOut(&out)
-	appsRemoveOwnerCmd.SetContext(context.Background())
-
-	err := appsRemoveOwnerCmd.RunE(appsRemoveOwnerCmd, []string{"app1"})
+	// Through the root, where cobra enforces the required flag; a bare RunE
+	// no longer re-checks it.
+	res := runMutationCLI(t, nil, 0, nil, "apps", "remove-owner", "app1")
+	err := res.err
 	if err == nil {
 		t.Fatal("expected an error when --user-id is unset")
 	}
-	var ue *usageError
-	if !errors.As(err, &ue) {
-		t.Errorf("error %v is not a *usageError", err)
+	if res.exit != exitUsage {
+		t.Errorf("exit = %d, want %d (usage)", res.exit, exitUsage)
 	}
-	if !strings.Contains(err.Error(), "--user-id") {
-		t.Errorf("expected error to mention --user-id, got %v", err)
+	if !strings.Contains(err.Error(), "user-id") {
+		t.Errorf("expected error to mention user-id, got %v", err)
 	}
 }
 

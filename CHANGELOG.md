@@ -123,6 +123,12 @@ Exit codes and value types that change, each described under Fixed:
   not 1.
 - An id of `.` or `..` exits 2 and sends nothing, for every method.
 - A blank or invisible-only `--display-name` exits 2, not 0.
+- A blank required or id flag or positional exits 2, not 0 or a request:
+  `accounts set-owner <id> --user-id " "`, `grants list --app-id " "`,
+  `users get " "`, `tasks approve <id> --policy-step-id ""` (which used to
+  act on the current step), `auth login --client-id ""` (which used to open a
+  browser login) and whitespace in `--catalog-id`. Quote shell variables:
+  one that is unset or empty is now refused, not dropped.
 - A failed write to stdout exits 1, not 0.
 - A stuck pagination cursor exits 6, not an endless loop.
 - A `200` list page that is HTML, an array, empty or truncated exits 6, not 1.
@@ -294,11 +300,14 @@ exits:
   `create` that takes one, including `service-principals credentials`. `apps`,
   `access-profiles`, `policies`, `service-principals` and `mcp servers`/
   `mcp toolsets` `update` sent it as is: the server blanked the name, stored
-  the spaces, or (`apps update ""`) kept the old name with exit 0. The same
-  visible-character rule now also refuses an invisible-only
-  `--resource-type-id`/`--resource-id` (`entitlements create`), `--policy-id`
-  (`findings create-task`) and `--duration` (`tasks update-grant-duration`)
-  with exit 2.
+  the spaces, or (`apps update ""`) kept the old name with exit 0.
+- A blank (empty, whitespace or invisible-only) required or id flag, or
+  positional, exits `2` before any request, from one rule in the root
+  pre-run. It covers every flag that is documented `(required)` and every
+  string flag named `*-id`, where `accounts set-owner --user-id " "` exited 0,
+  `grants list --app-id " "` tried to authenticate and a `get " "` was sent.
+  `requireNonEmpty` and repeatable flags (`--user-id " "` on `set-owners`) use
+  the same test, so whitespace-only values are no longer accepted anywhere.
 - An id of `.` or `..`, including with a `;` suffix (`..;x`) or as a raw
   `api --path` segment such as `%2E`, now exits `2` and sends nothing, for
   every method. The API resolves such a segment to the parent or collection,

@@ -30,9 +30,6 @@ Prints the updated toolset, unwrapped like "mcp toolsets get".`,
 		if _, err := requireNonEmptyIfSet(cmd, "display-name"); err != nil {
 			return err
 		}
-		if err := requireNonEmpty(cmd, "app-id", "connector-id"); err != nil {
-			return err
-		}
 
 		appID, _ := cmd.Flags().GetString("app-id")
 		connectorID, _ := cmd.Flags().GetString("connector-id")

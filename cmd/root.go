@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"unicode/utf8"
 
 	"github.com/ConductorOne/c1i/internal/client"
@@ -49,6 +50,12 @@ For raw API exploration, also with no authentication required:
 			return err
 		}
 		if err := validateFlagsUTF8(cmd); err != nil {
+			return err
+		}
+		if err := validateBlankArgs(cmd, args); err != nil {
+			return err
+		}
+		if err := validateBlankFlags(cmd); err != nil {
 			return err
 		}
 		if err := validateCountFlags(cmd); err != nil {
@@ -103,6 +110,61 @@ func validateFlagsUTF8(cmd *cobra.Command) error {
 		if v := f.Value.String(); !utf8.ValidString(v) {
 			err = &usageError{fmt.Errorf("--%s value %q is not valid UTF-8", f.Name, v)}
 		}
+	})
+	return err
+}
+
+// validateBlankArgs rejects a positional with no visible character: ExactArgs
+// accepts "" and " ", and an id built from one addresses the collection.
+func validateBlankArgs(cmd *cobra.Command, args []string) error {
+	if isCompletionRequest(cmd) {
+		return nil
+	}
+	for _, a := range args {
+		if !hasVisibleRune(a) {
+			return &usageError{fmt.Errorf("argument %q is blank: it must contain a visible character", a)}
+		}
+	}
+	return nil
+}
+
+// isCompletionRequest reports whether cmd is cobra's hidden __complete, whose
+// args legitimately include the empty word being completed.
+func isCompletionRequest(cmd *cobra.Command) bool {
+	return cmd.Name() == cobra.ShellCompRequestCmd || cmd.Name() == cobra.ShellCompNoDescRequestCmd
+}
+
+// blankFlagExemptions maps an id-shaped or required string flag name to why
+// validateBlankFlags skips it. No blank value means anything; these flags
+// refuse it themselves with a better message.
+var blankFlagExemptions = map[string]string{
+	"grant-policy-id":           policyIDBlankReason,
+	"revoke-policy-id":          policyIDBlankReason,
+	"certify-policy-id":         policyIDBlankReason,
+	"emergency-grant-policy-id": policyIDBlankReason,
+}
+
+const policyIDBlankReason = "policyIDFlag (policy_binding.go) refuses blank and hints at --unbind-policy"
+
+// validateBlankFlags rejects a set string flag that is required or id-shaped
+// (name ends in -id) and has no visible character. Without it `--app-id " "`
+// drops the scope and over-fetches, or addresses the wrong object.
+func validateBlankFlags(cmd *cobra.Command) error {
+	if isCompletionRequest(cmd) {
+		return nil
+	}
+	var err error
+	cmd.Flags().VisitAll(func(f *pflag.Flag) {
+		if err != nil || !f.Changed || f.Value.Type() != "string" {
+			return
+		}
+		if f.Annotations[requiredAnnotation] == nil && !strings.HasSuffix(f.Name, "-id") {
+			return
+		}
+		if _, ok := blankFlagExemptions[f.Name]; ok || hasVisibleRune(f.Value.String()) {
+			return
+		}
+		err = &usageError{fmt.Errorf("flag --%s requires a non-empty value", f.Name)}
 	})
 	return err
 }

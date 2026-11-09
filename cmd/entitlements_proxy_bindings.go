@@ -76,17 +76,6 @@ Prints the API's response, which is {}; exit 0 is the success signal.`,
 }
 
 func proxyBindingPath(cmd *cobra.Command) (string, error) {
-	for _, name := range []string{
-		"source-app-id",
-		"source-entitlement-id",
-		"destination-app-id",
-		"destination-entitlement-id",
-	} {
-		if err := requireNonEmpty(cmd, name); err != nil {
-			return "", err
-		}
-	}
-
 	sourceAppID, _ := cmd.Flags().GetString("source-app-id")
 	sourceEntitlementID, _ := cmd.Flags().GetString("source-entitlement-id")
 	destinationAppID, _ := cmd.Flags().GetString("destination-app-id")

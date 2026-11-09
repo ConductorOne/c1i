@@ -56,9 +56,6 @@ For a hosted server without --catalog-id, c1i first looks the catalog id up
 (also on --dry-run) and reports "Resolved catalog id: <id>" on stderr.`,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		if err := requireNonEmpty(cmd, "app-id", "type"); err != nil {
-			return err
-		}
 
 		appID, _ := cmd.Flags().GetString("app-id")
 		connectorID := args[0]

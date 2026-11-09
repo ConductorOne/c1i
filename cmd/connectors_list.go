@@ -39,9 +39,6 @@ var connectorsListCmd = &cobra.Command{
 	Use:   "list",
 	Short: "List connectors for an application (NDJSON output)",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		if err := requireNonEmpty(cmd, "app-id"); err != nil {
-			return err
-		}
 
 		baseURL, err := GetBaseURL()
 		if err != nil {

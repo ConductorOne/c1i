@@ -23,9 +23,6 @@ other states still returns 0 for a filterless search).
 --include-last-called-at adds a "last_called_at" timestamp per row (one extra
 TSDB read each) so you can spot idle servers.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		if err := requireNonEmpty(cmd, "app-id"); err != nil {
-			return err
-		}
 
 		baseURL, err := GetBaseURL()
 		if err != nil {

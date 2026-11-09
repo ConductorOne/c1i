@@ -182,6 +182,16 @@ tracked root file outside its allowlist. Stage explicit paths rather than `-A`.
   accepts 0 and the documented count; a command documenting none must not
   require one. Rejecting a *stray* positional is the guard's job, not the
   test's.
+- **Blank ids exit 2, centrally (enforced convention):** a set string flag that
+  is required (`markRequired`/`annotateRequired`) or named `*-id`, and every
+  positional, with no visible character (empty, whitespace or invisible-only,
+  `hasVisibleRune`) exits 2 before any request. `validateBlankFlags` and
+  `validateBlankArgs` run in the root `PersistentPreRunE`; add no per-command
+  check. `requireNonEmpty` stays only where the command itself requires a flag
+  cobra does not (`annotateRequired`, or required in one mode). A flag where blank means something goes in
+  `blankFlagExemptions` with a reason.
+  `TestBlankIDAndRequiredFlagsExitUsage` and `TestBlankPositionalsExitUsage`
+  walk the tree.
 - **A new flag must be named in a top-level doc (enforced convention):**
   `TestEveryFlagIsDocumented` (`cmd/flag_docs_coverage_test.go`) walks the tree
   and fails CI on any long flag absent from **both** README.md and
@@ -251,7 +261,7 @@ tracked root file outside its allowlist. Stage explicit paths rather than `-A`.
   |------|---------|
   | `0` | ok |
   | `1` | generic |
-  | `2` | usage (bad flags/args, an empty, `.` or `..` id, a refused redirect, or any API `4xx` other than `401`/`403`/`404`/`408`/`429`/`499`) |
+  | `2` | usage (bad flags/args, an empty, `.` or `..` id, a blank required or id flag or positional, a refused redirect, or any API `4xx` other than `401`/`403`/`404`/`408`/`429`/`499`) |
   | `3` | auth (`401`/`403`) |
   | `4` | not-found (`404`) |
   | `5` | rate-limited (`429`) |

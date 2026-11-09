@@ -115,12 +115,14 @@ func TestProxyBindingRequiresEveryDirectionalScope(t *testing.T) {
 		"destination-entitlement-id",
 	} {
 		t.Run(missing, func(t *testing.T) {
-			resetCmdFlags(t, entitlementsProxyBindingsCreateCmd)
 			values := proxyBindingTestValues()
 			delete(values, missing)
-			setProxyBindingFlags(t, entitlementsProxyBindingsCreateCmd, values)
-			entitlementsProxyBindingsCreateCmd.SetContext(context.Background())
-			err := entitlementsProxyBindingsCreateCmd.RunE(entitlementsProxyBindingsCreateCmd, nil)
+			args := []string{"entitlements", "proxy-bindings", "create"}
+			for name, value := range values {
+				args = append(args, "--"+name, value)
+			}
+			// Through the root: cobra enforces the required flags.
+			err := runMutationCLI(t, nil, 0, nil, args...).err
 			if err == nil || exitCode(err) != exitUsage || !strings.Contains(err.Error(), missing) {
 				t.Errorf("error = %v, want usage error naming --%s", err, missing)
 			}

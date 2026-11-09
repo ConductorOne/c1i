@@ -14,9 +14,6 @@ var mcpBindingsCreateCmd = &cobra.Command{
 	Long: `Bind one or more MCP tools (--tool-id, repeatable) to a toolset. Prints the
 API's response as returned: {"bindings":[{"mcpToolId":…}]}, with no id of its own.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		if err := requireNonEmpty(cmd, "app-id", "connector-id", "toolset-id"); err != nil {
-			return err
-		}
 
 		appID, _ := cmd.Flags().GetString("app-id")
 		connectorID, _ := cmd.Flags().GetString("connector-id")

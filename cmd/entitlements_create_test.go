@@ -167,16 +167,6 @@ func TestEntitlementCreatePlanUsageErrors(t *testing.T) {
 			"--resource-display-name only applies",
 		},
 		{
-			"empty resource type id",
-			[]string{"--app-id", "app1", "--display-name", "e", "--resource-type-id", ""},
-			"flag --resource-type-id requires a non-empty value",
-		},
-		{
-			"empty resource id",
-			[]string{"--app-id", "app1", "--display-name", "e", "--resource-type-id", "rt1", "--resource-id", ""},
-			"flag --resource-id requires a non-empty value",
-		},
-		{
 			// Both display-name overrides would otherwise fall back to
 			// --display-name and mis-name the object.
 			"empty resource type display name",
@@ -816,6 +806,18 @@ func TestReuseAdviceIsDocumented(t *testing.T) {
 			if strings.Contains(lead, "not ") || strings.Contains(lead, "never ") {
 				t.Errorf("%s negates the reuse clause for %s: %q", name, idFlag, flat[max(0, at-24):at+len(clause)])
 			}
+		}
+	}
+}
+
+// A blank reused-object id is refused by the root's central rule, not by the
+// plan builder, so it is pinned through the real command.
+func TestEntitlementCreateBlankReuseIDsExitUsage(t *testing.T) {
+	for _, flag := range []string{"resource-type-id", "resource-id"} {
+		res := runMutationCLI(t, nil, 0, nil, "entitlements", "create", "--app-id", "app1", "--display-name", "e", "--resource-type-id", "rt1", "--"+flag, "")
+		want := "flag --" + flag + " requires a non-empty value"
+		if res.exit != exitUsage || res.err == nil || !strings.Contains(res.err.Error(), want) {
+			t.Errorf("--%s \"\": exit %d, err %v, want usage error %q", flag, res.exit, res.err, want)
 		}
 	}
 }

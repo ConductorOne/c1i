@@ -19,9 +19,6 @@ in the request body; HTTP DELETE doesn't reliably support that.
 Prints the API's response, which is {}; exit 0 is the success signal. Honors
 --dry-run.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		if err := requireNonEmpty(cmd, "app-id", "connector-id", "toolset-id"); err != nil {
-			return err
-		}
 
 		appID, _ := cmd.Flags().GetString("app-id")
 		connectorID, _ := cmd.Flags().GetString("connector-id")

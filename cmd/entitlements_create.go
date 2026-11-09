@@ -117,12 +117,6 @@ Example:
     --display-name "Payroll admin" --resource-type-display-name "Payroll role" \
     --slug member --alias payroll_admin`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		if _, err := requireNonEmptyIfSet(cmd, "display-name"); err != nil {
-			return err
-		}
-		if err := requireNonEmpty(cmd, "app-id", "display-name"); err != nil {
-			return err
-		}
 
 		plan, err := buildEntitlementCreatePlan(cmd)
 		if err != nil {
@@ -177,14 +171,8 @@ func buildEntitlementCreatePlan(cmd *cobra.Command) (*entitlementCreatePlan, err
 	appID, _ := cmd.Flags().GetString("app-id")
 	displayName, _ := cmd.Flags().GetString("display-name")
 
-	resourceTypeID, err := requireNonEmptyIfSet(cmd, "resource-type-id")
-	if err != nil {
-		return nil, err
-	}
-	resourceID, err := requireNonEmptyIfSet(cmd, "resource-id")
-	if err != nil {
-		return nil, err
-	}
+	resourceTypeID, _ := cmd.Flags().GetString("resource-type-id")
+	resourceID, _ := cmd.Flags().GetString("resource-id")
 	if resourceID != "" && resourceTypeID == "" {
 		return nil, &usageError{fmt.Errorf("--resource-id requires --resource-type-id: the entitlement carries both ids, and the server rejects a missing one with " +
 			`invalid CreateAppEntitlementRequest.AppResourceTypeId: value does not match regex pattern "^[a-zA-Z0-9]{27}$"`)}

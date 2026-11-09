@@ -12,9 +12,6 @@ var mcpToolsSearchCmd = &cobra.Command{
 	Use:   "search",
 	Short: "Search MCP tools with filters (NDJSON output)",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		if err := requireNonEmpty(cmd, "app-id", "connector-id"); err != nil {
-			return err
-		}
 
 		states, err := parseRepeatableEnum(cmd, toolStateFlag)
 		if err != nil {

@@ -28,9 +28,6 @@ Verify with "c1i entitlements owners <entitlement-id> --app-id <app-id>".
 ` + setOwnersWaitNote,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		if err := requireNonEmpty(cmd, "app-id"); err != nil {
-			return err
-		}
 		appID, _ := cmd.Flags().GetString("app-id")
 		entitlementID := args[0]
 		return runOwnerSetPut(cmd, client.Path("/api/v1/apps/%s/entitlements/%s/owners", appID, entitlementID),

@@ -12,9 +12,6 @@ var mcpToolsGetCmd = &cobra.Command{
 	Short: "Get a single MCP tool (pretty JSON)",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		if err := requireNonEmpty(cmd, "app-id", "connector-id"); err != nil {
-			return err
-		}
 
 		baseURL, err := GetBaseURL()
 		if err != nil {

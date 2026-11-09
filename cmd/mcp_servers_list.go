@@ -13,9 +13,6 @@ var mcpServersListCmd = &cobra.Command{
 	Use:   "list",
 	Short: "List MCP servers registered under an app (NDJSON output)",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		if err := requireNonEmpty(cmd, "app-id"); err != nil {
-			return err
-		}
 
 		baseURL, err := GetBaseURL()
 		if err != nil {

@@ -33,12 +33,6 @@ Example:
   APP_ID=$(c1i apps create --display-name "Google Workspace" | jq -er .id)
   c1i mcp servers register --app-id "$APP_ID" --type hosted ...`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		if _, err := requireNonEmptyIfSet(cmd, "display-name"); err != nil {
-			return err
-		}
-		if err := requireNonEmpty(cmd, "display-name"); err != nil {
-			return err
-		}
 
 		body, err := buildAppCreateBody(cmd)
 		if err != nil {
