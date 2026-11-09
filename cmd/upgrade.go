@@ -250,10 +250,11 @@ func writeUpgradeReport(cmd *cobra.Command, current, target, channel string, ava
 }
 
 // externalServiceError classifies a failure talking to a service beyond C1 (the
-// release host, the OpenAPI spec host, the docs site) as upstream (8), except that a 404, 429 or 5xx keeps its
-// own exit code. Neither host needs auth or takes input from the caller, so for
-// a refused redirect, a bad path, or any other 4xx the status is dropped and
-// the exit code is 8.
+// release host, the OpenAPI spec host, the docs site) as upstream (8), except
+// that a 404, 429 or 5xx keeps its own exit code. None of these hosts needs
+// auth or takes input from the caller, so for a refused redirect, a redirect
+// loop, a bad path, or any other 4xx the status is dropped and the exit code
+// is 8.
 func externalServiceError(err error, format string, args ...any) error {
 	msg := fmt.Sprintf(format, args...)
 	var apiErr *client.APIError
@@ -265,7 +266,8 @@ func externalServiceError(err error, format string, args ...any) error {
 	}
 	var redirErr *client.RedirectError
 	var pathErr *client.PathError
-	if errors.As(err, &redirErr) || errors.As(err, &pathErr) {
+	var loopErr *client.RedirectLoopError
+	if errors.As(err, &redirErr) || errors.As(err, &pathErr) || errors.As(err, &loopErr) {
 		return &upstreamError{fmt.Errorf("%s: %v", msg, err)}
 	}
 	return &upstreamError{fmt.Errorf("%s: %w", msg, err)}

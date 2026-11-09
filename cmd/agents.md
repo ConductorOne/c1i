@@ -111,8 +111,8 @@ JSON is for the detail, not the classification.
 
 `--debug` and `--max-retries` cover `mcp gateway`, `auth login` (except its
 device-code polling, which never retries), `upgrade` and every `docs` command
-as well as the REST commands: the gateway
-client threads both into its bearer mint and its JSON-RPC calls. On a
+as well as the REST commands: the gateway client threads both into its bearer
+mint and its JSON-RPC calls. On a
 `mcp gateway call` that hangs or fails oddly, `--debug` is the fastest way to
 see which request stopped.
 
@@ -131,7 +131,7 @@ for a nonsense query: never read a result as proof a concept exists, or an
 unexpected result as proof it is absent. `docs endpoints --filter` DOES have a
 true no-match. If a spec fetch fails, an expired cache is served with a
 one-line `Warning:` on stderr naming its age; with no cache, it exits 4 for a
-404, 5 for a 429, 6 for a 5xx or a redirect loop, and 8 otherwise. With a cache
+404, 5 for a 429, 6 for a 5xx, and 8 otherwise. With a cache
 to fall back on, the fetch makes one attempt unless you set `--max-retries` or
 `C1I_MAX_RETRIES`.
 
@@ -640,8 +640,8 @@ checks the install directory is writable, then prints what it would download
 and replace; it takes no lock, doesn't prompt, and installs nothing.
 
 Exit codes treat the distribution center as a system beyond C1: a dist `404`,
-`429`, or `5xx` exits 4, 5, or 6 and a same-path redirect loop 6, but any other
-dist `4xx`, a refused redirect, a non-JSON `200`, or a TUF, signature, or
+`429`, or `5xx` exits 4, 5, or 6, but any other
+dist `4xx`, a refused redirect, a redirect loop, a non-JSON `200`, or a TUF, signature, or
 checksum failure exits 8.
 
 ## Carry forward

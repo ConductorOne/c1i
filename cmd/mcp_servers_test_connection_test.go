@@ -76,6 +76,18 @@ func TestTestConnectionUnreachableExitsUpstream(t *testing.T) {
 	}
 }
 
+func TestTestConnectionUnrecognizedShapeExitsServer(t *testing.T) {
+	for _, body := range []string{`null`, `[]`, `"x"`, `3`} {
+		stdout, _, err := runTestConnection(t, 200, body)
+		if got := exitCode(err); got != exitServer {
+			t.Errorf("body %s: exit = %d (%v), want %d", body, got, err, exitServer)
+		}
+		if !strings.Contains(stdout, strings.TrimSpace(body)) {
+			t.Errorf("body %s: stdout = %q, want it still printed", body, stdout)
+		}
+	}
+}
+
 func TestTestConnectionReachableExitsZero(t *testing.T) {
 	stdout, _, err := runTestConnection(t, 200, `{"reachable":true,"toolCount":"3"}`)
 	if err != nil {

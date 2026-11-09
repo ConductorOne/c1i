@@ -247,6 +247,9 @@ func TestUpgradeExitCodes(t *testing.T) {
 		{"unauthorized", status(http.StatusUnauthorized), false, exitUpstream, "reading release channels"},
 		{"forbidden", status(http.StatusForbidden), false, exitUpstream, "reading release channels"},
 		{"bad request", status(http.StatusBadRequest), false, exitUpstream, "reading release channels"},
+		{"redirect loop", func(w http.ResponseWriter, r *http.Request) {
+			http.Redirect(w, r, r.URL.Path, http.StatusFound)
+		}, false, exitUpstream, "reading release channels"},
 		{"redirect refused", func(w http.ResponseWriter, r *http.Request) {
 			http.Redirect(w, r, "/elsewhere", http.StatusFound)
 		}, false, exitUpstream, "reading release channels"},

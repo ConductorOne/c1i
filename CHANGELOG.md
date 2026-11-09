@@ -184,7 +184,7 @@ exit 8, whatever the status.
 
 **`mcp servers test-connection` exits 8 when the server is unreachable.** 0.9.2
 exited 0 with `{"reachable":false,…}`. It still prints the same JSON, then
-exits 8 with the `failureReason` on stderr; check the exit code, not just
+exits 8; stderr says `MCP server is unreachable: <failureReason>`. Check the exit code, not just
 `reachable`.
 
 ### Added
@@ -297,7 +297,8 @@ exits 8 with the `failureReason` on stderr; check the exit code, not just
 ### Fixed
 
 - `--debug` and `--max-retries` now work on `docs search` and `docs page`,
-  which also gain the path and redirect guards and retry a 5xx. One helper
+  which also gain the path and redirect guards and retry a 5xx. A redirect
+  loop on those and on `upgrade` now exits 8, not 6. One helper
   now builds those options for every client, so no command can skip them.
 - `docs guide configure-new-app` and `request-access` said c1i has no command
   to make an entitlement requestable or to read access-profile membership.

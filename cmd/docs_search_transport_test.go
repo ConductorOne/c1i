@@ -73,10 +73,11 @@ func TestDocsMaxRetriesRetries503(t *testing.T) {
 
 func TestDocsSiteFailureExitsUpstream(t *testing.T) {
 	cases := map[string]http.HandlerFunc{
-		"500":      func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(500) },
-		"404":      func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(404) },
-		"non-JSON": func(w http.ResponseWriter, _ *http.Request) { _, _ = w.Write([]byte("<html>")) },
-		"redirect": func(w http.ResponseWriter, r *http.Request) { http.Redirect(w, r, "/elsewhere", http.StatusFound) },
+		"500":           func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(500) },
+		"404":           func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(404) },
+		"non-JSON":      func(w http.ResponseWriter, _ *http.Request) { _, _ = w.Write([]byte("<html>")) },
+		"redirect loop": func(w http.ResponseWriter, r *http.Request) { http.Redirect(w, r, r.URL.Path, http.StatusFound) },
+		"redirect":      func(w http.ResponseWriter, r *http.Request) { http.Redirect(w, r, "/elsewhere", http.StatusFound) },
 	}
 	for name, h := range cases {
 		for _, sub := range []string{"search", "page"} {
