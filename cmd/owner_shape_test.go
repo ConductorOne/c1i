@@ -8,7 +8,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// TestOwnerOldShapesExitUsage pins that the pre-0.10 owner shapes (user as
+// TestOwnerOldShapesExitUsage pins that the previous owner shapes (user as
 // the positional, --app-id/--entitlement-id as the address) fail with exit 2
 // and send nothing, rather than addressing the wrong id.
 func TestOwnerOldShapesExitUsage(t *testing.T) {
@@ -48,11 +48,9 @@ func TestOwnerOldShapesExitUsage(t *testing.T) {
 }
 
 // TestOwnerCommandsSharePositional enforces CLAUDE.md's membership-verb rule:
-// in every group with an `owners` command, owners|set-owners|add-owner|
-// remove-owner take the same positional (the collection owner's id) and none
-// takes the user as a positional.
+// in every group with an `owners` command, every *owner/*owners verb takes
+// exactly one positional, the same one as `owners`, and the user as --user-id.
 func TestOwnerCommandsSharePositional(t *testing.T) {
-	verbs := []string{"set-owners", "add-owner", "remove-owner"}
 	checked := 0
 	var walk func(c *cobra.Command)
 	walk = func(c *cobra.Command) {
@@ -68,18 +66,20 @@ func TestOwnerCommandsSharePositional(t *testing.T) {
 				t.Errorf("%s: owners Use %q must take the collection owner's id as its one positional", c.CommandPath(), owners.Use)
 			}
 			for _, sub := range c.Commands() {
-				for _, v := range verbs {
-					if sub.Name() != v {
-						continue
-					}
-					checked++
-					got := positionalPlaceholders(sub.Use)
-					if strings.Join(got, " ") != strings.Join(want, " ") {
-						t.Errorf("%s: Use %q has positional %v, want %v (same as owners)", sub.CommandPath(), sub.Use, got, want)
-					}
-					if sub.Flags().Lookup("user-id") == nil {
-						t.Errorf("%s: the member must be a --user-id flag", sub.CommandPath())
-					}
+				name := sub.Name()
+				if name == "owners" || (!strings.HasSuffix(name, "owner") && !strings.HasSuffix(name, "owners")) {
+					continue
+				}
+				checked++
+				got := positionalPlaceholders(sub.Use)
+				if strings.Join(got, " ") != strings.Join(want, " ") {
+					t.Errorf("%s: Use %q has positional %v, want %v (same as owners)", sub.CommandPath(), sub.Use, got, want)
+				}
+				if sub.Args == nil || sub.Args(sub, []string{"x"}) != nil || sub.Args(sub, []string{"x", "y"}) == nil {
+					t.Errorf("%s: Args must accept exactly one positional", sub.CommandPath())
+				}
+				if sub.Flags().Lookup("user-id") == nil {
+					t.Errorf("%s: the member must be a --user-id flag", sub.CommandPath())
 				}
 			}
 		}

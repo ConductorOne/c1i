@@ -20,6 +20,7 @@ owner you know about can still leave the app owned by someone you never
 chose -- its creator. Check "c1i apps owners <app-id>" first if that matters.
 
 ` + ownerAsyncNote + `
+An unknown app id exits 4.
 Verify with "c1i apps owners <app-id>".
 
 Prints the API's response, which is {}; exit 0 is the success signal.

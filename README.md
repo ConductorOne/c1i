@@ -134,7 +134,8 @@ sent once.
 asynchronously and can take several minutes to appear. It returns zero rows
 at exit 0 for a well-formed but nonexistent app id, so an empty result can
 also mean "wrong id". `apps add-owner` and `apps remove-owner` change one
-owner at a time (a single `--user-id`; use `set-owners` for many); two `add-owner` calls issued at once were both observed to land.
+owner at a time (a single `--user-id`; use `set-owners` for many); two
+`add-owner` calls issued at once were both observed to land.
 `apps set-owners` replaces the whole list with exactly the ids you pass, so an
 owner added between your read and your write is silently removed.
 

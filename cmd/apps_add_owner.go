@@ -23,6 +23,7 @@ at least one before you ever run this -- this adds to that set, it doesn't
 start one.
 
 ` + ownerAsyncNote + `
+An unknown app id exits 4.
 Verify with "c1i apps owners <app-id>".
 
 Prints the API's response, which is {}; exit 0 is the success signal.
