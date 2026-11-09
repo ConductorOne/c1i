@@ -56,9 +56,30 @@ func jsonKindName(v any) string {
 		return "a boolean"
 	case []any:
 		return "an array"
+	case map[string]any:
+		return "an object"
 	default:
 		return fmt.Sprintf("a %T", v)
 	}
+}
+
+// policyStepsEntry returns the steps of one policySteps entry and whether the
+// key is present. A body-file entry that isn't an object, or a present steps
+// that isn't an array, is a usage error; an absent steps is not.
+func policyStepsEntry(key string, v any) (steps []any, present bool, err error) {
+	entry, ok := v.(map[string]any)
+	if !ok {
+		return nil, false, &usageError{fmt.Errorf("--body-file policySteps[%q] must be a JSON object, not %s", key, jsonKindName(v))}
+	}
+	raw, present := entry["steps"]
+	if !present {
+		return nil, false, nil
+	}
+	steps, ok = raw.([]any)
+	if !ok {
+		return nil, true, &usageError{fmt.Errorf("--body-file policySteps[%q].steps must be a JSON array, not %s", key, jsonKindName(raw))}
+	}
+	return steps, true, nil
 }
 
 func hasStepArm(step map[string]any) bool {
@@ -168,12 +189,11 @@ func validatePolicyType(policyType string) error {
 // explicit opt-in to accept the server's silent deny-all default.
 func validatePolicyStepsNonEmpty(policyType string, policySteps map[string]any, allowDenyAll bool) error {
 	for key, v := range policySteps {
-		entry, ok := v.(map[string]any)
-		if !ok {
-			continue
+		arr, present, err := policyStepsEntry(key, v)
+		if err != nil {
+			return err
 		}
-		if raw, present := entry["steps"]; present {
-			arr, _ := raw.([]any)
+		if present {
 			if len(arr) == 0 {
 				return &usageError{fmt.Errorf("policySteps[%q].steps is explicitly empty: the server rejects this with a 400 (%q must contain at least 1 item). Supply a real step, or omit the %q key entirely and pass --allow-deny-all if you intend a deny-all policy", key, "steps", key)}
 			}
@@ -345,11 +365,10 @@ func validateRuleConditions(rules []map[string]any) error {
 //     failure action is \"Reassign to users\"").
 func validateApprovalFallback(policySteps map[string]any, policyType string) error {
 	for ptype, v := range policySteps {
-		entry, ok := v.(map[string]any)
-		if !ok {
-			continue
+		rawSteps, _, err := policyStepsEntry(ptype, v)
+		if err != nil {
+			return err
 		}
-		rawSteps, _ := entry["steps"].([]any)
 		steps, err := objectElements(fmt.Sprintf("--body-file policySteps[%q].steps", ptype), rawSteps)
 		if err != nil {
 			return err
