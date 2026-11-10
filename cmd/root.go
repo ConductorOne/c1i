@@ -70,6 +70,9 @@ For raw API exploration, also with no authentication required:
 		if err := validateDotSegmentIDArgs(cmd, args); err != nil {
 			return err
 		}
+		if err := validatePageToken(cmd); err != nil {
+			return err
+		}
 		if err := validateCountFlags(cmd); err != nil {
 			return err
 		}

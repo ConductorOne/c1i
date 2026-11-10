@@ -346,8 +346,10 @@ and any other code, exit 1.
 ## Pagination
 
 Most list commands auto-paginate to completion by default — one invocation
-gets every page. Pass `--page-token` to opt out and fetch a single page
-manually. The exceptions send one request:
+gets every page. Pass `--page-token` with a cursor to opt out and fetch a
+single page manually; a blank value is refused (exit 2, before any request),
+because supplying the flag at all turns auto-pagination off and an unset
+variable would otherwise silently truncate the list. The exceptions send one request:
 `role-mining suggestions|runs|custom-analysis list` and
 `findings routing-rules|transformation-rules list` print a stderr
 `partial result` warning if the server reports more pages, and `mcp bindings by-tools`
