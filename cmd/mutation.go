@@ -538,19 +538,27 @@ func previewProbeIfDryRun(cmd *cobra.Command, baseURL, path string, body map[str
 
 const redactedPlaceholder = "[redacted]"
 
-// secretBodyKeys are the lower-cased body keys whose values are credentials.
+// secretBodyKeys are the body keys (normalized by secretKey) whose values are
+// credentials.
 var secretBodyKeys = map[string]bool{
 	"token": true, "headervalue": true, "password": true, "clientsecret": true,
 	"secretaccesskey": true, "sessiontoken": true, "credentialsjson": true,
 }
 
-// redactSecrets returns a copy of v with every secret-valued key masked.
+// secretKey folds a JSON key's camelCase, snake_case and kebab-case spellings
+// (the API accepts the first two) into one lookup form.
+func secretKey(k string) string {
+	return strings.ToLower(strings.NewReplacer("_", "", "-", "").Replace(k))
+}
+
+// redactSecrets returns a copy of v with the value of every secret key masked,
+// whatever its JSON type; an empty value is left as is.
 func redactSecrets(v any) any {
 	switch x := v.(type) {
 	case map[string]any:
 		out := make(map[string]any, len(x))
 		for k, e := range x {
-			if s, ok := e.(string); ok && secretBodyKeys[strings.ToLower(k)] && s != "" {
+			if secretBodyKeys[secretKey(k)] && !emptyJSONValue(e) {
 				out[k] = redactedPlaceholder
 			} else {
 				out[k] = redactSecrets(e)
@@ -565,6 +573,20 @@ func redactSecrets(v any) any {
 		return out
 	}
 	return v
+}
+
+func emptyJSONValue(v any) bool {
+	switch x := v.(type) {
+	case nil:
+		return true
+	case string:
+		return x == ""
+	case map[string]any:
+		return len(x) == 0
+	case []any:
+		return len(x) == 0
+	}
+	return false
 }
 
 // writeMutationResult prints U(data): pretty for a single target, compact for
