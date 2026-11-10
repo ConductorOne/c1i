@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"net/http"
 	"reflect"
+	"strings"
 
 	"github.com/ConductorOne/c1i/internal/client"
 	"github.com/spf13/cobra"
@@ -518,6 +519,52 @@ func writeMutationPreview(cmd *cobra.Command, baseURL string, reqs []previewRequ
 	}
 	notice(cmd, noticeDryRun, "dry run: nothing was sent", nil)
 	return nil
+}
+
+// previewProbeIfDryRun previews a probe POST (which is not a mutation, so it
+// does not go through sendMutation) instead of sending it, and reports whether
+// it did. Secret-valued keys in the body are masked: a probe's body carries
+// the credentials under test.
+func previewProbeIfDryRun(cmd *cobra.Command, baseURL, path string, body map[string]any) (bool, error) {
+	if !dryRunActive() {
+		return false, nil
+	}
+	req, err := prepareMutation(baseURL, mutation{Method: http.MethodPost, Path: path, Body: redactSecrets(body)})
+	if err != nil {
+		return true, err
+	}
+	return true, writeMutationPreview(cmd, baseURL, []previewRequest{req})
+}
+
+const redactedPlaceholder = "[redacted]"
+
+// secretBodyKeys are the lower-cased body keys whose values are credentials.
+var secretBodyKeys = map[string]bool{
+	"token": true, "headervalue": true, "password": true, "clientsecret": true,
+	"secretaccesskey": true, "sessiontoken": true, "credentialsjson": true,
+}
+
+// redactSecrets returns a copy of v with every secret-valued key masked.
+func redactSecrets(v any) any {
+	switch x := v.(type) {
+	case map[string]any:
+		out := make(map[string]any, len(x))
+		for k, e := range x {
+			if s, ok := e.(string); ok && secretBodyKeys[strings.ToLower(k)] && s != "" {
+				out[k] = redactedPlaceholder
+			} else {
+				out[k] = redactSecrets(e)
+			}
+		}
+		return out
+	case []any:
+		out := make([]any, len(x))
+		for i, e := range x {
+			out[i] = redactSecrets(e)
+		}
+		return out
+	}
+	return v
 }
 
 // writeMutationResult prints U(data): pretty for a single target, compact for

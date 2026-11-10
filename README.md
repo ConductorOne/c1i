@@ -1304,6 +1304,10 @@ classifier. A tool gate's `filter` must select either `builtInPattern` or
   sharing is not readable back, so repeat `--token-sharing per-user` on
   `update-credentials` / `test-connection` when the stored server is per-user
   and you are not supplying the secret.
+- `test-connection --dry-run` prints the probe's request body and sends
+  nothing; credential values in the body (token, header value, password,
+  client secret) show as `[redacted]`. The other commands in this section echo
+  the body as sent.
 - Secrets are sealed server-side; reads only ever return `*_configured`
   booleans, never the values. A read-back can legitimately differ from what you
   sent: the backend may store a *resolved* OAuth2 grant such as

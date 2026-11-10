@@ -376,6 +376,10 @@ already behaved this way.
 
 ### Fixed
 
+- `mcp servers test-connection --dry-run` no longer sends the probe (0.9.2
+  did); it prints the request body like other mutations, with credential
+  values shown as `[redacted]`.
+
 - `C1I_DRY_RUN=yes` (or any value the flag would refuse) was read as **false**,
   so a command run with the variable live-sent the mutation it was meant to
   preview; `C1I_DEBUG` and `C1I_MAX_RETRIES` silently fell back to their

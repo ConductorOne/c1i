@@ -588,6 +588,9 @@ resource with `--resource-id` likewise means you drop
   number. The `tool_count` in NDJSON list rows is a real number. It exits `8`
   when the server is unreachable (`reachable` is not `true`), after printing
   the same JSON, so check the exit code before reading `toolCount`.
+  `--dry-run` previews the probe's body and sends nothing, with credential
+  values shown as `[redacted]` (`register` and `update-credentials` previews
+  echo them as sent).
 - `mcp servers search` only includes `tool_count` when you pass
   `--tool-state`; the API doesn't compute a count without a state filter, so
   a filterless search omits the key rather than showing a 0 that would look

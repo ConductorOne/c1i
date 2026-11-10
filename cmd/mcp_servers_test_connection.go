@@ -31,6 +31,10 @@ secret you are not supplying.
 EXTERNAL servers only; HOSTED servers return an error ("test connection is only
 supported for external MCP servers").
 
+--dry-run prints the request body without sending the probe; credential values
+in it (token, header value, password, client secret, ...) are shown as
+"[redacted]".
+
 Exits 8 when the server is unreachable; the JSON is still printed.`,
 	Args: cobra.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
@@ -77,11 +81,15 @@ Exits 8 when the server is unreachable; the JSON is still printed.`,
 			}
 		}
 
+		const path = "/api/v1/mcp_servers/test_connection"
+		if done, err := previewProbeIfDryRun(cmd, baseURL, path, body); done {
+			return err
+		}
 		c, err := newClient(cmd, baseURL)
 		if err != nil {
 			return fmt.Errorf("authentication failed: %w", err)
 		}
-		data, err := c.Post(cmd.Context(), "/api/v1/mcp_servers/test_connection", body)
+		data, err := c.Post(cmd.Context(), path, body)
 		if err != nil {
 			return fmt.Errorf("API error: %w", err)
 		}
