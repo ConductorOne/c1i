@@ -12,11 +12,11 @@ import (
 	"github.com/ConductorOne/c1i/internal/tokensource"
 )
 
-// useConfigFile points HOME at a temp dir holding ~/.c1i.yaml with body, so no
-// test reads the real file.
 // resetViper drops the global viper's config layer and search paths.
 func resetViper() { viper.Reset(); bindGlobalEnvSettings() }
 
+// useConfigFile points HOME at a temp dir holding ~/.c1i.yaml with body, so no
+// test reads the real file.
 func useConfigFile(t *testing.T, body string) string {
 	t.Helper()
 	// viper keeps the last file it parsed after HOME is restored.
