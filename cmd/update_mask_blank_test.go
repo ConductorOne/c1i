@@ -33,7 +33,7 @@ func TestBlankUpdateMaskIsNotReportedAsMissing(t *testing.T) {
 				// Adopters cobra already marks required report a blank mask
 				// through validateBlankFlags; the rest reach bodyFileMask.
 				if r.exit != exitUsage || strings.Contains(msg, "required together") ||
-					!(strings.Contains(msg, "--update-mask is blank") || strings.Contains(msg, "requires a non-empty value")) {
+					(!strings.Contains(msg, "--update-mask is blank") && !strings.Contains(msg, "requires a non-empty value")) {
 					t.Errorf("mask %q: exit %d, err %v; want exit 2 saying the mask is blank", blank, r.exit, r.err)
 				}
 			}
