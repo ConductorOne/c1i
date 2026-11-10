@@ -683,8 +683,11 @@ func bodyFileMask(cmd *cobra.Command, exclusive ...string) (mask string, usingBo
 			return "", true, &usageError{fmt.Errorf("--body-file is mutually exclusive with --%s", strings.Join(exclusive, "/--"))}
 		}
 	}
-	if !hasVisibleRune(mask) {
+	if !f.Changed("update-mask") {
 		return "", true, &usageError{fmt.Errorf("--update-mask is required together with --body-file")}
+	}
+	if !hasVisibleRune(mask) {
+		return "", true, &usageError{fmt.Errorf("--update-mask is blank; name the changed field paths, comma-separated")}
 	}
 	paths := strings.Split(mask, ",")
 	for i, p := range paths {

@@ -376,6 +376,9 @@ already behaved this way.
 
 ### Fixed
 
+- A blank `--update-mask " "` with `--body-file` on `policies update` and
+  `automations update` said the mask was required; it now says it is blank.
+
 - A negative `--max-retries`, `C1I_MAX_RETRIES` or `max_retries` was accepted
   and treated as 0; it now exits 2. `0` still disables retries.
 
