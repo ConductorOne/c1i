@@ -20,9 +20,9 @@ exit 0.
 
 `c1i` resolves the tenant in this order: `--url`, `C1I_URL`, then `url:` in
 `~/.c1i.yaml` (never read with a relative `HOME`). It must be a full host —
-`mycompany.conductor.one` or `mycompany.c1eu.ai` (EU) — and `https` is
+`example.conductor.one` or `example.c1eu.ai` (EU) — and `https` is
 required:
-a bare `mycompany`, a non-https scheme, and a malformed host (an embedded space
+a bare `example`, a non-https scheme, and a malformed host (an embedded space
 or control character, or a stray scheme like `://host`) are all usage errors
 (exit `2`) before any request is sent.
 Every command that resolves a C1 tenant URL prints a `Warning: no --url flag
@@ -64,7 +64,7 @@ the latter machine-readably: `tenant` is the resolved base URL and
 last meaning it fell through to `~/.c1i.yaml`). Gate any write on it:
 
 ```sh
-c1i auth whoami --url https://mycompany.conductor.one --fields tenant
+c1i auth whoami --url https://example.conductor.one --fields tenant
 ```
 
 Both keys are emitted only once the credentials are proven against that
@@ -644,6 +644,9 @@ resource with `--resource-id` likewise means you drop
 - `automations delete <automation-id>` is soft: the automation leaves
   `automations list`, but `automations get` still returns it at exit `0` with
   no field marking it deleted.
+- `policies delete <policy-id>` is soft: the policy leaves `policies list` and
+  the default `search`, but `policies get` still returns it at exit `0` with
+  `deletedAt` set (`search --include-deleted` also finds it).
 - `users list` with no `--origin` returns directory-origin users only, so
   local-origin users (service principals among them) and system users are
   missing. Pass `--origin all` for every user, or `--origin local` for

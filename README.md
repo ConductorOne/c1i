@@ -1321,9 +1321,10 @@ always exit `4`:
   `deleted_at` field.
 - `entitlements delete`: `entitlements get` still returns it, with `deletedAt`
   set.
-- `policies delete`: `policies get` still returns it with `deletedAt`
-  populated, but it leaves `list` and the default `search`; only
-  `search --include-deleted` finds it. List and search rows carry `deleted_at`,
+- `policies delete`: the policy leaves `policies list` and the default
+  `search`, but `policies get` still returns it at exit `0` with `deletedAt`
+  set; only `search --include-deleted` finds it in a listing. List and search
+  rows carry `deleted_at`,
   `null` on a live policy, so `jq 'select(.deleted_at)'` selects only the
   deleted ones.
 - `automations delete`: the automation leaves `automations list`, but
