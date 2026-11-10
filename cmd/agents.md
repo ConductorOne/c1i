@@ -53,7 +53,8 @@ does not write a `client_credentials` audit event each time. It uses the OS
 keychain when available; on Unix-like hosts without a usable keyring, it uses
 a hardened `0600` file fallback. `auth token` and `mcp gateway` always mint a
 fresh bearer and never persist it.
-`C1I_NO_TOKEN_CACHE=1` disables the REST-client cache.
+Setting `C1I_NO_TOKEN_CACHE` to any non-empty value (even `0`) disables the
+REST-client cache.
 `c1i auth login` to authenticate; then `c1i auth whoami` before doing
 anything else — it reports both the identity you're acting as (principleId,
 plus userId when the principal has one; email and displayName only when a
@@ -641,6 +642,10 @@ resource with `--resource-id` likewise means you drop
   `720h`: anything else exits `2` before sending, and over `720h` update returns
   `callback_timeout must be between 0 and 30 days`. A webhook has no
   signing secret.
+- `apps delete <app-id>` is soft: the app is marked with `deletedAt`, and
+  `apps list` rows carry a `deleted_at` field.
+- `entitlements delete <entitlement-id>` is soft: `entitlements get` still
+  returns it, with `deletedAt` set.
 - `automations delete <automation-id>` is soft: the automation leaves
   `automations list`, but `automations get` still returns it at exit `0` with
   no field marking it deleted.
