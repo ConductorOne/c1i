@@ -204,7 +204,8 @@ tracked root file outside its allowlist. Stage explicit paths rather than `-A`.
   every channel it can arrive by (flag, `C1I_*` env var, `--body-file`) and
   wherever it is used (path, body, query); `--dry-run` must refuse exactly what
   a real run refuses. `C1I_DRY_RUN=yes` was once coerced to false and sent the
-  mutation it meant to preview. `~/.c1i.yaml` values are not validated yet.
+  mutation it meant to preview. `~/.c1i.yaml` is validated the same way; a
+  broken file exits 2 (`docs`, `help`, `version` and completion ignore it).
   Scope a rule by what the value does, not its flag name, and back a name-keyed
   rule with a tree test that fails on a flag it misses.
 - **A new flag must be named in a top-level doc (enforced convention):**
@@ -234,8 +235,9 @@ tracked root file outside its allowlist. Stage explicit paths rather than `-A`.
 - **Output:** list rows go through the `newEmitter(...)`/`.Encode` emitter;
   single-object reads through `writeObject`; **mutations** through
   `sendMutation`/`sendMutationBatch`/`sendMutationSequence` (`cmd/mutation.go`),
-  which own the send, pre-send reads, `--wait`, the `--dry-run` preview (`writeMutationPreview` masks credential fields
-  for every path), and the
+  which own the send, pre-send reads, `--wait`, the `--dry-run` preview
+  (`writeMutationPreview` masks credentials on every path; extend the one name
+  rule, `isSecretKey`, never a second list), and the
   output: the response unwrapped like the family's read, never projected (an
   explicit `--fields` is exit 2). Call `markMutating` in the command's `init`.
   `TestMutationsWriteOnlyThroughHelper` enforces this. Every stderr line goes

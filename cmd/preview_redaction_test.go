@@ -258,8 +258,10 @@ func TestRedactPreviewBodiesFailsClosedOnNonJSON(t *testing.T) {
 func TestSecretNameSuffixRule(t *testing.T) {
 	secret := []string{"X-Amz-Security-Token", "x-api-key", "X-Goog-Signature", "privateKey", "secret_key",
 		"passphrase", "bearer", "bearer_token", "sas_token", "clientSecret", "db_password", "Authorization", "auth", "code", "sig",
-		"apiKey", "accessToken", "client_credentials", "secretAccessKey", "headerValue", "credentialsJson"}
-	visible := []string{"tokenType", "secretName", "author", "tokenSharing", "displayName", "key", "authority", "encoded"}
+		"apiKey", "accessToken", "client_credentials", "secretAccessKey", "headerValue", "credentialsJson",
+		"accessKey", "signingKey", "encryptionKey", "sshKey", "pwd", "pass", "otp", "jwt", "hmac", "cookie", "setCookie", "connectionString", "dsn"}
+	visible := []string{"tokenType", "secretName", "author", "tokenSharing", "displayName", "key", "authority", "encoded",
+		"publicKey", "sortKey", "passwordPolicy", "accessKeyId", "keyName"}
 	forms := map[string]func(string) string{
 		"as-is": func(n string) string { return n },
 		"upper": strings.ToUpper,

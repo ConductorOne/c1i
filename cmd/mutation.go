@@ -583,10 +583,12 @@ func secretKey(k string) string {
 
 var (
 	// A folded name is secret when it ends with one of these...
-	secretSuffixes = []string{"token", "secret", "secretkey", "password", "passphrase", "signature", "apikey", "privatekey", "credential", "credentials", "bearer"}
+	secretSuffixes = []string{"token", "secret", "secretkey", "password", "passphrase", "signature", "apikey", "privatekey", "accesskey", "signingkey", "encryptionkey", "sshkey", "credential", "credentials", "bearer"}
 	// ...or equals one of these, or one of the builders' names the suffixes miss.
 	secretExact = map[string]bool{
 		"auth": true, "authorization": true, "code": true, "sig": true,
+		"pwd": true, "pass": true, "otp": true, "jwt": true, "hmac": true, "cookie": true, "setcookie": true,
+		"connectionstring": true, "dsn": true,
 		secretKey(keyHeaderValue): true, secretKey(keyCredentialsJSON): true, secretKey(keySecretAccessKey): true,
 	}
 )
