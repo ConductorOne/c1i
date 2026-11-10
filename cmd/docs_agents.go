@@ -2,8 +2,6 @@ package cmd
 
 import (
 	_ "embed"
-	"fmt"
-	"os"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -33,17 +31,7 @@ plain Markdown.
 	RunE: func(cmd *cobra.Command, args []string) error {
 		content := strings.ReplaceAll(agentsTemplate, "{{VERSION}}", Version)
 
-		output, _ := cmd.Flags().GetString("output")
-		if output != "" {
-			if err := os.WriteFile(output, []byte(content), 0o644); err != nil { // #nosec G306 -- content is the static, public agents.md doc, not sensitive
-				return fmt.Errorf("writing agents file: %w", err)
-			}
-			notice(cmd, noticeInfo, fmt.Sprintf("Wrote AGENTS.md to %s", output), nil)
-			return nil
-		}
-
-		_, err := fmt.Fprint(cmd.OutOrStdout(), content)
-		return wrapOutputErr(err)
+		return emitDoc(cmd, "AGENTS.md", content)
 	},
 }
 
