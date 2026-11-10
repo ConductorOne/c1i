@@ -534,6 +534,10 @@ func redactPreviewBodies(reqs []previewRequest) []previewRequest {
 		if len(r.Body) == 0 {
 			continue
 		}
+		if !json.Valid(r.Body) {
+			out[i].Body = json.RawMessage(`"[redacted: not JSON]"`) // cannot be inspected, so not shown
+			continue
+		}
 		dec := json.NewDecoder(bytes.NewReader(r.Body))
 		dec.UseNumber()
 		var v any
@@ -598,7 +602,7 @@ func redactSecrets(v any) any {
 			sk := secretKey(k)
 			if (secretBodyKeys[sk] || (authArmKeys[sk] && isScalar(e))) && !emptyJSONValue(e) {
 				out[k] = redactedPlaceholder
-			} else if sk == "headers" {
+			} else if strings.Contains(sk, "headers") {
 				out[k] = redactHeaders(e)
 			} else if str, ok := e.(string); ok {
 				out[k] = redactURL(str)
@@ -610,7 +614,11 @@ func redactSecrets(v any) any {
 	case []any:
 		out := make([]any, len(x))
 		for i, e := range x {
-			out[i] = redactSecrets(e)
+			if str, ok := e.(string); ok {
+				out[i] = redactURL(str)
+			} else {
+				out[i] = redactSecrets(e)
+			}
 		}
 		return out
 	}
@@ -627,49 +635,62 @@ var authArmKeys = func() map[string]bool {
 	return m
 }()
 
-// redactURL masks a URL's password (url.URL.Redacted) and the value of every
-// secret-named query or fragment parameter, leaving the rest as sent. A string
-// that does not parse as an absolute URL goes through redactURLText instead,
-// so a malformed or scheme-less one fails closed.
+// redactURL masks a URL's userinfo (the password, or the username when there
+// is none: `https://<token>@host` is the common PAT form) and the value of
+// every secret-named query, fragment or `;` parameter, leaving the rest as
+// sent. A string that does not parse as a URL with a host goes through
+// redactURLText instead, so a malformed or scheme-less one fails closed.
 func redactURL(s string) string {
 	u, err := url.Parse(s)
-	if err != nil || u.Scheme == "" || u.Host == "" {
+	if err != nil || u.Host == "" {
 		return redactURLText(s)
 	}
 	if u.User != nil {
 		if _, has := u.User.Password(); has {
-			s = u.Redacted()
+			u.User = url.UserPassword(u.User.Username(), redactedPlaceholder)
+		} else {
+			u.User = url.User(redactedPlaceholder)
 		}
+		s = strings.Replace(u.String(), url.QueryEscape(redactedPlaceholder), redactedPlaceholder, 1)
+		s = strings.Replace(s, "%5Bredacted%5D", redactedPlaceholder, 1)
 	}
 	return maskSecretPairs(s)
 }
 
 var (
-	urlUserinfoRE  = regexp.MustCompile(`(://[^/?#:@]*:)[^/?#]*@`)
+	urlPasswordRE  = regexp.MustCompile(`(//[^/?#:@]*:)[^/?#]*@`)
+	urlUsernameRE  = regexp.MustCompile(`(//)[^/?#:@]+@`)
 	bareUserinfoRE = regexp.MustCompile(`^([^/@\s:]+:)[^/@\s]*@`)
 	queryPairRE    = regexp.MustCompile(`([^&;?#=\s]+)=([^&;#\s]*)`)
 )
 
+// paramOnlyKeys are secret as a URL parameter (signed-URL and API-key
+// parameters) but ordinary as a body field, so they stay out of secretBodyKeys.
+var paramOnlyKeys = map[string]bool{"key": true, "sig": true, "signature": true, "xamzsignature": true}
+
 // redactURLText is redactURL's fail-closed fallback for text url.Parse cannot
-// use: it masks a user:pass@ password and the secret-named k=v pairs after a
-// "?" or "#".
+// use: it masks userinfo and the secret-named k=v parameters.
 func redactURLText(s string) string {
-	s = urlUserinfoRE.ReplaceAllString(s, "${1}"+redactedPlaceholder+"@")
+	s = urlPasswordRE.ReplaceAllString(s, "${1}"+redactedPlaceholder+"@")
+	s = urlUsernameRE.ReplaceAllString(s, "${1}"+redactedPlaceholder+"@")
 	s = bareUserinfoRE.ReplaceAllString(s, "${1}"+redactedPlaceholder+"@")
 	return maskSecretPairs(s)
 }
 
-// maskSecretPairs masks the value of each secret-named k=v pair after the
-// first "?" or "#" (pairs split on "&" or ";"), by the same key rule as bodies.
+// maskSecretPairs masks the value of each secret-named k=v pair from the first
+// "?", "#" or ";" on (pairs split on "&" or ";"), by the same key rule as
+// bodies plus paramOnlyKeys.
 func maskSecretPairs(s string) string {
-	i := strings.IndexAny(s, "?#")
+	i := strings.IndexAny(s, "?#;")
 	if i < 0 {
 		return s
 	}
 	return s[:i] + queryPairRE.ReplaceAllStringFunc(s[i:], func(m string) string {
 		k, _, _ := strings.Cut(m, "=")
-		if name, err := url.QueryUnescape(k); err == nil && secretBodyKeys[secretKey(name)] {
-			return k + "=" + redactedPlaceholder
+		if name, err := url.QueryUnescape(k); err == nil {
+			if sk := secretKey(name); secretBodyKeys[sk] || paramOnlyKeys[sk] {
+				return k + "=" + redactedPlaceholder
+			}
 		}
 		return m
 	})
@@ -680,6 +701,8 @@ func maskSecretPairs(s string) string {
 // X-Api-Key, ...). The name fields stay.
 func redactHeaders(v any) any {
 	switch h := v.(type) {
+	case string: // "Authorization: Bearer ..."
+		return maskUnlessEmpty(h)
 	case map[string]any:
 		out := make(map[string]any, len(h))
 		for k, e := range h {

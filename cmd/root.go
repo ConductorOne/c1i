@@ -294,7 +294,7 @@ func isLocalOnlyRequest(cmd *cobra.Command) bool {
 // must not stop them. The typed settings are still validated there.
 func usesConfigFile(cmd *cobra.Command) bool {
 	for p := cmd; p.HasParent(); p = p.Parent() {
-		if !p.Parent().HasParent() && (p.Name() == "docs" || p.Name() == "version") {
+		if !p.Parent().HasParent() && (p.Name() == "docs" || p.Name() == "version" || p.Name() == "help") {
 			return false // p is a top-level command
 		}
 	}

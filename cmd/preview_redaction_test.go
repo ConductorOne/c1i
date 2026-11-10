@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"bytes"
+	"encoding/json"
 	"net/http"
 	"strings"
 	"testing"
@@ -140,6 +141,36 @@ func TestPreviewRedactsUrlsHeadersAndKeyNames(t *testing.T) {
 			[]string{"Aleak", "Bleak"}, []string{"Authorization"}},
 		{"non-string under arm key", map[string]any{"externalConfig": map[string]any{"awsSigv4": 12345678, "customHeader": map[string]any{"headerName": "X", "headerValue": "Hleak"}}},
 			[]string{"12345678", "Hleak"}, nil},
+		{"username-only userinfo (PAT)", map[string]any{"url": "https://ghp_SU1leak@github.example/x"},
+			[]string{"ghp_SU1leak"}, []string{"github.example/x"}},
+		{"username-only userinfo, malformed", map[string]any{"url": "https://ghp_SU2leak@gith ub.example/x"},
+			[]string{"ghp_SU2leak"}, nil},
+		{"scheme-relative userinfo", map[string]any{"url": "//u:PW3leak@h.example/x"},
+			[]string{"PW3leak"}, []string{"h.example/x"}},
+		{"urls in an array", map[string]any{"urls": []any{"https://u:S1leak@h.example/p", "https://h.example/?token=S2leak"}},
+			[]string{"S1leak", "S2leak"}, []string{"h.example"}},
+		{"customHeaders map", map[string]any{"customHeaders": map[string]any{"X-Y": "Aleak"}},
+			[]string{"Aleak"}, nil},
+		{"customHeaders string", map[string]any{"customHeaders": "Authorization: Bearer Bleak"},
+			[]string{"Bleak"}, nil},
+		{"extraHeaders string list", map[string]any{"extraHeaders": []any{"Authorization: Cleak"}},
+			[]string{"Cleak"}, nil},
+		{"key/sig/signature params", map[string]any{"url": "https://h.example/x?key=P1leak&sig=P2leak&Signature=P3leak&X-Amz-Signature=P4leak&ok=1"},
+			[]string{"P1leak", "P2leak", "P3leak", "P4leak"}, []string{"ok=1"}},
+		{"semicolon before query", map[string]any{"url": "https://h.example/p;token=M1leak?a=1"},
+			[]string{"M1leak"}, nil},
+		{"? inside a secret value", map[string]any{"url": "https://h.example/x?token=abc?defleak"},
+			[]string{"abc?defleak", "defleak"}, nil},
+		{"? inside a secret value, neighbours kept", map[string]any{"url": "https://h.example/x?a=1&token=x?yleak&b=2"},
+			[]string{"yleak"}, []string{"a=1", "b=2"}},
+		{"? inside a secret value, fragment", map[string]any{"url": "https://h.example/x#a=1&token=x?zleak&b=2"},
+			[]string{"zleak"}, []string{"a=1", "b=2"}},
+		{"non-secret a=b=c unchanged", map[string]any{"url": "https://h.example/x?a=b=c&d=1"},
+			nil, []string{"a=b=c", "d=1"}},
+		{"path-only semicolon param", map[string]any{"url": "https://h.example/p;api_key=M2leak/x"},
+			[]string{"M2leak"}, nil},
+		{"a plain key field is not a credential", map[string]any{"key": "visibleKey", "sig": "visibleSig"},
+			nil, []string{"visibleKey", "visibleSig"}},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -188,4 +219,23 @@ func TestPreviewRedactsUrlsHeadersAndKeyNames(t *testing.T) {
 			t.Errorf("preview URL:\n%s", r.stdout)
 		}
 	})
+}
+
+// One sentinel: a URL password prints as [redacted], not url.Redacted's xxxxx.
+func TestURLPasswordUsesTheSingleSentinel(t *testing.T) {
+	got := redactURL("https://user:PWleak@h.example/x")
+	if strings.Contains(got, "xxxxx") || strings.Contains(got, "PWleak") || !strings.Contains(got, "[redacted]") {
+		t.Errorf("redactURL = %q", got)
+	}
+}
+
+// A body that is not valid JSON cannot be inspected, so it is not printed.
+func TestRedactPreviewBodiesFailsClosedOnNonJSON(t *testing.T) {
+	out := redactPreviewBodies([]previewRequest{{Method: "POST", URL: "https://h.example/x", Body: []byte("tok=SECRETleak")}})
+	if strings.Contains(string(out[0].Body), "SECRETleak") || !json.Valid(out[0].Body) {
+		t.Errorf("body = %q", out[0].Body)
+	}
+	if !strings.Contains(string(out[0].Body), "[redacted: not JSON]") {
+		t.Errorf("body = %q, want the not-JSON marker", out[0].Body)
+	}
 }

@@ -103,7 +103,7 @@ func TestBrokenConfigFileDoesNotBreakDocsOrVersion(t *testing.T) {
 	origR, origC := embeddedReadme, embeddedChangelog
 	t.Cleanup(func() { embeddedReadme, embeddedChangelog = origR, origC })
 	embeddedReadme, embeddedChangelog = "# readme\n", "# changelog\n"
-	for _, args := range [][]string{{"docs", "readme"}, {"docs", "changelog"}, {"docs", "agents"}, {"version"}} {
+	for _, args := range [][]string{{"docs", "readme"}, {"docs", "changelog"}, {"docs", "agents"}, {"version"}, {"help"}} {
 		t.Run(strings.Join(args, " "), func(t *testing.T) {
 			clearEnvFlags(t)
 			home := t.TempDir()
@@ -114,5 +114,13 @@ func TestBrokenConfigFileDoesNotBreakDocsOrVersion(t *testing.T) {
 				t.Fatalf("exit %d: %v", r.exit, r.err)
 			}
 		})
+	}
+}
+
+// upgrade reads dry_run from the config file, so a broken file must still stop
+// it rather than silently turn a preview into an install.
+func TestUpgradeStillUsesConfigFile(t *testing.T) {
+	if !usesConfigFile(upgradeCmd) {
+		t.Error("upgrade must fail on a broken config: it reads dry_run from it")
 	}
 }

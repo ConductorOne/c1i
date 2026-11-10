@@ -289,7 +289,7 @@ entirely. The same keys in `~/.c1i.yaml` (`dry_run`, `debug`, `max_retries`,
 `error_format`) are checked the same way, and the error names the file and key.
 A `~/.c1i.yaml` that exists but can't be read or parsed (invalid YAML, not a
 mapping, a directory, no read permission) exits `2` naming the file, even with
-`--url`; a missing file is fine, and completion, `docs` and `version` ignore a
+`--url`; a missing file is fine, and completion, `docs`, `help` and `version` ignore a
 broken one.
 
 This covers the token mint too: minting or refreshing the OAuth2 bearer
@@ -335,7 +335,7 @@ it never has an `id`, and `body` is omitted when the request has none. A
 stderr notice, `dry run: nothing was sent`, accompanies every preview.
 
 Every preview prints credential fields as `[redacted]` (tokens, passwords,
-secrets, header values, a password in a URL, secret-named query parameters);
+secrets, header values, a URL username or password, secret-named query parameters);
 everything else is shown as sent. A 0.9.2 preview showed them as typed.
 
 It applies to every REST write command and to non-GET `api` calls, and never

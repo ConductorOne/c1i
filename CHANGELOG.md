@@ -400,7 +400,7 @@ already behaved this way.
 - A `~/.c1i.yaml` that exists but is invalid YAML, not a mapping, a directory,
   or unreadable was ignored (0.9.2), so `--url` ran and a missing `--url` said
   "url is required". It now exits 2 naming the file; a missing file is still
-  fine, and completion, `docs` and `version` ignore a broken one.
+  fine, and completion, `docs`, `help` and `version` ignore a broken one.
 
 - `accounts set-owner` with a repeated `--user-id` used to use the last one
   (0.9.2); it now exits 2 before any request, as do `apps` and `entitlements`
