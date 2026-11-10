@@ -424,13 +424,14 @@ func TestTaskActionsDryRunStillResolvesTheURL(t *testing.T) {
 	}
 }
 
-// withDryRun turns dry-run on and restores the previous value, matching
-// withRealDryRun. Hardcoding false would outrank a leaked pflag.
+// withDryRun turns dry-run on for one test. Cleanup restores viper's "no
+// override" state rather than the previous value: an override outranks both a
+// bound env var and a changed pflag, so parking one here would mask
+// C1I_DRY_RUN in whichever test runs next.
 func withDryRun(t *testing.T) {
 	t.Helper()
-	orig := viper.GetBool("dry_run")
 	viper.Set("dry_run", true)
-	t.Cleanup(func() { viper.Set("dry_run", orig) })
+	t.Cleanup(func() { viper.Set("dry_run", nil) })
 }
 
 // TestStepUnusedActionsPreviewWithoutCredentials: an action needing no step

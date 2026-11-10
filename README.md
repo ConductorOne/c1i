@@ -1449,6 +1449,10 @@ precedence:
 Set `--max-retries 0` to disable retries entirely. Non-retryable responses
 (4xx other than 429, and 501/505) fail immediately.
 
+A non-empty `C1I_*` value that doesn't parse (a boolean such as
+`C1I_DRY_RUN`, or `C1I_MAX_RETRIES`) exits `2` naming the variable before any
+request; the flag given on the command line overrides the variable entirely.
+
 This covers the token mint too: minting or refreshing the OAuth2 bearer
 c1i authenticates with is itself a request, subject to the same 429 retry
 (never 5xx/network, since it's a POST) and the same `--max-retries` budget.
