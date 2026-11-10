@@ -51,6 +51,16 @@ proto field paths to override. Note the mask uses the auth oneof case name
 ("bearerToken", "customHeader", "basicAuth", "oauth2", "none"), not the
 "hostedConfig"/"externalConfig" wrapper.
 
+Companion values are required for the selected arm, with two exceptions. With
+--token-sharing per-user the secret is left to each user. With an explicit
+--update-mask, only the arm fields the mask names are required (e.g.
+--auth basic-auth --basic-auth-password NEW --update-mask basicAuth.password
+rotates the password and leaves the username stored); a coarse path such as
+"basicAuth" names the whole arm and still requires all of it. Omitted fields
+must already exist on the server. Token sharing cannot be read back, so repeat
+--token-sharing per-user when rotating a stored per-user server without its
+secret.
+
 Prints the updated server, unwrapped like "mcp servers get" (id: .connectorId).
 For a hosted server without --catalog-id, c1i first looks the catalog id up
 (also on --dry-run) and reports "Resolved catalog id: <id>" on stderr.`,

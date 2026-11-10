@@ -437,13 +437,16 @@ already behaved this way.
   directory-origin users by default, omitting local-origin and
   system users.
 
-- `mcp servers register|update-credentials` refused nothing when
-  `--auth bearer-token|custom-header|basic-auth` was missing its companion
-  value(s): the preview showed empty auth material and the real request got
-  the server's `400`. The missing flags now exit `2` before anything is sent.
-  `entitlements create --owner-id` checks each user exists before its first
-  create; an unknown id used to exit `6` after the resource type and resource
-  had already been created.
+- `mcp servers register|update-credentials|test-connection` refused nothing
+  when `--auth bearer-token|custom-header|basic-auth` was missing a companion
+  value: the preview showed empty auth material and the real request got the
+  server's `400`. A blank companion now exits `2` before anything is sent,
+  except when `--token-sharing per-user` leaves the secret to each user, or
+  when an explicit `--update-mask` names only some fields of the arm (a coarse
+  arm path still requires all of them). `entitlements create --owner-id`
+  checks each user exists (a user read, skipped by `--dry-run`) before its
+  first create; an unknown id used to exit `6` after the resource type and
+  resource had already been created.
 
 ## [0.9.2] - 2026-10-21
 

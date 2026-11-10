@@ -36,11 +36,11 @@ func deriveCredentialUpdateMask(cfg map[string]any) string {
 // --hosted-config-file / --external-config-file JSON escape hatch instead.
 func addAuthFlags(cmd *cobra.Command) {
 	cmd.Flags().String("auth", "", "Auth method: "+authFlag.usage()+" (OAuth2/AWS/Google go via --*-config-file)")
-	cmd.Flags().String("bearer-token", "", "Bearer token value (required with --auth bearer-token)")
-	cmd.Flags().String("header-name", "", "Custom header name (required with --auth custom-header)")
-	cmd.Flags().String("header-value", "", "Custom header value (required with --auth custom-header)")
-	cmd.Flags().String("basic-auth-username", "", "Basic-auth username (required with --auth basic-auth)")
-	cmd.Flags().String("basic-auth-password", "", "Basic-auth password (required with --auth basic-auth)")
+	cmd.Flags().String("bearer-token", "", "Bearer token value (required with --auth bearer-token unless --token-sharing per-user or an explicit --update-mask omits it)")
+	cmd.Flags().String("header-name", "", "Custom header name (required with --auth custom-header unless an explicit --update-mask omits it)")
+	cmd.Flags().String("header-value", "", "Custom header value (required with --auth custom-header unless --token-sharing per-user or an explicit --update-mask omits it)")
+	cmd.Flags().String("basic-auth-username", "", "Basic-auth username (required with --auth basic-auth unless --token-sharing per-user or an explicit --update-mask omits it)")
+	cmd.Flags().String("basic-auth-password", "", "Basic-auth password (required with --auth basic-auth unless --token-sharing per-user or an explicit --update-mask omits it)")
 	cmd.Flags().String("token-sharing", "", "Token sharing: "+tokenSharingFlag.usage())
 	cmd.Flags().Bool("require-tool-approval", false, "Per-server override for tool auto-approval (omit to leave unset)")
 }
@@ -58,24 +58,18 @@ func authArmFromFlags(cmd *cobra.Command) (map[string]any, error) {
 	if err != nil {
 		return nil, &usageError{fmt.Errorf("unsupported --auth %q: use %s (OAuth2/AWS/Google go via --hosted-config-file / --external-config-file)", auth, authFlag.usage())}
 	}
+	if err := requireAuthArmValues(cmd, arm); err != nil {
+		return nil, err
+	}
 	switch arm {
 	case "bearerToken":
-		if err := requireAuthArmFlags(cmd, "bearer-token", "bearer-token"); err != nil {
-			return nil, err
-		}
 		token, _ := cmd.Flags().GetString("bearer-token")
 		return map[string]any{arm: map[string]any{"token": token}}, nil
 	case "customHeader":
-		if err := requireAuthArmFlags(cmd, "custom-header", "header-name", "header-value"); err != nil {
-			return nil, err
-		}
 		name, _ := cmd.Flags().GetString("header-name")
 		value, _ := cmd.Flags().GetString("header-value")
 		return map[string]any{arm: map[string]any{"headerName": name, "headerValue": value}}, nil
 	case "basicAuth":
-		if err := requireAuthArmFlags(cmd, "basic-auth", "basic-auth-username", "basic-auth-password"); err != nil {
-			return nil, err
-		}
 		user, _ := cmd.Flags().GetString("basic-auth-username")
 		pass, _ := cmd.Flags().GetString("basic-auth-password")
 		return map[string]any{arm: map[string]any{"username": user, "password": pass}}, nil
@@ -84,24 +78,149 @@ func authArmFromFlags(cmd *cobra.Command) (map[string]any, error) {
 	}
 }
 
-// requireAuthArmFlags refuses a selected --auth arm whose companion values are
-// blank. The server 400s on each empty field, so without this a --dry-run
-// preview shows a request that cannot succeed.
-func requireAuthArmFlags(cmd *cobra.Command, auth string, names ...string) error {
+// authArmField is one companion flag of an --auth arm and the mask paths that
+// name it. Both spellings reach the server as the same FieldMask path: the API
+// JSON form converts lowerCamelCase to proto snake_case.
+type authArmField struct {
+	flag  string
+	paths []string
+}
+
+// authArmRule is an arm's companion flags and the coarse --update-mask path
+// (its oneof case name) that asks for the whole arm.
+type authArmRule struct {
+	name   string
+	coarse []string
+	fields []authArmField
+}
+
+var authArmRules = map[string]authArmRule{
+	"bearerToken": {
+		name:   "bearer-token",
+		coarse: []string{"bearerToken", "bearer_token"},
+		fields: []authArmField{{"bearer-token", []string{"bearerToken.token", "bearer_token.token"}}},
+	},
+	"customHeader": {
+		name:   "custom-header",
+		coarse: []string{"customHeader", "custom_header"},
+		fields: []authArmField{
+			{"header-name", []string{"customHeader.headerName", "custom_header.header_name"}},
+			{"header-value", []string{"customHeader.headerValue", "custom_header.header_value"}},
+		},
+	},
+	"basicAuth": {
+		name:   "basic-auth",
+		coarse: []string{"basicAuth", "basic_auth"},
+		fields: []authArmField{
+			{"basic-auth-username", []string{"basicAuth.username", "basic_auth.username"}},
+			{"basic-auth-password", []string{"basicAuth.password", "basic_auth.password"}},
+		},
+	},
+}
+
+// authArmPerUserOptional is the companions a PER_USER server may leave blank:
+// each user supplies the secret later via SubmitUserCredential. A custom
+// header's name is not one — the admin always sets it.
+var authArmPerUserOptional = map[string]bool{
+	"bearer-token":        true,
+	"header-value":        true,
+	"basic-auth-username": true,
+	"basic-auth-password": true,
+}
+
+// requireAuthArmValues refuses a companion value the request would send as an
+// empty credential. Two documented shapes are exempt, matching the server:
+// PER_USER leaves the secret to SubmitUserCredential, and an explicit
+// --update-mask requires only the fields it names (the server carries the
+// rest forward), with a coarse arm path requiring all of them.
+func requireAuthArmValues(cmd *cobra.Command, arm string) error {
+	rule, ok := authArmRules[arm]
+	if !ok { // none
+		return nil
+	}
+	perUser := false
+	if cmd.Flags().Lookup("token-sharing") != nil {
+		ts, err := tokenSharingFlag.parse(mustGetString(cmd, "token-sharing"))
+		if err != nil {
+			return err
+		}
+		perUser = ts == "MCP_SERVER_TOKEN_SHARING_PER_USER"
+	}
+
+	required := rule.fields
+	if mask, explicit := explicitUpdateMask(cmd); explicit {
+		paths := maskPaths(mask)
+		if !maskNamesAny(paths, rule.coarse) {
+			required = nil
+			for _, f := range rule.fields {
+				if maskNamesAny(paths, f.paths) {
+					required = append(required, f)
+				}
+			}
+		}
+	}
+
 	var missing []string
-	for _, n := range names {
-		if v, _ := cmd.Flags().GetString(n); !hasVisibleRune(v) {
-			missing = append(missing, "--"+n)
+	for _, f := range required {
+		if perUser && authArmPerUserOptional[f.flag] {
+			continue
+		}
+		if v, _ := cmd.Flags().GetString(f.flag); !hasVisibleRune(v) {
+			missing = append(missing, "--"+f.flag)
 		}
 	}
 	if len(missing) == 0 {
 		return nil
 	}
-	required := strings.Join(missing, ", ")
+	requiredText := strings.Join(missing, ", ")
 	if len(missing) > 1 {
-		required = strings.Join(missing[:len(missing)-1], ", ") + " and " + missing[len(missing)-1]
+		requiredText = strings.Join(missing[:len(missing)-1], ", ") + " and " + missing[len(missing)-1]
 	}
-	return &usageError{fmt.Errorf("--auth %s requires %s", auth, required)}
+	return &usageError{fmt.Errorf("--auth %s requires %s", rule.name, requiredText)}
+}
+
+// explicitUpdateMask returns the caller's non-empty --update-mask when the
+// command will actually send it. An empty mask means "derive it from the
+// flags", i.e. the supplied arm is a full replacement. test-connection sends
+// the mask only in edit mode (which requires --app-id); a create-mode probe
+// ignores it, so it must not relax the full-arm requirement.
+func explicitUpdateMask(cmd *cobra.Command) (string, bool) {
+	if cmd.Flags().Lookup("update-mask") == nil {
+		return "", false
+	}
+	mask, _ := cmd.Flags().GetString("update-mask")
+	if mask == "" {
+		return "", false
+	}
+	// update-credentials (which has --type) always sends the mask;
+	// test-connection (no --type) sends it only in edit mode, which requires
+	// --app-id, and ignores it in create mode.
+	if cmd.Flags().Lookup("type") == nil {
+		if appID, _ := cmd.Flags().GetString("app-id"); !hasVisibleRune(appID) {
+			return "", false
+		}
+	}
+	return mask, true
+}
+
+// maskPaths splits a comma-separated update mask, dropping blanks.
+func maskPaths(mask string) []string {
+	var paths []string
+	for _, p := range strings.Split(mask, ",") {
+		if p = strings.TrimSpace(p); p != "" {
+			paths = append(paths, p)
+		}
+	}
+	return paths
+}
+
+func maskNamesAny(paths, names []string) bool {
+	for _, p := range paths {
+		if slices.Contains(names, p) {
+			return true
+		}
+	}
+	return false
 }
 
 // authFlag lists the --auth methods the convenience flags can fill in; api

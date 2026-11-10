@@ -22,6 +22,12 @@ Two modes:
            any changed fields named by --update-mask (omit for a stored-config
            probe).
 
+Companion auth values follow the same rule as update-credentials: required for
+the selected arm unless --token-sharing per-user, or unless an explicit
+--update-mask names only some fields of the arm (a coarse arm path requires all
+of them). Repeat --token-sharing per-user for a stored per-user server whose
+secret you are not supplying.
+
 EXTERNAL servers only; HOSTED servers return an error ("test connection is only
 supported for external MCP servers").
 
