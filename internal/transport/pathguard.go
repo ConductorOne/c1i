@@ -25,17 +25,29 @@ func pathHasBadSegment(path string) bool {
 		if seg == "" {
 			return true
 		}
-		dec, err := url.PathUnescape(seg)
-		if err != nil {
-			continue
-		}
-		// The server drops ";params" before resolving dots, so "..;x" is "..".
-		if i := strings.IndexByte(dec, ';'); i >= 0 {
-			dec = dec[:i]
-		}
-		if dec == "." || dec == ".." {
+		if IsDotSegmentID(seg) {
 			return true
 		}
 	}
 	return false
+}
+
+// IsDotSegmentID reports whether s, used as one path segment (an id), is a
+// "." or ".." dot segment: the server strips a ";params" suffix and
+// percent-decodes before resolving dots, so "..;x" and "%2E" both count. An
+// undecodable value is not a dot segment (it reaches the server verbatim).
+//
+// Exported for the CLI's pre-send validation: a body-carried id never reaches
+// a request path this guard can inspect, so the same rule has to run on the
+// value itself -- otherwise --dry-run prints it as if it were an id.
+func IsDotSegmentID(s string) bool {
+	dec, err := url.PathUnescape(s)
+	if err != nil {
+		return false
+	}
+	// The server drops ";params" before resolving dots, so "..;x" is "..".
+	if i := strings.IndexByte(dec, ';'); i >= 0 {
+		dec = dec[:i]
+	}
+	return dec == "." || dec == ".."
 }

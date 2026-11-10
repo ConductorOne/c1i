@@ -146,5 +146,9 @@ last_executed_at, args.`,
 
 func init() {
 	addPaginationFlags(functionsUsageCmd)
+	// <function-id> is compared against callFunction.functionId client-side;
+	// it never appears in a request path, so the root pre-run needs to know
+	// it is an id to refuse a "."/".." value.
+	markBodyIDArgs(functionsUsageCmd, 0)
 	functionsCmd.AddCommand(functionsUsageCmd)
 }

@@ -71,3 +71,41 @@ func TestPathHasBadSegment(t *testing.T) {
 		})
 	}
 }
+
+// TestIsDotSegmentID pins the single-segment form the CLI's pre-send
+// validation uses on a body-carried id value (no path, so no empty-segment
+// rule -- blank values are refused by a different check).
+func TestIsDotSegmentID(t *testing.T) {
+	cases := []struct {
+		name  string
+		value string
+		want  bool
+	}{
+		{"dot", ".", true},
+		{"dot-dot", "..", true},
+		{"dot matrix", ".;", true},
+		{"dot-dot matrix", "..;x", true},
+		{"dot-dot matrix empty", "..;", true},
+		{"encoded dot", "%2E", true},
+		{"encoded dot-dot", "%2e%2E", true},
+		{"encoded dot-dot matrix", "%2E%2E;", true},
+
+		{"empty", "", false},
+		{"slash", "/", false},
+		{"dotted id", "a.b", false},
+		{"leading dots", "..a", false},
+		{"trailing dot", "a.", false},
+		{"triple dot", "...", false},
+		{"triple dot matrix", "...;", false},
+		{"semicolon id", "a;b", false},
+		{"slash inside", "x/..", false},
+		{"undecodable percent", "%zz", false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := IsDotSegmentID(tc.value); got != tc.want {
+				t.Errorf("IsDotSegmentID(%q) = %v, want %v", tc.value, got, tc.want)
+			}
+		})
+	}
+}

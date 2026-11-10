@@ -370,7 +370,9 @@ the server returns.
 it: one JSON object, `{"dryRun":true,"requests":[{"method","url","body"}]}`,
 never with an `id`, plus a stderr notice (`upgrade --dry-run` instead prints plain
 `[dry-run]` text lines). It needs a configured URL (exit 2
-without) and refuses an empty, `.` or `..` id (exit 2) as a real send does. It
+without) and refuses an empty, `.` or `..` id (exit 2) as a real send does —
+including one carried only in a request body (`--grant-policy-id`,
+`--owner-id`, ...), so the preview cannot print a value a send would refuse. It
 needs no credentials unless c1i must look something up for an exact body: a
 task action's current policy step without `--policy-step-id`, a hosted MCP
 server's catalog id (`mcp servers update-credentials` without `--catalog-id`), or the caller for
