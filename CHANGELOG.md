@@ -320,6 +320,12 @@ already behaved this way.
 
 ### Fixed
 
+- `C1I_DRY_RUN=yes` (or any value the flag would refuse) was read as **false**,
+  so a command run with the variable live-sent the mutation it was meant to
+  preview; `C1I_DEBUG` and `C1I_MAX_RETRIES` silently fell back to their
+  defaults for an unparseable value. Each now exits `2` naming the variable and
+  the accepted form, before any request. An explicit flag still wins, and an
+  empty variable still means unset.
 - `policies update` shares `automations update`'s `--body-file`/`--update-mask`
   rules; see Upgrading.
 - `requests list --entitlement-id` without `--app-id` returned requests from
