@@ -93,10 +93,10 @@ Prints the updated policy unwrapped like "policies get" (id is .id).`,
 
 var errPolicyTypeNeeded = errors.New("policy type lookup needed")
 
-// policyUpdateInputs holds the --*-file contents, read once per run.
 // policyBodyExclusive are the flags --body-file cannot be combined with.
 var policyBodyExclusive = []string{"display-name", "description", "policy-type", "steps-file", "rules-file"}
 
+// policyUpdateInputs holds the --*-file contents, read once per run.
 type policyUpdateInputs struct {
 	body         map[string]any
 	steps, rules []any

@@ -203,9 +203,11 @@ being ignored (the mask is derived from the other flags), and
 update`, `access-reviews update`, `mcp classifiers update`, `mcp classifiers
 policy update` and `mcp classifiers tool-gates update` now trim each
 `--update-mask` path (`" description, steps"` is sent as `description,steps`),
-and exit 2 before any request on an empty path (`a,,b`) or a blank mask. The
-last now says "--update-mask is required together with --body-file" instead
-of sending the blank mask. `automations update` already behaved this way.
+and exit 2 before any request on an empty path (`a,,b`). A blank mask, which
+`policies update` used to send, now exits 2 there too; on the other four it
+already exited 2, and its message changes from `--update-mask is required` to
+`--update-mask is required together with --body-file`. `automations update`
+already behaved this way.
 
 ### Added
 
