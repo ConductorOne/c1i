@@ -35,6 +35,11 @@ go test -count=1 -shuffle=on ./...     # CI gates on this; catches tests that
                                        # leak package-level command state
 ```
 
+Before tagging a release, also run an adversarial pass against the built binary,
+separate from any docs-following check: boundary values (`""`, `" "`, `.`, `..`,
+`" .. "`, an unknown well-formed id, duplicates), garbage `C1I_*` env values,
+error paths, and partial apply on multi-step commands.
+
 Never weaken, loosen, or delete a test to make a change pass. For a new test,
 confirm it fails before your fix and passes after — a test that compiles but
 never fails proves nothing.
@@ -193,6 +198,15 @@ tracked root file outside its allowlist. Stage explicit paths rather than `-A`.
   `TestBlankIDAndRequiredFlagsExitUsage` and `TestBlankPositionalsExitUsage`
   walk the tree; `TestRequiredUsageMatchesAnnotation` fails a hand-written
   "(required)" that lacks the annotation.
+- **A guard covers every channel and sink, not a name.** Validate a value on
+  every channel it can arrive by (flag, `C1I_*` env var, config file,
+  `--body-file`, stdin) and wherever it is used (path, body, query). `--dry-run`
+  must refuse exactly what a real run refuses. Scope a rule by what the value
+  does, not by its flag name, and back a name-keyed rule with a tree test that
+  fails on a flag it misses. Never treat `Changed()` or `TrimSpace(v) == ""` as
+  the signal when the content matters: `--page-token ""` once disabled
+  auto-pagination and returned page 1 at exit 0, and `C1I_DRY_RUN=yes`, coerced
+  to false, sent a mutation.
 - **A new flag must be named in a top-level doc (enforced convention):**
   `TestEveryFlagIsDocumented` (`cmd/flag_docs_coverage_test.go`) walks the tree
   and fails CI on any long flag absent from **both** README.md and
@@ -284,7 +298,9 @@ tracked root file outside its allowlist. Stage explicit paths rather than `-A`.
   from both directions. Four shipped examples of getting this wrong: two
   EXTERNAL-only `mcp servers` subcommands that documented no scope, a `--user-id`
   that promised "defaults to self" and 500s without it, and a `delete` that
-  silently cascaded to every bound toolset's entitlement.
+  silently cascaded to every bound toolset's entitlement. Docs and CHANGELOG
+  are claims too: run a stated server behaviour before writing it, rather than
+  checking prose against prose.
 - **`api` is the escape hatch for endpoints with no first-class command.** It
   still goes through `newClient` and the output helpers, so retries and
   exit-code classification work as they do everywhere else; what it skips is
