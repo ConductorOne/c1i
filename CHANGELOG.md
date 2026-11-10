@@ -119,6 +119,11 @@ output are unchanged.
 
 Exit codes and value types that change, each described under Fixed:
 
+- A non-empty `C1I_DRY_RUN`, `C1I_DEBUG` or `C1I_MAX_RETRIES` that does
+  not parse exits `2`, instead of being coerced to `false`/`0`
+  (`C1I_DRY_RUN=yes` used to send the mutation it was meant to preview).
+  A flag set on the command line still overrides the variable, and an
+  empty variable still means unset.
 - An input-file error (missing, malformed, `null` or the wrong shape) exits 2,
   not 1. That includes a non-object element in an array `--*-file` or
   `--body-file` (`--rules-file '[null]'` was sent by 0.9.2), and a `--body-file`
