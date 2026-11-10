@@ -123,11 +123,12 @@ var taskStateFlag = enumFlag{flag: "state", prefix: "TASK_STATE_", unknown: enum
 	{name: "closed", api: "TASK_STATE_CLOSED"},
 }}
 
-// parseTaskState reads --state for `tasks list` and `requests list`; blank
-// means no filter.
+// parseTaskState reads --state for `tasks list` and `requests list`. An empty
+// value means no filter; anything else, whitespace-only included, goes to the
+// parser, which rejects a blank key rather than dropping the filter.
 func parseTaskState(cmd *cobra.Command) (string, error) {
 	v := mustGetString(cmd, "state")
-	if strings.TrimSpace(v) == "" {
+	if v == "" {
 		return "", nil
 	}
 	return taskStateFlag.parse(v)

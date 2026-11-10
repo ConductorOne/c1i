@@ -325,11 +325,15 @@ func TestEnumFlagValues(t *testing.T) {
 	}
 }
 
-// Blank --sort and --state keep meaning the default / no filter.
+// An empty --sort keeps meaning the default; a whitespace-only value is
+// refused rather than silently defaulting (see parseSortDirection).
 func TestEnumFlagBlankDefaults(t *testing.T) {
-	for _, in := range []string{"", "  "} {
-		if got, err := parseSortDirection(in); err != nil || got != "SORT_DIRECTION_ASC" {
-			t.Errorf("parseSortDirection(%q) = %q, %v", in, got, err)
+	if got, err := parseSortDirection(""); err != nil || got != "SORT_DIRECTION_ASC" {
+		t.Errorf("parseSortDirection(%q) = %q, %v", "", got, err)
+	}
+	for _, in := range []string{"  ", "\t"} {
+		if got, err := parseSortDirection(in); err == nil {
+			t.Errorf("parseSortDirection(%q) = %q, nil; want a usage error", in, got)
 		}
 	}
 }
