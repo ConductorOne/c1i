@@ -93,7 +93,8 @@ Assign owners inline with --owner-id: the create request carries
 appEntitlementOwnerIds, so no follow-up call is needed. An empty --owner-id is
 a usage error, not an owner quietly dropped. Each id is checked before the
 first create and must name an existing user, or the command exits 2 and
-creates nothing. Owner provisioning is
+creates nothing; the check is a user read, so a credential without read access
+exits 3, and --dry-run skips it. Owner provisioning is
 asynchronous — one measured create took 116s to read back on
 "GET /api/v1/apps/{app-id}/entitlements/{id}/ownerids".
 
