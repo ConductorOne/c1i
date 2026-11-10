@@ -15,6 +15,9 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - `golang.org/x/crypto` is pinned to the untagged
   `v0.58.1-0.20261009181718-2f1f834330b2`, which fixes GO-2026-5932; c1i does
   not call the affected code, and no tagged release has the fix yet.
+- `golang.org/x/oauth2` moves to 0.38.0, which stops a zero or overflowing
+  server-supplied device-flow poll interval from panicking; c1i runs its own
+  device flow and does not call the affected code.
 
 ### Upgrading from 0.9.2
 
@@ -41,7 +44,8 @@ wrapper key. New commands (see Added) follow the same contract.
     `routing-rules` and `transformation-rules` `create|update`:
     `.routingRule.id` / `.transformationRule.id` → `.id`
   - `mcp classifiers create|update` and `templates add-rule|instantiate`:
-    `.classifier.id` → `.id`; `bindings create`: `.binding.id` → `.id`;
+    `.classifier.id` → `.id`; `mcp classifiers bindings create`:
+    `.binding.id` → `.id`;
     `tool-gates create|update`: `.toolGate.id` → `.id`; `policy update`:
     `.policy.X` → `.X`
   - `mcp servers register|update|update-credentials`: `.mcpServer.connectorId`
@@ -71,7 +75,8 @@ wrapper key. New commands (see Added) follow the same contract.
 - **Text confirmations are gone.**
   - Deletes, `credentials revoke`, SP `bindings add|delete`, `resync-tools`
     and `apps set-owners` print `{}`; exit 0 is the success signal.
-  - `mcp bindings delete` prints `{}`.
+  - `mcp bindings delete` printed `{"unbound":N,"toolset_id":…,"tool_ids":[…]}`;
+    it now prints `{}`.
   - `mcp tools approve` prints one JSON line per tool and stops at the first
     stdout write failure.
 - **A task's `.state` is the server's snapshot, not the outcome.** For
@@ -80,7 +85,7 @@ wrapper key. New commands (see Added) follow the same contract.
 - **An empty success response prints `{}`.** `--wait` progress for
   `apps set-owners` goes to stderr.
 - **`--dry-run` prints one JSON object**, `{"dryRun":true,"requests":[…]}`,
-  with no `id`. Extract ids with `jq -er`, because under an inherited
+  with no `id`; 0.9.2 printed `[dry-run] METHOD /path` and the body as text. Extract ids with `jq -er`, because under an inherited
   `C1I_DRY_RUN=1`, `jq -r .id` prints `null` and your script carries on.
   - A preview needs a configured URL, but still no credentials unless c1i
     must look up an id the body needs (a task's current policy step, a
@@ -100,14 +105,12 @@ wrapper key. New commands (see Added) follow the same contract.
   - `mcp tools approve` adds per-id error objects and a summary with
     `notAttempted`. A batch can exit non-zero after applying changes.
   - Exit codes are unchanged.
-  - In text mode, stderr is unchanged except for four lines:
+  - In text mode, the mutation-related stderr is unchanged except for four
+    lines:
     - `Resolved …` is new.
     - `dry run: nothing was sent` is new.
     - The `apps set-owners --wait` lines move from stdout to stderr.
     - The `entitlements create` dry-run note moves from stdout to stderr.
-
-`apps set-owners --wait` now waits until the owner set equals the request,
-so a set that removes an owner can wait longer than before.
 
 **`apps add-owner` and `apps remove-owner` take the app as the positional.**
 The user is now `--user-id`, one per call (use `set-owners` for many), like
@@ -117,6 +120,14 @@ output are unchanged.
 - `apps add-owner <user-id> --app-id <id>` → `apps add-owner <app-id> --user-id <id>`
 - `apps remove-owner <user-id> --app-id <id>` → `apps remove-owner <app-id> --user-id <id>`
 
+**`apps set-owners` checks its users first.** It looks up each distinct
+`--user-id` and exits `2` naming an unknown one, sending nothing
+(`--dry-run` skips the lookups); 0.9.2 sent the `PUT`, and the API stored the
+unknown id at exit `0` as an owner no user matches. The lookup is a user read,
+so a credential without user-read exits `3`. A repeated `--user-id` is sent
+once. `--wait` now waits until the owner set equals the request, so a set that
+removes an owner can wait longer than before.
+
 Exit codes and value types that change:
 
 - A non-empty `C1I_DRY_RUN`, `C1I_DEBUG` or `C1I_MAX_RETRIES` that does
@@ -124,14 +135,14 @@ Exit codes and value types that change:
   (`C1I_DRY_RUN=yes` used to send the mutation it was meant to preview).
   A flag set on the command line still overrides the variable, and an
   empty variable still means unset.
-- The same values in `~/.c1i.yaml` (`dry_run`, `debug`, `max_retries`,
-  `error_format`) are checked the same way: `dry_run: yes` or
-  `max_retries: abc` exits `2` naming the file and key, instead of being
-  coerced to `false`/`0` (a config `dry_run: yes` used to send the mutation it
-  was meant to preview). An empty value still means unset, and a flag or env
-  var that overrides the key shadows it. An invalid `--error-format` or
-  `C1I_ERROR_FORMAT` still exits `2`; its message now names the source
-  (`invalid C1I_ERROR_FORMAT "xml": want text or json`).
+- The same values in `~/.c1i.yaml` (`dry_run`, `debug`, `max_retries`) are
+  checked the same way: `dry_run: yes` or `max_retries: abc` exits `2` naming
+  the file and key, instead of being coerced to `false`/`0` (a config
+  `dry_run: yes` used to send the mutation it was meant to preview). An empty
+  value still means unset, and a flag or env var that overrides the key
+  shadows it. An invalid `error_format` there, like an invalid
+  `--error-format` or `C1I_ERROR_FORMAT`, still exits `2`; its message now
+  names the source (`invalid C1I_ERROR_FORMAT "xml": want text or json`).
 - `C1I_NO_TOKEN_CACHE` is a strict boolean: `1`/`true` disable the token
   cache, `0`/`false` leave it enabled (any non-empty value, `0` included,
   used to disable it), and anything else exits `2`.
@@ -140,20 +151,22 @@ Exit codes and value types that change:
   both, or neither. `auth login` and `auth logout` still run, and warn on
   stderr.
 - `policies create --body-file ""` is a read error (exit `2`); it used to mean
-  "no body file" and fall through to the flags. `--body-file` combined with
-  `--display-name`, `--description`, `--policy-type`, `--steps-file` or
-  `--rules-file` also exits `2`; it exited `1`.
+  "no body file" and fall through to the flags.
 - An input-file error (missing, malformed, `null` or the wrong shape) exits 2,
   not 1. That includes a non-object element in an array `--*-file` or
   `--body-file` (`--rules-file '[null]'` was sent by 0.9.2), and a `--body-file`
   `policySteps` entry that isn't an object under a key other than the policy
-  type's own (0.9.2 sent it).
+  type's own (0.9.2 sent it). The error names the flag, and for an array the
+  zero-based index.
 - An id of `.` or `..` exits 2 and sends nothing, for every method, including
   one carried only in a request body (any `*-id` flag, the `functions usage`
   positional, `mcp classifiers templates add-rule <template-id>`) and one
-  padded with surrounding whitespace. 0.9.2 previewed such a value at exit 0
-  and only some sends refused it, so a preview could disagree with the send
-  and a multi-step create could apply its first steps before failing.
+  padded with surrounding whitespace, followed by a `;params` suffix (`..;x`)
+  or percent-encoded in `api --path` (`%2E`). 0.9.2 previewed such a value at
+  exit 0 and did not refuse it client-side, and the API resolves it to the
+  parent or collection, so a preview could disagree with the send and a
+  multi-step create (`entitlements create --owner-id .`) could apply its first
+  steps before failing.
 - A whitespace-only `--state`, `--type` or `--sort` exits 2; 0.9.2 trimmed it
   to nothing and dropped the filter at exit 0.
 - A blank `--page-token` (empty, whitespace-only or invisible-only) exits 2;
@@ -176,21 +189,30 @@ Exit codes and value types that change:
 - `entitlements create --owner-id` exits 2 for an unknown user before it
   creates anything; 0.9.2 exited 6 after the resource type and resource had
   been created. The check is a user read, so a credential without user-read
-  exits 3 and creates nothing, the same requirement `set-owners` already has.
-- A failed write to stdout exits 1, not 0.
-- A stuck pagination cursor exits 6, not an endless loop.
+  exits 3 and creates nothing, the same requirement `apps set-owners` now
+  has. A repeated `--owner-id` is sent once; 0.9.2 sent the duplicate and the
+  API answered 500.
+- A failed write to stdout exits 1, not 0, even when a mutation's change was
+  already applied.
+- A stuck pagination cursor exits 6, not an endless loop (Fixed says what
+  counts as stuck).
 - A `200` list page that is HTML, an array, empty or truncated exits 6, not 1.
 - `mcp gateway list-tools` with a cursor that never ends exits 8, not 1.
-- `api --paginate` with a misspelled `--list-key` exits 2, not 0.
+- `api --paginate` with a misspelled `--list-key` exits 2, not 0, and the
+  error names the page's array fields; once the key has appeared, a page that
+  omits it adds no rows.
 - `last_executed_at` is `null`, not `""`, for a never-run automation.
 - `tasks deny` and `tasks restart` naming an unknown task exit `4`, not
   `2` with the server's `PolicyStepId` error; no action is sent.
   `tasks reassign --to-user-id` refuses a user that does not exist
-  (exit `2`) and sends the list once; 0.9.2 stored the id as the step's
-  approver at exit `0`.
+  (exit `2`, nothing sent) and sends a repeated id once; 0.9.2 stored the id
+  as the step's approver at exit `0`.
 
-Named-value flags now refuse more input before sending anything, each with
-exit 2. `automations executions list --state <unknown>` used to print nothing
+Every named-value flag now parses the same way: ASCII case and surrounding
+whitespace are ignored, `-` and `_` are interchangeable, and the full API name
+is accepted in any case (`--state pending-review`, `--sort
+SORT_DIRECTION_DESC`); `--help` value lists come from one table per flag. They
+also refuse more input before sending anything, each with exit 2. `automations executions list --state <unknown>` used to print nothing
 and exit 0. An unknown short value for `accounts list --status`/`--type`,
 `--policy-type`, the `mcp tools` and `mcp servers` enum flags and the
 `access-profiles` behavior flags used to reach the server (which answered
@@ -208,26 +230,32 @@ rewrites; no other prefixed value is remapped. `users list --status` sends
 an unknown value upper-cased with `-` turned to `_`, where it sent it as
 typed.
 
-Duration flags sent to the API now share one parser, which changes these
-exits:
+Every duration flag sent to the API (`--duration-grant`, `requests create
+grant --duration`, `tasks update-grant-duration --duration`, `--expires`)
+now shares one parser: a whole-number Go (`8h`, `1h30m`) or protobuf (`3600s`)
+duration, surrounding whitespace ignored, sent as seconds (`24h` becomes
+`86400s`; `requests create grant --duration` and `tasks update-grant-duration
+--duration` used to pass the value through, so `24h` failed with `invalid
+google.protobuf.Duration value "24h"`). That changes these exits:
 
-- `service-principals credentials create --expires ""` and `requests create
-  grant --duration ""` exit 2; the empty value used to be left out of the
-  request.
+- `service-principals credentials create --expires ""`, `requests create
+  grant --duration ""` and `entitlements create --duration-grant ""` exit 2;
+  the empty value used to be left out of the request.
 - A sign exits 2 before sending on every such flag: `-1h`, `-0s` and `+1h`
   alike. `requests create grant --duration` and `tasks update-grant-duration
   --duration` used to send a negative value, and the server's 400 exited 2
-  after the round trip; the other flags already refused negatives.
+  after the round trip; `--expires` already refused negatives, and
+  `entitlements create --duration-grant` sent one as typed.
 - A leading zero (`01h`, `00h`) exits 2 on every such flag.
 - Decimal durations now exit 2 on every such flag: write `1h30m`, not `1.5h`,
-  and `1s500ms`, not `1.5s`. `--duration-grant`, `--expires` and
-  `--callback-timeout` used to accept them, and `requests create grant
-  --duration` and `tasks update-grant-duration --duration` used to send a
-  protobuf decimal such as `3600.5s` as typed.
+  and `1s500ms`, not `1.5s`. `--expires` used to accept them, and
+  `entitlements create --duration-grant`, `requests create grant --duration`
+  and `tasks update-grant-duration --duration` sent the value as typed (a
+  protobuf decimal such as `3600.5s` is valid).
 - `--expires 0s` is sent instead of exiting 2, and the server refuses it
   with exit 2.
-- `--expires` and `--callback-timeout` send a sub-second value such as
-  `1s500ms` as `1.5s` instead of `1.500000000s`.
+- `--expires` sends a sub-second value such as `1s500ms` as `1.5s` instead of
+  `1.500000000s`.
 
 **`docs search` and `docs page` exit 8 when the docs site fails.** An
 unreachable site, a non-200, an unparseable body and a redirect loop used to
@@ -255,10 +283,11 @@ update`, `access-reviews update`, `mcp classifiers update`, `mcp classifiers
 policy update` and `mcp classifiers tool-gates update` now trim each
 `--update-mask` path (`" description, steps"` is sent as `description,steps`),
 and exit 2 before any request on an empty path (`a,,b`). A blank mask, which
-`policies update` used to send, now exits 2 there too; on the other four it
-already exited 2, and its message changes from `--update-mask is required` to
-`--update-mask is required together with --body-file`. `automations update`
-already behaved this way.
+`policies update` used to send, now exits 2 there too (`--update-mask is
+required together with --body-file`). On the other four it already exited 2;
+only the message changes, from `--update-mask is required` to cobra's
+`required flag(s) "update-mask" not set` (`flag --update-mask requires a
+non-empty value` when blank).
 
 ### Added
 
@@ -298,10 +327,8 @@ already behaved this way.
   `--emergency-grant-policy-id`. On both, each policy id is checked first (it
   must exist, not be deleted, and be of the slot's type; the emergency slot
   takes a grant policy), otherwise exit `2` and nothing is sent; an empty
-  policy id is exit `2`. Create's `--duration-grant` now also accepts a
-  Go duration (`8h`); `0s` is accepted and sent, and a negative or
-  signed value, a decimal one or an empty `--duration-grant ""` (previously
-  ignored) exits 2.
+  policy id is exit `2`. Create's `--duration-grant` follows the shared
+  duration rules (see Upgrading); `0s` is accepted and sent.
 - `users list --origin directory|local|system|all` (repeatable; a
   `USER_ORIGIN_*` value is also accepted) filters by user origin;
   `--origin all` lists every user, including the local-origin and system users
@@ -334,104 +361,31 @@ already behaved this way.
 
 ### Changed
 
-- `mcp servers test-connection` exits 8 instead of 0 when the probe reports the
-  server unreachable (see Upgrading).
-- `apps add-owner|remove-owner` take the app id as the positional and the
-  user as `--user-id`; their `--app-id` flag is removed (see "Upgrading from
-  0.9.2"). Every owner command in a family now shares one positional.
-- `apps set-owners` looks up each distinct `--user-id` before the `PUT` and
-  exits `2` naming an unknown one, sending nothing (`--dry-run` skips the
-  lookups): the API accepts an unknown id at exit `0` and stores it as an
-  owner no user matches, so a set naming only unknown ids leaves no real
-  owners. A repeated `--user-id` is sent once. It prints the API's JSON
-  response, with `--wait` progress on stderr (see Upgrading).
-- Apps and entitlement owner help, README, `cmd/agents.md` and the
-  configure-new-app guide no longer quote a provisioning range, which varies
-  by tenant and server version: "Owner changes are applied asynchronously
-  and can take several minutes to appear; pass --wait to block until they
-  do." The `--wait` timeout message says the same.
-- Every named-value flag now parses the same way, including `--auth`,
-  `--unbind-policy`, `requests list --type`, `--error-format`, `api --method`
-  and `entitlements create --resource-type`: ASCII case and surrounding
-  whitespace are ignored, `-` and `_` are interchangeable, and the full API
-  name is accepted in any case (`--state pending-review`,
-  `--sort SORT_DIRECTION_DESC`). `--help` value lists are generated from one
-  table per flag. See "Upgrading from 0.9.2" for the exit-code changes.
-- Every duration flag sent to the API (`--duration-grant`, `requests create
-  grant --duration`, `tasks update-grant-duration --duration`, `--expires`,
-  `--callback-timeout`) takes a whole-number Go (`8h`, `1h30m`) or protobuf
-  (`3600s`) duration, ignores surrounding whitespace, and is sent as seconds
-  with any sub-second fraction's trailing zeros trimmed. `requests create grant --duration`
-  and `tasks update-grant-duration --duration` previously passed the value
-  through, so `24h` failed with `invalid google.protobuf.Duration value
-  "24h"`; it is now sent as `86400s`.
 - `github.com/spf13/pflag` moves to 1.1.0: `--help` shows boolean flags as
   `--debug[=true|false]`, and a bad integer, boolean or duration value reads
   `must be an integer`, `must be true or false` or `must be a duration like
   "30s" or "5m"` instead of a Go parse error. Exit codes are unchanged.
 - `github.com/sigstore/sigstore` moves to 1.11.3, `sigstore-go` to 1.4.0,
-  `go.yaml.in/yaml/v3` to 3.0.6 and `golang.org/x/mod` to 0.43.0.
-- `golang.org/x/oauth2` moves to 0.38.0 and `golang.org/x/term` to 0.48.0
-  (with `golang.org/x/sys` 0.50.0).
+  `go.yaml.in/yaml/v3` to 3.0.6, `golang.org/x/mod` to 0.43.0 and
+  `golang.org/x/term` to 0.48.0 (with `golang.org/x/sys` 0.50.0).
 
 ### Fixed
 
-- `C1I_DRY_RUN=yes` (or any value the flag would refuse) was read as **false**,
-  so a command run with the variable live-sent the mutation it was meant to
-  preview; `C1I_DEBUG` and `C1I_MAX_RETRIES` silently fell back to their
-  defaults for an unparseable value. Each now exits `2` naming the variable and
-  the accepted form, before any request. An explicit flag still wins, and an
-  empty variable still means unset.
-- `policies update` shares `automations update`'s `--body-file`/`--update-mask`
-  rules; see Upgrading.
-- `requests list --entitlement-id` without `--app-id` returned requests from
-  every app sharing that entitlement id; it now requires `--app-id`, as
-  `grants list` already did.
 - `--debug` and `--max-retries` now work on `docs search` and `docs page`,
-  which also gain the path and redirect guards and retry a 5xx. One helper now
-  builds those options for every client, so no command can skip them.
+  which also gain the path and redirect guards and retry a 5xx.
 - `docs guide configure-new-app` and `request-access` said c1i has no command
   to make an entitlement requestable or to read access-profile membership.
   They now give the recipe (a published, visible-to-everyone access profile
   plus `access-profiles requestable-entitlements add`) and point at
   `requestable-entitlements list`. The `configure-new-app` guide also said
   `apps get` on a deleted app exits 4; it exits 0 with `deletedAt` set.
-- `docs agents` no longer calls its doc "short", and its `service-principals
-  delete` note matches live behavior: `get` on a deleted principal exits 4.
-- `policies create --help` no longer sends readers to a source-code comment.
+- `docs agents` is no longer described as "short" in `docs --help`, and its
+  `service-principals delete` note matches live behavior: `get` on a deleted
+  principal exits 4.
 - `mcp toolsets update --help` said `--description` alone updates only the
   description. The server requires `--display-name` on every update and 400s
   without it ("DisplayName value length must be between 1 and 255 runes",
   exit 2); the help and README now say so.
-- An empty, whitespace-only or invisible-only (e.g. U+200B, U+FEFF)
-  `--display-name` now exits `2` before any request on every `update` and
-  `create` that takes one, including `service-principals credentials`. `apps`,
-  `access-profiles`, `policies`, `service-principals` and `mcp servers`/
-  `mcp toolsets` `update` sent it as is: the server blanked the name, stored
-  the spaces, or (`apps update ""`) kept the old name with exit 0.
-- A blank (empty, whitespace or invisible-only) required or id flag, or
-  positional, exits `2` before any request, from one rule in the root
-  pre-run. It covers every flag that is documented `(required)` and every
-  string flag named `*-id`, where `accounts set-owner --user-id " "` exited 0,
-  `grants list --app-id " "` tried to authenticate and a `get " "` was sent.
-  `requireNonEmpty` and repeatable flags (`--user-id " "` on `set-owners`) use
-  the same test, so whitespace-only values are no longer accepted anywhere.
-- An id of `.` or `..`, including with a `;` suffix (`..;x`) or as a raw
-  `api --path` segment such as `%2E`, now exits `2` and sends nothing, for
-  every method. The API resolves such a segment to the parent or collection,
-  and a write could reach the wrong handler with no redirect for the client to
-  refuse.
-- An input file that is missing, malformed, JSON `null` or the wrong JSON
-  shape now exits `2` (usage) before any request, and the error names the
-  flag: every `--body-file` (including `api`'s), the MCP server
-  `--*-config-file` flags, and `--steps-file`, `--rules-file` and
-  `--refs-file`. These exited `1`; a `null` body file could panic, and a
-  `null` `--rules-file` sent `"rules": null` with exit 0. Every element of an
-  array file or `--body-file` array must be a JSON object, and the error names
-  the flag or body location and the zero-based index.
-- **A failed write to stdout now exits `1`** (e.g. a full disk) instead of
-  `0`; list commands stop paging at the first failed row. A mutation such as
-  `apps set-owners` exits 1 too, though its change was already applied.
 - **Every auto-paginating command now stops on a stuck cursor** instead of
   looping forever, keeps the rows already printed, warns on stderr that
   results are INCOMPLETE and exits `6`. A cursor counts as stuck on a
@@ -439,19 +393,12 @@ already behaved this way.
   rows with an id, 25 or more rows in all); after 100 empty pages in a row;
   and after 100,000 pages in a row with no new row. `export events` is exempt
   from the last two. This covers every list command, `grants list --wait`,
-  `api --paginate` and the `auth login` role menu. A page of rows already
-  printed is skipped even when it also holds a row without an id, and a page
-  whose rows all lack the id the command reads exits `6` instead of printing
-  unchecked rows; `grants list`, the entitlement lists and `automations
-  executions list`, whose ids can legitimately be missing, still print such
-  rows. `api --paginate` holds an isolated page of already-seen items and
-  prints it once a later page brings a new item, the list ends, or a later
-  request fails (the exit code stays the failure's). `mcp gateway list-tools`
-  with a cursor that never ends now exits `8` rather than `1`. A `200` page
-  whose body is HTML, an array, empty or truncated exits `6`, not `1`, and an
-  `api --paginate --list-key` field that isn't an array exits `2`.
-  `grants list` now reads a grant's account and entitlement ids from the
-  binding when the expanded objects are missing.
+  `api --paginate` and the `auth login` role menu. A page whose rows all lack
+  the id the command reads exits `6` instead of printing unchecked rows;
+  `grants list`, the entitlement lists and `automations executions list`,
+  whose ids can legitimately be missing, still print such rows.
+- `grants list` reads a grant's account and entitlement ids from the binding
+  when the expanded objects are missing.
 
 - **`automations list`, `automations executions list`, `functions usage`,
   `functions list` and `functions commits` could loop forever**, re-printing
@@ -470,12 +417,6 @@ already behaved this way.
   ignored `nextPageToken`. They now warn on stderr when one is returned.
   None of these routes paginate today.
 
-- `tasks deny` and `tasks restart` naming an unknown task exited `2` with the
-  server's `PolicyStepId` error, because the failed task read was swallowed;
-  both now exit `4` like every other `tasks` action and send nothing.
-- `tasks reassign --to-user-id` refuses an unknown user with exit `2`
-  (`no such user`) instead of storing the id as the step's approver and
-  stranding the task; a repeated `--to-user-id` is sent once.
 - `tasks approve` on a task with no current step told you to pass
   `--policy-step-id`, which cannot supply one; the error now says the task has
   no current step and to re-read it with `tasks get`.
@@ -489,18 +430,11 @@ already behaved this way.
 
 - **`functions usage` overclaimed with `--page-token`.** It scans only that
   page, yet printed "no automations call function X"; it now says no
-  automation on this page calls it. A never-run automation's
-  `last_executed_at` is now `null` instead of `""`.
+  automation on this page calls it.
 
 - **`tasks list` and `requests list` emitted a row of empty values** for a
   result with no `task` object. Such a result is now skipped, as
   `automations executions list` already does.
-
-- **`api --paginate --list-key` with a misspelled key printed nothing and
-  exited 0.** A key missing from a page that has other array fields is now a
-  usage error (exit `2`) naming them, until the key has appeared once; after
-  that, a page that omits it adds no rows. A page with no array fields is
-  still an empty result.
 
 - The docs no longer say every list command auto-paginates; they name the
   single-request ones and their stderr `partial result` warning.
@@ -508,35 +442,6 @@ already behaved this way.
 - `users list` help and the README now say its search route returns only
   directory-origin users by default, omitting local-origin and
   system users.
-
-- `mcp servers register|update-credentials|test-connection` refused nothing
-  when `--auth bearer-token|custom-header|basic-auth` was missing a companion
-  value: the preview showed empty auth material and the real request got the
-  server's `400`. A blank companion now exits `2` before anything is sent,
-  except when `--token-sharing per-user` leaves the secret to each user, or
-  when an explicit `--update-mask` names only some fields of the arm (a coarse
-  arm path still requires all of them). `entitlements create --owner-id`
-  checks each user exists (a user read, skipped by `--dry-run`) before its
-  first create; an unknown id used to exit `6` after the resource type and
-  resource had already been created.
-- A `.` or `..` value for any `*-id` flag, or for a positional the command
-  sends only in a body, is refused with exit `2` before any request, including
-  under `--dry-run`. Surrounding whitespace and a `;params` suffix are
-  ignored, matching the path rule. That covers a filter id that never reaches
-  a path (`grants list --user-id .`, `--grant-policy-id`, `--owner-id`,
-  `--policy-step-id`, `mcp classifiers templates add-rule <classifier-id>
-  <template-id>`) and the `functions usage <function-id>` positional, which is
-  compared client-side. A preview used to print such a value and exit `0`
-  while a real send exited `2`; `functions usage` sent nothing and matched
-  nothing, exiting `0`; and `entitlements create --owner-id .` applied its
-  first two steps before failing.
-- A whitespace-only `--state`, `--type` or `--sort` exits `2` instead of
-  silently dropping the filter (`tasks list`, `requests list`,
-  `automations executions list`, `export events`).
-
-- `--page-token` set to a blank value exits `2` with a message to omit it; it
-  used to disable auto-pagination and return the first page at exit `0` with
-  nothing on stderr, so an unset shell variable truncated a list silently.
 
 ## [0.9.2] - 2026-10-21
 
