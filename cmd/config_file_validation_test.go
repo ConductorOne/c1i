@@ -175,7 +175,15 @@ func TestPartialEnvCredentialsNotice(t *testing.T) {
 // completion too (as before the other globals were validated); the typed
 // settings stay skipped there so a stray C1I_DRY_RUN cannot break tab completion.
 func TestLocalOnlyRequestsValidateErrorFormatOnly(t *testing.T) {
-	// cobra adds `completion` lazily; register it so the test can run alone.
+	// cobra adds `completion` lazily and its bash/zsh/... subcommands capture
+	// root's stdout at creation, so recreate it rather than inherit a writer
+	// another test left there.
+	rootCmd.SetOut(nil)
+	for _, c := range rootCmd.Commands() {
+		if c.Name() == "completion" {
+			rootCmd.RemoveCommand(c)
+		}
+	}
 	rootCmd.InitDefaultCompletionCmd()
 	for _, tc := range []struct {
 		name     string
