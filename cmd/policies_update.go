@@ -33,7 +33,9 @@ two exit 2 before reading.
 
 For anything the convenience flags can't express, pass the full Policy
 object yourself via --body-file plus an explicit --update-mask (both
-required together) — mutually exclusive with the convenience flags.
+required together, mutually exclusive with the convenience flags). Mask
+paths are comma-separated; spaces around them are trimmed, and an empty path
+or an --update-mask without --body-file exits 2.
 
 The same client-side guards as "create" run here too (exit code 2 before
 any request is sent) — including the empty-steps guard, which also
@@ -103,7 +105,8 @@ func readPolicyUpdateInputs(cmd *cobra.Command) (policyUpdateInputs, error) {
 		return in, err
 	}
 	var err error
-	if f, _ := cmd.Flags().GetString("body-file"); f != "" {
+	if cmd.Flags().Changed("body-file") {
+		f, _ := cmd.Flags().GetString("body-file")
 		if in.body, err = readJSONFile[map[string]any](cmd, "body-file", f); err != nil {
 			return in, err
 		}
@@ -190,18 +193,12 @@ func fetchPolicyType(ctx context.Context, c *client.Client, id string) (string, 
 // when --steps-file comes without --policy-type. "id" is left to the caller,
 // so the guards see only the fields being changed.
 func buildUpdatePolicyPatch(cmd *cobra.Command, in policyUpdateInputs, resolveFallbackPolicyType func() (string, error)) (policy map[string]any, mask string, err error) {
-	bodyFile, _ := cmd.Flags().GetString("body-file")
-	usingFlags := cmd.Flags().Changed("display-name") || cmd.Flags().Changed("description") ||
-		cmd.Flags().Changed("policy-type") || cmd.Flags().Changed("steps-file") || cmd.Flags().Changed("rules-file")
+	mask, usingBody, err := bodyFileMask(cmd, "display-name", "description", "policy-type", "steps-file", "rules-file")
+	if err != nil {
+		return nil, "", err
+	}
 
-	if bodyFile != "" {
-		if usingFlags {
-			return nil, "", fmt.Errorf("--body-file is mutually exclusive with --display-name/--description/--policy-type/--steps-file/--rules-file")
-		}
-		mask, _ = cmd.Flags().GetString("update-mask")
-		if mask == "" {
-			return nil, "", fmt.Errorf("--update-mask is required together with --body-file")
-		}
+	if usingBody {
 		// A copy: the caller sets "id" on it, and a second pass reuses in.
 		policy = make(map[string]any, len(in.body))
 		for k, v := range in.body {
@@ -265,7 +262,7 @@ func init() {
 	policiesUpdateCmd.Flags().String("steps-file", "", "JSON array: replaces the baseline policySteps.steps content (file, or \"-\" for stdin)")
 	policiesUpdateCmd.Flags().String("rules-file", "", "JSON array: replaces rules[] (file, or \"-\" for stdin)")
 	policiesUpdateCmd.Flags().String("body-file", "", "Full Policy JSON object, verbatim (file, or \"-\" for stdin); requires --update-mask; mutually exclusive with the flags above")
-	policiesUpdateCmd.Flags().String("update-mask", "", "Comma-separated field paths to update (required with --body-file; ignored/derived otherwise)")
+	policiesUpdateCmd.Flags().String("update-mask", "", "Comma-separated field paths to update (required with --body-file, which it needs; derived otherwise)")
 	policiesUpdateCmd.Flags().Bool("allow-deny-all", false, "Allow leaving/setting a policy with no steps — bypasses the empty-steps guard on purpose")
 	markMutating(policiesUpdateCmd)
 	policiesCmd.AddCommand(policiesUpdateCmd)

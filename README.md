@@ -492,7 +492,8 @@ or return an opaque `HTTP 500` instead of a `400`:
 `update` sends the API's required `{"policy": {...}, "updateMask": "..."}`
 wrapper for you — a flat body 400s. The `--steps-file`/`--rules-file`
 convenience flags derive the update mask from what you pass; `--body-file`
-requires an explicit `--update-mask`.
+requires an explicit `--update-mask` (spaces around its comma-separated paths
+are trimmed; an empty path, or `--update-mask` without `--body-file`, exits 2).
 
 `create`/`update` print the policy unwrapped like `get` (`jq -er .id`); `delete`
 prints `{}`. A `--steps-file` or `--body-file` update that states no

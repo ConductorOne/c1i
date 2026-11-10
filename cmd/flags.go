@@ -617,3 +617,35 @@ func formatProtoDuration(d time.Duration) string {
 	}
 	return secs + "s"
 }
+
+// bodyFileMask applies the --body-file/--update-mask rules every masked update
+// shares. usingBody is true when --body-file was passed (even as ""); the
+// caller then reads the file. exclusive names the flags --body-file cannot be
+// combined with. The mask comes back trimmed per path, as the server rejects
+// " description" as an invalid path.
+func bodyFileMask(cmd *cobra.Command, exclusive ...string) (mask string, usingBody bool, err error) {
+	f := cmd.Flags()
+	mask, _ = f.GetString("update-mask")
+	if !f.Changed("body-file") {
+		if f.Changed("update-mask") {
+			return "", false, &usageError{fmt.Errorf("--update-mask requires --body-file; the mask is derived from the other flags")}
+		}
+		return "", false, nil
+	}
+	for _, name := range exclusive {
+		if f.Changed(name) {
+			return "", true, &usageError{fmt.Errorf("--body-file is mutually exclusive with --%s", strings.Join(exclusive, "/--"))}
+		}
+	}
+	if !hasVisibleRune(mask) {
+		return "", true, &usageError{fmt.Errorf("--update-mask is required together with --body-file")}
+	}
+	paths := strings.Split(mask, ",")
+	for i, p := range paths {
+		paths[i] = strings.TrimSpace(p)
+		if !hasVisibleRune(paths[i]) {
+			return "", true, &usageError{fmt.Errorf("--update-mask %q has an empty path", mask)}
+		}
+	}
+	return strings.Join(paths, ","), true, nil
+}

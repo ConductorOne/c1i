@@ -85,7 +85,10 @@ unwrapped like "access-reviews get".`,
 		if err != nil {
 			return err
 		}
-		mask, _ := cmd.Flags().GetString("update-mask")
+		mask, _, err := bodyFileMask(cmd)
+		if err != nil {
+			return err
+		}
 		campaign["id"] = args[0]
 		return sendMutation(cmd, mutation{Method: http.MethodPost, Path: client.Path("/api/v1/access_review/%s", args[0]), Body: map[string]any{
 			"accessReview": campaign,
