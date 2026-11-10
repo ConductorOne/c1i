@@ -522,7 +522,9 @@ resource with `--resource-id` likewise means you drop
   on stderr (`Resolved policy step: <id>`) only; if you call these actions
   through `api`, read the task back rather than trusting the response's
   `state`. The same holds for `restart`, `reset`, `skip-step`, `process` and
-  `update-grant-duration`.
+  `update-grant-duration`. `reassign` checks each `--to-user-id` before the
+  action: an unknown user exits 2, because the API stores it as the step's
+  approver and only `restart` recovers the task. A repeated id is sent once.
 - Which actions a task accepts depends on its state, and the server refuses the
   rest with `action not permitted`. Read the task's own list first:
   `c1i api --path /api/v1/tasks/<task-id> --fields actions`. `restart`, `reset` and

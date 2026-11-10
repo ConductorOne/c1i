@@ -247,3 +247,150 @@ func TestTasksReassignUnderivableStepIsUsageError(t *testing.T) {
 		t.Errorf("error = %q, want the re-read-the-task message", err.Error())
 	}
 }
+
+// reassignTestTaskJSON is the step lookup's response: one current step.
+func reassignTestTaskJSON(taskID, stepID string) string {
+	return fmt.Sprintf(`{"taskView":{"task":{"id":%q,"policy":{"current":{"id":%q}}}}}`, taskID, stepID)
+}
+
+// TestTasksReassignRefusesAnUnknownUser: the API accepts any 27-char id as the
+// step's new approver and leaves the task stranded, so an unknown user must
+// fail before the action is sent.
+func TestTasksReassignRefusesAnUnknownUser(t *testing.T) {
+	const taskID = "zz-c1i-test-task-6"
+	const unknown = "ZZZZZZZZZZZZZZZZZZZZZZZZZZZ"
+
+	var userGets []string
+	var posts []string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case r.Method == http.MethodGet && strings.HasPrefix(r.URL.Path, "/api/v1/users/"):
+			userGets = append(userGets, strings.TrimPrefix(r.URL.Path, "/api/v1/users/"))
+			w.WriteHeader(http.StatusNotFound)
+			_, _ = fmt.Fprint(w, `{"code":5,"message":"not found"}`)
+		case r.Method == http.MethodGet:
+			_, _ = fmt.Fprint(w, reassignTestTaskJSON(taskID, "zz-c1i-test-step"))
+		default:
+			posts = append(posts, r.URL.Path)
+			_, _ = fmt.Fprint(w, taskActionResponse(taskID, "TASK_STATE_OPEN"))
+		}
+	}))
+	defer srv.Close()
+
+	resetCmdFlags(t, tasksReassignCmd)
+	_ = tasksReassignCmd.Flags().Set("to-user-id", unknown)
+
+	_, err := runTaskActionCmd(t, tasksReassignCmd, srv, taskID)
+	if err == nil {
+		t.Fatal("reassign accepted an unknown user")
+	}
+	if got, want := exitCode(err), exitUsage; got != want {
+		t.Errorf("exitCode = %d, want %d (exitUsage); err = %v", got, want, err)
+	}
+	if !strings.Contains(err.Error(), unknown) || !strings.Contains(err.Error(), "no such user") {
+		t.Errorf("error = %q, want it to name the unknown --to-user-id", err.Error())
+	}
+	if len(userGets) != 1 || userGets[0] != unknown {
+		t.Errorf("user lookups = %v, want one GET for %s", userGets, unknown)
+	}
+	if len(posts) != 0 {
+		t.Errorf("reassign sent an action despite the unknown user: %v", posts)
+	}
+}
+
+// TestTasksReassignDeduplicatesUserIDs: a repeated id is looked up once and
+// sent once; a duplicate in the body reaches the server as a repeated approver.
+func TestTasksReassignDeduplicatesUserIDs(t *testing.T) {
+	const taskID = "zz-c1i-test-task-7"
+	const userA = "aaaaaaaaaaaaaaaaaaaaaaaaaaa"
+	const userB = "bbbbbbbbbbbbbbbbbbbbbbbbbbb"
+
+	var userGets []string
+	var gotBody map[string]any
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case r.Method == http.MethodGet && strings.HasPrefix(r.URL.Path, "/api/v1/users/"):
+			userGets = append(userGets, strings.TrimPrefix(r.URL.Path, "/api/v1/users/"))
+			_, _ = fmt.Fprint(w, `{"id":"user"}`)
+		case r.Method == http.MethodGet:
+			_, _ = fmt.Fprint(w, reassignTestTaskJSON(taskID, "zz-c1i-test-step"))
+		default:
+			raw, _ := io.ReadAll(r.Body)
+			_ = json.Unmarshal(raw, &gotBody)
+			_, _ = fmt.Fprint(w, taskActionResponse(taskID, "TASK_STATE_OPEN"))
+		}
+	}))
+	defer srv.Close()
+
+	resetCmdFlags(t, tasksReassignCmd)
+	_ = tasksReassignCmd.Flags().Set("to-user-id", userA)
+	_ = tasksReassignCmd.Flags().Set("to-user-id", userB)
+	_ = tasksReassignCmd.Flags().Set("to-user-id", userA)
+
+	if _, err := runTaskActionCmd(t, tasksReassignCmd, srv, taskID); err != nil {
+		t.Fatalf("reassign: %v", err)
+	}
+	wantGets := []string{userA, userB}
+	if len(userGets) != len(wantGets) || userGets[0] != wantGets[0] || userGets[1] != wantGets[1] {
+		t.Errorf("user lookups = %v, want one per distinct id %v", userGets, wantGets)
+	}
+	ids, ok := gotBody["newStepUserIds"].([]any)
+	if !ok {
+		t.Fatalf("newStepUserIds = %#v, want a JSON array", gotBody["newStepUserIds"])
+	}
+	if len(ids) != 2 || ids[0] != userA || ids[1] != userB {
+		t.Errorf("newStepUserIds = %v, want the distinct ids [user-a user-b]", ids)
+	}
+}
+
+// TestTasksReassignDryRunSkipsTheUserLookup: a preview needs no existence
+// proof (nothing is written), but must still show the ids it would send.
+func TestTasksReassignDryRunSkipsTheUserLookup(t *testing.T) {
+	const taskID = "zz-c1i-test-task-8"
+	const user = "aaaaaaaaaaaaaaaaaaaaaaaaaaa"
+
+	var userGets, posts []string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case r.Method == http.MethodGet && strings.HasPrefix(r.URL.Path, "/api/v1/users/"):
+			userGets = append(userGets, r.URL.Path)
+			_, _ = fmt.Fprint(w, `{"id":"user"}`)
+		case r.Method == http.MethodGet:
+			_, _ = fmt.Fprint(w, reassignTestTaskJSON(taskID, "zz-c1i-test-step"))
+		default:
+			posts = append(posts, r.URL.Path)
+		}
+	}))
+	defer srv.Close()
+
+	resetCmdFlags(t, tasksReassignCmd)
+	_ = tasksReassignCmd.Flags().Set("to-user-id", user)
+	stubNewClient(t, srv)
+	t.Setenv("C1I_URL", "https://example.invalid")
+	withDryRun(t)
+
+	var out bytes.Buffer
+	tasksReassignCmd.SetOut(&out)
+	t.Cleanup(func() { tasksReassignCmd.SetOut(nil) })
+	tasksReassignCmd.SetContext(context.Background())
+
+	if err := tasksReassignCmd.RunE(tasksReassignCmd, []string{taskID}); err != nil {
+		t.Fatalf("reassign --dry-run: %v", err)
+	}
+	if len(userGets) != 0 {
+		t.Errorf("--dry-run looked up users: %v", userGets)
+	}
+	if len(posts) != 0 {
+		t.Errorf("--dry-run posted: %v", posts)
+	}
+	preview := out.String()
+	if !strings.HasPrefix(preview, "{\n  \"dryRun\": true") {
+		t.Errorf("no preview printed: %q", preview)
+	}
+	if !strings.Contains(preview, "/action/reassign") || !strings.Contains(preview, user) {
+		t.Errorf("preview = %q, want the reassign path and the ids", preview)
+	}
+}

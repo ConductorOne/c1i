@@ -211,7 +211,7 @@ var mutationTable = []mutationRow{
 	{cmd: "tasks close", args: []string{"task-1"}, body: tblTask("taskActionId"), want: tblTaskDoc("taskActionId"), ids: tblTaskIDs("taskActionId")},
 	{cmd: "tasks comment", args: []string{"task-1", "--comment", "hi"}, body: tblTask(""), want: tblTaskDoc(""), ids: tblTaskIDs("")},
 	{cmd: "tasks process", args: []string{"task-1"}, body: tblTask(""), want: tblTaskDoc(""), ids: tblTaskIDs("")},
-	{cmd: "tasks reassign", args: []string{"task-1", "--to-user-id", "u1", "--policy-step-id", "s"}, body: tblTask("ticketActionId"), want: tblTaskDoc("ticketActionId"), ids: tblTaskIDs("ticketActionId")},
+	{cmd: "tasks reassign", args: []string{"task-1", "--to-user-id", "u1", "--policy-step-id", "s"}, body: tblTask("ticketActionId"), want: tblTaskDoc("ticketActionId"), ids: tblTaskIDs("ticketActionId"), reads: 1},
 	{cmd: "tasks reset", args: []string{"task-1"}, body: tblTask("ticketActionId"), want: tblTaskDoc("ticketActionId"), ids: tblTaskIDs("ticketActionId")},
 	{cmd: "tasks restart", args: []string{"task-1"}, body: tblTask("ticketActionId"), want: tblTaskDoc("ticketActionId"), ids: tblTaskIDs("ticketActionId"), reads: 1, stderr: tblStep},
 	{cmd: "tasks skip-step", args: []string{"task-1", "--policy-step-id", "s"}, body: tblTask("ticketActionId"), want: tblTaskDoc("ticketActionId"), ids: tblTaskIDs("ticketActionId")},

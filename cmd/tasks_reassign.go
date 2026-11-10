@@ -22,8 +22,18 @@ var tasksReassignAction = taskAction{
 		if len(toUserIDs) == 0 {
 			return &usageError{fmt.Errorf("flag --to-user-id requires at least one value")}
 		}
-		body["newStepUserIds"] = toUserIDs
+		// A repeated id would reach the server as a duplicate approver.
+		body["newStepUserIds"] = dedupe(toUserIDs)
 		return nil
+	},
+	preReads: func(cmd *cobra.Command) []preRead {
+		// extraBody already rejected a bad value, so an error here can only
+		// repeat it; the send never happens either way.
+		ids, err := repeatableStringFlag(cmd, "to-user-id")
+		if err != nil {
+			return nil
+		}
+		return []preRead{existingUsersCheck("to-user-id", ids)}
 	},
 }
 
@@ -33,11 +43,14 @@ var tasksReassignCmd = &cobra.Command{
 	Long: `Reassign a task's approval step to one or more other users.
 
 --to-user-id sets the step's approvers to the users named; repeat it to
-assign several.
+assign several. Each id is checked first: an unknown user exits 2 before the
+action is sent, because the API would store it as the step's approver and only
+"tasks restart" recovers the task. A repeated id is sent once.
 
 --policy-step-id targets a specific step of the task's policy. If omitted, the
-task's currently executing step is fetched and used; if it cannot be determined
-the command errors and asks you to pass --policy-step-id explicitly.
+task's currently executing step is fetched and used; a task with no current
+step is an error (exit 2) telling you to re-read it with
+"c1i tasks get <task-id>".
 
 A step c1i looked up is reported on stderr ("Resolved policy step: <id>"),
 not on stdout.
