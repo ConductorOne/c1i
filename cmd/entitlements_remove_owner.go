@@ -42,7 +42,8 @@ One owner per call; to change several at once use "entitlements set-owners".`,
 
 func init() {
 	entitlementsRemoveOwnerCmd.Flags().String("app-id", "", "Application ID the entitlement belongs to")
-	entitlementsRemoveOwnerCmd.Flags().String("user-id", "", "C1 user ID to remove as owner")
+	addOnceStringFlag(entitlementsRemoveOwnerCmd, "user-id", "C1 user ID to remove as owner",
+		"use \"entitlements set-owners\" to set several owners")
 	markRequired(entitlementsRemoveOwnerCmd, "app-id", "user-id")
 	markMutating(entitlementsRemoveOwnerCmd)
 	entitlementsCmd.AddCommand(entitlementsRemoveOwnerCmd)

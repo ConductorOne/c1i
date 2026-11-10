@@ -46,7 +46,8 @@ One owner per call; to change several at once use "apps set-owners".`,
 }
 
 func init() {
-	appsAddOwnerCmd.Flags().String("user-id", "", "C1 user ID to add as owner")
+	addOnceStringFlag(appsAddOwnerCmd, "user-id", "C1 user ID to add as owner",
+		"use \"apps set-owners\" to set several owners")
 	markRequired(appsAddOwnerCmd, "user-id")
 	markMutating(appsAddOwnerCmd)
 	appsCmd.AddCommand(appsAddOwnerCmd)

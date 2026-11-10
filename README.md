@@ -764,7 +764,9 @@ API's JSON response and returns as soon as the `PUT` is accepted.
 `apps remove-owner` and `apps set-owners` write. It returns zero rows at exit 0
 for a well-formed but nonexistent app id, so an empty result can also mean
 "wrong id". `apps add-owner` and `apps remove-owner` change one owner at a time
-(a single `--user-id`; use `set-owners` for many).
+(a single `--user-id`; use `set-owners` for many). A repeated `--user-id` exits
+`2` before any request, here, on `entitlements add-owner|remove-owner` and on
+`accounts set-owner`.
 
 **Owner commands (apps and entitlements).** Owner changes are applied
 asynchronously and can take several minutes to appear; pass --wait to block

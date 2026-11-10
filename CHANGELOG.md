@@ -376,6 +376,10 @@ already behaved this way.
 
 ### Fixed
 
+- `accounts set-owner` with a repeated `--user-id` used to use the last one
+  (0.9.2); it now exits 2 before any request, as do `apps` and `entitlements`
+  `add-owner|remove-owner`.
+
 - `mcp servers test-connection --dry-run` no longer sends the probe (0.9.2
   did); it prints the request body like other mutations, with credential
   values shown as `[redacted]`.

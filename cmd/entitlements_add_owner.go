@@ -49,7 +49,8 @@ One owner per call; to change several at once use "entitlements set-owners".`,
 
 func init() {
 	entitlementsAddOwnerCmd.Flags().String("app-id", "", "Application ID the entitlement belongs to")
-	entitlementsAddOwnerCmd.Flags().String("user-id", "", "C1 user ID to add as owner")
+	addOnceStringFlag(entitlementsAddOwnerCmd, "user-id", "C1 user ID to add as owner",
+		"use \"entitlements set-owners\" to set several owners")
 	markRequired(entitlementsAddOwnerCmd, "app-id", "user-id")
 	addWaitFlags(entitlementsAddOwnerCmd, "GET .../ownerids until the owner appears", 4*time.Minute)
 	markMutating(entitlementsAddOwnerCmd)
