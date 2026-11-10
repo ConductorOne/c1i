@@ -58,13 +58,13 @@ func TestEnvFlagValidation(t *testing.T) {
 	}{
 		// Unparsable: exit 2, nothing sent, message names the variable.
 		{name: "dry-run yes", envVar: "C1I_DRY_RUN", value: "yes", wantExit: exitUsage,
-			wantErr: `invalid C1I_DRY_RUN "yes": must be true or false`},
+			wantErr: `invalid C1I_DRY_RUN "yes": must be a boolean (true/false, 1/0)`},
 		{name: "dry-run on", envVar: "C1I_DRY_RUN", value: "on", wantExit: exitUsage,
-			wantErr: `invalid C1I_DRY_RUN "on": must be true or false`},
+			wantErr: `invalid C1I_DRY_RUN "on": must be a boolean (true/false, 1/0)`},
 		{name: "dry-run bogus", envVar: "C1I_DRY_RUN", value: "bogus", wantExit: exitUsage,
-			wantErr: `invalid C1I_DRY_RUN "bogus": must be true or false`},
+			wantErr: `invalid C1I_DRY_RUN "bogus": must be a boolean (true/false, 1/0)`},
 		{name: "debug yes", envVar: "C1I_DEBUG", value: "yes", wantExit: exitUsage,
-			wantErr: `invalid C1I_DEBUG "yes": must be true or false`},
+			wantErr: `invalid C1I_DEBUG "yes": must be a boolean (true/false, 1/0)`},
 		{name: "max-retries abc", envVar: "C1I_MAX_RETRIES", value: "abc", wantExit: exitUsage,
 			wantErr: `invalid C1I_MAX_RETRIES "abc": must be an integer`},
 		{name: "max-retries float", envVar: "C1I_MAX_RETRIES", value: "1.5", wantExit: exitUsage,

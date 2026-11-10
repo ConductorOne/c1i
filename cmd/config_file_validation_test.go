@@ -41,9 +41,9 @@ func TestConfigFileValidation(t *testing.T) {
 		wantReqs int
 	}{
 		{name: "dry_run yes", yaml: "dry_run: yes\n", wantExit: exitUsage,
-			wantErr: `invalid dry_run "yes" in ~/.c1i.yaml: must be true or false`},
+			wantErr: `invalid dry_run "yes" in ~/.c1i.yaml: must be a boolean (true/false, 1/0)`},
 		{name: "debug maybe", yaml: "debug: maybe\n", wantExit: exitUsage,
-			wantErr: `invalid debug "maybe" in ~/.c1i.yaml: must be true or false`},
+			wantErr: `invalid debug "maybe" in ~/.c1i.yaml: must be a boolean (true/false, 1/0)`},
 		{name: "max_retries abc", yaml: "max_retries: abc\n", wantExit: exitUsage,
 			wantErr: `invalid max_retries "abc" in ~/.c1i.yaml: must be an integer`},
 		{name: "max_retries 2.5", yaml: "max_retries: 2.5\n", wantExit: exitUsage,
@@ -72,7 +72,7 @@ func TestConfigFileValidation(t *testing.T) {
 		{name: "integral float max_retries", yaml: "max_retries: 1e6\n", wantReqs: 1},
 
 		{name: "token cache env garbage", env: map[string]string{tokenCacheEnv: "maybe"}, wantExit: exitUsage,
-			wantErr: `invalid C1I_NO_TOKEN_CACHE "maybe": must be true or false`},
+			wantErr: `invalid C1I_NO_TOKEN_CACHE "maybe": must be a boolean (true/false, 1/0)`},
 		{name: "token cache env 0", env: map[string]string{tokenCacheEnv: "0"}, wantReqs: 1},
 		{name: "token cache env true", env: map[string]string{tokenCacheEnv: "true"}, wantReqs: 1},
 	}

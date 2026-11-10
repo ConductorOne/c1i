@@ -11,7 +11,7 @@ import (
 func Parse(s string) (bool, error) {
 	b, err := strconv.ParseBool(s)
 	if err != nil {
-		return false, errors.New("must be true or false")
+		return false, errors.New("must be a boolean (true/false, 1/0)")
 	}
 	return b, nil
 }

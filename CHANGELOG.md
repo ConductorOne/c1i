@@ -376,6 +376,10 @@ already behaved this way.
 
 ### Fixed
 
+- A bad boolean env or config value said `must be true or false` although
+  `1`, `0`, `t`, `f`, `TRUE` and `FALSE` are accepted; it now reads `must be a
+  boolean (true/false, 1/0)`.
+
 - `apps delete` help, README and agents.md said `apps list` rows show deleted
   apps; it omits them. `apps get` shows `deletedAt`.
 
