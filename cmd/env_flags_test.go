@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 	"github.com/spf13/viper"
 )
 
@@ -14,7 +15,7 @@ import (
 var envTestArgs = []string{"api", "--method", "POST", "--path", "/api/v1/things", "--body", "{}"}
 
 // clearEnvFlags isolates every global env-backed setting; "" is unset for both
-// viper (allowEmptyEnv is off) and validateEnvFlags.
+// viper (allowEmptyEnv is off) and validateGlobalSettings.
 func clearEnvFlags(t *testing.T) {
 	t.Helper()
 	t.Setenv("C1I_URL", mutTestURL)
@@ -138,23 +139,42 @@ func TestEnvFlagValidation(t *testing.T) {
 }
 
 // TestGlobalEnvSettingsMatchFlagTypes keeps the one table honest: a setting
-// whose flag is typed must carry the parser validateEnvFlags applies, and a
-// string setting must not pretend to parse. A new typed global that skips the
-// table would be bound nowhere and validated nowhere.
+// whose flag is typed must carry the parser validateGlobalSettings applies to
+// its env var and ~/.c1i.yaml key, and a string setting must not pretend to
+// parse. A new typed global that skips the table would be bound nowhere and
+// validated nowhere. An env-only entry (no key, no flag) must have a parser.
 func TestGlobalEnvSettingsMatchFlagTypes(t *testing.T) {
-	if len(globalEnvSettings) < 6 {
+	if len(globalEnvSettings) < 7 {
 		t.Fatalf("only %d global env settings; the table lost an entry", len(globalEnvSettings))
 	}
+	tableKeys := map[string]bool{}
 	for _, s := range globalEnvSettings {
+		if s.flag == "" {
+			if s.key != "" || s.parse == nil {
+				t.Errorf("%s: an env-only setting needs no key and a parser", s.env)
+			}
+			continue
+		}
+		tableKeys[s.flag] = true
 		f := rootCmd.PersistentFlags().Lookup(s.flag)
 		if f == nil {
 			t.Fatalf("no persistent flag --%s for %s", s.flag, s.env)
+		}
+		if s.key != strings.ReplaceAll(s.flag, "-", "_") {
+			t.Errorf("%s: config key %q is not --%s with underscores", s.env, s.key, s.flag)
 		}
 		if stringTyped := f.Value.Type() == "string"; stringTyped != (s.parse == nil) {
 			t.Errorf("%s (--%s, type %s): parse == nil is %v; a typed value needs a parser and a string needs none",
 				s.env, s.flag, f.Value.Type(), s.parse == nil)
 		}
 	}
+	// Every global flag must be in the table, or its env and config-file
+	// values skip binding and validation.
+	rootCmd.PersistentFlags().VisitAll(func(f *pflag.Flag) {
+		if !tableKeys[f.Name] {
+			t.Errorf("--%s is missing from globalEnvSettings", f.Name)
+		}
+	})
 }
 
 // TestLocalOnlyRequestsIgnoreBadEnvFlags: completion never touches the network,

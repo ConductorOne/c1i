@@ -53,7 +53,9 @@ does not write a `client_credentials` audit event each time. It uses the OS
 keychain when available; on Unix-like hosts without a usable keyring, it uses
 a hardened `0600` file fallback. `auth token` and `mcp gateway` always mint a
 fresh bearer and never persist it.
-`C1I_NO_TOKEN_CACHE=1` disables the REST-client cache.
+`C1I_NO_TOKEN_CACHE=1`/`true` disables the REST-client cache (`0`/`false` keep
+it; any other value exits 2). Exactly one of `C1I_CLIENT_ID`/`C1I_CLIENT_SECRET`
+set also exits 2.
 `c1i auth login` to authenticate; then `c1i auth whoami` before doing
 anything else — it reports both the identity you're acting as (principleId,
 plus userId when the principal has one; email and displayName only when a
@@ -100,7 +102,9 @@ apply it for a whole session; the flag wins for a single invocation.
 A non-empty env value that doesn't parse (`C1I_DRY_RUN=yes`,
 `C1I_MAX_RETRIES=abc`) is a usage error naming the variable, before any
 request; an empty one means unset. A flag set on the command line overrides
-its env var entirely, so a bad env value is then ignored.
+its env var entirely, so a bad env value is then ignored. The same keys in
+`~/.c1i.yaml` (`dry_run`, `debug`, `max_retries`) are validated alike, naming
+the file and key.
 
 `--error-format json` is the one worth setting by default if you parse
 failures: stderr becomes NDJSON. Error objects carry `"error"` (select them

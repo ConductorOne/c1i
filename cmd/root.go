@@ -11,6 +11,8 @@ import (
 
 	"github.com/ConductorOne/c1i/internal/client"
 	"github.com/ConductorOne/c1i/internal/config"
+	"github.com/ConductorOne/c1i/internal/envbool"
+	"github.com/ConductorOne/c1i/internal/tokensource"
 	"github.com/ConductorOne/c1i/internal/transport"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
@@ -49,7 +51,7 @@ For raw API exploration, also with no authentication required:
 		if err := validateErrorFormat(viper.GetString("error_format")); err != nil {
 			return err
 		}
-		if err := validateEnvFlags(cmd); err != nil {
+		if err := validateGlobalSettings(cmd); err != nil {
 			return err
 		}
 		if err := validateArgsUTF8(args); err != nil {
@@ -178,14 +180,15 @@ func validateBlankFlags(cmd *cobra.Command) error {
 }
 
 // globalEnvSetting is one env-backed global: its viper key, the env var, the
-// persistent flag that overrides it, and the parser its env value must satisfy
-// (nil for a string setting, which cannot be unparsable).
+// persistent flag that overrides it, and the parser each source's value must
+// satisfy (nil for a string setting, which cannot be unparsable). An env-only
+// setting leaves key and flag empty.
 //
-// The table drives both the viper binding and validateEnvFlags, so a new
+// The table drives the viper binding and validateGlobalSettings, so a new
 // setting cannot be bound in one place and left unvalidated in another. viper
 // (via cast) coerces an unparsable value to the zero value without an error, so
-// C1I_DRY_RUN=yes silently read as false and sent the mutation it was meant to
-// preview.
+// C1I_DRY_RUN=yes, or `dry_run: yes` in ~/.c1i.yaml, silently read as false and
+// sent the mutation it was meant to preview.
 type globalEnvSetting struct {
 	key, env, flag string
 	parse          func(string) error
@@ -198,38 +201,60 @@ var globalEnvSettings = []globalEnvSetting{
 	{key: "error_format", env: "C1I_ERROR_FORMAT", flag: "error-format"},
 	{key: "debug", env: "C1I_DEBUG", flag: "debug", parse: parseBoolValue},
 	{key: "dry_run", env: "C1I_DRY_RUN", flag: "dry-run", parse: parseBoolValue},
+	{env: tokensource.NoCacheEnv, parse: parseBoolValue},
 }
 
 // bindGlobalEnvSettings wires every entry to its flag and env var.
 func bindGlobalEnvSettings() {
 	for _, s := range globalEnvSettings {
+		if s.key == "" {
+			continue
+		}
 		_ = viper.BindPFlag(s.key, rootCmd.PersistentFlags().Lookup(s.flag))
 		_ = viper.BindEnv(s.key, s.env)
 	}
 }
 
-// validateEnvFlags rejects an unparsable value in a typed env-backed global
-// before any request is sent. A flag set on the command line wins, so its
-// presence suppresses the check (viper gives it the same precedence). Empty
-// means unset. Negative C1I_MAX_RETRIES is accepted like `--max-retries -1`
-// (transport clamps it).
-func validateEnvFlags(cmd *cobra.Command) error {
+// validateGlobalSettings rejects an unparsable value in a typed global before
+// any request is sent, from whichever source wins: flag (pflag already parsed
+// it), then env, then ~/.c1i.yaml. A value shadowed by a higher source is not
+// checked, matching viper's precedence. Empty means unset. Negative
+// max_retries is accepted like `--max-retries -1` (transport clamps it).
+func validateGlobalSettings(cmd *cobra.Command) error {
 	if isLocalOnlyRequest(cmd) {
 		return nil
 	}
+	var cfg *viper.Viper
 	for _, s := range globalEnvSettings {
 		if s.parse == nil {
 			continue
 		}
-		if f := cmd.Flags().Lookup(s.flag); f != nil && f.Changed {
+		if f := cmd.Flags().Lookup(s.flag); s.flag != "" && f != nil && f.Changed {
 			continue
 		}
-		v, ok := os.LookupEnv(s.env)
-		if !ok || v == "" {
+		if v := os.Getenv(s.env); v != "" {
+			if err := s.parse(v); err != nil {
+				return &usageError{fmt.Errorf("invalid %s %q: %w", s.env, v, err)}
+			}
 			continue
 		}
-		if err := s.parse(v); err != nil {
-			return &usageError{fmt.Errorf("invalid %s %q: %w", s.env, v, err)}
+		if s.key == "" {
+			continue
+		}
+		if cfg == nil {
+			cfg = viper.New()
+			loadConfigFile(cfg)
+		}
+		// Sprint renders a YAML bool/int the way its source spelled it; a
+		// string, map or list fails the parser like any other garbage.
+		raw := cfg.Get(s.key)
+		if raw == nil {
+			continue
+		}
+		if v := fmt.Sprint(raw); v != "" {
+			if err := s.parse(v); err != nil {
+				return &usageError{fmt.Errorf("invalid %s %q in ~/.c1i.yaml: %w", s.key, v, err)}
+			}
 		}
 	}
 	return nil
@@ -251,10 +276,8 @@ func isLocalOnlyRequest(cmd *cobra.Command) bool {
 }
 
 func parseBoolValue(s string) error {
-	if _, err := strconv.ParseBool(s); err != nil {
-		return errors.New("must be true or false")
-	}
-	return nil
+	_, err := envbool.Parse(s)
+	return err
 }
 
 // parseIntValue mirrors pflag's intValue.Set (base 0, so hexadecimal and octal

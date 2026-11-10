@@ -680,3 +680,21 @@ func TestRelativeConfigDirSkipsFileCache(t *testing.T) {
 		t.Errorf("wrote %v under the working directory", entries)
 	}
 }
+
+// Only a true boolean disables the cache; "0" used to, as any non-empty value did.
+func TestNoCacheEnvIsStrictBool(t *testing.T) {
+	for _, tc := range []struct {
+		val     string
+		wantOff bool
+	}{{"1", true}, {"true", true}, {"0", false}, {"false", false}, {"", false}} {
+		t.Run("val="+tc.val, func(t *testing.T) {
+			useTempConfig(t)
+			t.Setenv(noCacheEnv, tc.val)
+			key := testCacheKey("host", "client")
+			storeCachedToken(key, freshToken(30*time.Minute))
+			if got := loadCachedToken(key) == nil; got != tc.wantOff {
+				t.Errorf("cache disabled = %v, want %v", got, tc.wantOff)
+			}
+		})
+	}
+}

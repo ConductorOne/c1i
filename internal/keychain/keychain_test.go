@@ -110,27 +110,30 @@ func TestEnvOverridesKeyring(t *testing.T) {
 	}
 }
 
-func TestEnvIgnoredWhenOnlyOneSet(t *testing.T) {
-	keyring.MockInit()
-	withTempConfigDir(t)
-	clearEnv(t)
-
-	if _, err := Store(testService, testID, testSecret); err != nil {
-		t.Fatalf("Store: %v", err)
-	}
-
-	t.Setenv(envClientID, "env-id")
-	// envClientSecret deliberately not set
-
-	id, sec, backend, err := Load(testService)
-	if err != nil {
-		t.Fatalf("Load: %v", err)
-	}
-	if id != testID || sec != testSecret {
-		t.Fatalf("expected stored values when only one env var set, got (%q, %q)", id, sec)
-	}
-	if backend != BackendKeyring {
-		t.Fatalf("backend = %q, want %q", backend, BackendKeyring)
+// One of the pair set is a half-configured credential; falling through to the
+// keyring would authenticate as a different identity than the user set.
+func TestLoadRejectsOneSidedEnv(t *testing.T) {
+	for _, tc := range []struct{ name, id, secret string }{
+		{"id only", "env-id", ""},
+		{"secret only", "", "env-sec"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			keyring.MockInit()
+			withTempConfigDir(t)
+			clearEnv(t)
+			if _, err := Store(testService, testID, testSecret); err != nil {
+				t.Fatalf("Store: %v", err)
+			}
+			if tc.id != "" {
+				t.Setenv(envClientID, tc.id)
+			}
+			if tc.secret != "" {
+				t.Setenv(envClientSecret, tc.secret)
+			}
+			if _, _, _, err := Load(testService); !errors.Is(err, ErrPartialEnv) {
+				t.Fatalf("Load err = %v, want ErrPartialEnv", err)
+			}
+		})
 	}
 }
 

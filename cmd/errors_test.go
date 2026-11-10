@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/ConductorOne/c1i/internal/client"
+	"github.com/ConductorOne/c1i/internal/keychain"
 	"github.com/spf13/cobra"
 )
 
@@ -409,5 +410,14 @@ func TestRunWiresCompletionUnderTheGuards(t *testing.T) {
 	rootCmd.SetArgs([]string{"completion", "bogus-shell"})
 	if got := Run(); got != exitUsage {
 		t.Errorf("Run() for completion bogus-shell: exit %d, want %d", got, exitUsage)
+	}
+}
+
+// A half-set credential pair is an environment mistake (exit 2), even though
+// the client wraps every credential-load failure as an AuthError (exit 3).
+func TestExitCodePartialEnvCredentials(t *testing.T) {
+	err := &client.AuthError{Err: fmt.Errorf("loading credentials: %w", keychain.ErrPartialEnv)}
+	if got := exitCode(err); got != exitUsage {
+		t.Errorf("exitCode = %d, want %d", got, exitUsage)
 	}
 }

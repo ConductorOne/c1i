@@ -12,6 +12,7 @@ import (
 	"syscall"
 
 	"github.com/ConductorOne/c1i/internal/client"
+	"github.com/ConductorOne/c1i/internal/keychain"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
@@ -243,6 +244,11 @@ func exitCode(err error) int {
 		default:
 			return exitError
 		}
+	}
+	// Ahead of AuthError, which wraps it: a half-set credential pair is a bad
+	// environment, not a rejected credential.
+	if errors.Is(err, keychain.ErrPartialEnv) {
+		return exitUsage
 	}
 	var authErr *client.AuthError
 	if errors.As(err, &authErr) {

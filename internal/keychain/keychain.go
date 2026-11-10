@@ -41,6 +41,11 @@ const (
 // errors.Is, so it wraps this sentinel.
 var ErrNoCredentials = errors.New("no credentials found")
 
+// ErrPartialEnv means exactly one of C1I_CLIENT_ID/C1I_CLIENT_SECRET is set.
+// Falling through to stored credentials would act as a different identity than
+// the one the caller half-configured.
+var ErrPartialEnv = errors.New("only one of " + envClientID + " and " + envClientSecret + " is set; set both or neither")
+
 // Store persists credentials. Tries the OS keyring first; falls back to a
 // 0600 file when no keyring is available. Env vars are never written.
 // Returns the backend used so callers can inform the user.
@@ -59,11 +64,15 @@ func Store(service, clientID, clientSecret string) (Backend, error) {
 	return BackendFile, nil
 }
 
-// Load returns credentials for service. Precedence: env vars (if both are
-// set), OS keyring, file fallback. Returns the backend used.
+// Load returns credentials for service. Precedence: env vars (both set; one
+// alone is ErrPartialEnv), OS keyring, file fallback. Returns the backend used.
 func Load(service string) (string, string, Backend, error) {
-	if id, sec := os.Getenv(envClientID), os.Getenv(envClientSecret); id != "" && sec != "" {
+	id, sec := os.Getenv(envClientID), os.Getenv(envClientSecret)
+	if id != "" && sec != "" {
 		return id, sec, BackendEnv, nil
+	}
+	if id != "" || sec != "" {
+		return "", "", "", ErrPartialEnv
 	}
 
 	id, sec, keyringErr := loadKeyring(service)
