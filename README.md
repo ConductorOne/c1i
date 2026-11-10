@@ -495,8 +495,8 @@ has its own optional mask, described under Auth in the MCP section.)
 Most deletes mark the object rather than erase it, so a later `get` does not
 always exit `4`:
 
-- `apps delete`: the app is marked with `deletedAt`; `apps list` rows carry a
-  `deleted_at` field.
+- `apps delete`: the app is marked with `deletedAt`; `apps get` shows it, and
+  `apps list` omits deleted apps.
 - `entitlements delete`: `entitlements get` still returns it, with `deletedAt`
   set.
 - `policies delete`: the policy leaves `policies list` and the default
@@ -536,7 +536,7 @@ c1i users list --fields id,email
 c1i functions get <id> --fields id,displayName,publishedCommitId
 
 # Conditional selection: jq is appropriate
-DELETED_APPS="$(c1i apps list | jq -c 'if .deleted_at then . else empty end')"
+APPS_WITH_USERS="$(c1i apps list | jq -c 'if .user_count > 0 then . else empty end')"
 
 # Mutation output: never projected; extract the id with jq -er
 APP_ID=$(c1i apps create --display-name "Example" | jq -er .id)

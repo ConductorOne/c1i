@@ -376,6 +376,9 @@ already behaved this way.
 
 ### Fixed
 
+- `apps delete` help, README and agents.md said `apps list` rows show deleted
+  apps; it omits them. `apps get` shows `deletedAt`.
+
 - A `~/.c1i.yaml` that exists but is invalid YAML, not a mapping, a directory,
   or unreadable was ignored (0.9.2), so `--url` ran and a missing `--url` said
   "url is required". It now exits 2 naming the file; a missing file is still

@@ -298,7 +298,7 @@ Choose the simplest output tool:
 # Known keys: prefer c1i's built-in projection
 c1i users list --fields id,email
 # Conditional selection: jq is appropriate
-DELETED_APPS="$(c1i apps list | jq -c 'if .deleted_at then . else empty end')"
+APPS_WITH_USERS="$(c1i apps list | jq -c 'if .user_count > 0 then . else empty end')"
 
 # Mutation output: never projected; extract the id with jq -er
 APP_ID=$(c1i apps create --display-name "Example" | jq -er .id)
@@ -651,8 +651,8 @@ resource with `--resource-id` likewise means you drop
   `720h`: anything else exits `2` before sending, and over `720h` update returns
   `callback_timeout must be between 0 and 30 days`. A webhook has no
   signing secret.
-- `apps delete <app-id>` is soft: the app is marked with `deletedAt`, and
-  `apps list` rows carry a `deleted_at` field.
+- `apps delete <app-id>` is soft: the app is marked with `deletedAt`
+  (`apps get` shows it), and `apps list` omits deleted apps.
 - `entitlements delete <entitlement-id>` is soft: `entitlements get` still
   returns it, with `deletedAt` set.
 - `automations delete <automation-id>` is soft: the automation leaves

@@ -11,7 +11,8 @@ var appsDeleteCmd = &cobra.Command{
 	Use:   "delete <app-id>",
 	Short: "Soft-delete an app",
 	Long: `Soft-delete an app by ID: the app is marked deleted (deletedAt set)
-rather than erased, which is why "apps list" rows carry a deleted_at field.
+rather than erased. "apps get <app-id>" still returns it with deletedAt set;
+"apps list" omits deleted apps.
 Prints the API's response, which is {}; exit 0 is the success signal.
 Honors --dry-run.
 
