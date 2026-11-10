@@ -238,6 +238,20 @@ Warning: no --url flag given; targeting https://example.conductor.one (from ~/.c
 
 For credential storage, see [Credential sources](#credential-sources) below.
 
+### Global flags
+
+These flags apply to every command. A flag on the command line overrides its
+environment variable.
+
+| Flag | Env var | Default | Meaning |
+|------|---------|---------|---------|
+| `--url` | `C1I_URL` | none (then `~/.c1i.yaml`) | C1 tenant URL, `https` required; see [Configuration](#configuration) |
+| `--fields` | `C1I_FIELDS` | none | comma-separated JSON field projection of read output; see [Field selection](#field-selection) |
+| `--max-retries` | `C1I_MAX_RETRIES` | `4` | retries for transient API failures; `0` disables; see [Retries](#retries) |
+| `--error-format` | `C1I_ERROR_FORMAT` | `text` | `text` or `json` errors; see [Errors & exit codes](#errors--exit-codes) |
+| `--dry-run` | `C1I_DRY_RUN` | off | preview a C1 REST mutation without sending it; see [Dry run](#dry-run) |
+| `--debug` | `C1I_DEBUG` | off | trace API HTTP requests to stderr; see [Debug tracing](#debug-tracing) |
+
 ### Retries
 
 Transient API failures are retried automatically with exponential backoff and
