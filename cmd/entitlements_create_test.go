@@ -815,3 +815,104 @@ func TestEntitlementCreateBlankReuseIDsExitUsage(t *testing.T) {
 		}
 	}
 }
+
+// TestEntitlementCreatePlanDedupesOwners pins that a repeated --owner-id
+// reaches the create body once, as on the owner-set PUT.
+func TestEntitlementCreatePlanDedupesOwners(t *testing.T) {
+	p := mustPlan(t, "--app-id", "app1", "--display-name", "e", "--owner-id", "u1", "--owner-id", "u1")
+	got, ok := p.entitlementBody["appEntitlementOwnerIds"].([]string)
+	if !ok || len(got) != 1 || got[0] != "u1" {
+		t.Errorf("appEntitlementOwnerIds = %v, want [u1]", p.entitlementBody["appEntitlementOwnerIds"])
+	}
+	if len(p.owners) != 1 || p.owners[0] != "u1" {
+		t.Errorf("plan.owners = %v, want [u1]", p.owners)
+	}
+}
+
+// ownerCreateServer answers the owner lookup and the three creates, recording
+// every request so a test can prove nothing was created.
+func ownerCreateServer(t *testing.T, userStatus int, userBody string) *mutServer {
+	t.Helper()
+	return newMutServer(t, func(r *http.Request, _ int) mutReply {
+		switch {
+		case r.Method == http.MethodGet && strings.Contains(r.URL.Path, "/users/"):
+			return mutReply{status: userStatus, body: userBody}
+		case strings.HasSuffix(r.URL.Path, "/resource_types"):
+			return mutReply{body: `{"appResourceType":{"id":"rt-new"}}`}
+		case strings.HasSuffix(r.URL.Path, "/resources"):
+			return mutReply{body: `{"appResource":{"id":"res-new"}}`}
+		}
+		return mutReply{body: `{"appEntitlementView":{"appEntitlement":{"id":"e-new","appResourceTypeId":"rt-new","appResourceId":"res-new"}}}`}
+	})
+}
+
+// TestEntitlementCreateUnknownOwnerCreatesNothing pins the fix for the orphaned
+// resource type/resource: an unknown --owner-id used to fail at step 3 (exit
+// 6), after steps 1 and 2 had already created objects. It must exit 2 on the
+// owner pre-read and send no create at all.
+func TestEntitlementCreateUnknownOwnerCreatesNothing(t *testing.T) {
+	s := ownerCreateServer(t, http.StatusNotFound, `{"code":5,"message":"not found"}`)
+	t.Setenv("C1I_URL", mutTestURL)
+	r := runMutationCLI(t, s.srv, 0, nil,
+		"entitlements", "create", "--app-id", "app-1", "--display-name", "e", "--owner-id", "u-missing")
+
+	if r.exit != exitUsage {
+		t.Fatalf("exit %d (%v), want %d", r.exit, r.err, exitUsage)
+	}
+	if r.err == nil || !strings.Contains(r.err.Error(), `--owner-id "u-missing": no such user`) {
+		t.Errorf("err = %v, want it to name the unknown owner", r.err)
+	}
+	if r.stdout != "" {
+		t.Errorf("stdout = %q, want nothing printed", r.stdout)
+	}
+	posts := 0
+	for _, rq := range s.requests() {
+		if rq.method != http.MethodGet {
+			posts++
+		}
+	}
+	if posts != 0 {
+		t.Errorf("%d create request(s) sent, want none", posts)
+	}
+}
+
+// TestEntitlementCreateKnownOwnerReachesFinalBody pins the passing direction:
+// the seqence runs and step 3 carries appEntitlementOwnerIds.
+func TestEntitlementCreateKnownOwnerReachesFinalBody(t *testing.T) {
+	s := ownerCreateServer(t, http.StatusOK, `{"user":{"id":"u1"}}`)
+	t.Setenv("C1I_URL", mutTestURL)
+	r := runMutationCLI(t, s.srv, 0, nil,
+		"entitlements", "create", "--app-id", "app-1", "--display-name", "e", "--owner-id", "u1", "--owner-id", "u1")
+
+	if r.err != nil {
+		t.Fatalf("exit %d: %v", r.exit, r.err)
+	}
+	reqs := s.requests()
+	if len(reqs) != 4 {
+		t.Fatalf("%d requests, want the owner read plus 3 creates", len(reqs))
+	}
+	final := reqs[len(reqs)-1].body
+	if !strings.Contains(final, `"appEntitlementOwnerIds":["u1"]`) {
+		t.Errorf("final body = %s, want a single deduped appEntitlementOwnerIds entry", final)
+	}
+}
+
+// TestEntitlementCreateDryRunSkipsOwnerLookup pins that --dry-run still
+// previews without the existence check, so a preview needs no user read.
+func TestEntitlementCreateDryRunSkipsOwnerLookup(t *testing.T) {
+	withDryRun(t)
+	s := ownerCreateServer(t, http.StatusOK, `{"user":{"id":"u1"}}`)
+	t.Setenv("C1I_URL", mutTestURL)
+	r := runMutationCLI(t, s.srv, 0, nil,
+		"entitlements", "create", "--app-id", "app-1", "--display-name", "e", "--owner-id", "u1")
+
+	if r.err != nil {
+		t.Fatalf("exit %d: %v", r.exit, r.err)
+	}
+	if got := len(s.requests()); got != 0 {
+		t.Errorf("%d request(s) sent on --dry-run, want none", got)
+	}
+	if !strings.Contains(r.stdout, `"appEntitlementOwnerIds": [`) || !strings.Contains(r.stdout, `"u1"`) {
+		t.Errorf("preview = %s, want appEntitlementOwnerIds in the body", r.stdout)
+	}
+}

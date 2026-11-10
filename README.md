@@ -242,7 +242,8 @@ any other kind fails with a 500 (exit `6`, though retrying never helps) saying
 Reusing a resource with `--resource-id` likewise means you drop
 `--resource-display-name`. `--owner-id` is repeatable and goes inline in the
 create request, so no follow-up call is needed; an empty one is a usage error
-rather than an owner quietly dropped. `--duration-grant` takes a protobuf
+rather than an owner quietly dropped, and each id is checked before the first
+create (an unknown user exits `2` and creates nothing). `--duration-grant` takes a protobuf
 (`3600s`) or Go (`8h`) whole-number duration (no sign, no decimals), sent in
 seconds; anything else, or an empty one, is a usage error. Omit it for standing access.
 

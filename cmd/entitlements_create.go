@@ -91,7 +91,9 @@ entitlement. --dry-run skips the check.
 
 Assign owners inline with --owner-id: the create request carries
 appEntitlementOwnerIds, so no follow-up call is needed. An empty --owner-id is
-a usage error, not an owner quietly dropped. Owner provisioning is
+a usage error, not an owner quietly dropped. Each id is checked before the
+first create and must name an existing user, or the command exits 2 and
+creates nothing. Owner provisioning is
 asynchronous — one measured create took 116s to read back on
 "GET /api/v1/apps/{app-id}/entitlements/{id}/ownerids".
 
@@ -125,10 +127,14 @@ Example:
 			return err
 		}
 
-		// The policy check runs before step 1, so a bad policy leaves no
-		// resource type behind.
-		return sendMutationSequence(cmd, plan.steps(), plan.placeholderNote(),
-			withPreRead(policyBindingsCheck(cmd, entitlementPolicyKinds)))
+		// Both checks run before step 1: an unknown owner (or bad policy)
+		// otherwise fails at step 3, after the resource type and resource
+		// already exist. --dry-run skips the pre-reads.
+		opts := []mutationOpt{withPreRead(policyBindingsCheck(cmd, entitlementPolicyKinds))}
+		if len(plan.owners) > 0 {
+			opts = append(opts, withPreRead(existingUsersCheck("owner-id", plan.owners)))
+		}
+		return sendMutationSequence(cmd, plan.steps(), plan.placeholderNote(), opts...)
 	},
 }
 
@@ -152,6 +158,10 @@ type entitlementCreatePlan struct {
 	// entitlementBody carries everything except appResourceTypeId and
 	// appResourceId, which are only known once the steps above have run.
 	entitlementBody map[string]any
+
+	// owners is the deduped --owner-id list, also in entitlementBody. The
+	// create sequence pre-checks each one before creating anything.
+	owners []string
 }
 
 // typeCreateOnlyFlags describe a resource type this command would create, so
@@ -246,12 +256,14 @@ func buildEntitlementCreatePlan(cmd *cobra.Command) (*entitlementCreatePlan, err
 	// An owner id from an unset shell variable would otherwise create the
 	// entitlement with fewer owners than asked for, and owner reads are async,
 	// so nothing downstream can tell that apart from "not provisioned yet".
+	// A repeated id 500s, as it does on the owners PUT.
 	owners, err := repeatableStringFlag(cmd, "owner-id")
 	if err != nil {
 		return nil, err
 	}
 	if len(owners) > 0 {
-		p.entitlementBody["appEntitlementOwnerIds"] = owners
+		p.owners = dedupe(owners)
+		p.entitlementBody["appEntitlementOwnerIds"] = p.owners
 	}
 
 	return p, nil
