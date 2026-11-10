@@ -129,7 +129,17 @@ Exit codes and value types that change, each described under Fixed:
   `--body-file` (`--rules-file '[null]'` was sent by 0.9.2), and a `--body-file`
   `policySteps` entry that isn't an object under a key other than the policy
   type's own (0.9.2 sent it).
-- An id of `.` or `..` exits 2 and sends nothing, for every method.
+- An id of `.` or `..` exits 2 and sends nothing, for every method, including
+  one carried only in a request body (any `*-id` flag, the `functions usage`
+  positional, `mcp classifiers templates add-rule <template-id>`) and one
+  padded with surrounding whitespace. 0.9.2 previewed such a value at exit 0
+  and only some sends refused it, so a preview could disagree with the send
+  and a multi-step create could apply its first steps before failing.
+- A whitespace-only `--state`, `--type` or `--sort` exits 2; 0.9.2 trimmed it
+  to nothing and dropped the filter at exit 0.
+- A blank `--page-token` (empty, whitespace-only or invisible-only) exits 2;
+  0.9.2 disabled auto-pagination and returned the first page at exit 0 with
+  nothing on stderr, so an unset shell variable truncated a list.
 - A blank or invisible-only `--display-name` exits 2, not 0.
 - A blank required or id flag or positional exits 2, not 0 or a request:
   `accounts set-owner <id> --user-id " "`, `grants list --app-id " "`,
