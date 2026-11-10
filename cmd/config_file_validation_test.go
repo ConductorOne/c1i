@@ -14,8 +14,13 @@ import (
 
 // useConfigFile points HOME at a temp dir holding ~/.c1i.yaml with body, so no
 // test reads the real file.
+// resetViper drops the global viper's config layer and search paths.
+func resetViper() { viper.Reset(); bindGlobalEnvSettings() }
+
 func useConfigFile(t *testing.T, body string) string {
 	t.Helper()
+	// viper keeps the last file it parsed after HOME is restored.
+	t.Cleanup(resetViper)
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	t.Setenv("USERPROFILE", home)
@@ -112,9 +117,7 @@ func TestConfigFileValueTakesEffect(t *testing.T) {
 	useConfigFile(t, "max_retries: 0\n")
 	// A fresh viper: the global one carries search paths from earlier tests'
 	// HOMEs (and the real one), which would be read before this file.
-	resetViper := func() { viper.Reset(); bindGlobalEnvSettings() }
 	resetViper()
-	t.Cleanup(resetViper)
 	srv := newMutServer(t, fixedReply(503, "{}"))
 	res := runMutationCLI(t, srv.srv, retriesFromConfig, nil, "api", "--method", "GET", "--path", "/api/v1/things")
 	if got := len(srv.requests()); got != 1 {
