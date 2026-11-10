@@ -129,7 +129,17 @@ Exit codes and value types that change, each described under Fixed:
   `--body-file` (`--rules-file '[null]'` was sent by 0.9.2), and a `--body-file`
   `policySteps` entry that isn't an object under a key other than the policy
   type's own (0.9.2 sent it).
-- An id of `.` or `..` exits 2 and sends nothing, for every method.
+- An id of `.` or `..` exits 2 and sends nothing, for every method, including
+  one carried only in a request body (any `*-id` flag, the `functions usage`
+  positional, `mcp classifiers templates add-rule <template-id>`) and one
+  padded with surrounding whitespace. 0.9.2 previewed such a value at exit 0
+  and only some sends refused it, so a preview could disagree with the send
+  and a multi-step create could apply its first steps before failing.
+- A whitespace-only `--state`, `--type` or `--sort` exits 2; 0.9.2 trimmed it
+  to nothing and dropped the filter at exit 0.
+- A blank `--page-token` (empty, whitespace-only or invisible-only) exits 2;
+  0.9.2 disabled auto-pagination and returned the first page at exit 0 with
+  nothing on stderr, so an unset shell variable truncated a list.
 - A blank or invisible-only `--display-name` exits 2, not 0.
 - A blank required or id flag or positional exits 2, not 0 or a request:
   `accounts set-owner <id> --user-id " "`, `grants list --app-id " "`,
@@ -485,6 +495,24 @@ already behaved this way.
   checks each user exists (a user read, skipped by `--dry-run`) before its
   first create; an unknown id used to exit `6` after the resource type and
   resource had already been created.
+- A `.` or `..` value for any `*-id` flag, or for a positional the command
+  sends only in a body, is refused with exit `2` before any request, including
+  under `--dry-run`. Surrounding whitespace and a `;params` suffix are
+  ignored, matching the path rule. That covers a filter id that never reaches
+  a path (`grants list --user-id .`, `--grant-policy-id`, `--owner-id`,
+  `--policy-step-id`, `mcp classifiers templates add-rule <classifier-id>
+  <template-id>`) and the `functions usage <function-id>` positional, which is
+  compared client-side. A preview used to print such a value and exit `0`
+  while a real send exited `2`; `functions usage` sent nothing and matched
+  nothing, exiting `0`; and `entitlements create --owner-id .` applied its
+  first two steps before failing.
+- A whitespace-only `--state`, `--type` or `--sort` exits `2` instead of
+  silently dropping the filter (`tasks list`, `requests list`,
+  `automations executions list`, `export events`).
+
+- `--page-token` set to a blank value exits `2` with a message to omit it; it
+  used to disable auto-pagination and return the first page at exit `0` with
+  nothing on stderr, so an unset shell variable truncated a list silently.
 
 ## [0.9.2] - 2026-10-21
 

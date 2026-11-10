@@ -3,7 +3,6 @@ package cmd
 import (
 	"encoding/json"
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -14,10 +13,12 @@ var sortDirectionFlag = enumFlag{flag: "sort", prefix: "SORT_DIRECTION_", unknow
 	{name: "desc", api: "SORT_DIRECTION_DESC"},
 }}
 
-// parseSortDirection reads --sort. Blank is ascending (chronological), the
-// natural order for archiving and for incremental sync via --since-event-uid.
+// parseSortDirection reads --sort. An empty value (the flag omitted) is
+// ascending (chronological), the natural order for archiving and for
+// incremental sync via --since-event-uid; a whitespace-only value is refused
+// by the parser instead of quietly falling back to it.
 func parseSortDirection(s string) (string, error) {
-	if strings.TrimSpace(s) == "" {
+	if s == "" {
 		return "SORT_DIRECTION_ASC", nil
 	}
 	return sortDirectionFlag.parse(s)

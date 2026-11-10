@@ -11,6 +11,7 @@ import (
 
 	"github.com/ConductorOne/c1i/internal/client"
 	"github.com/ConductorOne/c1i/internal/config"
+	"github.com/ConductorOne/c1i/internal/transport"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 	"github.com/spf13/viper"
@@ -61,6 +62,15 @@ For raw API exploration, also with no authentication required:
 			return err
 		}
 		if err := validateBlankFlags(cmd); err != nil {
+			return err
+		}
+		if err := validateDotSegmentIDFlags(cmd); err != nil {
+			return err
+		}
+		if err := validateDotSegmentIDArgs(cmd, args); err != nil {
+			return err
+		}
+		if err := validatePageToken(cmd); err != nil {
 			return err
 		}
 		if err := validateCountFlags(cmd); err != nil {
@@ -254,6 +264,111 @@ func parseIntValue(s string) error {
 		return errors.New("must be an integer")
 	}
 	return nil
+}
+
+// validateDotSegmentIDFlags rejects a set *-id flag (or one occurrence of a
+// repeatable one) whose value the server would normalize to the parent or
+// collection: exactly "." or ".." once percent-encoded, a ";params" suffix and
+// surrounding whitespace are ignored -- the same predicate the transport path
+// guard uses. That guard only sees a request path, so an id the
+// command carries in a body -- --grant-policy-id, --owner-id, ... -- used to
+// preview as if it were an id and only fail once a real send interpolated it
+// into a URL; a multi-step create could apply its earlier steps first. Doing
+// it here, before any pre-read or send, makes --dry-run and a real send agree.
+// `c1i api` has no *-id flag and guards its own --path.
+func validateDotSegmentIDFlags(cmd *cobra.Command) error {
+	if isCompletionRequest(cmd) {
+		return nil
+	}
+	var err error
+	cmd.Flags().VisitAll(func(f *pflag.Flag) {
+		if err != nil || !f.Changed || !strings.HasSuffix(f.Name, "-id") {
+			return
+		}
+		switch f.Value.Type() {
+		case "string":
+			err = dotSegmentIDError(f.Name, f.Value.String())
+		case "stringArray":
+			// GetStringArray, not f.Value.String(), whose form is Go-syntax
+			// "[a b]". A lone empty occurrence reads back as no elements; a
+			// blank value is refused by the command's own flag reader.
+			values, getErr := cmd.Flags().GetStringArray(f.Name)
+			if getErr != nil {
+				// Not user input: a *-id flag of any other type is a
+				// programming bug, so surface it instead of skipping the flag
+				// (TestIDFlagsAreStringOrStringArray keeps it unreachable).
+				err = fmt.Errorf("--%s is not a repeatable string flag: %w", f.Name, getErr)
+				return
+			}
+			for _, v := range values {
+				if err = dotSegmentIDError(f.Name, v); err != nil {
+					return
+				}
+			}
+		}
+	})
+	return err
+}
+
+// bodyIDArgAnnotation marks a command whose positional id at the given
+// 0-based indexes is sent only in a request body, never in a path. The
+// transport guard inspects paths, so validateDotSegmentIDArgs has to apply the
+// same "."/".." rule to those arguments itself.
+const bodyIDArgAnnotation = "c1i/body-id-arg"
+
+// markBodyIDArgs records that the given 0-based positionals are body-carried
+// ids (see bodyIDArgAnnotation). Calls append, so a command marked by two
+// helpers keeps both indexes.
+func markBodyIDArgs(c *cobra.Command, indexes ...int) {
+	if c.Annotations == nil {
+		c.Annotations = map[string]string{}
+	}
+	vals := []string{}
+	if existing := c.Annotations[bodyIDArgAnnotation]; existing != "" {
+		vals = append(vals, existing)
+	}
+	for _, idx := range indexes {
+		vals = append(vals, strconv.Itoa(idx))
+	}
+	c.Annotations[bodyIDArgAnnotation] = strings.Join(vals, ",")
+}
+
+// validateDotSegmentIDArgs applies validateDotSegmentIDFlags' rule to the
+// positionals a command annotated with markBodyIDArgs. An argument past the
+// end is left alone: args validation belongs to cobra and the command.
+func validateDotSegmentIDArgs(cmd *cobra.Command, args []string) error {
+	if isCompletionRequest(cmd) {
+		return nil
+	}
+	v, ok := cmd.Annotations[bodyIDArgAnnotation]
+	if !ok {
+		return nil
+	}
+	for _, part := range strings.Split(v, ",") {
+		idx, convErr := strconv.Atoi(part)
+		if convErr != nil || idx < 0 || idx >= len(args) {
+			continue
+		}
+		if err := dotSegmentIDValueError("argument", args[idx]); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// dotSegmentIDError returns the usage error for a *-id flag value the server
+// would resolve to something other than the named object, or nil.
+func dotSegmentIDError(flagName, value string) error {
+	return dotSegmentIDValueError("flag --"+flagName, value)
+}
+
+// dotSegmentIDValueError is the one wording for an id (a flag or a positional)
+// that the server would normalize away.
+func dotSegmentIDValueError(subject, value string) error {
+	if !transport.IsDotSegmentID(value) {
+		return nil
+	}
+	return &usageError{fmt.Errorf(`%s %q is not an id: "." and ".." (with an optional ";params" suffix) address the parent or collection, not the object`, subject, value)}
 }
 
 func validateErrorFormat(f string) error {

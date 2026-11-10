@@ -3,7 +3,6 @@ package cmd
 import (
 	"encoding/json"
 	"fmt"
-	"strings"
 
 	"github.com/spf13/cobra"
 )
@@ -77,7 +76,9 @@ tenant.
 		userID, _ := cmd.Flags().GetString("user-id")
 		all, _ := cmd.Flags().GetBool("all")
 		var typ string
-		if v := mustGetString(cmd, "type"); strings.TrimSpace(v) != "" {
+		// Only an empty value means "both". A whitespace-only value goes to
+		// the parser, which rejects it instead of dropping the filter.
+		if v := mustGetString(cmd, "type"); v != "" {
 			var err error
 			if typ, err = requestTypeFlag.parse(v); err != nil {
 				return err

@@ -348,8 +348,10 @@ and any other code, exit 1.
 ## Pagination
 
 Most list commands auto-paginate to completion by default — one invocation
-gets every page. Pass `--page-token` to opt out and fetch a single page
-manually. The exceptions send one request:
+gets every page. Pass `--page-token` with a cursor to opt out and fetch a
+single page manually; a blank value is refused (exit 2, before any request),
+because supplying the flag at all turns auto-pagination off and an unset
+variable would otherwise silently truncate the list. The exceptions send one request:
 `role-mining suggestions|runs|custom-analysis list` and
 `findings routing-rules|transformation-rules list` print a stderr
 `partial result` warning if the server reports more pages, and `mcp bindings by-tools`
@@ -372,7 +374,9 @@ the server returns.
 it: one JSON object, `{"dryRun":true,"requests":[{"method","url","body"}]}`,
 never with an `id`, plus a stderr notice (`upgrade --dry-run` instead prints plain
 `[dry-run]` text lines). It needs a configured URL (exit 2
-without) and refuses an empty, `.` or `..` id (exit 2) as a real send does. It
+without) and refuses an empty, `.` or `..` id (exit 2) as a real send does —
+including one carried only in a request body (`--grant-policy-id`,
+`--owner-id`, ...), so the preview cannot print a value a send would refuse. It
 needs no credentials unless c1i must look something up for an exact body: a
 task action's current policy step without `--policy-step-id`, a hosted MCP
 server's catalog id (`mcp servers update-credentials` without `--catalog-id`), or the caller for
@@ -424,9 +428,11 @@ resource with `--resource-id` likewise means you drop
 - Every named-value flag (`--state`, `--status`, `--type`, `--auth`,
   `--unbind-policy`, `--error-format`, `--method`, ...) ignores ASCII case,
   whitespace and `-` vs `_`, and takes the full API name too; `--help` lists
-  the short names. An unknown or non-ASCII value exits 2 before any request.
-  Where `--help` says "or any `PREFIX_*` value", a value with that prefix is
-  sent upper-cased, `-` turned to `_`; `users list --status` and
+  the short names. An unknown or non-ASCII value exits 2 before any request,
+  and so does a value that is only whitespace: it is a usage error, not "no
+  filter". Only omitting the flag (or, for a filter, passing an empty string)
+  leaves it unset. Where `--help` says "or any `PREFIX_*` value", a value with
+  that prefix is sent upper-cased, `-` turned to `_`; `users list --status` and
   `entitlements create --resource-type` send any ASCII value that way. The
   only rewrites to a different enum are listed aliases:
   `MCP_TOOL_STATE_PENDING` → `MCP_TOOL_STATE_PENDING_REVIEW`, and

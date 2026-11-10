@@ -71,3 +71,70 @@ func TestPathHasBadSegment(t *testing.T) {
 		})
 	}
 }
+
+// TestIsDotSegmentID pins the single-segment form the CLI's pre-send
+// validation uses on a body-carried id value (no path, so no empty-segment
+// rule -- blank values are refused by a different check).
+func TestIsDotSegmentID(t *testing.T) {
+	cases := []struct {
+		name  string
+		value string
+		want  bool
+	}{
+		{"dot", ".", true},
+		{"dot-dot", "..", true},
+		{"dot matrix", ".;", true},
+		{"dot-dot matrix", "..;x", true},
+		{"dot-dot matrix empty", "..;", true},
+		{"encoded dot", "%2E", true},
+		{"encoded dot-dot", "%2e%2E", true},
+		{"encoded dot-dot matrix", "%2E%2E;", true},
+		{"padded dot", " . ", true},
+		{"padded dot-dot", " .. ", true},
+		{"padded dot-dot matrix", " ..;x ", true},
+		{"padded encoded dot", " %2E ", true},
+
+		{"empty", "", false},
+		{"slash", "/", false},
+		{"dotted id", "a.b", false},
+		{"leading dots", "..a", false},
+		{"trailing dot", "a.", false},
+		{"triple dot", "...", false},
+		{"triple dot matrix", "...;", false},
+		{"semicolon id", "a;b", false},
+		{"slash inside", "x/..", false},
+		{"undecodable percent", "%zz", false},
+		{"padded dotted id", " a.b ", false},
+		{"space inside", "a . b", false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := IsDotSegmentID(tc.value); got != tc.want {
+				t.Errorf("IsDotSegmentID(%q) = %v, want %v", tc.value, got, tc.want)
+			}
+		})
+	}
+}
+
+// The server trims a segment before resolving dots, so a padded dot segment
+// must be refused exactly like an unpadded one -- and a padded real id must
+// still pass.
+func TestPathHasBadSegmentPaddedDot(t *testing.T) {
+	cases := []struct {
+		path string
+		want bool
+	}{
+		{"/api/v1/users/ .. ", true},
+		{"/api/v1/users/.. ", true},
+		{"/api/v1/users/ ..", true},
+		{"/api/v1/users/%20..%20", true},
+		{"/api/v1/users/ ..;x ", true},
+		{"/api/v1/users/ a.b ", false},
+		{"/api/v1/users/a . b", false},
+	}
+	for _, tc := range cases {
+		if got := pathHasBadSegment(tc.path); got != tc.want {
+			t.Errorf("pathHasBadSegment(%q) = %v, want %v", tc.path, got, tc.want)
+		}
+	}
+}

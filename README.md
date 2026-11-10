@@ -1134,7 +1134,7 @@ both print identical output.
   `tasks get`. `mcp tools approve` prints one compact JSON line per tool.
 - **`api`** outputs pretty-printed JSON. With `--paginate`, outputs NDJSON (one list item per line). A `200` whose body is not JSON is an error (exit `6`), not a silent pass-through — a `--path` that escapes the API prefix can reach the web app and return HTML, which used to print as though it had succeeded. An empty body still succeeds, since some endpoints answer a write with nothing.
 - **`docs`** commands output NDJSON (`search`, `endpoints`), pretty JSON (`endpoint`, `openapi` is YAML), or plain text (`page`).
-- List commands auto-paginate by default, except the single-request ones the agent guide names under Pagination (the `role-mining` and `findings …-rules` lists warn on stderr when a result is partial). Pass `--page-token` to fetch a single page manually. A page holding only rows already printed is skipped (apart from any rows without an id); a page with any new row is printed whole. If the server's cursor stops advancing, or sends 100 empty pages in a row (`export events` excepted), the command keeps the rows already printed, warns that results are INCOMPLETE, and exits `6`. A page whose rows all lack the id the command reads is an unrecognized response (exit `6`); commands keyed on several fields, such as `grants list` and `entitlements list`, print such rows instead.
+- List commands auto-paginate by default, except the single-request ones the agent guide names under Pagination (the `role-mining` and `findings …-rules` lists warn on stderr when a result is partial). Pass `--page-token` with a non-empty cursor to fetch a single page manually; supplying the flag at all disables auto-pagination, so a blank value is a usage error (exit 2) rather than an empty filter. A page holding only rows already printed is skipped (apart from any rows without an id); a page with any new row is printed whole. If the server's cursor stops advancing, or sends 100 empty pages in a row (`export events` excepted), the command keeps the rows already printed, warns that results are INCOMPLETE, and exits `6`. A page whose rows all lack the id the command reads is an unrecognized response (exit `6`); commands keyed on several fields, such as `grants list` and `entitlements list`, print such rows instead.
 - `--page-size` **requests** a per-call batch size (max 100; `mcp tools history` and `mcp bindings history` allow 200). It is not a guarantee: a page can contain more rows than you asked for, by an amount that varies per endpoint and per size — `apps list --page-size 10` returned 23 rows, `policies list` 12, `users list` exactly 10. A positive value below 5 usually returns 5, though `policies list` floors at 6 and `mcp servers catalog list` has no floor. `--page-size 0` means the server's default of 25, not "none". A value over the max is clamped by c1i rather than rejected. A negative `--page-size` or `--limit` is a usage error (exit 2), rejected before any request. Use `--limit N` for an exact total: it is enforced client-side, so it holds even when a page overshoots, and it stops auto-pagination once reached.
 
 ### Repeatable flags
@@ -1163,7 +1163,9 @@ Every flag that takes a named value (`--state`, `--status`, `--type`,
 whitespace are ignored, `-` and `_` are the same, and the full API name is
 accepted in any case (`--state pending-review`, `--state
 mcp_tool_state_approved`). Its `--help` lists the short names. An unknown or
-non-ASCII value is a usage error (exit 2), rejected before any request.
+non-ASCII value is a usage error (exit 2), rejected before any request, and so
+is a whitespace-only value — it is not "no filter". Only omitting the flag
+(or, for a filter, passing an empty string) leaves it unset.
 
 Where `--help` says "or any `PREFIX_*` value", a value carrying that prefix
 is sent upper-cased with `-` changed to `_`, so an enum newer than c1i still

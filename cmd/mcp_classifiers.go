@@ -594,6 +594,9 @@ func init() {
 	mcpClassifiersCmd.AddCommand(mcpClassifiersListCmd, mcpClassifiersGetCmd, mcpClassifiersCreateCmd, mcpClassifiersUpdateCmd, mcpClassifiersDeleteCmd)
 	mcpClassifierBindingsCmd.AddCommand(mcpClassifierBindingsListCmd, mcpClassifierBindingsCreateCmd, mcpClassifierBindingsDeleteCmd)
 	mcpClassifierTemplatesCmd.AddCommand(mcpClassifierTemplatesListCmd, mcpClassifierTemplatesGetCmd, mcpClassifierTemplatesInstantiateCmd, mcpClassifierTemplatesAddRuleCmd)
+	// <template-id> only ever reaches the request body (the classifier id is
+	// in the path), so the root pre-run needs it marked to refuse "."/"..".
+	markBodyIDArgs(mcpClassifierTemplatesAddRuleCmd, 1)
 	mcpClassifierPolicyCmd.AddCommand(mcpClassifierPolicyShowCmd, mcpClassifierPolicyUpdateCmd)
 	mcpClassifierToolGatesCmd.AddCommand(mcpClassifierToolGatesListCmd, mcpClassifierToolGatesSearchCmd, mcpClassifierToolGatesGetCmd, mcpClassifierToolGatesCreateCmd, mcpClassifierToolGatesUpdateCmd, mcpClassifierToolGatesDeleteCmd)
 	for _, command := range []*cobra.Command{

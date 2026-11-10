@@ -3,7 +3,6 @@ package cmd
 import (
 	"encoding/json"
 	"fmt"
-	"strings"
 
 	"github.com/spf13/cobra"
 )
@@ -53,8 +52,9 @@ Combine with --limit to bound the work.`,
 			return fmt.Errorf("authentication failed: %w", err)
 		}
 
-		// Blank means no filter, as before.
-		stateFilter, err := executionStateFlag.parse(strings.TrimSpace(mustGetString(cmd, "state")))
+		// Empty means no filter; whitespace-only reaches the parser, which
+		// rejects a blank key rather than silently dropping the filter.
+		stateFilter, err := executionStateFlag.parse(mustGetString(cmd, "state"))
 		if err != nil {
 			return err
 		}
