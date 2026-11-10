@@ -223,6 +223,12 @@ func bindGlobalEnvSettings() {
 func validateGlobalSettings(cmd *cobra.Command) error {
 	local := isLocalOnlyRequest(cmd)
 	var cfg *viper.Viper
+	if !local {
+		cfg = viper.New()
+		if err := loadConfigFile(cfg); err != nil {
+			return err
+		}
+	}
 	for _, s := range globalEnvSettings {
 		if s.parse == nil || (local && !s.everywhere) {
 			continue
@@ -248,7 +254,7 @@ func validateGlobalSettings(cmd *cobra.Command) error {
 		}
 		if cfg == nil {
 			cfg = viper.New()
-			loadConfigFile(cfg)
+			_ = loadConfigFile(cfg) // local-only: a broken file must not fail completion
 		}
 		raw := cfg.Get(s.key)
 		if raw == nil {
@@ -433,18 +439,37 @@ func init() {
 	bindGlobalEnvSettings()
 }
 
-func initConfig() { loadConfigFile(viper.GetViper()) }
+// initConfig's error is reported by validateGlobalSettings, which reads the
+// same file; failing here would also break completion.
+func initConfig() { _ = loadConfigFile(viper.GetViper()) }
 
-// loadConfigFile reads ~/.c1i.yaml into v, or nothing without a usable home.
-func loadConfigFile(v *viper.Viper) {
+// loadConfigFile reads ~/.c1i.yaml into v. A missing file or home is fine; a
+// file that exists but cannot be read or parsed is an error naming it.
+func loadConfigFile(v *viper.Viper) error {
 	home, err := config.HomeDir()
 	if err != nil {
-		return
+		return nil
 	}
 	v.AddConfigPath(home)
 	v.SetConfigName(".c1i")
 	v.SetConfigType("yaml")
-	_ = v.ReadInConfig()
+	err = v.ReadInConfig()
+	path := v.ConfigFileUsed()
+	if path == "" {
+		path = filepath.Join(home, ".c1i.yaml")
+	}
+	var notFound viper.ConfigFileNotFoundError
+	if err == nil {
+		return nil
+	}
+	if errors.As(err, &notFound) {
+		// viper skips a directory in the file's place as "not found".
+		if fi, serr := os.Stat(path); serr == nil && fi.IsDir() {
+			return &usageError{fmt.Errorf("cannot use config file %s: it is a directory", path)}
+		}
+		return nil
+	}
+	return &usageError{fmt.Errorf("cannot use config file %s: %w", path, err)}
 }
 
 // GetBaseURL returns the configured base URL or exits with an error. Embedded

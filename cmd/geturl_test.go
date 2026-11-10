@@ -265,7 +265,7 @@ func TestRelativeHomeSkipsConfigFile(t *testing.T) {
 		t.Fatal(err)
 	}
 	v := viper.New()
-	loadConfigFile(v)
+	_ = loadConfigFile(v)
 	if got := v.GetString("url"); got != "" {
 		t.Errorf("read url %q from the working directory's .c1i.yaml", got)
 	}

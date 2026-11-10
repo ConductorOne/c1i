@@ -105,7 +105,8 @@ A non-empty env value that doesn't parse (`C1I_DRY_RUN=yes`,
 request; an empty one means unset. A flag set on the command line overrides
 its env var entirely, so a bad env value is then ignored. The same keys in
 `~/.c1i.yaml` (`dry_run`, `debug`, `max_retries`, `error_format`) are validated
-alike, naming the file and key.
+alike, naming the file and key. A `~/.c1i.yaml` that exists but can't be read
+or parsed exits 2 naming the file, even with `--url` (a missing one is fine).
 
 `--error-format json` is the one worth setting by default if you parse
 failures: stderr becomes NDJSON. Error objects carry `"error"` (select them

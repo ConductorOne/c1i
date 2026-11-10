@@ -286,6 +286,9 @@ A non-empty `C1I_DEBUG`, `C1I_DRY_RUN`, `C1I_MAX_RETRIES` or
 before any request; the flag given on the command line overrides the variable
 entirely. The same keys in `~/.c1i.yaml` (`dry_run`, `debug`, `max_retries`,
 `error_format`) are checked the same way, and the error names the file and key.
+A `~/.c1i.yaml` that exists but can't be read or parsed (invalid YAML, not a
+mapping, a directory, no read permission) exits `2` naming the file, even with
+`--url`; a missing file is fine, and completion ignores a broken one.
 
 This covers the token mint too: minting or refreshing the OAuth2 bearer
 c1i authenticates with is itself a request, subject to the same 429 retry
