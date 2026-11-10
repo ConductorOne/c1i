@@ -306,7 +306,7 @@ APP_ID=$(c1i apps create --display-name "Example" | jq -er .id)
 |---|---|---|
 | 0 | success | — |
 | 1 | generic / unclassified error | inspect the message; on a write, read `applied` (a `--wait` timeout or failed stdout write is `true`) before retrying |
-| 2 | usage error (bad flags/args, an empty, `.` or `..` id, a blank required or id flag or positional, a missing, malformed, `null` or wrong-shape `--*-file` input, a non-object element in an array `--*-file` or `--body-file`, a refused redirect, or any API `4xx` other than `401`/`403`/`404`/`408`/`429`/`499`) | fix the invocation, don't retry as-is — but read the message first: an API `4xx` can also be a state rejection (e.g. `task is closed`) rather than a bad argument |
+| 2 | usage error (bad flags/args, an empty, `.` or `..` id, a blank required or id flag or positional, a missing, malformed, `null` or wrong-shape `--*-file` input, a non-object element in an array `--*-file` or `--body-file`, a refused redirect (but `upgrade` and the `docs` commands exit `8`), or any API `4xx` other than `401`/`403`/`404`/`408`/`429`/`499`) | fix the invocation, don't retry as-is — but read the message first: an API `4xx` can also be a state rejection (e.g. `task is closed`) rather than a bad argument |
 | 3 | not authenticated, or API `401`/`403` | re-authenticate (`c1i auth login`); a scoped credential needs a role that covers the call |
 | 4 | API `404` | stop — the resource/path doesn't exist |
 | 5 | API `429` | back off and retry |
@@ -428,10 +428,10 @@ resource with `--resource-id` likewise means you drop
 - Every named-value flag (`--state`, `--status`, `--type`, `--auth`,
   `--unbind-policy`, `--error-format`, `--method`, ...) ignores ASCII case,
   whitespace and `-` vs `_`, and takes the full API name too; `--help` lists
-  the short names. An unknown or non-ASCII value exits 2 before any request,
-  and so does a value that is only whitespace: it is a usage error, not "no
-  filter". Only omitting the flag (or, for a filter, passing an empty string)
-  leaves it unset. Where `--help` says "or any `PREFIX_*` value", a value with
+  the short names. An unknown or non-ASCII value exits 2 before any request.
+  An empty string is the same as omitting the flag (the filter stays unset); a
+  whitespace-only value is a usage error (exit 2), not "no filter". A repeatable
+  flag such as `--unbind-policy` rejects an empty occurrence instead. Where `--help` says "or any `PREFIX_*` value", a value with
   that prefix is sent upper-cased, `-` turned to `_`; `users list --status` and
   `entitlements create --resource-type` send any ASCII value that way. The
   only rewrites to a different enum are listed aliases:

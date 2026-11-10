@@ -276,7 +276,7 @@ tracked root file outside its allowlist. Stage explicit paths rather than `-A`.
   |------|---------|
   | `0` | ok |
   | `1` | generic |
-  | `2` | usage (bad flags/args, an empty, `.` or `..` id, a blank required or id flag or positional, a missing, malformed, `null` or wrong-shape `--*-file` input, a non-object element in an array `--*-file` or `--body-file`, a refused redirect, or any API `4xx` other than `401`/`403`/`404`/`408`/`429`/`499`) |
+  | `2` | usage (bad flags/args, an empty, `.` or `..` id, a blank required or id flag or positional, a missing, malformed, `null` or wrong-shape `--*-file` input, a non-object element in an array `--*-file` or `--body-file`, a refused redirect (but `upgrade` and the `docs` commands exit `8`), or any API `4xx` other than `401`/`403`/`404`/`408`/`429`/`499`) |
   | `3` | auth (`401`/`403`) |
   | `4` | not-found (`404`) |
   | `5` | rate-limited (`429`) |
