@@ -402,7 +402,7 @@ $ cat trace.log
   pages in a row, at least 25 rows in all, holding only rows already seen), or
   it sends 100 empty pages in a row (`export events` excepted), the command
   keeps the rows already printed, warns on stderr that results are INCOMPLETE
-  naming the route, and exits `6`; every list command has this guard. A page whose
+  naming the route, and exits `6`; every auto-paginating list command stops on a stuck cursor. A page whose
   rows all lack the id the command reads is an unrecognized response (exit `6`);
   commands keyed on several fields, such as `grants list` and
   `entitlements list`, print such rows instead.
