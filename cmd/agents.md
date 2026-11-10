@@ -11,7 +11,7 @@ required_bins:
 You are an AI agent using `c1i`, the CLI for the C1.ai API. Read this once,
 early — it covers what `--help` can't: getting the tenant right, output
 contracts, exit codes, and when to reach for `c1i api`. Save it locally with
-`c1i docs agents -o AGENTS.md`. For the full reference, run `c1i docs readme`;
+`c1i docs agents -o AGENTS.md` (`-o -` is stdout). For the full reference, run `c1i docs readme`;
 `c1i docs changelog` prints the migration notes (both embedded, no network).
 
 ## Tenant and auth

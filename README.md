@@ -1802,7 +1802,7 @@ c1i docs agents [--output AGENTS.md]
 
 # Print the README and CHANGELOG embedded in the binary (no network). The
 # README is the full reference; "docs agents" is the concise agent guide.
-# Both take --output FILE.
+# Both take --output FILE ("-" is stdout, not a file named -).
 c1i docs readme
 c1i docs changelog
 

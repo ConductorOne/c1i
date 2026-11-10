@@ -376,6 +376,9 @@ already behaved this way.
 
 ### Fixed
 
+- `docs readme|changelog|agents -o -` wrote a file named `-`; `-` now means
+  stdout.
+
 - A blank `--update-mask " "` with `--body-file` on `policies update` and
   `automations update` said the mask was required; it now says it is blank.
 
