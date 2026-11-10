@@ -56,7 +56,9 @@ type listPaginationCase struct {
 func resetCmdFlags(t *testing.T, cmd *cobra.Command) {
 	t.Helper()
 	resetFlag := func(f *pflag.Flag) {
-		if sv, ok := f.Value.(pflag.SliceValue); ok {
+		if r, ok := f.Value.(interface{ Reset() }); ok {
+			r.Reset()
+		} else if sv, ok := f.Value.(pflag.SliceValue); ok {
 			_ = sv.Replace(nil)
 		} else {
 			_ = f.Value.Set(f.DefValue)

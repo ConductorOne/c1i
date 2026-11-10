@@ -11,7 +11,7 @@ required_bins:
 You are an AI agent using `c1i`, the CLI for the C1.ai API. Read this once,
 early — it covers what `--help` can't: getting the tenant right, output
 contracts, exit codes, and when to reach for `c1i api`. Save it locally with
-`c1i docs agents -o AGENTS.md`. For the full reference, run `c1i docs readme`;
+`c1i docs agents -o AGENTS.md` (`-o -` is stdout). For the full reference, run `c1i docs readme`;
 `c1i docs changelog` prints the migration notes (both embedded, no network).
 
 ## Tenant and auth
@@ -95,9 +95,9 @@ apply it for a whole session; the flag wins for a single invocation.
 |---|---|---|
 | `--url` | `C1I_URL` | tenant host — see above |
 | `--fields` | `C1I_FIELDS` | comma-separated dot-paths to keep in JSON output — see "Reading output" |
-| `--dry-run` | `C1I_DRY_RUN` | preview a C1 REST mutation as one JSON object (`.requests[]`: method, URL, body); it never has an `id` (`upgrade --dry-run` prints plain `[dry-run]` text instead); unsupported for `mcp gateway call` and `auth login` |
+| `--dry-run` | `C1I_DRY_RUN` | preview a C1 REST mutation as one JSON object (`.requests[]`: method, URL, body); it never has an `id`, and credential fields print as `[redacted]` (`upgrade --dry-run` prints plain `[dry-run]` text instead); unsupported for `mcp gateway call` and `auth login` |
 | `--debug` | `C1I_DEBUG` | trace API HTTP requests (method, URL, status, timing) to stderr |
-| `--max-retries` | `C1I_MAX_RETRIES` | retries for transient API failures (`429`/`5xx`); `0` disables |
+| `--max-retries` | `C1I_MAX_RETRIES` | retries for transient API failures (`429`/`5xx`); `0` disables; negative exits 2 (flag, env and config alike) |
 | `--error-format` | `C1I_ERROR_FORMAT` | `text` (default) or `json` |
 
 A non-empty env value that doesn't parse (`C1I_DRY_RUN=yes`,
@@ -105,7 +105,9 @@ A non-empty env value that doesn't parse (`C1I_DRY_RUN=yes`,
 request; an empty one means unset. A flag set on the command line overrides
 its env var entirely, so a bad env value is then ignored. The same keys in
 `~/.c1i.yaml` (`dry_run`, `debug`, `max_retries`, `error_format`) are validated
-alike, naming the file and key.
+alike, naming the file and key. A `~/.c1i.yaml` that exists but can't be read
+or parsed exits 2 naming the file, even with `--url` (a missing one is fine; `docs`, `help` and
+`version` ignore it).
 
 `--error-format json` is the one worth setting by default if you parse
 failures: stderr becomes NDJSON. Error objects carry `"error"` (select them
@@ -297,7 +299,7 @@ Choose the simplest output tool:
 # Known keys: prefer c1i's built-in projection
 c1i users list --fields id,email
 # Conditional selection: jq is appropriate
-DELETED_APPS="$(c1i apps list | jq -c 'if .deleted_at then . else empty end')"
+APPS_WITH_USERS="$(c1i apps list | jq -c 'if .user_count > 0 then . else empty end')"
 
 # Mutation output: never projected; extract the id with jq -er
 APP_ID=$(c1i apps create --display-name "Example" | jq -er .id)
@@ -378,7 +380,10 @@ the server returns.
 `--dry-run` (or `C1I_DRY_RUN`) previews a C1 REST mutation without sending
 it: one JSON object, `{"dryRun":true,"requests":[{"method","url","body"}]}`,
 never with an `id`, plus a stderr notice (`upgrade --dry-run` instead prints plain
-`[dry-run]` text lines). It needs a configured URL (exit 2
+`[dry-run]` text lines). Credential fields (names ending in token, secret,
+password, signature, apikey and the like; header values; a URL's username or
+password and secret-named parameters) print as `[redacted]`, a non-JSON body as
+`"[redacted: not JSON]"`; the rest is as sent. It needs a configured URL (exit 2
 without) and refuses an empty, `.` or `..` id (exit 2) as a real send does —
 including one carried only in a request body (`--grant-policy-id`,
 `--owner-id`, ...), so the preview cannot print a value a send would refuse. It
@@ -474,7 +479,8 @@ resource with `--resource-id` likewise means you drop
   owners work the same way:
   read with `c1i entitlements owners <entitlement-id> --app-id <app-id>`,
   write with `entitlements add-owner`/`remove-owner <entitlement-id>
-  --app-id --user-id` (one user per call) or `entitlements set-owners <entitlement-id> --app-id
+  --app-id --user-id` (one user per call; a repeated `--user-id` exits 2, as on
+  `apps add-owner|remove-owner` and `accounts set-owner`) or `entitlements set-owners <entitlement-id> --app-id
   --user-id ...`. `set-owners` replaces the list and needs at least one
   `--user-id`; an unknown user exits 2 before the write, because the API
   would silently drop it and could leave no owners. `remove-owner` exits 4
@@ -588,6 +594,7 @@ resource with `--resource-id` likewise means you drop
   number. The `tool_count` in NDJSON list rows is a real number. It exits `8`
   when the server is unreachable (`reachable` is not `true`), after printing
   the same JSON, so check the exit code before reading `toolCount`.
+  `--dry-run` previews the probe and sends nothing.
 - `mcp servers search` only includes `tool_count` when you pass
   `--tool-state`; the API doesn't compute a count without a state filter, so
   a filterless search omits the key rather than showing a 0 that would look
@@ -646,8 +653,8 @@ resource with `--resource-id` likewise means you drop
   `720h`: anything else exits `2` before sending, and over `720h` update returns
   `callback_timeout must be between 0 and 30 days`. A webhook has no
   signing secret.
-- `apps delete <app-id>` is soft: the app is marked with `deletedAt`, and
-  `apps list` rows carry a `deleted_at` field.
+- `apps delete <app-id>` is soft: the app is marked with `deletedAt`
+  (`apps get` shows it), and `apps list` omits deleted apps.
 - `entitlements delete <entitlement-id>` is soft: `entitlements get` still
   returns it, with `deletedAt` set.
 - `automations delete <automation-id>` is soft: the automation leaves

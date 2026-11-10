@@ -2,7 +2,11 @@ package cmd
 
 import (
 	"encoding/json"
+	"strings"
 	"testing"
+
+	"github.com/ConductorOne/c1i/internal/client"
+	"github.com/spf13/cobra"
 )
 
 // TestAppRowUserCountIsNumeric pins that user_count keeps its real numeric
@@ -25,34 +29,28 @@ func TestAppRowUserCountIsNumeric(t *testing.T) {
 	}
 }
 
-// TestAppRowDeletedAtIsNullNotEmptyString pins that deleted_at is untyped
-// nil, not "", on a live app — "" is truthy in jq and would make
-// `jq 'select(.deleted_at)'` match every row.
-func TestAppRowDeletedAtIsNullNotEmptyString(t *testing.T) {
-	tests := []struct {
-		name      string
-		deletedAt string
-		want      any
-	}{
-		{name: "live app", deletedAt: "", want: nil},
-		{name: "deleted app", deletedAt: "2026-01-02T03:04:05Z", want: "2026-01-02T03:04:05Z"},
+// `apps list` omits deleted apps, so its rows carry no deleted_at (it was
+// always null); apps get shows deletedAt.
+func TestAppsListRowsHaveNoDeletedAt(t *testing.T) {
+	if _, ok := appRow(appListItem{ID: "a1"})["deleted_at"]; ok {
+		t.Error("row still has a deleted_at key")
 	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			row := appRow(appListItem{ID: "a1", DeletedAt: tt.deletedAt})
-			got, ok := row["deleted_at"]
-			if !ok {
-				t.Fatal("row has no deleted_at key")
-			}
-			if tt.want == nil {
-				if got != nil {
-					t.Fatalf("deleted_at = %#v, want untyped nil", got)
-				}
-				return
-			}
-			if got != tt.want {
-				t.Errorf("deleted_at = %v, want %v", got, tt.want)
-			}
-		})
+	t.Setenv("C1I_URL", mutTestURL)
+	clearViperOverrides(t, "fields") // another test may have left an override
+	s := newMutServer(t, fixedReply(200, `{"list":[{"id":"a1","displayName":"A","userCount":"3"}]}`))
+	stub := func() {
+		orig := newListClient
+		newListClient = func(_ *cobra.Command, _ string) (*client.Client, error) {
+			return client.NewForTesting(s.srv.URL, s.srv.Client()), nil
+		}
+		t.Cleanup(func() { newListClient = orig })
+	}
+	r := runCLI(t, stub, nil, "apps", "list")
+	if r.err != nil || strings.Contains(r.stdout, "deleted_at") {
+		t.Errorf("exit %d (%v), stdout %q", r.exit, r.err, r.stdout)
+	}
+	r = runCLI(t, stub, nil, "apps", "list", "--fields", "deleted_at")
+	if r.exit != exitUsage {
+		t.Errorf("--fields deleted_at: exit %d (%v), want %d (matched no keys)", r.exit, r.err, exitUsage)
 	}
 }

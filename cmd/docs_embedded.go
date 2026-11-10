@@ -19,11 +19,19 @@ func SetEmbeddedDocs(readme, changelog string) {
 	embeddedReadme, embeddedChangelog = readme, changelog
 }
 
+// docOutputFile is the file --output names; "" for stdout, which "-" also means.
+func docOutputFile(cmd *cobra.Command) string {
+	output, _ := cmd.Flags().GetString("output")
+	if output == "-" {
+		return ""
+	}
+	return output
+}
+
 // emitDoc writes content to --output or stdout. label names the doc in the
 // "Wrote ..." notice and errors; shared by every embedded-doc command.
 func emitDoc(cmd *cobra.Command, label, content string) error {
-	output, _ := cmd.Flags().GetString("output")
-	if output != "" {
+	if output := docOutputFile(cmd); output != "" {
 		if err := os.WriteFile(output, []byte(content), 0o644); err != nil { // #nosec G306 -- content is a static, public doc, not sensitive
 			return fmt.Errorf("writing %s: %w", label, err)
 		}
@@ -60,13 +68,13 @@ func newEmbeddedDocCmd(use, file string, content *string, long string) *cobra.Co
 			if err := emitDoc(cmd, file, *content); err != nil {
 				return err
 			}
-			if o, _ := cmd.Flags().GetString("output"); o == "" {
+			if docOutputFile(cmd) == "" {
 				notice(cmd, noticeInfo, "Rendered markdown with working links: "+docsBlobURL(file), map[string]any{"url": docsBlobURL(file)})
 			}
 			return nil
 		},
 	}
-	c.Flags().StringP("output", "o", "", "write to file instead of stdout")
+	c.Flags().StringP("output", "o", "", "write to file instead of stdout (\"-\" is stdout)")
 	return c
 }
 

@@ -33,7 +33,8 @@ mutation. Honors --dry-run.`,
 
 func init() {
 	accountsSetOwnerCmd.Flags().String("app-id", "", "Application ID")
-	accountsSetOwnerCmd.Flags().String("user-id", "", "C1 user ID to set as owner")
+	addOnceStringFlag(accountsSetOwnerCmd, "user-id", "C1 user ID to set as owner",
+		"an account has one owner")
 	markRequired(accountsSetOwnerCmd, "app-id")
 	markRequired(accountsSetOwnerCmd, "user-id")
 	markMutating(accountsSetOwnerCmd)

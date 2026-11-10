@@ -542,6 +542,34 @@ func addRepeatableStringFlag(cmd *cobra.Command, name, usage string) {
 	cmd.Flags().StringArray(name, nil, usage)
 }
 
+// onceStringValue is a string flag value that refuses a second occurrence,
+// which pflag would otherwise resolve silently to the last one.
+type onceStringValue struct {
+	val, hint string
+	set       bool
+}
+
+func (o *onceStringValue) String() string { return o.val }
+func (o *onceStringValue) Type() string   { return "string" }
+
+// Reset exists for test isolation: cmd flags are package-level, so the harness
+// resets them between runs.
+func (o *onceStringValue) Reset() { o.val, o.set = "", false }
+
+func (o *onceStringValue) Set(v string) error {
+	if o.set {
+		return errors.New("can be given once; " + o.hint)
+	}
+	o.val, o.set = v, true
+	return nil
+}
+
+// addOnceStringFlag registers a string flag that exits 2 when repeated; hint
+// says what to do instead.
+func addOnceStringFlag(cmd *cobra.Command, name, usage, hint string) {
+	cmd.Flags().Var(&onceStringValue{hint: hint}, name, usage)
+}
+
 // repeatableStringFlagError is the one wording for a repeatable flag given an
 // empty value, defined once so its callers cannot drift apart.
 func repeatableStringFlagError(name string) error {
@@ -658,8 +686,11 @@ func bodyFileMask(cmd *cobra.Command, exclusive ...string) (mask string, usingBo
 			return "", true, &usageError{fmt.Errorf("--body-file is mutually exclusive with --%s", strings.Join(exclusive, "/--"))}
 		}
 	}
-	if !hasVisibleRune(mask) {
+	if !f.Changed("update-mask") {
 		return "", true, &usageError{fmt.Errorf("--update-mask is required together with --body-file")}
+	}
+	if !hasVisibleRune(mask) {
+		return "", true, &usageError{fmt.Errorf("--update-mask is blank; name the changed field paths, comma-separated")}
 	}
 	paths := strings.Split(mask, ",")
 	for i, p := range paths {

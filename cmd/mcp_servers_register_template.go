@@ -48,23 +48,23 @@ func authArmTemplate(mode string) (map[string]any, error) {
 			// catalog entry advertises (supportedOauth2Modes); the backend may
 			// store a *resolved* grant such as ..._MODE_AUTHORIZATION_CODE, so
 			// a read-back mode can legitimately differ from what you sent.
-			"mode":         "MCP_SERVER_AUTH_OAUTH2_MODE_SERVICE",
-			"clientId":     "<oauth-client-id>",
-			"clientSecret": "<oauth-client-secret>",
-			"authorizeUrl": "https://provider.example/oauth/authorize",
-			"tokenUrl":     "https://provider.example/oauth/token",
-			"scopes":       []string{"<scope>"},
+			"mode":          "MCP_SERVER_AUTH_OAUTH2_MODE_SERVICE",
+			"clientId":      "<oauth-client-id>",
+			keyClientSecret: "<oauth-client-secret>",
+			"authorizeUrl":  "https://provider.example/oauth/authorize",
+			"tokenUrl":      "https://provider.example/oauth/token",
+			"scopes":        []string{"<scope>"},
 		}}, nil // #nosec G101 -- placeholder template values (e.g. "<oauth-client-secret>"), not real secrets
 	case "awsSigv4":
 		return map[string]any{"awsSigv4": map[string]any{
-			"accessKeyId":     "<aws-access-key-id>",
-			"secretAccessKey": "<aws-secret-access-key>",
-			"sessionToken":    "",
+			"accessKeyId":      "<aws-access-key-id>",
+			keySecretAccessKey: "<aws-secret-access-key>",
+			keySessionToken:    "",
 		}}, nil // #nosec G101 -- placeholder template values (e.g. "<aws-secret-access-key>"), not real secrets
 	case "googleServiceAccount":
 		return map[string]any{"googleServiceAccount": map[string]any{
-			"credentialsJson": "<service-account-credentials-json-string>",
-			"scopes":          []string{"<scope>"},
+			keyCredentialsJSON: "<service-account-credentials-json-string>",
+			"scopes":           []string{"<scope>"},
 		}}, nil
 	default:
 		return nil, fmt.Errorf("--auth %q has no template", arm)
