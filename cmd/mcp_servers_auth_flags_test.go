@@ -132,7 +132,7 @@ func TestMcpAuthFlagsCompleteValuesPass(t *testing.T) {
 				}
 				for _, n := range c.companions {
 					want := c.values[n]
-					if secretBodyKeys[secretKey(jsonKeyFor(n))] {
+					if isSecretKey(jsonKeyFor(n)) {
 						want = redactedPlaceholder // every preview masks credentials
 					}
 					if !strings.Contains(r.stdout, `"`+jsonKeyFor(n)+`": "`+want+`"`) {

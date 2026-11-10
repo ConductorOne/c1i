@@ -64,9 +64,8 @@ func ParseURL(input string) (result string, warnings []string, err error) {
 				return "", nil, fmt.Errorf("c1i requires https; got scheme %q", u.Scheme)
 			}
 			if u.User != nil {
-				warnings = append(warnings, fmt.Sprintf(
-					"--url embedded credentials (user %q) were dropped; %s",
-					u.User.Username(), credentialsNotInURL))
+				// The username is not named: https://<token>@host puts a secret there.
+				warnings = append(warnings, "--url embedded credentials were dropped; "+credentialsNotInURL)
 			}
 			return "https://" + strings.ToLower(u.Host), warnings, nil
 		}

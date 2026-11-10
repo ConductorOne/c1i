@@ -119,8 +119,8 @@ var authArmRules = map[string]authArmRule{
 }
 
 // The auth-arm fields that hold a credential. The builders here and in the
-// register template use these names, and secretBodyKeys (cmd/mutation.go) is
-// built from them, so a preview masks exactly what the builders write.
+// register template use these names, and isSecretKey (cmd/mutation.go) names the ones its
+// suffix rule does not cover, so a preview masks what the builders write.
 const (
 	keyToken           = "token"
 	keyHeaderValue     = "headerValue"
@@ -129,13 +129,6 @@ const (
 	keySecretAccessKey = "secretAccessKey"
 	keySessionToken    = "sessionToken"
 	keyCredentialsJSON = "credentialsJson"
-	// Credential names the builders don't write but a --external-config-file
-	// or `api --body` can carry.
-	keyAuthorization = "authorization"
-	keyAPIKey        = "apiKey"
-	keyAccessToken   = "accessToken"
-	keyRefreshToken  = "refreshToken"
-	keySecret        = "secret"
 )
 
 // authArmPerUserOptional is the companions a PER_USER server may leave blank:

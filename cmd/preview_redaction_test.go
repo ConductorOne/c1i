@@ -3,6 +3,7 @@ package cmd
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"strings"
 	"testing"
@@ -169,8 +170,20 @@ func TestPreviewRedactsUrlsHeadersAndKeyNames(t *testing.T) {
 			nil, []string{"a=b=c", "d=1"}},
 		{"path-only semicolon param", map[string]any{"url": "https://h.example/p;api_key=M2leak/x"},
 			[]string{"M2leak"}, nil},
-		{"a plain key field is not a credential", map[string]any{"key": "visibleKey", "sig": "visibleSig"},
-			nil, []string{"visibleKey", "visibleSig"}},
+		{"a plain key field is not a credential", map[string]any{"key": "visibleKey"},
+			nil, []string{"visibleKey"}},
+		{"scheme-less token@host", map[string]any{"url": "TOKENleak@h.example/p"},
+			[]string{"TOKENleak"}, []string{"h.example/p"}},
+		{"git@ is not a secret", map[string]any{"a": "git@github.example:org/repo.git", "b": "ssh://git@github.example/org/repo"},
+			nil, []string{"git@github.example:org/repo.git", "ssh://git@github.example/org/repo"}},
+		{"; inside a query value", map[string]any{"url": "https://h.example/x?token=a;bleak&ok=1"},
+			[]string{"bleak"}, []string{"ok=1"}},
+		{"# inside a query value", map[string]any{"url": "https://h.example/x?token=a#cleak"},
+			[]string{"cleak"}, nil},
+		{"percent-encoded pair", map[string]any{"url": "https://h.example/x?token%3Dpleak&ok=1"},
+			[]string{"pleak"}, []string{"ok=1"}},
+		{"; separated pair after a plain one", map[string]any{"url": "https://h.example/x?a=1;token=sleak"},
+			[]string{"sleak"}, []string{"a=1"}},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -237,5 +250,49 @@ func TestRedactPreviewBodiesFailsClosedOnNonJSON(t *testing.T) {
 	}
 	if !strings.Contains(string(out[0].Body), "[redacted: not JSON]") {
 		t.Errorf("body = %q, want the not-JSON marker", out[0].Body)
+	}
+}
+
+// The suffix rule: every credential-shaped name, in every spelling, as a body
+// field and as a URL parameter; and names that merely contain one stay visible.
+func TestSecretNameSuffixRule(t *testing.T) {
+	secret := []string{"X-Amz-Security-Token", "x-api-key", "X-Goog-Signature", "privateKey", "secret_key",
+		"passphrase", "bearer", "bearer_token", "sas_token", "clientSecret", "db_password", "Authorization", "auth", "code", "sig",
+		"apiKey", "accessToken", "client_credentials", "secretAccessKey", "headerValue", "credentialsJson"}
+	visible := []string{"tokenType", "secretName", "author", "tokenSharing", "displayName", "key", "authority", "encoded"}
+	forms := map[string]func(string) string{
+		"as-is": func(n string) string { return n },
+		"upper": strings.ToUpper,
+		"snake": func(n string) string { return strings.ReplaceAll(spellSnake(n), "-", "_") },
+		"kebab": func(n string) string { return strings.ReplaceAll(spellSnake(n), "_", "-") },
+	}
+	for _, n := range secret {
+		for fname, f := range forms {
+			name := f(n)
+			if body := redactSecrets(map[string]any{name: "BODYleak"}); strings.Contains(fmt.Sprint(body), "BODYleak") {
+				t.Errorf("body field %q (%s) not masked", name, fname)
+			}
+			if got := redactURL("https://h.example/p?" + name + "=PARAMleak&ok=1"); strings.Contains(got, "PARAMleak") || !strings.Contains(got, "ok=1") {
+				t.Errorf("parameter %q (%s) -> %q", name, fname, got)
+			}
+		}
+	}
+	for _, n := range visible {
+		body := redactSecrets(map[string]any{n: "KEEPme"})
+		if !strings.Contains(fmt.Sprint(body), "KEEPme") && n != "key" {
+			t.Errorf("body field %q was masked", n)
+		}
+		if n == "key" && !strings.Contains(fmt.Sprint(body), "KEEPme") {
+			t.Errorf("body field key was masked")
+		}
+		if n != "key" {
+			if got := redactURL("https://h.example/p?" + n + "=KEEPme"); !strings.Contains(got, "KEEPme") {
+				t.Errorf("parameter %q was masked: %q", n, got)
+			}
+		}
+	}
+	// "key" is a secret only as a URL parameter.
+	if got := redactURL("https://h.example/p?key=Kleak"); strings.Contains(got, "Kleak") {
+		t.Errorf("key parameter not masked: %q", got)
 	}
 }

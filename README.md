@@ -334,9 +334,12 @@ Its only keys are `dryRun` and `requests` (one entry per request: several for
 it never has an `id`, and `body` is omitted when the request has none. A
 stderr notice, `dry run: nothing was sent`, accompanies every preview.
 
-Every preview prints credential fields as `[redacted]` (tokens, passwords,
-secrets, header values, a URL username or password, secret-named query parameters);
-everything else is shown as sent. A 0.9.2 preview showed them as typed.
+Every preview prints credential fields as `[redacted]`: fields whose name ends
+in `token`, `secret`, `password`, `signature`, `apikey` and the like (a
+best-effort suffix rule), header values, a URL's username or password, and
+secret-named URL parameters. Everything else is shown as sent, and a body that
+is not JSON prints as `"[redacted: not JSON]"`. A 0.9.2 preview showed them as
+typed.
 
 It applies to every REST write command and to non-GET `api` calls, and never
 sends that mutation. `mcp gateway call` rejects both `--dry-run` and

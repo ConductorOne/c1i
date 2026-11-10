@@ -86,8 +86,10 @@ wrapper key. New commands (see Added) follow the same contract.
     must look up an id the body needs (a task's current policy step, a
     hosted MCP server's catalog id, or the caller for `requests create`).
   - A preview refuses an empty, `.` or `..` id (exit 2), as a real send does.
-  - A preview prints credential fields (tokens, passwords, header values, a
-    URL's password) as `[redacted]`; 0.9.2 showed them as typed.
+  - A preview prints credential fields (names ending in token, secret,
+    password, signature, apikey and the like; header values; a URL's username
+    or password and secret-named parameters) as `[redacted]`, and a non-JSON
+    body as `"[redacted: not JSON]"`; 0.9.2 showed them as typed.
 - **Passing `--fields` to a mutation is a usage error (exit 2).** `C1I_FIELDS`
   is still ignored on mutations.
 - **`apps list` rows no longer carry `deleted_at`.** It was always null,
@@ -380,6 +382,9 @@ already behaved this way.
   (with `golang.org/x/sys` 0.50.0).
 
 ### Fixed
+
+- A `--url` with embedded credentials printed the username in its warning
+  (`https://<token>@host` puts a secret there); the warning no longer names it.
 
 - `docs readme|changelog|agents -o -` wrote a file named `-`; `-` now means
   stdout.

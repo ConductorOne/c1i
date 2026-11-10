@@ -139,6 +139,11 @@ func Run() int {
 //     already declares its own Args (e.g. a migrated `get <id>` command using
 //     cobra.ExactArgs(1)) is never touched.
 func attachSubcommandGuards(c *cobra.Command) {
+	// cobra's own help command takes a command name: NoArgs would break
+	// `help <cmd>` whenever it exists by the time this runs.
+	if c.Name() == "help" && c.Parent() != nil && !c.Parent().HasParent() {
+		return
+	}
 	for _, sub := range c.Commands() {
 		attachSubcommandGuards(sub)
 	}

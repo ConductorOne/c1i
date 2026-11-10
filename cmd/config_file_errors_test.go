@@ -103,7 +103,7 @@ func TestBrokenConfigFileDoesNotBreakDocsOrVersion(t *testing.T) {
 	origR, origC := embeddedReadme, embeddedChangelog
 	t.Cleanup(func() { embeddedReadme, embeddedChangelog = origR, origC })
 	embeddedReadme, embeddedChangelog = "# readme\n", "# changelog\n"
-	for _, args := range [][]string{{"docs", "readme"}, {"docs", "changelog"}, {"docs", "agents"}, {"version"}, {"help"}} {
+	for _, args := range [][]string{{"docs", "readme"}, {"docs", "changelog"}, {"docs", "agents"}, {"version"}, {"help"}, {"help", "docs"}, {"help", "api"}} {
 		t.Run(strings.Join(args, " "), func(t *testing.T) {
 			clearEnvFlags(t)
 			home := t.TempDir()
@@ -120,7 +120,36 @@ func TestBrokenConfigFileDoesNotBreakDocsOrVersion(t *testing.T) {
 // upgrade reads dry_run from the config file, so a broken file must still stop
 // it rather than silently turn a preview into an install.
 func TestUpgradeStillUsesConfigFile(t *testing.T) {
-	if !usesConfigFile(upgradeCmd) {
-		t.Error("upgrade must fail on a broken config: it reads dry_run from it")
+	clearEnvFlags(t)
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	writeFile(t, filepath.Join(home, ".c1i.yaml"), "- a\n")
+	d := newFakeDist(t)
+	useDist(t, d, nil, "0.0.1")
+	_, err := runUpgrade(t, "--dry-run")
+	if exitCode(err) != exitUsage {
+		t.Fatalf("exit = %d (%v), want %d", exitCode(err), err, exitUsage)
+	}
+	if len(d.requests) != 0 {
+		t.Errorf("upgrade fetched %v before failing", d.requests)
+	}
+}
+
+// attachSubcommandGuards (called by several tests, and by Execute) must leave
+// cobra's lazily-created help command alone: NoArgs on it breaks `help <cmd>`.
+func TestAttachSubcommandGuardsLeavesHelpCommandAlone(t *testing.T) {
+	rootCmd.InitDefaultHelpCmd()
+	attachSubcommandGuards(rootCmd)
+	help, _, err := rootCmd.Find([]string{"help"})
+	if err != nil || help.Name() != "help" {
+		t.Fatalf("no help command: %v", err)
+	}
+	if help.Args != nil {
+		t.Error("help command got an Args stamp; `help <cmd>` would be rejected")
+	}
+	clearEnvFlags(t)
+	if r := runCLI(t, nil, nil, "help", "docs"); r.err != nil {
+		t.Fatalf("help docs: exit %d: %v", r.exit, r.err)
 	}
 }

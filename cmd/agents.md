@@ -380,8 +380,10 @@ the server returns.
 `--dry-run` (or `C1I_DRY_RUN`) previews a C1 REST mutation without sending
 it: one JSON object, `{"dryRun":true,"requests":[{"method","url","body"}]}`,
 never with an `id`, plus a stderr notice (`upgrade --dry-run` instead prints plain
-`[dry-run]` text lines). Credential fields (tokens, passwords, secrets,
-header values, a URL's password) print as `[redacted]`; the rest is as sent. It needs a configured URL (exit 2
+`[dry-run]` text lines). Credential fields (names ending in token, secret,
+password, signature, apikey and the like; header values; a URL's username or
+password and secret-named parameters) print as `[redacted]`, a non-JSON body as
+`"[redacted: not JSON]"`; the rest is as sent. It needs a configured URL (exit 2
 without) and refuses an empty, `.` or `..` id (exit 2) as a real send does —
 including one carried only in a request body (`--grant-policy-id`,
 `--owner-id`, ...), so the preview cannot print a value a send would refuse. It
