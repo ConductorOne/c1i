@@ -299,7 +299,7 @@ tracked root file outside its allowlist. Stage explicit paths rather than `-A`.
   EXTERNAL-only `mcp servers` subcommands that documented no scope, a `--user-id`
   that promised "defaults to self" and 500s without it, and a `delete` that
   silently cascaded to every bound toolset's entitlement.
-  Docs and CHANGELOG are claims too: exercise the server behaviour a doc
+  Docs and CHANGELOG are claims too: exercise the server behavior a doc
   describes before writing it, rather than checking prose against prose.
 - **`api` is the escape hatch for endpoints with no first-class command.** It
   still goes through `newClient` and the output helpers, so retries and
