@@ -262,6 +262,11 @@ already behaved this way.
 
 ### Added
 
+- `docs readme` and `docs changelog` print the README and CHANGELOG embedded
+  in the binary (no network or credentials; `--output FILE` writes to a file),
+  for installs from a release archive, which ships only the binary. Stderr
+  gets the version-pinned GitHub URL that renders the markdown. `docs agents`
+  stays the concise agent guide; the README is the full reference.
 - `tasks get <task-id>` reads a single task, the same endpoint as `requests
   get`.
 - `entitlements delete <entitlement-id> --app-id` deletes an app entitlement
