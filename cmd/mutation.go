@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/url"
 	"reflect"
+	"regexp"
 	"strings"
 
 	"github.com/ConductorOne/c1i/internal/client"
@@ -595,10 +596,10 @@ func redactSecrets(v any) any {
 		out := make(map[string]any, len(x))
 		for k, e := range x {
 			sk := secretKey(k)
-			if _, isStr := e.(string); (secretBodyKeys[sk] || (authArmKeys[sk] && isStr)) && !emptyJSONValue(e) {
+			if (secretBodyKeys[sk] || (authArmKeys[sk] && isScalar(e))) && !emptyJSONValue(e) {
 				out[k] = redactedPlaceholder
-			} else if h, ok := e.(map[string]any); ok && sk == "headers" {
-				out[k] = redactHeaders(h)
+			} else if sk == "headers" {
+				out[k] = redactHeaders(e)
 			} else if str, ok := e.(string); ok {
 				out[k] = redactURL(str)
 			} else {
@@ -626,47 +627,102 @@ var authArmKeys = func() map[string]bool {
 	return m
 }()
 
-// redactURL masks an absolute URL's password (url.URL.Redacted) and the value
-// of every secret-named query parameter, leaving the rest as sent.
+// redactURL masks a URL's password (url.URL.Redacted) and the value of every
+// secret-named query or fragment parameter, leaving the rest as sent. A string
+// that does not parse as an absolute URL goes through redactURLText instead,
+// so a malformed or scheme-less one fails closed.
 func redactURL(s string) string {
 	u, err := url.Parse(s)
 	if err != nil || u.Scheme == "" || u.Host == "" {
-		return s
+		return redactURLText(s)
 	}
 	if u.User != nil {
 		if _, has := u.User.Password(); has {
 			s = u.Redacted()
 		}
 	}
-	if q := u.RawQuery; q != "" {
-		pairs := strings.Split(q, "&")
-		changed := false
-		for i, p := range pairs {
-			k, _, found := strings.Cut(p, "=")
-			if name, err := url.QueryUnescape(k); found && err == nil && secretBodyKeys[secretKey(name)] {
-				pairs[i] = k + "=" + redactedPlaceholder
-				changed = true
-			}
-		}
-		if changed {
-			s = strings.Replace(s, "?"+q, "?"+strings.Join(pairs, "&"), 1)
-		}
-	}
-	return s
+	return maskSecretPairs(s)
 }
 
-// redactHeaders masks every non-empty header value: any header can carry a
-// credential (Authorization, X-Api-Key, ...).
-func redactHeaders(h map[string]any) map[string]any {
-	out := make(map[string]any, len(h))
-	for k, v := range h {
-		if emptyJSONValue(v) {
-			out[k] = v
-		} else {
-			out[k] = redactedPlaceholder
-		}
+var (
+	urlUserinfoRE  = regexp.MustCompile(`(://[^/?#:@]*:)[^/?#]*@`)
+	bareUserinfoRE = regexp.MustCompile(`^([^/@\s:]+:)[^/@\s]*@`)
+	queryPairRE    = regexp.MustCompile(`([^&;?#=\s]+)=([^&;#\s]*)`)
+)
+
+// redactURLText is redactURL's fail-closed fallback for text url.Parse cannot
+// use: it masks a user:pass@ password and the secret-named k=v pairs after a
+// "?" or "#".
+func redactURLText(s string) string {
+	s = urlUserinfoRE.ReplaceAllString(s, "${1}"+redactedPlaceholder+"@")
+	s = bareUserinfoRE.ReplaceAllString(s, "${1}"+redactedPlaceholder+"@")
+	return maskSecretPairs(s)
+}
+
+// maskSecretPairs masks the value of each secret-named k=v pair after the
+// first "?" or "#" (pairs split on "&" or ";"), by the same key rule as bodies.
+func maskSecretPairs(s string) string {
+	i := strings.IndexAny(s, "?#")
+	if i < 0 {
+		return s
 	}
-	return out
+	return s[:i] + queryPairRE.ReplaceAllStringFunc(s[i:], func(m string) string {
+		k, _, _ := strings.Cut(m, "=")
+		if name, err := url.QueryUnescape(k); err == nil && secretBodyKeys[secretKey(name)] {
+			return k + "=" + redactedPlaceholder
+		}
+		return m
+	})
+}
+
+// redactHeaders masks every non-empty header value, as a {name: value} map or
+// a [{name, value}] list: any header can carry a credential (Authorization,
+// X-Api-Key, ...). The name fields stay.
+func redactHeaders(v any) any {
+	switch h := v.(type) {
+	case map[string]any:
+		out := make(map[string]any, len(h))
+		for k, e := range h {
+			out[k] = maskUnlessEmpty(e)
+		}
+		return out
+	case []any:
+		out := make([]any, len(h))
+		for i, e := range h {
+			m, ok := e.(map[string]any)
+			if !ok {
+				out[i] = maskUnlessEmpty(e)
+				continue
+			}
+			row := make(map[string]any, len(m))
+			for k, f := range m {
+				if n := secretKey(k); n == "name" || n == "key" || n == "headername" {
+					row[k] = f
+				} else {
+					row[k] = maskUnlessEmpty(f)
+				}
+			}
+			out[i] = row
+		}
+		return out
+	}
+	return v
+}
+
+func maskUnlessEmpty(v any) any {
+	if emptyJSONValue(v) {
+		return v
+	}
+	return redactedPlaceholder
+}
+
+// isScalar reports a JSON value that is neither an object nor an array.
+func isScalar(v any) bool {
+	switch v.(type) {
+	case map[string]any, []any:
+		return false
+	}
+	return true
 }
 
 func emptyJSONValue(v any) bool {

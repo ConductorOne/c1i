@@ -130,6 +130,16 @@ func TestPreviewRedactsUrlsHeadersAndKeyNames(t *testing.T) {
 			[]string{"K1leak", "K2leak", "K3leak", "K4leak"}, []string{"visible"}},
 		{"string directly under an arm key", map[string]any{"externalConfig": map[string]any{"bearerToken": "Sleak", "basic_auth": "Tleak"}},
 			[]string{"Sleak", "Tleak"}, nil},
+		{"semicolon query and fragment", map[string]any{"url": "https://h.example/x?a=1;token=Q1leak&b=2#access_token=Q2leak&c=3"},
+			[]string{"Q1leak", "Q2leak"}, []string{"a=1", "b=2", "c=3"}},
+		{"malformed url keeps no userinfo", map[string]any{"url": "https://us er:PWleak@h.example/x?api_key=Q3leak"},
+			[]string{"PWleak", "Q3leak"}, nil},
+		{"scheme-less userinfo", map[string]any{"url": "user:PWleak@h.example/x?secret=Q4leak&z=9"},
+			[]string{"PWleak", "Q4leak"}, []string{"z=9"}},
+		{"header array", map[string]any{"headers": []any{map[string]any{"name": "Authorization", "value": "Aleak"}, map[string]any{"name": "X-Api-Key", "value": "Bleak"}}},
+			[]string{"Aleak", "Bleak"}, []string{"Authorization"}},
+		{"non-string under arm key", map[string]any{"externalConfig": map[string]any{"awsSigv4": 12345678, "customHeader": map[string]any{"headerName": "X", "headerValue": "Hleak"}}},
+			[]string{"12345678", "Hleak"}, nil},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

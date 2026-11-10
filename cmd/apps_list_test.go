@@ -36,6 +36,7 @@ func TestAppsListRowsHaveNoDeletedAt(t *testing.T) {
 		t.Error("row still has a deleted_at key")
 	}
 	t.Setenv("C1I_URL", mutTestURL)
+	clearViperOverrides(t, "fields") // another test may have left an override
 	s := newMutServer(t, fixedReply(200, `{"list":[{"id":"a1","displayName":"A","userCount":"3"}]}`))
 	stub := func() {
 		orig := newListClient
