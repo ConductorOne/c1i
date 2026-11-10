@@ -484,6 +484,18 @@ already behaved this way.
   checks each user exists (a user read, skipped by `--dry-run`) before its
   first create; an unknown id used to exit `6` after the resource type and
   resource had already been created.
+- A `.` or `..` id carried only in a request body (for example
+  `--grant-policy-id`, `--owner-id`, `--user-id`, or the `functions usage`
+  positional) is refused with exit `2` before any request, including under
+  `--dry-run`. The preview used to print it and exit `0` while a real send
+  exited `2`, and `entitlements create --owner-id .` applied its first two
+  steps before failing.
+- A whitespace-only `--state`, `--type` or `--sort` exits `2` instead of
+  silently dropping the filter (`tasks list`, `requests list`,
+  `automations executions list`, `export events`).
+- `--page-token` set to a blank value exits `2` with a message to omit it; it
+  used to disable auto-pagination and return the first page at exit `0` with
+  nothing on stderr, so an unset shell variable truncated a list silently.
 
 ## [0.9.2] - 2026-10-21
 
