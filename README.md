@@ -379,18 +379,25 @@ a ticket in a provision step`; the value lands as `grantDuration`.
 `escalate`, `update-request-data` and `approve-with-step-up` are not wrapped;
 reach them through `c1i api`.
 
-`approve`/`deny`/`reassign` target a specific policy step. If `--policy-step-id`
-is omitted, the task's currently executing step is fetched and used
-automatically for all three — but `approve` and `reassign` require a resolvable
-step and error if they can't find one, while `deny` proceeds without a step if
-none can be derived.
+`approve`/`deny`/`reassign`/`skip-step` target a specific policy step, fetched
+when `--policy-step-id` is omitted. `approve`, `skip-step` and `reassign`
+require a resolvable step: a task with no current step exits `2` and tells you
+to re-read it with `tasks get` (`--policy-step-id` cannot supply one), while
+`deny` and `restart` proceed without the field when the task has no current
+step. Because each of them reads the task first, an unknown task id exits `4`
+before any action is sent.
 
 `close` cancels a task without recording an approval decision, and takes no
 step. Closing an already-closed task is rejected by the API with `task is
 closed` (exit 2).
 
-`reassign` sets the step's approvers to the users named by
-`--to-user-id`; repeat the flag to assign several.
+`reassign` sets the step's approvers to the users named by `--to-user-id`;
+repeat the flag to assign several. Before sending it looks each id up: an
+unknown user exits `2` and nothing is sent, because the API would store the id
+as the step's approver. `--dry-run` skips that lookup, so a preview does not
+prove the ids exist. A repeated id is sent once; recover a step already given a
+bad approver by re-running `reassign` with valid ids (a system owner can also
+`reset`/`restart` where the task offers them).
 
 Every task action prints the task unwrapped like `tasks get` (`jq -er .id`),
 plus `ticketActionId` (`taskActionId` on `close`) where the API returns one. The

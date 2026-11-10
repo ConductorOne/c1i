@@ -15,8 +15,10 @@ var tasksDenyCmd = &cobra.Command{
 	Long: `Deny an access request task.
 
 --policy-step-id targets a specific step of the task's policy. If omitted, the
-currently executing step is used when it can be derived, and simply left off
-otherwise — deny does not require a step, so it proceeds either way.
+currently executing step is used when the task has one and left off when it has
+none — deny does not require a step, so either way it proceeds. A task that
+cannot be fetched is an error (exit 4 for an unknown id), never a silent
+denial without a step.
 
 A step c1i looked up is reported on stderr ("Resolved policy step: <id>"),
 not on stdout.

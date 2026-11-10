@@ -138,6 +138,11 @@ Exit codes and value types that change, each described under Fixed:
 - `mcp gateway list-tools` with a cursor that never ends exits 8, not 1.
 - `api --paginate` with a misspelled `--list-key` exits 2, not 0.
 - `last_executed_at` is `null`, not `""`, for a never-run automation.
+- `tasks deny` and `tasks restart` naming an unknown task exit `4`, not
+  `2` with the server's `PolicyStepId` error; no action is sent.
+  `tasks reassign --to-user-id` refuses a user that does not exist
+  (exit `2`) and sends the list once; 0.9.2 stored the id as the step's
+  approver at exit `0`.
 
 Named-value flags now refuse more input before sending anything, each with
 exit 2. `automations executions list --state <unknown>` used to print nothing
@@ -407,6 +412,16 @@ already behaved this way.
   silently** if the server ever paginated them: they made one request and
   ignored `nextPageToken`. They now warn on stderr when one is returned.
   None of these routes paginate today.
+
+- `tasks deny` and `tasks restart` naming an unknown task exited `2` with the
+  server's `PolicyStepId` error, because the failed task read was swallowed;
+  both now exit `4` like every other `tasks` action and send nothing.
+- `tasks reassign --to-user-id` refuses an unknown user with exit `2`
+  (`no such user`) instead of storing the id as the step's approver and
+  stranding the task; a repeated `--to-user-id` is sent once.
+- `tasks approve` on a task with no current step told you to pass
+  `--policy-step-id`, which cannot supply one; the error now says the task has
+  no current step and to re-read it with `tasks get`.
 
 - **List and search commands that read via `POST` were never retried on a
   transient 5xx or network error**, unlike GET-based lists: `users`, `grants`,

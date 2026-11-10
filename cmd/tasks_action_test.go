@@ -169,6 +169,45 @@ func TestTasksDenyOmitsAnUnresolvableStep(t *testing.T) {
 	}
 }
 
+// TestTasksStepOptionalActionsFailOnAnUnknownTask: a failed step lookup must
+// stop the action with the fetch's own exit code, not be swallowed into "no
+// step to send" and a server 400.
+func TestTasksStepOptionalActionsFailOnAnUnknownTask(t *testing.T) {
+	const unknownTaskID = "ZZZZZZZZZZZZZZZZZZZZZZZZZZZ"
+	for _, name := range []string{"deny", "restart"} {
+		t.Run(name, func(t *testing.T) {
+			cmd := findTasksSubcommand(t, name)
+			resetCmds(t, cmd)
+			var posts []string
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
+				if r.Method == http.MethodPost {
+					posts = append(posts, r.URL.Path)
+					_, _ = w.Write([]byte(taskActionResponse(unknownTaskID, "TASK_STATE_OPEN")))
+					return
+				}
+				w.WriteHeader(http.StatusNotFound)
+				_, _ = w.Write([]byte(`{"code":5,"message":"not found"}`))
+			}))
+			t.Cleanup(srv.Close)
+
+			_, err := runTaskActionCmd(t, cmd, srv, unknownTaskID)
+			if err == nil {
+				t.Fatalf("%s on an unknown task succeeded", name)
+			}
+			if got, want := exitCode(err), exitNotFound; got != want {
+				t.Errorf("%s exitCode = %d, want %d (exitNotFound); err = %v", name, got, want, err)
+			}
+			if !strings.Contains(err.Error(), "failed to fetch task to determine current policy step") {
+				t.Errorf("%s error = %q, want the fetch failure named", name, err)
+			}
+			if len(posts) != 0 {
+				t.Errorf("%s sent an action POST despite the failed lookup: %v", name, posts)
+			}
+		})
+	}
+}
+
 // findTasksSubcommandOrNil is findTasksSubcommand without the fatal, for the
 // reverse direction of the pinning check.
 func findTasksSubcommandOrNil(name string) *cobra.Command {

@@ -600,10 +600,10 @@ func TestResolveMCPServerCatalogIDMissingExitsUsage(t *testing.T) {
 	}
 }
 
-// TestResolvePolicyStepIDUnderivableRequiredExitsUsage pins tasks.go's "could
-// not determine the current policy step" (approve's required=true path) as
-// exitUsage: the task has no current step, so the fix is for the caller to
-// pass --policy-step-id, not a retry.
+// TestResolvePolicyStepIDUnderivableRequiredExitsUsage pins tasks.go's
+// no-current-step error (approve's required=true path) as exitUsage, and pins
+// the message: passing --policy-step-id cannot conjure a step that is not
+// there, so the actionable fix is to re-read the task.
 func TestResolvePolicyStepIDUnderivableRequiredExitsUsage(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -619,6 +619,11 @@ func TestResolvePolicyStepIDUnderivableRequiredExitsUsage(t *testing.T) {
 	}
 	if got, want := exitCode(err), exitUsage; got != want {
 		t.Errorf("exitCode(%v) = %d, want %d (exitUsage); err type %T", err, got, want, err)
+	}
+	for _, want := range []string{"task task-1 has no current policy step to target", `c1i tasks get task-1`} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("error = %q, want it to contain %q", err.Error(), want)
+		}
 	}
 }
 

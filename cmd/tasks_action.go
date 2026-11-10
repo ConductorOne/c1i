@@ -25,6 +25,10 @@ type taskAction struct {
 	// extraBody adds fields beyond comment/policyStepId, and may reject bad
 	// flag combinations. Runs before any client is built, so it exits 2.
 	extraBody func(cmd *cobra.Command, body map[string]any) error
+	// preReads adds pre-send reads beyond the step lookup, e.g. checking that
+	// a flag names a real user. Runs before the send, on a dry run too unless
+	// the returned preRead says otherwise.
+	preReads func(cmd *cobra.Command) []preRead
 }
 
 // runTaskAction is the shared RunE. Flags are validated before a client is
@@ -48,15 +52,21 @@ func (a taskAction) runTaskAction(cmd *cobra.Command, args []string) error {
 		body["comment"] = comment
 	}
 	m := mutation{Method: http.MethodPost, Path: client.Path("/api/v1/tasks/%s/action/%s", taskID, a.verb), Body: body}
-	if a.step == stepUnused {
-		return sendMutation(cmd, m)
+	var opts []mutationOpt
+	if a.step != stepUnused {
+		// An explicit step needs no lookup, so a preview needs no credentials.
+		if explicit, _ := cmd.Flags().GetString("policy-step-id"); explicit != "" {
+			body["policyStepId"] = explicit
+		} else {
+			opts = append(opts, withPreRead(a.stepLookup(taskID)))
+		}
 	}
-	// An explicit step needs no lookup, so a preview needs no credentials.
-	if explicit, _ := cmd.Flags().GetString("policy-step-id"); explicit != "" {
-		body["policyStepId"] = explicit
-		return sendMutation(cmd, m)
+	if a.preReads != nil {
+		for _, p := range a.preReads(cmd) {
+			opts = append(opts, withPreRead(p))
+		}
 	}
-	return sendMutation(cmd, m, withPreRead(a.stepLookup(taskID)))
+	return sendMutation(cmd, m, opts...)
 }
 
 // stepLookup resolves the current policy step before the send, on a dry run

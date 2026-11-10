@@ -147,31 +147,27 @@ func parseCurrentPolicyStepID(data []byte) (string, error) {
 // the explicit --policy-step-id when given, otherwise the task's currently
 // executing step, fetched with a GET.
 //
-// required distinguishes the two modes callers need. Actions the server
-// rejects without a step (approve, skip-step) and reassign, which we refuse to
-// send ambiguously, pass true and get an error. deny and restart pass false:
-// when the step cannot be derived the field is omitted rather than blocking
-// the action, which is what lets restart act on a closed task.
+// A failed fetch or unparseable body is always an error, required or not: a
+// missing task must not look like a task with no step. required only governs
+// an empty current step. Actions the server rejects without one (approve,
+// skip-step) and reassign, which we refuse to send ambiguously, pass true and
+// get a usage error. deny and restart pass false and omit the field, which is
+// what lets restart act on a closed task (its GET succeeds; the current step
+// is empty).
 func resolvePolicyStepID(ctx context.Context, c *client.Client, taskID, explicit string, required bool) (string, error) {
 	if explicit != "" {
 		return explicit, nil
 	}
 	data, err := c.Get(ctx, client.Path("/api/v1/tasks/%s", taskID), nil)
 	if err != nil {
-		if required {
-			return "", fmt.Errorf("failed to fetch task to determine current policy step: %w", err)
-		}
-		return "", nil // optional (deny): can't derive it, so omit the field
+		return "", fmt.Errorf("failed to fetch task to determine current policy step: %w", err)
 	}
 	stepID, err := parseCurrentPolicyStepID(data)
 	if err != nil {
-		if required {
-			return "", err
-		}
-		return "", nil // optional (deny): omit rather than block the action
+		return "", err
 	}
 	if stepID == "" && required {
-		return "", &usageError{fmt.Errorf("could not determine the current policy step for task %s; pass --policy-step-id explicitly", taskID)}
+		return "", &usageError{fmt.Errorf("task %s has no current policy step to target; re-read it with \"c1i tasks get %s\" (pass --policy-step-id only if you already know the step)", taskID, taskID)}
 	}
 	return stepID, nil
 }
