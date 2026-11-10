@@ -426,9 +426,11 @@ resource with `--resource-id` likewise means you drop
 - Every named-value flag (`--state`, `--status`, `--type`, `--auth`,
   `--unbind-policy`, `--error-format`, `--method`, ...) ignores ASCII case,
   whitespace and `-` vs `_`, and takes the full API name too; `--help` lists
-  the short names. An unknown or non-ASCII value exits 2 before any request.
-  Where `--help` says "or any `PREFIX_*` value", a value with that prefix is
-  sent upper-cased, `-` turned to `_`; `users list --status` and
+  the short names. An unknown or non-ASCII value exits 2 before any request,
+  and so does a value that is only whitespace: it is a usage error, not "no
+  filter". Only omitting the flag (or, for a filter, passing an empty string)
+  leaves it unset. Where `--help` says "or any `PREFIX_*` value", a value with
+  that prefix is sent upper-cased, `-` turned to `_`; `users list --status` and
   `entitlements create --resource-type` send any ASCII value that way. The
   only rewrites to a different enum are listed aliases:
   `MCP_TOOL_STATE_PENDING` → `MCP_TOOL_STATE_PENDING_REVIEW`, and
