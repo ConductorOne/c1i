@@ -473,7 +473,10 @@ func readMaskedClassifierObject(cmd *cobra.Command, field, id string) (map[strin
 	if err != nil {
 		return nil, err
 	}
-	mask, _ := cmd.Flags().GetString("update-mask")
+	mask, _, err := bodyFileMask(cmd)
+	if err != nil {
+		return nil, err
+	}
 	if id != "" {
 		object["id"] = id
 	}

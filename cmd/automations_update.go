@@ -52,31 +52,14 @@ top-level siblings.`,
 
 func buildAutomationUpdateBody(cmd *cobra.Command, id string) (map[string]any, error) {
 	f := cmd.Flags()
-	usingFlags := f.Changed("display-name") || f.Changed("description") || f.Changed("enabled")
-	mask, _ := f.GetString("update-mask")
-	if !f.Changed("body-file") && f.Changed("update-mask") {
-		return nil, fmt.Errorf("--update-mask requires --body-file; the mask is derived from the other flags")
+	mask, usingBody, err := bodyFileMask(cmd, "display-name", "description", "enabled")
+	if err != nil {
+		return nil, err
 	}
 
 	var automation map[string]any
-	if f.Changed("body-file") {
-		if usingFlags {
-			return nil, fmt.Errorf("--body-file is mutually exclusive with --display-name/--description/--enabled")
-		}
-		if !hasVisibleRune(mask) {
-			return nil, fmt.Errorf("--update-mask is required together with --body-file")
-		}
-		// The server rejects " description" as an invalid path.
-		paths := strings.Split(mask, ",")
-		for i, p := range paths {
-			paths[i] = strings.TrimSpace(p)
-			if !hasVisibleRune(paths[i]) {
-				return nil, fmt.Errorf("--update-mask %q has an empty path", mask)
-			}
-		}
-		mask = strings.Join(paths, ",")
+	if usingBody {
 		bodyFile, _ := f.GetString("body-file")
-		var err error
 		automation, err = readJSONFile[map[string]any](cmd, "body-file", bodyFile)
 		if err != nil {
 			return nil, err
@@ -119,7 +102,7 @@ func init() {
 	f.String("description", "", "New description; pass an empty value to clear it (omit to leave unchanged)")
 	f.Bool("enabled", false, "Enable (--enabled) or disable (--enabled=false) the automation (omit to leave unchanged)")
 	f.String("body-file", "", "Automation JSON object, sent verbatim (file, or \"-\" for stdin); requires --update-mask; mutually exclusive with the flags above")
-	f.String("update-mask", "", "Comma-separated Automation field paths to update (required with --body-file; derived otherwise)")
+	f.String("update-mask", "", bodyFileMaskUsage)
 	markMutating(automationsUpdateCmd)
 	automationsCmd.AddCommand(automationsUpdateCmd)
 }

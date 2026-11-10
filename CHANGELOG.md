@@ -197,6 +197,18 @@ exit code, not just `reachable`.
 entitlement id repeats across apps, and the id alone matched requests from
 every app that shares it.
 
+`policies update --update-mask` without `--body-file` now exits 2 instead of
+being ignored (the mask is derived from the other flags), and
+`policies update --body-file ""` exits 2 as an unreadable file. `policies
+update`, `access-reviews update`, `mcp classifiers update`, `mcp classifiers
+policy update` and `mcp classifiers tool-gates update` now trim each
+`--update-mask` path (`" description, steps"` is sent as `description,steps`),
+and exit 2 before any request on an empty path (`a,,b`). A blank mask, which
+`policies update` used to send, now exits 2 there too; on the other four it
+already exited 2, and its message changes from `--update-mask is required` to
+`--update-mask is required together with --body-file`. `automations update`
+already behaved this way.
+
 ### Added
 
 - `tasks get <task-id>` reads a single task, the same endpoint as `requests
@@ -308,6 +320,8 @@ every app that shares it.
 
 ### Fixed
 
+- `policies update` shares `automations update`'s `--body-file`/`--update-mask`
+  rules; see Upgrading.
 - `requests list --entitlement-id` without `--app-id` returned requests from
   every app sharing that entitlement id; it now requires `--app-id`, as
   `grants list` already did.
