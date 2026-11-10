@@ -90,6 +90,9 @@ wrapper key. New commands (see Added) follow the same contract.
     URL's password) as `[redacted]`; 0.9.2 showed them as typed.
 - **Passing `--fields` to a mutation is a usage error (exit 2).** `C1I_FIELDS`
   is still ignored on mutations.
+- **`apps list` rows no longer carry `deleted_at`.** It was always null,
+  because the endpoint omits deleted apps; use `apps get <id>` for
+  `deletedAt`. `--fields deleted_at` on `apps list` now exits 2.
 - **`--error-format json` now makes stderr NDJSON for every command.**
   - Previously you got one error object and text for everything else. Now
     each line is one object: `{"error":…}`, `{"notice":…}`, `{"progress":…}`
