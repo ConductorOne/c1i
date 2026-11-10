@@ -278,7 +278,8 @@ precedence:
 2. `C1I_MAX_RETRIES` environment variable
 3. Default: `4`
 
-Set `--max-retries 0` to disable retries entirely. Non-retryable responses
+Set `--max-retries 0` to disable retries entirely; a negative value, from the
+flag, `C1I_MAX_RETRIES` or `max_retries` in `~/.c1i.yaml`, exits `2`. Non-retryable responses
 (4xx other than 429, and 501/505) fail immediately.
 
 A non-empty `C1I_DEBUG`, `C1I_DRY_RUN`, `C1I_MAX_RETRIES` or
@@ -286,6 +287,10 @@ A non-empty `C1I_DEBUG`, `C1I_DRY_RUN`, `C1I_MAX_RETRIES` or
 before any request; the flag given on the command line overrides the variable
 entirely. The same keys in `~/.c1i.yaml` (`dry_run`, `debug`, `max_retries`,
 `error_format`) are checked the same way, and the error names the file and key.
+A `~/.c1i.yaml` that exists but can't be read or parsed (invalid YAML, not a
+mapping, a directory, no read permission) exits `2` naming the file, even with
+`--url`; a missing file is fine, and completion, `docs`, `help` and `version` ignore a
+broken one.
 
 This covers the token mint too: minting or refreshing the OAuth2 bearer
 c1i authenticates with is itself a request, subject to the same 429 retry
@@ -302,7 +307,7 @@ that legitimately runs long. Neither is configurable.
 
 `--dry-run` (or `C1I_DRY_RUN=1`) previews a C1 REST mutation and returns
 without sending it. The preview is one JSON object on stdout, the requests in
-send order with the full URL and the exact body (`upgrade --dry-run` is the
+send order with the full URL and the body as sent (`upgrade --dry-run` is the
 exception: it prints plain `[dry-run]` text lines, since it sends no C1 API
 mutation):
 
@@ -328,6 +333,13 @@ Its only keys are `dryRun` and `requests` (one entry per request: several for
 `mcp tools approve` with several ids, up to three for `entitlements create`);
 it never has an `id`, and `body` is omitted when the request has none. A
 stderr notice, `dry run: nothing was sent`, accompanies every preview.
+
+Every preview prints credential fields as `[redacted]`: fields whose name ends
+in `token`, `secret`, `password`, `signature`, `apikey` and the like (a
+best-effort suffix rule), header values, a URL's username or password, and
+secret-named URL parameters. Everything else is shown as sent, and a body that
+is not JSON prints as `"[redacted: not JSON]"`. A 0.9.2 preview showed them as
+typed.
 
 It applies to every REST write command and to non-GET `api` calls, and never
 sends that mutation. `mcp gateway call` rejects both `--dry-run` and
@@ -492,8 +504,8 @@ has its own optional mask, described under Auth in the MCP section.)
 Most deletes mark the object rather than erase it, so a later `get` does not
 always exit `4`:
 
-- `apps delete`: the app is marked with `deletedAt`; `apps list` rows carry a
-  `deleted_at` field.
+- `apps delete`: the app is marked with `deletedAt`; `apps get` shows it, and
+  `apps list` omits deleted apps.
 - `entitlements delete`: `entitlements get` still returns it, with `deletedAt`
   set.
 - `policies delete`: the policy leaves `policies list` and the default
@@ -533,7 +545,7 @@ c1i users list --fields id,email
 c1i functions get <id> --fields id,displayName,publishedCommitId
 
 # Conditional selection: jq is appropriate
-DELETED_APPS="$(c1i apps list | jq -c 'if .deleted_at then . else empty end')"
+APPS_WITH_USERS="$(c1i apps list | jq -c 'if .user_count > 0 then . else empty end')"
 
 # Mutation output: never projected; extract the id with jq -er
 APP_ID=$(c1i apps create --display-name "Example" | jq -er .id)
@@ -764,7 +776,9 @@ API's JSON response and returns as soon as the `PUT` is accepted.
 `apps remove-owner` and `apps set-owners` write. It returns zero rows at exit 0
 for a well-formed but nonexistent app id, so an empty result can also mean
 "wrong id". `apps add-owner` and `apps remove-owner` change one owner at a time
-(a single `--user-id`; use `set-owners` for many).
+(a single `--user-id`; use `set-owners` for many). A repeated `--user-id` exits
+`2` before any request, here, on `entitlements add-owner|remove-owner` and on
+`accounts set-owner`.
 
 **Owner commands (apps and entitlements).** Owner changes are applied
 asynchronously and can take several minutes to appear; pass --wait to block
@@ -1304,6 +1318,7 @@ classifier. A tool gate's `filter` must select either `builtInPattern` or
   sharing is not readable back, so repeat `--token-sharing per-user` on
   `update-credentials` / `test-connection` when the stored server is per-user
   and you are not supplying the secret.
+- `test-connection --dry-run` previews the probe and sends nothing.
 - Secrets are sealed server-side; reads only ever return `*_configured`
   booleans, never the values. A read-back can legitimately differ from what you
   sent: the backend may store a *resolved* OAuth2 grant such as
@@ -1792,7 +1807,7 @@ c1i docs agents [--output AGENTS.md]
 
 # Print the README and CHANGELOG embedded in the binary (no network). The
 # README is the full reference; "docs agents" is the concise agent guide.
-# Both take --output FILE.
+# Both take --output FILE ("-" is stdout, not a file named -).
 c1i docs readme
 c1i docs changelog
 

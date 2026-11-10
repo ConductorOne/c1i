@@ -197,7 +197,7 @@ type globalEnvSetting struct {
 var globalEnvSettings = []globalEnvSetting{
 	{key: "url", env: urlEnvVar, flag: "url"},
 	{key: "fields", env: "C1I_FIELDS", flag: "fields"},
-	{key: "max_retries", env: "C1I_MAX_RETRIES", flag: "max-retries", parse: parseIntValue},
+	{key: "max_retries", env: "C1I_MAX_RETRIES", flag: "max-retries", parse: parseMaxRetries},
 	{key: "error_format", env: "C1I_ERROR_FORMAT", flag: "error-format", parse: parseErrorFormat, everywhere: true},
 	{key: "debug", env: "C1I_DEBUG", flag: "debug", parse: parseBoolValue},
 	{key: "dry_run", env: "C1I_DRY_RUN", flag: "dry-run", parse: parseBoolValue},
@@ -218,11 +218,16 @@ func bindGlobalEnvSettings() {
 // validateGlobalSettings rejects an unparsable value in a typed global before
 // any request is sent, from whichever source wins: flag (pflag already parsed
 // it), then env, then ~/.c1i.yaml. A value shadowed by a higher source is not
-// checked, matching viper's precedence. Empty means unset. Negative
-// max_retries is accepted like `--max-retries -1` (transport clamps it).
+// checked, matching viper's precedence. Empty means unset.
 func validateGlobalSettings(cmd *cobra.Command) error {
 	local := isLocalOnlyRequest(cmd)
 	var cfg *viper.Viper
+	if !local {
+		cfg = viper.New()
+		if err := loadConfigFile(cfg); err != nil && usesConfigFile(cmd) {
+			return err
+		}
+	}
 	for _, s := range globalEnvSettings {
 		if s.parse == nil || (local && !s.everywhere) {
 			continue
@@ -248,7 +253,7 @@ func validateGlobalSettings(cmd *cobra.Command) error {
 		}
 		if cfg == nil {
 			cfg = viper.New()
-			loadConfigFile(cfg)
+			_ = loadConfigFile(cfg) // local-only: a broken file must not fail completion
 		}
 		raw := cfg.Get(s.key)
 		if raw == nil {
@@ -284,6 +289,18 @@ func isLocalOnlyRequest(cmd *cobra.Command) bool {
 	return false
 }
 
+// usesConfigFile reports whether cmd reads ~/.c1i.yaml for anything: not the
+// docs tree or version, which need no tenant or credentials, so a broken file
+// must not stop them. The typed settings are still validated there.
+func usesConfigFile(cmd *cobra.Command) bool {
+	for p := cmd; p.HasParent(); p = p.Parent() {
+		if !p.Parent().HasParent() && (p.Name() == "docs" || p.Name() == "version" || p.Name() == "help") {
+			return false // p is a top-level command
+		}
+	}
+	return true
+}
+
 func parseBoolValue(s string) error {
 	_, err := envbool.Parse(s)
 	return err
@@ -294,6 +311,18 @@ func parseBoolValue(s string) error {
 func parseIntValue(s string) error {
 	if _, err := strconv.ParseInt(s, 0, 0); err != nil {
 		return errors.New("must be an integer")
+	}
+	return nil
+}
+
+// parseMaxRetries is parseIntValue plus the rule --limit follows: a negative
+// count is refused; 0 disables retries.
+func parseMaxRetries(s string) error {
+	if err := parseIntValue(s); err != nil {
+		return err
+	}
+	if n, _ := strconv.ParseInt(s, 0, 0); n < 0 {
+		return errors.New("must not be negative; 0 disables retries")
 	}
 	return nil
 }
@@ -433,18 +462,37 @@ func init() {
 	bindGlobalEnvSettings()
 }
 
-func initConfig() { loadConfigFile(viper.GetViper()) }
+// initConfig's error is reported by validateGlobalSettings, which reads the
+// same file; failing here would also break completion.
+func initConfig() { _ = loadConfigFile(viper.GetViper()) }
 
-// loadConfigFile reads ~/.c1i.yaml into v, or nothing without a usable home.
-func loadConfigFile(v *viper.Viper) {
+// loadConfigFile reads ~/.c1i.yaml into v. A missing file or home is fine; a
+// file that exists but cannot be read or parsed is an error naming it.
+func loadConfigFile(v *viper.Viper) error {
 	home, err := config.HomeDir()
 	if err != nil {
-		return
+		return nil
 	}
 	v.AddConfigPath(home)
 	v.SetConfigName(".c1i")
 	v.SetConfigType("yaml")
-	_ = v.ReadInConfig()
+	err = v.ReadInConfig()
+	path := v.ConfigFileUsed()
+	if path == "" {
+		path = filepath.Join(home, ".c1i.yaml")
+	}
+	var notFound viper.ConfigFileNotFoundError
+	if err == nil {
+		return nil
+	}
+	if errors.As(err, &notFound) {
+		// viper skips a directory in the file's place as "not found".
+		if fi, serr := os.Stat(path); serr == nil && fi.IsDir() {
+			return &usageError{fmt.Errorf("cannot use config file %s: it is a directory", path)}
+		}
+		return nil
+	}
+	return &usageError{fmt.Errorf("cannot use config file %s: %w", path, err)}
 }
 
 // GetBaseURL returns the configured base URL or exits with an error. Embedded

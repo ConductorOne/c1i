@@ -15,19 +15,17 @@ type appListItem struct {
 	Description string    `json:"description"`
 	UserCount   flexInt64 `json:"userCount"`
 	IconURL     string    `json:"iconUrl"`
-	DeletedAt   string    `json:"deletedAt"`
 }
 
 // appRow flattens an appListItem into the NDJSON output row. user_count keeps
-// its real numeric type (the API sends it as a JSON string) and deleted_at is
-// nil, not "", on a live app — see CLAUDE.md's row-fidelity convention.
+// its real numeric type (the API sends it as a JSON string); there is no
+// deleted_at, because the endpoint omits deleted apps.
 func appRow(a appListItem) map[string]any {
 	return map[string]any{
 		"id":           a.ID,
 		"display_name": a.DisplayName,
 		"description":  a.Description,
 		"user_count":   int64(a.UserCount),
-		"deleted_at":   nilIfEmpty(a.DeletedAt),
 	}
 }
 

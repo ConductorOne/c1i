@@ -209,7 +209,7 @@ func TestAutomationsUpdateUsageErrors(t *testing.T) {
 		wantMsg string
 	}{
 		{"empty display name", map[string]string{"display-name": ""}, "display_name is required"},
-		{"whitespace-only mask", map[string]string{"body-file": path, "update-mask": "  "}, "--update-mask is required"},
+		{"whitespace-only mask", map[string]string{"body-file": path, "update-mask": "  "}, "--update-mask is blank"},
 		{"empty mask path", map[string]string{"body-file": path, "update-mask": "displayName,,description"}, "empty path"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

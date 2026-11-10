@@ -93,8 +93,15 @@ wrapper key. New commands (see Added) follow the same contract.
     must look up an id the body needs (a task's current policy step, a
     hosted MCP server's catalog id, or the caller for `requests create`).
   - A preview refuses an empty, `.` or `..` id (exit 2), as a real send does.
+  - A preview prints credential fields (names ending in token, secret,
+    password, signature, apikey and the like; header values; a URL's username
+    or password and secret-named parameters) as `[redacted]`, and a non-JSON
+    body as `"[redacted: not JSON]"`; 0.9.2 showed them as typed.
 - **Passing `--fields` to a mutation is a usage error (exit 2).** `C1I_FIELDS`
   is still ignored on mutations.
+- **`apps list` rows no longer carry `deleted_at`.** It was always null,
+  because the endpoint omits deleted apps; use `apps get <id>` for
+  `deletedAt`. `--fields deleted_at` on `apps list` now exits 2.
 - **`--error-format json` now makes stderr NDJSON for every command.**
   - Previously you got one error object and text for everything else. Now
     each line is one object: `{"error":…}`, `{"notice":…}`, `{"progress":…}`
@@ -373,6 +380,28 @@ non-empty value` when blank).
 
 ### Fixed
 
+- A `--url` with embedded credentials printed the username in its warning
+  (`https://<token>@host` puts a secret there); the warning no longer names it.
+- `docs readme|changelog|agents -o -` wrote a file named `-`; `-` now means
+  stdout.
+- A blank `--update-mask " "` with `--body-file` on `policies update` and
+  `automations update` said the mask was required; it now says it is blank.
+- A negative `--max-retries`, `C1I_MAX_RETRIES` or `max_retries` was accepted
+  and treated as 0; it now exits 2. `0` still disables retries.
+- A bad boolean env or config value said `must be true or false` although
+  `1`, `0`, `t`, `f`, `TRUE` and `FALSE` are accepted; it now reads `must be a
+  boolean (true/false, 1/0)`.
+- `apps delete` help, README and agents.md said `apps list` rows show deleted
+  apps; it omits them. `apps get` shows `deletedAt`.
+- A `~/.c1i.yaml` that exists but is invalid YAML, not a mapping, a directory,
+  or unreadable was ignored (0.9.2), so `--url` ran and a missing `--url` said
+  "url is required". It now exits 2 naming the file; a missing file is still
+  fine, and completion, `docs`, `help` and `version` ignore a broken one.
+- `accounts set-owner` with a repeated `--user-id` used to use the last one
+  (0.9.2); it now exits 2 before any request, as do `apps` and `entitlements`
+  `add-owner|remove-owner`.
+- `mcp servers test-connection --dry-run` no longer sends the probe (0.9.2
+  did); it now previews like other mutations.
 - `--debug` and `--max-retries` now work on `docs search` and `docs page`,
   which also gain the path and redirect guards and retry a 5xx.
 - `docs guide configure-new-app` and `request-access` said c1i has no command

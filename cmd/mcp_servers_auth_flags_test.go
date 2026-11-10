@@ -111,8 +111,8 @@ func TestMcpAuthFlagsCompleteValuesPass(t *testing.T) {
 		}
 	}
 
-	// test-connection does not honor --dry-run (it is a probe, not a
-	// mutation), so its preview path is covered only by the send case above.
+	// test-connection's preview masks secrets, so it is covered by
+	// TestTestConnectionDryRunSendsNothingAndRedactsSecrets.
 	for cmdName, m := range authFlagMutations() {
 		if cmdName == "test-connection" {
 			continue
@@ -131,7 +131,11 @@ func TestMcpAuthFlagsCompleteValuesPass(t *testing.T) {
 					t.Fatalf("exit %d: %v", r.exit, r.err)
 				}
 				for _, n := range c.companions {
-					if !strings.Contains(r.stdout, `"`+jsonKeyFor(n)+`": "`+c.values[n]+`"`) {
+					want := c.values[n]
+					if isSecretKey(jsonKeyFor(n)) {
+						want = redactedPlaceholder // every preview masks credentials
+					}
+					if !strings.Contains(r.stdout, `"`+jsonKeyFor(n)+`": "`+want+`"`) {
 						t.Errorf("preview missing %s value %q:\n%s", n, c.values[n], r.stdout)
 					}
 				}

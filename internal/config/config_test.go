@@ -190,12 +190,24 @@ func TestParseURLDropsEmbeddedCredentialsWithWarning(t *testing.T) {
 	if want := "https://host.example.com"; got != want {
 		t.Errorf("ParseURL(%q) = %q, want %q", "https://user:hunter2@host.example.com", got, want)
 	}
-	if len(warnings) != 1 || !strings.Contains(warnings[0], "user") {
+	if len(warnings) != 1 || !strings.Contains(warnings[0], "embedded credentials") {
 		t.Errorf("warnings = %v, want one mentioning the dropped credentials", warnings)
 	}
 	for _, w := range warnings {
-		if strings.Contains(w, "hunter2") {
-			t.Errorf("warning leaked the password: %q", w)
+		if strings.Contains(w, "hunter2") || strings.Contains(w, "(user") {
+			t.Errorf("warning leaked the password or username: %q", w)
+		}
+	}
+	// A username alone is often the credential (https://<token>@host).
+	for _, in := range []string{"https://URLleak@host.example.com", "https://URLleak:pw@host.example.com"} {
+		_, ws, err := ParseURL(in)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, w := range ws {
+			if strings.Contains(w, "URLleak") {
+				t.Errorf("ParseURL(%q) warning leaked the username: %q", in, w)
+			}
 		}
 	}
 }
@@ -219,7 +231,7 @@ func TestParseURLDropsEmbeddedCredentialsSchemeless(t *testing.T) {
 	if strings.Contains(got, "hunter2") {
 		t.Errorf("result leaked the password: %q", got)
 	}
-	if len(warnings) != 1 || !strings.Contains(warnings[0], "user") {
+	if len(warnings) != 1 || !strings.Contains(warnings[0], "embedded credentials") {
 		t.Errorf("warnings = %v, want one mentioning the dropped credentials", warnings)
 	}
 	for _, w := range warnings {

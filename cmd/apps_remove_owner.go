@@ -39,7 +39,8 @@ One owner per call; to change several at once use "apps set-owners".`,
 }
 
 func init() {
-	appsRemoveOwnerCmd.Flags().String("user-id", "", "C1 user ID to remove as owner")
+	addOnceStringFlag(appsRemoveOwnerCmd, "user-id", "C1 user ID to remove as owner",
+		"use \"apps set-owners\" to set several owners")
 	markRequired(appsRemoveOwnerCmd, "user-id")
 	markMutating(appsRemoveOwnerCmd)
 	appsCmd.AddCommand(appsRemoveOwnerCmd)

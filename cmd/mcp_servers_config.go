@@ -64,15 +64,15 @@ func authArmFromFlags(cmd *cobra.Command) (map[string]any, error) {
 	switch arm {
 	case "bearerToken":
 		token, _ := cmd.Flags().GetString("bearer-token")
-		return map[string]any{arm: map[string]any{"token": token}}, nil
+		return map[string]any{arm: map[string]any{keyToken: token}}, nil
 	case "customHeader":
 		name, _ := cmd.Flags().GetString("header-name")
 		value, _ := cmd.Flags().GetString("header-value")
-		return map[string]any{arm: map[string]any{"headerName": name, "headerValue": value}}, nil
+		return map[string]any{arm: map[string]any{"headerName": name, keyHeaderValue: value}}, nil
 	case "basicAuth":
 		user, _ := cmd.Flags().GetString("basic-auth-username")
 		pass, _ := cmd.Flags().GetString("basic-auth-password")
-		return map[string]any{arm: map[string]any{"username": user, "password": pass}}, nil
+		return map[string]any{arm: map[string]any{"username": user, keyPassword: pass}}, nil
 	default: // none
 		return map[string]any{arm: map[string]any{}}, nil
 	}
@@ -117,6 +117,19 @@ var authArmRules = map[string]authArmRule{
 		},
 	},
 }
+
+// The auth-arm fields that hold a credential. The builders here and in the
+// register template use these names, and isSecretKey (cmd/mutation.go) names the ones its
+// suffix rule does not cover, so a preview masks what the builders write.
+const (
+	keyToken           = "token"
+	keyHeaderValue     = "headerValue"
+	keyPassword        = "password"
+	keyClientSecret    = "clientSecret"
+	keySecretAccessKey = "secretAccessKey"
+	keySessionToken    = "sessionToken"
+	keyCredentialsJSON = "credentialsJson"
+)
 
 // authArmPerUserOptional is the companions a PER_USER server may leave blank:
 // each user supplies the secret later via SubmitUserCredential. A custom
