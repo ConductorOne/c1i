@@ -12,10 +12,10 @@ For a human-friendly CLI, see [cone](https://github.com/ConductorOne/cone).
 - [Installation](#installation)
 - [Start Here](#start-here)
 - [Quick Start](#quick-start)
-- [Command Reference](#command-reference)
-- [Output Conventions](#output-conventions)
-- [Configuration](#configuration)
 - [Authentication](#authentication)
+- [Configuration](#configuration)
+- [Output Conventions](#output-conventions)
+- [Command Reference](#command-reference)
 - [Shell Completion](#shell-completion)
 - [Version](#version)
 - [Updating the binary](#updating-the-binary-c1i-upgrade)
@@ -73,6 +73,615 @@ c1i docs endpoints --filter task
 > **Upgrading to 0.10.0?** It changes mutation output (unwrapped JSON, like
 > `get`) and several exit codes. Read "Upgrading from 0.9.2" in
 > [CHANGELOG.md](CHANGELOG.md) before updating scripts.
+
+## Authentication
+
+```sh
+# Browser-based login (OAuth device flow)
+c1i auth login
+
+# Limit the browser-login credential to chosen roles
+c1i auth login --choose-roles                  # pick from a menu after approving
+c1i auth login --scoped-role basic-user        # repeatable; a role name or id
+
+# Or store credentials directly
+c1i auth login --client-id <id> --client-secret <secret>
+
+# Check credential status (also reports the storage backend)
+c1i auth status
+
+# Show the authenticated principal (`principleId` as the API spells it, `userId`, role/permission/feature counts, and
+# display name + email when a best-effort secondary lookup succeeds) plus the resolved
+# tenant: "tenant" (base URL) and "tenantSource" (flag/env/config)
+c1i auth whoami
+# --verbose swaps the summary for the raw introspect payload (full roles/permissions/
+# features arrays, but no display name or email) -- a different projection, not a superset
+c1i auth whoami --verbose
+
+# Machine-readable "which tenant am I about to write to?" — the pre-write check
+c1i auth whoami --url https://example.conductor.one --fields tenant
+
+# Mint a short-lived bearer token for driving raw API calls yourself
+c1i auth token            # add --json for token type and absolute expiry (RFC3339)
+
+# Remove stored credentials
+c1i auth logout
+```
+
+Browser login creates a personal client credential with all of your roles. To
+limit it, pass `--choose-roles` (a menu after you approve in the browser; needs
+a terminal) or `--scoped-role <role>` (repeatable). The two can't be combined,
+and neither applies to `--client-id`/`--client-secret` (exit 2). When no
+credential is stored for the tenant, a terminal login asks which you want:
+Enter keeps all of your roles, and `--choose-roles=false` skips the question.
+
+- **Which roles.** A scoped credential keeps only the overlap between its roles
+  and your own access. The menu and role names offer the roles you hold, Basic
+  User, and Read-Only Administrator (a read-only view of your access); holders
+  of Super Administrator or Read-Only Administrator see every role. In the
+  menu, enter numbers or `0` for all of your roles; a blank answer asks again.
+- **Names and IDs.** A role ID is 27 letters and digits and goes to C1 as
+  given; an unknown one exits 4. Anything else is a name: case is ignored, and
+  spaces, underscores and hyphens are interchangeable. A name that matches no
+  offered role, or more than one, exits 2 before your credential is created,
+  listing the choices.
+- **Checks.** Login verifies the new credential before storing it. If C1
+  scoped it wider than asked (exit 6), a scoped credential has no access
+  (exit 2), verification or storing fails, or you press Ctrl-C, login deletes
+  it. Scoped credentials are named `Created by c1i (<role or count>)`.
+- **The temporary credential.** The device-flow token can only create a
+  credential, so reading roles uses a short-lived one with all of your roles,
+  deleted before yours is created. If it isn't deleted, login names it. If
+  yours was stored, login exits 1; otherwise it exits with the login's own
+  failure code and stores nothing.
+- A browser login that replaces a stored credential names it; it stays active
+  in C1.ai.
+
+`c1i auth token` prints just the access token, newline-terminated, so it
+composes into `curl -H "Authorization: Bearer $(c1i auth token)" ...`. It is
+never written to disk — a new one is minted per invocation.
+
+### Credential sources
+
+`c1i` reads credentials from the first source that has them, in this order:
+
+1. **Environment variables** — set `C1I_CLIENT_ID` and `C1I_CLIENT_SECRET`
+   (alongside `C1I_URL`) for non-interactive / CI use. Both must be set; if
+   only one is set the value is ignored.
+2. **OS keyring** — Keychain on macOS, Credential Manager on Windows, Secret
+   Service (e.g. gnome-keyring, KeePassXC) on Linux. Used by default when
+   available.
+3. **File fallback** — a `0600` JSON file under your config directory
+   (`~/.config/c1i/credentials/` on Linux, `~/Library/Application Support/c1i/credentials/`
+   on macOS, `%AppData%\c1i\credentials\` on Windows). Used automatically when
+   no OS keyring is available — typical on headless Linux servers, containers,
+   CI runners, and WSL without a desktop environment.
+
+`c1i auth login` writes to the OS keyring when it can and falls back to the
+file backend transparently. `c1i auth status` tells you which source served
+the active credentials. If the config directory resolves to a relative path,
+from a relative `HOME`, `%AppData%` or `XDG_CONFIG_HOME`, the file fallback
+fails with an error and the token cache below skips its file, rather than
+writing under the working directory.
+
+### Token cache
+
+To avoid minting a fresh OAuth token on every invocation — each mint writes a
+`client_credentials` event to the tenant's audit log — `c1i` caches the access
+token and reuses it until it nears expiry. It uses the OS keyring when
+available. On Unix-like hosts without a usable keyring, it instead uses a
+hardened `0600` file under the config directory (`~/.config/c1i/tokens/` on
+Linux). A cached token the server rejects (clock skew, or a revoked credential)
+is dropped and re-minted once automatically. Each file-cache write also deletes
+the other token files there that c1i would refuse to load (expired or expiring
+within a minute, corrupt or unreadable, or open to group or other users) and
+temp files over a minute old.
+The token is strictly shorter-lived than the client secret already stored
+beside it. Set `C1I_NO_TOKEN_CACHE` to any non-empty value (even `0`) to disable
+caching and mint per invocation; it is not validated.
+
+## Configuration
+
+c1i requires a C1 **URL**.
+
+**c1i requires `https`.** A URL with any other scheme is rejected (exit `2`); it
+is not rewritten. Credentials embedded in the URL are dropped with a warning on
+stderr, and an embedded password is never echoed.
+
+The scheme may be omitted (`tenant.c1eu.ai`), in which case `https` is assumed.
+The host is lower-cased, so `HTTPS://TENANT.C1EU.AI` and `tenant.c1eu.ai`
+resolve identically, and a protocol-relative `//tenant.example` is handled.
+
+Both `*.conductor.one` and `*.c1eu.ai` (EU) tenant domains are accepted — pass
+whichever your tenant uses. Only the shape of the URL is checked, never the
+domain, so a typo like `example.conductor.on` is accepted here and surfaces
+later as an authentication failure.
+
+A bare name (`--url example`) is rejected: with more than one tenant domain in
+use it is ambiguous, and silently expanding it to `example.conductor.one` would
+point an EU tenant at the wrong region. The error names where the value came
+from, which matters when it is a stale entry in `~/.c1i.yaml` rather than
+something you just typed. A single-label host is fine as long as it arrives as a
+URL (`https://intranet-host`), such as a name only your resolver knows.
+
+Set it via (in order of precedence):
+
+1. `--url` flag
+2. `C1I_URL` environment variable
+3. `~/.c1i.yaml` config file:
+
+   ```yaml
+   url: https://example.conductor.one
+   ```
+
+   A terminal `c1i auth login` given the URL another way offers to save it
+   there. If the file isn't a valid YAML mapping, login warns and leaves it
+   unchanged. With a relative `HOME`, c1i neither reads nor writes it, so a
+   `.c1i.yaml` in the working directory is never used.
+
+These are equivalent:
+- `--url https://example.conductor.one`
+- `--url example.conductor.one`
+- `--url EXAMPLE.CONDUCTOR.ONE` (the host is lower-cased)
+
+**Every command prints which tenant it's about to use when the URL came from
+`~/.c1i.yaml`.** Nothing on the command line names the config file, so a
+stale entry there sends a command to the wrong tenant with no visible sign
+otherwise. `--url` and `C1I_URL` don't print this warning: both are explicit
+choices made for that invocation, and warning on every normal use of
+`C1I_URL` would just train you to stop reading it. The warning goes to
+stderr, once per invocation (never once per page of a paginated list):
+
+```
+Warning: no --url flag given; targeting https://example.conductor.one (from ~/.c1i.yaml)
+```
+
+For credential storage, see [Credential sources](#credential-sources) below.
+
+### Retries
+
+Transient API failures are retried automatically with exponential backoff and
+jitter, honoring a `Retry-After` header when the server sends one. This keeps
+long auto-paginated pulls from failing on a single rate-limit blip. What gets
+retried depends on the request, to avoid duplicating side effects:
+
+- **`429 Too Many Requests`** — retried for every command (the request is
+  rejected before the server processes it, so a retry is always safe).
+- **Transient `5xx` (500, 502, 503, 504) and network errors** — retried only for
+  idempotent reads and updates (GET/PUT/DELETE) and for the read-only search and
+  list `POST`s behind list commands (`/api/v1/search/*`, and any `/api/v1/` path
+  ending in `/search` or `/list`). Other `POST` mutations
+  (e.g. `requests create`, `tasks approve`) are **not** retried on these, since
+  the server may have already applied the change before the failure.
+  Non-transient 5xx (501 Not Implemented, 505, 511) are never retried.
+
+Control the retry budget (attempts *after* the first try) via, in order of
+precedence:
+
+1. `--max-retries N` flag (any command that reaches the C1 API)
+2. `C1I_MAX_RETRIES` environment variable
+3. Default: `4`
+
+Set `--max-retries 0` to disable retries entirely. Non-retryable responses
+(4xx other than 429, and 501/505) fail immediately.
+
+A non-empty `C1I_DEBUG`, `C1I_DRY_RUN`, `C1I_MAX_RETRIES` or
+`C1I_ERROR_FORMAT` value that doesn't parse exits `2` naming the variable
+before any request; the flag given on the command line overrides the variable
+entirely.
+
+This covers the token mint too: minting or refreshing the OAuth2 bearer
+c1i authenticates with is itself a request, subject to the same 429 retry
+(never 5xx/network, since it's a POST) and the same `--max-retries` budget.
+
+Every request also gets a fixed timeout, per attempt (a retried request
+gets a fresh budget, not a shrinking share of one deadline): 10 minutes
+for a REST or MCP gateway request, 30 seconds for `auth login`'s
+device-flow requests and the OAuth2 token mint/refresh above — tighter
+because those are fast request/response exchanges, not the kind of call
+that legitimately runs long. Neither is configurable.
+
+### Dry run
+
+`--dry-run` (or `C1I_DRY_RUN=1`) previews a C1 REST mutation and returns
+without sending it. The preview is one JSON object on stdout, the requests in
+send order with the full URL and the exact body (`upgrade --dry-run` is the
+exception: it prints plain `[dry-run]` text lines, since it sends no C1 API
+mutation):
+
+```sh
+$ c1i requests create grant --app-id A1 --entitlement-id E1 --user-id U1 --dry-run
+{
+  "dryRun": true,
+  "requests": [
+    {
+      "method": "POST",
+      "url": "https://tenant.example.invalid/api/v1/task/grant",
+      "body": {
+        "appEntitlementId": "E1",
+        "appId": "A1",
+        "identityUserId": "U1"
+      }
+    }
+  ]
+}
+```
+
+Its only keys are `dryRun` and `requests` (one entry per request: several for
+`mcp tools approve` with several ids, up to three for `entitlements create`);
+it never has an `id`, and `body` is omitted when the request has none. A
+stderr notice, `dry run: nothing was sent`, accompanies every preview.
+
+It applies to every REST write command and to non-GET `api` calls, and never
+sends that mutation. `mcp gateway call` rejects both `--dry-run` and
+`C1I_DRY_RUN`: c1i cannot preview or suppress a gateway tool's side effects, so
+inspect the tool and treat its invocation as live. `auth login` rejects both
+too: it can't preview or suppress storing a credential.
+
+A preview resolves the URL first, so it needs one configured (exit `2`
+without), and it applies the same id guard as a real send: an empty, `.` or
+`..` id exits `2`. An explicit `--fields` exits `2` too, since a preview is
+never projected. A preview needs no credentials, except where c1i must look
+something up so the previewed body is exact:
+
+- `tasks approve`, `deny`, `restart`, `skip-step` and `reassign` without
+  `--policy-step-id` read the task to resolve its current policy step;
+- `mcp servers update-credentials` for a hosted server without `--catalog-id`
+  reads the server to resolve its catalog id;
+- `requests create grant`/`revoke` without `--user-id` resolve the caller;
+- `upgrade` fetches and verifies the release (see [Updating the binary](#updating-the-binary-c1i-upgrade)).
+
+Other pre-send checks, such as the policy lookups on `apps` and
+`entitlements` writes, are skipped on a preview. `policies update` skips its
+policy-type lookup too, so a patch that needs the type exits `2` under
+`--dry-run` unless you pass `--policy-type`.
+
+**An inherited `C1I_DRY_RUN=1` turns every write in a script into a
+preview.** The preview has no `id`, so `jq -r .id` prints `null` and the script
+carries on with it. Extract ids with `jq -er`, which fails on a preview:
+
+```sh
+APP_ID=$(c1i apps create --display-name "Example" | jq -er .id) || exit 1
+```
+
+### Debug tracing
+
+`--debug` (or `C1I_DEBUG=1`) traces each API HTTP request to stderr — method,
+URL, response status, and elapsed time, including every retry attempt. Headers
+and bodies are never logged, so credentials don't leak. Output goes to stderr,
+so it won't corrupt piped JSON on stdout:
+
+```sh
+$ c1i apps list --debug 2>trace.log
+$ cat trace.log
+> GET https://example.conductor.one/api/v1/apps
+< GET /api/v1/apps 200 OK (142ms)
+```
+
+## Output Conventions
+
+- **List commands** (`users list`, `apps list`, etc.) output NDJSON (one JSON object per line).
+- **Mutations** (create, update, delete, owner changes, task actions,
+  bindings) print the API's response as pretty JSON, unwrapped the same way the
+  matching `get` unwraps it; every other envelope key, `expanded` included,
+  stays as a top-level sibling. **The id path varies by command:** most use
+  `.id`, but an MCP server's is `.connectorId`, a proxy binding's `.srcAppId`,
+  `role-mining trigger` prints `.runId`, `findings bulk-*` `.bulkActionId`,
+  `role-mining access-profiles create` `.accessProfileId`,
+  `findings create-task` `.taskId` and `.finding.id`, and `webhooks test`
+  `.id` (the delivery) and `.webhookId`. Extract an id with `jq -er`, which
+  fails rather than printing `null`. Deletes and other empty responses print
+  `{}`; exit `0` is the success signal. A task's `.state` (`tasks` actions,
+  `requests create`) is the server's snapshot, not the outcome: re-read with
+  `tasks get`. `mcp tools approve` prints one compact JSON line per tool.
+- **`api`** outputs pretty-printed JSON. With `--paginate`, outputs NDJSON (one list item per line). A `200` whose body is not JSON is an error (exit `6`), not a silent pass-through — a `--path` that escapes the API prefix can reach the web app and return HTML. An empty body still succeeds, since some endpoints answer a write with nothing.
+- **`docs`** commands output NDJSON (`search`, `endpoints`), pretty JSON (`endpoint`), YAML (`openapi`), or plain text (`page`).
+- List commands auto-paginate by default, except the single-request ones the
+  agent guide names under Pagination (the `role-mining` and `findings …-rules`
+  lists warn on stderr when a result is partial). Pass `--page-token` with a
+  non-empty cursor to fetch a single page manually; supplying the flag at all
+  disables auto-pagination, so a blank value is a usage error (exit 2) rather
+  than an empty filter.
+- **Stuck cursor.** A page holding only rows already printed is skipped (apart
+  from any rows without an id); a page with any new row is printed whole. If the
+  server's cursor stops advancing (a repeated `nextPageToken`, or two or more
+  pages in a row, at least 25 rows in all, holding only rows already seen), or
+  it sends 100 empty pages in a row (`export events` excepted), the command
+  keeps the rows already printed, warns on stderr that results are INCOMPLETE
+  naming the route, and exits `6`. `functions list`, `functions commits` and the
+  automation lists read routes that do this on large result sets. A page whose
+  rows all lack the id the command reads is an unrecognized response (exit `6`);
+  commands keyed on several fields, such as `grants list` and
+  `entitlements list`, print such rows instead.
+- `--page-size` **requests** a per-call batch size (max 100; `mcp tools
+  history` and `mcp bindings history` allow 200). Most list commands default it
+  to 50 (see `--help`); `--page-size 0` asks for the server's default of 25,
+  not "none". It is not a guarantee: a page can contain more rows than you asked
+  for, by an amount that varies per endpoint and per size, and a positive value
+  below 5 usually returns 5 (`policies list` floors at 6; `mcp servers catalog
+  list` has no floor). A value over the max is clamped by c1i rather than
+  rejected. A negative `--page-size` or `--limit` is a usage error (exit 2),
+  rejected before any request. Use `--limit N` for an exact total: it is
+  enforced client-side, so it holds even when a page overshoots, and it stops
+  auto-pagination once reached.
+
+### Repeatable flags
+
+A flag documented as **repeatable** takes one value per occurrence, and a comma
+is a literal character rather than a separator:
+
+```sh
+c1i mcp bindings create --app-id A --connector-id C --toolset-id T \
+  --tool-id tool-a --tool-id tool-b     # two tools
+```
+
+`--tool-id tool-a,tool-b` is one id containing a comma, not two ids. This is
+easy to miss on `--config-field`, where `--config-field "region=us1,env=prod"`
+sets `region` to `us1,env=prod` and the server may accept it.
+
+An empty occurrence is a usage error (exit 2), rejected before any request, so
+an unset shell variable cannot silently shorten a list or remove a credential
+restriction. Contrast `--fields`, which *is* comma-separated.
+
+### Enum flags
+
+Every flag that takes a named value (`--state`, `--status`, `--type`,
+`--policy-type`, `--sort`, `--auth`, `--unbind-policy`, `--error-format`,
+`--method`, ...) parses it the same way: ASCII case and surrounding
+whitespace are ignored, `-` and `_` are the same, and the full API name is
+accepted in any case (`--state pending-review`, `--state
+mcp_tool_state_approved`). Its `--help` lists the short names. An unknown or
+non-ASCII value is a usage error (exit 2), rejected before any request. An empty
+string is the same as omitting the flag (the filter stays unset); a
+whitespace-only value is a usage error (exit 2), not "no filter". A repeatable
+flag such as `--unbind-policy` rejects an empty occurrence instead.
+
+Where `--help` says "or any `PREFIX_*` value", a value carrying that prefix
+is sent upper-cased with `-` changed to `_`, so an enum newer than c1i still
+works. Two flags whose API enums have no prefix, `users list --status` and
+`entitlements create --resource-type`, send any ASCII value that way. The
+only values rewritten to a different enum are these listed aliases:
+`MCP_TOOL_STATE_PENDING` is sent as `MCP_TOOL_STATE_PENDING_REVIEW`, and `REQUEST_CATALOG_ENROLLMENT_BEHAVIOR_BYPASS`/`_ENFORCE` as their `..._ENTITLEMENT_REQUEST_POLICY` names. No other prefixed value is ever remapped.
+
+### Display names
+
+A blank `--display-name` (empty, whitespace or invisible-only, such as a lone
+U+200B) exits 2 on every create and update, before any request is sent.
+
+### Durations
+
+Every duration flag (`--duration-grant`, `requests create grant --duration`,
+`tasks update-grant-duration --duration`, `--expires`, `--callback-timeout`)
+takes a whole-number Go (`8h`, `1h30m`) or protobuf (`3600s`) duration and sends
+it in seconds. There is no sign, no decimal and no `d` unit: `-1h`, `1.5h` and
+`7d` exit `2`, as does an empty value. `0s` is accepted by c1i and sent as is;
+whether the server takes it is its call (it stores it for `--duration-grant` and
+`tasks update-grant-duration`, and refuses it for `requests create grant`).
+Ranges beyond that are the server's too and are noted per flag.
+
+### Update masks
+
+`--update-mask` takes comma-separated field paths; spaces around each path are
+trimmed, and an empty path (`a,,b`) or a blank mask exits `2`. It applies to
+`policies update`, `automations update`, `access-reviews update`,
+`mcp classifiers update`, `mcp classifiers policy update` and
+`mcp classifiers tool-gates update`, which send the object in `--body-file` with
+that mask. `--body-file` requires `--update-mask`; on `policies update` and
+`automations update`, which otherwise derive the mask from their flags,
+`--update-mask` without `--body-file` exits `2`. (`mcp servers update-credentials`
+has its own optional mask, described under Auth in the MCP section.)
+
+### Soft delete
+
+Most deletes mark the object rather than erase it, so a later `get` does not
+always exit `4`:
+
+- `apps delete`: the app is marked with `deletedAt`; `apps list` rows carry a
+  `deleted_at` field.
+- `entitlements delete`: `entitlements get` still returns it, with `deletedAt`
+  set.
+- `policies delete`: the policy leaves `policies list` and the default
+  `search`, but `policies get` still returns it at exit `0` with `deletedAt`
+  set; only `search --include-deleted` finds it in a listing. List and search
+  rows carry `deleted_at`,
+  `null` on a live policy, so `jq 'select(.deleted_at)'` selects only the
+  deleted ones.
+- `automations delete`: the automation leaves `automations list`, but
+  `automations get` still returns it.
+- `access-profiles delete`: the profile leaves `access-profiles list`, while
+  `access-profiles get` still returns it with `deletedAt` populated.
+- `webhooks delete`: the webhook leaves `webhooks list`, but `webhooks get`
+  still returns it at exit `0` with `deletedAt` set.
+- `service-principals delete`: reflected immediately. `service-principals get`
+  exits `4` and the lists omit it; `users get <sp-id>` shows
+  `"status": "DELETED"` and `deletedAt`.
+- `service-principals credentials revoke`: `credentials get` on a revoked
+  credential still returns the record, exit `0`, with no field marking it; only
+  the lists omit it.
+
+### Field selection
+
+`--fields` is the default for reducing JSON read output: use it when you know
+the keys you need. It has no external dependency, keeps list output as NDJSON,
+and understands c1i's snake_case/camelCase field variants.
+
+Use `jq` only when the work is more than projection: conditional selection,
+reshaping, aggregation, sorting, or extracting a value from mutation output
+(with `jq -er`). `--fields` never changes mutation output.
+
+```sh
+# Known keys: prefer c1i's built-in projection
+c1i users list --fields id,email
+
+# Nested known keys: --fields preserves the object shape
+c1i functions get <id> --fields id,displayName,publishedCommitId
+
+# Conditional selection: jq is appropriate
+DELETED_APPS="$(c1i apps list | jq -c 'if .deleted_at then . else empty end')"
+
+# Mutation output: never projected; extract the id with jq -er
+APP_ID=$(c1i apps create --display-name "Example" | jq -er .id)
+```
+
+- Comma-separated; use dot-paths (`user.email`) for nested access.
+- Matches the emitted keys, trying an **exact match first**, then falling back
+  to a **case- and separator-insensitive** match. So `--fields displayName`
+  resolves whether the output uses `displayName` (single-object reads) or
+  `display_name` (list rows); the output keeps the source key's own spelling.
+- Single-object `get` commands print the resource itself, so `--fields id`
+  yields `{"id": ...}` and `jq -r .id` works. The API wraps the resource under
+  its own key (`app`, `function`, `userView.user`, ...); `get` unwraps that and
+  keeps every other envelope key — `expanded` among them — as a top-level
+  sibling. Do **not** write the wrapper into a path: `--fields function.id`
+  does not resolve, because there is no `function` key left.
+- `c1i api` is a raw passthrough and still returns the envelope. There, and
+  for any genuinely nested field, a name that doesn't match at the top level is
+  also searched for deeper: the shallowest match wins, and a tie at the same
+  depth resolves to the alphabetically first full path, deterministically.
+- Mutation output is unwrapped the same way, but never projected: an explicit
+  `--fields` on a mutation (even `--fields ""`) is a usage error (exit `2`),
+  checked before anything is sent; `C1I_FIELDS` alone is ignored there. The id
+  path varies by command (`.id`, `.connectorId`, `.srcAppId`, ...); a delete
+  prints `{}`.
+- A `--fields` spec that matches **nothing at all** in the response (a typo, or
+  a field that truly doesn't exist) is a usage error (exit `2`), not a silent
+  `{}`. This is a zero-match check only: `--fields id,dispalyName` (typo) still
+  exits `0` and silently returns just `{"id": ...}` — the misspelled field is
+  dropped with no error and no other signal that it didn't match anything. This
+  is deliberate, not a gap in the check: `--fields`/`C1I_FIELDS` is a
+  persistent, session-wide setting, so one spec is routinely applied across
+  many differently-shaped responses; erroring on any unmatched name would make
+  a session-wide `C1I_FIELDS` fail on every command whose response happens to
+  lack one of the names. Double-check the spelling of every name you pass —
+  the tool only catches getting *all* of them wrong.
+  - On list commands and `api --paginate`, "the response" means the **whole
+    result**, not each row: rows are decided and streamed out one at a time as
+    they're fetched (never buffered — these commands can walk unbounded,
+    multi-page results), but a row whose projection is empty is **skipped**
+    rather than printed as `{}` — a field present on some rows but absent on
+    others just means fewer rows are printed, not an error, as long as it
+    matches at least one row anywhere. Only a spec that matches nothing in
+    **every** row across every page is an error, with a message ("...matched
+    no keys in any row of the response") distinguishable from the
+    single-object case above. Because every row's own projection was already
+    empty (and skipped) by the time that whole-result verdict is known,
+    nothing is printed on stdout before the error — never rely on output
+    length to detect success without checking the exit code. If you're piping
+    to `jq` (`c1i ... | jq ...`), remember `$?` reads the pipe's last command,
+    not `c1i`'s — the stderr message is the durable signal here, not the exit
+    code you'd read from a naive `$?` after the pipe.
+  - **Worst case: a `--fields` spec that matches nothing at all, paired with
+    `--limit`, scans the collection to completion before erroring** — "nothing
+    ever matched" can't be known short of exhausting every page, and a typo is
+    the ordinary way to hit this: on a large tenant that is minutes of requests
+    before the exit `2`. `accounts list --unmapped-only` and `functions usage`
+    behave the same way for their client-side filtering: a filter applied after
+    the fetch can't bound the work when nothing matches, whatever `--limit`
+    says.
+- Missing fields are silently omitted, so requesting a superset is safe.
+- Also settable via `C1I_FIELDS`. Applies to read output — list commands, `api`,
+  and single-object `get` commands. Mutation output is never projected, so a
+  session-wide `C1I_FIELDS` is ignored there.
+
+### Errors & exit codes
+
+On failure, `c1i` writes an error to stderr and exits with a code an agent can
+branch on without parsing text:
+
+| Code | Meaning |
+|------|---------|
+| `0` | success |
+| `1` | generic / unclassified error |
+| `2` | usage error (bad flags or arguments, an empty, `.` or `..` id, a blank required or id flag or positional, a missing, malformed, `null` or wrong-shape `--*-file` input, a non-object element in an array `--*-file` or `--body-file`, a refused redirect (but `upgrade` and the `docs` commands exit `8`), or the API returned any `4xx` other than `401`/`403`/`404`/`408`/`429`/`499`) |
+| `3` | not authenticated, or API returned `401`/`403` |
+| `4` | API returned `404` (not found) |
+| `5` | API returned `429` (rate limited — back off and retry) |
+| `6` | C1 failed: the API returned `5xx`, a redirect chain never settled, it answered `200` with a body that isn't JSON, a list command's pagination cursor stopped advancing, or a list page in a shape the command doesn't recognize |
+| `7` | `mcp gateway call` completed, but the tool itself reported an error (`isError: true` in its result) |
+| `8` | a system beyond C1, or the MCP protocol layer, failed — an upstream connector was unreachable or errored, the gateway itself was unreachable (DNS failure, refused connection), `mcp servers test-connection` reported an EXTERNAL server unreachable (its JSON is still printed), or the gateway returned a protocol-level JSON-RPC error |
+
+Exit `1` with `writing output:` means stdout failed (e.g. a full disk). On a
+mutation the message is `<METHOD> <path> succeeded but writing its response
+failed`: the change was applied, so verify before retrying a mutation.
+
+`6` and `8` are both "something remote broke," but they call for different
+responses. `6` means C1 itself is failing, so retrying later is reasonable and
+there is nothing to fix at your end. `8` means C1 answered fine and something
+past it did not, so the same call will usually fail the same way: if a connector
+is at fault, inspect it (`c1i mcp servers get <connector-id> --app-id <id>`, and
+`mcp servers test-connection` for an EXTERNAL server) — it may be unreachable or
+its credentials may have expired; if it's a protocol-level JSON-RPC error, that
+indicates a version mismatch or a bug in c1i, worth reporting rather than
+working around.
+
+An **empty id argument** is a usage error, not a lookup: `c1i policies get ""`
+exits `2` and sends nothing, because an empty id would render a trailing empty
+path segment that the API redirects to the collection endpoint. An id of `.` or
+`..` is refused the same way, as is one with a `;` suffix (`..;x`), which the
+API treats as `..`. The same check applies to a raw `api --path` ending in `/`
+or containing such a segment, percent-encoded (`%2E`) or not.
+
+The REST client is **selective about HTTP redirects**. It follows one only when
+the target path is identical to what was requested (a trailing-slash difference
+counts as a change) and the target host is in the same trust scope as the
+request host: the same host differing only in scheme or port, or a
+`label.`-prefix relationship in either direction with at least two labels,
+which covers `apex ↔ www` canonicalization. An `https`→`http` downgrade is
+never followed. Anything else is refused as an error (exit `2`) naming the
+target. The path rule stops an id such as `/` or `.` from turning a
+single-object read into a full listing; the host rule keeps your bearer token
+from going to whatever host a redirect names, since a followed redirect is
+re-authenticated. A chain of allowed redirects that doesn't settle within five
+hops fails as a remote error (exit `6`) rather than looping.
+
+This applies to every command that sends HTTP: the REST client, the MCP
+gateway, the login handshake, `upgrade` and every `docs` command, so the path
+and redirect guards, `--debug` tracing, and `--max-retries` cover all of them,
+not just REST commands (`upgrade` and the `docs` commands map a refused
+redirect to exit `8`, and `docs search`/`docs page` map any failure to `8`).
+
+One narrower carve-out inside login: the device-flow token poll forces its own
+retry count to zero, because RFC 8628's polling interval already *is* that
+call's retry strategy and a second layer underneath would double the delays.
+`--max-retries` still governs the rest of the handshake.
+
+Pass `--error-format json` (or `C1I_ERROR_FORMAT=json`) to get a machine-readable
+error object instead of the default `Error: <msg>` line. For API errors it
+includes the status, method, path, and response body:
+
+```sh
+$ c1i api --path /api/v1/apps/<nonexistent-id> --error-format json
+{"body":{"code":5,"message":"not found (request-id: ...)"},"error":"API error: API GET /api/v1/apps/<nonexistent-id> returned 404: ...","method":"GET","path":"/api/v1/apps/<nonexistent-id>","status":404}
+```
+
+The `body` is embedded as JSON when the API returned JSON, otherwise as a string.
+
+In JSON mode **stderr is NDJSON**: every line is one object. Errors carry
+`"error"` (select them with `jq 'select(.error)'`), warnings and other notices
+`"notice"` and `"kind"`, `--wait` progress `"progress"`, and `--debug` trace
+lines `"debug"`. Text mode is unchanged.
+
+An error from a command that writes also carries `"applied"` (`api` does not:
+c1i can't tell whether an arbitrary call writes):
+
+| `applied` | When |
+|---|---|
+| `false` | Nothing reached the server: a flag or argument error, an explicit `--fields`, a refused id or redirect, a failed pre-send lookup, a failure before the request was written, or an API `4xx` other than `408`/`499` |
+| `"unknown"` | The request may have reached the server: an API `408`/`499` or `5xx`, a transport error or timeout after the request was written, or **any** failure after an earlier attempt was sent and retried (a `DELETE` that gets a `503` and then a `404` is `"unknown"`) |
+| `true` | The change was applied: the response wasn't JSON, printing it failed, or a `--wait` after it failed |
+
+`entitlements create` adds a `"steps"` array naming each attempted request, and
+its `applied` is `true` once any step was written.
+
+`mcp tools approve` reports each failed id as its own object
+(`{"error":…,"id":"<tool-id>","applied":…}`) and ends with a summary object
+that has no `id`:
+`{"error":"approved N of M tools; …","applied":…,"succeeded":N,"failed":K,"notAttempted":[…]}`.
+**A batch can exit non-zero with changes applied:** it exits with the first
+failure's code while the ids before it stay approved, a failed stdout write
+stops it (exit `1`), and `notAttempted` lists the ids it never sent.
+
+Exit codes are unchanged.
 
 ## Command Reference
 
@@ -1198,615 +1807,6 @@ search API (`api.mintlify.com`), not to the C1 API.
 both print identical output.
 
 `~/.c1i/cache/` belongs to c1i: when `docs openapi`, `docs endpoints` or `docs endpoint` refreshes the spec, any file there that the running version doesn't use (such as one left by an older release) is deleted. Don't keep your own files in it.
-
-## Output Conventions
-
-- **List commands** (`users list`, `apps list`, etc.) output NDJSON (one JSON object per line).
-- **Mutations** (create, update, delete, owner changes, task actions,
-  bindings) print the API's response as pretty JSON, unwrapped the same way the
-  matching `get` unwraps it; every other envelope key, `expanded` included,
-  stays as a top-level sibling. **The id path varies by command:** most use
-  `.id`, but an MCP server's is `.connectorId`, a proxy binding's `.srcAppId`,
-  `role-mining trigger` prints `.runId`, `findings bulk-*` `.bulkActionId`,
-  `role-mining access-profiles create` `.accessProfileId`,
-  `findings create-task` `.taskId` and `.finding.id`, and `webhooks test`
-  `.id` (the delivery) and `.webhookId`. Extract an id with `jq -er`, which
-  fails rather than printing `null`. Deletes and other empty responses print
-  `{}`; exit `0` is the success signal. A task's `.state` (`tasks` actions,
-  `requests create`) is the server's snapshot, not the outcome: re-read with
-  `tasks get`. `mcp tools approve` prints one compact JSON line per tool.
-- **`api`** outputs pretty-printed JSON. With `--paginate`, outputs NDJSON (one list item per line). A `200` whose body is not JSON is an error (exit `6`), not a silent pass-through — a `--path` that escapes the API prefix can reach the web app and return HTML. An empty body still succeeds, since some endpoints answer a write with nothing.
-- **`docs`** commands output NDJSON (`search`, `endpoints`), pretty JSON (`endpoint`), YAML (`openapi`), or plain text (`page`).
-- List commands auto-paginate by default, except the single-request ones the
-  agent guide names under Pagination (the `role-mining` and `findings …-rules`
-  lists warn on stderr when a result is partial). Pass `--page-token` with a
-  non-empty cursor to fetch a single page manually; supplying the flag at all
-  disables auto-pagination, so a blank value is a usage error (exit 2) rather
-  than an empty filter.
-- **Stuck cursor.** A page holding only rows already printed is skipped (apart
-  from any rows without an id); a page with any new row is printed whole. If the
-  server's cursor stops advancing (a repeated `nextPageToken`, or two or more
-  pages in a row, at least 25 rows in all, holding only rows already seen), or
-  it sends 100 empty pages in a row (`export events` excepted), the command
-  keeps the rows already printed, warns on stderr that results are INCOMPLETE
-  naming the route, and exits `6`. `functions list`, `functions commits` and the
-  automation lists read routes that do this on large result sets. A page whose
-  rows all lack the id the command reads is an unrecognized response (exit `6`);
-  commands keyed on several fields, such as `grants list` and
-  `entitlements list`, print such rows instead.
-- `--page-size` **requests** a per-call batch size (max 100; `mcp tools
-  history` and `mcp bindings history` allow 200). Most list commands default it
-  to 50 (see `--help`); `--page-size 0` asks for the server's default of 25,
-  not "none". It is not a guarantee: a page can contain more rows than you asked
-  for, by an amount that varies per endpoint and per size, and a positive value
-  below 5 usually returns 5 (`policies list` floors at 6; `mcp servers catalog
-  list` has no floor). A value over the max is clamped by c1i rather than
-  rejected. A negative `--page-size` or `--limit` is a usage error (exit 2),
-  rejected before any request. Use `--limit N` for an exact total: it is
-  enforced client-side, so it holds even when a page overshoots, and it stops
-  auto-pagination once reached.
-
-### Repeatable flags
-
-A flag documented as **repeatable** takes one value per occurrence, and a comma
-is a literal character rather than a separator:
-
-```sh
-c1i mcp bindings create --app-id A --connector-id C --toolset-id T \
-  --tool-id tool-a --tool-id tool-b     # two tools
-```
-
-`--tool-id tool-a,tool-b` is one id containing a comma, not two ids. This is
-easy to miss on `--config-field`, where `--config-field "region=us1,env=prod"`
-sets `region` to `us1,env=prod` and the server may accept it.
-
-An empty occurrence is a usage error (exit 2), rejected before any request, so
-an unset shell variable cannot silently shorten a list or remove a credential
-restriction. Contrast `--fields`, which *is* comma-separated.
-
-### Enum flags
-
-Every flag that takes a named value (`--state`, `--status`, `--type`,
-`--policy-type`, `--sort`, `--auth`, `--unbind-policy`, `--error-format`,
-`--method`, ...) parses it the same way: ASCII case and surrounding
-whitespace are ignored, `-` and `_` are the same, and the full API name is
-accepted in any case (`--state pending-review`, `--state
-mcp_tool_state_approved`). Its `--help` lists the short names. An unknown or
-non-ASCII value is a usage error (exit 2), rejected before any request. An empty
-string is the same as omitting the flag (the filter stays unset); a
-whitespace-only value is a usage error (exit 2), not "no filter". A repeatable
-flag such as `--unbind-policy` rejects an empty occurrence instead.
-
-Where `--help` says "or any `PREFIX_*` value", a value carrying that prefix
-is sent upper-cased with `-` changed to `_`, so an enum newer than c1i still
-works. Two flags whose API enums have no prefix, `users list --status` and
-`entitlements create --resource-type`, send any ASCII value that way. The
-only values rewritten to a different enum are these listed aliases:
-`MCP_TOOL_STATE_PENDING` is sent as `MCP_TOOL_STATE_PENDING_REVIEW`, and `REQUEST_CATALOG_ENROLLMENT_BEHAVIOR_BYPASS`/`_ENFORCE` as their `..._ENTITLEMENT_REQUEST_POLICY` names. No other prefixed value is ever remapped.
-
-### Display names
-
-A blank `--display-name` (empty, whitespace or invisible-only, such as a lone
-U+200B) exits 2 on every create and update, before any request is sent.
-
-### Durations
-
-Every duration flag (`--duration-grant`, `requests create grant --duration`,
-`tasks update-grant-duration --duration`, `--expires`, `--callback-timeout`)
-takes a whole-number Go (`8h`, `1h30m`) or protobuf (`3600s`) duration and sends
-it in seconds. There is no sign, no decimal and no `d` unit: `-1h`, `1.5h` and
-`7d` exit `2`, as does an empty value. `0s` is accepted by c1i and sent as is;
-whether the server takes it is its call (it stores it for `--duration-grant` and
-`tasks update-grant-duration`, and refuses it for `requests create grant`).
-Ranges beyond that are the server's too and are noted per flag.
-
-### Update masks
-
-`--update-mask` takes comma-separated field paths; spaces around each path are
-trimmed, and an empty path (`a,,b`) or a blank mask exits `2`. It applies to
-`policies update`, `automations update`, `access-reviews update`,
-`mcp classifiers update`, `mcp classifiers policy update` and
-`mcp classifiers tool-gates update`, which send the object in `--body-file` with
-that mask. `--body-file` requires `--update-mask`; on `policies update` and
-`automations update`, which otherwise derive the mask from their flags,
-`--update-mask` without `--body-file` exits `2`. (`mcp servers update-credentials`
-has its own optional mask, described under Auth in the MCP section.)
-
-### Soft delete
-
-Most deletes mark the object rather than erase it, so a later `get` does not
-always exit `4`:
-
-- `apps delete`: the app is marked with `deletedAt`; `apps list` rows carry a
-  `deleted_at` field.
-- `entitlements delete`: `entitlements get` still returns it, with `deletedAt`
-  set.
-- `policies delete`: the policy leaves `policies list` and the default
-  `search`, but `policies get` still returns it at exit `0` with `deletedAt`
-  set; only `search --include-deleted` finds it in a listing. List and search
-  rows carry `deleted_at`,
-  `null` on a live policy, so `jq 'select(.deleted_at)'` selects only the
-  deleted ones.
-- `automations delete`: the automation leaves `automations list`, but
-  `automations get` still returns it.
-- `access-profiles delete`: the profile leaves `access-profiles list`, while
-  `access-profiles get` still returns it with `deletedAt` populated.
-- `webhooks delete`: the webhook leaves `webhooks list`, but `webhooks get`
-  still returns it at exit `0` with `deletedAt` set.
-- `service-principals delete`: reflected immediately. `service-principals get`
-  exits `4` and the lists omit it; `users get <sp-id>` shows
-  `"status": "DELETED"` and `deletedAt`.
-- `service-principals credentials revoke`: `credentials get` on a revoked
-  credential still returns the record, exit `0`, with no field marking it; only
-  the lists omit it.
-
-### Field selection
-
-`--fields` is the default for reducing JSON read output: use it when you know
-the keys you need. It has no external dependency, keeps list output as NDJSON,
-and understands c1i's snake_case/camelCase field variants.
-
-Use `jq` only when the work is more than projection: conditional selection,
-reshaping, aggregation, sorting, or extracting a value from mutation output
-(with `jq -er`). `--fields` never changes mutation output.
-
-```sh
-# Known keys: prefer c1i's built-in projection
-c1i users list --fields id,email
-
-# Nested known keys: --fields preserves the object shape
-c1i functions get <id> --fields id,displayName,publishedCommitId
-
-# Conditional selection: jq is appropriate
-DELETED_APPS="$(c1i apps list | jq -c 'if .deleted_at then . else empty end')"
-
-# Mutation output: never projected; extract the id with jq -er
-APP_ID=$(c1i apps create --display-name "Example" | jq -er .id)
-```
-
-- Comma-separated; use dot-paths (`user.email`) for nested access.
-- Matches the emitted keys, trying an **exact match first**, then falling back
-  to a **case- and separator-insensitive** match. So `--fields displayName`
-  resolves whether the output uses `displayName` (single-object reads) or
-  `display_name` (list rows); the output keeps the source key's own spelling.
-- Single-object `get` commands print the resource itself, so `--fields id`
-  yields `{"id": ...}` and `jq -r .id` works. The API wraps the resource under
-  its own key (`app`, `function`, `userView.user`, ...); `get` unwraps that and
-  keeps every other envelope key — `expanded` among them — as a top-level
-  sibling. Do **not** write the wrapper into a path: `--fields function.id`
-  does not resolve, because there is no `function` key left.
-- `c1i api` is a raw passthrough and still returns the envelope. There, and
-  for any genuinely nested field, a name that doesn't match at the top level is
-  also searched for deeper: the shallowest match wins, and a tie at the same
-  depth resolves to the alphabetically first full path, deterministically.
-- Mutation output is unwrapped the same way, but never projected: an explicit
-  `--fields` on a mutation (even `--fields ""`) is a usage error (exit `2`),
-  checked before anything is sent; `C1I_FIELDS` alone is ignored there. The id
-  path varies by command (`.id`, `.connectorId`, `.srcAppId`, ...); a delete
-  prints `{}`.
-- A `--fields` spec that matches **nothing at all** in the response (a typo, or
-  a field that truly doesn't exist) is a usage error (exit `2`), not a silent
-  `{}`. This is a zero-match check only: `--fields id,dispalyName` (typo) still
-  exits `0` and silently returns just `{"id": ...}` — the misspelled field is
-  dropped with no error and no other signal that it didn't match anything. This
-  is deliberate, not a gap in the check: `--fields`/`C1I_FIELDS` is a
-  persistent, session-wide setting, so one spec is routinely applied across
-  many differently-shaped responses; erroring on any unmatched name would make
-  a session-wide `C1I_FIELDS` fail on every command whose response happens to
-  lack one of the names. Double-check the spelling of every name you pass —
-  the tool only catches getting *all* of them wrong.
-  - On list commands and `api --paginate`, "the response" means the **whole
-    result**, not each row: rows are decided and streamed out one at a time as
-    they're fetched (never buffered — these commands can walk unbounded,
-    multi-page results), but a row whose projection is empty is **skipped**
-    rather than printed as `{}` — a field present on some rows but absent on
-    others just means fewer rows are printed, not an error, as long as it
-    matches at least one row anywhere. Only a spec that matches nothing in
-    **every** row across every page is an error, with a message ("...matched
-    no keys in any row of the response") distinguishable from the
-    single-object case above. Because every row's own projection was already
-    empty (and skipped) by the time that whole-result verdict is known,
-    nothing is printed on stdout before the error — never rely on output
-    length to detect success without checking the exit code. If you're piping
-    to `jq` (`c1i ... | jq ...`), remember `$?` reads the pipe's last command,
-    not `c1i`'s — the stderr message is the durable signal here, not the exit
-    code you'd read from a naive `$?` after the pipe.
-  - **Worst case: a `--fields` spec that matches nothing at all, paired with
-    `--limit`, scans the collection to completion before erroring** — "nothing
-    ever matched" can't be known short of exhausting every page, and a typo is
-    the ordinary way to hit this: on a large tenant that is minutes of requests
-    before the exit `2`. `accounts list --unmapped-only` and `functions usage`
-    behave the same way for their client-side filtering: a filter applied after
-    the fetch can't bound the work when nothing matches, whatever `--limit`
-    says.
-- Missing fields are silently omitted, so requesting a superset is safe.
-- Also settable via `C1I_FIELDS`. Applies to read output — list commands, `api`,
-  and single-object `get` commands. Mutation output is never projected, so a
-  session-wide `C1I_FIELDS` is ignored there.
-
-### Errors & exit codes
-
-On failure, `c1i` writes an error to stderr and exits with a code an agent can
-branch on without parsing text:
-
-| Code | Meaning |
-|------|---------|
-| `0` | success |
-| `1` | generic / unclassified error |
-| `2` | usage error (bad flags or arguments, an empty, `.` or `..` id, a blank required or id flag or positional, a missing, malformed, `null` or wrong-shape `--*-file` input, a non-object element in an array `--*-file` or `--body-file`, a refused redirect (but `upgrade` and the `docs` commands exit `8`), or the API returned any `4xx` other than `401`/`403`/`404`/`408`/`429`/`499`) |
-| `3` | not authenticated, or API returned `401`/`403` |
-| `4` | API returned `404` (not found) |
-| `5` | API returned `429` (rate limited — back off and retry) |
-| `6` | C1 failed: the API returned `5xx`, a redirect chain never settled, it answered `200` with a body that isn't JSON, a list command's pagination cursor stopped advancing, or a list page in a shape the command doesn't recognize |
-| `7` | `mcp gateway call` completed, but the tool itself reported an error (`isError: true` in its result) |
-| `8` | a system beyond C1, or the MCP protocol layer, failed — an upstream connector was unreachable or errored, the gateway itself was unreachable (DNS failure, refused connection), `mcp servers test-connection` reported an EXTERNAL server unreachable (its JSON is still printed), or the gateway returned a protocol-level JSON-RPC error |
-
-Exit `1` with `writing output:` means stdout failed (e.g. a full disk). On a
-mutation the message is `<METHOD> <path> succeeded but writing its response
-failed`: the change was applied, so verify before retrying a mutation.
-
-`6` and `8` are both "something remote broke," but they call for different
-responses. `6` means C1 itself is failing, so retrying later is reasonable and
-there is nothing to fix at your end. `8` means C1 answered fine and something
-past it did not, so the same call will usually fail the same way: if a connector
-is at fault, inspect it (`c1i mcp servers get <connector-id> --app-id <id>`, and
-`mcp servers test-connection` for an EXTERNAL server) — it may be unreachable or
-its credentials may have expired; if it's a protocol-level JSON-RPC error, that
-indicates a version mismatch or a bug in c1i, worth reporting rather than
-working around.
-
-An **empty id argument** is a usage error, not a lookup: `c1i policies get ""`
-exits `2` and sends nothing, because an empty id would render a trailing empty
-path segment that the API redirects to the collection endpoint. An id of `.` or
-`..` is refused the same way, as is one with a `;` suffix (`..;x`), which the
-API treats as `..`. The same check applies to a raw `api --path` ending in `/`
-or containing such a segment, percent-encoded (`%2E`) or not.
-
-The REST client is **selective about HTTP redirects**. It follows one only when
-the target path is identical to what was requested (a trailing-slash difference
-counts as a change) and the target host is in the same trust scope as the
-request host: the same host differing only in scheme or port, or a
-`label.`-prefix relationship in either direction with at least two labels,
-which covers `apex ↔ www` canonicalization. An `https`→`http` downgrade is
-never followed. Anything else is refused as an error (exit `2`) naming the
-target. The path rule stops an id such as `/` or `.` from turning a
-single-object read into a full listing; the host rule keeps your bearer token
-from going to whatever host a redirect names, since a followed redirect is
-re-authenticated. A chain of allowed redirects that doesn't settle within five
-hops fails as a remote error (exit `6`) rather than looping.
-
-This applies to every command that sends HTTP: the REST client, the MCP
-gateway, the login handshake, `upgrade` and every `docs` command, so the path
-and redirect guards, `--debug` tracing, and `--max-retries` cover all of them,
-not just REST commands (`upgrade` and the `docs` commands map a refused
-redirect to exit `8`, and `docs search`/`docs page` map any failure to `8`).
-
-One narrower carve-out inside login: the device-flow token poll forces its own
-retry count to zero, because RFC 8628's polling interval already *is* that
-call's retry strategy and a second layer underneath would double the delays.
-`--max-retries` still governs the rest of the handshake.
-
-Pass `--error-format json` (or `C1I_ERROR_FORMAT=json`) to get a machine-readable
-error object instead of the default `Error: <msg>` line. For API errors it
-includes the status, method, path, and response body:
-
-```sh
-$ c1i api --path /api/v1/apps/<nonexistent-id> --error-format json
-{"body":{"code":5,"message":"not found (request-id: ...)"},"error":"API error: API GET /api/v1/apps/<nonexistent-id> returned 404: ...","method":"GET","path":"/api/v1/apps/<nonexistent-id>","status":404}
-```
-
-The `body` is embedded as JSON when the API returned JSON, otherwise as a string.
-
-In JSON mode **stderr is NDJSON**: every line is one object. Errors carry
-`"error"` (select them with `jq 'select(.error)'`), warnings and other notices
-`"notice"` and `"kind"`, `--wait` progress `"progress"`, and `--debug` trace
-lines `"debug"`. Text mode is unchanged.
-
-An error from a command that writes also carries `"applied"` (`api` does not:
-c1i can't tell whether an arbitrary call writes):
-
-| `applied` | When |
-|---|---|
-| `false` | Nothing reached the server: a flag or argument error, an explicit `--fields`, a refused id or redirect, a failed pre-send lookup, a failure before the request was written, or an API `4xx` other than `408`/`499` |
-| `"unknown"` | The request may have reached the server: an API `408`/`499` or `5xx`, a transport error or timeout after the request was written, or **any** failure after an earlier attempt was sent and retried (a `DELETE` that gets a `503` and then a `404` is `"unknown"`) |
-| `true` | The change was applied: the response wasn't JSON, printing it failed, or a `--wait` after it failed |
-
-`entitlements create` adds a `"steps"` array naming each attempted request, and
-its `applied` is `true` once any step was written.
-
-`mcp tools approve` reports each failed id as its own object
-(`{"error":…,"id":"<tool-id>","applied":…}`) and ends with a summary object
-that has no `id`:
-`{"error":"approved N of M tools; …","applied":…,"succeeded":N,"failed":K,"notAttempted":[…]}`.
-**A batch can exit non-zero with changes applied:** it exits with the first
-failure's code while the ids before it stay approved, a failed stdout write
-stops it (exit `1`), and `notAttempted` lists the ids it never sent.
-
-Exit codes are unchanged.
-
-## Configuration
-
-c1i requires a C1 **URL**.
-
-**c1i requires `https`.** A URL with any other scheme is rejected (exit `2`); it
-is not rewritten. Credentials embedded in the URL are dropped with a warning on
-stderr, and an embedded password is never echoed.
-
-The scheme may be omitted (`tenant.c1eu.ai`), in which case `https` is assumed.
-The host is lower-cased, so `HTTPS://TENANT.C1EU.AI` and `tenant.c1eu.ai`
-resolve identically, and a protocol-relative `//tenant.example` is handled.
-
-Both `*.conductor.one` and `*.c1eu.ai` (EU) tenant domains are accepted — pass
-whichever your tenant uses. Only the shape of the URL is checked, never the
-domain, so a typo like `example.conductor.on` is accepted here and surfaces
-later as an authentication failure.
-
-A bare name (`--url example`) is rejected: with more than one tenant domain in
-use it is ambiguous, and silently expanding it to `example.conductor.one` would
-point an EU tenant at the wrong region. The error names where the value came
-from, which matters when it is a stale entry in `~/.c1i.yaml` rather than
-something you just typed. A single-label host is fine as long as it arrives as a
-URL (`https://intranet-host`), such as a name only your resolver knows.
-
-Set it via (in order of precedence):
-
-1. `--url` flag
-2. `C1I_URL` environment variable
-3. `~/.c1i.yaml` config file:
-
-   ```yaml
-   url: https://example.conductor.one
-   ```
-
-   A terminal `c1i auth login` given the URL another way offers to save it
-   there. If the file isn't a valid YAML mapping, login warns and leaves it
-   unchanged. With a relative `HOME`, c1i neither reads nor writes it, so a
-   `.c1i.yaml` in the working directory is never used.
-
-These are equivalent:
-- `--url https://example.conductor.one`
-- `--url example.conductor.one`
-- `--url EXAMPLE.CONDUCTOR.ONE` (the host is lower-cased)
-
-**Every command prints which tenant it's about to use when the URL came from
-`~/.c1i.yaml`.** Nothing on the command line names the config file, so a
-stale entry there sends a command to the wrong tenant with no visible sign
-otherwise. `--url` and `C1I_URL` don't print this warning: both are explicit
-choices made for that invocation, and warning on every normal use of
-`C1I_URL` would just train you to stop reading it. The warning goes to
-stderr, once per invocation (never once per page of a paginated list):
-
-```
-Warning: no --url flag given; targeting https://example.conductor.one (from ~/.c1i.yaml)
-```
-
-For credential storage, see [Credential sources](#credential-sources) below.
-
-### Retries
-
-Transient API failures are retried automatically with exponential backoff and
-jitter, honoring a `Retry-After` header when the server sends one. This keeps
-long auto-paginated pulls from failing on a single rate-limit blip. What gets
-retried depends on the request, to avoid duplicating side effects:
-
-- **`429 Too Many Requests`** — retried for every command (the request is
-  rejected before the server processes it, so a retry is always safe).
-- **Transient `5xx` (500, 502, 503, 504) and network errors** — retried only for
-  idempotent reads and updates (GET/PUT/DELETE) and for the read-only search and
-  list `POST`s behind list commands (`/api/v1/search/*`, and any `/api/v1/` path
-  ending in `/search` or `/list`). Other `POST` mutations
-  (e.g. `requests create`, `tasks approve`) are **not** retried on these, since
-  the server may have already applied the change before the failure.
-  Non-transient 5xx (501 Not Implemented, 505, 511) are never retried.
-
-Control the retry budget (attempts *after* the first try) via, in order of
-precedence:
-
-1. `--max-retries N` flag (any command that reaches the C1 API)
-2. `C1I_MAX_RETRIES` environment variable
-3. Default: `4`
-
-Set `--max-retries 0` to disable retries entirely. Non-retryable responses
-(4xx other than 429, and 501/505) fail immediately.
-
-A non-empty `C1I_DEBUG`, `C1I_DRY_RUN`, `C1I_MAX_RETRIES` or
-`C1I_ERROR_FORMAT` value that doesn't parse exits `2` naming the variable
-before any request; the flag given on the command line overrides the variable
-entirely.
-
-This covers the token mint too: minting or refreshing the OAuth2 bearer
-c1i authenticates with is itself a request, subject to the same 429 retry
-(never 5xx/network, since it's a POST) and the same `--max-retries` budget.
-
-Every request also gets a fixed timeout, per attempt (a retried request
-gets a fresh budget, not a shrinking share of one deadline): 10 minutes
-for a REST or MCP gateway request, 30 seconds for `auth login`'s
-device-flow requests and the OAuth2 token mint/refresh above — tighter
-because those are fast request/response exchanges, not the kind of call
-that legitimately runs long. Neither is configurable.
-
-### Dry run
-
-`--dry-run` (or `C1I_DRY_RUN=1`) previews a C1 REST mutation and returns
-without sending it. The preview is one JSON object on stdout, the requests in
-send order with the full URL and the exact body (`upgrade --dry-run` is the
-exception: it prints plain `[dry-run]` text lines, since it sends no C1 API
-mutation):
-
-```sh
-$ c1i requests create grant --app-id A1 --entitlement-id E1 --user-id U1 --dry-run
-{
-  "dryRun": true,
-  "requests": [
-    {
-      "method": "POST",
-      "url": "https://tenant.example.invalid/api/v1/task/grant",
-      "body": {
-        "appEntitlementId": "E1",
-        "appId": "A1",
-        "identityUserId": "U1"
-      }
-    }
-  ]
-}
-```
-
-Its only keys are `dryRun` and `requests` (one entry per request: several for
-`mcp tools approve` with several ids, up to three for `entitlements create`);
-it never has an `id`, and `body` is omitted when the request has none. A
-stderr notice, `dry run: nothing was sent`, accompanies every preview.
-
-It applies to every REST write command and to non-GET `api` calls, and never
-sends that mutation. `mcp gateway call` rejects both `--dry-run` and
-`C1I_DRY_RUN`: c1i cannot preview or suppress a gateway tool's side effects, so
-inspect the tool and treat its invocation as live. `auth login` rejects both
-too: it can't preview or suppress storing a credential.
-
-A preview resolves the URL first, so it needs one configured (exit `2`
-without), and it applies the same id guard as a real send: an empty, `.` or
-`..` id exits `2`. An explicit `--fields` exits `2` too, since a preview is
-never projected. A preview needs no credentials, except where c1i must look
-something up so the previewed body is exact:
-
-- `tasks approve`, `deny`, `restart`, `skip-step` and `reassign` without
-  `--policy-step-id` read the task to resolve its current policy step;
-- `mcp servers update-credentials` for a hosted server without `--catalog-id`
-  reads the server to resolve its catalog id;
-- `requests create grant`/`revoke` without `--user-id` resolve the caller;
-- `upgrade` fetches and verifies the release (see [Updating the binary](#updating-the-binary-c1i-upgrade)).
-
-Other pre-send checks, such as the policy lookups on `apps` and
-`entitlements` writes, are skipped on a preview. `policies update` skips its
-policy-type lookup too, so a patch that needs the type exits `2` under
-`--dry-run` unless you pass `--policy-type`.
-
-**An inherited `C1I_DRY_RUN=1` turns every write in a script into a
-preview.** The preview has no `id`, so `jq -r .id` prints `null` and the script
-carries on with it. Extract ids with `jq -er`, which fails on a preview:
-
-```sh
-APP_ID=$(c1i apps create --display-name "Example" | jq -er .id) || exit 1
-```
-
-### Debug tracing
-
-`--debug` (or `C1I_DEBUG=1`) traces each API HTTP request to stderr — method,
-URL, response status, and elapsed time, including every retry attempt. Headers
-and bodies are never logged, so credentials don't leak. Output goes to stderr,
-so it won't corrupt piped JSON on stdout:
-
-```sh
-$ c1i apps list --debug 2>trace.log
-$ cat trace.log
-> GET https://example.conductor.one/api/v1/apps
-< GET /api/v1/apps 200 OK (142ms)
-```
-
-## Authentication
-
-```sh
-# Browser-based login (OAuth device flow)
-c1i auth login
-
-# Limit the browser-login credential to chosen roles
-c1i auth login --choose-roles                  # pick from a menu after approving
-c1i auth login --scoped-role basic-user        # repeatable; a role name or id
-
-# Or store credentials directly
-c1i auth login --client-id <id> --client-secret <secret>
-
-# Check credential status (also reports the storage backend)
-c1i auth status
-
-# Show the authenticated principal (`principleId` as the API spells it, `userId`, role/permission/feature counts, and
-# display name + email when a best-effort secondary lookup succeeds) plus the resolved
-# tenant: "tenant" (base URL) and "tenantSource" (flag/env/config)
-c1i auth whoami
-# --verbose swaps the summary for the raw introspect payload (full roles/permissions/
-# features arrays, but no display name or email) -- a different projection, not a superset
-c1i auth whoami --verbose
-
-# Machine-readable "which tenant am I about to write to?" — the pre-write check
-c1i auth whoami --url https://example.conductor.one --fields tenant
-
-# Mint a short-lived bearer token for driving raw API calls yourself
-c1i auth token            # add --json for token type and absolute expiry (RFC3339)
-
-# Remove stored credentials
-c1i auth logout
-```
-
-Browser login creates a personal client credential with all of your roles. To
-limit it, pass `--choose-roles` (a menu after you approve in the browser; needs
-a terminal) or `--scoped-role <role>` (repeatable). The two can't be combined,
-and neither applies to `--client-id`/`--client-secret` (exit 2). When no
-credential is stored for the tenant, a terminal login asks which you want:
-Enter keeps all of your roles, and `--choose-roles=false` skips the question.
-
-- **Which roles.** A scoped credential keeps only the overlap between its roles
-  and your own access. The menu and role names offer the roles you hold, Basic
-  User, and Read-Only Administrator (a read-only view of your access); holders
-  of Super Administrator or Read-Only Administrator see every role. In the
-  menu, enter numbers or `0` for all of your roles; a blank answer asks again.
-- **Names and IDs.** A role ID is 27 letters and digits and goes to C1 as
-  given; an unknown one exits 4. Anything else is a name: case is ignored, and
-  spaces, underscores and hyphens are interchangeable. A name that matches no
-  offered role, or more than one, exits 2 before your credential is created,
-  listing the choices.
-- **Checks.** Login verifies the new credential before storing it. If C1
-  scoped it wider than asked (exit 6), a scoped credential has no access
-  (exit 2), verification or storing fails, or you press Ctrl-C, login deletes
-  it. Scoped credentials are named `Created by c1i (<role or count>)`.
-- **The temporary credential.** The device-flow token can only create a
-  credential, so reading roles uses a short-lived one with all of your roles,
-  deleted before yours is created. If it isn't deleted, login names it. If
-  yours was stored, login exits 1; otherwise it exits with the login's own
-  failure code and stores nothing.
-- A browser login that replaces a stored credential names it; it stays active
-  in C1.ai.
-
-`c1i auth token` prints just the access token, newline-terminated, so it
-composes into `curl -H "Authorization: Bearer $(c1i auth token)" ...`. It is
-never written to disk — a new one is minted per invocation.
-
-### Credential sources
-
-`c1i` reads credentials from the first source that has them, in this order:
-
-1. **Environment variables** — set `C1I_CLIENT_ID` and `C1I_CLIENT_SECRET`
-   (alongside `C1I_URL`) for non-interactive / CI use. Both must be set; if
-   only one is set the value is ignored.
-2. **OS keyring** — Keychain on macOS, Credential Manager on Windows, Secret
-   Service (e.g. gnome-keyring, KeePassXC) on Linux. Used by default when
-   available.
-3. **File fallback** — a `0600` JSON file under your config directory
-   (`~/.config/c1i/credentials/` on Linux, `~/Library/Application Support/c1i/credentials/`
-   on macOS, `%AppData%\c1i\credentials\` on Windows). Used automatically when
-   no OS keyring is available — typical on headless Linux servers, containers,
-   CI runners, and WSL without a desktop environment.
-
-`c1i auth login` writes to the OS keyring when it can and falls back to the
-file backend transparently. `c1i auth status` tells you which source served
-the active credentials. If the config directory resolves to a relative path,
-from a relative `HOME`, `%AppData%` or `XDG_CONFIG_HOME`, the file fallback
-fails with an error and the token cache below skips its file, rather than
-writing under the working directory.
-
-### Token cache
-
-To avoid minting a fresh OAuth token on every invocation — each mint writes a
-`client_credentials` event to the tenant's audit log — `c1i` caches the access
-token and reuses it until it nears expiry. It uses the OS keyring when
-available. On Unix-like hosts without a usable keyring, it instead uses a
-hardened `0600` file under the config directory (`~/.config/c1i/tokens/` on
-Linux). A cached token the server rejects (clock skew, or a revoked credential)
-is dropped and re-minted once automatically. Each file-cache write also deletes
-the other token files there that c1i would refuse to load (expired or expiring
-within a minute, corrupt or unreadable, or open to group or other users) and
-temp files over a minute old.
-The token is strictly shorter-lived than the client secret already stored
-beside it. Set `C1I_NO_TOKEN_CACHE` to any non-empty value (even `0`) to disable
-caching and mint per invocation; it is not validated.
 
 ## Shell Completion
 
