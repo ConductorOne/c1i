@@ -20,9 +20,9 @@ exit 0.
 
 `c1i` resolves the tenant in this order: `--url`, `C1I_URL`, then `url:` in
 `~/.c1i.yaml` (never read with a relative `HOME`). It must be a full host —
-`mycompany.conductor.one` or `mycompany.c1eu.ai` (EU) — and `https` is
+`example.conductor.one` or `example.c1eu.ai` (EU) — and `https` is
 required:
-a bare `mycompany`, a non-https scheme, and a malformed host (an embedded space
+a bare `example`, a non-https scheme, and a malformed host (an embedded space
 or control character, or a stray scheme like `://host`) are all usage errors
 (exit `2`) before any request is sent.
 Every command that resolves a C1 tenant URL prints a `Warning: no --url flag
@@ -55,7 +55,7 @@ a hardened `0600` file fallback. `auth token` and `mcp gateway` always mint a
 fresh bearer and never persist it.
 `C1I_NO_TOKEN_CACHE=1`/`true` disables the REST-client cache (`0`/`false` keep
 it; any other value exits 2). Exactly one of `C1I_CLIENT_ID`/`C1I_CLIENT_SECRET`
-set also exits 2.
+set also exits 2; `auth login` and `auth logout` still run and warn on stderr.
 `c1i auth login` to authenticate; then `c1i auth whoami` before doing
 anything else — it reports both the identity you're acting as (principleId,
 plus userId when the principal has one; email and displayName only when a
@@ -66,7 +66,7 @@ the latter machine-readably: `tenant` is the resolved base URL and
 last meaning it fell through to `~/.c1i.yaml`). Gate any write on it:
 
 ```sh
-c1i auth whoami --url https://mycompany.conductor.one --fields tenant
+c1i auth whoami --url https://example.conductor.one --fields tenant
 ```
 
 Both keys are emitted only once the credentials are proven against that
@@ -103,8 +103,8 @@ A non-empty env value that doesn't parse (`C1I_DRY_RUN=yes`,
 `C1I_MAX_RETRIES=abc`) is a usage error naming the variable, before any
 request; an empty one means unset. A flag set on the command line overrides
 its env var entirely, so a bad env value is then ignored. The same keys in
-`~/.c1i.yaml` (`dry_run`, `debug`, `max_retries`, `error_format`) are validated alike, naming
-the file and key.
+`~/.c1i.yaml` (`dry_run`, `debug`, `max_retries`, `error_format`) are validated
+alike, naming the file and key.
 
 `--error-format json` is the one worth setting by default if you parse
 failures: stderr becomes NDJSON. Error objects carry `"error"` (select them
@@ -310,7 +310,7 @@ APP_ID=$(c1i apps create --display-name "Example" | jq -er .id)
 |---|---|---|
 | 0 | success | — |
 | 1 | generic / unclassified error | inspect the message; on a write, read `applied` (a `--wait` timeout or failed stdout write is `true`) before retrying |
-| 2 | usage error (bad flags/args, an empty, `.` or `..` id, a blank required or id flag or positional, a missing, malformed, `null` or wrong-shape `--*-file` input, a non-object element in an array `--*-file` or `--body-file`, a refused redirect, or any API `4xx` other than `401`/`403`/`404`/`408`/`429`/`499`) | fix the invocation, don't retry as-is — but read the message first: an API `4xx` can also be a state rejection (e.g. `task is closed`) rather than a bad argument |
+| 2 | usage error (bad flags/args, an empty, `.` or `..` id, a blank required or id flag or positional, a missing, malformed, `null` or wrong-shape `--*-file` input, a non-object element in an array `--*-file` or `--body-file`, a refused redirect (but `upgrade` and the `docs` commands exit `8`), or any API `4xx` other than `401`/`403`/`404`/`408`/`429`/`499`) | fix the invocation, don't retry as-is — but read the message first: an API `4xx` can also be a state rejection (e.g. `task is closed`) rather than a bad argument |
 | 3 | not authenticated, or API `401`/`403` | re-authenticate (`c1i auth login`); a scoped credential needs a role that covers the call |
 | 4 | API `404` | stop — the resource/path doesn't exist |
 | 5 | API `429` | back off and retry |
@@ -432,10 +432,10 @@ resource with `--resource-id` likewise means you drop
 - Every named-value flag (`--state`, `--status`, `--type`, `--auth`,
   `--unbind-policy`, `--error-format`, `--method`, ...) ignores ASCII case,
   whitespace and `-` vs `_`, and takes the full API name too; `--help` lists
-  the short names. An unknown or non-ASCII value exits 2 before any request,
-  and so does a value that is only whitespace: it is a usage error, not "no
-  filter". Only omitting the flag (or, for a filter, passing an empty string)
-  leaves it unset. Where `--help` says "or any `PREFIX_*` value", a value with
+  the short names. An unknown or non-ASCII value exits 2 before any request.
+  An empty string is the same as omitting the flag (the filter stays unset); a
+  whitespace-only value is a usage error (exit 2), not "no filter". A repeatable
+  flag such as `--unbind-policy` rejects an empty occurrence instead. Where `--help` says "or any `PREFIX_*` value", a value with
   that prefix is sent upper-cased, `-` turned to `_`; `users list --status` and
   `entitlements create --resource-type` send any ASCII value that way. The
   only rewrites to a different enum are listed aliases:
@@ -645,9 +645,16 @@ resource with `--resource-id` likewise means you drop
   `720h`: anything else exits `2` before sending, and over `720h` update returns
   `callback_timeout must be between 0 and 30 days`. A webhook has no
   signing secret.
+- `apps delete <app-id>` is soft: the app is marked with `deletedAt`, and
+  `apps list` rows carry a `deleted_at` field.
+- `entitlements delete <entitlement-id>` is soft: `entitlements get` still
+  returns it, with `deletedAt` set.
 - `automations delete <automation-id>` is soft: the automation leaves
   `automations list`, but `automations get` still returns it at exit `0` with
   no field marking it deleted.
+- `policies delete <policy-id>` is soft: the policy leaves `policies list` and
+  the default `search`, but `policies get` still returns it at exit `0` with
+  `deletedAt` set (`search --include-deleted` also finds it).
 - `users list` with no `--origin` returns directory-origin users only, so
   local-origin users (service principals among them) and system users are
   missing. Pass `--origin all` for every user, or `--origin local` for
