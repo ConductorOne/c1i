@@ -1787,6 +1787,12 @@ The `docs` commands require no C1 credentials — agents can use them to explore
 # prefer first-class commands over raw API calls (write to a file with --output)
 c1i docs agents [--output AGENTS.md]
 
+# Print the README and CHANGELOG embedded in the binary (no network). The
+# README is the full reference; "docs agents" is the concise agent guide.
+# Both take --output FILE.
+c1i docs readme
+c1i docs changelog
+
 # Search documentation
 c1i docs search "access reviews"
 

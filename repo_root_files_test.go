@@ -19,6 +19,7 @@ var allowedRootFiles = map[string]bool{
 	".golangci.yml":           true,
 	"CHANGELOG.md":            true,
 	"CLAUDE.md":               true,
+	"embedded_docs_test.go":   true,
 	"LICENSE":                 true,
 	"README.md":               true,
 	"go.mod":                  true,

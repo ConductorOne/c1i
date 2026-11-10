@@ -12,6 +12,8 @@ Use the rest to explore endpoints and schemas when no first-class command
 covers what you need yet.
 
   docs agents [-o FILE]          Short bootstrap doc: output contracts, exit codes, when to use "api"
+  docs readme [-o FILE]          Print the embedded README (the full reference)
+  docs changelog [-o FILE]       Print the embedded CHANGELOG (migration notes)
   docs search <query>            Search documentation by keyword
   docs page <path>               Fetch a full documentation page
   docs endpoints [--filter <p>]  List all API endpoints (filterable)
