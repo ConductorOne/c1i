@@ -170,6 +170,8 @@ func TestPartialEnvCredentialsNotice(t *testing.T) {
 // completion too (as before the other globals were validated); the typed
 // settings stay skipped there so a stray C1I_DRY_RUN cannot break tab completion.
 func TestLocalOnlyRequestsValidateErrorFormatOnly(t *testing.T) {
+	// cobra adds `completion` lazily; register it so the test can run alone.
+	rootCmd.InitDefaultCompletionCmd()
 	for _, tc := range []struct {
 		name     string
 		env      map[string]string
@@ -213,8 +215,8 @@ func TestAuthRecoveryCommandsWarnOnPartialEnvCredentials(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			clearEnvFlags(t)
-			home := useConfigFile(t, "")
-			t.Setenv("XDG_CONFIG_HOME", filepath.Dir(home))
+			cfgFile := useConfigFile(t, "")
+			t.Setenv("XDG_CONFIG_HOME", filepath.Dir(cfgFile))
 			t.Setenv("C1I_CLIENT_ID", "id-only")
 			t.Setenv("C1I_CLIENT_SECRET", "")
 			res := runCLI(t, nil, nil, tc.args...)
