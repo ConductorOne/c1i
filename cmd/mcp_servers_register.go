@@ -23,6 +23,11 @@ Auth (convenience flags cover the simple methods):
   --auth custom-header --header-name NAME --header-value VALUE
   --auth basic-auth    --basic-auth-username USER --basic-auth-password PASS
 
+Each companion value is required (a blank one exits 2 before sending) unless
+--token-sharing per-user, where each user supplies the secret later via
+SubmitUserCredential. Register takes no --update-mask, so it always needs the
+full arm (a custom header's name even under per-user).
+
 For OAuth2 / AWS SigV4 / Google service-account auth, pass the full config
 object via --hosted-config-file / --external-config-file (JSON, or "-" for
 stdin). Don't hand-write it — generate a ready-to-edit skeleton:
