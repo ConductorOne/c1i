@@ -4,7 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"strings"
+	"regexp"
 
 	"github.com/spf13/cobra"
 )
@@ -25,7 +25,7 @@ func emitDoc(cmd *cobra.Command, label, content string) error {
 	output, _ := cmd.Flags().GetString("output")
 	if output != "" {
 		if err := os.WriteFile(output, []byte(content), 0o644); err != nil { // #nosec G306 -- content is a static, public doc, not sensitive
-			return fmt.Errorf("writing %s file: %w", label, err)
+			return fmt.Errorf("writing %s: %w", label, err)
 		}
 		notice(cmd, noticeInfo, fmt.Sprintf("Wrote %s to %s", label, output), nil)
 		return nil
@@ -34,11 +34,15 @@ func emitDoc(cmd *cobra.Command, label, content string) error {
 	return wrapOutputErr(err)
 }
 
-// docsBlobURL is the version-pinned GitHub URL for a repo-root file. A dev
-// build (no "v" prefix) has no tag to pin to, so it points at main.
+// releaseTagRE matches a published tag. A source build's pseudo-version
+// ("v0.9.3-0.2026...-abc123", "+dirty") is not a tag, so its link would 404.
+var releaseTagRE = regexp.MustCompile(`^v\d+\.\d+\.\d+(-rc\.?\d+)?$`)
+
+// docsBlobURL is the version-pinned GitHub URL for a repo-root file, or the
+// main branch when this build isn't a release.
 func docsBlobURL(file string) string {
 	ref := "main"
-	if strings.HasPrefix(Version, "v") {
+	if releaseTagRE.MatchString(Version) {
 		ref = Version
 	}
 	return "https://github.com/ConductorOne/c1i/blob/" + ref + "/" + file

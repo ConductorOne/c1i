@@ -70,6 +70,23 @@ func TestDocsEmbeddedFooterDevBuildPointsAtMain(t *testing.T) {
 	}
 }
 
+func TestDocsEmbeddedFooterNonReleaseVersionsPointAtMain(t *testing.T) {
+	for _, v := range []string{"v0.9.3-0.20261110014657-ed76e0b66cf2", "v0.10.0+dirty", "(devel)", ""} {
+		withEmbeddedDocs(t, "r", "c", v)
+		_, stderr, err := runEmbeddedDoc(t, docsReadmeCmd, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !strings.Contains(stderr, "/blob/main/README.md") {
+			t.Errorf("Version %q footer = %q, want main ref", v, stderr)
+		}
+	}
+	withEmbeddedDocs(t, "r", "c", "v0.10.0-rc1")
+	if _, stderr, _ := runEmbeddedDoc(t, docsReadmeCmd, nil); !strings.Contains(stderr, "/blob/v0.10.0-rc1/") {
+		t.Errorf("rc tag should pin, got %q", stderr)
+	}
+}
+
 func TestDocsEmbeddedOutputFlag(t *testing.T) {
 	withEmbeddedDocs(t, "readme body\n", "changelog body\n", "v1.2.3")
 	for _, tc := range []struct {

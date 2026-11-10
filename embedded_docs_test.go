@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"testing"
 )
 
@@ -12,13 +13,19 @@ import (
 // and a dead C1I_URL, so a pass also proves neither command needs auth or
 // the network.
 func TestEmbeddedDocsMatchRepoFiles(t *testing.T) {
+	if testing.Short() {
+		t.Skip("builds the binary")
+	}
 	dir := t.TempDir()
 	bin := filepath.Join(dir, "c1i")
+	if runtime.GOOS == "windows" {
+		bin += ".exe"
+	}
 	if out, err := exec.Command("go", "build", "-o", bin, ".").CombinedOutput(); err != nil {
 		t.Fatalf("go build: %v\n%s", err, out)
 	}
 	env := append(os.Environ(),
-		"HOME="+dir, "XDG_CONFIG_HOME="+dir, "APPDATA="+dir,
+		"HOME="+dir, "XDG_CONFIG_HOME="+dir, "APPDATA="+dir, "USERPROFILE="+dir,
 		"C1I_URL=http://127.0.0.1:1", "C1I_CLIENT_ID=", "C1I_CLIENT_SECRET=")
 
 	for sub, file := range map[string]string{"readme": "README.md", "changelog": "CHANGELOG.md"} {
