@@ -97,6 +97,11 @@ apply it for a whole session; the flag wins for a single invocation.
 | `--max-retries` | `C1I_MAX_RETRIES` | retries for transient API failures (`429`/`5xx`); `0` disables |
 | `--error-format` | `C1I_ERROR_FORMAT` | `text` (default) or `json` |
 
+A non-empty env value that doesn't parse (`C1I_DRY_RUN=yes`,
+`C1I_MAX_RETRIES=abc`) is a usage error naming the variable, before any
+request; an empty one means unset. A flag set on the command line overrides
+its env var entirely, so a bad env value is then ignored.
+
 `--error-format json` is the one worth setting by default if you parse
 failures: stderr becomes NDJSON. Error objects carry `"error"` (select them
 with `jq 'select(.error)'`) plus `status`, `method`, `path`, and the response

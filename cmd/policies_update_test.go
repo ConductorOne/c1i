@@ -31,11 +31,12 @@ func stubPoliciesClient(t *testing.T, srv *httptest.Server) {
 	t.Cleanup(func() { newClient, newPoliciesClient = orig, origPolicies })
 }
 
+// withRealDryRun forces the sending path. Cleanup clears the override instead
+// of restoring it, so a parked false cannot outrank C1I_DRY_RUN in a later test.
 func withRealDryRun(t *testing.T) {
 	t.Helper()
-	orig := viper.GetBool("dry_run")
 	viper.Set("dry_run", false)
-	t.Cleanup(func() { viper.Set("dry_run", orig) })
+	t.Cleanup(func() { viper.Set("dry_run", nil) })
 }
 
 // TestPoliciesUpdateSendsWrappedBody is the load-bearing proof that "update"

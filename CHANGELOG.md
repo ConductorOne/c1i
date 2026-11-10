@@ -119,6 +119,11 @@ output are unchanged.
 
 Exit codes and value types that change, each described under Fixed:
 
+- A non-empty `C1I_DRY_RUN`, `C1I_DEBUG` or `C1I_MAX_RETRIES` that does
+  not parse exits `2`, instead of being coerced to `false`/`0`
+  (`C1I_DRY_RUN=yes` used to send the mutation it was meant to preview).
+  A flag set on the command line still overrides the variable, and an
+  empty variable still means unset.
 - An input-file error (missing, malformed, `null` or the wrong shape) exits 2,
   not 1. That includes a non-object element in an array `--*-file` or
   `--body-file` (`--rules-file '[null]'` was sent by 0.9.2), and a `--body-file`
@@ -336,6 +341,12 @@ already behaved this way.
 
 ### Fixed
 
+- `C1I_DRY_RUN=yes` (or any value the flag would refuse) was read as **false**,
+  so a command run with the variable live-sent the mutation it was meant to
+  preview; `C1I_DEBUG` and `C1I_MAX_RETRIES` silently fell back to their
+  defaults for an unparseable value. Each now exits `2` naming the variable and
+  the accepted form, before any request. An explicit flag still wins, and an
+  empty variable still means unset.
 - `policies update` shares `automations update`'s `--body-file`/`--update-mask`
   rules; see Upgrading.
 - `requests list --entitlement-id` without `--app-id` returned requests from

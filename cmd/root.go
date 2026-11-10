@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"unicode/utf8"
 
@@ -45,6 +46,9 @@ For raw API exploration, also with no authentication required:
 	// validateCountFlags, which needs to see every list command's --limit.
 	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
 		if err := validateErrorFormat(viper.GetString("error_format")); err != nil {
+			return err
+		}
+		if err := validateEnvFlags(cmd); err != nil {
 			return err
 		}
 		if err := validateArgsUTF8(args); err != nil {
@@ -163,6 +167,95 @@ func validateBlankFlags(cmd *cobra.Command) error {
 	return err
 }
 
+// globalEnvSetting is one env-backed global: its viper key, the env var, the
+// persistent flag that overrides it, and the parser its env value must satisfy
+// (nil for a string setting, which cannot be unparsable).
+//
+// The table drives both the viper binding and validateEnvFlags, so a new
+// setting cannot be bound in one place and left unvalidated in another. viper
+// (via cast) coerces an unparsable value to the zero value without an error, so
+// C1I_DRY_RUN=yes silently read as false and sent the mutation it was meant to
+// preview.
+type globalEnvSetting struct {
+	key, env, flag string
+	parse          func(string) error
+}
+
+var globalEnvSettings = []globalEnvSetting{
+	{key: "url", env: urlEnvVar, flag: "url"},
+	{key: "fields", env: "C1I_FIELDS", flag: "fields"},
+	{key: "max_retries", env: "C1I_MAX_RETRIES", flag: "max-retries", parse: parseIntValue},
+	{key: "error_format", env: "C1I_ERROR_FORMAT", flag: "error-format"},
+	{key: "debug", env: "C1I_DEBUG", flag: "debug", parse: parseBoolValue},
+	{key: "dry_run", env: "C1I_DRY_RUN", flag: "dry-run", parse: parseBoolValue},
+}
+
+// bindGlobalEnvSettings wires every entry to its flag and env var.
+func bindGlobalEnvSettings() {
+	for _, s := range globalEnvSettings {
+		_ = viper.BindPFlag(s.key, rootCmd.PersistentFlags().Lookup(s.flag))
+		_ = viper.BindEnv(s.key, s.env)
+	}
+}
+
+// validateEnvFlags rejects an unparsable value in a typed env-backed global
+// before any request is sent. A flag set on the command line wins, so its
+// presence suppresses the check (viper gives it the same precedence). Empty
+// means unset. Negative C1I_MAX_RETRIES is accepted like `--max-retries -1`
+// (transport clamps it).
+func validateEnvFlags(cmd *cobra.Command) error {
+	if isLocalOnlyRequest(cmd) {
+		return nil
+	}
+	for _, s := range globalEnvSettings {
+		if s.parse == nil {
+			continue
+		}
+		if f := cmd.Flags().Lookup(s.flag); f != nil && f.Changed {
+			continue
+		}
+		v, ok := os.LookupEnv(s.env)
+		if !ok || v == "" {
+			continue
+		}
+		if err := s.parse(v); err != nil {
+			return &usageError{fmt.Errorf("invalid %s %q: %w", s.env, v, err)}
+		}
+	}
+	return nil
+}
+
+// isLocalOnlyRequest reports whether cmd runs without touching the network:
+// shell completion, either cobra's hidden __complete helper or the
+// `completion` command tree. A bad global env value must not fail those.
+func isLocalOnlyRequest(cmd *cobra.Command) bool {
+	if isCompletionRequest(cmd) {
+		return true
+	}
+	for p := cmd; p != nil; p = p.Parent() {
+		if p.Name() == "completion" {
+			return true
+		}
+	}
+	return false
+}
+
+func parseBoolValue(s string) error {
+	if _, err := strconv.ParseBool(s); err != nil {
+		return errors.New("must be true or false")
+	}
+	return nil
+}
+
+// parseIntValue mirrors pflag's intValue.Set (base 0, so hexadecimal and octal
+// are valid here exactly as they are on --max-retries) and its wording.
+func parseIntValue(s string) error {
+	if _, err := strconv.ParseInt(s, 0, 0); err != nil {
+		return errors.New("must be an integer")
+	}
+	return nil
+}
+
 func validateErrorFormat(f string) error {
 	if f == "" {
 		return nil
@@ -182,29 +275,14 @@ func init() {
 	rootCmd.SetFlagErrorFunc(func(_ *cobra.Command, err error) error {
 		return &usageError{err}
 	})
-	rootCmd.PersistentFlags().String("url", "", "C1 tenant URL; https required. Precedence: --url, C1I_URL, then ~/.c1i.yaml")
-	_ = viper.BindPFlag("url", rootCmd.PersistentFlags().Lookup("url"))
-	_ = viper.BindEnv("url", urlEnvVar)
-
-	rootCmd.PersistentFlags().String("fields", "", "Comma-separated JSON fields to keep in read output (dot-paths); prefer over jq for simple projection")
-	_ = viper.BindPFlag("fields", rootCmd.PersistentFlags().Lookup("fields"))
-	_ = viper.BindEnv("fields", "C1I_FIELDS")
-
-	rootCmd.PersistentFlags().Int("max-retries", client.DefaultMaxRetries, "Retries for transient API failures (429/5xx); 0 disables")
-	_ = viper.BindPFlag("max_retries", rootCmd.PersistentFlags().Lookup("max-retries"))
-	_ = viper.BindEnv("max_retries", "C1I_MAX_RETRIES")
-
-	rootCmd.PersistentFlags().String("error-format", "text", "Error output format: "+errorFormatFlag.usage())
-	_ = viper.BindPFlag("error_format", rootCmd.PersistentFlags().Lookup("error-format"))
-	_ = viper.BindEnv("error_format", "C1I_ERROR_FORMAT")
-
-	rootCmd.PersistentFlags().Bool("debug", false, "Trace HTTP requests (method, URL, status, timing) to stderr")
-	_ = viper.BindPFlag("debug", rootCmd.PersistentFlags().Lookup("debug"))
-	_ = viper.BindEnv("debug", "C1I_DEBUG")
-
-	rootCmd.PersistentFlags().Bool("dry-run", false, "Preview C1 REST mutations (method, path, body) without sending; mcp gateway call and auth login reject it")
-	_ = viper.BindPFlag("dry_run", rootCmd.PersistentFlags().Lookup("dry-run"))
-	_ = viper.BindEnv("dry_run", "C1I_DRY_RUN")
+	pf := rootCmd.PersistentFlags()
+	pf.String("url", "", "C1 tenant URL; https required. Precedence: --url, C1I_URL, then ~/.c1i.yaml")
+	pf.String("fields", "", "Comma-separated JSON fields to keep in read output (dot-paths); prefer over jq for simple projection")
+	pf.Int("max-retries", client.DefaultMaxRetries, "Retries for transient API failures (429/5xx); 0 disables")
+	pf.String("error-format", "text", "Error output format: "+errorFormatFlag.usage())
+	pf.Bool("debug", false, "Trace HTTP requests (method, URL, status, timing) to stderr")
+	pf.Bool("dry-run", false, "Preview C1 REST mutations (method, path, body) without sending; mcp gateway call and auth login reject it")
+	bindGlobalEnvSettings()
 }
 
 func initConfig() { loadConfigFile(viper.GetViper()) }
