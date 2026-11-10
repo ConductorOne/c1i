@@ -408,6 +408,16 @@ already behaved this way.
   ignored `nextPageToken`. They now warn on stderr when one is returned.
   None of these routes paginate today.
 
+- `tasks deny` and `tasks restart` naming an unknown task exited `2` with the
+  server's `PolicyStepId` error, because the failed task read was swallowed;
+  both now exit `4` like every other `tasks` action and send nothing.
+- `tasks reassign --to-user-id` refuses an unknown user with exit `2`
+  (`no such user`) instead of storing the id as the step's approver and
+  stranding the task; a repeated `--to-user-id` is sent once.
+- `tasks approve` on a task with no current step told you to pass
+  `--policy-step-id`, which cannot supply one; the error now says the task has
+  no current step and to re-read it with `tasks get`.
+
 - **List and search commands that read via `POST` were never retried on a
   transient 5xx or network error**, unlike GET-based lists: `users`, `grants`,
   `entitlements`, `tasks`, `policies`, `findings` and `mcp` searches among
