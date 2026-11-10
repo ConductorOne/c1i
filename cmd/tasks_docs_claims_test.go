@@ -5,16 +5,16 @@ import (
 	"testing"
 )
 
-// TestResetReopensClosedTaskIsDocumented pins the two user-facing claims a
-// closed task turns on: "reset" reopens it (exit 0, state OPEN, outcome
-// cleared) and "restart" does not (the server answers "task is closed", exit
-// 2). Both docs said neither reopened, which would steer an agent away from the
-// only working undo.
-func TestResetReopensClosedTaskIsDocumented(t *testing.T) {
+// TestClosedTaskReopenBehaviorIsDocumented pins the measured closed-task
+// matrix: neither action is a general undo, and the outcome depends on how the
+// task closed. reset reopens CANCELLED/GRANTED/REVOKED closes but exits 0 and
+// leaves a DENIED one CLOSED; restart reopened a GRANTED close and is refused
+// with "task is closed" on CANCELLED and DENIED ones. The docs used to say
+// neither reopened, then that only reset did; both steer an agent wrong.
+func TestClosedTaskReopenBehaviorIsDocumented(t *testing.T) {
 	docs := map[string]string{
 		"README.md":                readDocFile(t, "../README.md"),
 		"cmd/agents.md (embedded)": agentsTemplate,
-		"tasks reset --help":       tasksResetCmd.Long,
 	}
 
 	for name, raw := range docs {
@@ -22,25 +22,34 @@ func TestResetReopensClosedTaskIsDocumented(t *testing.T) {
 		if strings.Contains(text, "Neither reopens a closed task") {
 			t.Errorf("%s still claims neither action reopens a closed task", name)
 		}
-		if !strings.Contains(text, "reopen") {
-			t.Errorf("%s does not state that reset reopens a closed task", name)
+		if !strings.Contains(text, "DENIED") {
+			t.Errorf("%s does not carve out the denial-closed case", name)
 		}
-	}
-	for name, raw := range map[string]string{
-		"README.md":                readDocFile(t, "../README.md"),
-		"cmd/agents.md (embedded)": agentsTemplate,
-	} {
-		if !strings.Contains(flatten(raw), "reopens a closed task") {
-			t.Errorf("%s does not state that reset reopens a closed task", name)
+		if !strings.Contains(text, "reopen") {
+			t.Errorf("%s does not state that reset/restart can reopen a closed task", name)
 		}
 	}
 
+	reset := flatten(tasksResetCmd.Long)
+	if !strings.Contains(reset, "DENIED") || !strings.Contains(reset, "reopen") {
+		t.Error("tasks reset --help does not state that a DENIED-closed task does not reopen")
+	}
+	if !strings.Contains(reset, "tasks get") {
+		t.Error("tasks reset --help does not send the reader to re-read with tasks get")
+	}
+
 	restart := flatten(tasksRestartCmd.Long)
+	if strings.Contains(restart, "does NOT reopen a closed task") {
+		t.Error("tasks restart --help still claims a closed task never reopens")
+	}
 	if strings.Contains(restart, "leaves the state CLOSED") {
-		t.Error("tasks restart --help still claims a closed task stays CLOSED")
+		t.Error("tasks restart --help still claims a closed task always stays CLOSED")
 	}
 	if !strings.Contains(restart, "task is closed") {
 		t.Error(`tasks restart --help does not quote the server's "task is closed"`)
+	}
+	if !strings.Contains(restart, "GRANTED") {
+		t.Error("tasks restart --help omits the GRANTED close it did reopen")
 	}
 	if !strings.Contains(flatten(agentsTemplate), "`task is closed`") {
 		t.Error("cmd/agents.md does not quote the server's `task is closed` for restart")

@@ -368,10 +368,14 @@ with `action not permitted`. Read the task's own list with
 `c1i api --path /api/v1/tasks/<task-id> --fields actions`.
 
 `restart` re-runs the current approval step; `reset` restarts the whole policy.
-`reset` reopens a closed task (exit `0`, state back to `TASK_STATE_OPEN`,
-outcome cleared); `restart` does not — the server answers `task is closed`
-(exit `2`). `process` changes nothing observable on a healthy task — it is
-intended for one that has stalled, which was not reproduced here.
+Either can reopen a closed task, but whether it does depends on how the task
+closed: `reset` reopened CANCELLED, GRANTED and REVOKED closes but not a DENIED
+one — exit `0`, the task stays CLOSED with outcome DENIED. `restart` reopened a
+GRANTED close but answered `task is closed` (exit `2`) on CANCELLED and DENIED
+ones (REVOKED untested). Neither is a general undo: re-read with `c1i tasks get`
+instead of trusting either exit. `process` changes nothing observable on a
+healthy task — it is intended for one that has stalled, which was not
+reproduced here.
 `update-grant-duration` takes a whole-number Go (`1h`) or
 protobuf (`3600s`) duration (no sign, no decimals), sent in seconds; `-1h` or
 `1.5h` exits `2`, and `0s` is sent and was stored by the server without

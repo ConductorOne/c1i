@@ -16,9 +16,10 @@ Unlike "restart", which re-runs the current step, this discards the task's
 approval progress and starts the policy over. The endpoint is
 /action/reset and takes no policy step.
 
-On a closed task this reopens it: exit 0, the state returns to
-TASK_STATE_OPEN and the outcome is cleared. "restart" does not do this; the
-server refuses a closed task with "task is closed" (exit 2).
+On a closed task the result depends on how it closed: a CANCELLED, GRANTED or
+REVOKED task reopens (exit 0, state TASK_STATE_OPEN, outcome cleared), while a
+DENIED one exits 0 and stays CLOSED with outcome DENIED -- no visible change.
+Neither is a general undo; re-read with "c1i tasks get".
 
 Prints the task as pretty JSON, unwrapped like "tasks get": the id is .id.
 Its .state is the task from before the action, not the outcome; re-read with

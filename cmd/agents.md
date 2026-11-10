@@ -533,15 +533,18 @@ resource with `--resource-id` likewise means you drop
   action is no longer available: the request has advanced to a new approval
   step` -- omit the flag to act on whatever step is current.
 - `restart` re-runs the current approval step (one new history entry); `reset`
-  restarts the whole policy (four, measured). `reset` reopens a closed task --
-  exit 0, state back to `TASK_STATE_OPEN`, outcome cleared -- but `restart`
-  does not: the server answers `task is closed` (exit 2). `process` changes
-  nothing observable on a healthy task. `update-grant-duration` takes a
-  whole-number Go (`1h`) or protobuf (`3600s`) duration (the server stored `0s`
-  without complaint); it only works before provisioning, after which the
-  server says `cannot update grant duration for a ticket in a provision step`;
-  the value lands at `.type.grant.grantDuration` (there is no top-level
-  `.grantDuration`).
+  restarts the whole policy (four, measured). Either can reopen a closed task,
+  but whether it does depends on how the task closed: `reset` reopened
+  CANCELLED, GRANTED and REVOKED closes but not a DENIED one -- exit 0, the
+  task stays CLOSED with outcome DENIED. `restart` reopened a GRANTED close but
+  answered `task is closed` (exit 2) on CANCELLED and DENIED ones (REVOKED
+  untested). Neither is a general undo: re-read with `c1i tasks get` instead of
+  trusting either exit. `process` changes nothing observable on a healthy task.
+  `update-grant-duration` takes a whole-number Go (`1h`) or protobuf (`3600s`)
+  duration (the server stored `0s` without complaint); it only works before
+  provisioning, after which the server says
+  `cannot update grant duration for a ticket in a provision step`; the value
+  lands at `.type.grant.grantDuration` (there is no top-level `.grantDuration`).
 - `requests create grant --duration` likewise takes `24h` or `86400s`; the
   server refuses `0s` with `value must be greater than 0s`. The value lands at
   that same `.type.grant.grantDuration` path.
