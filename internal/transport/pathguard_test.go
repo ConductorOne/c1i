@@ -89,6 +89,10 @@ func TestIsDotSegmentID(t *testing.T) {
 		{"encoded dot", "%2E", true},
 		{"encoded dot-dot", "%2e%2E", true},
 		{"encoded dot-dot matrix", "%2E%2E;", true},
+		{"padded dot", " . ", true},
+		{"padded dot-dot", " .. ", true},
+		{"padded dot-dot matrix", " ..;x ", true},
+		{"padded encoded dot", " %2E ", true},
 
 		{"empty", "", false},
 		{"slash", "/", false},
@@ -100,6 +104,8 @@ func TestIsDotSegmentID(t *testing.T) {
 		{"semicolon id", "a;b", false},
 		{"slash inside", "x/..", false},
 		{"undecodable percent", "%zz", false},
+		{"padded dotted id", " a.b ", false},
+		{"space inside", "a . b", false},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -107,5 +113,28 @@ func TestIsDotSegmentID(t *testing.T) {
 				t.Errorf("IsDotSegmentID(%q) = %v, want %v", tc.value, got, tc.want)
 			}
 		})
+	}
+}
+
+// The server trims a segment before resolving dots, so a padded dot segment
+// must be refused exactly like an unpadded one -- and a padded real id must
+// still pass.
+func TestPathHasBadSegmentPaddedDot(t *testing.T) {
+	cases := []struct {
+		path string
+		want bool
+	}{
+		{"/api/v1/users/ .. ", true},
+		{"/api/v1/users/.. ", true},
+		{"/api/v1/users/ ..", true},
+		{"/api/v1/users/%20..%20", true},
+		{"/api/v1/users/ ..;x ", true},
+		{"/api/v1/users/ a.b ", false},
+		{"/api/v1/users/a . b", false},
+	}
+	for _, tc := range cases {
+		if got := pathHasBadSegment(tc.path); got != tc.want {
+			t.Errorf("pathHasBadSegment(%q) = %v, want %v", tc.path, got, tc.want)
+		}
 	}
 }

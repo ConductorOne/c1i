@@ -268,8 +268,9 @@ func parseIntValue(s string) error {
 
 // validateDotSegmentIDFlags rejects a set *-id flag (or one occurrence of a
 // repeatable one) whose value the server would normalize to the parent or
-// collection: exactly "." or "..", with any ";params" suffix ignored, matching
-// the transport path guard. That guard only sees a request path, so an id the
+// collection: exactly "." or ".." once percent-encoded, a ";params" suffix and
+// surrounding whitespace are ignored -- the same predicate the transport path
+// guard uses. That guard only sees a request path, so an id the
 // command carries in a body -- --grant-policy-id, --owner-id, ... -- used to
 // preview as if it were an id and only fail once a real send interpolated it
 // into a URL; a multi-step create could apply its earlier steps first. Doing
@@ -293,6 +294,10 @@ func validateDotSegmentIDFlags(cmd *cobra.Command) error {
 			// blank value is refused by the command's own flag reader.
 			values, getErr := cmd.Flags().GetStringArray(f.Name)
 			if getErr != nil {
+				// Not user input: a *-id flag of any other type is a
+				// programming bug, so surface it instead of skipping the flag
+				// (TestIDFlagsAreStringOrStringArray keeps it unreachable).
+				err = fmt.Errorf("--%s is not a repeatable string flag: %w", f.Name, getErr)
 				return
 			}
 			for _, v := range values {
@@ -312,14 +317,18 @@ func validateDotSegmentIDFlags(cmd *cobra.Command) error {
 const bodyIDArgAnnotation = "c1i/body-id-arg"
 
 // markBodyIDArgs records that the given 0-based positionals are body-carried
-// ids (see bodyIDArgAnnotation).
+// ids (see bodyIDArgAnnotation). Calls append, so a command marked by two
+// helpers keeps both indexes.
 func markBodyIDArgs(c *cobra.Command, indexes ...int) {
 	if c.Annotations == nil {
 		c.Annotations = map[string]string{}
 	}
-	vals := make([]string, len(indexes))
-	for i, idx := range indexes {
-		vals[i] = strconv.Itoa(idx)
+	vals := []string{}
+	if existing := c.Annotations[bodyIDArgAnnotation]; existing != "" {
+		vals = append(vals, existing)
+	}
+	for _, idx := range indexes {
+		vals = append(vals, strconv.Itoa(idx))
 	}
 	c.Annotations[bodyIDArgAnnotation] = strings.Join(vals, ",")
 }
@@ -353,11 +362,10 @@ func dotSegmentIDError(flagName, value string) error {
 	return dotSegmentIDValueError("flag --"+flagName, value)
 }
 
-// dotSegmentIDValueError is the one wording for a body-carried id (a flag or a
-// positional) that the server would normalize away. A padded value counts
-// too: policyIDFlag trims before use, so " . " reaches a path as ".".
+// dotSegmentIDValueError is the one wording for an id (a flag or a positional)
+// that the server would normalize away.
 func dotSegmentIDValueError(subject, value string) error {
-	if !transport.IsDotSegmentID(value) && !transport.IsDotSegmentID(strings.TrimSpace(value)) {
+	if !transport.IsDotSegmentID(value) {
 		return nil
 	}
 	return &usageError{fmt.Errorf(`%s %q is not an id: "." and ".." (with an optional ";params" suffix) address the parent or collection, not the object`, subject, value)}
