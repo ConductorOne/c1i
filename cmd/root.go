@@ -224,7 +224,7 @@ func validateGlobalSettings(cmd *cobra.Command) error {
 	var cfg *viper.Viper
 	if !local {
 		cfg = viper.New()
-		if err := loadConfigFile(cfg); err != nil {
+		if err := loadConfigFile(cfg); err != nil && usesConfigFile(cmd) {
 			return err
 		}
 	}
@@ -287,6 +287,18 @@ func isLocalOnlyRequest(cmd *cobra.Command) bool {
 		}
 	}
 	return false
+}
+
+// usesConfigFile reports whether cmd reads ~/.c1i.yaml for anything: not the
+// docs tree or version, which need no tenant or credentials, so a broken file
+// must not stop them. The typed settings are still validated there.
+func usesConfigFile(cmd *cobra.Command) bool {
+	for p := cmd; p.HasParent(); p = p.Parent() {
+		if !p.Parent().HasParent() && (p.Name() == "docs" || p.Name() == "version") {
+			return false // p is a top-level command
+		}
+	}
+	return true
 }
 
 func parseBoolValue(s string) error {

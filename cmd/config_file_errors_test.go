@@ -97,3 +97,22 @@ func TestBrokenConfigFileDoesNotBreakCompletion(t *testing.T) {
 		t.Fatalf("validateGlobalSettings on __complete: %v", err)
 	}
 }
+
+// docs and version need no config: a broken ~/.c1i.yaml must not stop them.
+func TestBrokenConfigFileDoesNotBreakDocsOrVersion(t *testing.T) {
+	origR, origC := embeddedReadme, embeddedChangelog
+	t.Cleanup(func() { embeddedReadme, embeddedChangelog = origR, origC })
+	embeddedReadme, embeddedChangelog = "# readme\n", "# changelog\n"
+	for _, args := range [][]string{{"docs", "readme"}, {"docs", "changelog"}, {"docs", "agents"}, {"version"}} {
+		t.Run(strings.Join(args, " "), func(t *testing.T) {
+			clearEnvFlags(t)
+			home := t.TempDir()
+			t.Setenv("HOME", home)
+			t.Setenv("USERPROFILE", home)
+			writeFile(t, filepath.Join(home, ".c1i.yaml"), "- a\n")
+			if r := runCLI(t, nil, nil, args...); r.err != nil {
+				t.Fatalf("exit %d: %v", r.exit, r.err)
+			}
+		})
+	}
+}

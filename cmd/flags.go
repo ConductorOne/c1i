@@ -551,7 +551,10 @@ type onceStringValue struct {
 
 func (o *onceStringValue) String() string { return o.val }
 func (o *onceStringValue) Type() string   { return "string" }
-func (o *onceStringValue) Reset()         { o.val, o.set = "", false }
+
+// Reset exists for test isolation: cmd flags are package-level, so the harness
+// resets them between runs.
+func (o *onceStringValue) Reset() { o.val, o.set = "", false }
 
 func (o *onceStringValue) Set(v string) error {
 	if o.set {
