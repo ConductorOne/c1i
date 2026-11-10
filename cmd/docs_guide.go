@@ -789,11 +789,15 @@ checking once immediately.
   authenticated identity isn't on the task's current policy step,
   confirmed ahead of time by actions in step 2 omitting
   TASK_ACTION_TYPE_APPROVE/_DENY.
-- could not determine the current policy step for task ...; pass
-  --policy-step-id explicitly, on tasks approve (exit 2) — no current step
-  could be derived (approve requires one). tasks deny never fails this way
-  on the same task; it just proceeds without a step. Supply
-  --policy-step-id explicitly once you've read it via step 2's response.
+- task ... has no current policy step to target; re-read it with "c1i
+  tasks get ...", on tasks approve (exit 2) — the task has no current step, so
+  --policy-step-id cannot supply one. tasks deny never fails this way on the
+  same task; it just proceeds without a step. Fails only when you pass a step
+  no longer current, where the server rejects it.
+- failed to fetch task to determine current policy step: ... (exit 4 for an
+  unknown task id) — every task action that resolves a step reads the task
+  first, deny and restart included, so a bad id fails before any action is
+  sent.
 - Entitlement-level grantPolicyId/revokePolicyId reading empty is normal,
   not a bug — it means the entitlement inherits the app's default policy.
   Read the task's embedded policy.policy, not the entitlement, to see

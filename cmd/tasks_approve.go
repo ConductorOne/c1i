@@ -14,8 +14,9 @@ var tasksApproveCmd = &cobra.Command{
 
 The approval targets a specific step of the task's policy via --policy-step-id.
 If omitted, the task's currently executing step is fetched and used
-automatically; if it cannot be determined the command errors and asks you to
-pass --policy-step-id explicitly (approve requires a step).
+automatically; a task with no current step is an error (exit 2) telling you to
+re-read it with "c1i tasks get <task-id>". Pass --policy-step-id only when you
+already know the step.
 
 A step c1i looked up is reported on stderr ("Resolved policy step: <id>"),
 not on stdout.

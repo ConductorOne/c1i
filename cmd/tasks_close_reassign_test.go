@@ -129,6 +129,11 @@ func TestTasksReassignSendsUserIDsAsArray(t *testing.T) {
 	var gotBody map[string]any
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
+		// Reassign checks each --to-user-id before the action.
+		if r.Method == http.MethodGet && strings.HasPrefix(r.URL.Path, "/api/v1/users/") {
+			_, _ = fmt.Fprint(w, `{"id":"user"}`)
+			return
+		}
 		if r.Method != http.MethodPost || r.URL.Path != "/api/v1/tasks/"+taskID+"/action/reassign" {
 			t.Errorf("unexpected request: %s %s", r.Method, r.URL.Path)
 			w.WriteHeader(http.StatusNotFound)
@@ -186,6 +191,8 @@ func TestTasksReassignDerivesCurrentPolicyStep(t *testing.T) {
 		case r.Method == http.MethodGet && r.URL.Path == "/api/v1/tasks/"+taskID:
 			sawGet = true
 			_, _ = fmt.Fprintf(w, `{"taskView":{"task":{"policy":{"current":{"id":%q}}}}}`, currentStep)
+		case r.Method == http.MethodGet && strings.HasPrefix(r.URL.Path, "/api/v1/users/"):
+			_, _ = fmt.Fprint(w, `{"id":"user"}`)
 		case r.Method == http.MethodPost && r.URL.Path == "/api/v1/tasks/"+taskID+"/action/reassign":
 			raw, _ := io.ReadAll(r.Body)
 			_ = json.Unmarshal(raw, &gotBody)
@@ -213,7 +220,7 @@ func TestTasksReassignDerivesCurrentPolicyStep(t *testing.T) {
 
 // TestTasksReassignUnderivableStepIsUsageError: reassignment always applies to
 // a step, so a task with no current step must fail with the actionable
-// "pass --policy-step-id" usage error (exit 2) rather than posting without one.
+// re-read-the-task usage error (exit 2) rather than posting without one.
 func TestTasksReassignUnderivableStepIsUsageError(t *testing.T) {
 	const taskID = "zz-c1i-test-task-4"
 
@@ -236,7 +243,7 @@ func TestTasksReassignUnderivableStepIsUsageError(t *testing.T) {
 	if got, want := exitCode(err), exitUsage; got != want {
 		t.Errorf("exitCode(%v) = %d, want %d (exitUsage)", err, got, want)
 	}
-	if !strings.Contains(err.Error(), "--policy-step-id") {
-		t.Errorf("error = %q, want it to name --policy-step-id", err.Error())
+	if !strings.Contains(err.Error(), "no current policy step to target") || !strings.Contains(err.Error(), "c1i tasks get "+taskID) {
+		t.Errorf("error = %q, want the re-read-the-task message", err.Error())
 	}
 }
