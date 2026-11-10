@@ -132,6 +132,17 @@ Exit codes and value types that change, each described under Fixed:
   act on the current step), `auth login --client-id ""` (which used to open a
   browser login) and whitespace in `--catalog-id`. Quote shell variables:
   one that is unset or empty is now refused, not dropped.
+- `mcp servers register|update-credentials|test-connection` exit 2 when
+  `--auth` names an arm whose companion value is missing or blank:
+  `--bearer-token`, `--header-name` with `--header-value`, or
+  `--basic-auth-username` with `--basic-auth-password`. 0.9.2 sent empty auth
+  material and let the server 400. `--token-sharing per-user` leaves the
+  secret to the user, and an explicit `--update-mask` requires only the fields
+  it names; `register` has no mask and requires the whole arm.
+- `entitlements create --owner-id` exits 2 for an unknown user before it
+  creates anything; 0.9.2 exited 6 after the resource type and resource had
+  been created. The check is a user read, so a credential without user-read
+  exits 3 and creates nothing, the same requirement `set-owners` already has.
 - A failed write to stdout exits 1, not 0.
 - A stuck pagination cursor exits 6, not an endless loop.
 - A `200` list page that is HTML, an array, empty or truncated exits 6, not 1.
