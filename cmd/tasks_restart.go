@@ -13,9 +13,9 @@ var tasksRestartCmd = &cobra.Command{
 	Long: `Restart a task's approval step, sending it back for a fresh decision.
 
 On an open task this rotates the current policy step and records the restart in
-the task's policy history. It does NOT reopen a closed task: the API offers
-restart on some closed tasks, but the call leaves the state CLOSED and only
-appends history, so use it to re-run a live approval, not to undo a close.
+the task's policy history. It does NOT reopen a closed task: the server refuses
+one with "task is closed" (exit 2), so use it to re-run a live approval, not to
+undo a close ("tasks reset" is the one that reopens).
 
 Whether restart is available at all depends on the task; the server refuses
 with "action not permitted" otherwise. Check the task's own action list:

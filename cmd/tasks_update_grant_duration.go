@@ -29,8 +29,8 @@ The task must still be at an approval step. Once it reaches provisioning the
 server refuses with:
   cannot update grant duration for a ticket in a provision step
 
-The new value lands on the task as "grantDuration"; read it back with
-"c1i requests get <task-id>".
+The new value lands at ".type.grant.grantDuration" on the task (there is no
+top-level ".grantDuration"); read it back with "c1i requests get <task-id>".
 
 Prints the task as pretty JSON, unwrapped like "tasks get": the id is .id.
 Its .state is the task from before the action, not the outcome; re-read with

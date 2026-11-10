@@ -320,14 +320,16 @@ Branch on the exit code, not stderr text. An empty id argument is a usage error
 build ids programmatically, because it used to return the whole collection with
 exit 0. An id of `.` or `..` (also with a `;` suffix, such as `..;x`, or
 percent-encoded as `%2E`) is refused before sending too, since the API resolves
-it to the parent or collection. An id of `/` escapes to a path the
-API redirects to the collection, and the REST client refuses a redirect that
-changes the path, so you get exit 2 instead of a full listing that looks like a
-successful read. It also refuses a same-path redirect to an unrelated host or
-from `https` to `http`, since a followed redirect carries your token. It does
-follow pure host canonicalization. `mcp gateway` is guarded the same way: it is
-built on the same shared transport, which applies the empty-path and redirect checks
-unconditionally.
+it to the parent or collection. An id of `/` is never valid, and the exit
+depends on the route: as the URL's final segment (`c1i users get /`) it escapes
+to a path the API redirects to the collection, and the REST client refuses that
+path change (exit 2); on a multi-segment route (`c1i apps owners /`) the request
+targets `//` and the API answers 404 (exit 4). Either way you don't get a full
+listing that looks like a successful read. It also refuses a same-path redirect
+to an unrelated host or from `https` to `http`, since a followed redirect
+carries your token. It does follow pure host canonicalization. `mcp gateway` is
+guarded the same way: it is built on the same shared transport, which applies
+the empty-path and redirect checks unconditionally.
 
 `6` versus `8`: `6` means C1 itself failed, so waiting and retrying is sensible.
 `8` means C1 answered and something past it did not — a connector is down, or
@@ -531,16 +533,18 @@ resource with `--resource-id` likewise means you drop
   action is no longer available: the request has advanced to a new approval
   step` -- omit the flag to act on whatever step is current.
 - `restart` re-runs the current approval step (one new history entry); `reset`
-  restarts the whole policy (four, measured). Neither reopens a closed task --
-  the state stays `TASK_STATE_CLOSED`. `process` changes nothing observable on
-  a healthy task. `update-grant-duration` takes a whole-number Go (`1h`)
-  or protobuf (`3600s`) duration (the server stored `0s` without complaint); it only
-  works before provisioning, after which the server says
-  `cannot update grant duration for a ticket in a provision step`; the value
-  lands as `grantDuration`.
+  restarts the whole policy (four, measured). `reset` reopens a closed task --
+  exit 0, state back to `TASK_STATE_OPEN`, outcome cleared -- but `restart`
+  does not: the server answers `task is closed` (exit 2). `process` changes
+  nothing observable on a healthy task. `update-grant-duration` takes a
+  whole-number Go (`1h`) or protobuf (`3600s`) duration (the server stored `0s`
+  without complaint); it only works before provisioning, after which the
+  server says `cannot update grant duration for a ticket in a provision step`;
+  the value lands at `.type.grant.grantDuration` (there is no top-level
+  `.grantDuration`).
 - `requests create grant --duration` likewise takes `24h` or `86400s`; the
-  server refuses `0s` with `value must be greater than 0s`. The value lands on
-  the task as `grantDuration`.
+  server refuses `0s` with `value must be greater than 0s`. The value lands at
+  that same `.type.grant.grantDuration` path.
 - Entitlement ids are unique only within an app — some system-builtin
   entitlements reuse the same id across every app that has one. Always key
   on `(app_id, id)` together, never `id` alone.
