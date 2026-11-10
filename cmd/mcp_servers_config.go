@@ -36,11 +36,11 @@ func deriveCredentialUpdateMask(cfg map[string]any) string {
 // --hosted-config-file / --external-config-file JSON escape hatch instead.
 func addAuthFlags(cmd *cobra.Command) {
 	cmd.Flags().String("auth", "", "Auth method: "+authFlag.usage()+" (OAuth2/AWS/Google go via --*-config-file)")
-	cmd.Flags().String("bearer-token", "", "Bearer token value (with --auth bearer-token)")
-	cmd.Flags().String("header-name", "", "Custom header name (with --auth custom-header)")
-	cmd.Flags().String("header-value", "", "Custom header value (with --auth custom-header)")
-	cmd.Flags().String("basic-auth-username", "", "Basic-auth username (with --auth basic-auth)")
-	cmd.Flags().String("basic-auth-password", "", "Basic-auth password (with --auth basic-auth)")
+	cmd.Flags().String("bearer-token", "", "Bearer token value (required with --auth bearer-token)")
+	cmd.Flags().String("header-name", "", "Custom header name (required with --auth custom-header)")
+	cmd.Flags().String("header-value", "", "Custom header value (required with --auth custom-header)")
+	cmd.Flags().String("basic-auth-username", "", "Basic-auth username (required with --auth basic-auth)")
+	cmd.Flags().String("basic-auth-password", "", "Basic-auth password (required with --auth basic-auth)")
 	cmd.Flags().String("token-sharing", "", "Token sharing: "+tokenSharingFlag.usage())
 	cmd.Flags().Bool("require-tool-approval", false, "Per-server override for tool auto-approval (omit to leave unset)")
 }
@@ -60,19 +60,48 @@ func authArmFromFlags(cmd *cobra.Command) (map[string]any, error) {
 	}
 	switch arm {
 	case "bearerToken":
+		if err := requireAuthArmFlags(cmd, "bearer-token", "bearer-token"); err != nil {
+			return nil, err
+		}
 		token, _ := cmd.Flags().GetString("bearer-token")
 		return map[string]any{arm: map[string]any{"token": token}}, nil
 	case "customHeader":
+		if err := requireAuthArmFlags(cmd, "custom-header", "header-name", "header-value"); err != nil {
+			return nil, err
+		}
 		name, _ := cmd.Flags().GetString("header-name")
 		value, _ := cmd.Flags().GetString("header-value")
 		return map[string]any{arm: map[string]any{"headerName": name, "headerValue": value}}, nil
 	case "basicAuth":
+		if err := requireAuthArmFlags(cmd, "basic-auth", "basic-auth-username", "basic-auth-password"); err != nil {
+			return nil, err
+		}
 		user, _ := cmd.Flags().GetString("basic-auth-username")
 		pass, _ := cmd.Flags().GetString("basic-auth-password")
 		return map[string]any{arm: map[string]any{"username": user, "password": pass}}, nil
 	default: // none
 		return map[string]any{arm: map[string]any{}}, nil
 	}
+}
+
+// requireAuthArmFlags refuses a selected --auth arm whose companion values are
+// blank. The server 400s on each empty field, so without this a --dry-run
+// preview shows a request that cannot succeed.
+func requireAuthArmFlags(cmd *cobra.Command, auth string, names ...string) error {
+	var missing []string
+	for _, n := range names {
+		if v, _ := cmd.Flags().GetString(n); !hasVisibleRune(v) {
+			missing = append(missing, "--"+n)
+		}
+	}
+	if len(missing) == 0 {
+		return nil
+	}
+	required := strings.Join(missing, ", ")
+	if len(missing) > 1 {
+		required = strings.Join(missing[:len(missing)-1], ", ") + " and " + missing[len(missing)-1]
+	}
+	return &usageError{fmt.Errorf("--auth %s requires %s", auth, required)}
 }
 
 // authFlag lists the --auth methods the convenience flags can fill in; api
