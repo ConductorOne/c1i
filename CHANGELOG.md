@@ -138,6 +138,11 @@ Exit codes and value types that change, each described under Fixed:
 - `mcp gateway list-tools` with a cursor that never ends exits 8, not 1.
 - `api --paginate` with a misspelled `--list-key` exits 2, not 0.
 - `last_executed_at` is `null`, not `""`, for a never-run automation.
+- `tasks deny` and `tasks restart` naming an unknown task exit `4`, not
+  `2` with the server's `PolicyStepId` error; no action is sent.
+  `tasks reassign --to-user-id` refuses a user that does not exist
+  (exit `2`) and sends the list once; 0.9.2 stored the id as the step's
+  approver at exit `0`.
 
 Named-value flags now refuse more input before sending anything, each with
 exit 2. `automations executions list --state <unknown>` used to print nothing
