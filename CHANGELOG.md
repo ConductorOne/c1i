@@ -382,15 +382,10 @@ non-empty value` when blank).
 
 - A `--url` with embedded credentials printed the username in its warning
   (`https://<token>@host` puts a secret there); the warning no longer names it.
-- `docs readme|changelog|agents -o -` wrote a file named `-`; `-` now means
-  stdout.
-- A blank `--update-mask " "` with `--body-file` on `policies update` and
-  `automations update` said the mask was required; it now says it is blank.
+- `docs agents -o -` wrote a file named `-`; `-` now means stdout, as it does
+  on the new `docs readme` and `docs changelog`.
 - A negative `--max-retries`, `C1I_MAX_RETRIES` or `max_retries` was accepted
   and treated as 0; it now exits 2. `0` still disables retries.
-- A bad boolean env or config value said `must be true or false` although
-  `1`, `0`, `t`, `f`, `TRUE` and `FALSE` are accepted; it now reads `must be a
-  boolean (true/false, 1/0)`.
 - `apps delete` help, README and agents.md said `apps list` rows show deleted
   apps; it omits them. `apps get` shows `deletedAt`.
 - A `~/.c1i.yaml` that exists but is invalid YAML, not a mapping, a directory,
@@ -398,8 +393,8 @@ non-empty value` when blank).
   "url is required". It now exits 2 naming the file; a missing file is still
   fine, and completion, `docs`, `help` and `version` ignore a broken one.
 - `accounts set-owner` with a repeated `--user-id` used to use the last one
-  (0.9.2); it now exits 2 before any request, as do `apps` and `entitlements`
-  `add-owner|remove-owner`.
+  (0.9.2); it now exits 2 before any request. The `--user-id` flag on `apps`
+  and `entitlements` `add-owner|remove-owner` refuses a repeat the same way.
 - `mcp servers test-connection --dry-run` no longer sends the probe (0.9.2
   did); it now previews like other mutations.
 - `--debug` and `--max-retries` now work on `docs search` and `docs page`,
@@ -430,7 +425,6 @@ non-empty value` when blank).
   whose ids can legitimately be missing, still print such rows.
 - `grants list` reads a grant's account and entitlement ids from the binding
   when the expanded objects are missing.
-
 - **`automations list`, `automations executions list`, `functions usage`,
   `functions list` and `functions commits` could loop forever**, re-printing
   the same rows: on a large enough result set, `/api/v1/automations`,
@@ -441,35 +435,28 @@ non-empty value` when blank).
   /api/v1/search/automations` and `POST /api/v1/search/automation_executions`,
   which page correctly, with output rows unchanged. `functions list` and
   `functions commits` stop on a stuck cursor as described above.
-
 - **`role-mining suggestions|runs|custom-analysis list` and
   `findings routing-rules|transformation-rules list` would drop a page
   silently** if the server ever paginated them: they made one request and
   ignored `nextPageToken`. They now warn on stderr when one is returned.
   None of these routes paginate today.
-
 - `tasks approve` on a task with no current step told you to pass
   `--policy-step-id`, which cannot supply one; the error now says the task has
   no current step and to re-read it with `tasks get`.
-
 - **List and search commands that read via `POST` were never retried on a
   transient 5xx or network error**, unlike GET-based lists: `users`, `grants`,
   `entitlements`, `tasks`, `policies`, `findings` and `mcp` searches among
   them. A `POST` to `/api/v1/search/*`, or to an `/api/v1/` path ending in
   `/search` or `/list`, is now retried like a GET; every such route is a
   read. Other `POST`s are still retried only on 429.
-
 - **`functions usage` overclaimed with `--page-token`.** It scans only that
   page, yet printed "no automations call function X"; it now says no
   automation on this page calls it.
-
 - **`tasks list` and `requests list` emitted a row of empty values** for a
   result with no `task` object. Such a result is now skipped, as
   `automations executions list` already does.
-
 - The docs no longer say every list command auto-paginates; they name the
   single-request ones and their stderr `partial result` warning.
-
 - `users list` help and the README now say its search route returns only
   directory-origin users by default, omitting local-origin and
   system users.
