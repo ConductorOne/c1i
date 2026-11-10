@@ -183,16 +183,22 @@ func validateBlankFlags(cmd *cobra.Command) error {
 // (via cast) coerces an unparsable value to the zero value without an error, so
 // C1I_DRY_RUN=yes, or `dry_run: yes` in ~/.c1i.yaml, silently read as false and
 // sent the mutation it was meant to preview.
+//
+// everywhere keeps the check on local-only requests too (completion): only
+// error_format, which shapes every error and was always rejected on any command.
+// The typed settings are skipped there so a stray C1I_DRY_RUN cannot break tab
+// completion.
 type globalEnvSetting struct {
 	key, env, flag string
 	parse          func(string) error
+	everywhere     bool
 }
 
 var globalEnvSettings = []globalEnvSetting{
 	{key: "url", env: urlEnvVar, flag: "url"},
 	{key: "fields", env: "C1I_FIELDS", flag: "fields"},
 	{key: "max_retries", env: "C1I_MAX_RETRIES", flag: "max-retries", parse: parseIntValue},
-	{key: "error_format", env: "C1I_ERROR_FORMAT", flag: "error-format", parse: parseErrorFormat},
+	{key: "error_format", env: "C1I_ERROR_FORMAT", flag: "error-format", parse: parseErrorFormat, everywhere: true},
 	{key: "debug", env: "C1I_DEBUG", flag: "debug", parse: parseBoolValue},
 	{key: "dry_run", env: "C1I_DRY_RUN", flag: "dry-run", parse: parseBoolValue},
 	{env: tokensource.NoCacheEnv, parse: parseBoolValue},
@@ -215,12 +221,10 @@ func bindGlobalEnvSettings() {
 // checked, matching viper's precedence. Empty means unset. Negative
 // max_retries is accepted like `--max-retries -1` (transport clamps it).
 func validateGlobalSettings(cmd *cobra.Command) error {
-	if isLocalOnlyRequest(cmd) {
-		return nil
-	}
+	local := isLocalOnlyRequest(cmd)
 	var cfg *viper.Viper
 	for _, s := range globalEnvSettings {
-		if s.parse == nil {
+		if s.parse == nil || (local && !s.everywhere) {
 			continue
 		}
 		if f := cmd.Flags().Lookup(s.flag); s.flag != "" && f != nil && f.Changed {
@@ -266,7 +270,8 @@ func validateGlobalSettings(cmd *cobra.Command) error {
 
 // isLocalOnlyRequest reports whether cmd runs without touching the network:
 // shell completion, either cobra's hidden __complete helper or the
-// `completion` command tree. A bad global env value must not fail those.
+// `completion` command tree. A bad typed global must not fail those; see
+// globalEnvSetting.everywhere.
 func isLocalOnlyRequest(cmd *cobra.Command) bool {
 	if isCompletionRequest(cmd) {
 		return true

@@ -46,6 +46,8 @@ func TestConfigFileValidation(t *testing.T) {
 			wantErr: `invalid debug "maybe" in ~/.c1i.yaml: must be true or false`},
 		{name: "max_retries abc", yaml: "max_retries: abc\n", wantExit: exitUsage,
 			wantErr: `invalid max_retries "abc" in ~/.c1i.yaml: must be an integer`},
+		{name: "max_retries 2.5", yaml: "max_retries: 2.5\n", wantExit: exitUsage,
+			wantErr: `invalid max_retries "2.5" in ~/.c1i.yaml: must be an integer`},
 		{name: "max_retries float", yaml: "max_retries: 1.5\n", wantExit: exitUsage,
 			wantErr: `invalid max_retries "1.5" in ~/.c1i.yaml: must be an integer`},
 
@@ -156,9 +158,71 @@ func TestPartialEnvCredentialsNotice(t *testing.T) {
 			authLogoutCmd.SetErr(&errBuf)
 			t.Cleanup(func() { authLogoutCmd.SetErr(nil) })
 			warnPartialEnvCredentials(authLogoutCmd)
-			got := strings.Contains(errBuf.String(), "only one of C1I_CLIENT_ID and C1I_CLIENT_SECRET is set; other commands will exit 2")
+			got := strings.Contains(errBuf.String(), "only one of C1I_CLIENT_ID and C1I_CLIENT_SECRET is set; commands that need credentials will exit 2 until both or neither are set")
 			if got != tc.want {
 				t.Errorf("notice present = %v, want %v; stderr %q", got, tc.want, errBuf.String())
+			}
+		})
+	}
+}
+
+// error_format decides how every error is rendered, so a bad value fails
+// completion too (as before the other globals were validated); the typed
+// settings stay skipped there so a stray C1I_DRY_RUN cannot break tab completion.
+func TestLocalOnlyRequestsValidateErrorFormatOnly(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		env      map[string]string
+		yaml     string
+		args     []string
+		wantExit int
+	}{
+		{"flag", nil, "", []string{"completion", "bash", "--error-format", "xml"}, exitUsage},
+		{"env", map[string]string{"C1I_ERROR_FORMAT": "xml"}, "", []string{"completion", "bash"}, exitUsage},
+		{"config", nil, "error_format: xml\n", []string{"completion", "bash"}, exitUsage},
+		{"bad dry-run env still skipped", map[string]string{"C1I_DRY_RUN": "yes"}, "", []string{"completion", "bash"}, exitOK},
+		{"bad max_retries config still skipped", nil, "max_retries: abc\n", []string{"completion", "bash"}, exitOK},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			clearEnvFlags(t)
+			useConfigFile(t, tc.yaml)
+			for k, v := range tc.env {
+				t.Setenv(k, v)
+			}
+			var out bytes.Buffer
+			res := runCLI(t, nil, &out, tc.args...)
+			if res.exit != tc.wantExit {
+				t.Fatalf("exit = %d (err %v), want %d", res.exit, res.err, tc.wantExit)
+			}
+		})
+	}
+}
+
+// auth login and auth logout are the recovery path for a half-set credential
+// pair: they run (no credential load), and say why everything else exits 2.
+func TestAuthRecoveryCommandsWarnOnPartialEnvCredentials(t *testing.T) {
+	const want = "only one of C1I_CLIENT_ID and C1I_CLIENT_SECRET is set; commands that need credentials will exit 2 until both or neither are set"
+	for _, tc := range []struct {
+		name     string
+		args     []string
+		wantExit int
+	}{
+		{"logout", []string{"auth", "logout"}, exitOK},
+		// Stops at the missing secret, after the warning and before any login.
+		{"login", []string{"auth", "login", "--client-id", "x"}, exitUsage},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			clearEnvFlags(t)
+			home := useConfigFile(t, "")
+			t.Setenv("XDG_CONFIG_HOME", filepath.Dir(home))
+			t.Setenv("C1I_CLIENT_ID", "id-only")
+			t.Setenv("C1I_CLIENT_SECRET", "")
+			res := runCLI(t, nil, nil, tc.args...)
+			if res.exit != tc.wantExit {
+				t.Fatalf("exit = %d (err %v), want %d", res.exit, res.err, tc.wantExit)
+			}
+			if !strings.Contains(res.stderr, want) {
+				t.Errorf("stderr = %q, want it to contain %q", res.stderr, want)
 			}
 		})
 	}

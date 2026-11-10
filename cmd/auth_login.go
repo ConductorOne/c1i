@@ -176,11 +176,11 @@ func offerSaveURL(cmd *cobra.Command, in *lineReader, baseURL string) {
 	_, _ = fmt.Fprintf(out, "URL saved to ~/.c1i.yaml\n")
 }
 
-// warnPartialEnvCredentials says why other commands exit 2 while exactly one
+// warnPartialEnvCredentials says why commands that need credentials exit 2 while exactly one
 // credential env var is set; login and logout, the recovery path, still run.
 func warnPartialEnvCredentials(cmd *cobra.Command) {
 	if keychain.EnvCredentialsPartial() {
-		notice(cmd, "credentials", "Warning: only one of C1I_CLIENT_ID and C1I_CLIENT_SECRET is set; other commands will exit 2 until both or neither are set", nil)
+		notice(cmd, "credentials", "Warning: only one of C1I_CLIENT_ID and C1I_CLIENT_SECRET is set; commands that need credentials will exit 2 until both or neither are set", nil)
 	}
 }
 

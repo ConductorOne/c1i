@@ -117,7 +117,7 @@ output are unchanged.
 - `apps add-owner <user-id> --app-id <id>` → `apps add-owner <app-id> --user-id <id>`
 - `apps remove-owner <user-id> --app-id <id>` → `apps remove-owner <app-id> --user-id <id>`
 
-Exit codes and value types that change, each described under Fixed:
+Exit codes and value types that change:
 
 - A non-empty `C1I_DRY_RUN`, `C1I_DEBUG` or `C1I_MAX_RETRIES` that does
   not parse exits `2`, instead of being coerced to `false`/`0`
