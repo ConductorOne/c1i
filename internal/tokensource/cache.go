@@ -39,7 +39,6 @@ const (
 	// other non-empty value before a request, so an unparsable one here only
 	// means a caller skipped that and fails closed (no caching).
 	NoCacheEnv = "C1I_NO_TOKEN_CACHE"
-	noCacheEnv = NoCacheEnv
 
 	// tmpFileGrace spares a temp file a concurrent store may still be renaming.
 	tmpFileGrace = time.Minute
@@ -293,7 +292,7 @@ func InvalidateCachedToken(tokenHost, clientID, clientSecret string) {
 }
 
 func cacheDisabled() bool {
-	v := os.Getenv(noCacheEnv)
+	v := os.Getenv(NoCacheEnv)
 	if v == "" {
 		return false
 	}

@@ -124,7 +124,8 @@ Exit codes and value types that change, each described under Fixed:
   (`C1I_DRY_RUN=yes` used to send the mutation it was meant to preview).
   A flag set on the command line still overrides the variable, and an
   empty variable still means unset.
-- The same values in `~/.c1i.yaml` (`dry_run`, `debug`, `max_retries`) are now
+- The same values in `~/.c1i.yaml` (`dry_run`, `debug`, `max_retries`,
+  `error_format`) are now
   checked the same way: `dry_run: yes` or `max_retries: abc` exits `2`
   naming the file and key, instead of being coerced to `false`/`0` (a config
   `dry_run: yes` used to send the mutation it was meant to preview). An empty
@@ -138,6 +139,13 @@ Exit codes and value types that change, each described under Fixed:
   both, or neither.
 - `policies create --body-file ""` is a read error (exit `2`); it used to mean
   "no body file" and fall through to the flags.
+- `policies create --body-file` combined with `--display-name`,
+  `--description`, `--policy-type`, `--steps-file` or `--rules-file` exits `2`;
+  it exited `1`.
+- A bad `--error-format` / `C1I_ERROR_FORMAT` message now names its source
+  (`invalid C1I_ERROR_FORMAT "xml": want text or json`); the exit code is
+  unchanged. `auth login` and `auth logout` warn on stderr when exactly one of
+  `C1I_CLIENT_ID`/`C1I_CLIENT_SECRET` is set.
 - An input-file error (missing, malformed, `null` or the wrong shape) exits 2,
   not 1. That includes a non-object element in an array `--*-file` or
   `--body-file` (`--rules-file '[null]'` was sent by 0.9.2), and a `--body-file`

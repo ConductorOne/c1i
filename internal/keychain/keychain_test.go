@@ -460,3 +460,16 @@ func TestFileFallbackRefusesRelativeConfigDir(t *testing.T) {
 		t.Errorf("wrote %v under the working directory", entries)
 	}
 }
+
+func TestEnvCredentialsPartial(t *testing.T) {
+	for _, tc := range []struct {
+		id, sec string
+		want    bool
+	}{{"", "", false}, {"a", "", true}, {"", "b", true}, {"a", "b", false}} {
+		t.Setenv(envClientID, tc.id)
+		t.Setenv(envClientSecret, tc.sec)
+		if got := EnvCredentialsPartial(); got != tc.want {
+			t.Errorf("EnvCredentialsPartial(%q, %q) = %v, want %v", tc.id, tc.sec, got, tc.want)
+		}
+	}
+}

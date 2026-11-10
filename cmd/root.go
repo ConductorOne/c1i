@@ -3,6 +3,7 @@ package cmd
 import (
 	"errors"
 	"fmt"
+	"math"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -48,9 +49,6 @@ For raw API exploration, also with no authentication required:
 	// --connector-id, ...) are covered without a per-command check. Same for
 	// validateCountFlags, which needs to see every list command's --limit.
 	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
-		if err := validateErrorFormat(viper.GetString("error_format")); err != nil {
-			return err
-		}
 		if err := validateGlobalSettings(cmd); err != nil {
 			return err
 		}
@@ -89,10 +87,6 @@ For raw API exploration, also with no authentication required:
 	PersistentPostRunE: checkFieldsMatchedAnyRow,
 }
 
-// validateErrorFormat accepts "", "text", or "json" (case-insensitive, matching
-// how writeError interprets the value) and rejects anything else as a usage
-// error so a typo like --error-format=jsonn fails loudly instead of silently
-// falling back to text.
 // validateArgsUTF8 rejects a positional argument that isn't valid UTF-8 (a
 // lone UTF-16 surrogate, raw invalid bytes, ...) client-side. Without this,
 // an id built from such an argument (client.Path only URL-escapes; it
@@ -181,7 +175,7 @@ func validateBlankFlags(cmd *cobra.Command) error {
 
 // globalEnvSetting is one env-backed global: its viper key, the env var, the
 // persistent flag that overrides it, and the parser each source's value must
-// satisfy (nil for a string setting, which cannot be unparsable). An env-only
+// satisfy (nil for a free-form string setting). An env-only
 // setting leaves key and flag empty.
 //
 // The table drives the viper binding and validateGlobalSettings, so a new
@@ -198,7 +192,7 @@ var globalEnvSettings = []globalEnvSetting{
 	{key: "url", env: urlEnvVar, flag: "url"},
 	{key: "fields", env: "C1I_FIELDS", flag: "fields"},
 	{key: "max_retries", env: "C1I_MAX_RETRIES", flag: "max-retries", parse: parseIntValue},
-	{key: "error_format", env: "C1I_ERROR_FORMAT", flag: "error-format"},
+	{key: "error_format", env: "C1I_ERROR_FORMAT", flag: "error-format", parse: parseErrorFormat},
 	{key: "debug", env: "C1I_DEBUG", flag: "debug", parse: parseBoolValue},
 	{key: "dry_run", env: "C1I_DRY_RUN", flag: "dry-run", parse: parseBoolValue},
 	{env: tokensource.NoCacheEnv, parse: parseBoolValue},
@@ -230,6 +224,13 @@ func validateGlobalSettings(cmd *cobra.Command) error {
 			continue
 		}
 		if f := cmd.Flags().Lookup(s.flag); s.flag != "" && f != nil && f.Changed {
+			// pflag parsed a bool or int; a string flag (--error-format) is
+			// only checked here.
+			if v := f.Value.String(); v != "" {
+				if err := s.parse(v); err != nil {
+					return &usageError{fmt.Errorf("invalid --%s %q: %w", s.flag, v, err)}
+				}
+			}
 			continue
 		}
 		if v := os.Getenv(s.env); v != "" {
@@ -245,12 +246,15 @@ func validateGlobalSettings(cmd *cobra.Command) error {
 			cfg = viper.New()
 			loadConfigFile(cfg)
 		}
-		// Sprint renders a YAML bool/int the way its source spelled it; a
-		// string, map or list fails the parser like any other garbage.
 		raw := cfg.Get(s.key)
 		if raw == nil {
 			continue
 		}
+		// YAML reads 1e6 as a float; viper's int cast accepts it, so do we.
+		if f, ok := raw.(float64); ok && f == math.Trunc(f) && math.Abs(f) < 1<<53 {
+			raw = int64(f)
+		}
+		// A string, map or list fails the parser like any other garbage.
 		if v := fmt.Sprint(raw); v != "" {
 			if err := s.parse(v); err != nil {
 				return &usageError{fmt.Errorf("invalid %s %q in ~/.c1i.yaml: %w", s.key, v, err)}
@@ -394,12 +398,13 @@ func dotSegmentIDValueError(subject, value string) error {
 	return &usageError{fmt.Errorf(`%s %q is not an id: "." and ".." (with an optional ";params" suffix) address the parent or collection, not the object`, subject, value)}
 }
 
-func validateErrorFormat(f string) error {
-	if f == "" {
-		return nil
+// parseErrorFormat accepts "", "text" or "json" (case-insensitive, as writeError
+// reads it), so a typo like jsonn fails loudly instead of falling back to text.
+func parseErrorFormat(s string) error {
+	if _, err := errorFormatFlag.parse(s); err != nil {
+		return errors.New("want " + errorFormatFlag.usage())
 	}
-	_, err := errorFormatFlag.parse(f)
-	return err
+	return nil
 }
 
 var errorFormatFlag = enumFlag{flag: "error-format", unknown: enumReject, values: []enumValue{

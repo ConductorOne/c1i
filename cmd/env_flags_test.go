@@ -98,10 +98,8 @@ func TestEnvFlagValidation(t *testing.T) {
 		{name: "flag debug overrides bad env", envVar: "C1I_DEBUG", value: "yes",
 			args: []string{"api", "--method", "POST", "--path", "/api/v1/things", "--body", "{}", "--debug=false"}, wantReqs: 1},
 
-		// C1I_ERROR_FORMAT already reached a usage error through
-		// validateErrorFormat; this pins that it still does.
 		{name: "error-format invalid", envVar: "C1I_ERROR_FORMAT", value: "jsonn", wantExit: exitUsage,
-			wantErr: `invalid --error-format "jsonn"`},
+			wantErr: `invalid C1I_ERROR_FORMAT "jsonn": want text or json`},
 		{name: "error-format valid", envVar: "C1I_ERROR_FORMAT", value: "json", wantReqs: 1},
 	}
 	for _, tc := range cases {
@@ -140,8 +138,7 @@ func TestEnvFlagValidation(t *testing.T) {
 
 // TestGlobalEnvSettingsMatchFlagTypes keeps the one table honest: a setting
 // whose flag is typed must carry the parser validateGlobalSettings applies to
-// its env var and ~/.c1i.yaml key, and a string setting must not pretend to
-// parse. A new typed global that skips the table would be bound nowhere and
+// its flag, env var and ~/.c1i.yaml key. A new typed global that skips the table would be bound nowhere and
 // validated nowhere. An env-only entry (no key, no flag) must have a parser.
 func TestGlobalEnvSettingsMatchFlagTypes(t *testing.T) {
 	if len(globalEnvSettings) < 7 {
@@ -163,9 +160,8 @@ func TestGlobalEnvSettingsMatchFlagTypes(t *testing.T) {
 		if s.key != strings.ReplaceAll(s.flag, "-", "_") {
 			t.Errorf("%s: config key %q is not --%s with underscores", s.env, s.key, s.flag)
 		}
-		if stringTyped := f.Value.Type() == "string"; stringTyped != (s.parse == nil) {
-			t.Errorf("%s (--%s, type %s): parse == nil is %v; a typed value needs a parser and a string needs none",
-				s.env, s.flag, f.Value.Type(), s.parse == nil)
+		if f.Value.Type() != "string" && s.parse == nil {
+			t.Errorf("%s (--%s, type %s) has no parser; a typed value needs one", s.env, s.flag, f.Value.Type())
 		}
 	}
 	// Every global flag must be in the table, or its env and config-file

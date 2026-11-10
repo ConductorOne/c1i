@@ -103,7 +103,7 @@ A non-empty env value that doesn't parse (`C1I_DRY_RUN=yes`,
 `C1I_MAX_RETRIES=abc`) is a usage error naming the variable, before any
 request; an empty one means unset. A flag set on the command line overrides
 its env var entirely, so a bad env value is then ignored. The same keys in
-`~/.c1i.yaml` (`dry_run`, `debug`, `max_retries`) are validated alike, naming
+`~/.c1i.yaml` (`dry_run`, `debug`, `max_retries`, `error_format`) are validated alike, naming
 the file and key.
 
 `--error-format json` is the one worth setting by default if you parse

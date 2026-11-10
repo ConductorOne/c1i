@@ -188,7 +188,7 @@ func TestStoreNoOps(t *testing.T) {
 
 func TestNoCacheEnvDisablesDisk(t *testing.T) {
 	useTempConfig(t)
-	t.Setenv(noCacheEnv, "1")
+	t.Setenv(NoCacheEnv, "1")
 	storeCachedToken(testCacheKey("host", "client"), freshToken(30*time.Minute))
 	p, _ := cachePath(testCacheKey("host", "client"))
 	if _, err := os.Stat(p); !errors.Is(err, os.ErrNotExist) {
@@ -237,7 +237,7 @@ func TestCacheTokenSource_InMemoryReuse(t *testing.T) {
 	// Disable the disk cache so in-memory reuse is the ONLY thing that can hold
 	// the mint count at 1 -- otherwise a disk hit would mask a broken in-memory
 	// path.
-	t.Setenv(noCacheEnv, "1")
+	t.Setenv(NoCacheEnv, "1")
 	m := &countingMint{tok: freshToken(30 * time.Minute)}
 	src := &cacheTokenSource{mint: m, key: testCacheKey("h", "c")}
 	for i := 0; i < 5; i++ {
@@ -689,7 +689,7 @@ func TestNoCacheEnvIsStrictBool(t *testing.T) {
 	}{{"1", true}, {"true", true}, {"0", false}, {"false", false}, {"", false}} {
 		t.Run("val="+tc.val, func(t *testing.T) {
 			useTempConfig(t)
-			t.Setenv(noCacheEnv, tc.val)
+			t.Setenv(NoCacheEnv, tc.val)
 			key := testCacheKey("host", "client")
 			storeCachedToken(key, freshToken(30*time.Minute))
 			if got := loadCachedToken(key) == nil; got != tc.wantOff {

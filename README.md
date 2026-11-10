@@ -1470,7 +1470,7 @@ Set `--max-retries 0` to disable retries entirely. Non-retryable responses
 A non-empty `C1I_*` value that doesn't parse (a boolean such as
 `C1I_DRY_RUN`, or `C1I_MAX_RETRIES`) exits `2` naming the variable before any
 request; the flag given on the command line overrides the variable entirely.
-The same keys in `~/.c1i.yaml` (`dry_run`, `debug`, `max_retries`) are checked
+The same keys in `~/.c1i.yaml` (`dry_run`, `debug`, `max_retries`, `error_format`) are checked
 the same way, naming the file and key.
 
 This covers the token mint too: minting or refreshing the OAuth2 bearer

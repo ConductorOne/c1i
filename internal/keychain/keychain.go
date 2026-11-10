@@ -71,7 +71,7 @@ func Load(service string) (string, string, Backend, error) {
 	if id != "" && sec != "" {
 		return id, sec, BackendEnv, nil
 	}
-	if id != "" || sec != "" {
+	if envPartial(id, sec) {
 		return "", "", "", ErrPartialEnv
 	}
 
@@ -133,6 +133,14 @@ func Delete(service string) (bool, error) {
 	}
 	fileRemoved, err := deleteFile(service)
 	return removed || fileRemoved, err
+}
+
+func envPartial(id, sec string) bool { return (id != "") != (sec != "") }
+
+// EnvCredentialsPartial reports whether exactly one credential env var is set,
+// the state Load rejects with ErrPartialEnv.
+func EnvCredentialsPartial() bool {
+	return envPartial(os.Getenv(envClientID), os.Getenv(envClientSecret))
 }
 
 // EnvCredentialsSet reports whether both credential env vars are set. When they

@@ -349,21 +349,15 @@ func TestWriteErrorJSONNonJSONBody(t *testing.T) {
 	}
 }
 
-func TestValidateErrorFormat(t *testing.T) {
-	for _, ok := range []string{"", "text", "json", "JSON", "Text"} {
-		if err := validateErrorFormat(ok); err != nil {
-			t.Errorf("validateErrorFormat(%q) = %v, want nil", ok, err)
+func TestParseErrorFormat(t *testing.T) {
+	for _, ok := range []string{"text", "json", "JSON", "Text"} {
+		if err := parseErrorFormat(ok); err != nil {
+			t.Errorf("parseErrorFormat(%q) = %v, want nil", ok, err)
 		}
 	}
 	for _, bad := range []string{"xml", "yaml", "jsonn", "tex"} {
-		err := validateErrorFormat(bad)
-		if err == nil {
-			t.Errorf("validateErrorFormat(%q) = nil, want error", bad)
-			continue
-		}
-		var ue *usageError
-		if !errors.As(err, &ue) {
-			t.Errorf("validateErrorFormat(%q) = %T, want *usageError (exit 2)", bad, err)
+		if err := parseErrorFormat(bad); err == nil {
+			t.Errorf("parseErrorFormat(%q) = nil, want error", bad)
 		}
 	}
 }

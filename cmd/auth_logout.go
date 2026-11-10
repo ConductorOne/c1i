@@ -20,6 +20,7 @@ C1I_CLIENT_SECRET) are not affected.`,
 		if err != nil {
 			return err
 		}
+		warnPartialEnvCredentials(cmd)
 		client.ClearCachedToken(baseURL)
 		service := config.KeychainService(baseURL)
 		removed, err := keychain.Delete(service)
