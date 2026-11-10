@@ -234,7 +234,8 @@ tracked root file outside its allowlist. Stage explicit paths rather than `-A`.
 - **Output:** list rows go through the `newEmitter(...)`/`.Encode` emitter;
   single-object reads through `writeObject`; **mutations** through
   `sendMutation`/`sendMutationBatch`/`sendMutationSequence` (`cmd/mutation.go`),
-  which own the send, pre-send reads, `--wait`, the `--dry-run` preview, and the
+  which own the send, pre-send reads, `--wait`, the `--dry-run` preview (`writeMutationPreview` masks credential fields
+  for every path), and the
   output: the response unwrapped like the family's read, never projected (an
   explicit `--fields` is exit 2). Call `markMutating` in the command's `init`.
   `TestMutationsWriteOnlyThroughHelper` enforces this. Every stderr line goes

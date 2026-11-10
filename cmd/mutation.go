@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"net/url"
 	"reflect"
 	"strings"
 
@@ -499,13 +500,14 @@ func marshalMutationBody(m mutation) ([]byte, error) {
 // writeMutationPreview prints the --dry-run document and its stderr notice.
 func writeMutationPreview(cmd *cobra.Command, baseURL string, reqs []previewRequest) error {
 	_ = baseURL // reqs carry the full URL
+	reqs = redactPreviewBodies(reqs)
 	doc := struct {
 		DryRun   bool             `json:"dryRun"`
 		Requests []previewRequest `json:"requests"`
 	}{true, reqs}
 	var buf bytes.Buffer
 	enc := json.NewEncoder(&buf)
-	enc.SetEscapeHTML(false) // body bytes are shown as sent
+	enc.SetEscapeHTML(false) // bodies are shown as sent, apart from secrets
 	if err := enc.Encode(doc); err != nil {
 		return fmt.Errorf("encoding dry-run preview: %w", err)
 	}
@@ -521,6 +523,36 @@ func writeMutationPreview(cmd *cobra.Command, baseURL string, reqs []previewRequ
 	return nil
 }
 
+// redactPreviewBodies is the one place a preview masks secrets: every preview
+// goes through writeMutationPreview. A body with no secret key keeps its bytes.
+func redactPreviewBodies(reqs []previewRequest) []previewRequest {
+	out := make([]previewRequest, len(reqs))
+	copy(out, reqs)
+	for i, r := range out {
+		out[i].URL = redactURL(r.URL)
+		if len(r.Body) == 0 {
+			continue
+		}
+		dec := json.NewDecoder(bytes.NewReader(r.Body))
+		dec.UseNumber()
+		var v any
+		if dec.Decode(&v) != nil {
+			continue
+		}
+		red := redactSecrets(v)
+		if reflect.DeepEqual(v, red) {
+			continue
+		}
+		var buf bytes.Buffer
+		enc := json.NewEncoder(&buf)
+		enc.SetEscapeHTML(false)
+		if enc.Encode(red) == nil {
+			out[i].Body = bytes.TrimSpace(buf.Bytes())
+		}
+	}
+	return out
+}
+
 // previewProbeIfDryRun previews a probe POST (which is not a mutation, so it
 // does not go through sendMutation) instead of sending it, and reports whether
 // it did. Secret-valued keys in the body are masked: a probe's body carries
@@ -529,7 +561,7 @@ func previewProbeIfDryRun(cmd *cobra.Command, baseURL, path string, body map[str
 	if !dryRunActive() {
 		return false, nil
 	}
-	req, err := prepareMutation(baseURL, mutation{Method: http.MethodPost, Path: path, Body: redactSecrets(body)})
+	req, err := prepareMutation(baseURL, mutation{Method: http.MethodPost, Path: path, Body: body})
 	if err != nil {
 		return true, err
 	}
@@ -539,11 +571,15 @@ func previewProbeIfDryRun(cmd *cobra.Command, baseURL, path string, body map[str
 const redactedPlaceholder = "[redacted]"
 
 // secretBodyKeys are the body keys (normalized by secretKey) whose values are
-// credentials.
-var secretBodyKeys = map[string]bool{
-	"token": true, "headervalue": true, "password": true, "clientsecret": true,
-	"secretaccesskey": true, "sessiontoken": true, "credentialsjson": true,
-}
+// credentials; the names come from the auth-arm builders.
+var secretBodyKeys = func() map[string]bool {
+	m := map[string]bool{}
+	for _, k := range []string{keyToken, keyHeaderValue, keyPassword, keyClientSecret, keySecretAccessKey, keySessionToken, keyCredentialsJSON,
+		keyAuthorization, keyAPIKey, keyAccessToken, keyRefreshToken, keySecret} {
+		m[secretKey(k)] = true
+	}
+	return m
+}()
 
 // secretKey folds a JSON key's camelCase, snake_case and kebab-case spellings
 // (the API accepts the first two) into one lookup form.
@@ -558,8 +594,13 @@ func redactSecrets(v any) any {
 	case map[string]any:
 		out := make(map[string]any, len(x))
 		for k, e := range x {
-			if secretBodyKeys[secretKey(k)] && !emptyJSONValue(e) {
+			sk := secretKey(k)
+			if _, isStr := e.(string); (secretBodyKeys[sk] || (authArmKeys[sk] && isStr)) && !emptyJSONValue(e) {
 				out[k] = redactedPlaceholder
+			} else if h, ok := e.(map[string]any); ok && sk == "headers" {
+				out[k] = redactHeaders(h)
+			} else if str, ok := e.(string); ok {
+				out[k] = redactURL(str)
 			} else {
 				out[k] = redactSecrets(e)
 			}
@@ -573,6 +614,59 @@ func redactSecrets(v any) any {
 		return out
 	}
 	return v
+}
+
+// authArmKeys are the auth-oneof arm names (authTemplateFlag's api names); a
+// string placed directly under one is a credential.
+var authArmKeys = func() map[string]bool {
+	m := map[string]bool{}
+	for _, v := range authTemplateFlag.values {
+		m[secretKey(v.api)] = true
+	}
+	return m
+}()
+
+// redactURL masks an absolute URL's password (url.URL.Redacted) and the value
+// of every secret-named query parameter, leaving the rest as sent.
+func redactURL(s string) string {
+	u, err := url.Parse(s)
+	if err != nil || u.Scheme == "" || u.Host == "" {
+		return s
+	}
+	if u.User != nil {
+		if _, has := u.User.Password(); has {
+			s = u.Redacted()
+		}
+	}
+	if q := u.RawQuery; q != "" {
+		pairs := strings.Split(q, "&")
+		changed := false
+		for i, p := range pairs {
+			k, _, found := strings.Cut(p, "=")
+			if name, err := url.QueryUnescape(k); found && err == nil && secretBodyKeys[secretKey(name)] {
+				pairs[i] = k + "=" + redactedPlaceholder
+				changed = true
+			}
+		}
+		if changed {
+			s = strings.Replace(s, "?"+q, "?"+strings.Join(pairs, "&"), 1)
+		}
+	}
+	return s
+}
+
+// redactHeaders masks every non-empty header value: any header can carry a
+// credential (Authorization, X-Api-Key, ...).
+func redactHeaders(h map[string]any) map[string]any {
+	out := make(map[string]any, len(h))
+	for k, v := range h {
+		if emptyJSONValue(v) {
+			out[k] = v
+		} else {
+			out[k] = redactedPlaceholder
+		}
+	}
+	return out
 }
 
 func emptyJSONValue(v any) bool {

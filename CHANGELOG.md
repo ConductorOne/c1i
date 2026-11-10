@@ -86,6 +86,8 @@ wrapper key. New commands (see Added) follow the same contract.
     must look up an id the body needs (a task's current policy step, a
     hosted MCP server's catalog id, or the caller for `requests create`).
   - A preview refuses an empty, `.` or `..` id (exit 2), as a real send does.
+  - A preview prints credential fields (tokens, passwords, header values, a
+    URL's password) as `[redacted]`; 0.9.2 showed them as typed.
 - **Passing `--fields` to a mutation is a usage error (exit 2).** `C1I_FIELDS`
   is still ignored on mutations.
 - **`--error-format json` now makes stderr NDJSON for every command.**
@@ -402,8 +404,7 @@ already behaved this way.
   `add-owner|remove-owner`.
 
 - `mcp servers test-connection --dry-run` no longer sends the probe (0.9.2
-  did); it prints the request body like other mutations, with credential
-  values shown as `[redacted]`.
+  did); it now previews like other mutations.
 
 - `C1I_DRY_RUN=yes` (or any value the flag would refuse) was read as **false**,
   so a command run with the variable live-sent the mutation it was meant to

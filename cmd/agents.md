@@ -95,7 +95,7 @@ apply it for a whole session; the flag wins for a single invocation.
 |---|---|---|
 | `--url` | `C1I_URL` | tenant host — see above |
 | `--fields` | `C1I_FIELDS` | comma-separated dot-paths to keep in JSON output — see "Reading output" |
-| `--dry-run` | `C1I_DRY_RUN` | preview a C1 REST mutation as one JSON object (`.requests[]`: method, URL, body); it never has an `id` (`upgrade --dry-run` prints plain `[dry-run]` text instead); unsupported for `mcp gateway call` and `auth login` |
+| `--dry-run` | `C1I_DRY_RUN` | preview a C1 REST mutation as one JSON object (`.requests[]`: method, URL, body); it never has an `id`, and credential fields print as `[redacted]` (`upgrade --dry-run` prints plain `[dry-run]` text instead); unsupported for `mcp gateway call` and `auth login` |
 | `--debug` | `C1I_DEBUG` | trace API HTTP requests (method, URL, status, timing) to stderr |
 | `--max-retries` | `C1I_MAX_RETRIES` | retries for transient API failures (`429`/`5xx`); `0` disables; negative exits 2 (flag, env and config alike) |
 | `--error-format` | `C1I_ERROR_FORMAT` | `text` (default) or `json` |
@@ -379,7 +379,8 @@ the server returns.
 `--dry-run` (or `C1I_DRY_RUN`) previews a C1 REST mutation without sending
 it: one JSON object, `{"dryRun":true,"requests":[{"method","url","body"}]}`,
 never with an `id`, plus a stderr notice (`upgrade --dry-run` instead prints plain
-`[dry-run]` text lines). It needs a configured URL (exit 2
+`[dry-run]` text lines). Credential fields (tokens, passwords, secrets,
+header values, a URL's password) print as `[redacted]`; the rest is as sent. It needs a configured URL (exit 2
 without) and refuses an empty, `.` or `..` id (exit 2) as a real send does —
 including one carried only in a request body (`--grant-policy-id`,
 `--owner-id`, ...), so the preview cannot print a value a send would refuse. It
@@ -590,9 +591,7 @@ resource with `--resource-id` likewise means you drop
   number. The `tool_count` in NDJSON list rows is a real number. It exits `8`
   when the server is unreachable (`reachable` is not `true`), after printing
   the same JSON, so check the exit code before reading `toolCount`.
-  `--dry-run` previews the probe's body and sends nothing, with credential
-  values shown as `[redacted]` (`register` and `update-credentials` previews
-  echo them as sent).
+  `--dry-run` previews the probe and sends nothing.
 - `mcp servers search` only includes `tool_count` when you pass
   `--tool-state`; the API doesn't compute a count without a state filter, so
   a filterless search omits the key rather than showing a 0 that would look

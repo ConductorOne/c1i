@@ -306,7 +306,7 @@ that legitimately runs long. Neither is configurable.
 
 `--dry-run` (or `C1I_DRY_RUN=1`) previews a C1 REST mutation and returns
 without sending it. The preview is one JSON object on stdout, the requests in
-send order with the full URL and the exact body (`upgrade --dry-run` is the
+send order with the full URL and the body as sent (`upgrade --dry-run` is the
 exception: it prints plain `[dry-run]` text lines, since it sends no C1 API
 mutation):
 
@@ -332,6 +332,10 @@ Its only keys are `dryRun` and `requests` (one entry per request: several for
 `mcp tools approve` with several ids, up to three for `entitlements create`);
 it never has an `id`, and `body` is omitted when the request has none. A
 stderr notice, `dry run: nothing was sent`, accompanies every preview.
+
+Every preview prints credential fields as `[redacted]` (tokens, passwords,
+secrets, header values, a password in a URL, secret-named query parameters);
+everything else is shown as sent. A 0.9.2 preview showed them as typed.
 
 It applies to every REST write command and to non-GET `api` calls, and never
 sends that mutation. `mcp gateway call` rejects both `--dry-run` and
@@ -1310,10 +1314,7 @@ classifier. A tool gate's `filter` must select either `builtInPattern` or
   sharing is not readable back, so repeat `--token-sharing per-user` on
   `update-credentials` / `test-connection` when the stored server is per-user
   and you are not supplying the secret.
-- `test-connection --dry-run` prints the probe's request body and sends
-  nothing; credential values in the body (token, header value, password,
-  client secret) show as `[redacted]`. The other commands in this section echo
-  the body as sent.
+- `test-connection --dry-run` previews the probe and sends nothing.
 - Secrets are sealed server-side; reads only ever return `*_configured`
   booleans, never the values. A read-back can legitimately differ from what you
   sent: the backend may store a *resolved* OAuth2 grant such as

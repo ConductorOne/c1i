@@ -131,7 +131,11 @@ func TestMcpAuthFlagsCompleteValuesPass(t *testing.T) {
 					t.Fatalf("exit %d: %v", r.exit, r.err)
 				}
 				for _, n := range c.companions {
-					if !strings.Contains(r.stdout, `"`+jsonKeyFor(n)+`": "`+c.values[n]+`"`) {
+					want := c.values[n]
+					if secretBodyKeys[secretKey(jsonKeyFor(n))] {
+						want = redactedPlaceholder // every preview masks credentials
+					}
+					if !strings.Contains(r.stdout, `"`+jsonKeyFor(n)+`": "`+want+`"`) {
 						t.Errorf("preview missing %s value %q:\n%s", n, c.values[n], r.stdout)
 					}
 				}
