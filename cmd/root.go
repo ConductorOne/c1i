@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"unicode/utf8"
 
@@ -45,6 +46,9 @@ For raw API exploration, also with no authentication required:
 	// validateCountFlags, which needs to see every list command's --limit.
 	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
 		if err := validateErrorFormat(viper.GetString("error_format")); err != nil {
+			return err
+		}
+		if err := validateEnvFlags(cmd); err != nil {
 			return err
 		}
 		if err := validateArgsUTF8(args); err != nil {
@@ -161,6 +165,60 @@ func validateBlankFlags(cmd *cobra.Command) error {
 		err = &usageError{errors.New(msg)}
 	})
 	return err
+}
+
+// envFlagSpec pairs a viper-bound env var with the flag that overrides it and
+// the parser its value must satisfy.
+type envFlagSpec struct {
+	env, flag string
+	parse     func(string) error
+}
+
+// envFlagSpecs covers the typed global settings that viper can also read from
+// the environment. viper (via cast) coerces an unparsable value to the zero
+// value without an error, so C1I_DRY_RUN=yes silently read as false and sent
+// the mutation it was meant to preview. Empty means unset; negative
+// C1I_MAX_RETRIES is accepted like `--max-retries -1` (transport clamps it).
+var envFlagSpecs = []envFlagSpec{
+	{env: "C1I_DRY_RUN", flag: "dry-run", parse: parseBoolValue},
+	{env: "C1I_DEBUG", flag: "debug", parse: parseBoolValue},
+	{env: "C1I_MAX_RETRIES", flag: "max-retries", parse: parseIntValue},
+}
+
+// validateEnvFlags rejects an unparsable value in an env-backed global setting
+// before any request is sent. A flag set on the command line wins, so its
+// presence suppresses the check (viper gives it the same precedence).
+func validateEnvFlags(cmd *cobra.Command) error {
+	if isCompletionRequest(cmd) {
+		return nil
+	}
+	for _, spec := range envFlagSpecs {
+		if f := cmd.Flags().Lookup(spec.flag); f != nil && f.Changed {
+			continue
+		}
+		v, ok := os.LookupEnv(spec.env)
+		if !ok || v == "" {
+			continue
+		}
+		if err := spec.parse(v); err != nil {
+			return &usageError{fmt.Errorf("invalid %s %q: %w", spec.env, v, err)}
+		}
+	}
+	return nil
+}
+
+func parseBoolValue(s string) error {
+	if _, err := strconv.ParseBool(s); err != nil {
+		return errors.New("must be true or false")
+	}
+	return nil
+}
+
+func parseIntValue(s string) error {
+	if _, err := strconv.Atoi(s); err != nil {
+		return errors.New("must be an integer")
+	}
+	return nil
 }
 
 func validateErrorFormat(f string) error {
