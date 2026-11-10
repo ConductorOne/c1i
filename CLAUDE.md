@@ -205,7 +205,8 @@ tracked root file outside its allowlist. Stage explicit paths rather than `-A`.
   wherever it is used (path, body, query); `--dry-run` must refuse exactly what
   a real run refuses. `C1I_DRY_RUN=yes` was once coerced to false and sent the
   mutation it meant to preview. `~/.c1i.yaml` is validated the same way; a
-  broken file exits 2 (`docs`, `help`, `version` and completion ignore it).
+  file that cannot be read or parsed exits 2, except on `docs`, `help`,
+  `version` and completion, which skip it (its typed values still apply).
   Scope a rule by what the value does, not its flag name, and back a name-keyed
   rule with a tree test that fails on a flag it misses.
 - **A new flag must be named in a top-level doc (enforced convention):**
