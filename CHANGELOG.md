@@ -168,10 +168,11 @@ and exit 0. An unknown short value for `accounts list --status`/`--type`,
 400) or be printed by `--dry-run`. A whitespace-only value, and any non-ASCII
 value (such as a lookalike `ı` or `ſ`), is refused on every such flag. A value
 carrying the flag's API prefix is still sent, upper-cased with `-` turned to
-`_`; `mcp servers --type` is the exception and takes only `hosted` or
-`external`. Three typed values are now rewritten, where 0.9.2 sent them as
-typed and the server answered 400: `MCP_TOOL_STATE_PENDING` becomes
-`MCP_TOOL_STATE_PENDING_REVIEW`, and
+`_`; `mcp servers --type` is the one closed enum: it takes `hosted`/`external`,
+their full `MCP_SERVER_TYPE_HOSTED`/`_EXTERNAL` API names, or the bare suffix,
+and any other value — prefixed or not — exits 2. Three typed values are now
+rewritten, where 0.9.2 sent them as typed and the server answered 400:
+`MCP_TOOL_STATE_PENDING` becomes `MCP_TOOL_STATE_PENDING_REVIEW`, and
 `REQUEST_CATALOG_ENROLLMENT_BEHAVIOR_BYPASS`/`_ENFORCE` become their
 `..._ENTITLEMENT_REQUEST_POLICY` names. These listed aliases are the only
 rewrites; no other prefixed value is remapped. `users list --status` sends

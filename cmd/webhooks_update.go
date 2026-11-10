@@ -22,6 +22,9 @@ Refused with exit 2 before a request is sent:
     literal host
   - a --callback-timeout with a sign or decimal
 
+The server also refuses a --display-name outside 3-100 characters with a 400
+(exit 2).
+
 Updating a soft-deleted webhook exits 0 and changes it; it stays deleted.
 Prints the webhook, unwrapped like "webhooks get": the id is .id. Honors
 --dry-run.`,

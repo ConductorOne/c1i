@@ -587,8 +587,8 @@ you'd take it back.
   which this response does not show. "c1i access-profiles
   requestable-entitlements list <access-profile-id>" reads one profile's
   members; to make an entitlement requestable, see "c1i docs guide
-  configure-new-app" step 5. The create call in step 2 below is the actual
-  test.
+  assign-toolset-everyone" step 5. The create call in step 2 below is the
+  actual test.
 
 - The target's C1 user id — the directory-sourced identity being granted
   access, not an app account ("c1i accounts list"), which is how that same

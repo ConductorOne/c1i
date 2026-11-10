@@ -18,6 +18,9 @@ Refused with exit 2 before a request is sent:
     strips an IPv6 literal's brackets)
   - a --callback-timeout with a sign or decimal
 
+The server also refuses a --display-name outside 3-100 characters with a 400
+(exit 2).
+
 No secret is returned. Prints the webhook, unwrapped like "webhooks get": the
 id is .id. Honors --dry-run.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
