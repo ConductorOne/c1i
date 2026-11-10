@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/ConductorOne/c1i/internal/envbool"
 	"github.com/ConductorOne/c1i/internal/keychain"
 	"golang.org/x/oauth2"
 )
@@ -23,7 +24,7 @@ import (
 // The token sits beside the client secret it was minted from, same 0600/0700
 // perms. It is strictly shorter-lived than that secret and grants nothing the
 // secret could not re-mint on demand, so it widens no exposure. Opt out with
-// C1I_NO_TOKEN_CACHE=1.
+// C1I_NO_TOKEN_CACHE=true (or 1).
 const (
 	// expirySkew keeps a token that is about to expire from being handed to a
 	// request that would outlive it.
@@ -34,7 +35,10 @@ const (
 	// hostile or accidental cache file exhaust the CLI's memory.
 	maxCachedTokenBytes = 64 << 10
 
-	noCacheEnv = "C1I_NO_TOKEN_CACHE"
+	// NoCacheEnv disables the cache when it parses as true. cmd rejects any
+	// other non-empty value before a request, so an unparsable one here only
+	// means a caller skipped that and fails closed (no caching).
+	NoCacheEnv = "C1I_NO_TOKEN_CACHE"
 
 	// tmpFileGrace spares a temp file a concurrent store may still be renaming.
 	tmpFileGrace = time.Minute
@@ -87,7 +91,7 @@ func trustedCacheDir(dir string) bool {
 // not break the command. The OS keychain is the primary store; the hardened
 // file cache exists for headless environments without a usable keychain.
 func loadCachedToken(key string) *oauth2.Token {
-	if os.Getenv(noCacheEnv) != "" {
+	if cacheDisabled() {
 		return nil
 	}
 	if encoded, err := tokenKeyringGet(tokenKeychainService, key); err == nil {
@@ -149,7 +153,7 @@ func tokenFresh(t *oauth2.Token) bool {
 // storeCachedToken persists a freshly minted token. Errors are deliberately
 // swallowed: failing to cache must never fail the request that just succeeded.
 func storeCachedToken(key string, t *oauth2.Token) {
-	if os.Getenv(noCacheEnv) != "" || t == nil || t.AccessToken == "" {
+	if cacheDisabled() || t == nil || t.AccessToken == "" {
 		return
 	}
 	b, err := json.Marshal(cachedToken{AccessToken: t.AccessToken, TokenType: t.TokenType, Expiry: t.Expiry}) // #nosec G117 -- serializing for the cache, not logging or a response
@@ -285,4 +289,13 @@ func invalidateCachedToken(key string) {
 func InvalidateCachedToken(tokenHost, clientID, clientSecret string) {
 	host := strings.TrimPrefix(tokenHost, "https://")
 	invalidateCachedToken(cacheKey(host, clientID, clientSecret))
+}
+
+func cacheDisabled() bool {
+	v := os.Getenv(NoCacheEnv)
+	if v == "" {
+		return false
+	}
+	b, err := envbool.Parse(v)
+	return err != nil || b
 }

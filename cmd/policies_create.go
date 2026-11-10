@@ -94,9 +94,10 @@ func buildCreatePolicyBody(cmd *cobra.Command) (map[string]any, error) {
 	usingFlags := cmd.Flags().Changed("display-name") || cmd.Flags().Changed("description") ||
 		cmd.Flags().Changed("policy-type") || cmd.Flags().Changed("steps-file") || cmd.Flags().Changed("rules-file")
 
-	if bodyFile != "" {
+	// Changed, not != "": --body-file "" is a read error, not "no body file".
+	if cmd.Flags().Changed("body-file") {
 		if usingFlags {
-			return nil, fmt.Errorf("--body-file is mutually exclusive with --display-name/--description/--policy-type/--steps-file/--rules-file")
+			return nil, &usageError{fmt.Errorf("--body-file is mutually exclusive with --display-name/--description/--policy-type/--steps-file/--rules-file")}
 		}
 		return readJSONFile[map[string]any](cmd, "body-file", bodyFile)
 	}

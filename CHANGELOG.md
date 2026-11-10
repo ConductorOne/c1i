@@ -117,13 +117,32 @@ output are unchanged.
 - `apps add-owner <user-id> --app-id <id>` → `apps add-owner <app-id> --user-id <id>`
 - `apps remove-owner <user-id> --app-id <id>` → `apps remove-owner <app-id> --user-id <id>`
 
-Exit codes and value types that change, each described under Fixed:
+Exit codes and value types that change:
 
 - A non-empty `C1I_DRY_RUN`, `C1I_DEBUG` or `C1I_MAX_RETRIES` that does
   not parse exits `2`, instead of being coerced to `false`/`0`
   (`C1I_DRY_RUN=yes` used to send the mutation it was meant to preview).
   A flag set on the command line still overrides the variable, and an
   empty variable still means unset.
+- The same values in `~/.c1i.yaml` (`dry_run`, `debug`, `max_retries`,
+  `error_format`) are checked the same way: `dry_run: yes` or
+  `max_retries: abc` exits `2` naming the file and key, instead of being
+  coerced to `false`/`0` (a config `dry_run: yes` used to send the mutation it
+  was meant to preview). An empty value still means unset, and a flag or env
+  var that overrides the key shadows it. An invalid `--error-format` or
+  `C1I_ERROR_FORMAT` still exits `2`; its message now names the source
+  (`invalid C1I_ERROR_FORMAT "xml": want text or json`).
+- `C1I_NO_TOKEN_CACHE` is a strict boolean: `1`/`true` disable the token
+  cache, `0`/`false` leave it enabled (any non-empty value, `0` included,
+  used to disable it), and anything else exits `2`.
+- Exactly one of `C1I_CLIENT_ID`/`C1I_CLIENT_SECRET` set exits `2`. It used to
+  be ignored, so the command ran as whatever identity the keyring held. Set
+  both, or neither. `auth login` and `auth logout` still run, and warn on
+  stderr.
+- `policies create --body-file ""` is a read error (exit `2`); it used to mean
+  "no body file" and fall through to the flags. `--body-file` combined with
+  `--display-name`, `--description`, `--policy-type`, `--steps-file` or
+  `--rules-file` also exits `2`; it exited `1`.
 - An input-file error (missing, malformed, `null` or the wrong shape) exits 2,
   not 1. That includes a non-object element in an array `--*-file` or
   `--body-file` (`--rules-file '[null]'` was sent by 0.9.2), and a `--body-file`

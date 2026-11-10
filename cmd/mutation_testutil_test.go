@@ -110,6 +110,10 @@ func (r mutResult) errorObject(t *testing.T) map[string]any {
 	return nil
 }
 
+// retriesFromConfig makes the stub client take its retry budget from viper, as
+// the real one does, instead of a fixed count.
+const retriesFromConfig = -1
+
 // stubMutationClient points newClient at srv for the test; srv nil fails the
 // test if a client is built.
 func stubMutationClient(t *testing.T, srv *httptest.Server, retries int) {
@@ -119,6 +123,9 @@ func stubMutationClient(t *testing.T, srv *httptest.Server, retries int) {
 		if srv == nil {
 			t.Error("a client was built")
 			return nil, &client.AuthError{Err: io.EOF}
+		}
+		if retries == retriesFromConfig {
+			return client.NewForTesting(srv.URL, srv.Client(), globalClientOptions()...), nil
 		}
 		return client.NewForTesting(srv.URL, srv.Client(), client.WithMaxRetries(retries)), nil
 	}
@@ -139,13 +146,22 @@ func wantPreview(method, path, body string) string {
 // failure with writeError. srv nil means no client can be built.
 func runMutationCLI(t *testing.T, srv *httptest.Server, retries int, out io.Writer, args ...string) mutResult {
 	t.Helper()
+	return runCLI(t, func() { stubMutationClient(t, srv, retries) }, out, args...)
+}
+
+// runCLI is runMutationCLI with the client stub supplied by the caller, or nil
+// to build the real client.
+func runCLI(t *testing.T, stub func(), out io.Writer, args ...string) mutResult {
+	t.Helper()
 	resetCmdFlags(t, rootCmd)
 	leaf, _, err := rootCmd.Find(args)
 	if err != nil {
 		t.Fatal(err)
 	}
 	resetCmdFlags(t, leaf)
-	stubMutationClient(t, srv, retries)
+	if stub != nil {
+		stub()
+	}
 	var stdout, stderr bytes.Buffer
 	if out == nil {
 		out = &stdout

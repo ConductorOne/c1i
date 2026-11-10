@@ -146,8 +146,9 @@ never written to disk — a new one is minted per invocation.
 `c1i` reads credentials from the first source that has them, in this order:
 
 1. **Environment variables** — set `C1I_CLIENT_ID` and `C1I_CLIENT_SECRET`
-   (alongside `C1I_URL`) for non-interactive / CI use. Both must be set; if
-   only one is set the value is ignored.
+   (alongside `C1I_URL`) for non-interactive / CI use. Both must be set;
+   setting only one exits `2` (`auth login` and `auth logout` still run and
+   warn on stderr).
 2. **OS keyring** — Keychain on macOS, Credential Manager on Windows, Secret
    Service (e.g. gnome-keyring, KeePassXC) on Linux. Used by default when
    available.
@@ -177,8 +178,9 @@ the other token files there that c1i would refuse to load (expired or expiring
 within a minute, corrupt or unreadable, or open to group or other users) and
 temp files over a minute old.
 The token is strictly shorter-lived than the client secret already stored
-beside it. Set `C1I_NO_TOKEN_CACHE` to any non-empty value (even `0`) to disable
-caching and mint per invocation; it is not validated.
+beside it. Set `C1I_NO_TOKEN_CACHE=1` (or `true`) to disable
+caching and mint per invocation; `0` and `false` leave it on, and any other
+value exits `2`.
 
 ## Configuration
 
@@ -282,7 +284,8 @@ Set `--max-retries 0` to disable retries entirely. Non-retryable responses
 A non-empty `C1I_DEBUG`, `C1I_DRY_RUN`, `C1I_MAX_RETRIES` or
 `C1I_ERROR_FORMAT` value that doesn't parse exits `2` naming the variable
 before any request; the flag given on the command line overrides the variable
-entirely.
+entirely. The same keys in `~/.c1i.yaml` (`dry_run`, `debug`, `max_retries`,
+`error_format`) are checked the same way, and the error names the file and key.
 
 This covers the token mint too: minting or refreshing the OAuth2 bearer
 c1i authenticates with is itself a request, subject to the same 429 retry
