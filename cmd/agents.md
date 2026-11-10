@@ -97,7 +97,7 @@ apply it for a whole session; the flag wins for a single invocation.
 | `--fields` | `C1I_FIELDS` | comma-separated dot-paths to keep in JSON output — see "Reading output" |
 | `--dry-run` | `C1I_DRY_RUN` | preview a C1 REST mutation as one JSON object (`.requests[]`: method, URL, body); it never has an `id` (`upgrade --dry-run` prints plain `[dry-run]` text instead); unsupported for `mcp gateway call` and `auth login` |
 | `--debug` | `C1I_DEBUG` | trace API HTTP requests (method, URL, status, timing) to stderr |
-| `--max-retries` | `C1I_MAX_RETRIES` | retries for transient API failures (`429`/`5xx`); `0` disables |
+| `--max-retries` | `C1I_MAX_RETRIES` | retries for transient API failures (`429`/`5xx`); `0` disables; negative exits 2 (flag, env and config alike) |
 | `--error-format` | `C1I_ERROR_FORMAT` | `text` (default) or `json` |
 
 A non-empty env value that doesn't parse (`C1I_DRY_RUN=yes`,

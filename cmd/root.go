@@ -197,7 +197,7 @@ type globalEnvSetting struct {
 var globalEnvSettings = []globalEnvSetting{
 	{key: "url", env: urlEnvVar, flag: "url"},
 	{key: "fields", env: "C1I_FIELDS", flag: "fields"},
-	{key: "max_retries", env: "C1I_MAX_RETRIES", flag: "max-retries", parse: parseIntValue},
+	{key: "max_retries", env: "C1I_MAX_RETRIES", flag: "max-retries", parse: parseMaxRetries},
 	{key: "error_format", env: "C1I_ERROR_FORMAT", flag: "error-format", parse: parseErrorFormat, everywhere: true},
 	{key: "debug", env: "C1I_DEBUG", flag: "debug", parse: parseBoolValue},
 	{key: "dry_run", env: "C1I_DRY_RUN", flag: "dry-run", parse: parseBoolValue},
@@ -218,8 +218,7 @@ func bindGlobalEnvSettings() {
 // validateGlobalSettings rejects an unparsable value in a typed global before
 // any request is sent, from whichever source wins: flag (pflag already parsed
 // it), then env, then ~/.c1i.yaml. A value shadowed by a higher source is not
-// checked, matching viper's precedence. Empty means unset. Negative
-// max_retries is accepted like `--max-retries -1` (transport clamps it).
+// checked, matching viper's precedence. Empty means unset.
 func validateGlobalSettings(cmd *cobra.Command) error {
 	local := isLocalOnlyRequest(cmd)
 	var cfg *viper.Viper
@@ -300,6 +299,18 @@ func parseBoolValue(s string) error {
 func parseIntValue(s string) error {
 	if _, err := strconv.ParseInt(s, 0, 0); err != nil {
 		return errors.New("must be an integer")
+	}
+	return nil
+}
+
+// parseMaxRetries is parseIntValue plus the rule --limit follows: a negative
+// count is refused; 0 disables retries.
+func parseMaxRetries(s string) error {
+	if err := parseIntValue(s); err != nil {
+		return err
+	}
+	if n, _ := strconv.ParseInt(s, 0, 0); n < 0 {
+		return errors.New("must not be negative; 0 disables retries")
 	}
 	return nil
 }

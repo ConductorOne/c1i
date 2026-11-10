@@ -376,6 +376,9 @@ already behaved this way.
 
 ### Fixed
 
+- A negative `--max-retries`, `C1I_MAX_RETRIES` or `max_retries` was accepted
+  and treated as 0; it now exits 2. `0` still disables retries.
+
 - A bad boolean env or config value said `must be true or false` although
   `1`, `0`, `t`, `f`, `TRUE` and `FALSE` are accepted; it now reads `must be a
   boolean (true/false, 1/0)`.

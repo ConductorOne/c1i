@@ -278,7 +278,8 @@ precedence:
 2. `C1I_MAX_RETRIES` environment variable
 3. Default: `4`
 
-Set `--max-retries 0` to disable retries entirely. Non-retryable responses
+Set `--max-retries 0` to disable retries entirely; a negative value, from the
+flag, `C1I_MAX_RETRIES` or `max_retries` in `~/.c1i.yaml`, exits `2`. Non-retryable responses
 (4xx other than 429, and 501/505) fail immediately.
 
 A non-empty `C1I_DEBUG`, `C1I_DRY_RUN`, `C1I_MAX_RETRIES` or

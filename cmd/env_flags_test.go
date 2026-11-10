@@ -81,14 +81,18 @@ func TestEnvFlagValidation(t *testing.T) {
 		{name: "debug true", envVar: "C1I_DEBUG", value: "true", wantReqs: 1},
 		{name: "debug false", envVar: "C1I_DEBUG", value: "false", wantReqs: 1},
 
-		// Negative retries parse like `--max-retries -1` does (transport
-		// clamps it to 0); parity with the flag is the contract. pflag's Int
-		// parses with base 0, so hex/octal are valid on the flag and here.
-		{name: "max-retries negative", envVar: "C1I_MAX_RETRIES", value: "-1", wantReqs: 1},
+		// A negative count is refused from every source, like a negative
+		// --limit. pflag's Int parses with base 0, so hex/octal are valid.
+		{name: "max-retries negative", envVar: "C1I_MAX_RETRIES", value: "-1", wantExit: exitUsage,
+			wantErr: `invalid C1I_MAX_RETRIES "-1": must not be negative; 0 disables retries`},
+		{name: "max-retries negative flag", envVar: "C1I_DEBUG", value: "",
+			args:     append(append([]string{}, envTestArgs...), "--max-retries=-1"),
+			wantExit: exitUsage, wantErr: `invalid --max-retries "-1": must not be negative; 0 disables retries`},
 		{name: "max-retries zero", envVar: "C1I_MAX_RETRIES", value: "0", wantReqs: 1},
 		{name: "max-retries hex", envVar: "C1I_MAX_RETRIES", value: "0x2", wantReqs: 1},
 		{name: "max-retries octal", envVar: "C1I_MAX_RETRIES", value: "010", wantReqs: 1},
-		{name: "max-retries negative hex", envVar: "C1I_MAX_RETRIES", value: "-0x1", wantReqs: 1},
+		{name: "max-retries negative hex", envVar: "C1I_MAX_RETRIES", value: "-0x1", wantExit: exitUsage,
+			wantErr: `invalid C1I_MAX_RETRIES "-0x1": must not be negative; 0 disables retries`},
 
 		// An explicitly-set flag wins over a bad env value.
 		{name: "flag dry-run overrides bad env", envVar: "C1I_DRY_RUN", value: "yes",

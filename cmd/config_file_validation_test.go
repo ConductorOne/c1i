@@ -44,6 +44,8 @@ func TestConfigFileValidation(t *testing.T) {
 			wantErr: `invalid dry_run "yes" in ~/.c1i.yaml: must be a boolean (true/false, 1/0)`},
 		{name: "debug maybe", yaml: "debug: maybe\n", wantExit: exitUsage,
 			wantErr: `invalid debug "maybe" in ~/.c1i.yaml: must be a boolean (true/false, 1/0)`},
+		{name: "max_retries negative", yaml: "max_retries: -3\n", wantExit: exitUsage,
+			wantErr: `invalid max_retries "-3" in ~/.c1i.yaml: must not be negative; 0 disables retries`},
 		{name: "max_retries abc", yaml: "max_retries: abc\n", wantExit: exitUsage,
 			wantErr: `invalid max_retries "abc" in ~/.c1i.yaml: must be an integer`},
 		{name: "max_retries 2.5", yaml: "max_retries: 2.5\n", wantExit: exitUsage,
