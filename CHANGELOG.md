@@ -198,10 +198,14 @@ entitlement id repeats across apps, and the id alone matched requests from
 every app that shares it.
 
 `policies update --update-mask` without `--body-file` now exits 2 instead of
-being ignored (the mask is derived from the other flags). A `--body-file` mask
-is now trimmed per path (`" description, steps"` is sent as
-`description,steps`) and an empty path (`a,,b`) exits 2, as in
-`automations update`.
+being ignored (the mask is derived from the other flags), and
+`policies update --body-file ""` exits 2 as an unreadable file. `policies
+update`, `access-reviews update`, `mcp classifiers update`, `mcp classifiers
+policy update` and `mcp classifiers tool-gates update` now trim each
+`--update-mask` path (`" description, steps"` is sent as `description,steps`),
+and exit 2 before any request on an empty path (`a,,b`) or a blank mask. The
+last now says "--update-mask is required together with --body-file" instead
+of sending the blank mask. `automations update` already behaved this way.
 
 ### Added
 
@@ -314,10 +318,8 @@ is now trimmed per path (`" description, steps"` is sent as
 
 ### Fixed
 
-- `policies update` applies the same `--body-file`/`--update-mask` rules as
-  `automations update` (shared code): a mask without `--body-file` exits 2, a
-  padded mask is trimmed, and `--body-file ""` is read as a file, so it exits 2.
-  `access-reviews update` and `mcp classifiers ... update` trim the mask too.
+- `policies update` shares `automations update`'s `--body-file`/`--update-mask`
+  rules; see Upgrading.
 - `requests list --entitlement-id` without `--app-id` returned requests from
   every app sharing that entitlement id; it now requires `--app-id`, as
   `grants list` already did.

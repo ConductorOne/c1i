@@ -618,6 +618,10 @@ func formatProtoDuration(d time.Duration) string {
 	return secs + "s"
 }
 
+// bodyFileMaskUsage is the --update-mask help for commands that derive the
+// mask when no --body-file is given.
+const bodyFileMaskUsage = "Comma-separated field paths (required with --body-file; rejected without it; derived otherwise)"
+
 // bodyFileMask applies the --body-file/--update-mask rules every masked update
 // shares. usingBody is true when --body-file was passed (even as ""); the
 // caller then reads the file. exclusive names the flags --body-file cannot be

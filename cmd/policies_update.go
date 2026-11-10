@@ -94,6 +94,9 @@ Prints the updated policy unwrapped like "policies get" (id is .id).`,
 var errPolicyTypeNeeded = errors.New("policy type lookup needed")
 
 // policyUpdateInputs holds the --*-file contents, read once per run.
+// policyBodyExclusive are the flags --body-file cannot be combined with.
+var policyBodyExclusive = []string{"display-name", "description", "policy-type", "steps-file", "rules-file"}
+
 type policyUpdateInputs struct {
 	body         map[string]any
 	steps, rules []any
@@ -101,6 +104,10 @@ type policyUpdateInputs struct {
 
 func readPolicyUpdateInputs(cmd *cobra.Command) (policyUpdateInputs, error) {
 	var in policyUpdateInputs
+	// Validate flags before any read, so a bad mask never drains stdin.
+	if _, _, err := bodyFileMask(cmd, policyBodyExclusive...); err != nil {
+		return in, err
+	}
 	if err := refuseMultipleStdin(cmd); err != nil {
 		return in, err
 	}
@@ -193,7 +200,7 @@ func fetchPolicyType(ctx context.Context, c *client.Client, id string) (string, 
 // when --steps-file comes without --policy-type. "id" is left to the caller,
 // so the guards see only the fields being changed.
 func buildUpdatePolicyPatch(cmd *cobra.Command, in policyUpdateInputs, resolveFallbackPolicyType func() (string, error)) (policy map[string]any, mask string, err error) {
-	mask, usingBody, err := bodyFileMask(cmd, "display-name", "description", "policy-type", "steps-file", "rules-file")
+	mask, usingBody, err := bodyFileMask(cmd, policyBodyExclusive...)
 	if err != nil {
 		return nil, "", err
 	}
@@ -262,7 +269,7 @@ func init() {
 	policiesUpdateCmd.Flags().String("steps-file", "", "JSON array: replaces the baseline policySteps.steps content (file, or \"-\" for stdin)")
 	policiesUpdateCmd.Flags().String("rules-file", "", "JSON array: replaces rules[] (file, or \"-\" for stdin)")
 	policiesUpdateCmd.Flags().String("body-file", "", "Full Policy JSON object, verbatim (file, or \"-\" for stdin); requires --update-mask; mutually exclusive with the flags above")
-	policiesUpdateCmd.Flags().String("update-mask", "", "Comma-separated field paths to update (required with --body-file, which it needs; derived otherwise)")
+	policiesUpdateCmd.Flags().String("update-mask", "", bodyFileMaskUsage)
 	policiesUpdateCmd.Flags().Bool("allow-deny-all", false, "Allow leaving/setting a policy with no steps — bypasses the empty-steps guard on purpose")
 	markMutating(policiesUpdateCmd)
 	policiesCmd.AddCommand(policiesUpdateCmd)
