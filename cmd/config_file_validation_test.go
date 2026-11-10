@@ -12,10 +12,15 @@ import (
 	"github.com/ConductorOne/c1i/internal/tokensource"
 )
 
+// resetViper drops the global viper's config layer and search paths.
+func resetViper() { viper.Reset(); bindGlobalEnvSettings() }
+
 // useConfigFile points HOME at a temp dir holding ~/.c1i.yaml with body, so no
 // test reads the real file.
 func useConfigFile(t *testing.T, body string) string {
 	t.Helper()
+	// viper keeps the last file it parsed after HOME is restored.
+	t.Cleanup(resetViper)
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	t.Setenv("USERPROFILE", home)
@@ -112,9 +117,7 @@ func TestConfigFileValueTakesEffect(t *testing.T) {
 	useConfigFile(t, "max_retries: 0\n")
 	// A fresh viper: the global one carries search paths from earlier tests'
 	// HOMEs (and the real one), which would be read before this file.
-	resetViper := func() { viper.Reset(); bindGlobalEnvSettings() }
 	resetViper()
-	t.Cleanup(resetViper)
 	srv := newMutServer(t, fixedReply(503, "{}"))
 	res := runMutationCLI(t, srv.srv, retriesFromConfig, nil, "api", "--method", "GET", "--path", "/api/v1/things")
 	if got := len(srv.requests()); got != 1 {
@@ -172,7 +175,15 @@ func TestPartialEnvCredentialsNotice(t *testing.T) {
 // completion too (as before the other globals were validated); the typed
 // settings stay skipped there so a stray C1I_DRY_RUN cannot break tab completion.
 func TestLocalOnlyRequestsValidateErrorFormatOnly(t *testing.T) {
-	// cobra adds `completion` lazily; register it so the test can run alone.
+	// cobra adds `completion` lazily and its bash/zsh/... subcommands capture
+	// root's stdout at creation, so recreate it rather than inherit a writer
+	// another test left there.
+	rootCmd.SetOut(nil)
+	for _, c := range rootCmd.Commands() {
+		if c.Name() == "completion" {
+			rootCmd.RemoveCommand(c)
+		}
+	}
 	rootCmd.InitDefaultCompletionCmd()
 	for _, tc := range []struct {
 		name     string
