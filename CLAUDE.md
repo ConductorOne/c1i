@@ -36,14 +36,13 @@ go test -count=1 -shuffle=on ./...     # CI gates on this; catches tests that
 ```
 
 One shuffled run proves only its own seed. Before pushing, sweep many seeds in
-a clean environment (no `C1I_*` variables, an empty HOME), as CI runs; this
-reproduced a CI-only order failure that a local run passed:
+a clean environment (no `C1I_*` variables, an empty HOME), as CI runs:
 
 ```sh
-for i in $(seq 25); do
+(for i in $(seq 25); do
   env -i PATH="$PATH" HOME="$(mktemp -d)" GOCACHE="$(go env GOCACHE)" \
-    GOMODCACHE="$(go env GOMODCACHE)" go test -count=1 -shuffle=on ./cmd || break
-done
+    GOMODCACHE="$(go env GOMODCACHE)" go test -count=1 -shuffle=on ./cmd || exit 1
+done)
 ```
 
 Don't set `GOTOOLCHAIN=local` for this unless `go version` matches `go.mod`;
@@ -67,7 +66,7 @@ workflow in `ConductorOne/github-workflows` at `@v4`. Before tagging:
   `main` commit you will tag, after its CI passes.
 - Read the commits to the shared `release.yaml` since the previous tag. A
   change there can fail a release that passed every check here: v0.10.0
-  failed in preflight after ConductorOne/github-workflows#159 (fix:
+  failed in preflight after ConductorOne/github-workflows#159 (see
   ConductorOne/github-workflows#174).
 - Tag the `main` commit, push the tag, and watch the Release run to the
   published release.

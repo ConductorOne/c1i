@@ -12,10 +12,11 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   from a `MaxBytesReader` header race in `net/http`), reachable from the
   transport and self-update code. 0.10.0 builds with Go 1.27.3, which has it.
 
-0.10.0 was tagged, but its release workflow failed before building, so no
-0.10.0 binaries were published. 0.10.1 is the first release with the changes
-listed under 0.10.0; if you are upgrading from 0.9.2, read 0.10.0's
-"Upgrading from 0.9.2".
+0.10.0 was tagged, but its release failed in preflight: first a bug in the
+shared release workflow (ConductorOne/github-workflows#174), then GO-2026-6859
+in that workflow's locked Go 1.27.3 toolchain. No 0.10.0 binaries were
+published. 0.10.1 is the first release with the changes listed under 0.10.0;
+if you are upgrading from 0.9.2, read 0.10.0's "Upgrading from 0.9.2".
 
 ## [0.10.0] - 2026-11-10
 
