@@ -35,6 +35,20 @@ go test -count=1 -shuffle=on ./...     # CI gates on this; catches tests that
                                        # leak package-level command state
 ```
 
+One shuffled run proves only its own seed. Before pushing, sweep many seeds in
+a clean environment (no `C1I_*` variables, an empty HOME), as CI runs; this
+reproduced a CI-only order failure that a local run passed:
+
+```sh
+for i in $(seq 25); do
+  env -i PATH="$PATH" HOME="$(mktemp -d)" GOCACHE="$(go env GOCACHE)" \
+    GOMODCACHE="$(go env GOMODCACHE)" go test -count=1 -shuffle=on ./cmd || break
+done
+```
+
+Don't set `GOTOOLCHAIN=local` for this unless `go version` matches `go.mod`;
+it runs whatever Go is on PATH instead of the version CI uses.
+
 Never weaken, loosen, or delete a test to make a change pass. For a new test,
 confirm it fails before your fix and passes after — a test that compiles but
 never fails proves nothing.
@@ -43,6 +57,20 @@ Before tagging a release, try to break the built binary, not only follow the
 documented flows: boundary values (`""`, `" "`, `.`, `..`, `" .. "`, an unknown
 well-formed id, duplicates), garbage `C1I_*` env values, error paths, and
 partial apply on multi-step commands.
+
+### Releasing
+
+Pushing a tag runs `.github/workflows/release.yaml`, which calls the shared
+workflow in `ConductorOne/github-workflows` at `@v4`. Before tagging:
+
+- Run the full check, the seed sweep and the dependency scan above on the
+  `main` commit you will tag, after its CI passes.
+- Read the commits to the shared `release.yaml` since the previous tag. A
+  change there can fail a release that passed every check here: v0.10.0
+  failed in preflight after ConductorOne/github-workflows#159 (fix:
+  ConductorOne/github-workflows#174).
+- Tag the `main` commit, push the tag, and watch the Release run to the
+  published release.
 
 ## Dependency scan
 
