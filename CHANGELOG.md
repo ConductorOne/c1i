@@ -6,15 +6,23 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.10.1] - 2026-11-12
+
+0.10.0 was tagged, but its release failed in preflight: first a bug in the
+shared release workflow (ConductorOne/github-workflows#174), then GO-2026-6859
+in that workflow's locked Go 1.27.3 toolchain. No 0.10.0 binaries were
+published. This release contains the changes listed under 0.10.0; if you are
+upgrading from 0.9.2, read "Upgrading from 0.9.2" below.
+
 ### Security
 
-- Builds with Go 1.27.4, which fixes GO-2026-6859 (an HTTP/1 server crash
-  from a `MaxBytesReader` header race in `net/http`), reachable from the
-  transport and self-update code. 0.10.0 builds with Go 1.27.3, which has it.
-
-## [0.10.0] - 2026-11-10
-
-### Security
+- Builds with Go 1.27.4, which fixes GO-2026-6859: an HTTP/1 *server* race
+  in `net/http` when `MaxBytesReader`'s limit is exceeded. c1i serves no
+  HTTP, so there is no exploit path here; `govulncheck` reports it as
+  reachable at symbol granularity because c1i links the client. The bump
+  keeps the shipped standard library free of the advisory. 0.9.0 through
+  0.9.2 shipped Go 1.27.1-1.27.3, all in the affected range; the v0.10.0 tag
+  was never built.
 
 - `github.com/go-jose/go-jose/v4` moves to 4.1.9, which fixes six published
   advisories (GHSA-mgcc-cww5-fp2q, GHSA-r39w-98wm-9pp6, GHSA-27pc-rm86-68pq,
@@ -2448,8 +2456,8 @@ First changelog entry; releases through v0.1.5 predate this file (see the
 
 - CI enforces `gofmt` via golangci-lint; module-wide formatting normalized.
 
-[Unreleased]: https://github.com/ConductorOne/c1i/compare/v0.10.0...HEAD
-[0.10.0]: https://github.com/ConductorOne/c1i/releases/tag/v0.10.0
+[Unreleased]: https://github.com/ConductorOne/c1i/compare/v0.10.1...HEAD
+[0.10.1]: https://github.com/ConductorOne/c1i/releases/tag/v0.10.1
 [0.9.2]: https://github.com/ConductorOne/c1i/releases/tag/v0.9.2
 [0.9.1]: https://github.com/ConductorOne/c1i/releases/tag/v0.9.1
 [0.9.0]: https://github.com/ConductorOne/c1i/releases/tag/v0.9.0
