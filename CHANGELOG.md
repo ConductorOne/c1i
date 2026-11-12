@@ -6,6 +6,12 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security
+
+- Builds with Go 1.27.4, which fixes GO-2026-6859 (an HTTP/1 server crash
+  from a `MaxBytesReader` header race in `net/http`), reachable from the
+  transport and self-update code. 0.10.0 builds with Go 1.27.3, which has it.
+
 ## [0.10.0] - 2026-11-10
 
 ### Security
