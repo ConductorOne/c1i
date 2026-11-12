@@ -8,9 +8,13 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Security
 
-- Builds with Go 1.27.4, which fixes GO-2026-6859 (an HTTP/1 server crash
-  from a `MaxBytesReader` header race in `net/http`), reachable from the
-  transport and self-update code. 0.10.0 builds with Go 1.27.3, which has it.
+- Builds with Go 1.27.4, which fixes GO-2026-6859: an HTTP/1 *server* race
+  in `net/http` when `MaxBytesReader`'s limit is exceeded. c1i serves no
+  HTTP, so there is no exploit path here; `govulncheck` reports it as
+  reachable at symbol granularity because c1i links the client. The bump
+  keeps the shipped standard library free of the advisory. 0.9.0 through
+  0.9.2 shipped Go 1.27.1-1.27.3, all in the affected range; the v0.10.0 tag
+  was never built.
 
 0.10.0 was tagged, but its release failed in preflight: first a bug in the
 shared release workflow (ConductorOne/github-workflows#174), then GO-2026-6859
