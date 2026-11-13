@@ -49,9 +49,6 @@ accepts an empty mapper with exit 0 but keeps the existing one. This API
 offers no way to remove a mapper.`,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		if _, err := requireNonEmptyIfSet(cmd, "display-name"); err != nil {
-			return err
-		}
 		body, err := buildAppUpdateBody(cmd, args[0])
 		if err != nil {
 			return &usageError{err}
@@ -134,9 +131,6 @@ func buildAppUpdateBody(cmd *cobra.Command, id string) (map[string]any, error) {
 	}
 	if cmd.Flags().Changed("app-user-mapper-file") {
 		mapperFile, _ := cmd.Flags().GetString("app-user-mapper-file")
-		if mapperFile == "" {
-			return nil, fmt.Errorf(`--app-user-mapper-file requires a path (or "-" for stdin)`)
-		}
 		mapper, err := readAppUserMapperFile(cmd, mapperFile)
 		if err != nil {
 			return nil, err
@@ -155,6 +149,7 @@ func init() {
 	f := appsUpdateCmd.Flags()
 	f.String("display-name", "", "New display name (omit to leave unchanged; "+displayNameRule+")")
 	f.String("description", "", "New description; pass an empty value to clear it (omit to leave unchanged)")
+	allowEmpty(appsUpdateCmd, emptyIsSent, "description")
 	registerPolicyIDFlags(appsUpdateCmd, appPolicyKinds, " (omit to leave unchanged)")
 	registerUnbindPolicyFlag(appsUpdateCmd, appPolicyKinds)
 	markMutating(appsUpdateCmd)

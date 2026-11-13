@@ -112,6 +112,7 @@ longer found.`,
 func init() {
 	authLoginCmd.Flags().String("client-id", "", "C1 API client ID (skip browser login)")
 	authLoginCmd.Flags().String("client-secret", "", "C1 API client secret (skip browser login)")
+	allowEmpty(authLoginCmd, emptyIsOmitted, "client-secret")
 	authLoginCmd.Flags().Bool("choose-roles", false, "Choose the browser-login credential's roles from a menu after approval (needs a terminal); =false skips the role question")
 	addRepeatableStringFlag(authLoginCmd, "scoped-role", "Restrict the browser-login credential to a role, by name (e.g. basic-user) or ID (repeatable)")
 	authCmd.AddCommand(authLoginCmd)

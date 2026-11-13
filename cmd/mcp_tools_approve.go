@@ -76,6 +76,7 @@ func init() {
 	mcpToolsApproveCmd.Flags().String("app-id", "", "Application ID")
 	mcpToolsApproveCmd.Flags().String("connector-id", "", "Connector ID")
 	mcpToolsApproveCmd.Flags().String("state", "", "Target state (default approved): "+toolStateFlag.without("removed").usage())
+	allowEmpty(mcpToolsApproveCmd, emptyIsOmitted, "state")
 	markRequired(mcpToolsApproveCmd, "app-id", "connector-id")
 	markMutating(mcpToolsApproveCmd)
 	mcpToolsCmd.AddCommand(mcpToolsApproveCmd)

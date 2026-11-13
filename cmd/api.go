@@ -360,6 +360,7 @@ func init() {
 	addRepeatableStringFlag(apiCmd, "header", "Extra request header as key=value (repeatable)")
 	apiCmd.Flags().Bool("paginate", false, "Automatically follow pagination to fetch all pages")
 	apiCmd.Flags().String("list-key", "", "Force the response field name to drain as the list (default: auto-detect the first array-valued field, e.g. 'list', 'automationExecutions', 'automations')")
+	allowEmpty(apiCmd, emptyIsOmitted, "method", "body", "body-file", "list-key")
 	markRequired(apiCmd, "path")
 	addLimitFlag(apiCmd)
 	rootCmd.AddCommand(apiCmd)

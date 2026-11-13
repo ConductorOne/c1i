@@ -6,12 +6,47 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Upgrading from 0.10.1
+
+A script that passes a possibly-empty variable to a filter
+(`--state "$STATE"`) now exits 2 when it is empty instead of returning an
+unfiltered list. Omit the flag when the variable is empty, for example
+`${STATE:+--state "$STATE"}`.
+
+### Changed
+
+- **A blank value on any flag is now a usage error (exit 2)**, checked before
+  any request. Only required and `*-id` flags were checked before, so
+  `tasks list --state "$STATE"` with `STATE` unset listed every task at exit
+  0, and a whitespace-only value on an optional flag was often sent verbatim.
+  This applies to every filter (`--state`, `--status`, `--type`, `--query`,
+  `--email`, `--calls-function`, `policies search --display-name`, `docs
+  endpoints --filter`, `export events --since`/`--until`/`--since-event-uid`,
+  and `--body-file` on the `search` commands that take one). Flags whose empty value
+  means something still take an exact `""`: an update's `--description`
+  clears it, `--fields ""` and `--error-format ""` override `C1I_FIELDS` and
+  `C1I_ERROR_FORMAT`, a create's `--description ""` is sent or omitted as
+  before, and optional flags such as `--comment`, `-o`, `--gateway-url`,
+  `export events --sort` and `mcp servers search --tool-state` read it as not
+  given.
+  Whitespace-only is refused on those too.
+
+### Fixed
+
+- `mcp servers register --hosted-config-file ""` (or
+  `--external-config-file ""`) registered a server with an empty config at
+  exit 0; it now exits 2.
+- `docs agents|readme|changelog -o "  "` wrote a file named with spaces; it now
+  exits 2.
+- README and the 0.10.1 changelog no longer point at a 0.10.0 section that
+  was never published.
+
 ## [0.10.1] - 2026-11-12
 
 0.10.0 was tagged, but its release failed in preflight: first a bug in the
 shared release workflow (ConductorOne/github-workflows#174), then GO-2026-6859
 in that workflow's locked Go 1.27.3 toolchain. No 0.10.0 binaries were
-published. This release contains the changes listed under 0.10.0; if you are
+published. This release contains every change listed below; if you are
 upgrading from 0.9.2, read "Upgrading from 0.9.2" below.
 
 ### Security

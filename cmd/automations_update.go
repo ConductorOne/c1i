@@ -68,11 +68,7 @@ func buildAutomationUpdateBody(cmd *cobra.Command, id string) (map[string]any, e
 		automation = map[string]any{}
 		var paths []string
 		if f.Changed("display-name") {
-			v, err := requireNonEmptyIfSet(cmd, "display-name")
-			if err != nil {
-				// The server answers an empty name with a 500.
-				return nil, fmt.Errorf("%w: the server rejects it with \"display_name is required\"", err)
-			}
+			v, _ := f.GetString("display-name")
 			automation["displayName"] = v
 			paths = append(paths, "displayName")
 		}
@@ -99,10 +95,14 @@ func buildAutomationUpdateBody(cmd *cobra.Command, id string) (map[string]any, e
 func init() {
 	f := automationsUpdateCmd.Flags()
 	f.String("display-name", "", "New display name (omit to leave unchanged; "+displayNameRule+")")
+	// The server answers an empty name with a 500.
+	setBlankHint(automationsUpdateCmd, "display-name", `the server rejects it with "display_name is required"`)
 	f.String("description", "", "New description; pass an empty value to clear it (omit to leave unchanged)")
+	allowEmpty(automationsUpdateCmd, emptyIsSent, "description")
 	f.Bool("enabled", false, "Enable (--enabled) or disable (--enabled=false) the automation (omit to leave unchanged)")
 	f.String("body-file", "", "Automation JSON object, sent verbatim (file, or \"-\" for stdin); requires --update-mask; mutually exclusive with the flags above")
 	f.String("update-mask", "", bodyFileMaskUsage)
+	setBlankHint(automationsUpdateCmd, "update-mask", updateMaskBlankHint)
 	markMutating(automationsUpdateCmd)
 	automationsCmd.AddCommand(automationsUpdateCmd)
 }

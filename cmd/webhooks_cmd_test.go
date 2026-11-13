@@ -56,7 +56,7 @@ func runWebhookCmd(t *testing.T, srv *httptest.Server, cmd *cobra.Command, args 
 	cmd.SetOut(&out)
 	t.Cleanup(func() { cmd.SetOut(nil) })
 	cmd.SetContext(context.Background())
-	err := cmd.RunE(cmd, args)
+	err := runEAfterBlankCheck(cmd, args)
 	return out.String(), err
 }
 

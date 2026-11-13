@@ -45,6 +45,7 @@ func init() {
 	mcpToolsetsCreateCmd.Flags().String("connector-id", "", "Connector ID")
 	mcpToolsetsCreateCmd.Flags().String("display-name", "", "Toolset display name ("+displayNameRule+")")
 	mcpToolsetsCreateCmd.Flags().String("description", "", "Toolset description")
+	allowEmpty(mcpToolsetsCreateCmd, emptyIsOmitted, "description")
 	markRequired(mcpToolsetsCreateCmd, "app-id", "connector-id", "display-name")
 	markMutating(mcpToolsetsCreateCmd)
 	mcpToolsetsCmd.AddCommand(mcpToolsetsCreateCmd)

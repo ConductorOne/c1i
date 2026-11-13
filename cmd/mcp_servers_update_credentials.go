@@ -152,6 +152,7 @@ func init() {
 	// Shared auth
 	addAuthFlags(mcpServersUpdateCredentialsCmd)
 	mcpServersUpdateCredentialsCmd.Flags().String("update-mask", "", "Comma-separated proto field paths to update (default: derived from the fields you supply)")
+	allowEmpty(mcpServersUpdateCredentialsCmd, emptyIsOmitted, "hosted-config-file", "server-url", "transport", "external-config-file", "update-mask")
 	markRequired(mcpServersUpdateCredentialsCmd, "app-id", "type")
 	markMutating(mcpServersUpdateCredentialsCmd)
 	mcpServersCmd.AddCommand(mcpServersUpdateCredentialsCmd)

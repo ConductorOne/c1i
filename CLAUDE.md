@@ -36,14 +36,18 @@ go test -count=1 -shuffle=on ./...     # CI gates on this; catches tests that
 ```
 
 One shuffled run proves only its own seed. Before pushing, sweep many seeds in
-a clean environment (no `C1I_*` variables, an empty HOME), as CI runs:
+a clean environment (no `C1I_*` variables, an empty HOME), as CI runs. Each
+`./cmd` run is serial (~35s: its tests share global command state), so run
+seeds side by side; 8 at a time takes about 2.5 minutes instead of 15:
 
 ```sh
-(for i in $(seq 25); do
-  env -i PATH="$PATH" HOME="$(mktemp -d)" GOCACHE="$(go env GOCACHE)" \
-    GOMODCACHE="$(go env GOMODCACHE)" go test -count=1 -shuffle=on ./cmd || exit 1
-done)
+export GC="$(go env GOCACHE)" GM="$(go env GOMODCACHE)"
+seq 25 | xargs -P 8 -I{} sh -c 'env -i PATH="$PATH" HOME="$(mktemp -d)" \
+  GOCACHE="$GC" GOMODCACHE="$GM" go test -count=1 -shuffle=on ./cmd \
+  > dev/sweep-{}.log 2>&1 || { grep -m3 -E "shuffle|--- FAIL" dev/sweep-{}.log; exit 255; }'
 ```
+
+Don't edit the tree while it runs: every seed compiles the working copy.
 
 Don't set `GOTOOLCHAIN=local` for this unless `go version` matches `go.mod`;
 it runs whatever Go is on PATH instead of the version CI uses.
@@ -214,17 +218,32 @@ tracked root file outside its allowlist. Stage explicit paths rather than `-A`.
   accepts 0 and the documented count; a command documenting none must not
   require one. Rejecting a *stray* positional is the guard's job, not the
   test's.
-- **Blank ids exit 2, centrally (enforced convention):** a set string flag that
-  is required (`markRequired`/`annotateRequired`) or named `*-id`, and every
-  positional, with no visible character (empty, whitespace or invisible-only,
-  `hasVisibleRune`) exits 2 before any request. `validateBlankFlags` and
-  `validateBlankArgs` run in the root `PersistentPreRunE`; add no per-command
-  check. `requireNonEmpty` stays only where the command itself requires a flag
-  cobra does not (`annotateRequired`, or required in one mode). There is no
-  exemption list; a flag-specific hint goes in a `blankHintAnnotation`.
-  `TestBlankIDAndRequiredFlagsExitUsage` and `TestBlankPositionalsExitUsage`
-  walk the tree; `TestRequiredUsageMatchesAnnotation` fails a hand-written
-  "(required)" that lacks the annotation. Never use `Changed()` or
+- **Blank values exit 2, centrally (enforced convention):** every set string
+  flag and every positional with no visible character (empty, whitespace or
+  invisible-only, `hasVisibleRune`) exits 2 before any request.
+  `validateBlankFlags` and `validateBlankArgs` run in the root
+  `PersistentPreRunE`; add no per-command check. Where an exact `""` means
+  something, register the flag with `allowEmpty(cmd, reason, names...)`
+  (`emptyIsSent`, `emptyIsOmitted`, `emptyOverridesEnv`); whitespace is still
+  refused. Never on a filter: an empty one silently widens a list. A
+  flag-specific hint goes through `setBlankHint`. `requireNonEmpty` stays only
+  where the command itself requires a flag cobra does not (`annotateRequired`,
+  or required in one mode). The rule covers flags only: `C1I_*` env vars and
+  `~/.c1i.yaml` values still go through `globalEnvSettings` parsers, and
+  `fields` has none yet (`C1I_FIELDS=" "` reads as no projection).
+  `TestBlankStringFlagsExitUsage` and `TestBlankPositionalsExitUsage` walk the
+  tree; `TestEmptyAllowedInventoryIsPinned` pins every opt-out (adding or
+  removing one is a deliberate edit there), and
+  `TestEmptyAllowedFlagsAcceptEmpty` checks each still takes `""` without a
+  usage error (where omitting the flag is itself an error, `""` must give
+  exactly that error), and that an `emptyIsSent` one sends its own field as
+  `""`;
+  `TestBlankAllowedFlagsAreJustified` fails an opt-out without a reason, on a
+  filter, or missing where help promises an empty value clears; an opt-out
+  on a list command (it paginates, or is named list/search/history/...) must
+  be named in `listCommandNonFilters` with why it is not a filter;
+  `TestRequiredUsageMatchesAnnotation` fails a hand-written "(required)" that
+  lacks the annotation. Never use `Changed()` or
   `TrimSpace(v) == ""` as the signal when a value's content matters:
   `--page-token ""` once disabled auto-pagination and returned page 1 at exit 0.
 - **A guard covers every channel and sink, not a name.** Validate a value on
@@ -308,7 +327,7 @@ tracked root file outside its allowlist. Stage explicit paths rather than `-A`.
   |------|---------|
   | `0` | ok |
   | `1` | generic |
-  | `2` | usage (bad flags/args, an empty, `.` or `..` id, a blank required or id flag or positional, a missing, malformed, `null` or wrong-shape `--*-file` input, a non-object element in an array `--*-file` or `--body-file`, a refused redirect (but `upgrade` and the `docs` commands exit `8`), or any API `4xx` other than `401`/`403`/`404`/`408`/`429`/`499`) |
+  | `2` | usage (bad flags/args, an empty, `.` or `..` id, a blank flag or positional, a missing, malformed, `null` or wrong-shape `--*-file` input, a non-object element in an array `--*-file` or `--body-file`, a refused redirect (but `upgrade` and the `docs` commands exit `8`), or any API `4xx` other than `401`/`403`/`404`/`408`/`429`/`499`) |
   | `3` | auth (`401`/`403`) |
   | `4` | not-found (`404`) |
   | `5` | rate-limited (`429`) |

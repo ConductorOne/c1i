@@ -37,5 +37,6 @@ plain Markdown.
 
 func init() {
 	docsAgentsCmd.Flags().StringP("output", "o", "", "write to file instead of stdout (\"-\" is stdout)")
+	allowEmpty(docsAgentsCmd, emptyIsOmitted, "output")
 	docsCmd.AddCommand(docsAgentsCmd)
 }

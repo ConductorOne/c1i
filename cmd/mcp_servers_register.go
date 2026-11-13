@@ -68,9 +68,6 @@ requires --app-id. Approve discovered tools afterward with
 			return printConfigTemplate(cmd)
 		}
 
-		if _, err := requireNonEmptyIfSet(cmd, "display-name"); err != nil {
-			return err
-		}
 		if err := requireNonEmpty(cmd, "app-id", "type", "display-name"); err != nil {
 			// Wrap as a usage error so a missing required flag still maps to
 			// exit code 2 (these flags are annotate-only, not cobra-required,
@@ -173,6 +170,7 @@ func init() {
 	mcpServersRegisterCmd.Flags().String("server-url", "", "External MCP server URL (EXTERNAL)")
 	mcpServersRegisterCmd.Flags().String("transport", "", "Transport: "+transportTypeFlag.usage()+" (EXTERNAL)")
 	mcpServersRegisterCmd.Flags().String("external-config-file", "", "Full externalConfig JSON (file or \"-\" for stdin)")
+	allowEmpty(mcpServersRegisterCmd, emptyIsOmitted, "description", "data-sensitivity", "tool-prefix", "server-url", "transport")
 	// Config-template generator (no auth / no network)
 	mcpServersRegisterCmd.Flags().Bool("print-config-template", false, "Print a ready-to-edit config skeleton for the --auth method (use with --auth and --type) instead of registering")
 	// Shared auth

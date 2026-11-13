@@ -249,9 +249,11 @@ func init() {
 	accessReviewsCreateCmd.Flags().String("body-file", "", "Full CreateAccessReview request JSON object (required; file or \"-\" for stdin)")
 	accessReviewsUpdateCmd.Flags().String("body-file", "", "Partial AccessReview JSON object (required; file or \"-\" for stdin)")
 	accessReviewsUpdateCmd.Flags().String("update-mask", "", "Comma-separated campaign fields to update")
+	setBlankHint(accessReviewsUpdateCmd, "update-mask", updateMaskBlankHint)
 	markRequired(accessReviewsUpdateCmd, "update-mask")
 	accessReviewReportsGenerateCmd.Flags().String("format", "", "Report format: "+reportFormatFlag.usage()+" (mutually exclusive with --body-file)")
 	accessReviewReportsGenerateCmd.Flags().String("body-file", "", "Full GenerateAccessReviewReport request JSON object (file or \"-\" for stdin; mutually exclusive with --format)")
+	allowEmpty(accessReviewReportsGenerateCmd, emptyIsOmitted, "format", "body-file")
 
 	for _, command := range []*cobra.Command{accessReviewsCreateCmd, accessReviewsUpdateCmd, accessReviewReportsGenerateCmd} {
 		markMutating(command)

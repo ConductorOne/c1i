@@ -51,6 +51,7 @@ func init() {
 	requestsCreateRevokeCmd.Flags().String("entitlement-id", "", "Entitlement ID")
 	requestsCreateRevokeCmd.Flags().String("user-id", "", "User ID (defaults to self if omitted)")
 	requestsCreateRevokeCmd.Flags().String("description", "", "Justification or description")
+	allowEmpty(requestsCreateRevokeCmd, emptyIsOmitted, "description")
 	markRequired(requestsCreateRevokeCmd, "app-id")
 	markRequired(requestsCreateRevokeCmd, "entitlement-id")
 	markMutating(requestsCreateRevokeCmd)

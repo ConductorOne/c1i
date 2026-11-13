@@ -25,6 +25,7 @@ mutation; extract with jq -er, which fails on a --dry-run preview.`,
 
 func init() {
 	tasksCloseCmd.Flags().String("comment", "", "Optional comment")
+	allowEmpty(tasksCloseCmd, emptyIsOmitted, "comment")
 	markMutating(tasksCloseCmd)
 	tasksCmd.AddCommand(tasksCloseCmd)
 }

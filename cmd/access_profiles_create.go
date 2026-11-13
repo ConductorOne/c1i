@@ -128,6 +128,7 @@ func init() {
 	f.String("enrollment-behavior", "", "Enrollment request-policy behavior: "+catalogEnrollmentFlag.usage()+" (omit to leave it unset)")
 	f.String("unenrollment-behavior", "", "Unenrollment behavior: "+catalogUnenrollmentFlag.usage()+" (omit to leave it unset)")
 	f.String("unenrollment-entitlement-behavior", "", "Unenrollment entitlement revoke-policy behavior: "+catalogUnenrollmentEntitlementFlag.usage()+" (omit to leave it unset)")
+	allowEmpty(accessProfilesCreateCmd, emptyIsSent, "description", "enrollment-behavior", "unenrollment-behavior", "unenrollment-entitlement-behavior")
 	markRequired(accessProfilesCreateCmd, "display-name")
 	markMutating(accessProfilesCreateCmd)
 	accessProfilesCmd.AddCommand(accessProfilesCreateCmd)

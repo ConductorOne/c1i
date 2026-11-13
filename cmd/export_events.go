@@ -171,6 +171,7 @@ func init() {
 	exportEventsCmd.Flags().String("until", "", "Only events before this RFC3339 time")
 	exportEventsCmd.Flags().String("since-event-uid", "", "Resume after this event UID (incremental sync)")
 	exportEventsCmd.Flags().String("sort", "asc", "Sort order (asc is oldest first): "+sortDirectionFlag.usage())
+	allowEmpty(exportEventsCmd, emptyIsOmitted, "sort")
 	addPaginationFlags(exportEventsCmd)
 	exportCmd.AddCommand(exportEventsCmd)
 }

@@ -34,6 +34,47 @@ const requiredAnnotation = "c1i_required"
 // blank-value error.
 const blankHintAnnotation = "c1i_blank_hint"
 
+// updateMaskBlankHint is the blank-value hint for a --body-file update mask.
+const updateMaskBlankHint = "name the changed field paths, comma-separated"
+
+// setBlankHint appends hint to flag name's blank-value error.
+func setBlankHint(cmd *cobra.Command, name, hint string) {
+	if err := cmd.Flags().SetAnnotation(name, blankHintAnnotation, []string{hint}); err != nil {
+		panic(err)
+	}
+}
+
+// emptyAllowedAnnotation lets a string flag take an exact "" past
+// validateBlankFlags; whitespace or invisible-only is still refused. Its value
+// is the reason; set it with allowEmpty.
+const emptyAllowedAnnotation = "c1i_empty_allowed"
+
+// allowEmpty reasons. Filters never take one: an empty filter is refused, so
+// `--state "$UNSET"` cannot silently widen a list.
+const (
+	emptyIsSent       = "an empty value is sent as given (an update's clears the field where --help says so)"
+	emptyIsOmitted    = "an empty value is the same as omitting the flag"
+	emptyOverridesEnv = "an empty value overrides the environment variable and config file"
+)
+
+// allowEmpty lets each named flag take an exact "", where that clears a field,
+// overrides an env default, or stands for "not given". Every other string flag
+// refuses any blank value.
+func allowEmpty(cmd *cobra.Command, reason string, names ...string) {
+	if !hasVisibleRune(reason) || len(names) == 0 {
+		panic("allowEmpty: a reason and at least one flag are required")
+	}
+	for _, n := range names {
+		fs := cmd.Flags()
+		if fs.Lookup(n) == nil {
+			fs = cmd.PersistentFlags()
+		}
+		if err := fs.SetAnnotation(n, emptyAllowedAnnotation, []string{reason}); err != nil {
+			panic(err)
+		}
+	}
+}
+
 // annotateRequired appends "(required)" to each named flag's usage WITHOUT
 // enabling cobra's pre-run required-flag validation. Use it when a command has
 // an escape-hatch flag (e.g. register's --print-config-template) that is valid
@@ -158,24 +199,10 @@ func pageSizeUsage(maxSize int) string {
 
 // pageTokenUsage is the shared --page-token description. A non-empty value
 // switches the command to a single request; see the `manualPaging` check in
-// every list command's RunE. A blank value is refused before the command runs
-// (validatePageToken): supplying the flag at all turns auto-pagination off, so
-// a blank token silently truncated the list.
+// every list command's RunE. A blank value is refused by validateBlankFlags:
+// supplying the flag at all turns auto-pagination off, so a blank token
+// silently truncated the list.
 const pageTokenUsage = "Pagination cursor; a non-empty value fetches exactly one page (disables auto-pagination); a blank value is refused, so omit it to auto-paginate" // #nosec G101 -- flag help text; G101 fires on the "Token" in the name
-
-// validatePageToken rejects a --page-token that is set but blank (empty,
-// whitespace-only, or invisible-only). Every list command reads the cursor
-// with `manualPaging := cmd.Flags().Changed("page-token")`, so an empty value
-// from an unset shell variable fetched only the first page and exited 0 --
-// a silently truncated list that looks exactly like a filtered one. Omitting
-// the flag is how you ask for every page.
-func validatePageToken(cmd *cobra.Command) error {
-	f := cmd.Flags().Lookup("page-token")
-	if f == nil || !f.Changed || hasVisibleRune(f.Value.String()) {
-		return nil
-	}
-	return &usageError{errors.New("--page-token is blank: omit the flag to auto-paginate, or pass a non-empty cursor to fetch exactly one page")}
-}
 
 // countFlags is a slice, not a map: with both flags negative, map iteration
 // order would pick which one the error names at random.
@@ -220,6 +247,7 @@ func addPaginationFlagsWithMax(cmd *cobra.Command, def, maxSize int) {
 	// above rules out.
 	_ = cmd.Flags().SetAnnotation("page-size", pageSizeMaxAnnotation, []string{strconv.Itoa(maxSize)})
 	cmd.Flags().String("page-token", "", pageTokenUsage)
+	setBlankHint(cmd, "page-token", "omit the flag to auto-paginate, or pass a non-empty cursor to fetch exactly one page")
 	addLimitFlag(cmd)
 }
 
@@ -487,25 +515,8 @@ func requireNonEmpty(cmd *cobra.Command, names ...string) error {
 }
 
 // displayNameRule is the one wording for every --display-name: blank exits 2
-// before sending (centrally on creates, where it is required;
-// requireNonEmptyIfSet on the optional update flag).
+// before sending, via validateBlankFlags.
 const displayNameRule = "cannot be blank: empty, whitespace or invisible-only"
-
-// requireNonEmptyIfSet errors when a flag was passed with no visible
-// character (one that is graphic, not a space, not a format char), while
-// leaving an unset flag alone. Distinct from
-// requireNonEmpty, which is for flags that must always be present: use this
-// for an *optional* flag whose empty value would change behavior rather than
-// fail — an id flag selecting an existing object (`--resource-type-id
-// "$RT_ID"` with RT_ID unset would silently create a second one), or one that
-// scopes a read.
-func requireNonEmptyIfSet(cmd *cobra.Command, name string) (string, error) {
-	v, _ := cmd.Flags().GetString(name)
-	if !hasVisibleRune(v) && cmd.Flags().Changed(name) {
-		return "", &usageError{fmt.Errorf("flag --%s requires a non-empty value", name)}
-	}
-	return v, nil
-}
 
 // hasVisibleRune reports whether s has a rune that renders. TrimSpace alone
 // lets through zero-width/format runes (U+200B, U+FEFF), i.e. an invisible name.
@@ -688,9 +699,6 @@ func bodyFileMask(cmd *cobra.Command, exclusive ...string) (mask string, usingBo
 	}
 	if !f.Changed("update-mask") {
 		return "", true, &usageError{fmt.Errorf("--update-mask is required together with --body-file")}
-	}
-	if !hasVisibleRune(mask) {
-		return "", true, &usageError{fmt.Errorf("--update-mask is blank; name the changed field paths, comma-separated")}
 	}
 	paths := strings.Split(mask, ",")
 	for i, p := range paths {

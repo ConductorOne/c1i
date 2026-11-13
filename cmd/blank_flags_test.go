@@ -54,28 +54,30 @@ func blankArgs(t *testing.T, c *cobra.Command, blankFlag, value string) []string
 		}
 	}
 	c.Flags().VisitAll(func(f *pflag.Flag) {
-		if f.Name == blankFlag {
-			args = append(args, "--"+f.Name, value)
-		} else if isRequiredFlag(f) && f.Value.Type() == "string" {
+		if isRequiredFlag(f) && f.Value.Type() == "string" && f.Name != blankFlag {
 			args = append(args, "--"+f.Name, "x")
 		}
 	})
+	if blankFlag != "" {
+		args = append(args, "--"+blankFlag, value)
+	}
 	return args
 }
 
-// TestBlankIDAndRequiredFlagsExitUsage walks the whole command tree: every
-// string flag that is required or id-shaped must exit 2 on a
-// blank value with nothing sent. One central rule (validateBlankFlags)
-// provides this; a per-command check is never needed.
-func TestBlankIDAndRequiredFlagsExitUsage(t *testing.T) {
+// TestBlankStringFlagsExitUsage walks the whole command tree, inherited
+// global flags included: every string flag must exit 2 on a blank value with
+// nothing sent; an allowEmpty flag still must on whitespace or invisible-only.
+// One central rule (validateBlankFlags) provides this.
+func TestBlankStringFlagsExitUsage(t *testing.T) {
 	t.Setenv("C1I_URL", mutTestURL)
 	checked := 0
 	for _, c := range blankCheckCommands() {
-		c.Flags().VisitAll(func(f *pflag.Flag) {
-			if f.Value.Type() != "string" || (!isRequiredFlag(f) && !strings.HasSuffix(f.Name, "-id")) {
-				return
+		visitStringFlagsWithGlobals(c, func(f *pflag.Flag) {
+			values := blankValues
+			if f.Annotations[emptyAllowedAnnotation] != nil {
+				values = blankValues[1:]
 			}
-			for _, v := range blankValues {
+			for _, v := range values {
 				checked++
 				name := fmt.Sprintf("%s --%s %q", c.CommandPath(), f.Name, v)
 				t.Run(name, func(t *testing.T) {
@@ -84,8 +86,8 @@ func TestBlankIDAndRequiredFlagsExitUsage(t *testing.T) {
 					if res.exit != exitUsage {
 						t.Fatalf("exit = %d (err %v), want %d", res.exit, res.err, exitUsage)
 					}
-					if want := "flag --" + f.Name + " requires a non-empty value"; res.err == nil || !strings.Contains(res.err.Error(), want) {
-						t.Errorf("err = %v, want it to contain %q", res.err, want)
+					if res.err == nil || !strings.Contains(res.err.Error(), "--"+f.Name) || !strings.Contains(res.err.Error(), "requires a non-empty value") {
+						t.Errorf("err = %v, want the blank-value error for --%s", res.err, f.Name)
 					}
 					if got := srv.requests(); len(got) != 0 {
 						t.Errorf("requests sent: %v", got)
@@ -94,8 +96,119 @@ func TestBlankIDAndRequiredFlagsExitUsage(t *testing.T) {
 			}
 		})
 	}
-	if checked < 200 {
+	if checked < 1500 {
 		t.Errorf("only %d blank cases ran; the tree walk has gone vacuous", checked)
+	}
+}
+
+// runEAfterBlankCheck runs c's RunE the way production does after rootCmd's
+// pre-run: blank flags are refused first. For tests that call RunE directly.
+func runEAfterBlankCheck(c *cobra.Command, args []string) error {
+	if err := validateBlankFlags(c); err != nil {
+		return err
+	}
+	return c.RunE(c, args)
+}
+
+// visitStringFlagsWithGlobals visits c's own string flags and every
+// ancestor's persistent ones, which cobra merges into c only at execution.
+func visitStringFlagsWithGlobals(c *cobra.Command, fn func(*pflag.Flag)) {
+	seen := map[string]bool{}
+	visit := func(f *pflag.Flag) {
+		if f.Value.Type() == "string" && !seen[f.Name] {
+			seen[f.Name] = true
+			fn(f)
+		}
+	}
+	c.Flags().VisitAll(visit)
+	for p := c.Parent(); p != nil; p = p.Parent() {
+		p.PersistentFlags().VisitAll(visit)
+	}
+}
+
+// listCommandNonFilters are the allowEmpty flags on list/search/export
+// commands that select something other than which rows come back.
+var listCommandNonFilters = map[string]string{
+	"c1i export events --sort":            "result order",
+	"c1i mcp servers search --tool-state": "which tools are counted, not which servers are listed",
+	"c1i api --method":                    "request shape, not a filter",
+	"c1i api --body":                      "request shape, not a filter",
+	"c1i api --body-file":                 "request shape, not a filter",
+	"c1i api --list-key":                  "which response field is the list, not a filter",
+}
+
+// isListCommand reports whether c returns a set of rows that a flag could
+// narrow, so an empty flag there would widen the result: it paginates, or its
+// name says so.
+func isListCommand(c *cobra.Command) bool {
+	if c.LocalFlags().Lookup("page-token") != nil || c.LocalFlags().Lookup("limit") != nil {
+		return true
+	}
+	switch c.Name() {
+	case "list", "list-ids", "list-tools", "search", "events", "endpoints", "history":
+		return true
+	}
+	return false
+}
+
+// Every listCommandNonFilters entry must still name an allowEmpty flag, or a
+// renamed flag would leave a silent exemption behind.
+func TestListCommandNonFiltersAreCurrent(t *testing.T) {
+	live := map[string]bool{}
+	for _, c := range blankCheckCommands() {
+		c.LocalFlags().VisitAll(func(f *pflag.Flag) {
+			if f.Annotations[emptyAllowedAnnotation] != nil && isListCommand(c) {
+				live[c.CommandPath()+" --"+f.Name] = true
+			}
+		})
+	}
+	for key := range listCommandNonFilters {
+		if !live[key] {
+			t.Errorf("listCommandNonFilters has %q, which is not an allowEmpty flag on a list command", key)
+		}
+	}
+}
+
+// An opt-out must say why, and a flag whose help promises that an empty value
+// clears something must be opted out, or the rule would refuse what the help
+// offers. A filter never is: an empty one would silently widen a list.
+func TestBlankAllowedFlagsAreJustified(t *testing.T) {
+	allowed := 0
+	for _, c := range blankCheckCommands() {
+		visitStringFlagsWithGlobals(c, func(f *pflag.Flag) {
+			reason := f.Annotations[emptyAllowedAnnotation]
+			if reason != nil {
+				allowed++
+				if len(reason) != 1 || !hasVisibleRune(reason[0]) {
+					t.Errorf("%s --%s: allowEmpty needs a reason, got %q", c.CommandPath(), f.Name, reason)
+				}
+				key := c.CommandPath() + " --" + f.Name
+				if strings.Contains(strings.ToLower(f.Usage), "filter") ||
+					(isListCommand(c) && c.LocalFlags().Lookup(f.Name) != nil && listCommandNonFilters[key] == "") {
+					t.Errorf("%s: a filter must not allowEmpty (a non-filter on a list command goes in listCommandNonFilters)", key)
+				}
+				return
+			}
+			if u := strings.ToLower(f.Usage); strings.Contains(u, "empty value") && strings.Contains(u, "clear") {
+				t.Errorf("%s --%s: help mentions an empty value but the flag is not opted out with allowEmpty", c.CommandPath(), f.Name)
+			}
+		})
+	}
+	if allowed == 0 {
+		t.Error("no flag is opted out; the description-clearing update flags should be")
+	}
+}
+
+// An opted-out flag sends its empty value instead of being refused.
+func TestAllowedBlankFlagIsSent(t *testing.T) {
+	t.Setenv("C1I_URL", mutTestURL)
+	srv := newMutServer(t, fixedReply(200, `{"app":{"id":"abc"}}`))
+	res := runMutationCLI(t, srv.srv, 0, nil, "apps", "update", "abc", "--description", "")
+	if res.exit != 0 {
+		t.Fatalf("exit = %d (err %v), want 0", res.exit, res.err)
+	}
+	if got := srv.requests(); len(got) == 0 {
+		t.Fatal("no request sent")
 	}
 }
 

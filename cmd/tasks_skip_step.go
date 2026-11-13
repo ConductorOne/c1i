@@ -33,6 +33,7 @@ mutation; extract with jq -er, which fails on a --dry-run preview.`,
 
 func init() {
 	tasksSkipStepCmd.Flags().String("comment", "", "Optional comment")
+	allowEmpty(tasksSkipStepCmd, emptyIsOmitted, "comment")
 	tasksSkipStepCmd.Flags().String("policy-step-id", "", "Policy step to skip (defaults to the task's current step)")
 	markMutating(tasksSkipStepCmd)
 	tasksCmd.AddCommand(tasksSkipStepCmd)

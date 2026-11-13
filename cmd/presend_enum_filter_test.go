@@ -8,8 +8,9 @@ import (
 // --- B. Whitespace-only enum filters ---
 
 // A whitespace-only enum value used to be trimmed to "" and dropped, so the
-// command exited 0 with an unfiltered list. It must be refused instead.
-func TestWhitespaceOnlyEnumFiltersRefused(t *testing.T) {
+// command exited 0 with an unfiltered list. It must be refused instead, by
+// the central blank rule, before the enum parser sees it.
+func TestBlankEnumFiltersRefused(t *testing.T) {
 	cases := []struct {
 		name string
 		args []string
@@ -19,6 +20,12 @@ func TestWhitespaceOnlyEnumFiltersRefused(t *testing.T) {
 		{"requests list --type", []string{"requests", "list", "--type", " ", "--user-id", "user-1"}},
 		{"automations executions list --state", []string{"automations", "executions", "list", "--state", " "}},
 		{"export events --sort", []string{"export", "events", "--sort", " "}},
+		// An empty filter is refused too: `--state "$UNSET"` used to list
+		// everything at exit 0.
+		{"tasks list --state empty", []string{"tasks", "list", "--state", ""}},
+		{"requests list --state empty", []string{"requests", "list", "--state", "", "--user-id", "user-1"}},
+		{"requests list --type empty", []string{"requests", "list", "--type", "", "--user-id", "user-1"}},
+		{"automations executions list --state empty", []string{"automations", "executions", "list", "--state", ""}},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -28,8 +35,8 @@ func TestWhitespaceOnlyEnumFiltersRefused(t *testing.T) {
 			if res.exit != exitUsage {
 				t.Fatalf("exit = %d, err = %v; want %d", res.exit, res.err, exitUsage)
 			}
-			if res.err == nil || !strings.Contains(res.err.Error(), "invalid --") {
-				t.Errorf("err = %v, want the enum usage error", res.err)
+			if res.err == nil || !strings.Contains(res.err.Error(), "requires a non-empty value") {
+				t.Errorf("err = %v, want the blank-value usage error", res.err)
 			}
 			if got := srv.requests(); len(got) != 0 {
 				t.Errorf("requests sent: %v", got)
@@ -38,35 +45,14 @@ func TestWhitespaceOnlyEnumFiltersRefused(t *testing.T) {
 	}
 }
 
-// An explicitly empty value still means "no filter"/"the default"; only a
-// non-empty raw value reaches the parser.
-func TestEmptyEnumFiltersStayUnfiltered(t *testing.T) {
+// --sort is not a filter: an empty one still means the default order.
+func TestEmptySortKeepsDefault(t *testing.T) {
 	cases := []struct {
 		name    string
 		args    []string
 		want    []string
 		notWant []string
 	}{
-		{
-			name:    "tasks list --state",
-			args:    []string{"tasks", "list", "--state", ""},
-			notWant: []string{`"taskStates"`},
-		},
-		{
-			name: "requests list --state",
-			args: []string{"requests", "list", "--state", "", "--user-id", "user-1"},
-			want: []string{`"taskTypes":[{"grant":{}},{"revoke":{}}]`},
-		},
-		{
-			name: "requests list --type",
-			args: []string{"requests", "list", "--type", "", "--user-id", "user-1"},
-			want: []string{`"taskTypes":[{"grant":{}},{"revoke":{}}]`},
-		},
-		{
-			name:    "automations executions list --state",
-			args:    []string{"automations", "executions", "list", "--state", ""},
-			notWant: nil,
-		},
 		{
 			name: "export events --sort",
 			args: []string{"export", "events", "--sort", ""},

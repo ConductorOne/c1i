@@ -41,9 +41,6 @@ get" (the id is .id). --fields is a usage error on a mutation.`,
 // flags. The catalog ID is part of the nested object and each mask path matches
 // exactly one supplied catalog field.
 func buildAccessProfileUpdateBody(cmd *cobra.Command, id string) (map[string]any, error) {
-	if _, err := requireNonEmptyIfSet(cmd, "display-name"); err != nil {
-		return nil, err
-	}
 	catalog := map[string]any{"id": id}
 	paths, err := addCatalogChangedFields(cmd, catalog)
 	if err != nil {
@@ -62,12 +59,14 @@ func init() {
 	f := accessProfilesUpdateCmd.Flags()
 	f.String("display-name", "", "New display name (omit to leave unchanged; "+displayNameRule+")")
 	f.String("description", "", "New description; pass an empty value to clear it (omit to leave unchanged)")
+	allowEmpty(accessProfilesUpdateCmd, emptyIsSent, "description")
 	f.Bool("published", false, "Publish or unpublish the access profile (omit to leave unchanged)")
 	f.Bool("visible-to-everyone", false, "Set whether every user can see the access profile (omit to leave unchanged)")
 	f.Bool("request-bundle", false, "Set whether all profile entitlements can be requested together (omit to leave unchanged)")
 	f.String("enrollment-behavior", "", "Enrollment request-policy behavior: "+catalogEnrollmentFlag.usage()+" (omit to leave unchanged)")
 	f.String("unenrollment-behavior", "", "Unenrollment behavior: "+catalogUnenrollmentFlag.usage()+" (omit to leave unchanged)")
 	f.String("unenrollment-entitlement-behavior", "", "Unenrollment entitlement revoke-policy behavior: "+catalogUnenrollmentEntitlementFlag.usage()+" (omit to leave unchanged)")
+	allowEmpty(accessProfilesUpdateCmd, emptyIsSent, "enrollment-behavior", "unenrollment-behavior", "unenrollment-entitlement-behavior")
 	markMutating(accessProfilesUpdateCmd)
 	accessProfilesCmd.AddCommand(accessProfilesUpdateCmd)
 }

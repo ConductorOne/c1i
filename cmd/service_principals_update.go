@@ -21,9 +21,6 @@ Prints the service principal as pretty JSON, unwrapped like
 "service-principals get": the id is .id.`,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		if _, err := requireNonEmptyIfSet(cmd, "display-name"); err != nil {
-			return err
-		}
 		id := args[0]
 		sp := map[string]any{"id": id}
 		var paths []string

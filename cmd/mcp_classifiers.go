@@ -570,6 +570,7 @@ func init() {
 	mcpClassifierTemplatesListCmd.Flags().Bool("latest-only", false, "Return only the latest revision of each template")
 	addPaginationFlags(mcpClassifierTemplatesListCmd)
 	mcpClassifierTemplatesGetCmd.Flags().String("template-version", "", "Template version (default: latest)")
+	allowEmpty(mcpClassifierTemplatesGetCmd, emptyIsOmitted, "template-version")
 	addPaginationFlags(mcpClassifierToolGatesListCmd)
 	mcpClassifierToolGatesSearchCmd.Flags().String("query", "", "Text to search for (default: all tool gates)")
 	addPaginationFlags(mcpClassifierToolGatesSearchCmd)
@@ -586,8 +587,11 @@ func init() {
 	} {
 		command.Flags().String("body-file", "", "JSON object file (or \"-\" for stdin)")
 	}
+	allowEmpty(mcpClassifierTemplatesInstantiateCmd, emptyIsOmitted, "body-file")
+	allowEmpty(mcpClassifierTemplatesAddRuleCmd, emptyIsOmitted, "body-file")
 	for _, command := range []*cobra.Command{mcpClassifiersUpdateCmd, mcpClassifierPolicyUpdateCmd, mcpClassifierToolGatesUpdateCmd} {
 		command.Flags().String("update-mask", "", "Comma-separated camelCase fields to update")
+		setBlankHint(command, "update-mask", updateMaskBlankHint)
 		markRequired(command, "update-mask")
 	}
 

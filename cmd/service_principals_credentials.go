@@ -211,9 +211,6 @@ Prints the credential as pretty JSON, unwrapped like
 "service-principals credentials get": the id is .id.`,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		if _, err := requireNonEmptyIfSet(cmd, "display-name"); err != nil {
-			return err
-		}
 		spID, _ := cmd.Flags().GetString("service-principal-id")
 
 		cred := map[string]any{"id": args[0]}

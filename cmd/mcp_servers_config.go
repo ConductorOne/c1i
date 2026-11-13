@@ -42,6 +42,7 @@ func addAuthFlags(cmd *cobra.Command) {
 	cmd.Flags().String("basic-auth-username", "", "Basic-auth username (required with --auth basic-auth unless --token-sharing per-user or an explicit --update-mask omits it)")
 	cmd.Flags().String("basic-auth-password", "", "Basic-auth password (required with --auth basic-auth unless --token-sharing per-user or an explicit --update-mask omits it)")
 	cmd.Flags().String("token-sharing", "", "Token sharing: "+tokenSharingFlag.usage())
+	allowEmpty(cmd, emptyIsOmitted, "auth", "bearer-token", "header-name", "header-value", "basic-auth-username", "basic-auth-password", "token-sharing")
 	cmd.Flags().Bool("require-tool-approval", false, "Per-server override for tool auto-approval (omit to leave unset)")
 }
 

@@ -26,10 +26,6 @@ nothing sent. Sent as is, the server stores "" as an empty name and keeps
 Prints the updated server, unwrapped like "mcp servers get" (id: .connectorId).`,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		if _, err := requireNonEmptyIfSet(cmd, "display-name"); err != nil {
-			return err
-		}
-
 		appID, _ := cmd.Flags().GetString("app-id")
 		connectorID := args[0]
 
@@ -90,8 +86,10 @@ func init() {
 	mcpServersUpdateCmd.Flags().String("app-id", "", "Application ID")
 	mcpServersUpdateCmd.Flags().String("display-name", "", "New display name (omit to leave unchanged; "+displayNameRule+")")
 	mcpServersUpdateCmd.Flags().String("description", "", "New description")
+	allowEmpty(mcpServersUpdateCmd, emptyIsSent, "description")
 	mcpServersUpdateCmd.Flags().String("data-sensitivity", "", "New data sensitivity: "+dataSensitivityFlag.usage())
 	mcpServersUpdateCmd.Flags().String("tool-prefix", "", "New tool-name prefix")
+	allowEmpty(mcpServersUpdateCmd, emptyIsSent, "data-sensitivity", "tool-prefix")
 	mcpServersUpdateCmd.Flags().Bool("require-tool-approval", false, "Per-server override for tool auto-approval")
 	markRequired(mcpServersUpdateCmd, "app-id")
 	markMutating(mcpServersUpdateCmd)

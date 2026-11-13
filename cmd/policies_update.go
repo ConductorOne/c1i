@@ -58,9 +58,6 @@ such a patch (exit 2 otherwise).
 Prints the updated policy unwrapped like "policies get" (id is .id).`,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		if _, err := requireNonEmptyIfSet(cmd, "display-name"); err != nil {
-			return err
-		}
 		id := args[0]
 		m := mutation{Method: http.MethodPost, Path: client.Path("/api/v1/policies/%s", id)}
 		// Read once: both passes below build from these, and stdin drains.
@@ -265,11 +262,13 @@ func buildUpdatePolicyPatch(cmd *cobra.Command, in policyUpdateInputs, resolveFa
 func init() {
 	policiesUpdateCmd.Flags().String("display-name", "", "New display name (omit to leave unchanged; "+displayNameRule+")")
 	policiesUpdateCmd.Flags().String("description", "", "New description")
+	allowEmpty(policiesUpdateCmd, emptyIsSent, "description")
 	policiesUpdateCmd.Flags().String("policy-type", "", "New policy type: "+policyTypeFlag.usage()+" (rarely changed)")
 	policiesUpdateCmd.Flags().String("steps-file", "", "JSON array: replaces the baseline policySteps.steps content (file, or \"-\" for stdin)")
 	policiesUpdateCmd.Flags().String("rules-file", "", "JSON array: replaces rules[] (file, or \"-\" for stdin)")
 	policiesUpdateCmd.Flags().String("body-file", "", "Full Policy JSON object, verbatim (file, or \"-\" for stdin); requires --update-mask; mutually exclusive with the flags above")
 	policiesUpdateCmd.Flags().String("update-mask", "", bodyFileMaskUsage)
+	setBlankHint(policiesUpdateCmd, "update-mask", updateMaskBlankHint)
 	policiesUpdateCmd.Flags().Bool("allow-deny-all", false, "Allow leaving/setting a policy with no steps — bypasses the empty-steps guard on purpose")
 	markMutating(policiesUpdateCmd)
 	policiesCmd.AddCommand(policiesUpdateCmd)

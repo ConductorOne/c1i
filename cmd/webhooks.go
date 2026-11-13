@@ -50,7 +50,12 @@ func webhookFieldFlags(cmd *cobra.Command, update bool) {
 	}
 	cmd.Flags().String("display-name", "", verb+" display name ("+keep+webhookDisplayNameRule+")")
 	cmd.Flags().String("destination-url", "", verb+" destination URL ("+keep+"https only, with a host; an IPv6 literal host is refused; else exit 2)")
-	cmd.Flags().String("description", "", verb+" description ("+keep+"an empty value clears it)")
+	descUsage := "Webhook description"
+	if update {
+		descUsage = "New description (omit to leave unchanged; an empty value clears it)"
+	}
+	cmd.Flags().String("description", "", descUsage)
+	allowEmpty(cmd, emptyIsSent, "description")
 	addProtoDurationFlag(cmd, "callback-timeout", verb+` time to wait for an asynchronous callback, as a protobuf duration (600s) or a Go duration (10m), sent in seconds (`+keep+`0 to 720h; a sign or decimal (-1h, 1.5h) exits 2 before sending; over 720h, update returns "callback_timeout must be between 0 and 30 days" and create "value must be inside range [0s, 720h0m0s]")`)
 }
 
@@ -60,10 +65,7 @@ func webhookFields(cmd *cobra.Command) (map[string]any, []string, error) {
 	fields := map[string]any{}
 	var paths []string
 	if cmd.Flags().Changed("display-name") {
-		v, err := requireNonEmptyIfSet(cmd, "display-name")
-		if err != nil {
-			return nil, nil, err
-		}
+		v, _ := cmd.Flags().GetString("display-name")
 		fields["displayName"] = v
 		paths = append(paths, "displayName")
 	}
