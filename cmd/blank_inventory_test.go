@@ -141,6 +141,10 @@ func TestEmptyAllowedInventoryIsPinned(t *testing.T) {
 // emptyIsSent one puts it on the wire.
 func TestEmptyAllowedFlagsAcceptEmpty(t *testing.T) {
 	t.Setenv("C1I_URL", mutTestURL)
+	// Some commands build their own client, not the stubbed one; without
+	// credentials they stop before any network call.
+	t.Setenv("C1I_CLIENT_ID", "")
+	t.Setenv("C1I_CLIENT_SECRET", "")
 	for key, reason := range wantEmptyAllowed {
 		c, flag := commandForInventoryKey(t, key)
 		t.Run(key, func(t *testing.T) {
