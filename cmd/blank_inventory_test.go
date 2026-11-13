@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 
@@ -144,29 +145,73 @@ func TestEmptyAllowedFlagsAcceptEmpty(t *testing.T) {
 		c, flag := commandForInventoryKey(t, key)
 		t.Run(key, func(t *testing.T) {
 			srv := newMutServer(t, fixedReply(200, "{}"))
-			args := append(blankArgs(t, c, flag, ""), inventoryExtraArgs[key]...)
+			args := append(blankArgs(t, c, flag, ""), extraArgsFor(c, flag)...)
 			res := runMutationCLI(t, srv.srv, 0, nil, args...)
 			if res.err != nil && strings.Contains(res.err.Error(), "--"+flag+" requires a non-empty value") {
 				t.Fatalf("\"\" refused: %v", res.err)
 			}
+			if res.exit == exitUsage && !inventoryUsageOK[key] {
+				t.Fatalf("exit 2 with \"\": %v", res.err)
+			}
 			if reason != emptyIsSent {
 				return
 			}
+			want := fmt.Sprintf("%q:\"\"", flagJSONKey(flag))
 			sent := false
 			for _, r := range srv.requests() {
-				sent = sent || strings.Contains(r.body, `""`)
+				sent = sent || strings.Contains(r.body, want)
 			}
 			if !sent {
-				t.Errorf("emptyIsSent, but no request carried \"\" (exit %d, err %v)", res.exit, res.err)
+				t.Errorf("emptyIsSent, but no request body carried %s (exit %d, err %v)", want, res.exit, res.err)
 			}
 		})
 	}
 }
 
-// inventoryExtraArgs replaces a placeholder "x" that a command validates
-// before sending (a later occurrence of a flag wins).
+// inventoryExtraArgs gives a command the valid "--flag=value" args its
+// placeholder "x" would fail on (a later occurrence of a flag wins). The flag
+// under test is never overridden.
 var inventoryExtraArgs = map[string][]string{
-	"c1i webhooks create --description": {"--destination-url", "https://hooks.example.com/x"},
+	"c1i api":                            {"--path=/api/v1/users"},
+	"c1i webhooks create":                {"--destination-url=https://hooks.example.com/x"},
+	"c1i policies create":                {"--policy-type=grant", "--allow-deny-all=true"},
+	"c1i requests create grant":          {"--user-id=u1"},
+	"c1i requests create revoke":         {"--user-id=u1"},
+	"c1i tasks reassign":                 {"--to-user-id=u2", "--policy-step-id=s1"},
+	"c1i tasks approve":                  {"--policy-step-id=s1"},
+	"c1i tasks deny":                     {"--policy-step-id=s1"},
+	"c1i tasks skip-step":                {"--policy-step-id=s1"},
+	"c1i mcp servers register":           {"--type=external", "--server-url=https://mcp.example.com/x"},
+	"c1i mcp servers test-connection":    {"--server-url=https://mcp.example.com/x"},
+	"c1i mcp servers update-credentials": {"--type=external", "--server-url=https://mcp.example.com/x", "--update-mask=url"},
+}
+
+// extraArgsFor returns c's extra "--flag=value" args minus any that set flag.
+func extraArgsFor(c *cobra.Command, flag string) []string {
+	var out []string
+	for _, a := range inventoryExtraArgs[c.CommandPath()] {
+		if !strings.HasPrefix(a, "--"+flag+"=") {
+			out = append(out, a)
+		}
+	}
+	return out
+}
+
+// flagJSONKey is the camelCase body key a flag maps to (tool-prefix ->
+// toolPrefix).
+func flagJSONKey(flag string) string {
+	parts := strings.Split(flag, "-")
+	for i := 1; i < len(parts); i++ {
+		parts[i] = strings.ToUpper(parts[i][:1]) + parts[i][1:]
+	}
+	return strings.Join(parts, "")
+}
+
+// inventoryUsageOK lists opt-outs where "" reads as omitted and omitting the
+// flag is itself a usage error, so only the blank-rule check applies.
+var inventoryUsageOK = map[string]bool{
+	"c1i mcp servers register --server-url":        true,
+	"c1i mcp servers test-connection --server-url": true,
 }
 
 // commandForInventoryKey resolves "<path> --<flag>" to a runnable command

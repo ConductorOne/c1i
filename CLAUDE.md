@@ -228,9 +228,10 @@ tracked root file outside its allowlist. Stage explicit paths rather than `-A`.
   `~/.c1i.yaml` values still go through `globalEnvSettings` parsers, and
   `fields` has none yet (`C1I_FIELDS=" "` reads as no projection).
   `TestBlankStringFlagsExitUsage` and `TestBlankPositionalsExitUsage` walk the
-  tree; `TestEmptyAllowedInventoryIsPinned` pins every opt-out (adding or removing one is a deliberate edit there), and
-  `TestEmptyAllowedFlagsAcceptEmpty` checks each still takes `""`, and that an
-  `emptyIsSent` one puts it on the wire;
+  tree; `TestEmptyAllowedInventoryIsPinned` pins every opt-out (adding or
+  removing one is a deliberate edit there), and
+  `TestEmptyAllowedFlagsAcceptEmpty` checks each still takes `""` without a
+  usage error, and that an `emptyIsSent` one sends its own field as `""`;
   `TestBlankAllowedFlagsAreJustified` fails an opt-out without a reason, on a
   filter, or missing where help promises an empty value clears; an opt-out
   on a list command (it paginates, or is named list/search/history/...) must
