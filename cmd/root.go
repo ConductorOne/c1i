@@ -146,9 +146,9 @@ func isCompletionRequest(cmd *cobra.Command) bool {
 }
 
 // validateBlankFlags rejects a set string flag with no visible character; an
-// allowEmpty flag still takes an exact "". `--state "$UNSET"` would otherwise drop the
-// filter and list everything at exit 0, and `--app-id " "` would drop the
-// scope. A blankHintAnnotation on the flag is appended to the message.
+// allowEmpty flag still takes an exact "". `--state "$UNSET"` would otherwise
+// drop the filter and list everything at exit 0, and `--app-id " "` would drop
+// the scope. A blankHintAnnotation on the flag is appended to the message.
 func validateBlankFlags(cmd *cobra.Command) error {
 	if isCompletionRequest(cmd) {
 		return nil
