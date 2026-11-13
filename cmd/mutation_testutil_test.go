@@ -5,7 +5,6 @@ import (
 	"context"
 	"encoding/json"
 	"io"
-	"net"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -186,16 +185,12 @@ func runCLI(t *testing.T, stub func(), out io.Writer, args ...string) mutResult 
 	return mutResult{stdout: stdout.String(), stderr: stderr.String(), exit: exitCode(err), err: err}
 }
 
+// closedPortServer returns a server whose URL refuses connections. Port 1 is
+// privileged, so no test process can bind it; a closed ephemeral port could be
+// reused by a concurrent run and answer with EOF instead of a dial error.
 func closedPortServer(t *testing.T) *httptest.Server {
 	t.Helper()
-	ln, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		t.Fatal(err)
-	}
-	srv := &httptest.Server{Listener: ln, Config: &http.Server{ReadHeaderTimeout: 0}}
-	srv.URL = "http://" + ln.Addr().String()
-	_ = ln.Close()
-	return srv
+	return &httptest.Server{URL: "http://127.0.0.1:1"}
 }
 
 func indentJSON(t *testing.T, compact string) string {
