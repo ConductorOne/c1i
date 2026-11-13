@@ -152,7 +152,7 @@ func init() {
 	f := appsUpdateCmd.Flags()
 	f.String("display-name", "", "New display name (omit to leave unchanged; "+displayNameRule+")")
 	f.String("description", "", "New description; pass an empty value to clear it (omit to leave unchanged)")
-	allowEmpty(appsUpdateCmd, emptyClears, "description")
+	allowEmpty(appsUpdateCmd, emptyIsSent, "description")
 	registerPolicyIDFlags(appsUpdateCmd, appPolicyKinds, " (omit to leave unchanged)")
 	registerUnbindPolicyFlag(appsUpdateCmd, appPolicyKinds)
 	markMutating(appsUpdateCmd)

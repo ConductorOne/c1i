@@ -220,7 +220,7 @@ tracked root file outside its allowlist. Stage explicit paths rather than `-A`.
   `validateBlankFlags` and `validateBlankArgs` run in the root
   `PersistentPreRunE`; add no per-command check. Where an exact `""` means
   something, register the flag with `allowEmpty(cmd, reason, names...)`
-  (`emptyClears`, `emptyIsOmitted`, `emptyOverridesEnv`); whitespace is still
+  (`emptyIsSent`, `emptyIsOmitted`, `emptyOverridesEnv`); whitespace is still
   refused. Never on a filter: an empty one silently widens a list. A
   flag-specific hint goes through `setBlankHint`. `requireNonEmpty` stays only
   where the command itself requires a flag cobra does not (`annotateRequired`,

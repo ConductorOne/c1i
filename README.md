@@ -456,13 +456,14 @@ restriction. Contrast `--fields`, which *is* comma-separated.
 A blank value (empty, whitespace or invisible-only) on any flag or positional
 is a usage error (exit 2), rejected before any request, so `--state "$STATE"`
 with `STATE` unset cannot silently list everything. A few flags take an exact
-`""` because it means something: an update's `--description` clears the
-field (`mcp servers update --tool-prefix`/`--data-sensitivity`, `policies
-update --policy-type` and the `access-profiles` behavior flags send `""` as
-given, as before); `--fields ""` and `--error-format ""` override `C1I_FIELDS` and
-`C1I_ERROR_FORMAT`; and optional flags such as `--comment`, a create's
-`--description` or `-o` read it as not given. Whitespace-only is refused on
-those too. Filters never take an empty value.
+`""` because it means something: an update's `--description ""` is sent as
+given, clearing the field where `--help` says so, and `mcp servers update
+--tool-prefix`/`--data-sensitivity` and the `access-profiles` behavior flags
+also send `""`; `--fields ""` and `--error-format ""` override `C1I_FIELDS`
+and `C1I_ERROR_FORMAT`; and optional flags such as `--comment`, a create's
+`--description`, `-o` or `--gateway-url` read it as not given. Whitespace-only
+is refused on those too. Filters never take an empty value. Environment
+variables and `~/.c1i.yaml` are not covered by this rule.
 
 ### Enum flags
 

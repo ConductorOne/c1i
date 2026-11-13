@@ -68,7 +68,7 @@ func init() {
 	mcpToolsetsUpdateCmd.Flags().String("connector-id", "", "Connector ID")
 	mcpToolsetsUpdateCmd.Flags().String("display-name", "", "New display name (the server requires it on every update; "+displayNameRule+")")
 	mcpToolsetsUpdateCmd.Flags().String("description", "", "New description (pass --display-name too; the server requires it)")
-	allowEmpty(mcpToolsetsUpdateCmd, emptyClears, "description")
+	allowEmpty(mcpToolsetsUpdateCmd, emptyIsSent, "description")
 	markRequired(mcpToolsetsUpdateCmd, "app-id", "connector-id")
 	markMutating(mcpToolsetsUpdateCmd)
 	mcpToolsetsCmd.AddCommand(mcpToolsetsUpdateCmd)

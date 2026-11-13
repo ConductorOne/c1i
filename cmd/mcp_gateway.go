@@ -167,5 +167,6 @@ func classifyGatewayError(err error) error {
 
 func init() {
 	mcpGatewayCmd.PersistentFlags().String("gateway-url", "", "MCP gateway endpoint (default: derived from --url by inserting -mcp into the host)")
+	allowEmpty(mcpGatewayCmd, emptyIsOmitted, "gateway-url")
 	mcpCmd.AddCommand(mcpGatewayCmd)
 }

@@ -591,6 +591,7 @@ func init() {
 	allowEmpty(mcpClassifierTemplatesAddRuleCmd, emptyIsOmitted, "body-file")
 	for _, command := range []*cobra.Command{mcpClassifiersUpdateCmd, mcpClassifierPolicyUpdateCmd, mcpClassifierToolGatesUpdateCmd} {
 		command.Flags().String("update-mask", "", "Comma-separated camelCase fields to update")
+		setBlankHint(command, "update-mask", updateMaskBlankHint)
 		markRequired(command, "update-mask")
 	}
 

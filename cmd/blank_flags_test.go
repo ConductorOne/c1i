@@ -110,8 +110,8 @@ func runEAfterBlankCheck(c *cobra.Command, args []string) error {
 	return c.RunE(c, args)
 }
 
-// visitStringFlagsWithGlobals visits c's own string flags and rootCmd's
-// persistent ones, which cobra merges into c only at execution.
+// visitStringFlagsWithGlobals visits c's own string flags and every
+// ancestor's persistent ones, which cobra merges into c only at execution.
 func visitStringFlagsWithGlobals(c *cobra.Command, fn func(*pflag.Flag)) {
 	seen := map[string]bool{}
 	visit := func(f *pflag.Flag) {
@@ -121,7 +121,26 @@ func visitStringFlagsWithGlobals(c *cobra.Command, fn func(*pflag.Flag)) {
 		}
 	}
 	c.Flags().VisitAll(visit)
-	rootCmd.PersistentFlags().VisitAll(visit)
+	for p := c.Parent(); p != nil; p = p.Parent() {
+		p.PersistentFlags().VisitAll(visit)
+	}
+}
+
+// listCommandNonFilters are the allowEmpty flags on list/search/export
+// commands that select something other than which rows come back.
+var listCommandNonFilters = map[string]string{
+	"c1i export events --sort":            "result order",
+	"c1i mcp servers search --tool-state": "which tools are counted, not which servers are listed",
+}
+
+// isListCommand reports whether c returns a set of rows that a flag could
+// narrow, so an empty flag there would widen the result.
+func isListCommand(c *cobra.Command) bool {
+	switch c.Name() {
+	case "list", "list-ids", "list-tools", "search", "events", "endpoints":
+		return true
+	}
+	return false
 }
 
 // blankFlagMessage is the part of the blank-value error every flag shares;
@@ -146,8 +165,10 @@ func TestBlankAllowedFlagsAreJustified(t *testing.T) {
 				if len(reason) != 1 || !hasVisibleRune(reason[0]) {
 					t.Errorf("%s --%s: allowEmpty needs a reason, got %q", c.CommandPath(), f.Name, reason)
 				}
-				if strings.Contains(strings.ToLower(f.Usage), "filter") {
-					t.Errorf("%s --%s: a filter must not allowEmpty", c.CommandPath(), f.Name)
+				key := c.CommandPath() + " --" + f.Name
+				if strings.Contains(strings.ToLower(f.Usage), "filter") ||
+					(isListCommand(c) && c.LocalFlags().Lookup(f.Name) != nil && listCommandNonFilters[key] == "") {
+					t.Errorf("%s: a filter must not allowEmpty (a non-filter on a list command goes in listCommandNonFilters)", key)
 				}
 				return
 			}

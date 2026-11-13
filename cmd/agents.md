@@ -449,10 +449,12 @@ resource with `--resource-id` likewise means you drop
 - A blank value (empty, whitespace or invisible-only) on any flag or
   positional exits 2 before any request, so an unset shell variable cannot
   drop a filter (`--state "$STATE"` no longer lists everything). Only flags
-  where `""` means something take it: an update's `--description` clears it,
+  where `""` means something take it: an update's `--description ""` is sent
+  (clearing it where `--help` says so),
   `--fields ""`/`--error-format ""` override `C1I_FIELDS`/`C1I_ERROR_FORMAT`,
-  and optional flags like `--comment` or `-o` read it as not given. Never a
-  filter.
+  and optional flags like `--comment`, `-o` or `--gateway-url` read it as not
+  given. Never a filter. Env vars and `~/.c1i.yaml` are not covered:
+  `C1I_FIELDS=" "` still reads as no projection.
 - `mcp tools approve` takes one or more tool ids in a single invocation:
   `approve id1 id2 id3 --app-id A --connector-id C` approves a whole toolset in
   one process (one token, one TLS handshake). The API has no batch approve, so

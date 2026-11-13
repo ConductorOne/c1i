@@ -145,8 +145,8 @@ func TestEntitlementCreatePlanUsageErrors(t *testing.T) {
 			"flag --resource-type requires a non-empty value",
 		},
 		{
-			// With --resource-type-id set, the reuse rejection is the more
-			// useful message: the flag does not belong at all.
+			// The blank rule runs before the reuse rejection, so a blank
+			// --resource-type is refused as blank even alongside --resource-type-id.
 			"empty resource type alongside a reused type",
 			[]string{"--app-id", "app1", "--display-name", "e", "--resource-type-id", "rt1", "--resource-type", ""},
 			"flag --resource-type requires a non-empty value",

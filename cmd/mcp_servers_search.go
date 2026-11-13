@@ -129,6 +129,8 @@ func init() {
 	mcpServersSearchCmd.Flags().String("app-id", "", "Application ID")
 	mcpServersSearchCmd.Flags().String("query", "", "Fuzzy search on display_name")
 	mcpServersSearchCmd.Flags().String("tool-state", "", "Tool state to count: "+toolStateFlag.usage()+". Without it, tool_count is omitted (the server does not compute a count)")
+	// Picks which tools to count; it does not narrow the rows.
+	allowEmpty(mcpServersSearchCmd, emptyIsOmitted, "tool-state")
 	mcpServersSearchCmd.Flags().Bool("include-last-called-at", false, "Populate last_called_at per row (extra read per server)")
 	addPaginationFlags(mcpServersSearchCmd)
 	markRequired(mcpServersSearchCmd, "app-id")

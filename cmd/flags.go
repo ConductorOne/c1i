@@ -52,7 +52,7 @@ const emptyAllowedAnnotation = "c1i_empty_allowed"
 // allowEmpty reasons. Filters never take one: an empty filter is refused, so
 // `--state "$UNSET"` cannot silently widen a list.
 const (
-	emptyClears       = "an empty value is sent and clears the field"
+	emptyIsSent       = "an empty value is sent as given (an update's clears the field where --help says so)"
 	emptyIsOmitted    = "an empty value is the same as omitting the flag"
 	emptyOverridesEnv = "an empty value overrides the environment variable and config file"
 )
@@ -712,9 +712,6 @@ func bodyFileMask(cmd *cobra.Command, exclusive ...string) (mask string, usingBo
 	}
 	if !f.Changed("update-mask") {
 		return "", true, &usageError{fmt.Errorf("--update-mask is required together with --body-file")}
-	}
-	if !hasVisibleRune(mask) {
-		return "", true, &usageError{errors.New("--update-mask is blank; " + updateMaskBlankHint)}
 	}
 	paths := strings.Split(mask, ",")
 	for i, p := range paths {

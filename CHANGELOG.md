@@ -20,13 +20,14 @@ unfiltered list. Omit the flag when the variable is empty, for example
   `tasks list --state "$STATE"` with `STATE` unset listed every task at exit
   0, and a whitespace-only value on an optional flag was often sent verbatim.
   This applies to every filter (`--state`, `--status`, `--type`, `--query`,
-  `--email`, `--tool-state`, `--calls-function`, `policies search
-  --display-name`, `docs endpoints --filter`, and `--body-file` on `findings
-  search`/`findings audits search`), plus `--url`. Flags whose empty value
+  `--email`, `--calls-function`, `policies search --display-name`, `docs
+  endpoints --filter`, `export events --since`/`--until`/`--since-event-uid`,
+  and `--body-file` on `findings search`/`findings audits search`). Flags whose empty value
   means something still take an exact `""`: an update's `--description`
   clears it, `--fields ""` and `--error-format ""` override `C1I_FIELDS` and
   `C1I_ERROR_FORMAT`, and optional flags such as `--comment`, a create's
-  `--description`, `-o` and `export events --sort` read it as not given.
+  `--description`, `-o`, `--gateway-url`, `export events --sort` and `mcp
+  servers search --tool-state` read it as not given.
   Whitespace-only is refused on those too.
 
 ### Fixed

@@ -456,7 +456,7 @@ func addEntitlementCreateFlags(cmd *cobra.Command) {
 	f.String("description", "", "Description for the new entitlement")
 	f.String("slug", "", "Slug for the new entitlement (e.g. member)")
 	f.String("alias", "", "Alias for the new entitlement; exact-match queryable")
-	allowEmpty(entitlementsCreateCmd, emptyIsOmitted, "description", "slug", "alias")
+	allowEmpty(cmd, emptyIsOmitted, "description", "slug", "alias")
 	addProtoDurationFlag(cmd, "duration-grant", "Maximum grant duration as a protobuf duration, e.g. 3600s; a Go duration such as 8h is converted to seconds; a sign or decimal (-1h, 1.5h) exits 2; omit for standing access")
 	registerPolicyIDFlags(cmd, entitlementPolicyKinds, " (omit to leave unset)")
 	// StringArray, not StringSlice: the slice parser drops an empty value
