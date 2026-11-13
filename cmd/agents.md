@@ -283,7 +283,9 @@ Rule of thumb: a product concept starts at `docs search` → `docs page`; a raw
 - Values keep their real JSON types: booleans and numbers are never
   stringified, so `jq 'select(.enabled)'` and numeric comparisons behave.
 - `--fields id,user.email` projects to just those dot-paths; `C1I_FIELDS`
-  sets the same thing for the whole session.
+  sets the same thing for the whole session. A spec that names no path (`,`,
+  `"$A,$B"` with both unset) or has an empty segment (`id.`) exits 2 from any
+  of the three channels, rather than printing full rows.
 
 Choose the simplest output tool:
 
@@ -453,8 +455,8 @@ resource with `--resource-id` likewise means you drop
   (clearing it where `--help` says so),
   `--fields ""`/`--error-format ""` override `C1I_FIELDS`/`C1I_ERROR_FORMAT`,
   and optional flags like `--comment`, `-o` or `--gateway-url` read it as not
-  given. Never a filter. Env vars and `~/.c1i.yaml` are not covered:
-  `C1I_FIELDS=" "` still reads as no projection.
+  given. Never a filter. Env vars and `~/.c1i.yaml` go through their own
+  parsers instead (an empty `C1I_FIELDS` is unset; `C1I_FIELDS=" "` exits 2).
 - `mcp tools approve` takes one or more tool ids in a single invocation:
   `approve id1 id2 id3 --app-id A --connector-id C` approves a whole toolset in
   one process (one token, one TLS handshake). The API has no batch approve, so

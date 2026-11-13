@@ -6,6 +6,7 @@ import (
 	"math"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strconv"
 	"strings"
 	"unicode/utf8"
@@ -191,7 +192,7 @@ type globalEnvSetting struct {
 
 var globalEnvSettings = []globalEnvSetting{
 	{key: "url", env: urlEnvVar, flag: "url"},
-	{key: "fields", env: "C1I_FIELDS", flag: "fields"},
+	{key: "fields", env: "C1I_FIELDS", flag: "fields", parse: parseFieldsSetting},
 	{key: "max_retries", env: "C1I_MAX_RETRIES", flag: "max-retries", parse: parseMaxRetries},
 	{key: "error_format", env: "C1I_ERROR_FORMAT", flag: "error-format", parse: parseErrorFormat, everywhere: true},
 	{key: "debug", env: "C1I_DEBUG", flag: "debug", parse: parseBoolValue},
@@ -224,21 +225,27 @@ func validateGlobalSettings(cmd *cobra.Command) error {
 		}
 	}
 	for _, s := range globalEnvSettings {
-		if s.parse == nil || (local && !s.everywhere) {
+		if local && !s.everywhere {
 			continue
+		}
+		// A free-form setting (url) has no parser, but its config value still
+		// gets the list/map check below.
+		parse := s.parse
+		if parse == nil {
+			parse = func(string) error { return nil }
 		}
 		if f := cmd.Flags().Lookup(s.flag); s.flag != "" && f != nil && f.Changed {
 			// pflag parsed a bool or int; a string flag (--error-format) is
 			// only checked here. A blank one is left to validateBlankFlags.
 			if v := f.Value.String(); hasVisibleRune(v) {
-				if err := s.parse(v); err != nil {
+				if err := parse(v); err != nil {
 					return &usageError{fmt.Errorf("invalid --%s %q: %w", s.flag, v, err)}
 				}
 			}
 			continue
 		}
 		if v := os.Getenv(s.env); v != "" {
-			if err := s.parse(v); err != nil {
+			if err := parse(v); err != nil {
 				return &usageError{fmt.Errorf("invalid %s %q: %w", s.env, v, err)}
 			}
 			continue
@@ -258,9 +265,14 @@ func validateGlobalSettings(cmd *cobra.Command) error {
 		if f, ok := raw.(float64); ok && f == math.Trunc(f) && math.Abs(f) < 1<<53 {
 			raw = int64(f)
 		}
-		// A string, map or list fails the parser like any other garbage.
+		// viper reads a list or map as "", so `fields: [id, email]` silently
+		// meant no projection: refuse it rather than parse its Sprint form.
+		switch reflect.ValueOf(raw).Kind() {
+		case reflect.Slice, reflect.Array, reflect.Map:
+			return &usageError{fmt.Errorf("invalid %s in ~/.c1i.yaml: want a single value, not a list or map", s.key)}
+		}
 		if v := fmt.Sprint(raw); v != "" {
-			if err := s.parse(v); err != nil {
+			if err := parse(v); err != nil {
 				return &usageError{fmt.Errorf("invalid %s %q in ~/.c1i.yaml: %w", s.key, v, err)}
 			}
 		}

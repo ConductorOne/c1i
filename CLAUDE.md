@@ -229,8 +229,9 @@ tracked root file outside its allowlist. Stage explicit paths rather than `-A`.
   flag-specific hint goes through `setBlankHint`. `requireNonEmpty` stays only
   where the command itself requires a flag cobra does not (`annotateRequired`,
   or required in one mode). The rule covers flags only: `C1I_*` env vars and
-  `~/.c1i.yaml` values still go through `globalEnvSettings` parsers, and
-  `fields` has none yet (`C1I_FIELDS=" "` reads as no projection).
+  `~/.c1i.yaml` values go through their `globalEnvSettings` parsers, so a
+  setting whose blank value is wrong needs a parser there too (`fields` uses
+  `parseFieldSpec`, the same function projection does).
   `TestBlankStringFlagsExitUsage` and `TestBlankPositionalsExitUsage` walk the
   tree; `TestEmptyAllowedInventoryIsPinned` pins every opt-out (adding or
   removing one is a deliberate edit there), and

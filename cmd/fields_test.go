@@ -34,25 +34,41 @@ func TestFieldPathsAndEmitterReadViper(t *testing.T) {
 	}
 }
 
-func TestParseFieldPaths(t *testing.T) {
+func TestParseFieldSpec(t *testing.T) {
 	cases := map[string][][]string{
 		"":              nil,
-		"   ":           nil,
-		",":             nil,
 		"id":            {{"id"}},
 		"id,email":      {{"id"}, {"email"}},
 		" id , email ":  {{"id"}, {"email"}},
 		"user.email":    {{"user", "email"}},
 		"id,user.email": {{"id"}, {"user", "email"}},
-		"a..b":          nil, // malformed dot-path is dropped
 		"id,,email":     {{"id"}, {"email"}},
+		"id,":           {{"id"}},
 		"a.b.c,d":       {{"a", "b", "c"}, {"d"}},
 	}
 	for spec, want := range cases {
-		if got := parseFieldPaths(spec); !reflect.DeepEqual(got, want) {
-			t.Errorf("parseFieldPaths(%q) = %v, want %v", spec, got, want)
+		got, err := parseFieldSpec(spec)
+		if err != nil || !reflect.DeepEqual(got, want) {
+			t.Errorf("parseFieldSpec(%q) = %v, %v; want %v", spec, got, err, want)
 		}
 	}
+	// A set value that names no path, or an entry with an empty segment,
+	// would switch projection off silently.
+	for _, spec := range []string{"   ", ",", ".", "a..b", "id.", ".id", "id,email.", "\u200b,"} {
+		if got, err := parseFieldSpec(spec); err == nil {
+			t.Errorf("parseFieldSpec(%q) = %v, want an error", spec, got)
+		}
+	}
+}
+
+// mustParseFields parses a spec the test knows is valid.
+func mustParseFields(t *testing.T, spec string) [][]string {
+	t.Helper()
+	paths, err := parseFieldSpec(spec)
+	if err != nil {
+		t.Fatalf("parseFieldSpec(%q): %v", spec, err)
+	}
+	return paths
 }
 
 // projectJSON is a test helper: project a JSON literal and return the result as
@@ -63,7 +79,7 @@ func projectJSON(t *testing.T, in string, spec string) string {
 	if err := json.Unmarshal([]byte(in), &v); err != nil {
 		t.Fatalf("bad input JSON: %v", err)
 	}
-	out := projectValue(v, parseFieldPaths(spec))
+	out := projectValue(v, mustParseFields(t, spec))
 	b, err := json.Marshal(out)
 	if err != nil {
 		t.Fatalf("marshal projected: %v", err)
@@ -129,7 +145,7 @@ func TestProjectValueNonObjectUnchanged(t *testing.T) {
 
 func TestProjectBytesPreservesLargeNumbers(t *testing.T) {
 	// Regression: round-tripping through float64 would corrupt integers > 2^53.
-	projected, ok := projectBytes([]byte(`{"id":1234567890123456789,"big":1e21,"drop":1}`), parseFieldPaths("id,big"))
+	projected, ok := projectBytes([]byte(`{"id":1234567890123456789,"big":1e21,"drop":1}`), mustParseFields(t, "id,big"))
 	if !ok {
 		t.Fatal("projectBytes returned ok=false on valid JSON")
 	}
@@ -142,18 +158,18 @@ func TestProjectBytesPreservesLargeNumbers(t *testing.T) {
 func TestProjectBytesRejectsTrailingData(t *testing.T) {
 	// Concatenated/NDJSON input must not be silently truncated to its first
 	// value; projectBytes reports ok=false so the caller emits raw.
-	if _, ok := projectBytes([]byte(`{"id":"1"}{"id":"2"}`), parseFieldPaths("id")); ok {
+	if _, ok := projectBytes([]byte(`{"id":"1"}{"id":"2"}`), mustParseFields(t, "id")); ok {
 		t.Error("expected ok=false for multi-value input")
 	}
 	// A single value with trailing whitespace is still fine.
-	if _, ok := projectBytes([]byte("{\"id\":\"1\"}\n  "), parseFieldPaths("id")); !ok {
+	if _, ok := projectBytes([]byte("{\"id\":\"1\"}\n  "), mustParseFields(t, "id")); !ok {
 		t.Error("expected ok=true for a single value with trailing whitespace")
 	}
 }
 
 func TestProjectBytesArrayElementwise(t *testing.T) {
 	// A top-level array is projected element by element.
-	projected, ok := projectBytes([]byte(`[{"id":"1","x":9},{"id":"2","x":8}]`), parseFieldPaths("id"))
+	projected, ok := projectBytes([]byte(`[{"id":"1","x":9},{"id":"2","x":8}]`), mustParseFields(t, "id"))
 	if !ok {
 		t.Fatal("projectBytes ok=false")
 	}
@@ -165,7 +181,7 @@ func TestProjectBytesArrayElementwise(t *testing.T) {
 
 func TestEmitterProjects(t *testing.T) {
 	var buf bytes.Buffer
-	e := &emitter{enc: json.NewEncoder(&buf), paths: parseFieldPaths("id,user.email")}
+	e := &emitter{enc: json.NewEncoder(&buf), paths: mustParseFields(t, "id,user.email")}
 	row := map[string]any{"id": "1", "user": map[string]any{"email": "a@b.c", "name": "n"}, "extra": "drop"}
 	if err := e.Encode(row); err != nil {
 		t.Fatalf("encode: %v", err)
@@ -182,7 +198,7 @@ func TestEmitterRawMessagePreservesNumbers(t *testing.T) {
 	// This is the shape the api --paginate loop feeds the emitter: a raw
 	// json.RawMessage list item. Numbers must survive both with and without
 	// projection (no float64 round-trip).
-	for _, paths := range [][][]string{nil, parseFieldPaths("id")} {
+	for _, paths := range [][][]string{nil, mustParseFields(t, "id")} {
 		var buf bytes.Buffer
 		e := &emitter{enc: json.NewEncoder(&buf), paths: paths}
 		if err := e.Encode(json.RawMessage(`{"id":` + big + `,"x":1}`)); err != nil {

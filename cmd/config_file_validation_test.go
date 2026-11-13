@@ -76,6 +76,13 @@ func TestConfigFileValidation(t *testing.T) {
 		{name: "error_format flag xml", wantExit: exitUsage, args: append(append([]string{}, envTestArgs...), "--error-format", "xml"),
 			wantErr: `invalid --error-format "xml": want text or json`},
 		{name: "error_format valid", yaml: "error_format: JSON\n", wantReqs: 1},
+		{name: "list value", yaml: "dry_run: [true]\n", wantExit: exitUsage,
+			wantErr: `invalid dry_run in ~/.c1i.yaml: want a single value, not a list or map`},
+		{name: "map value", yaml: "fields: {id: email}\n", wantExit: exitUsage,
+			wantErr: `invalid fields in ~/.c1i.yaml: want a single value, not a list or map`},
+		{name: "list value, free-form setting", yaml: "url: [https://tenant.example.invalid]\n",
+			env: map[string]string{"C1I_URL": ""}, wantExit: exitUsage,
+			wantErr: `invalid url in ~/.c1i.yaml: want a single value, not a list or map`},
 		{name: "integral float max_retries", yaml: "max_retries: 1e6\n", wantReqs: 1},
 
 		{name: "token cache env garbage", env: map[string]string{tokenCacheEnv: "maybe"}, wantExit: exitUsage,

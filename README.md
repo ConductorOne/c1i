@@ -564,7 +564,11 @@ APPS_WITH_USERS="$(c1i apps list | jq -c 'if .user_count > 0 then . else empty e
 APP_ID=$(c1i apps create --display-name "Example" | jq -er .id)
 ```
 
-- Comma-separated; use dot-paths (`user.email`) for nested access.
+- Comma-separated; use dot-paths (`user.email`) for nested access. A trailing
+  comma is fine, but a value that names no path (`,`, `.`, or `"$A,$B"` with
+  both unset) or has an empty segment (`id.`, `a..b`) is a usage error (exit
+  `2`), from `--fields`, `C1I_FIELDS` or `~/.c1i.yaml` alike; it used to turn
+  projection off. `--fields ""` turns a session-wide `C1I_FIELDS` off.
 - Matches the emitted keys, trying an **exact match first**, then falling back
   to a **case- and separator-insensitive** match. So `--fields displayName`
   resolves whether the output uses `displayName` (single-object reads) or

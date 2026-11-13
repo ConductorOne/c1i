@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"sort"
 	"strings"
@@ -20,39 +21,48 @@ import (
 // preserved in the result. It applies to both NDJSON list rows and single
 // pretty-printed objects, via the emitter and writeObject helpers below.
 
-// parseFieldPaths splits a `--fields` value ("id,user.email") into dot-path
-// segments ([["id"],["user","email"]]). Empty and whitespace-only entries are
-// dropped, so a trailing comma or a bare "" yields no path.
-func parseFieldPaths(spec string) [][]string {
-	if strings.TrimSpace(spec) == "" {
-		return nil
+// parseFieldSpec splits a `--fields` value ("id,user.email") into dot-path
+// segments ([["id"],["user","email"]]). "" means no projection. Blank entries
+// are skipped (a trailing comma is fine), but a set value that names no path,
+// or an entry with an empty segment ("id.", "a..b"), is an error: either
+// would silently switch projection off and print full rows. Flag, C1I_FIELDS
+// and ~/.c1i.yaml are all checked with it, via globalEnvSettings.
+func parseFieldSpec(spec string) ([][]string, error) {
+	if spec == "" {
+		return nil, nil
 	}
 	var paths [][]string
 	for _, raw := range strings.Split(spec, ",") {
-		field := strings.TrimSpace(raw)
-		if field == "" {
+		if !hasVisibleRune(raw) {
 			continue
 		}
 		var segs []string
-		for _, seg := range strings.Split(field, ".") {
-			seg = strings.TrimSpace(seg)
-			if seg == "" {
-				segs = nil
-				break
+		for _, seg := range strings.Split(raw, ".") {
+			if !hasVisibleRune(seg) {
+				return nil, fmt.Errorf("%q has an empty path segment", strings.TrimSpace(raw))
 			}
-			segs = append(segs, seg)
+			segs = append(segs, strings.TrimSpace(seg))
 		}
-		if len(segs) > 0 {
-			paths = append(paths, segs)
-		}
+		paths = append(paths, segs)
 	}
-	return paths
+	if len(paths) == 0 {
+		return nil, errors.New("names no field path")
+	}
+	return paths, nil
+}
+
+// parseFieldsSetting is fields' globalEnvSettings parser.
+func parseFieldsSetting(s string) error {
+	_, err := parseFieldSpec(s)
+	return err
 }
 
 // fieldPaths returns the projection requested via --fields / C1I_FIELDS, or nil
-// when none was set (meaning "emit everything").
+// when none was set (meaning "emit everything"). The value was validated
+// before the command ran.
 func fieldPaths() [][]string {
-	return parseFieldPaths(viper.GetString("fields"))
+	paths, _ := parseFieldSpec(viper.GetString("fields"))
+	return paths
 }
 
 // projectValue returns a copy of v containing only paths, with nesting
