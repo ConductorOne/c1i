@@ -22,8 +22,8 @@ exit 0.
 `c1i` resolves the tenant in this order: `--url`, `C1I_URL`, then `url:` in
 `~/.c1i.yaml` (never read with a relative `HOME`). It must be a full host —
 `example.conductor.one` or `example.c1eu.ai` (EU) — and `https` is
-required:
-a bare `example`, a non-https scheme, and a malformed host (an embedded space
+required. An explicit `:443` is dropped (another port is kept) and a path, query
+or fragment is ignored. A bare `example`, a non-https scheme, and a malformed host (an embedded space
 or control character, or a stray scheme like `://host`) are all usage errors
 (exit `2`) before any request is sent.
 Every command that resolves a C1 tenant URL prints a `Warning: no --url flag

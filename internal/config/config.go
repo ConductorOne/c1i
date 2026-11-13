@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"net"
 	"net/url"
 	"strings"
 	"unicode"
@@ -28,6 +29,9 @@ import (
 // the degenerate fallback path (below) is rejected the same way. On any error
 // the caller should name where input came from (--url flag, C1I_URL, config
 // file, interactive prompt) in how it surfaces err -- see GetBaseURLWithSource.
+//
+// An explicit :443 is dropped (it is the https default) and any other port is
+// kept. Path, query and fragment are ignored: requests go to the API root.
 //
 // A scheme other than https (e.g. "http://", "ftp://") is rejected outright
 // -- c1i requires https, full stop, no silent upgrade and no exception for
@@ -69,7 +73,7 @@ func ParseURL(input string) (result string, warnings []string, err error) {
 				// The username is not named: https://<token>@host puts a secret there.
 				warnings = append(warnings, "--url embedded credentials were dropped; "+credentialsNotInURL)
 			}
-			return "https://" + strings.ToLower(u.Host), warnings, nil
+			return "https://" + canonicalHost(u.Host), warnings, nil
 		}
 		// url.Parse failed, or found no host: fall back to the literal input,
 		// lower-cased -- but strip anything before a trailing "@" first so a
@@ -77,7 +81,7 @@ func ParseURL(input string) (result string, warnings []string, err error) {
 		// on this degenerate path. There is no parsed URL to name the user
 		// from, but the drop must still not be silent.
 		stripped := withoutUserinfo(input)
-		host := strings.ToLower(stripped)
+		host := canonicalHost(stripped)
 		if !isHostShaped(host) {
 			// Reject rather than build a nonsense base URL ("https://",
 			// "//", "://host") that only fails later, far from the input.
@@ -131,6 +135,20 @@ func isHostShaped(s string) bool {
 	return true
 }
 
+// canonicalHost lower-cases host and drops the default https port, so ":443"
+// and no port name one endpoint and one credential key. It is the single place
+// that decides this; every consumer reads the host ParseURL returns.
+func canonicalHost(host string) string {
+	host = strings.ToLower(host)
+	if h, port, err := net.SplitHostPort(host); err == nil && port == "443" {
+		if strings.Contains(h, ":") {
+			return "[" + h + "]"
+		}
+		return h
+	}
+	return host
+}
+
 // KeychainService returns the keychain service name for a given base URL.
 // The host is lower-cased independent of whether baseURL already went
 // through ParseURL, so a caller that bypasses ParseURL can't reintroduce a
@@ -138,9 +156,20 @@ func isHostShaped(s string) bool {
 func KeychainService(baseURL string) string {
 	u, err := url.Parse(baseURL)
 	if err == nil && u.Host != "" {
-		return "c1i/" + strings.ToLower(u.Host)
+		return "c1i/" + canonicalHost(u.Host)
 	}
 	return "c1i/" + strings.ToLower(baseURL)
+}
+
+// ExplicitPortKeychainService returns the key a credential was stored under
+// when --url carried an explicit :443, before ParseURL dropped the default
+// port, or "" if baseURL names a port itself.
+func ExplicitPortKeychainService(baseURL string) string {
+	u, err := url.Parse(baseURL)
+	if err != nil || u.Host == "" || u.Port() != "" {
+		return ""
+	}
+	return KeychainService(baseURL) + ":443"
 }
 
 // LegacyKeychainService returns the old-style keychain service name if the host

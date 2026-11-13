@@ -225,6 +225,9 @@ These are equivalent:
 - `--url https://example.conductor.one`
 - `--url example.conductor.one`
 - `--url EXAMPLE.CONDUCTOR.ONE` (the host is lower-cased)
+- `--url https://example.conductor.one:443` (the default https port is dropped; any other port is kept)
+
+A path, query or fragment in `--url` is ignored: requests go to the API root.
 
 **Every command prints which tenant it's about to use when the URL came from
 `~/.c1i.yaml`.** Nothing on the command line names the config file, so a

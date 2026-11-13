@@ -11,6 +11,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/ConductorOne/c1i/internal/keychain"
 	"github.com/ConductorOne/c1i/internal/tokensource"
 	"github.com/zalando/go-keyring"
 )
@@ -301,5 +302,38 @@ func TestPatchSendsBodyAndContentType(t *testing.T) {
 	}
 	if gotBody != `{"hello":"world"}` {
 		t.Errorf("body = %q", gotBody)
+	}
+}
+
+// TestLoadCredentialsFindsCredentialStoredUnderExplicitPort: before :443 was
+// normalized away, "auth login --url https://host:443" stored under
+// "c1i/host:443". It must stay reachable, and move to the plain key.
+func TestLoadCredentialsFindsCredentialStoredUnderExplicitPort(t *testing.T) {
+	keyring.MockInit()
+	dir := t.TempDir()
+	switch runtime.GOOS {
+	case "windows":
+		t.Setenv("AppData", dir)
+	case "darwin":
+		t.Setenv("HOME", dir)
+	default:
+		t.Setenv("XDG_CONFIG_HOME", dir)
+	}
+	t.Setenv("C1I_CLIENT_ID", "")
+	t.Setenv("C1I_CLIENT_SECRET", "")
+	_ = os.Unsetenv("C1I_CLIENT_ID")
+	_ = os.Unsetenv("C1I_CLIENT_SECRET")
+	if _, err := keychain.Store("c1i/acme.example:443", "id-1", "secret-1"); err != nil {
+		t.Fatal(err)
+	}
+	id, secret, err := loadCredentials("https://acme.example")
+	if err != nil || id != "id-1" || secret != "secret-1" {
+		t.Fatalf("loadCredentials = %q, %q, %v; want the :443 credential", id, secret, err)
+	}
+	if _, _, _, err := keychain.Load("c1i/acme.example"); err != nil {
+		t.Errorf("credential was not migrated to the plain key: %v", err)
+	}
+	if _, _, _, err := keychain.Load("c1i/acme.example:443"); err == nil {
+		t.Error("the :443 copy was left behind after migration")
 	}
 }
