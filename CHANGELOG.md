@@ -22,12 +22,13 @@ unfiltered list. Omit the flag when the variable is empty, for example
   This applies to every filter (`--state`, `--status`, `--type`, `--query`,
   `--email`, `--calls-function`, `policies search --display-name`, `docs
   endpoints --filter`, `export events --since`/`--until`/`--since-event-uid`,
-  and `--body-file` on `findings search`/`findings audits search`). Flags whose empty value
+  and `--body-file` on the `search` commands that take one). Flags whose empty value
   means something still take an exact `""`: an update's `--description`
   clears it, `--fields ""` and `--error-format ""` override `C1I_FIELDS` and
-  `C1I_ERROR_FORMAT`, and optional flags such as `--comment`, a create's
-  `--description`, `-o`, `--gateway-url`, `export events --sort` and `mcp
-  servers search --tool-state` read it as not given.
+  `C1I_ERROR_FORMAT`, a create's `--description ""` is sent or omitted as
+  before, and optional flags such as `--comment`, `-o`, `--gateway-url`,
+  `export events --sort` and `mcp servers search --tool-state` read it as not
+  given.
   Whitespace-only is refused on those too.
 
 ### Fixed

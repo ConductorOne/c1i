@@ -227,7 +227,9 @@ tracked root file outside its allowlist. Stage explicit paths rather than `-A`.
   or required in one mode). `TestBlankStringFlagsExitUsage` and
   `TestBlankPositionalsExitUsage` walk the tree;
   `TestBlankAllowedFlagsAreJustified` fails an opt-out without a reason, on a
-  filter, or missing where help promises an empty value clears;
+  filter, or missing where help promises an empty value clears; an opt-out
+  on a list command (it paginates, or is named list/search/history/...) must
+  be named in `listCommandNonFilters` with why it is not a filter;
   `TestRequiredUsageMatchesAnnotation` fails a hand-written "(required)" that
   lacks the annotation. Never use `Changed()` or
   `TrimSpace(v) == ""` as the signal when a value's content matters:

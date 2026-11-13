@@ -131,16 +131,42 @@ func visitStringFlagsWithGlobals(c *cobra.Command, fn func(*pflag.Flag)) {
 var listCommandNonFilters = map[string]string{
 	"c1i export events --sort":            "result order",
 	"c1i mcp servers search --tool-state": "which tools are counted, not which servers are listed",
+	"c1i api --method":                    "request shape, not a filter",
+	"c1i api --body":                      "request shape, not a filter",
+	"c1i api --body-file":                 "request shape, not a filter",
+	"c1i api --list-key":                  "which response field is the list, not a filter",
 }
 
 // isListCommand reports whether c returns a set of rows that a flag could
-// narrow, so an empty flag there would widen the result.
+// narrow, so an empty flag there would widen the result: it paginates, or its
+// name says so.
 func isListCommand(c *cobra.Command) bool {
+	if c.LocalFlags().Lookup("page-token") != nil || c.LocalFlags().Lookup("limit") != nil {
+		return true
+	}
 	switch c.Name() {
-	case "list", "list-ids", "list-tools", "search", "events", "endpoints":
+	case "list", "list-ids", "list-tools", "search", "events", "endpoints", "history":
 		return true
 	}
 	return false
+}
+
+// Every listCommandNonFilters entry must still name an allowEmpty flag, or a
+// renamed flag would leave a silent exemption behind.
+func TestListCommandNonFiltersAreCurrent(t *testing.T) {
+	live := map[string]bool{}
+	for _, c := range blankCheckCommands() {
+		c.LocalFlags().VisitAll(func(f *pflag.Flag) {
+			if f.Annotations[emptyAllowedAnnotation] != nil && isListCommand(c) {
+				live[c.CommandPath()+" --"+f.Name] = true
+			}
+		})
+	}
+	for key := range listCommandNonFilters {
+		if !live[key] {
+			t.Errorf("listCommandNonFilters has %q, which is not an allowEmpty flag on a list command", key)
+		}
+	}
 }
 
 // blankFlagMessage is the part of the blank-value error every flag shares;

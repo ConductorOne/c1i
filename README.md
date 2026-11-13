@@ -460,8 +460,9 @@ with `STATE` unset cannot silently list everything. A few flags take an exact
 given, clearing the field where `--help` says so, and `mcp servers update
 --tool-prefix`/`--data-sensitivity` and the `access-profiles` behavior flags
 also send `""`; `--fields ""` and `--error-format ""` override `C1I_FIELDS`
-and `C1I_ERROR_FORMAT`; and optional flags such as `--comment`, a create's
-`--description`, `-o` or `--gateway-url` read it as not given. Whitespace-only
+and `C1I_ERROR_FORMAT`; and optional flags such as `--comment`, `-o` or
+`--gateway-url` read it as not given (a create's `--description ""` is sent
+by `access-profiles create` and `webhooks create`, omitted by the others). Whitespace-only
 is refused on those too. Filters never take an empty value. Environment
 variables and `~/.c1i.yaml` are not covered by this rule.
 
