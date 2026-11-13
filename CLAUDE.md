@@ -36,14 +36,18 @@ go test -count=1 -shuffle=on ./...     # CI gates on this; catches tests that
 ```
 
 One shuffled run proves only its own seed. Before pushing, sweep many seeds in
-a clean environment (no `C1I_*` variables, an empty HOME), as CI runs:
+a clean environment (no `C1I_*` variables, an empty HOME), as CI runs. Each
+`./cmd` run is serial (~35s: its tests share global command state), so run
+seeds side by side; 8 at a time takes about 2.5 minutes instead of 15:
 
 ```sh
-(for i in $(seq 25); do
-  env -i PATH="$PATH" HOME="$(mktemp -d)" GOCACHE="$(go env GOCACHE)" \
-    GOMODCACHE="$(go env GOMODCACHE)" go test -count=1 -shuffle=on ./cmd || exit 1
-done)
+export GC="$(go env GOCACHE)" GM="$(go env GOMODCACHE)"
+seq 25 | xargs -P 8 -I{} sh -c 'env -i PATH="$PATH" HOME="$(mktemp -d)" \
+  GOCACHE="$GC" GOMODCACHE="$GM" go test -count=1 -shuffle=on ./cmd \
+  > dev/sweep-{}.log 2>&1 || { grep -m3 -E "shuffle|--- FAIL" dev/sweep-{}.log; exit 255; }'
 ```
+
+Don't edit the tree while it runs: every seed compiles the working copy.
 
 Don't set `GOTOOLCHAIN=local` for this unless `go version` matches `go.mod`;
 it runs whatever Go is on PATH instead of the version CI uses.
