@@ -68,8 +68,9 @@ still needs none.
   ignored; it is now a usage error (exit 2). Write `fields: "id,email"`.
 - `--dry-run` skipped the existence checks a real run makes, so it previewed
   success for an unknown user or policy id that the real run refuses. It now
-  refuses the same way, and `policies update --dry-run` no longer needs
-  `--policy-type`: the type is looked up and shown in the preview.
+  refuses the same way, and `policies update --dry-run` on a steps change no
+  longer needs `--policy-type`: it looks up the policy's type for its checks,
+  as a real run does.
 - `--url https://<tenant>:443` (also `C1I_URL` and `url:` in `~/.c1i.yaml`)
   failed with exit 3, "no credentials found", because credentials are stored
   per host and `:443` counted as a different one. The default HTTPS port is now
