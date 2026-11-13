@@ -86,7 +86,7 @@ func TestBlankStringFlagsExitUsage(t *testing.T) {
 					if res.exit != exitUsage {
 						t.Fatalf("exit = %d (err %v), want %d", res.exit, res.err, exitUsage)
 					}
-					if res.err == nil || !strings.Contains(res.err.Error(), "--"+f.Name) || !strings.Contains(res.err.Error(), blankFlagMessage(f.Name)) {
+					if res.err == nil || !strings.Contains(res.err.Error(), "--"+f.Name) || !strings.Contains(res.err.Error(), "requires a non-empty value") {
 						t.Errorf("err = %v, want the blank-value error for --%s", res.err, f.Name)
 					}
 					if got := srv.requests(); len(got) != 0 {
@@ -167,15 +167,6 @@ func TestListCommandNonFiltersAreCurrent(t *testing.T) {
 			t.Errorf("listCommandNonFilters has %q, which is not an allowEmpty flag on a list command", key)
 		}
 	}
-}
-
-// blankFlagMessage is the part of the blank-value error every flag shares;
-// --page-token words its own.
-func blankFlagMessage(name string) string {
-	if name == "page-token" {
-		return "is blank"
-	}
-	return "requires a non-empty value"
 }
 
 // An opt-out must say why, and a flag whose help promises that an empty value

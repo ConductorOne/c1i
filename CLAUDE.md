@@ -224,8 +224,13 @@ tracked root file outside its allowlist. Stage explicit paths rather than `-A`.
   refused. Never on a filter: an empty one silently widens a list. A
   flag-specific hint goes through `setBlankHint`. `requireNonEmpty` stays only
   where the command itself requires a flag cobra does not (`annotateRequired`,
-  or required in one mode). `TestBlankStringFlagsExitUsage` and
-  `TestBlankPositionalsExitUsage` walk the tree;
+  or required in one mode). The rule covers flags only: `C1I_*` env vars and
+  `~/.c1i.yaml` values still go through `globalEnvSettings` parsers, and
+  `fields` has none yet (`C1I_FIELDS=" "` reads as no projection).
+  `TestBlankStringFlagsExitUsage` and `TestBlankPositionalsExitUsage` walk the
+  tree; `TestEmptyAllowedInventoryIsPinned` pins every opt-out (adding or removing one is a deliberate edit there), and
+  `TestEmptyAllowedFlagsAcceptEmpty` checks each still takes `""`, and that an
+  `emptyIsSent` one puts it on the wire;
   `TestBlankAllowedFlagsAreJustified` fails an opt-out without a reason, on a
   filter, or missing where help promises an empty value clears; an opt-out
   on a list command (it paginates, or is named list/search/history/...) must

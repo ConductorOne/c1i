@@ -474,8 +474,8 @@ Every flag that takes a named value (`--state`, `--status`, `--type`,
 whitespace are ignored, `-` and `_` are the same, and the full API name is
 accepted in any case (`--state pending-review`, `--state
 mcp_tool_state_approved`). Its `--help` lists the short names. An unknown or
-non-ASCII value is a usage error (exit 2), rejected before any request, and so
-is a blank one (see [Blank values](#blank-values)).
+non-ASCII value is a usage error (exit 2), rejected before any request. A blank
+one is too, except the few that take an exact `""` (see [Blank values](#blank-values)).
 
 Where `--help` says "or any `PREFIX_*` value", a value carrying that prefix
 is sent upper-cased with `-` changed to `_`, so an enum newer than c1i still

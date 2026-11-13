@@ -74,7 +74,7 @@ func TestBuildAppUpdateBodyExactPatchAndMask(t *testing.T) {
 		{name: "unknown enum", flags: [][2]string{{"identity-matching", "fuzzy"}}, wantError: "invalid --identity-matching"},
 		{name: "unspecified is refused", flags: [][2]string{{"identity-matching", "unspecified"}}, wantError: "invalid --identity-matching"},
 		{name: "unspecified full enum is refused", flags: [][2]string{{"identity-matching", "APP_USER_IDENTITY_MATCHING_UNSPECIFIED"}}, wantError: "invalid --identity-matching"},
-		{name: "empty mapper path", flags: [][2]string{{"app-user-mapper-file", ""}}, wantError: "requires a path"},
+		{name: "empty mapper path", flags: [][2]string{{"app-user-mapper-file", ""}}, wantError: "--app-user-mapper-file requires a non-empty value"},
 		{name: "nothing", wantError: "nothing to update"},
 	}
 	for _, tc := range cases {
@@ -85,7 +85,12 @@ func TestBuildAppUpdateBodyExactPatchAndMask(t *testing.T) {
 					t.Fatalf("set --%s: %v", f[0], err)
 				}
 			}
-			got, err := buildAppUpdateBody(appsUpdateCmd, "app-1")
+			// rootCmd's pre-run refuses blank flags before the body is built.
+			err := validateBlankFlags(appsUpdateCmd)
+			var got map[string]any
+			if err == nil {
+				got, err = buildAppUpdateBody(appsUpdateCmd, "app-1")
+			}
 			if tc.wantError != "" {
 				if err == nil || !strings.Contains(err.Error(), tc.wantError) {
 					t.Fatalf("err = %v, want it to contain %q", err, tc.wantError)

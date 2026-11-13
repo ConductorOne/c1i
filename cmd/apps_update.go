@@ -131,9 +131,6 @@ func buildAppUpdateBody(cmd *cobra.Command, id string) (map[string]any, error) {
 	}
 	if cmd.Flags().Changed("app-user-mapper-file") {
 		mapperFile, _ := cmd.Flags().GetString("app-user-mapper-file")
-		if mapperFile == "" {
-			return nil, fmt.Errorf(`--app-user-mapper-file requires a path (or "-" for stdin)`)
-		}
 		mapper, err := readAppUserMapperFile(cmd, mapperFile)
 		if err != nil {
 			return nil, err

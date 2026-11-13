@@ -199,24 +199,10 @@ func pageSizeUsage(maxSize int) string {
 
 // pageTokenUsage is the shared --page-token description. A non-empty value
 // switches the command to a single request; see the `manualPaging` check in
-// every list command's RunE. A blank value is refused before the command runs
-// (validatePageToken): supplying the flag at all turns auto-pagination off, so
-// a blank token silently truncated the list.
+// every list command's RunE. A blank value is refused by validateBlankFlags:
+// supplying the flag at all turns auto-pagination off, so a blank token
+// silently truncated the list.
 const pageTokenUsage = "Pagination cursor; a non-empty value fetches exactly one page (disables auto-pagination); a blank value is refused, so omit it to auto-paginate" // #nosec G101 -- flag help text; G101 fires on the "Token" in the name
-
-// validatePageToken rejects a --page-token that is set but blank (empty,
-// whitespace-only, or invisible-only). Every list command reads the cursor
-// with `manualPaging := cmd.Flags().Changed("page-token")`, so an empty value
-// from an unset shell variable fetched only the first page and exited 0 --
-// a silently truncated list that looks exactly like a filtered one. Omitting
-// the flag is how you ask for every page.
-func validatePageToken(cmd *cobra.Command) error {
-	f := cmd.Flags().Lookup("page-token")
-	if f == nil || !f.Changed || hasVisibleRune(f.Value.String()) {
-		return nil
-	}
-	return &usageError{errors.New("--page-token is blank: omit the flag to auto-paginate, or pass a non-empty cursor to fetch exactly one page")}
-}
 
 // countFlags is a slice, not a map: with both flags negative, map iteration
 // order would pick which one the error names at random.
@@ -261,6 +247,7 @@ func addPaginationFlagsWithMax(cmd *cobra.Command, def, maxSize int) {
 	// above rules out.
 	_ = cmd.Flags().SetAnnotation("page-size", pageSizeMaxAnnotation, []string{strconv.Itoa(maxSize)})
 	cmd.Flags().String("page-token", "", pageTokenUsage)
+	setBlankHint(cmd, "page-token", "omit the flag to auto-paginate, or pass a non-empty cursor to fetch exactly one page")
 	addLimitFlag(cmd)
 }
 

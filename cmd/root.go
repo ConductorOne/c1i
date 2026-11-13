@@ -61,9 +61,6 @@ For raw API exploration, also with no authentication required:
 		if err := validateBlankArgs(cmd, args); err != nil {
 			return err
 		}
-		if err := validatePageToken(cmd); err != nil {
-			return err
-		}
 		if err := validateBlankFlags(cmd); err != nil {
 			return err
 		}
