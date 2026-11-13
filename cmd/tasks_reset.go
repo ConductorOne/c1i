@@ -31,6 +31,7 @@ mutation; extract with jq -er, which fails on a --dry-run preview.`,
 
 func init() {
 	tasksResetCmd.Flags().String("comment", "", "Optional comment")
+	allowEmpty(tasksResetCmd, emptyIsOmitted, "comment")
 	markMutating(tasksResetCmd)
 	tasksCmd.AddCommand(tasksResetCmd)
 }

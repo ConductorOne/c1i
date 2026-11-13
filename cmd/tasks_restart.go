@@ -44,6 +44,7 @@ mutation; extract with jq -er, which fails on a --dry-run preview.`,
 
 func init() {
 	tasksRestartCmd.Flags().String("comment", "", "Optional comment")
+	allowEmpty(tasksRestartCmd, emptyIsOmitted, "comment")
 	tasksRestartCmd.Flags().String("policy-step-id", "", "Policy step to restart (defaults to the task's current step)")
 	markMutating(tasksRestartCmd)
 	tasksCmd.AddCommand(tasksRestartCmd)

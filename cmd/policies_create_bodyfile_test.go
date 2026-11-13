@@ -6,8 +6,8 @@ import (
 )
 
 // --body-file "" used to read as "no body file": the flags built the request,
-// or a generic error (exit 1) asked for --display-name.
-func TestPoliciesCreateEmptyBodyFileIsReadError(t *testing.T) {
+// or a generic error (exit 1) asked for --display-name. It is refused as blank.
+func TestPoliciesCreateEmptyBodyFileIsRefused(t *testing.T) {
 	for _, tc := range []struct {
 		name string
 		args []string
@@ -25,8 +25,8 @@ func TestPoliciesCreateEmptyBodyFileIsReadError(t *testing.T) {
 			if res.exit != exitUsage {
 				t.Fatalf("exit = %d (err %v), want %d", res.exit, res.err, exitUsage)
 			}
-			if tc.name == "alone" && (res.err == nil || !strings.Contains(res.err.Error(), "reading --body-file")) {
-				t.Fatalf("err = %v, want it to contain %q", res.err, "reading --body-file")
+			if want := "--body-file requires a non-empty value"; res.err == nil || !strings.Contains(res.err.Error(), want) {
+				t.Fatalf("err = %v, want it to contain %q", res.err, want)
 			}
 		})
 	}

@@ -125,6 +125,7 @@ func init() {
 	mcpServersTestConnectionCmd.Flags().String("transport", "", "Transport: streamable-http or sse")
 	mcpServersTestConnectionCmd.Flags().String("external-config-file", "", "Full externalConfig JSON (file or \"-\" for stdin)")
 	mcpServersTestConnectionCmd.Flags().String("update-mask", "", "Comma-separated changed externalConfig paths (edit mode)")
+	allowEmpty(mcpServersTestConnectionCmd, emptyIsOmitted, "server-url", "transport", "external-config-file", "update-mask")
 	addAuthFlags(mcpServersTestConnectionCmd)
 	mcpServersCmd.AddCommand(mcpServersTestConnectionCmd)
 }

@@ -32,6 +32,7 @@ mutation; extract with jq -er, which fails on a --dry-run preview.`,
 func init() {
 	tasksApproveCmd.Flags().String("policy-step-id", "", "Policy step to approve (defaults to the task's current step)")
 	tasksApproveCmd.Flags().String("comment", "", "Optional comment")
+	allowEmpty(tasksApproveCmd, emptyIsOmitted, "comment")
 	markMutating(tasksApproveCmd)
 	tasksCmd.AddCommand(tasksApproveCmd)
 }

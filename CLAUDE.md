@@ -214,17 +214,22 @@ tracked root file outside its allowlist. Stage explicit paths rather than `-A`.
   accepts 0 and the documented count; a command documenting none must not
   require one. Rejecting a *stray* positional is the guard's job, not the
   test's.
-- **Blank ids exit 2, centrally (enforced convention):** a set string flag that
-  is required (`markRequired`/`annotateRequired`) or named `*-id`, and every
-  positional, with no visible character (empty, whitespace or invisible-only,
-  `hasVisibleRune`) exits 2 before any request. `validateBlankFlags` and
-  `validateBlankArgs` run in the root `PersistentPreRunE`; add no per-command
-  check. `requireNonEmpty` stays only where the command itself requires a flag
-  cobra does not (`annotateRequired`, or required in one mode). There is no
-  exemption list; a flag-specific hint goes in a `blankHintAnnotation`.
-  `TestBlankIDAndRequiredFlagsExitUsage` and `TestBlankPositionalsExitUsage`
-  walk the tree; `TestRequiredUsageMatchesAnnotation` fails a hand-written
-  "(required)" that lacks the annotation. Never use `Changed()` or
+- **Blank values exit 2, centrally (enforced convention):** every set string
+  flag and every positional with no visible character (empty, whitespace or
+  invisible-only, `hasVisibleRune`) exits 2 before any request.
+  `validateBlankFlags` and `validateBlankArgs` run in the root
+  `PersistentPreRunE`; add no per-command check. Where an exact `""` means
+  something, register the flag with `allowEmpty(cmd, reason, names...)`
+  (`emptyClears`, `emptyIsOmitted`, `emptyOverridesEnv`); whitespace is still
+  refused. Never on a filter: an empty one silently widens a list. A
+  flag-specific hint goes through `setBlankHint`. `requireNonEmpty` stays only
+  where the command itself requires a flag cobra does not (`annotateRequired`,
+  or required in one mode). `TestBlankStringFlagsExitUsage` and
+  `TestBlankPositionalsExitUsage` walk the tree;
+  `TestBlankAllowedFlagsAreJustified` fails an opt-out without a reason, on a
+  filter, or missing where help promises an empty value clears;
+  `TestRequiredUsageMatchesAnnotation` fails a hand-written "(required)" that
+  lacks the annotation. Never use `Changed()` or
   `TrimSpace(v) == ""` as the signal when a value's content matters:
   `--page-token ""` once disabled auto-pagination and returned page 1 at exit 0.
 - **A guard covers every channel and sink, not a name.** Validate a value on
@@ -308,7 +313,7 @@ tracked root file outside its allowlist. Stage explicit paths rather than `-A`.
   |------|---------|
   | `0` | ok |
   | `1` | generic |
-  | `2` | usage (bad flags/args, an empty, `.` or `..` id, a blank required or id flag or positional, a missing, malformed, `null` or wrong-shape `--*-file` input, a non-object element in an array `--*-file` or `--body-file`, a refused redirect (but `upgrade` and the `docs` commands exit `8`), or any API `4xx` other than `401`/`403`/`404`/`408`/`429`/`499`) |
+  | `2` | usage (bad flags/args, an empty, `.` or `..` id, a blank flag or positional, a missing, malformed, `null` or wrong-shape `--*-file` input, a non-object element in an array `--*-file` or `--body-file`, a refused redirect (but `upgrade` and the `docs` commands exit `8`), or any API `4xx` other than `401`/`403`/`404`/`408`/`429`/`499`) |
   | `3` | auth (`401`/`403`) |
   | `4` | not-found (`404`) |
   | `5` | rate-limited (`429`) |

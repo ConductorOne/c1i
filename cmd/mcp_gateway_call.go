@@ -136,5 +136,6 @@ func classifyIsError(result json.RawMessage) isErrorVerdict {
 
 func init() {
 	mcpGatewayCallCmd.Flags().String("args", "", "Tool arguments as a JSON object (e.g. '{\"id\":\"abc\"}')")
+	allowEmpty(mcpGatewayCallCmd, emptyIsOmitted, "args")
 	mcpGatewayCmd.AddCommand(mcpGatewayCallCmd)
 }

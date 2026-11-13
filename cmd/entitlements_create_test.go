@@ -149,7 +149,7 @@ func TestEntitlementCreatePlanUsageErrors(t *testing.T) {
 			// useful message: the flag does not belong at all.
 			"empty resource type alongside a reused type",
 			[]string{"--app-id", "app1", "--display-name", "e", "--resource-type-id", "rt1", "--resource-type", ""},
-			"--resource-type only applies when this command creates that object",
+			"flag --resource-type requires a non-empty value",
 		},
 		{
 			"resource type kind alongside a reused type",
@@ -199,7 +199,12 @@ func TestEntitlementCreatePlanUsageErrors(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			_, err := buildEntitlementCreatePlan(newEntitlementCreateCmd(t, tc.args...))
+			// rootCmd's pre-run refuses blank flags before the plan is built.
+			cmd := newEntitlementCreateCmd(t, tc.args...)
+			err := validateBlankFlags(cmd)
+			if err == nil {
+				_, err = buildEntitlementCreatePlan(cmd)
+			}
 			if err == nil {
 				t.Fatalf("expected a usage error for %v", tc.args)
 			}

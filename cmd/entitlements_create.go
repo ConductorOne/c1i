@@ -196,23 +196,9 @@ func buildEntitlementCreatePlan(cmd *cobra.Command) (*entitlementCreatePlan, err
 		return nil, err
 	}
 
-	// --resource-type has a default, so an explicit "" is a mistake. Checked
-	// after the reuse rejection above, whose message is the more useful one when
-	// --resource-type-id is also set.
-	if _, err := requireNonEmptyIfSet(cmd, "resource-type"); err != nil {
-		return nil, err
-	}
 	resourceType, err := resourceTypeFlag.parse(mustGetString(cmd, "resource-type"))
 	if err != nil {
 		return nil, err
-	}
-
-	// Same for the display-name overrides: an explicit "" would fall back to
-	// --display-name and mis-name the object rather than fail.
-	for _, n := range []string{"resource-type-display-name", "resource-display-name"} {
-		if _, err := requireNonEmptyIfSet(cmd, n); err != nil {
-			return nil, err
-		}
 	}
 
 	p := &entitlementCreatePlan{
@@ -470,6 +456,7 @@ func addEntitlementCreateFlags(cmd *cobra.Command) {
 	f.String("description", "", "Description for the new entitlement")
 	f.String("slug", "", "Slug for the new entitlement (e.g. member)")
 	f.String("alias", "", "Alias for the new entitlement; exact-match queryable")
+	allowEmpty(entitlementsCreateCmd, emptyIsOmitted, "description", "slug", "alias")
 	addProtoDurationFlag(cmd, "duration-grant", "Maximum grant duration as a protobuf duration, e.g. 3600s; a Go duration such as 8h is converted to seconds; a sign or decimal (-1h, 1.5h) exits 2; omit for standing access")
 	registerPolicyIDFlags(cmd, entitlementPolicyKinds, " (omit to leave unset)")
 	// StringArray, not StringSlice: the slice parser drops an empty value

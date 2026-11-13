@@ -96,6 +96,7 @@ func init() {
 	addProtoDurationFlag(requestsCreateGrantCmd, "duration",
 		"Grant duration as a protobuf duration (86400s) or a Go duration (24h), sent in seconds; a sign or decimal (-1h, 1.5h) exits 2")
 	requestsCreateGrantCmd.Flags().String("description", "", "Justification or description")
+	allowEmpty(requestsCreateGrantCmd, emptyIsOmitted, "description")
 	requestsCreateGrantCmd.Flags().Bool("emergency", false, "Request emergency access")
 	markRequired(requestsCreateGrantCmd, "app-id")
 	markRequired(requestsCreateGrantCmd, "entitlement-id")

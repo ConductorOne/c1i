@@ -34,6 +34,47 @@ const requiredAnnotation = "c1i_required"
 // blank-value error.
 const blankHintAnnotation = "c1i_blank_hint"
 
+// updateMaskBlankHint is the blank-value hint for a --body-file update mask.
+const updateMaskBlankHint = "name the changed field paths, comma-separated"
+
+// setBlankHint appends hint to flag name's blank-value error.
+func setBlankHint(cmd *cobra.Command, name, hint string) {
+	if err := cmd.Flags().SetAnnotation(name, blankHintAnnotation, []string{hint}); err != nil {
+		panic(err)
+	}
+}
+
+// emptyAllowedAnnotation lets a string flag take an exact "" past
+// validateBlankFlags; whitespace or invisible-only is still refused. Its value
+// is the reason; set it with allowEmpty.
+const emptyAllowedAnnotation = "c1i_empty_allowed"
+
+// allowEmpty reasons. Filters never take one: an empty filter is refused, so
+// `--state "$UNSET"` cannot silently widen a list.
+const (
+	emptyClears       = "an empty value is sent and clears the field"
+	emptyIsOmitted    = "an empty value is the same as omitting the flag"
+	emptyOverridesEnv = "an empty value overrides the environment variable and config file"
+)
+
+// allowEmpty lets each named flag take an exact "", where that clears a field,
+// overrides an env default, or stands for "not given". Every other string flag
+// refuses any blank value.
+func allowEmpty(cmd *cobra.Command, reason string, names ...string) {
+	if !hasVisibleRune(reason) || len(names) == 0 {
+		panic("allowEmpty: a reason and at least one flag are required")
+	}
+	for _, n := range names {
+		fs := cmd.Flags()
+		if fs.Lookup(n) == nil {
+			fs = cmd.PersistentFlags()
+		}
+		if err := fs.SetAnnotation(n, emptyAllowedAnnotation, []string{reason}); err != nil {
+			panic(err)
+		}
+	}
+}
+
 // annotateRequired appends "(required)" to each named flag's usage WITHOUT
 // enabling cobra's pre-run required-flag validation. Use it when a command has
 // an escape-hatch flag (e.g. register's --print-config-template) that is valid
@@ -487,25 +528,8 @@ func requireNonEmpty(cmd *cobra.Command, names ...string) error {
 }
 
 // displayNameRule is the one wording for every --display-name: blank exits 2
-// before sending (centrally on creates, where it is required;
-// requireNonEmptyIfSet on the optional update flag).
+// before sending, via validateBlankFlags.
 const displayNameRule = "cannot be blank: empty, whitespace or invisible-only"
-
-// requireNonEmptyIfSet errors when a flag was passed with no visible
-// character (one that is graphic, not a space, not a format char), while
-// leaving an unset flag alone. Distinct from
-// requireNonEmpty, which is for flags that must always be present: use this
-// for an *optional* flag whose empty value would change behavior rather than
-// fail — an id flag selecting an existing object (`--resource-type-id
-// "$RT_ID"` with RT_ID unset would silently create a second one), or one that
-// scopes a read.
-func requireNonEmptyIfSet(cmd *cobra.Command, name string) (string, error) {
-	v, _ := cmd.Flags().GetString(name)
-	if !hasVisibleRune(v) && cmd.Flags().Changed(name) {
-		return "", &usageError{fmt.Errorf("flag --%s requires a non-empty value", name)}
-	}
-	return v, nil
-}
 
 // hasVisibleRune reports whether s has a rune that renders. TrimSpace alone
 // lets through zero-width/format runes (U+200B, U+FEFF), i.e. an invisible name.
@@ -690,7 +714,7 @@ func bodyFileMask(cmd *cobra.Command, exclusive ...string) (mask string, usingBo
 		return "", true, &usageError{fmt.Errorf("--update-mask is required together with --body-file")}
 	}
 	if !hasVisibleRune(mask) {
-		return "", true, &usageError{fmt.Errorf("--update-mask is blank; name the changed field paths, comma-separated")}
+		return "", true, &usageError{errors.New("--update-mask is blank; " + updateMaskBlankHint)}
 	}
 	paths := strings.Split(mask, ",")
 	for i, p := range paths {

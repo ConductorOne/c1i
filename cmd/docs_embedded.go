@@ -75,6 +75,7 @@ func newEmbeddedDocCmd(use, file string, content *string, long string) *cobra.Co
 		},
 	}
 	c.Flags().StringP("output", "o", "", "write to file instead of stdout (\"-\" is stdout)")
+	allowEmpty(c, emptyIsOmitted, "output")
 	return c
 }
 

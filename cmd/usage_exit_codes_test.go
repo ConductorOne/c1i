@@ -183,7 +183,7 @@ func TestValidationGuardsExitUsage(t *testing.T) {
 		{
 			name:    "apps create: empty --identity-matching",
 			args:    []string{"apps", "create", "--display-name", "a", "--identity-matching", ""},
-			wantMsg: "invalid --identity-matching",
+			wantMsg: "flag --identity-matching requires a non-empty value",
 			cmds:    []*cobra.Command{appsCreateCmd},
 		},
 		{

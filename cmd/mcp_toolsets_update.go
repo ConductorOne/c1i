@@ -27,10 +27,6 @@ nothing sent. Sent as is, the server 400s "" ("value length must be between
 Prints the updated toolset, unwrapped like "mcp toolsets get".`,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		if _, err := requireNonEmptyIfSet(cmd, "display-name"); err != nil {
-			return err
-		}
-
 		appID, _ := cmd.Flags().GetString("app-id")
 		connectorID, _ := cmd.Flags().GetString("connector-id")
 		id := args[0]
@@ -72,6 +68,7 @@ func init() {
 	mcpToolsetsUpdateCmd.Flags().String("connector-id", "", "Connector ID")
 	mcpToolsetsUpdateCmd.Flags().String("display-name", "", "New display name (the server requires it on every update; "+displayNameRule+")")
 	mcpToolsetsUpdateCmd.Flags().String("description", "", "New description (pass --display-name too; the server requires it)")
+	allowEmpty(mcpToolsetsUpdateCmd, emptyClears, "description")
 	markRequired(mcpToolsetsUpdateCmd, "app-id", "connector-id")
 	markMutating(mcpToolsetsUpdateCmd)
 	mcpToolsetsCmd.AddCommand(mcpToolsetsUpdateCmd)

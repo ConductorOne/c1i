@@ -23,11 +23,11 @@ func TestPoliciesUpdateBodyFileMaskRules(t *testing.T) {
 		{"empty path", []string{"--body-file", "BODY", "--update-mask", "description,,steps"}, exitUsage, "empty path", ""},
 		{"body-file with a convenience flag", []string{"--body-file", "BODY", "--display-name", "x", "--update-mask", "description"}, exitUsage, "mutually exclusive", ""},
 		{"mask with steps-file only", []string{"--steps-file", "BODY", "--update-mask", "steps"}, exitUsage, "requires --body-file", ""},
-		{"whitespace-only mask", []string{"--body-file", "BODY", "--update-mask", "  "}, exitUsage, "--update-mask is blank", ""},
+		{"whitespace-only mask", []string{"--body-file", "BODY", "--update-mask", "  "}, exitUsage, "--update-mask requires a non-empty value; name the changed field paths", ""},
 		// The mask is checked before the file is read.
-		{"mask error beats a missing file", []string{"--body-file", "missing.json", "--update-mask", ""}, exitUsage, "--update-mask is blank", ""},
+		{"mask error beats a missing file", []string{"--body-file", "missing.json", "--update-mask", ""}, exitUsage, "--update-mask requires a non-empty value; name the changed field paths", ""},
 		// "" is a set --body-file, so it is read like automations: a missing file, exit 2.
-		{"empty body-file", []string{"--body-file", "", "--update-mask", "description"}, exitUsage, "reading --body-file", ""},
+		{"empty body-file", []string{"--body-file", "", "--update-mask", "description"}, exitUsage, "--body-file requires a non-empty value", ""},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			s := newMutServer(t, fixedReply(200, `{"policy":{"id":"`+id+`"}}`))

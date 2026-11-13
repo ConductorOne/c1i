@@ -70,7 +70,7 @@ c1i docs search "access reviews"
 c1i docs endpoints --filter task
 ```
 
-> **Upgrading to 0.10.0?** It changes mutation output (unwrapped JSON, like
+> **Upgrading from 0.9.x?** 0.10.1 changes mutation output (unwrapped JSON, like
 > `get`) and several exit codes. Read "Upgrading from 0.9.2" in
 > [CHANGELOG.md](CHANGELOG.md) before updating scripts.
 
@@ -451,6 +451,19 @@ An empty occurrence is a usage error (exit 2), rejected before any request, so
 an unset shell variable cannot silently shorten a list or remove a credential
 restriction. Contrast `--fields`, which *is* comma-separated.
 
+### Blank values
+
+A blank value (empty, whitespace or invisible-only) on any flag or positional
+is a usage error (exit 2), rejected before any request, so `--state "$STATE"`
+with `STATE` unset cannot silently list everything. A few flags take an exact
+`""` because it means something: an update's `--description` clears the
+field (`mcp servers update --tool-prefix`/`--data-sensitivity`, `policies
+update --policy-type` and the `access-profiles` behavior flags send `""` as
+given, as before); `--fields ""` and `--error-format ""` override `C1I_FIELDS` and
+`C1I_ERROR_FORMAT`; and optional flags such as `--comment`, a create's
+`--description` or `-o` read it as not given. Whitespace-only is refused on
+those too. Filters never take an empty value.
+
 ### Enum flags
 
 Every flag that takes a named value (`--state`, `--status`, `--type`,
@@ -459,10 +472,8 @@ Every flag that takes a named value (`--state`, `--status`, `--type`,
 whitespace are ignored, `-` and `_` are the same, and the full API name is
 accepted in any case (`--state pending-review`, `--state
 mcp_tool_state_approved`). Its `--help` lists the short names. An unknown or
-non-ASCII value is a usage error (exit 2), rejected before any request. An empty
-string is the same as omitting the flag (the filter stays unset); a
-whitespace-only value is a usage error (exit 2), not "no filter". A repeatable
-flag such as `--unbind-policy` rejects an empty occurrence instead.
+non-ASCII value is a usage error (exit 2), rejected before any request, and so
+is a blank one (see [Blank values](#blank-values)).
 
 Where `--help` says "or any `PREFIX_*` value", a value carrying that prefix
 is sent upper-cased with `-` changed to `_`, so an enum newer than c1i still
@@ -620,7 +631,7 @@ branch on without parsing text:
 |------|---------|
 | `0` | success |
 | `1` | generic / unclassified error |
-| `2` | usage error (bad flags or arguments, an empty, `.` or `..` id, a blank required or id flag or positional, a missing, malformed, `null` or wrong-shape `--*-file` input, a non-object element in an array `--*-file` or `--body-file`, a refused redirect (but `upgrade` and the `docs` commands exit `8`), or the API returned any `4xx` other than `401`/`403`/`404`/`408`/`429`/`499`) |
+| `2` | usage error (bad flags or arguments, an empty, `.` or `..` id, a blank flag or positional, a missing, malformed, `null` or wrong-shape `--*-file` input, a non-object element in an array `--*-file` or `--body-file`, a refused redirect (but `upgrade` and the `docs` commands exit `8`), or the API returned any `4xx` other than `401`/`403`/`404`/`408`/`429`/`499`) |
 | `3` | not authenticated, or API returned `401`/`403` |
 | `4` | API returned `404` (not found) |
 | `5` | API returned `429` (rate limited — back off and retry) |

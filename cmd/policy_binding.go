@@ -52,7 +52,7 @@ func unbindPolicyFlag(kinds []policyKind) enumFlag {
 
 func registerUnbindPolicyFlag(cmd *cobra.Command, kinds []policyKind) {
 	for _, k := range kinds {
-		_ = cmd.Flags().SetAnnotation(k.flag, blankHintAnnotation, []string{"to unbind, use --unbind-policy " + k.kind})
+		setBlankHint(cmd, k.flag, "to unbind, use --unbind-policy "+k.kind)
 	}
 	addRepeatableStringFlag(cmd, "unbind-policy", "Unbind a policy: "+unbindPolicyFlag(kinds).usage()+" (repeatable)")
 }

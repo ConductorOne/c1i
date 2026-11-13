@@ -39,7 +39,7 @@ func runAutomationsUpdate(t *testing.T, id string) (string, error) {
 	var out bytes.Buffer
 	automationsUpdateCmd.SetOut(&out)
 	automationsUpdateCmd.SetContext(context.Background())
-	err := automationsUpdateCmd.RunE(automationsUpdateCmd, []string{id})
+	err := runEAfterBlankCheck(automationsUpdateCmd, []string{id})
 	return out.String(), err
 }
 
@@ -209,7 +209,7 @@ func TestAutomationsUpdateUsageErrors(t *testing.T) {
 		wantMsg string
 	}{
 		{"empty display name", map[string]string{"display-name": ""}, "display_name is required"},
-		{"whitespace-only mask", map[string]string{"body-file": path, "update-mask": "  "}, "--update-mask is blank"},
+		{"whitespace-only mask", map[string]string{"body-file": path, "update-mask": "  "}, "--update-mask requires a non-empty value; name the changed field paths"},
 		{"empty mask path", map[string]string{"body-file": path, "update-mask": "displayName,,description"}, "empty path"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

@@ -70,6 +70,7 @@ func init() {
 	addRepeatableStringFlag(tasksReassignCmd, "to-user-id", "User ID to reassign the step to (repeatable)")
 	tasksReassignCmd.Flags().String("policy-step-id", "", "Policy step to reassign (defaults to the task's current step)")
 	tasksReassignCmd.Flags().String("comment", "", "Optional comment")
+	allowEmpty(tasksReassignCmd, emptyIsOmitted, "comment")
 	markRequired(tasksReassignCmd, "to-user-id")
 	markMutating(tasksReassignCmd)
 	tasksCmd.AddCommand(tasksReassignCmd)

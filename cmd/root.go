@@ -61,6 +61,9 @@ For raw API exploration, also with no authentication required:
 		if err := validateBlankArgs(cmd, args); err != nil {
 			return err
 		}
+		if err := validatePageToken(cmd); err != nil {
+			return err
+		}
 		if err := validateBlankFlags(cmd); err != nil {
 			return err
 		}
@@ -68,9 +71,6 @@ For raw API exploration, also with no authentication required:
 			return err
 		}
 		if err := validateDotSegmentIDArgs(cmd, args); err != nil {
-			return err
-		}
-		if err := validatePageToken(cmd); err != nil {
 			return err
 		}
 		if err := validateCountFlags(cmd); err != nil {
@@ -145,10 +145,10 @@ func isCompletionRequest(cmd *cobra.Command) bool {
 	return cmd.Name() == cobra.ShellCompRequestCmd || cmd.Name() == cobra.ShellCompNoDescRequestCmd
 }
 
-// validateBlankFlags rejects a set string flag that is required or id-shaped
-// (name ends in -id) and has no visible character. Without it `--app-id " "`
-// drops the scope and over-fetches, or addresses the wrong object. A
-// blankHintAnnotation on the flag is appended to the message.
+// validateBlankFlags rejects a set string flag with no visible character; an
+// allowEmpty flag still takes an exact "". `--state "$UNSET"` would otherwise drop the
+// filter and list everything at exit 0, and `--app-id " "` would drop the
+// scope. A blankHintAnnotation on the flag is appended to the message.
 func validateBlankFlags(cmd *cobra.Command) error {
 	if isCompletionRequest(cmd) {
 		return nil
@@ -158,10 +158,8 @@ func validateBlankFlags(cmd *cobra.Command) error {
 		if err != nil || !f.Changed || f.Value.Type() != "string" {
 			return
 		}
-		if f.Annotations[requiredAnnotation] == nil && !strings.HasSuffix(f.Name, "-id") {
-			return
-		}
-		if hasVisibleRune(f.Value.String()) {
+		v := f.Value.String()
+		if hasVisibleRune(v) || (v == "" && f.Annotations[emptyAllowedAnnotation] != nil) {
 			return
 		}
 		msg := fmt.Sprintf("flag --%s requires a non-empty value", f.Name)
@@ -234,8 +232,8 @@ func validateGlobalSettings(cmd *cobra.Command) error {
 		}
 		if f := cmd.Flags().Lookup(s.flag); s.flag != "" && f != nil && f.Changed {
 			// pflag parsed a bool or int; a string flag (--error-format) is
-			// only checked here.
-			if v := f.Value.String(); v != "" {
+			// only checked here. A blank one is left to validateBlankFlags.
+			if v := f.Value.String(); hasVisibleRune(v) {
 				if err := s.parse(v); err != nil {
 					return &usageError{fmt.Errorf("invalid --%s %q: %w", s.flag, v, err)}
 				}
@@ -457,6 +455,7 @@ func init() {
 	pf.String("fields", "", "Comma-separated JSON fields to keep in read output (dot-paths); prefer over jq for simple projection")
 	pf.Int("max-retries", client.DefaultMaxRetries, "Retries for transient API failures (429/5xx); 0 disables")
 	pf.String("error-format", "text", "Error output format: "+errorFormatFlag.usage())
+	allowEmpty(rootCmd, emptyOverridesEnv, "fields", "error-format")
 	pf.Bool("debug", false, "Trace HTTP requests (method, URL, status, timing) to stderr")
 	pf.Bool("dry-run", false, "Preview C1 REST mutations (method, path, body) without sending; mcp gateway call and auth login reject it")
 	bindGlobalEnvSettings()

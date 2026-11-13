@@ -232,5 +232,6 @@ func hardenOutDir(outDir string, warn io.Writer) error {
 func init() {
 	functionsSourceCmd.Flags().String("commit", "", "Specific commit ID to fetch (default: the function's publishedCommitId, falling back to head)")
 	functionsSourceCmd.Flags().String("out-dir", "", "Write files to this directory instead of stdout. Files are written 0600 and the directory is created (or tightened, never widened, special bits stripped) to at most 0700 — fetched source may inline credentials")
+	allowEmpty(functionsSourceCmd, emptyIsOmitted, "commit", "out-dir")
 	functionsCmd.AddCommand(functionsSourceCmd)
 }

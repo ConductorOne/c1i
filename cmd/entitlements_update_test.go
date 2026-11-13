@@ -34,7 +34,7 @@ func runEntitlementsUpdate(t *testing.T, srv *httptest.Server, dryRun bool, id s
 	var out bytes.Buffer
 	entitlementsUpdateCmd.SetOut(&out)
 	entitlementsUpdateCmd.SetContext(context.Background())
-	err := entitlementsUpdateCmd.RunE(entitlementsUpdateCmd, []string{id})
+	err := runEAfterBlankCheck(entitlementsUpdateCmd, []string{id})
 	return out.String(), err
 }
 

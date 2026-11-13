@@ -78,9 +78,6 @@ Example:
 // Every error is a *usageError.
 func buildEntitlementUpdateBody(cmd *cobra.Command, appID, id string) (map[string]any, error) {
 	f := cmd.Flags()
-	if _, err := requireNonEmptyIfSet(cmd, "display-name"); err != nil {
-		return nil, err
-	}
 
 	ent := map[string]any{"id": id, "appId": appID}
 	var paths []string
@@ -138,6 +135,7 @@ func init() {
 	f.String("app-id", "", "Application ID the entitlement belongs to")
 	f.String("display-name", "", "New display name (omit to leave unchanged; "+displayNameRule+")")
 	f.String("description", "", "New description; an empty value clears it (omit to leave unchanged)")
+	allowEmpty(entitlementsUpdateCmd, emptyClears, "description")
 	registerPolicyIDFlags(entitlementsUpdateCmd, entitlementPolicyKinds, " (omit to leave unchanged)")
 	registerUnbindPolicyFlag(entitlementsUpdateCmd, entitlementPolicyKinds)
 	f.Bool("emergency-grant-enabled", false, "Enable or disable emergency grants; enabling requires --emergency-grant-policy-id in the same call")
