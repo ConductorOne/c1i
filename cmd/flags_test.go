@@ -115,8 +115,8 @@ func TestRequireNonEmpty(t *testing.T) {
 		if err == nil {
 			t.Fatal("expected error")
 		}
-		if !strings.Contains(err.Error(), "--b") {
-			t.Errorf("expected error to mention --b, got %v", err)
+		if !strings.Contains(err.Error(), `"b"`) {
+			t.Errorf("expected error to mention b, got %v", err)
 		}
 	})
 
@@ -126,10 +126,45 @@ func TestRequireNonEmpty(t *testing.T) {
 		if err == nil {
 			t.Fatal("expected error")
 		}
-		for _, want := range []string{"--a", "--b", "--c"} {
+		for _, want := range []string{`"a"`, `"b"`, `"c"`} {
 			if !strings.Contains(err.Error(), want) {
 				t.Errorf("expected error to mention %s, got %v", want, err)
 			}
+		}
+	})
+
+	t.Run("unset flag reads as required, not as empty", func(t *testing.T) {
+		cmd := mkCmd()
+		_ = cmd.Flags().Set("a", "x")
+		err := requireNonEmpty(cmd, "a", "b")
+		if err == nil || err.Error() != `required flag(s) "b" not set` {
+			t.Errorf("err = %v, want required flag(s) \"b\" not set", err)
+		}
+	})
+
+	t.Run("several unset flags use cobra's list form", func(t *testing.T) {
+		err := requireNonEmpty(mkCmd(), "a", "b")
+		if err == nil || err.Error() != `required flag(s) "a", "b" not set` {
+			t.Errorf("err = %v", err)
+		}
+	})
+
+	t.Run("given but blank keeps the non-empty wording", func(t *testing.T) {
+		cmd := mkCmd()
+		_ = cmd.Flags().Set("a", "  ")
+		err := requireNonEmpty(cmd, "a")
+		if err == nil || err.Error() != "flag --a requires a non-empty value" {
+			t.Errorf("err = %v", err)
+		}
+	})
+
+	t.Run("unset and blank together report both", func(t *testing.T) {
+		cmd := mkCmd()
+		_ = cmd.Flags().Set("a", "")
+		err := requireNonEmpty(cmd, "a", "b")
+		want := `required flag(s) "b" not set; flag --a requires a non-empty value`
+		if err == nil || err.Error() != want {
+			t.Errorf("err = %v, want %s", err, want)
 		}
 	})
 

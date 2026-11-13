@@ -526,6 +526,7 @@ resource with `--resource-id` likewise means you drop
   pure NDJSON, and a timeout exits `1` printing no rows. `--wait` fetches every
   page on every poll regardless of `--limit`, which only truncates what is
   printed, and it is mutually exclusive with `--page-token`.
+- A `--wait-*` flag (`--wait-timeout`, `--wait-stable`, `--wait-min`) without `--wait` exits `2`.
 - `--wait-stable` counts consecutive identical reads (default `3`, minimum
   `2`). Two is not enough: a pause mid-change is indistinguishable from
   completion. Three is a heuristic, not a proof -- size it past the longest

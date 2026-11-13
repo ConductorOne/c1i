@@ -4,9 +4,11 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"strings"
 	"time"
 
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 )
 
 // waitOp is one "poll until a condition holds" operation. Every --wait in this
@@ -210,10 +212,23 @@ func addWaitFlags(cmd *cobra.Command, until string, defaultTimeout time.Duration
 }
 
 // waitFlagValues reads the pair addWaitFlags declared. A non-positive timeout
-// is only an error when --wait was actually asked for.
+// is only an error when --wait was actually asked for, and any wait-* flag
+// (--wait-timeout or a command's own companion) set without --wait is a usage
+// error rather than silently ignored.
 func waitFlagValues(cmd *cobra.Command) (bool, time.Duration, error) {
 	wait, _ := cmd.Flags().GetBool("wait")
 	timeout, _ := cmd.Flags().GetDuration("wait-timeout")
+	if !wait {
+		var stray error
+		cmd.Flags().VisitAll(func(f *pflag.Flag) {
+			if stray == nil && f.Changed && f.Name != "wait" && strings.HasPrefix(f.Name, "wait-") {
+				stray = &usageError{fmt.Errorf("--%s requires --wait", f.Name)}
+			}
+		})
+		if stray != nil {
+			return false, 0, stray
+		}
+	}
 	if wait && timeout <= 0 {
 		return false, 0, &usageError{fmt.Errorf("--wait-timeout must be positive")}
 	}

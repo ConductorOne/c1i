@@ -597,25 +597,39 @@ func scopedRowID(parts ...string) string {
 }
 
 // requireNonEmpty errors when any named string flag is unset or blank. Use it
-// only for annotateRequired flags, which cobra does not presence-check; a SET
-// blank required or id-shaped flag is already refused by validateBlankFlags.
+// only for flags the command itself requires (annotateRequired, or required in
+// one mode), which cobra does not presence-check; a SET blank required or
+// id-shaped flag is already refused by validateBlankFlags. An unset flag reads
+// like cobra's own missing-required-flag error; a given-but-blank one says so.
 // The error is a *usageError (exit 2); callers just `return err`.
 func requireNonEmpty(cmd *cobra.Command, names ...string) error {
-	var missing []string
+	var unset, blank []string
 	for _, n := range names {
 		v, _ := cmd.Flags().GetString(n)
-		if !hasVisibleRune(v) {
-			missing = append(missing, "--"+n)
+		if hasVisibleRune(v) {
+			continue
+		}
+		if cmd.Flags().Changed(n) {
+			blank = append(blank, "--"+n)
+		} else {
+			unset = append(unset, strconv.Quote(n))
 		}
 	}
-	switch len(missing) {
-	case 0:
-		return nil
-	case 1:
-		return &usageError{fmt.Errorf("flag %s requires a non-empty value", missing[0])}
-	default:
-		return &usageError{fmt.Errorf("flags %s require non-empty values", strings.Join(missing, ", "))}
+	var msgs []string
+	if len(unset) > 0 {
+		msgs = append(msgs, fmt.Sprintf("required flag(s) %s not set", strings.Join(unset, ", ")))
 	}
+	switch len(blank) {
+	case 0:
+	case 1:
+		msgs = append(msgs, fmt.Sprintf("flag %s requires a non-empty value", blank[0]))
+	default:
+		msgs = append(msgs, fmt.Sprintf("flags %s require non-empty values", strings.Join(blank, ", ")))
+	}
+	if len(msgs) == 0 {
+		return nil
+	}
+	return &usageError{errors.New(strings.Join(msgs, "; "))}
 }
 
 // displayNameRule is the one wording for every --display-name: blank exits 2
