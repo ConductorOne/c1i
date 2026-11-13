@@ -164,3 +164,47 @@ func TestHeaderFlagsRefuseControlChars(t *testing.T) {
 		}
 	}
 }
+
+// A header value is often a secret: a refusal must name the flag, the
+// character and its offset, never the value.
+func TestHeaderControlCharErrorNeverEchoesValue(t *testing.T) {
+	t.Setenv("C1I_URL", mutTestURL)
+	const secret = "sekr3t\r\nX: y"
+	run := func(args ...string) mutResult {
+		srv := newMutServer(t, fixedReply(200, "{}"))
+		res := runMutationCLI(t, srv.srv, 0, nil, args...)
+		if got := srv.requests(); len(got) != 0 {
+			t.Errorf("%v: requests sent: %v", args, got)
+		}
+		return res
+	}
+	var runs [][]string
+	runs = append(runs, []string{"api", "--path", "/api/v1/apps", "--header", "Authorization=" + secret})
+	for _, flag := range []string{"header-value", "bearer-token"} {
+		for _, c := range blankCheckCommands() {
+			if c.Flags().Lookup(flag) != nil {
+				runs = append(runs, blankArgs(t, c, flag, secret))
+			}
+		}
+	}
+	for _, args := range runs {
+		for _, format := range []string{"text", "json"} {
+			res := run(append([]string{"--error-format", format}, args...)...)
+			out := res.stdout + res.stderr
+			if res.err != nil {
+				out += res.err.Error()
+			}
+			if res.exit != exitUsage || !regexp.MustCompile(`control character U\+000[AD] at byte 6`).MatchString(out) {
+				t.Errorf("%v (%s): exit %d out %q, want a usage error naming the character at byte 6", args, format, res.exit, out)
+			}
+			for _, leak := range []string{"sekr3t", "X: y"} {
+				if strings.Contains(out, leak) {
+					t.Errorf("%v (%s): output echoes the value (%q): %q", args, format, leak, out)
+				}
+			}
+		}
+	}
+	if len(runs) != 7 {
+		t.Errorf("ran %d invocations, want api + 3 commands x 2 flags", len(runs))
+	}
+}

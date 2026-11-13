@@ -30,14 +30,22 @@ func hasControlChar(s string) bool {
 func isASCIIControl(r rune) bool { return r < 0x20 || r == 0x7f }
 
 // checkHeaderText is the one rule for control characters in an HTTP header: a
-// name refuses all of them, a value all but tab (legal per RFC 9110). shown is
-// what the error quotes (the whole pair, or the flag value).
-func checkHeaderText(flag, shown, text string, isName bool) error {
-	bad := strings.IndexFunc(text, func(r rune) bool { return isASCIIControl(r) && (isName || r != '\t') })
-	if bad < 0 {
+// name refuses all of them, a value all but tab (legal per RFC 9110). A value
+// is often a secret, so the error gives the character and byte offset, never
+// the text; only a name (text itself, or key for a value) is quoted.
+func checkHeaderText(flag, key, text string, isName bool) error {
+	at := strings.IndexFunc(text, func(r rune) bool { return isASCIIControl(r) && (isName || r != '\t') })
+	if at < 0 {
 		return nil
 	}
-	return &usageError{fmt.Errorf("invalid --%s %q: contains a control character", flag, shown)}
+	what, subject := "value", ""
+	if key != "" {
+		subject = fmt.Sprintf(" %q", key)
+	}
+	if isName {
+		what, subject = "name", fmt.Sprintf(" %q", text)
+	}
+	return &usageError{fmt.Errorf("invalid --%s%s: %s has control character U+%04X at byte %d", flag, subject, what, text[at], at)}
 }
 
 // headerTextAnnotation marks a single-value flag that becomes an HTTP header
@@ -54,7 +62,7 @@ func validateHeaderFlags(cmd *cobra.Command) error {
 			return
 		}
 		v := f.Value.String()
-		err = checkHeaderText(f.Name, v, v, a[0] == "name")
+		err = checkHeaderText(f.Name, "", v, a[0] == "name")
 	})
 	return err
 }
@@ -96,11 +104,11 @@ func parseKeyValueFlag(pairs []string, flagName string, opts ...kvOpt) (map[stri
 		if !ok || k == "" {
 			return nil, &usageError{fmt.Errorf("invalid --%s %q: expected key=value", flagName, p)}
 		}
-		if err := checkHeaderText(flagName, p, k, true); err != nil {
+		if err := checkHeaderText(flagName, "", k, true); err != nil {
 			return nil, err
 		}
 		if !valueControls {
-			if err := checkHeaderText(flagName, p, v, false); err != nil {
+			if err := checkHeaderText(flagName, k, v, false); err != nil {
 				return nil, err
 			}
 		}
