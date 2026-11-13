@@ -29,6 +29,36 @@ func hasControlChar(s string) bool {
 
 func isASCIIControl(r rune) bool { return r < 0x20 || r == 0x7f }
 
+// checkHeaderText is the one rule for control characters in an HTTP header: a
+// name refuses all of them, a value all but tab (legal per RFC 9110). shown is
+// what the error quotes (the whole pair, or the flag value).
+func checkHeaderText(flag, shown, text string, isName bool) error {
+	bad := strings.IndexFunc(text, func(r rune) bool { return isASCIIControl(r) && (isName || r != '\t') })
+	if bad < 0 {
+		return nil
+	}
+	return &usageError{fmt.Errorf("invalid --%s %q: contains a control character", flag, shown)}
+}
+
+// headerTextAnnotation marks a single-value flag that becomes an HTTP header
+// name ("name") or value ("value"); validateHeaderFlags checks it centrally.
+const headerTextAnnotation = "c1i_header_text"
+
+// validateHeaderFlags applies checkHeaderText to every set flag annotated as a
+// header name or value, before any request or --dry-run preview.
+func validateHeaderFlags(cmd *cobra.Command) error {
+	var err error
+	cmd.Flags().VisitAll(func(f *pflag.Flag) {
+		a := f.Annotations[headerTextAnnotation]
+		if err != nil || !f.Changed || len(a) == 0 {
+			return
+		}
+		v := f.Value.String()
+		err = checkHeaderText(f.Name, v, v, a[0] == "name")
+	})
+	return err
+}
+
 // pathFlagNames are the string flags that name a file or directory without the
 // "-file" suffix. TestEveryPathLikeFlagIsCovered fails on a path flag this misses.
 var pathFlagNames = map[string]bool{"output": true, "out-dir": true}
@@ -66,9 +96,13 @@ func parseKeyValueFlag(pairs []string, flagName string, opts ...kvOpt) (map[stri
 		if !ok || k == "" {
 			return nil, &usageError{fmt.Errorf("invalid --%s %q: expected key=value", flagName, p)}
 		}
-		// A tab is legal in a header value (RFC 9110) but never in a key.
-		if strings.IndexFunc(k, isASCIIControl) >= 0 || (!valueControls && strings.IndexFunc(v, func(r rune) bool { return r != '\t' && isASCIIControl(r) }) >= 0) {
-			return nil, &usageError{fmt.Errorf("invalid --%s %q: contains a control character", flagName, p)}
+		if err := checkHeaderText(flagName, p, k, true); err != nil {
+			return nil, err
+		}
+		if !valueControls {
+			if err := checkHeaderText(flagName, p, v, false); err != nil {
+				return nil, err
+			}
 		}
 		m[k] = v
 	}

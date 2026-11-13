@@ -120,3 +120,44 @@ func TestEveryPathLikeFlagIsCovered(t *testing.T) {
 		})
 	}
 }
+
+func TestHeaderFlagsRefuseControlChars(t *testing.T) {
+	t.Setenv("C1I_URL", mutTestURL)
+	cases := map[string][]string{
+		"header-name":  append([]string{"a\tb"}, controlValues...),
+		"header-value": controlValues,
+	}
+	checked := 0
+	for _, c := range blankCheckCommands() {
+		for flag, values := range cases {
+			if c.Flags().Lookup(flag) == nil {
+				continue
+			}
+			for _, v := range values {
+				checked++
+				srv := newMutServer(t, fixedReply(200, "{}"))
+				res := runMutationCLI(t, srv.srv, 0, nil, blankArgs(t, c, flag, v)...)
+				if res.exit != exitUsage || res.err == nil ||
+					!strings.Contains(res.err.Error(), "--"+flag) || !strings.Contains(res.err.Error(), "control character") {
+					t.Errorf("%s --%s %q: exit %d err %v, want a control-character usage error", c.CommandPath(), flag, v, res.exit, res.err)
+				}
+				if got := srv.requests(); len(got) != 0 {
+					t.Errorf("%s --%s %q: requests sent: %v", c.CommandPath(), flag, v, got)
+				}
+			}
+		}
+	}
+	if checked != 3*(6+5) {
+		t.Errorf("ran %d cases, want 3 commands x 11 values", checked)
+	}
+	for _, c := range blankCheckCommands() {
+		if c.Flags().Lookup("header-value") == nil {
+			continue
+		}
+		srv := newMutServer(t, fixedReply(200, "{}"))
+		res := runMutationCLI(t, srv.srv, 0, nil, blankArgs(t, c, "header-value", "a\tb")...)
+		if res.err != nil && strings.Contains(res.err.Error(), "control character") {
+			t.Errorf("%s: tab in --header-value refused: %v", c.CommandPath(), res.err)
+		}
+	}
+}
