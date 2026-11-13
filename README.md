@@ -1094,6 +1094,9 @@ c1i functions commits <function-id> [--page-size N] [--page-token TOKEN] [--limi
 c1i functions usage <function-id> [--page-size N] [--page-token TOKEN] [--limit N]
 ```
 
+Every file-valued flag (`-o/--output`, `--out-dir`, `--*-file`) refuses a path
+containing a control character (exit 2); `-` still means stdin/stdout.
+
 `functions source` auto-resolves the function's published commit (falling back
 to its head/latest draft) and base64-decodes the source files. Without
 `--out-dir`, each file is printed to stdout with a `// ===== <name> =====`
@@ -1795,7 +1798,8 @@ file, or `-` for stdin) — the two are mutually exclusive. GET and DELETE refus
 a body by default (a body on either is more likely a mistake than intent); pass
 `--allow-delete-body` to lift that for DELETE specifically, for the handful of
 C1 endpoints that require one. `--query key=value` and `--header key=value` are
-both repeatable.
+both repeatable; a control character (newline, NUL, ...) in a `--header` key or
+value is a usage error (exit 2), except a tab in a value.
 
 With `--paginate`, each page's first array-valued field is unwrapped and each
 item is emitted as a single line of NDJSON, the same format list commands use.

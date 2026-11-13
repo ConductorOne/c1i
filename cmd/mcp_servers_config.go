@@ -317,7 +317,11 @@ func buildHostedConfig(cmd *cobra.Command) (map[string]any, error) {
 	if sourceAppID, _ := cmd.Flags().GetString("source-app-id"); sourceAppID != "" {
 		cfg["sourceAppId"] = sourceAppID
 	}
-	fields, err := parseKeyValues(cmd, "config-field")
+	pairs, err := repeatableStringFlag(cmd, "config-field")
+	if err != nil {
+		return nil, err
+	}
+	fields, err := parseKeyValueFlag(pairs, "config-field", allowValueControls)
 	if err != nil {
 		return nil, err
 	}
@@ -357,24 +361,4 @@ func buildExternalConfig(cmd *cobra.Command) (map[string]any, error) {
 		return nil, err
 	}
 	return cfg, nil
-}
-
-// parseKeyValues reads a repeatable "key=value" flag into a map.
-func parseKeyValues(cmd *cobra.Command, name string) (map[string]string, error) {
-	pairs, err := repeatableStringFlag(cmd, name)
-	if err != nil {
-		return nil, err
-	}
-	if len(pairs) == 0 {
-		return nil, nil
-	}
-	out := make(map[string]string, len(pairs))
-	for _, p := range pairs {
-		k, v, ok := strings.Cut(p, "=")
-		if !ok || k == "" {
-			return nil, &usageError{fmt.Errorf("invalid --%s %q: expected key=value", name, p)}
-		}
-		out[k] = v
-	}
-	return out, nil
 }

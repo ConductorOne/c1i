@@ -334,23 +334,6 @@ an intended non-GET REST write.`,
 	},
 }
 
-// parseKeyValueFlag parses repeated "key=value" flag values into a map. flagName
-// is only used to make error messages point at the offending flag.
-func parseKeyValueFlag(pairs []string, flagName string) (map[string]string, error) {
-	if len(pairs) == 0 {
-		return nil, nil
-	}
-	m := make(map[string]string, len(pairs))
-	for _, p := range pairs {
-		k, v, ok := strings.Cut(p, "=")
-		if !ok || k == "" {
-			return nil, &usageError{fmt.Errorf("invalid --%s %q: expected key=value", flagName, p)}
-		}
-		m[k] = v
-	}
-	return m, nil
-}
-
 func init() {
 	apiCmd.Flags().String("path", "", "API path (e.g. /api/v1/search/app_users)")
 	apiCmd.Flags().String("method", "", "HTTP method: "+httpMethodFlag.usage()+" (default: get, or post if a body is set)")

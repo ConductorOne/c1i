@@ -5,13 +5,75 @@ import (
 	"errors"
 	"fmt"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
 	"unicode"
 
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 )
+
+// kvOpt tunes parseKeyValueFlag.
+type kvOpt int
+
+// allowValueControls lets values carry control characters, for flags whose
+// values travel in a JSON body rather than an HTTP header.
+const allowValueControls kvOpt = 1
+
+// hasControlChar reports whether s holds an ASCII control character (C0 or DEL).
+func hasControlChar(s string) bool {
+	return strings.IndexFunc(s, isASCIIControl) >= 0
+}
+
+func isASCIIControl(r rune) bool { return r < 0x20 || r == 0x7f }
+
+// pathFlagNames are the string flags that name a file or directory without the
+// "-file" suffix. TestEveryPathLikeFlagIsCovered fails on a path flag this misses.
+var pathFlagNames = map[string]bool{"output": true, "out-dir": true}
+
+// isPathFlag reports whether f names a file or directory ("-" is stdin/stdout).
+func isPathFlag(f *pflag.Flag) bool {
+	return f.Value.Type() == "string" && (pathFlagNames[f.Name] || strings.HasSuffix(f.Name, "-file"))
+}
+
+// validatePathFlags refuses a set path flag holding a control character: it
+// would create or read a file whose name carries a newline, silently.
+func validatePathFlags(cmd *cobra.Command) error {
+	var err error
+	cmd.Flags().VisitAll(func(f *pflag.Flag) {
+		if err != nil || !f.Changed || !isPathFlag(f) {
+			return
+		}
+		if v := f.Value.String(); hasControlChar(v) {
+			err = &usageError{fmt.Errorf("--%s value %q contains a control character", f.Name, v)}
+		}
+	})
+	return err
+}
+
+// parseKeyValueFlag parses repeated "key=value" flag values into a map. flagName
+// only makes errors point at the offending flag.
+func parseKeyValueFlag(pairs []string, flagName string, opts ...kvOpt) (map[string]string, error) {
+	if len(pairs) == 0 {
+		return nil, nil
+	}
+	m := make(map[string]string, len(pairs))
+	valueControls := slices.Contains(opts, allowValueControls)
+	for _, p := range pairs {
+		k, v, ok := strings.Cut(p, "=")
+		if !ok || k == "" {
+			return nil, &usageError{fmt.Errorf("invalid --%s %q: expected key=value", flagName, p)}
+		}
+		// A tab is legal in a header value (RFC 9110) but never in a key.
+		if strings.IndexFunc(k, isASCIIControl) >= 0 || (!valueControls && strings.IndexFunc(v, func(r rune) bool { return r != '\t' && isASCIIControl(r) }) >= 0) {
+			return nil, &usageError{fmt.Errorf("invalid --%s %q: contains a control character", flagName, p)}
+		}
+		m[k] = v
+	}
+	return m, nil
+}
 
 // markRequired marks a flag as required AND appends "(required)" to its
 // help description. Cobra's MarkFlagRequired enforces presence at runtime
