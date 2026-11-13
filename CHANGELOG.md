@@ -33,6 +33,14 @@ unfiltered list. Omit the flag when the variable is empty, for example
 
 ### Fixed
 
+- A `--fields` value that names no field path (`,`, `.`, or `"$A,$B"` with
+  both variables unset) or has an empty segment (`id.`, `a..b`) printed full,
+  unprojected rows at exit 0. It is now a usage error (exit 2), and so is the
+  same value in `C1I_FIELDS` or `fields:` in `~/.c1i.yaml`, which were not
+  validated at all. A trailing comma (`id,`) still works, and `--fields ""`
+  still turns off a session-wide `C1I_FIELDS`. Like the other `C1I_*`
+  settings, an invalid `C1I_FIELDS` now fails every command except shell
+  completion, mutations included.
 - `mcp servers register --hosted-config-file ""` (or
   `--external-config-file ""`) registered a server with an empty config at
   exit 0; it now exits 2.

@@ -191,7 +191,7 @@ type globalEnvSetting struct {
 
 var globalEnvSettings = []globalEnvSetting{
 	{key: "url", env: urlEnvVar, flag: "url"},
-	{key: "fields", env: "C1I_FIELDS", flag: "fields"},
+	{key: "fields", env: "C1I_FIELDS", flag: "fields", parse: parseFieldsSetting},
 	{key: "max_retries", env: "C1I_MAX_RETRIES", flag: "max-retries", parse: parseMaxRetries},
 	{key: "error_format", env: "C1I_ERROR_FORMAT", flag: "error-format", parse: parseErrorFormat, everywhere: true},
 	{key: "debug", env: "C1I_DEBUG", flag: "debug", parse: parseBoolValue},
