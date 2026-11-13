@@ -231,7 +231,9 @@ tracked root file outside its allowlist. Stage explicit paths rather than `-A`.
   tree; `TestEmptyAllowedInventoryIsPinned` pins every opt-out (adding or
   removing one is a deliberate edit there), and
   `TestEmptyAllowedFlagsAcceptEmpty` checks each still takes `""` without a
-  usage error, and that an `emptyIsSent` one sends its own field as `""`;
+  usage error (where omitting the flag is itself an error, `""` must give
+  exactly that error), and that an `emptyIsSent` one sends its own field as
+  `""`;
   `TestBlankAllowedFlagsAreJustified` fails an opt-out without a reason, on a
   filter, or missing where help promises an empty value clears; an opt-out
   on a list command (it paginates, or is named list/search/history/...) must

@@ -145,12 +145,25 @@ func TestEmptyAllowedFlagsAcceptEmpty(t *testing.T) {
 		c, flag := commandForInventoryKey(t, key)
 		t.Run(key, func(t *testing.T) {
 			srv := newMutServer(t, fixedReply(200, "{}"))
-			args := append(blankArgs(t, c, flag, ""), extraArgsFor(c, flag)...)
+			extra := extraArgsFor(c, flag)
+			if override, ok := inventoryKeyArgs[key]; ok {
+				extra = override
+			}
+			args := append(blankArgs(t, c, flag, ""), extra...)
 			res := runMutationCLI(t, srv.srv, 0, nil, args...)
 			if res.err != nil && strings.Contains(res.err.Error(), "--"+flag+" requires a non-empty value") {
 				t.Fatalf("\"\" refused: %v", res.err)
 			}
-			if res.exit == exitUsage && !inventoryUsageOK[key] {
+			if want, ok := inventoryExpectedError[key]; ok {
+				if res.err == nil || !strings.Contains(res.err.Error(), want) {
+					t.Fatalf("err = %v, want the %q error that omitting the flag gives", res.err, want)
+				}
+				return
+			}
+			// Exit 2 means "" was refused by validation. A later failure (auth,
+			// network, a reply shape the fake server can't give) means it got
+			// past every check, which is what an opt-out promises.
+			if res.exit == exitUsage {
 				t.Fatalf("exit 2 with \"\": %v", res.err)
 			}
 			if reason != emptyIsSent {
@@ -186,6 +199,14 @@ var inventoryExtraArgs = map[string][]string{
 	"c1i mcp servers update-credentials": {"--type=external", "--server-url=https://mcp.example.com/x", "--update-mask=url"},
 }
 
+// inventoryKeyArgs replaces a command's fixture for one key whose flag is only
+// read under other arguments.
+var inventoryKeyArgs = map[string][]string{
+	"c1i mcp servers update-credentials --hosted-config-file": {"--type=hosted", "--catalog-id=cat1", "--update-mask=hostedConfig"},
+	// A closed local port: no DNS lookup for the device-flow endpoint.
+	"c1i auth login --client-secret": {"--url=https://127.0.0.1:1"},
+}
+
 // extraArgsFor returns c's extra "--flag=value" args minus any that set flag.
 func extraArgsFor(c *cobra.Command, flag string) []string {
 	var out []string
@@ -207,11 +228,11 @@ func flagJSONKey(flag string) string {
 	return strings.Join(parts, "")
 }
 
-// inventoryUsageOK lists opt-outs where "" reads as omitted and omitting the
-// flag is itself a usage error, so only the blank-rule check applies.
-var inventoryUsageOK = map[string]bool{
-	"c1i mcp servers register --server-url":        true,
-	"c1i mcp servers test-connection --server-url": true,
+// inventoryExpectedError lists opt-outs where "" reads as omitted and
+// omitting the flag is itself an error: "" must give exactly that error.
+var inventoryExpectedError = map[string]string{
+	"c1i mcp servers register --server-url":        "--server-url is required for --type external",
+	"c1i mcp servers test-connection --server-url": "provide the config to probe",
 }
 
 // commandForInventoryKey resolves "<path> --<flag>" to a runnable command
