@@ -208,3 +208,34 @@ func TestHeaderControlCharErrorNeverEchoesValue(t *testing.T) {
 		t.Errorf("ran %d invocations, want api + 3 commands x 2 flags", len(runs))
 	}
 }
+
+// A malformed key=value occurrence is often a secret missing its "=" (a pasted
+// token), so its error must name the flag only, never the input.
+func TestMalformedKeyValueErrorNeverEchoesInput(t *testing.T) {
+	t.Setenv("C1I_URL", mutTestURL)
+	const secret = "sekr3tTokenNoEquals"
+	for _, args := range [][]string{
+		{"api", "--path", "/api/v1/apps", "--header", secret},
+		{"api", "--path", "/api/v1/apps", "--query", secret},
+		{"api", "--path", "/api/v1/apps", "--header", "=" + secret},
+		{"mcp", "servers", "register", "--app-id", "a", "--type", "hosted", "--display-name", "d", "--config-field", secret},
+	} {
+		for _, format := range []string{"text", "json"} {
+			srv := newMutServer(t, fixedReply(200, "{}"))
+			res := runMutationCLI(t, srv.srv, 0, nil, append([]string{"--error-format", format}, args...)...)
+			out := res.stdout + res.stderr
+			if res.err != nil {
+				out += res.err.Error()
+			}
+			if res.exit != exitUsage || !strings.Contains(out, "expected key=value") {
+				t.Errorf("%v (%s): exit %d out %q, want the key=value usage error", args, format, res.exit, out)
+			}
+			if strings.Contains(out, "sekr3t") {
+				t.Errorf("%v (%s): output echoes the input: %q", args, format, out)
+			}
+			if got := srv.requests(); len(got) != 0 {
+				t.Errorf("%v: requests sent: %v", args, got)
+			}
+		}
+	}
+}

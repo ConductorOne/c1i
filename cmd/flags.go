@@ -91,6 +91,19 @@ func validatePathFlags(cmd *cobra.Command) error {
 	return err
 }
 
+// cutKeyValue splits one "key=value" occurrence of flagName. The error never
+// echoes the input: a mistyped pair can be a secret (a token missing its "=").
+func cutKeyValue(flagName, p string) (string, string, error) {
+	k, v, ok := strings.Cut(p, "=")
+	switch {
+	case !ok:
+		return "", "", &usageError{fmt.Errorf(`invalid --%s: expected key=value, but a value has no "="`, flagName)}
+	case k == "":
+		return "", "", &usageError{fmt.Errorf("invalid --%s: expected key=value, but a key is empty", flagName)}
+	}
+	return k, v, nil
+}
+
 // parseKeyValueFlag parses repeated "key=value" flag values into a map. flagName
 // only makes errors point at the offending flag.
 func parseKeyValueFlag(pairs []string, flagName string, opts ...kvOpt) (map[string]string, error) {
@@ -100,9 +113,9 @@ func parseKeyValueFlag(pairs []string, flagName string, opts ...kvOpt) (map[stri
 	m := make(map[string]string, len(pairs))
 	valueControls := slices.Contains(opts, allowValueControls)
 	for _, p := range pairs {
-		k, v, ok := strings.Cut(p, "=")
-		if !ok || k == "" {
-			return nil, &usageError{fmt.Errorf("invalid --%s %q: expected key=value", flagName, p)}
+		k, v, err := cutKeyValue(flagName, p)
+		if err != nil {
+			return nil, err
 		}
 		if err := checkHeaderText(flagName, "", k, true); err != nil {
 			return nil, err

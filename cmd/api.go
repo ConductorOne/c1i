@@ -130,9 +130,9 @@ an intended non-GET REST write.`,
 		// Apply --query params to the path once; pagination adds page_token per
 		// iteration below for GET/DELETE.
 		for _, qp := range queryPairs {
-			k, v, ok := strings.Cut(qp, "=")
-			if !ok || k == "" {
-				return &usageError{fmt.Errorf("invalid --query %q: expected key=value", qp)}
+			k, v, err := cutKeyValue("query", qp)
+			if err != nil {
+				return err
 			}
 			path = setQueryParam(path, k, v)
 		}

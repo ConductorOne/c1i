@@ -13,6 +13,14 @@ A script that passes a possibly-empty variable to a filter
 unfiltered list. Omit the flag when the variable is empty, for example
 `${STATE:+--state "$STATE"}`.
 
+A `--wait-*` flag (`--wait-timeout`, `grants list --wait-stable`/`--wait-min`)
+passed without `--wait` was ignored; it now exits 2. Drop it, or add `--wait`.
+
+`--dry-run` now runs the same pre-send reads a real run does (checking that a
+user or policy id exists, or looking up a policy's type), so a preview that
+names such an id needs credentials that can read it. A preview with no such id
+still needs none.
+
 ### Changed
 
 - **A blank value on any flag is now a usage error (exit 2)**, checked before
@@ -58,6 +66,29 @@ unfiltered list. Omit the flag when the variable is empty, for example
 - A YAML list or map for any setting in `~/.c1i.yaml` (`fields: [id, email]`,
   `dry_run: [true]`, `url: [...]`) read as empty, so the setting was silently
   ignored; it is now a usage error (exit 2). Write `fields: "id,email"`.
+- `--dry-run` skipped the existence checks a real run makes, so it previewed
+  success for an unknown user or policy id that the real run refuses. It now
+  refuses the same way, and `policies update --dry-run` no longer needs
+  `--policy-type`: the type is looked up and shown in the preview.
+- `--url https://<tenant>:443` (also `C1I_URL` and `url:` in `~/.c1i.yaml`)
+  failed with exit 3, "no credentials found", because credentials are stored
+  per host and `:443` counted as a different one. The default HTTPS port is now
+  dropped, and a credential saved under the `:443` name is found and moved on
+  first use. Any path, query or fragment in `--url` is ignored, as before.
+- A control character (newline, CR, NUL, ...) in a file-path flag (`-o`,
+  `--out-dir`, every `--*-file`) or a header (`api --header`, `mcp servers`
+  `--header-name`/`--header-value`/`--bearer-token`) is now a usage error (exit
+  2) before anything is read, written or sent. `docs readme -o $'a\nb'` wrote a
+  file named with a newline, and a CR/LF in a header failed only inside the
+  HTTP library. The error names the flag and the character's position, never a
+  header value; tab is still allowed in header values, and `--config-field`
+  values may still span lines.
+- A malformed `key=value` (`api --header`/`--query`, `--config-field`) echoed
+  the whole input in its error, which could expose a token missing its `=`; the
+  error now names the flag only.
+- A required flag that was not given said "requires a non-empty value", as if
+  it had been given empty; it now says `required flag(s) "app-id" not set`,
+  like the flags cobra checks.
 - `mcp servers register --hosted-config-file ""` (or
   `--external-config-file ""`) registered a server with an empty config at
   exit 0; it now exits 2.
