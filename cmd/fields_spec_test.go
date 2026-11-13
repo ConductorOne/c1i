@@ -33,10 +33,18 @@ func TestFieldsSpecWithNoUsablePathRefusedOnEveryChannel(t *testing.T) {
 			useConfigFile(t, "fields: \""+spec+"\"\n")
 			return []string{"users", "list"}
 		}},
+		// A YAML list or map reads as "" to viper, which meant no projection.
+		{"config file list", `want a single value`, func(t *testing.T, spec string) []string {
+			useConfigFile(t, "fields: [\""+spec+"\", id]\n")
+			return []string{"users", "list"}
+		}},
 	}
 	for _, ch := range channels {
 		specs := bad
-		if ch.name != "flag" {
+		if ch.name == "config file list" {
+			specs = []string{"id"}
+		}
+		if ch.name == "env" || ch.name == "config file" {
 			// A blank flag is the blank rule's job; env and config have no other check.
 			specs = append(append([]string{}, bad...), " ")
 		}

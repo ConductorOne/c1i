@@ -6,6 +6,7 @@ import (
 	"math"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strconv"
 	"strings"
 	"unicode/utf8"
@@ -258,7 +259,13 @@ func validateGlobalSettings(cmd *cobra.Command) error {
 		if f, ok := raw.(float64); ok && f == math.Trunc(f) && math.Abs(f) < 1<<53 {
 			raw = int64(f)
 		}
-		// A string, map or list fails the parser like any other garbage.
+		// A list or map is never a valid setting, and viper reads it as ""
+		// (fields: [id, email] silently meant no projection), so refuse it
+		// instead of parsing its Sprint form.
+		switch reflect.ValueOf(raw).Kind() {
+		case reflect.Slice, reflect.Array, reflect.Map:
+			return &usageError{fmt.Errorf("invalid %s in ~/.c1i.yaml: want a single value, not a list or map", s.key)}
+		}
 		if v := fmt.Sprint(raw); v != "" {
 			if err := s.parse(v); err != nil {
 				return &usageError{fmt.Errorf("invalid %s %q in ~/.c1i.yaml: %w", s.key, v, err)}

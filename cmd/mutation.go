@@ -435,7 +435,8 @@ func runPreReadsWith(cmd *cobra.Command, baseURL string, m *mutation, o mutation
 }
 
 // refuseMutationFields: mutation output is never projected, so an explicit
-// --fields (even "") is a usage error. C1I_FIELDS alone is ignored.
+// --fields (even "") is a usage error. A valid C1I_FIELDS alone is ignored
+// (a malformed one already failed in validateGlobalSettings).
 func refuseMutationFields(cmd *cobra.Command) error {
 	if f := cmd.Flags().Lookup("fields"); f != nil && f.Changed {
 		return &usageError{errors.New("--fields does not apply to mutation output, which is always the full response; drop --fields and extract with jq")}
