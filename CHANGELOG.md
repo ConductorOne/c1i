@@ -41,9 +41,9 @@ unfiltered list. Omit the flag when the variable is empty, for example
   still turns off a session-wide `C1I_FIELDS`. Like the other `C1I_*`
   settings, an invalid `C1I_FIELDS` now fails every command except shell
   completion, mutations included.
-- A YAML list or map in `~/.c1i.yaml` for a validated setting
-  (`fields: [id, email]`, `dry_run: [true]`) read as empty, so the setting was
-  silently ignored; it is now a usage error (exit 2). Write `fields: "id,email"`.
+- A YAML list or map for any setting in `~/.c1i.yaml` (`fields: [id, email]`,
+  `dry_run: [true]`, `url: [...]`) read as empty, so the setting was silently
+  ignored; it is now a usage error (exit 2). Write `fields: "id,email"`.
 - `mcp servers register --hosted-config-file ""` (or
   `--external-config-file ""`) registered a server with an empty config at
   exit 0; it now exits 2.
