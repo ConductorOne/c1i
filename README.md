@@ -1799,7 +1799,7 @@ a body by default (a body on either is more likely a mistake than intent); pass
 `--allow-delete-body` to lift that for DELETE specifically, for the handful of
 C1 endpoints that require one. `--query key=value` and `--header key=value` are
 both repeatable; a control character (newline, NUL, ...) in a `--header` key or
-value, or in `mcp servers` `--header-name`/`--header-value`, is a usage error
+value, or in `mcp servers` `--header-name`/`--header-value`/`--bearer-token`, is a usage error
 (exit 2), except a tab in a value.
 
 With `--paginate`, each page's first array-valued field is unwrapped and each

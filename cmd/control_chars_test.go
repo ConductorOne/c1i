@@ -126,6 +126,7 @@ func TestHeaderFlagsRefuseControlChars(t *testing.T) {
 	cases := map[string][]string{
 		"header-name":  append([]string{"a\tb"}, controlValues...),
 		"header-value": controlValues,
+		"bearer-token": controlValues,
 	}
 	checked := 0
 	for _, c := range blankCheckCommands() {
@@ -147,17 +148,19 @@ func TestHeaderFlagsRefuseControlChars(t *testing.T) {
 			}
 		}
 	}
-	if checked != 3*(6+5) {
-		t.Errorf("ran %d cases, want 3 commands x 11 values", checked)
+	if checked != 3*(6+5+5) {
+		t.Errorf("ran %d cases, want 3 commands x 16 values", checked)
 	}
 	for _, c := range blankCheckCommands() {
-		if c.Flags().Lookup("header-value") == nil {
-			continue
-		}
-		srv := newMutServer(t, fixedReply(200, "{}"))
-		res := runMutationCLI(t, srv.srv, 0, nil, blankArgs(t, c, "header-value", "a\tb")...)
-		if res.err != nil && strings.Contains(res.err.Error(), "control character") {
-			t.Errorf("%s: tab in --header-value refused: %v", c.CommandPath(), res.err)
+		for _, flag := range []string{"header-value", "bearer-token"} {
+			if c.Flags().Lookup(flag) == nil {
+				continue
+			}
+			srv := newMutServer(t, fixedReply(200, "{}"))
+			res := runMutationCLI(t, srv.srv, 0, nil, blankArgs(t, c, flag, "a\tb")...)
+			if res.err != nil && strings.Contains(res.err.Error(), "control character") {
+				t.Errorf("%s: tab in --%s refused: %v", c.CommandPath(), flag, res.err)
+			}
 		}
 	}
 }

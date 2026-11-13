@@ -42,7 +42,7 @@ func addAuthFlags(cmd *cobra.Command) {
 	cmd.Flags().String("basic-auth-username", "", "Basic-auth username (required with --auth basic-auth unless --token-sharing per-user or an explicit --update-mask omits it)")
 	cmd.Flags().String("basic-auth-password", "", "Basic-auth password (required with --auth basic-auth unless --token-sharing per-user or an explicit --update-mask omits it)")
 	cmd.Flags().String("token-sharing", "", "Token sharing: "+tokenSharingFlag.usage())
-	for flag, part := range map[string]string{"header-name": "name", "header-value": "value"} {
+	for flag, part := range map[string]string{"header-name": "name", "header-value": "value", "bearer-token": "value"} {
 		if err := cmd.Flags().SetAnnotation(flag, headerTextAnnotation, []string{part}); err != nil {
 			panic(err)
 		}
