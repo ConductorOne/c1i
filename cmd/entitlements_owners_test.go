@@ -249,8 +249,8 @@ func TestEntitlementOwnerWritesDryRun(t *testing.T) {
 			if tc.not != "" && strings.Contains(out, tc.not) {
 				t.Errorf("dry-run output contains %q, want none:\n%s", tc.not, out)
 			}
-			if n := len(seen()); n != 0 {
-				t.Errorf("dry-run sent %d request(s)", n)
+			if w := withoutUserLookups(seen()); len(w) != 0 {
+				t.Errorf("dry-run sent %+v", w)
 			}
 		})
 	}
@@ -353,15 +353,17 @@ func TestEntitlementsSetOwnersChecksUsersExist(t *testing.T) {
 			t.Errorf("looked up %v, want [u%%2F1]", got)
 		}
 	})
-	t.Run("dry-run does no lookups", func(t *testing.T) {
+	t.Run("dry-run refuses an unknown user like a real run", func(t *testing.T) {
 		withDryRun(t)
 		_, seen := entOwnerServerUsers(t, []string{`{"userIds":[]}`}, map[string]int{"ghost": http.StatusNotFound})
-		if _, _, err := runEntOwnerCmd(t, entitlementsSetOwnersCmd,
-			map[string][]string{"app-id": {"app1"}, "user-id": {"ghost"}}, "ent1"); err != nil {
-			t.Fatalf("RunE: %v", err)
+		_, _, err := runEntOwnerCmd(t, entitlementsSetOwnersCmd,
+			map[string][]string{"app-id": {"app1"}, "user-id": {"ghost"}}, "ent1")
+		var ue *usageError
+		if !errors.As(err, &ue) || !strings.Contains(err.Error(), `"ghost"`) {
+			t.Fatalf("error = %v, want a *usageError naming ghost", err)
 		}
-		if n := len(seen()); n != 0 {
-			t.Errorf("dry-run sent %d request(s)", n)
+		if w := withoutUserLookups(seen()); len(w) != 0 {
+			t.Errorf("dry-run sent %+v", w)
 		}
 	})
 	t.Run("a 403 lookup keeps its auth classification", func(t *testing.T) {

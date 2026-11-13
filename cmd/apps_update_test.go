@@ -196,13 +196,15 @@ func TestAppsUpdateWire(t *testing.T) {
 	}
 }
 
-// TestAppsUpdateDryRunSendsNothing pins that --dry-run previews the body and
-// never reaches the server.
+// TestAppsUpdateDryRunSendsNothing pins that --dry-run previews the body,
+// reads the policy, and sends no write.
 func TestAppsUpdateDryRunSendsNothing(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		t.Errorf("dry run sent %s %s", r.Method, r.URL.Path)
-	}))
-	defer srv.Close()
+	srv, requests := policyBindingServer(t, map[string]string{"gp-1": "POLICY_TYPE_GRANT"})
+	defer func() {
+		if got := countRequests(requests(), "POST "); got != 0 {
+			t.Errorf("dry run sent %d write(s)", got)
+		}
+	}()
 
 	resetCmdFlags(t, appsUpdateCmd)
 	stubCatalogClient(t, srv)

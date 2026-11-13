@@ -902,9 +902,9 @@ func TestEntitlementCreateKnownOwnerReachesFinalBody(t *testing.T) {
 	}
 }
 
-// TestEntitlementCreateDryRunSkipsOwnerLookup pins that --dry-run still
-// previews without the existence check, so a preview needs no user read.
-func TestEntitlementCreateDryRunSkipsOwnerLookup(t *testing.T) {
+// TestEntitlementCreateDryRunChecksOwner pins that --dry-run runs the owner
+// existence check (a read) and still sends no create.
+func TestEntitlementCreateDryRunChecksOwner(t *testing.T) {
 	withDryRun(t)
 	s := ownerCreateServer(t, http.StatusOK, `{"user":{"id":"u1"}}`)
 	t.Setenv("C1I_URL", mutTestURL)
@@ -914,8 +914,9 @@ func TestEntitlementCreateDryRunSkipsOwnerLookup(t *testing.T) {
 	if r.err != nil {
 		t.Fatalf("exit %d: %v", r.exit, r.err)
 	}
-	if got := len(s.requests()); got != 0 {
-		t.Errorf("%d request(s) sent on --dry-run, want none", got)
+	reqs := s.requests()
+	if len(reqs) != 1 || reqs[0].method != http.MethodGet || !strings.Contains(reqs[0].rawPath, "/users/u1") {
+		t.Errorf("requests = %+v, want one GET of the owner", reqs)
 	}
 	if !strings.Contains(r.stdout, `"appEntitlementOwnerIds": [`) || !strings.Contains(r.stdout, `"u1"`) {
 		t.Errorf("preview = %s, want appEntitlementOwnerIds in the body", r.stdout)

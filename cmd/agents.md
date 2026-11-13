@@ -389,7 +389,9 @@ password and secret-named parameters) print as `[redacted]`, a non-JSON body as
 without) and refuses an empty, `.` or `..` id (exit 2) as a real send does —
 including one carried only in a request body (`--grant-policy-id`,
 `--owner-id`, ...), so the preview cannot print a value a send would refuse. It
-needs no credentials unless c1i must look something up for an exact body: a
+needs no credentials unless c1i must look something up (reads only; a preview
+sends no write): the pre-send existence checks (user and policy ids, `policies
+update`'s current type), which refuse as a real run does, a
 task action's current policy step without `--policy-step-id`, a hosted MCP
 server's catalog id (`mcp servers update-credentials` without `--catalog-id`), or the caller for
 `requests create` without `--user-id`. `mcp gateway call` rejects it: c1i
@@ -558,8 +560,8 @@ resource with `--resource-id` likewise means you drop
   `state`. The same holds for `restart`, `reset`, `skip-step`, `process` and
   `update-grant-duration`. `reassign` looks up each `--to-user-id` before
   sending: an unknown user exits 2, because the API stores it as the step's
-  approver (`--dry-run` skips that lookup, so a preview proves nothing about
-  the ids). A repeated id is sent once. Recover a step that already names a bad
+  approver (`--dry-run` looks them up too, so a preview refuses what a real run
+  does). A repeated id is sent once. Recover a step that already names a bad
   approver by re-running `reassign` with valid ids; a system owner can also
   `reset`/`restart` where the task offers them.
 - Which actions a task accepts depends on its state, and the server refuses the

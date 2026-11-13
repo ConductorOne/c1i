@@ -118,7 +118,7 @@ For a hosted server without --catalog-id, c1i first looks the catalog id up
 		var opts []mutationOpt
 		if wrapperKey == "hostedConfig" && len(cfg) > 0 {
 			if _, ok := cfg["mcpServerCatalogId"]; !ok {
-				opts = append(opts, withPreRead(preRead{OnDryRun: true, Run: func(ctx context.Context, c *client.Client, _ *mutation) ([]resolvedID, error) {
+				opts = append(opts, withPreRead(preRead{Run: func(ctx context.Context, c *client.Client, _ *mutation) ([]resolvedID, error) {
 					catID, err := resolveMCPServerCatalogID(ctx, c, appID, connectorID)
 					if err != nil {
 						return nil, err

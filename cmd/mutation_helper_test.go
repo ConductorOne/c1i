@@ -62,13 +62,13 @@ func newTestSequenceCmd() *cobra.Command {
 	return c
 }
 
-func newTestPreReadCmd(onDryRun bool) *cobra.Command {
+func newTestPreReadCmd() *cobra.Command {
 	c := &cobra.Command{
 		Use: "reassign",
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			body := map[string]any{}
 			return sendMutation(cmd, mutation{Method: http.MethodPost, Path: "/api/v1/tasks/t1/action/reassign", Body: body},
-				withPreRead(preRead{OnDryRun: onDryRun, Run: func(ctx context.Context, c *client.Client, m *mutation) ([]resolvedID, error) {
+				withPreRead(preRead{Run: func(ctx context.Context, c *client.Client, m *mutation) ([]resolvedID, error) {
 					if _, err := c.Get(ctx, "/api/v1/tasks/t1", nil); err != nil {
 						return nil, err
 					}
@@ -314,14 +314,14 @@ func TestPreReadResolvesOnStderr(t *testing.T) {
 		}
 		return mutReply{body: `{"taskView":{"task":{"id":"t1"}}}`}
 	})
-	r := runHelperCmd(t, newTestPreReadCmd(true), s, context.Background(), nil, "text", []string{}...)
+	r := runHelperCmd(t, newTestPreReadCmd(), s, context.Background(), nil, "text", []string{}...)
 	if r.stdout != "{\n  \"id\": \"t1\"\n}\n" || r.stderr != "Resolved policy step: P1\n" {
 		t.Errorf("stdout %q stderr %q", r.stdout, r.stderr)
 	}
 	if got := s.requests(); len(got) != 2 || got[1].body != `{"policyStepId":"P1"}` {
 		t.Errorf("requests = %+v", got)
 	}
-	r = runHelperCmd(t, newTestPreReadCmd(true), s, context.Background(), nil, "json", []string{}...)
+	r = runHelperCmd(t, newTestPreReadCmd(), s, context.Background(), nil, "json", []string{}...)
 	if want := `{"id":"P1","kind":"resolved","name":"policyStepId","notice":"Resolved policy step: P1"}` + "\n"; r.stderr != want {
 		t.Errorf("stderr = %q, want %q", r.stderr, want)
 	}
@@ -330,13 +330,9 @@ func TestPreReadResolvesOnStderr(t *testing.T) {
 func TestPreReadDryRun(t *testing.T) {
 	withDryRun(t)
 	s := newMutServer(t, fixedReply(200, `{}`))
-	r := runHelperCmd(t, newTestPreReadCmd(true), s, context.Background(), nil, "text", []string{}...)
+	r := runHelperCmd(t, newTestPreReadCmd(), s, context.Background(), nil, "text", []string{}...)
 	if !strings.Contains(r.stdout, `"policyStepId": "P1"`) || len(s.requests()) != 1 {
-		t.Errorf("OnDryRun read: stdout %q, %d requests", r.stdout, len(s.requests()))
-	}
-	r = runHelperCmd(t, newTestPreReadCmd(false), nil, context.Background(), nil, "text", []string{}...)
-	if r.err != nil || strings.Contains(r.stdout, "policyStepId") {
-		t.Errorf("skipped read: stdout %q err %v", r.stdout, r.err)
+		t.Errorf("pre-read: stdout %q, %d requests", r.stdout, len(s.requests()))
 	}
 }
 

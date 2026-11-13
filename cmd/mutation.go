@@ -77,10 +77,10 @@ type resolvedID struct {
 	ID    string
 }
 
-// preRead is a read the helper runs before the send. It may modify m.
+// preRead is a read the helper runs before the send, on a --dry-run too, so a
+// preview refuses what a real run refuses. It may modify m; it must not write.
 type preRead struct {
-	Run      func(ctx context.Context, c *client.Client, m *mutation) ([]resolvedID, error)
-	OnDryRun bool
+	Run func(ctx context.Context, c *client.Client, m *mutation) ([]resolvedID, error)
 }
 
 type secretKind int
@@ -202,6 +202,10 @@ func sendMutationSequence(cmd *cobra.Command, steps []mutationStep, note string,
 	if err != nil {
 		return notApplied(err)
 	}
+	c, err := runPreReads(cmd, baseURL, nil, o)
+	if err != nil {
+		return notApplied(err)
+	}
 	if dryRunActive() {
 		ids := make([]string, 0, len(steps))
 		var reqs []previewRequest
@@ -225,10 +229,6 @@ func sendMutationSequence(cmd *cobra.Command, steps []mutationStep, note string,
 			notice(cmd, noticePlaceholders, note, map[string]any{"placeholders": placeholders})
 		}
 		return nil
-	}
-	c, err := runPreReads(cmd, baseURL, nil, o)
-	if err != nil {
-		return notApplied(err)
 	}
 	if c == nil {
 		if c, err = newMutationClient(cmd, baseURL); err != nil {
@@ -404,14 +404,10 @@ func runPreReads(cmd *cobra.Command, baseURL string, m *mutation, o mutationOpts
 	return runPreReadsWith(cmd, baseURL, m, o, nil)
 }
 
-// runPreReadsWith runs o's pre-send reads that apply to this run, building a
-// client (reusing c) only when one does.
+// runPreReadsWith runs o's pre-send reads, building a client (reusing c) only
+// when there is one.
 func runPreReadsWith(cmd *cobra.Command, baseURL string, m *mutation, o mutationOpts, c *client.Client) (*client.Client, error) {
-	dry := dryRunActive()
 	for _, p := range o.preReads {
-		if dry && !p.OnDryRun {
-			continue
-		}
 		if c == nil {
 			var err error
 			if c, err = newMutationClient(cmd, baseURL); err != nil {

@@ -134,7 +134,7 @@ func TestCoreEntitlementsCreateSequence(t *testing.T) {
 	})
 }
 
-// The policy check stays a pre-send read: skipped on a dry run, and a failure
+// The policy check is a pre-send read that runs on a dry run too, and a failure
 // sends nothing.
 func TestCoreEntitlementsUpdatePolicyCheck(t *testing.T) {
 	s := newMutServer(t, func(r *http.Request, _ int) mutReply {
@@ -156,9 +156,10 @@ func TestCoreEntitlementsUpdatePolicyCheck(t *testing.T) {
 	}
 
 	withDryRun(t)
-	r = runMutationCLI(t, nil, 0, nil, args...)
-	if r.err != nil || !strings.Contains(r.stdout, `"grantPolicyId": "ghost"`) {
-		t.Errorf("dry run: exit %d stdout %q, want a preview with no lookup", r.exit, r.stdout)
+	dry := newMutServer(t, func(*http.Request, int) mutReply { return mutReply{status: 404, body: `{"code":5}`} })
+	r = runMutationCLI(t, dry.srv, 0, nil, args...)
+	if r.exit != exitUsage || r.stdout != "" || len(dry.requests()) != 1 {
+		t.Errorf("dry run: exit %d stdout %q, %d requests, want exit 2, no preview, one lookup", r.exit, r.stdout, len(dry.requests()))
 	}
 }
 

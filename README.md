@@ -358,12 +358,11 @@ something up so the previewed body is exact:
 - `mcp servers update-credentials` for a hosted server without `--catalog-id`
   reads the server to resolve its catalog id;
 - `requests create grant`/`revoke` without `--user-id` resolve the caller;
+- the pre-send existence checks (a `--user-id`, `--owner-id` or `--to-user-id`
+  user, a policy id on `apps` and `entitlements` writes, the policy type
+  `policies update` looks up) run on a preview too, so it refuses what a real
+  run refuses; they are reads, and the preview still sends no write;
 - `upgrade` fetches and verifies the release (see [Updating the binary](#updating-the-binary-c1i-upgrade)).
-
-Other pre-send checks, such as the policy lookups on `apps` and
-`entitlements` writes, are skipped on a preview. `policies update` skips its
-policy-type lookup too, so a patch that needs the type exits `2` under
-`--dry-run` unless you pass `--policy-type`.
 
 **An inherited `C1I_DRY_RUN=1` turns every write in a script into a
 preview.** The preview has no `id`, so `jq -r .id` prints `null` and the script
@@ -771,7 +770,7 @@ updated app the same way. `--grant-policy-id`, `--revoke-policy-id` and
 the server assigns its default grant and revoke policies and no certify
 policy). Before sending, c1i fetches each policy and refuses (exit `2`,
 nothing sent) an id that doesn't exist, is deleted, or isn't of the flag's
-type; `--dry-run` skips this check. An empty policy id is a usage error, not
+type (a `--dry-run` preview does it too). An empty policy id is a usage error, not
 an unbind: unbind with `--unbind-policy grant|revoke|certify` (repeatable),
 which can't be combined with setting the same kind.
 `--identity-matching` takes `strict`, `display-name`, `custom`, or the full
@@ -813,7 +812,7 @@ polls. Any `--wait-*` flag without `--wait` is a usage error (exit 2).
 
 `set-owners` looks up each distinct `--user-id` with `GET /api/v1/users/{id}`
 before the `PUT`: an unknown one exits `2` naming it and nothing is sent
-(`--dry-run` skips the lookups), and a repeated `--user-id` is sent once. The
+(a `--dry-run` preview looks them up too), and a repeated `--user-id` is sent once. The
 API would otherwise accept an unknown id at exit `0`, so a set naming only
 unknown ids would leave no real owners: an app stores the id (`GET .../ownerids`
 lists it, `apps owners` does not), an entitlement drops it.
@@ -919,7 +918,7 @@ Reusing a resource with `--resource-id` likewise means you drop
 create request, so no follow-up call is needed; an empty one is a usage error
 rather than an owner quietly dropped, and each id is checked before the first
 create (an unknown user exits `2` and creates nothing; the check reads the user,
-so a credential without read access exits `3`, and `--dry-run` skips it). `--duration-grant` follows the [Durations](#durations)
+so a credential without read access exits `3`, a `--dry-run` preview included). `--duration-grant` follows the [Durations](#durations)
 rule; omit it for standing access.
 
 `--dry-run` previews all three requests in `requests[]`; where an id only
@@ -1066,8 +1065,7 @@ closed` (exit 2).
 `reassign` sets the step's approvers to the users named by `--to-user-id`;
 repeat the flag to assign several. Before sending it looks each id up: an
 unknown user exits `2` and nothing is sent, because the API would store the id
-as the step's approver. `--dry-run` skips that lookup, so a preview does not
-prove the ids exist. A repeated id is sent once; recover a step already given a
+as the step's approver; a `--dry-run` preview looks them up too. A repeated id is sent once; recover a step already given a
 bad approver by re-running `reassign` with valid ids (a system owner can also
 `reset`/`restart` where the task offers them).
 
@@ -1198,7 +1196,7 @@ requires an explicit `--update-mask` (see [Update masks](#update-masks)).
 `create`/`update` print the policy unwrapped like `get` (`jq -er .id`); `delete`
 prints `{}`. A `--steps-file` or `--body-file` update that states no
 `policyType` looks the policy's current type up first (nothing is sent if that
-fails); `--dry-run` skips the lookup, so pass `--policy-type` to preview one.
+fails); `--dry-run` does the lookup too, and `--policy-type` skips it.
 
 `validate-cel` checks a CEL condition without creating or updating anything.
 Its root variable is `subject` (not `user`); this validates the

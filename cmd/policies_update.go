@@ -52,8 +52,8 @@ still run. A failed lookup (e.g. the policy doesn't exist, or you're not
 authorized) surfaces as that failure's own exit code, not exit 2; if the
 lookup succeeds but still can't produce a usable type, the command refuses
 with exit 2 rather than send an unguarded request. Pass --policy-type to
-skip the lookup; --dry-run skips it too, so it needs --policy-type to preview
-such a patch (exit 2 otherwise).
+skip the lookup. --dry-run does the lookup too (a read) so the preview body is
+exact.
 
 Prints the updated policy unwrapped like "policies get" (id is .id).`,
 	Args: cobra.ExactArgs(1),
@@ -75,9 +75,6 @@ Prints the updated policy unwrapped like "policies get" (id is .id).`,
 		}
 		if !errors.Is(err, errPolicyTypeNeeded) {
 			return err
-		}
-		if dryRunActive() {
-			return &usageError{errors.New("--dry-run skips the lookup of the policy's current type, which this patch needs: pass --policy-type")}
 		}
 		return sendMutation(cmd, m, withPreRead(preRead{Run: func(ctx context.Context, c *client.Client, m *mutation) ([]resolvedID, error) {
 			r := &policyTypeResolver{client: c}
