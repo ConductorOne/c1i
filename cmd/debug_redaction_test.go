@@ -56,6 +56,55 @@ func TestDebugTraceAndTransportErrorRedactURL(t *testing.T) {
 	})
 }
 
+// The partial-result notice and the pagination guard's INCOMPLETE text echo the
+// --path; a secret query value stays masked, in both stderr formats.
+func TestApiNoticesAndGuardErrorsRedactPath(t *testing.T) {
+	const path = "/api/v1/apps?token=" + debugSecret + "&visible=1"
+	for _, format := range []string{"text", "json"} {
+		t.Run("partial/"+format, func(t *testing.T) {
+			s := newMutServer(t, fixedReply(200, `{"list":[{"id":"1"}],"nextPageToken":"abc"}`))
+			t.Setenv("C1I_URL", mutTestURL)
+			var r mutResult
+			trace := captureStderr(t, func() {
+				r = runMutationCLI(t, s.srv, 0, nil, "api", "--path", path, "--error-format", format)
+			})
+			if r.err != nil {
+				t.Fatal(r.err)
+			}
+			all := trace + r.stderr
+			if !strings.Contains(all, "partial result") || strings.Contains(all, debugSecret) || !strings.Contains(all, "visible=1") {
+				t.Errorf("stderr = %q", all)
+			}
+		})
+		t.Run("stuck cursor/"+format, func(t *testing.T) {
+			s := newMutServer(t, fixedReply(200, `{"list":[{"id":"1"}],"nextPageToken":"same"}`))
+			t.Setenv("C1I_URL", mutTestURL)
+			var r mutResult
+			trace := captureStderr(t, func() {
+				r = runMutationCLI(t, s.srv, 0, nil, "api", "--path", path, "--paginate", "--error-format", format)
+			})
+			if r.err == nil {
+				t.Fatal("want the stuck-cursor error")
+			}
+			all := trace + r.stderr
+			if !strings.Contains(all, "INCOMPLETE") || strings.Contains(all, debugSecret) || !strings.Contains(all, "visible=1") {
+				t.Errorf("stderr = %q", all)
+			}
+		})
+	}
+	t.Run("missing slash", func(t *testing.T) {
+		r := runMutationCLI(t, nil, 0, nil, "api", "--path", "api/v1/x?token="+debugSecret+"&visible=1")
+		if r.exit != exitUsage || strings.Contains(r.stderr, debugSecret) || !strings.Contains(r.stderr, "visible=1") {
+			t.Errorf("exit %d stderr %q", r.exit, r.stderr)
+		}
+	})
+	t.Run("destination-url", func(t *testing.T) {
+		if err := validateWebhookURL("http://h.example/x?token=" + debugSecret + "&visible=1"); err == nil || strings.Contains(err.Error(), debugSecret) || !strings.Contains(err.Error(), "visible=1") {
+			t.Errorf("err = %v", err)
+		}
+	})
+}
+
 // A request that cannot be built echoes its URL; the secret is masked, the
 // rest stays, and the exit code is still usage (2).
 func TestUnbuildableRequestErrorRedactsURL(t *testing.T) {

@@ -168,7 +168,7 @@ func sendMutation(cmd *cobra.Command, m mutation, opts ...mutationOpt) error {
 		op := o.wait(c)
 		if _, err := runWait(cmd, op); err != nil {
 			return &mutationError{
-				err:     fmt.Errorf("%s %s was applied; waiting for %s failed: %w", m.Method, m.Path, op.Subject, err),
+				err:     fmt.Errorf("%s %s was applied; waiting for %s failed: %w", m.Method, redact.URL(m.Path), op.Subject, err),
 				applied: appliedTrue,
 			}
 		}
@@ -494,7 +494,7 @@ func marshalMutationBody(m mutation) ([]byte, error) {
 		case reflect.Slice:
 			return []byte("[]"), nil
 		}
-		return nil, fmt.Errorf("refusing to send %s %s: the request body encodes to null", m.Method, m.Path)
+		return nil, fmt.Errorf("refusing to send %s %s: the request body encodes to null", m.Method, redact.URL(m.Path))
 	}
 	return b, nil
 }
@@ -704,7 +704,7 @@ func writeMutationResult(cmd *cobra.Command, m mutation, data []byte, secret sec
 	if !json.Valid(doc) {
 		return &mutationError{
 			err: &nonJSONResponseError{fmt.Errorf("%s %s returned 2xx with a non-JSON body; the change may have been applied: %w",
-				m.Method, m.Path, jsonSyntaxErr(doc))},
+				m.Method, redact.URL(m.Path), jsonSyntaxErr(doc))},
 			applied: appliedTrue,
 		}
 	}
@@ -717,7 +717,7 @@ func writeMutationResult(cmd *cobra.Command, m mutation, data []byte, secret sec
 		err = json.Indent(&out, doc, "", "  ")
 	}
 	if err != nil {
-		return &mutationError{err: &nonJSONResponseError{fmt.Errorf("%s %s returned 2xx with a non-JSON body; the change may have been applied: %w", m.Method, m.Path, err)}, applied: appliedTrue}
+		return &mutationError{err: &nonJSONResponseError{fmt.Errorf("%s %s returned 2xx with a non-JSON body; the change may have been applied: %w", m.Method, redact.URL(m.Path), err)}, applied: appliedTrue}
 	}
 	out.WriteByte('\n')
 	if _, werr := cmd.OutOrStdout().Write(out.Bytes()); werr != nil {
@@ -726,7 +726,7 @@ func writeMutationResult(cmd *cobra.Command, m mutation, data []byte, secret sec
 			extra = "; " + extra
 		}
 		return &mutationError{
-			err:     fmt.Errorf("%s %s succeeded but writing its response failed: %w%s", m.Method, m.Path, werr, extra),
+			err:     fmt.Errorf("%s %s succeeded but writing its response failed: %w%s", m.Method, redact.URL(m.Path), werr, extra),
 			applied: appliedTrue,
 		}
 	}
