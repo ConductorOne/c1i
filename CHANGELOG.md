@@ -76,13 +76,15 @@ still needs none.
 - `--url https://<tenant>:443` (also `C1I_URL` and `url:` in `~/.c1i.yaml`)
   failed with exit 3, "no credentials found", because credentials are stored
   per host and `:443` counted as a different one. The default HTTPS port
-  (`:443`, `:0443`, or an empty `:`) is now dropped, and a credential saved
+  (`:443`, `:0443`, or an empty `:`; a malformed port such as `+443` is still
+  refused) is now dropped, and a credential saved
   under the `:443` name is found and moved on first use, with every older copy
   removed. Any path, query or fragment in `--url` is ignored, as before.
 - A control character (newline, CR, NUL, ...) in a file-path flag (`-o`,
   `--out-dir`, every `--*-file`) or a header (`api --header`, `mcp servers`
-  `--header-name`/`--header-value`/`--bearer-token`, and the same fields in a
-  `--hosted-config-file`/`--external-config-file`) is now a usage error (exit
+  `--header-name`/`--header-value`/`--bearer-token`, and the same fields, plus
+  `awsSigv4.sessionToken`, in a `--hosted-config-file`/`--external-config-file`
+  under either JSON spelling) is now a usage error (exit
   2) before anything is read, written or sent. `docs readme -o $'a\nb'` wrote a
   file named with a newline, and a CR/LF in a header failed only inside the
   HTTP library. A header name must also be a valid HTTP token, so
@@ -90,8 +92,9 @@ still needs none.
   colon) is refused instead of reaching the HTTP library, which printed it.
   The error names the flag (or JSON field) and the character's position; it
   never prints a header value, or a header name that is itself invalid. Tab is
-  still allowed in header values, and `--config-field` values may still span
-  lines.
+  still allowed in header values. `--config-field` keys refuse only control
+  characters (they are JSON keys, not header names), and its values may still
+  span lines.
 - A malformed `key=value` (`api --header`/`--query`, `--config-field`) echoed
   the whole input in its error, which could expose a token missing its `=`; the
   error now names the flag only.
