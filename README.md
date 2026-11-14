@@ -1799,9 +1799,12 @@ file, or `-` for stdin) — the two are mutually exclusive. GET and DELETE refus
 a body by default (a body on either is more likely a mistake than intent); pass
 `--allow-delete-body` to lift that for DELETE specifically, for the handful of
 C1 endpoints that require one. `--query key=value` and `--header key=value` are
-both repeatable; a control character (newline, NUL, ...) in a `--header` key or
-value, or in `mcp servers` `--header-name`/`--header-value`/`--bearer-token`, is a usage error
-(exit 2), except a tab in a value.
+both repeatable. A header name must be letters, digits and `!#$%&'*+-.^_`+"`"+`|~`
+and a value may not hold a control character (newline, NUL, ...) except a tab;
+the same holds for `mcp servers` `--header-name`/`--header-value`/`--bearer-token`
+and those fields inside `--hosted-config-file`/`--external-config-file`. A
+violation is a usage error (exit 2) that names the flag or JSON path and never
+echoes the text.
 
 With `--paginate`, each page's first array-valued field is unwrapped and each
 item is emitted as a single line of NDJSON, the same format list commands use.

@@ -1,6 +1,8 @@
 package cmd
 
 import (
+	"os"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"testing"
@@ -237,5 +239,97 @@ func TestMalformedKeyValueErrorNeverEchoesInput(t *testing.T) {
 				t.Errorf("%v: requests sent: %v", args, got)
 			}
 		}
+	}
+}
+
+func TestHeaderNameRequiresTokenChars(t *testing.T) {
+	t.Setenv("C1I_URL", mutTestURL)
+	for _, pair := range []string{"Authorization: Bearer sekr3t==", "A B=x", "A(B)=x", "\u00e9=x"} {
+		srv := newMutServer(t, fixedReply(200, "{}"))
+		res := runMutationCLI(t, srv.srv, 0, nil, "api", "--path", "/api/v1/apps", "--header", pair)
+		out := res.stderr
+		if res.err != nil {
+			out += res.err.Error()
+		}
+		if res.exit != exitUsage || !strings.Contains(out, "--header") || !strings.Contains(out, "name has invalid character") {
+			t.Errorf("%q: exit %d out %q, want a name usage error", pair, res.exit, out)
+		}
+		if strings.Contains(out, "sekr3t") || strings.Contains(out, "Authorization") || strings.Contains(out, "Bearer") {
+			t.Errorf("%q: error echoes the name: %q", pair, out)
+		}
+		if got := srv.requests(); len(got) != 0 {
+			t.Errorf("%q: requests sent: %v", pair, got)
+		}
+	}
+	for _, c := range blankCheckCommands() {
+		if c.Flags().Lookup("header-name") == nil {
+			continue
+		}
+		srv := newMutServer(t, fixedReply(200, "{}"))
+		res := runMutationCLI(t, srv.srv, 0, nil, blankArgs(t, c, "header-name", "Authorization: sekr3t")...)
+		if res.exit != exitUsage || res.err == nil || strings.Contains(res.err.Error(), "sekr3t") || !strings.Contains(res.err.Error(), "--header-name") {
+			t.Errorf("%s: exit %d err %v, want a --header-name usage error without the name", c.CommandPath(), res.exit, res.err)
+		}
+	}
+	if _, err := parseKeyValueFlag([]string{"X-Request_Id.1~=v"}, "header"); err != nil {
+		t.Errorf("a name of token characters must pass: %v", err)
+	}
+}
+
+// The same rule applies to auth fields inside a config file, which bypass the flags.
+func TestConfigFileHeaderFieldsRefuseControlChars(t *testing.T) {
+	t.Setenv("C1I_URL", mutTestURL)
+	const secret = `sekr3t\r\nX: y` // JSON-escaped control characters
+	cmds := map[string][]string{
+		"register hosted":   {"mcp", "servers", "register", "--app-id", "a", "--type", "hosted", "--display-name", "d", "--hosted-config-file"},
+		"register external": {"mcp", "servers", "register", "--app-id", "a", "--type", "external", "--display-name", "d", "--external-config-file"},
+		"creds hosted":      {"mcp", "servers", "update-credentials", "conn-1", "--app-id", "a", "--type", "hosted", "--update-mask", "hostedConfig", "--hosted-config-file"},
+		"creds external":    {"mcp", "servers", "update-credentials", "conn-1", "--app-id", "a", "--type", "external", "--update-mask", "externalConfig", "--external-config-file"},
+		"test-connection":   {"mcp", "servers", "test-connection", "--external-config-file"},
+	}
+	arms := map[string]struct{ json, field string }{
+		"header value":       {`{"customHeader":{"headerName":"X-K","headerValue":"` + secret + `"}}`, "customHeader.headerValue"},
+		"header value snake": {`{"custom_header":{"header_name":"X-K","header_value":"` + secret + `"}}`, "custom_header.header_value"},
+		"header name":        {`{"customHeader":{"headerName":"Authorization: ` + secret + `","headerValue":"v"}}`, "customHeader.headerName"},
+		"bearer":             {`{"bearerToken":{"token":"` + secret + `"}}`, "bearerToken.token"},
+		"bearer snake":       {`{"bearer_token":{"token":"` + secret + `"}}`, "bearer_token.token"},
+	}
+	ran := 0
+	for cname, base := range cmds {
+		for aname, arm := range arms {
+			for _, dry := range []bool{false, true} {
+				body := arm.json
+				if strings.Contains(cname, "hosted") {
+					body = strings.Replace(body, "{", `{"mcpServerCatalogId":"cat1",`, 1)
+				}
+				file := filepath.Join(t.TempDir(), "cfg.json")
+				if err := os.WriteFile(file, []byte(body), 0o600); err != nil {
+					t.Fatal(err)
+				}
+				args := append(append([]string{}, base...), file)
+				if dry {
+					args = append(args, "--dry-run")
+				}
+				srv := newMutServer(t, fixedReply(200, "{}"))
+				res := runMutationCLI(t, srv.srv, 0, nil, args...)
+				out := res.stdout + res.stderr
+				if res.err != nil {
+					out += res.err.Error()
+				}
+				ran++
+				if res.exit != exitUsage || !strings.Contains(out, arm.field) || !strings.Contains(out, "character") {
+					t.Errorf("%s/%s dry=%v: exit %d out %q, want a usage error naming %s", cname, aname, dry, res.exit, out, arm.field)
+				}
+				if strings.Contains(out, "sekr3t") || strings.Contains(out, "X: y") {
+					t.Errorf("%s/%s dry=%v: output echoes the value: %q", cname, aname, dry, out)
+				}
+				if got := srv.requests(); len(got) != 0 {
+					t.Errorf("%s/%s dry=%v: requests sent: %v", cname, aname, dry, got)
+				}
+			}
+		}
+	}
+	if ran != 50 {
+		t.Errorf("ran %d cases, want 50", ran)
 	}
 }

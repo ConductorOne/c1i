@@ -301,6 +301,34 @@ func sharedAuthFlagsChanged(cmd *cobra.Command) bool {
 	return false
 }
 
+// configHeaderFields lists, per auth arm spelling (camelCase or the proto
+// snake_case a file may use), the fields that reach an HTTP header.
+var configHeaderFields = []struct {
+	arm, field string
+	isName     bool
+}{
+	{"customHeader", "headerName", true}, {"custom_header", "header_name", true},
+	{"customHeader", keyHeaderValue, false}, {"custom_header", "header_value", false},
+	{"bearerToken", keyToken, false}, {"bearer_token", keyToken, false},
+}
+
+// checkConfigHeaders applies checkHeaderText to the header-bound auth fields of
+// a config read from a file, which bypasses the flag checks. wrapper names the
+// config in the error path.
+func checkConfigHeaders(wrapper string, cfg map[string]any) error {
+	for _, f := range configHeaderFields {
+		arm, _ := cfg[f.arm].(map[string]any)
+		text, ok := arm[f.field].(string)
+		if !ok {
+			continue
+		}
+		if err := checkHeaderText(wrapper+"."+f.arm+"."+f.field, "", text, f.isName); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // buildHostedConfig assembles the hostedConfig object from --hosted-config-file
 // (verbatim) or from the convenience flags (--catalog-id, --config-field, auth).
 // The two are mutually exclusive.
@@ -312,7 +340,11 @@ func buildHostedConfig(cmd *cobra.Command) (map[string]any, error) {
 		if usingFlags {
 			return nil, &usageError{fmt.Errorf("--hosted-config-file is mutually exclusive with --catalog-id/--source-app-id/--config-field and the auth flags (--auth/--bearer-token/--token-sharing/…)")}
 		}
-		return readJSONFile[map[string]any](cmd, "hosted-config-file", file)
+		cfg, err := readJSONFile[map[string]any](cmd, "hosted-config-file", file)
+		if err != nil {
+			return nil, err
+		}
+		return cfg, checkConfigHeaders("hostedConfig", cfg)
 	}
 
 	cfg := map[string]any{}
@@ -350,7 +382,11 @@ func buildExternalConfig(cmd *cobra.Command) (map[string]any, error) {
 		if usingFlags {
 			return nil, &usageError{fmt.Errorf("--external-config-file is mutually exclusive with --server-url/--transport and the auth flags (--auth/--bearer-token/--token-sharing/…)")}
 		}
-		return readJSONFile[map[string]any](cmd, "external-config-file", file)
+		cfg, err := readJSONFile[map[string]any](cmd, "external-config-file", file)
+		if err != nil {
+			return nil, err
+		}
+		return cfg, checkConfigHeaders("externalConfig", cfg)
 	}
 
 	cfg := map[string]any{}

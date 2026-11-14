@@ -29,23 +29,33 @@ func hasControlChar(s string) bool {
 
 func isASCIIControl(r rune) bool { return r < 0x20 || r == 0x7f }
 
-// checkHeaderText is the one rule for control characters in an HTTP header: a
-// name refuses all of them, a value all but tab (legal per RFC 9110). A value
-// is often a secret, so the error gives the character and byte offset, never
-// the text; only a name (text itself, or key for a value) is quoted.
-func checkHeaderText(flag, key, text string, isName bool) error {
-	at := strings.IndexFunc(text, func(r rune) bool { return isASCIIControl(r) && (isName || r != '\t') })
-	if at < 0 {
-		return nil
+// checkHeaderText is the one rule for text that becomes an HTTP header. A name
+// must be an RFC 9110 token (tchar only); a value refuses control characters
+// except tab (legal per RFC 9110). where names the source ("--header", or a
+// JSON path). Either may be a secret (`--header "Authorization: Bearer x"`), so
+// the error gives the character and byte offset, never the text; key, a name
+// already checked, is quoted for a value.
+func checkHeaderText(where, key, text string, isName bool) error {
+	for at, r := range text {
+		switch {
+		case isName && isASCIIControl(r):
+			return &usageError{fmt.Errorf("invalid %s: name has control character U+%04X at byte %d", where, r, at)}
+		case isName && !isTokenChar(r):
+			return &usageError{fmt.Errorf("invalid %s: name has invalid character U+%04X at byte %d (a header name is letters, digits and !#$%%&'*+-.^_`|~)", where, r, at)}
+		case !isName && r != '\t' && isASCIIControl(r):
+			subject := ""
+			if key != "" {
+				subject = fmt.Sprintf(" %q", key)
+			}
+			return &usageError{fmt.Errorf("invalid %s%s: value has control character U+%04X at byte %d", where, subject, r, at)}
+		}
 	}
-	what, subject := "value", ""
-	if key != "" {
-		subject = fmt.Sprintf(" %q", key)
-	}
-	if isName {
-		what, subject = "name", fmt.Sprintf(" %q", text)
-	}
-	return &usageError{fmt.Errorf("invalid --%s%s: %s has control character U+%04X at byte %d", flag, subject, what, text[at], at)}
+	return nil
+}
+
+// isTokenChar reports whether r is an RFC 9110 tchar.
+func isTokenChar(r rune) bool {
+	return r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9' || r < 0x80 && strings.ContainsRune("!#$%&'*+-.^_`|~", r)
 }
 
 // headerTextAnnotation marks a single-value flag that becomes an HTTP header
@@ -62,7 +72,7 @@ func validateHeaderFlags(cmd *cobra.Command) error {
 			return
 		}
 		v := f.Value.String()
-		err = checkHeaderText(f.Name, "", v, a[0] == "name")
+		err = checkHeaderText("--"+f.Name, "", v, a[0] == "name")
 	})
 	return err
 }
@@ -117,11 +127,11 @@ func parseKeyValueFlag(pairs []string, flagName string, opts ...kvOpt) (map[stri
 		if err != nil {
 			return nil, err
 		}
-		if err := checkHeaderText(flagName, "", k, true); err != nil {
+		if err := checkHeaderText("--"+flagName, "", k, true); err != nil {
 			return nil, err
 		}
 		if !valueControls {
-			if err := checkHeaderText(flagName, k, v, false); err != nil {
+			if err := checkHeaderText("--"+flagName, k, v, false); err != nil {
 				return nil, err
 			}
 		}
