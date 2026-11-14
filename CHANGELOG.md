@@ -39,7 +39,9 @@ unfiltered list. Omit the flag when the variable is empty, for example
   secret query, fragment or `;` path parameter value (also percent-encoded) or
   URL userinfo reached stderr and CI logs. They now mask them with the same
   rule as `--dry-run` previews (shared `internal/redact`); non-secret parameters
-  stay visible. Names ending in `token`, including pagination cursors such as
+  stay visible. Encoded secret names (`;%74oken=`, `%3Btoken=`, `?%74oken=`)
+  and values that decode into a separator are now masked, in previews too.
+  Names ending in `token`, including pagination cursors such as
   `page_token`, print as `[redacted]`. A URL's username is now masked too (except `git`), so
   `https://<token>:x-oauth-basic@host` no longer prints the token, in previews
   as well.

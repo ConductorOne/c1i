@@ -474,7 +474,7 @@ func (c *Client) do(req *http.Request) ([]byte, error) {
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		return nil, &APIError{
 			Method:     req.Method,
-			Path:       req.URL.Path,
+			Path:       req.URL.EscapedPath(),
 			StatusCode: resp.StatusCode,
 			Body:       string(resp.Body),
 			PriorSent:  resp.PriorSent,

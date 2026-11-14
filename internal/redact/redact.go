@@ -64,10 +64,7 @@ func URL(s string) string {
 		return urlText(s)
 	}
 	if u.User != nil {
-		name := u.User.Username()
-		if name != gitUser {
-			name = Placeholder
-		}
+		name := maskedUser(u.User.Username())
 		if _, has := u.User.Password(); has {
 			u.User = url.UserPassword(name, Placeholder)
 		} else {
@@ -104,20 +101,14 @@ func urlText(s string) string {
 		return "//" + maskedUser(m[2:strings.Index(m, ":")]) + ":" + Placeholder + "@"
 	})
 	s = urlUsernameRE.ReplaceAllStringFunc(s, func(m string) string {
-		if m == "//"+gitUser+"@" {
-			return m
-		}
-		return "//" + Placeholder + "@"
+		return "//" + maskedUser(m[2:len(m)-1]) + "@"
 	})
 	s = bareUserinfoRE.ReplaceAllStringFunc(s, func(m string) string {
 		return maskedUser(m[:strings.Index(m, ":")]) + ":" + Placeholder + "@"
 	})
 	s = bareTokenRE.ReplaceAllStringFunc(s, func(m string) string {
 		user, host, _ := strings.Cut(m, "@")
-		if user == gitUser {
-			return m
-		}
-		return Placeholder + "@" + host
+		return maskedUser(user) + "@" + host
 	})
 	return maskSecretPairs(s)
 }

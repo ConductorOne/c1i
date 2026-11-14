@@ -382,7 +382,7 @@ func (c *Client) post(ctx context.Context, rpcMethod string, payload []byte, wan
 			StatusCode: resp.StatusCode,
 			Body:       strings.TrimSpace(string(data)),
 			Method:     req.Method,
-			Path:       req.URL.Path,
+			Path:       req.URL.EscapedPath(),
 			RPCMethod:  rpcMethod,
 		}
 	}

@@ -112,10 +112,10 @@ func (dt *debugTripper) RoundTrip(req *http.Request) (*http.Response, error) {
 	resp, err := dt.next.RoundTrip(req)
 	elapsed := time.Since(start).Round(time.Millisecond)
 	if err != nil {
-		_, _ = fmt.Fprintf(dt.out, "< %s %s error after %s: %v\n", req.Method, redact.Path(req.URL.Path), elapsed, err)
+		_, _ = fmt.Fprintf(dt.out, "< %s %s error after %s: %v\n", req.Method, redact.Path(req.URL.EscapedPath()), elapsed, err)
 		return resp, err
 	}
-	_, _ = fmt.Fprintf(dt.out, "< %s %s %s (%s)\n", req.Method, redact.Path(req.URL.Path), resp.Status, elapsed)
+	_, _ = fmt.Fprintf(dt.out, "< %s %s %s (%s)\n", req.Method, redact.Path(req.URL.EscapedPath()), resp.Status, elapsed)
 	return resp, err
 }
 

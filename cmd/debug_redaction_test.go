@@ -3,6 +3,7 @@ package cmd
 import (
 	"bytes"
 	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 
@@ -176,6 +177,54 @@ func TestPathParamSecretsNeverReachStderr(t *testing.T) {
 			t.Errorf("err %v stderr %q", r.err, r.stderr)
 		}
 	})
+}
+
+// A ";" parameter value that percent-decodes into a separator ("/", "?", "#",
+// space) is masked whole: the path is masked in its escaped form.
+func TestEscapedSeparatorsInPathParamStayMasked(t *testing.T) {
+	leaks := []string{"AbC", "dEf", "SEKa", "SEKb", "SEKc", "SEKd", "SEKe"}
+	run := func(t *testing.T, srv *httptest.Server, format string, args ...string) string {
+		t.Setenv("C1I_URL", mutTestURL)
+		var r mutResult
+		trace := captureStderr(t, func() {
+			r = runMutationCLI(t, srv, 0, nil, append(args, "--debug", "--error-format", format)...)
+		})
+		if r.err == nil {
+			t.Fatal("want an error")
+		}
+		return trace + r.stderr
+	}
+	for _, format := range []string{"text", "json"} {
+		t.Run("api 404/"+format, func(t *testing.T) {
+			s := newMutServer(t, fixedReply(404, `{}`))
+			all := run(t, s.srv, format, "api", "--path", "/api/v1/x;token=AbC%2FdEf%2B1==/y")
+			for _, l := range leaks {
+				if strings.Contains(all, l) {
+					t.Errorf("leaked %q: %s", l, all)
+				}
+			}
+			if !strings.Contains(all, "/y") {
+				t.Errorf("lost the visible path: %s", all)
+			}
+		})
+		t.Run("apps get 404/"+format, func(t *testing.T) {
+			s := newMutServer(t, fixedReply(404, `{}`))
+			all := run(t, s.srv, format, "apps", "get", "x;token=SEKa/SEKb?SEKc#SEKd SEKe")
+			for _, l := range leaks {
+				if strings.Contains(all, l) {
+					t.Errorf("leaked %q: %s", l, all)
+				}
+			}
+		})
+		t.Run("connection error/"+format, func(t *testing.T) {
+			all := run(t, closedPortServer(t), format, "apps", "get", "x;token=SEKa/SEKb?SEKc#SEKd SEKe")
+			for _, l := range leaks {
+				if strings.Contains(all, l) {
+					t.Errorf("leaked %q: %s", l, all)
+				}
+			}
+		})
+	}
 }
 
 // The fixed-route list's partial-result notice and the gateway URL error echo
