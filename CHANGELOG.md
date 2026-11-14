@@ -79,11 +79,13 @@ still needs none.
   (`:443`, `:0443`, or an empty `:`; a malformed port such as `+443` is still
   refused) is now dropped, and a credential saved
   under the `:443` name is found and moved on first use, with every older copy
-  removed. Any path, query or fragment in `--url` is ignored, as before.
+  removed. `auth logout` now removes every key a tenant's credentials may be
+  stored under (the plain host, `:443`, and the legacy short name for
+  `*.conductor.one`), so a leftover copy no longer logs you back in. Any path, query or fragment in `--url` is ignored, as before.
 - A control character (newline, CR, NUL, ...) in a file-path flag (`-o`,
   `--out-dir`, every `--*-file`) or a header (`api --header`, `mcp servers`
   `--header-name`/`--header-value`/`--bearer-token`, and the same fields, plus
-  `awsSigv4.sessionToken`, in a `--hosted-config-file`/`--external-config-file`
+  `awsSigv4.sessionToken`/`accessKeyId`, in a `--hosted-config-file`/`--external-config-file`
   under either JSON spelling) is now a usage error (exit
   2) before anything is read, written or sent. `docs readme -o $'a\nb'` wrote a
   file named with a newline, and a CR/LF in a header failed only inside the
