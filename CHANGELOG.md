@@ -33,6 +33,10 @@ unfiltered list. Omit the flag when the variable is empty, for example
 
 ### Fixed
 
+- `--debug` traces and transport or redirect errors printed the request URL
+  verbatim, so a secret query value or URL userinfo reached stderr and CI logs.
+  They now mask both with the same rule as `--dry-run` previews (shared
+  `internal/redact`); non-secret parameters stay visible.
 - A `--fields` value that names no field path (`,`, `.`, or `"$A,$B"` with
   both variables unset) or has an empty segment (`id.`, `a..b`) printed full,
   unprojected rows at exit 0. It is now a usage error (exit 2), and so is the

@@ -5,6 +5,8 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+
+	"github.com/ConductorOne/c1i/internal/redact"
 )
 
 // redirectStatuses is the set of 3xx codes net/http's own Client would
@@ -57,15 +59,15 @@ func (rt *redirectTripper) RoundTrip(req *http.Request) (*http.Response, error) 
 		if !ok {
 			return nil, &RedirectError{
 				Method:     req.Method,
-				URL:        req.URL.String(),
+				URL:        redact.URL(req.URL.String()),
 				StatusCode: resp.StatusCode,
-				Location:   loc,
+				Location:   redact.URL(loc),
 			}
 		}
 		if hop == maxRedirectHops-1 {
 			return nil, &RedirectLoopError{
 				Method: req.Method,
-				URL:    req.URL.String(),
+				URL:    redact.URL(req.URL.String()),
 				Hops:   hop + 1,
 			}
 		}

@@ -8,11 +8,14 @@ import (
 	"math/rand"
 	"net/http"
 	"net/http/httptrace"
+	"net/url"
 	"runtime/debug"
 	"strconv"
 	"strings"
 	"sync/atomic"
 	"time"
+
+	"github.com/ConductorOne/c1i/internal/redact"
 )
 
 const (
@@ -106,7 +109,7 @@ type debugTripper struct {
 
 func (dt *debugTripper) RoundTrip(req *http.Request) (*http.Response, error) {
 	start := time.Now()
-	_, _ = fmt.Fprintf(dt.out, "> %s %s\n", req.Method, req.URL.String())
+	_, _ = fmt.Fprintf(dt.out, "> %s %s\n", req.Method, redact.URL(req.URL.String()))
 	resp, err := dt.next.RoundTrip(req)
 	elapsed := time.Since(start).Round(time.Millisecond)
 	if err != nil {
@@ -314,6 +317,7 @@ func (c *Client) sendWithRetry(req *http.Request) (*Response, error) {
 
 		resp, err := c.httpClient.Do(attemptReq) // #nosec G704 -- req.URL is the operator's own --url/config target, not attacker-supplied input to an internal request
 		if err != nil {
+			redactErrorURL(err)
 			if c.nonRetryable != nil && c.nonRetryable(err) {
 				return nil, fail(err)
 			}
@@ -363,6 +367,15 @@ func (c *Client) sendWithRetry(req *http.Request) (*Response, error) {
 			return nil, fail(readErr)
 		}
 		return &Response{StatusCode: resp.StatusCode, Header: resp.Header, Body: body, PriorSent: priorSent}, nil
+	}
+}
+
+// redactErrorURL masks the request URL inside a *url.Error in place, so its
+// text no longer carries a secret query value; type and wrap chain are unchanged.
+func redactErrorURL(err error) {
+	var ue *url.Error
+	if errors.As(err, &ue) {
+		ue.URL = redact.URL(ue.URL)
 	}
 }
 

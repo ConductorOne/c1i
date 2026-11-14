@@ -377,7 +377,9 @@ APP_ID=$(c1i apps create --display-name "Example" | jq -er .id) || exit 1
 
 `--debug` (or `C1I_DEBUG=1`) traces each API HTTP request to stderr — method,
 URL, response status, and elapsed time, including every retry attempt. Headers
-and bodies are never logged, so credentials don't leak. Output goes to stderr,
+and bodies are never logged, and URL userinfo and the value of every
+secret-named parameter (`token`, `api_key`, ...) print as `[redacted]`, as in
+`--dry-run` previews, so credentials don't leak. Output goes to stderr,
 so it won't corrupt piped JSON on stdout:
 
 ```sh
