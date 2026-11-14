@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"errors"
 	"fmt"
 
 	"github.com/ConductorOne/c1i/internal/config"
@@ -19,8 +20,16 @@ var authStatusCmd = &cobra.Command{
 
 		// Probe Load directly to learn which backend served the credentials.
 		// client.New does its own Load but doesn't expose the backend.
-		service := config.KeychainService(baseURL)
-		_, _, backend, loadErr := keychain.Load(service)
+		// The first key holding a credential, in the order loading tries them.
+		var service string
+		var backend keychain.Backend
+		loadErr := errors.New("no stored credentials")
+		for _, k := range config.KeychainServices(baseURL) {
+			if _, _, b, err := keychain.Load(k); err == nil {
+				service, backend, loadErr = k, b, nil
+				break
+			}
+		}
 
 		c, err := newClient(cmd, baseURL)
 		if err != nil {

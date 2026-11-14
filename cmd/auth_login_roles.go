@@ -66,11 +66,10 @@ func loginScopeFromFlags(cmd *cobra.Command) (loginScope, error) {
 
 // storedClientID returns the client id stored for baseURL, or "" if none.
 func storedClientID(baseURL string) string {
-	if id := keychain.StoredClientID(config.KeychainService(baseURL)); id != "" {
-		return id
-	}
-	if legacy := config.LegacyKeychainService(baseURL); legacy != "" {
-		return keychain.StoredClientID(legacy)
+	for _, service := range config.KeychainServices(baseURL) {
+		if id := keychain.StoredClientID(service); id != "" {
+			return id
+		}
 	}
 	return ""
 }

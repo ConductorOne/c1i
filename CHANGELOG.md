@@ -77,17 +77,18 @@ still needs none.
   failed with exit 3, "no credentials found", because credentials are stored
   per host and `:443` counted as a different one. The default HTTPS port
   (`:443`, `:0443`, or an empty `:`; a malformed port such as `+443` is still
-  refused) is now dropped, and a credential saved
-  under the `:443` name is found and moved on first use, with every older copy
-  removed. `auth logout` now removes every key a tenant's credentials may be
-  stored under (the plain host, `:443`, and the legacy short name for
-  `*.conductor.one`), so a leftover copy no longer logs you back in. Any path, query or fragment in `--url` is ignored, as before.
+  refused) is now dropped, and a credential saved under the `:443` name is
+  found and moved on first use, with every older copy removed. `auth logout`
+  now removes every key a tenant's credentials may be stored under (the plain
+  host, `:443`, and the legacy short name for `*.conductor.one`), so a
+  leftover copy no longer logs you back in. Any path, query or fragment in
+  `--url` is ignored, as before.
 - A control character (newline, CR, NUL, ...) in a file-path flag (`-o`,
   `--out-dir`, every `--*-file`) or a header (`api --header`, `mcp servers`
   `--header-name`/`--header-value`/`--bearer-token`, and the same fields, plus
-  `awsSigv4.sessionToken`/`accessKeyId`, in a `--hosted-config-file`/`--external-config-file`
-  under either JSON spelling) is now a usage error (exit
-  2) before anything is read, written or sent. `docs readme -o $'a\nb'` wrote a
+  `awsSigv4.sessionToken`/`accessKeyId`, in a
+  `--hosted-config-file`/`--external-config-file` under either JSON spelling)
+  is now a usage error (exit 2) before anything is read, written or sent. `docs readme -o $'a\nb'` wrote a
   file named with a newline, and a CR/LF in a header failed only inside the
   HTTP library. A header name must also be a valid HTTP token, so
   `api --header "Authorization: Bearer x=="` (a name containing a space and a
