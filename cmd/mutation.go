@@ -467,7 +467,8 @@ func checkMutationRequest(method, rawURL string) error {
 	err := client.CheckRequest(method, rawURL)
 	var pe *client.PathError
 	if err != nil && !errors.As(err, &pe) {
-		return &usageError{fmt.Errorf("building %s %s: %w", method, rawURL, err)}
+		redact.ErrorURL(err)
+		return &usageError{fmt.Errorf("building %s %s: %w", method, redact.URL(rawURL), err)}
 	}
 	return err
 }

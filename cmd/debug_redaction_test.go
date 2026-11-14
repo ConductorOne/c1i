@@ -56,6 +56,32 @@ func TestDebugTraceAndTransportErrorRedactURL(t *testing.T) {
 	})
 }
 
+// A request that cannot be built echoes its URL; the secret is masked, the
+// rest stays, and the exit code is still usage (2).
+func TestUnbuildableRequestErrorRedactsURL(t *testing.T) {
+	withDryRun(t)
+	t.Setenv("C1I_URL", mutTestURL)
+	r := runMutationCLI(t, nil, 0, nil, "api", "--method", "POST", "--path", "/api/v1/x?token="+debugSecret+"&visible=1\x01", "--body", "{}")
+	if r.exit != exitUsage || r.err == nil {
+		t.Fatalf("exit %d err %v, want usage", r.exit, r.err)
+	}
+	if strings.Contains(r.stderr, debugSecret) || !strings.Contains(r.stderr, "visible=1") {
+		t.Errorf("stderr = %q", r.stderr)
+	}
+}
+
+// A malformed --url is rejected before any request; its secrets stay masked.
+func TestMalformedURLFlagErrorRedactsSecrets(t *testing.T) {
+	t.Setenv("C1I_URL", "")
+	r := runMutationCLI(t, nil, 0, nil, "--url", "acme?token="+debugSecret+"&visible=1", "api", "--path", "/api/v1/x")
+	if r.exit != exitUsage || r.err == nil {
+		t.Fatalf("exit %d err %v, want usage", r.exit, r.err)
+	}
+	if strings.Contains(r.stderr, debugSecret) || !strings.Contains(r.stderr, "visible=1") {
+		t.Errorf("stderr = %q", r.stderr)
+	}
+}
+
 // cmd's own secret list must stay inside the core one the redactor owns.
 func TestRedactorCoversMCPAuthKeys(t *testing.T) {
 	for _, k := range []string{keyHeaderValue, keyCredentialsJSON, keySecretAccessKey} {

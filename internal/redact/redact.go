@@ -3,6 +3,7 @@
 package redact
 
 import (
+	"errors"
 	"net/url"
 	"regexp"
 	"strings"
@@ -160,4 +161,14 @@ func maskPair(p string) string {
 		return k + "=" + Placeholder
 	}
 	return p
+}
+
+// ErrorURL masks the request URL inside a *url.Error in place, so its text no
+// longer carries a secret; the type and wrap chain are unchanged. Call it only
+// on an error you own (one fresh from net/http).
+func ErrorURL(err error) {
+	var ue *url.Error
+	if errors.As(err, &ue) {
+		ue.URL = URL(ue.URL)
+	}
 }
