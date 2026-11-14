@@ -213,12 +213,13 @@ func addWaitFlags(cmd *cobra.Command, until string, defaultTimeout time.Duration
 
 // waitFlagValues reads the pair addWaitFlags declared. A non-positive timeout
 // is only an error when --wait was actually asked for, and any wait-* flag
-// (--wait-timeout or a command's own companion) set without --wait is a usage
-// error rather than silently ignored.
+// (--wait-timeout or a command's own companion) given when --wait was not
+// given at all is a usage error. An explicit --wait=false is accepted and its
+// companions ignored, so a scripted --wait=$W --wait-timeout X keeps working.
 func waitFlagValues(cmd *cobra.Command) (bool, time.Duration, error) {
 	wait, _ := cmd.Flags().GetBool("wait")
 	timeout, _ := cmd.Flags().GetDuration("wait-timeout")
-	if !wait {
+	if !cmd.Flags().Changed("wait") {
 		var stray error
 		cmd.Flags().VisitAll(func(f *pflag.Flag) {
 			if stray == nil && f.Changed && f.Name != "wait" && strings.HasPrefix(f.Name, "wait-") {

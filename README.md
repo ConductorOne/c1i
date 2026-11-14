@@ -811,7 +811,7 @@ stderr, so stdout stays the write's JSON response. A wait failure reports
 `"applied": true` under `--error-format json`. A timeout exits `1` even though
 the write was accepted, so re-check with `owners` rather than re-issuing the
 write. With `--dry-run` the preview still only covers the write; `--wait` never
-polls. Any `--wait-*` flag without `--wait` is a usage error (exit 2).
+polls. A `--wait-*` flag given without `--wait` (an explicit `--wait=false` is fine) is a usage error (exit 2).
 
 `set-owners` looks up each distinct `--user-id` with `GET /api/v1/users/{id}`
 before the `PUT`: an unknown one exits `2` naming it and nothing is sent
