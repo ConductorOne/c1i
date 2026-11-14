@@ -312,12 +312,14 @@ func sendMutationBatch(cmd *cobra.Command, ms []mutation, idKey string, label fu
 		writeBatchItemError(cmd, o.batchNoun, labels[i], err, appliedFalse, len(ms) > 1)
 		return &mutationError{err: err, applied: appliedFalse, exit: exitCode(err), batch: &batchSummary{NotAttempted: labels}}
 	}
-	var c *client.Client
-	reqs := make([]previewRequest, len(ms))
 	for i := range ms {
 		if err = checkMutationPath(baseURL, ms[i]); err != nil {
 			return unsent(i, err)
 		}
+	}
+	var c *client.Client
+	reqs := make([]previewRequest, len(ms))
+	for i := range ms {
 		if c, err = runPreReadsWith(cmd, baseURL, &ms[i], o, c); err != nil {
 			return unsent(i, err)
 		}

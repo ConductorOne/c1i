@@ -383,8 +383,16 @@ func TestLoadCredentialsMigrationClearsEveryOlderKey(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	if _, _, err := loadCredentials("https://acme.conductor.one"); err != nil {
+	// The :443 key is the one a :443 login wrote, so it is the current one.
+	id, _, err := loadCredentials("https://acme.conductor.one")
+	if err != nil {
 		t.Fatal(err)
+	}
+	if id != "id-c1i/acme.conductor.one:443" {
+		t.Errorf("loaded %q, want the :443 credential", id)
+	}
+	if got, _, _, err := keychain.Load("c1i/acme.conductor.one"); err != nil || got != id {
+		t.Errorf("plain key holds %q (%v), want the :443 credential", got, err)
 	}
 	for _, k := range []string{"c1i/acme", "c1i/acme.conductor.one:443"} {
 		if _, _, _, err := keychain.Load(k); err == nil {

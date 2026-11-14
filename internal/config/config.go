@@ -145,14 +145,33 @@ func canonicalHost(host string) string {
 	if err != nil {
 		return host
 	}
-	// An empty port ("host:") is the default; compare the number, so "0443" is too.
-	if n, perr := strconv.Atoi(port); port != "" && (perr != nil || n != 443) {
+	// An empty port ("host:") is the default; compare the number, so "0443" is
+	// too. Atoi would also take "+443", which is not a port.
+	if port != "" && (!isASCIIDigits(port) || portNumber(port) != 443) {
 		return host
 	}
 	if strings.Contains(h, ":") {
 		return "[" + h + "]"
 	}
 	return h
+}
+
+func isASCIIDigits(s string) bool {
+	for _, r := range s {
+		if r < '0' || r > '9' {
+			return false
+		}
+	}
+	return s != ""
+}
+
+// portNumber parses ASCII digits; an overflow is not 443.
+func portNumber(s string) int {
+	n, err := strconv.Atoi(s)
+	if err != nil {
+		return -1
+	}
+	return n
 }
 
 // KeychainService returns the keychain service name for a given base URL.

@@ -33,7 +33,9 @@ func loadCredentials(baseURL string) (clientID, clientSecret string, err error) 
 		// Older keys: the legacy *.conductor.one name, and the name stored
 		// while --url could carry an explicit :443.
 		// A miss keeps the primary error, which names the key a login writes.
-		olders := []string{config.LegacyKeychainService(baseURL), config.ExplicitPortKeychainService(baseURL)}
+		// The :443 key goes first: a :443 login wrote it and never touched the
+		// legacy key, so where both exist the legacy one may be stale.
+		olders := []string{config.ExplicitPortKeychainService(baseURL), config.LegacyKeychainService(baseURL)}
 		for _, older := range olders {
 			if older == "" || older == service {
 				continue
