@@ -93,6 +93,8 @@ func TestApiNoticesAndGuardErrorsRedactPath(t *testing.T) {
 		})
 	}
 	t.Run("missing slash", func(t *testing.T) {
+		// Without a URL the "url is required" check fires first.
+		t.Setenv("C1I_URL", mutTestURL)
 		r := runMutationCLI(t, nil, 0, nil, "api", "--path", "api/v1/x?token="+debugSecret+"&visible=1")
 		if r.exit != exitUsage || strings.Contains(r.stderr, debugSecret) || !strings.Contains(r.stderr, "visible=1") {
 			t.Errorf("exit %d stderr %q", r.exit, r.stderr)
