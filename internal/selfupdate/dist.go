@@ -185,7 +185,7 @@ func (c *Client) get(ctx context.Context, doer Doer, url string) ([]byte, http.H
 		return nil, nil, fmt.Errorf("fetching %s: %w", url, err)
 	}
 	if resp.StatusCode != http.StatusOK {
-		return nil, nil, &transport.APIError{Method: req.Method, Path: req.URL.Path, StatusCode: resp.StatusCode, Body: string(resp.Body)}
+		return nil, nil, &transport.APIError{Method: req.Method, Path: req.URL.EscapedPath(), StatusCode: resp.StatusCode, Body: string(resp.Body)}
 	}
 	return resp.Body, resp.Header, nil
 }
