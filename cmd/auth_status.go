@@ -18,9 +18,15 @@ var authStatusCmd = &cobra.Command{
 			return err
 		}
 
-		// Probe Load directly to learn which backend served the credentials.
-		// client.New does its own Load but doesn't expose the backend.
-		// The first key holding a credential, in the order loading tries them.
+		c, err := newClient(cmd, baseURL)
+		if err != nil {
+			return fmt.Errorf("not authenticated: %w", err)
+		}
+
+		// Probe Load directly to learn which backend served the credentials;
+		// client.New does its own Load but doesn't expose the backend. It runs
+		// after New, which may have moved an older key's credential to the
+		// current one, so the key reported is the one that still exists.
 		var service string
 		var backend keychain.Backend
 		loadErr := errors.New("no stored credentials")
@@ -29,11 +35,6 @@ var authStatusCmd = &cobra.Command{
 				service, backend, loadErr = k, b, nil
 				break
 			}
-		}
-
-		c, err := newClient(cmd, baseURL)
-		if err != nil {
-			return fmt.Errorf("not authenticated: %w", err)
 		}
 
 		body := map[string]any{"pageSize": 1}

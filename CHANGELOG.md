@@ -81,15 +81,18 @@ still needs none.
   found and moved on first use, with every older copy removed. `auth logout`
   now removes every key a tenant's credentials may be stored under (the plain
   host, `:443`, and the legacy short name for `*.conductor.one`), so a
-  leftover copy no longer logs you back in. Any path, query or fragment in
-  `--url` is ignored, as before.
+  leftover copy no longer logs you back in, and keeps removing the other
+  keys if one delete fails (the first error is still returned). `auth status`
+  and the `auth login` role prompt now see a credential stored under an
+  older key (`:443` or legacy). Any path, query or fragment in `--url` is
+  ignored, as before.
 - A control character (newline, CR, NUL, ...) in a file-path flag (`-o`,
   `--out-dir`, every `--*-file`) or a header (`api --header`, `mcp servers`
   `--header-name`/`--header-value`/`--bearer-token`, and the same fields, plus
   `awsSigv4.sessionToken`/`accessKeyId`, in a
   `--hosted-config-file`/`--external-config-file` under either JSON spelling)
-  is now a usage error (exit 2) before anything is read, written or sent. `docs readme -o $'a\nb'` wrote a
-  file named with a newline, and a CR/LF in a header failed only inside the
+  is now a usage error (exit 2) before anything is read, written or sent.
+  `docs readme -o $'a\nb'` wrote a file named with a newline, and a CR/LF in a header failed only inside the
   HTTP library. A header name must also be a valid HTTP token, so
   `api --header "Authorization: Bearer x=="` (a name containing a space and a
   colon) is refused instead of reaching the HTTP library, which printed it.

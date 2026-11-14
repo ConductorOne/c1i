@@ -6,6 +6,10 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/ConductorOne/c1i/internal/client"
+	"github.com/spf13/cobra"
+	"github.com/zalando/go-keyring"
+
 	"github.com/ConductorOne/c1i/internal/config"
 	"github.com/ConductorOne/c1i/internal/keychain"
 )
@@ -58,12 +62,18 @@ func TestLogoutAttemptsEveryKeyAfterAFailure(t *testing.T) {
 	keys := config.KeychainServices(base)
 	// A non-empty directory where the current key's credentials file belongs
 	// makes its file delete fail.
-	p, err := keychain.FilePath(keys[0])
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := os.MkdirAll(filepath.Join(p, "x"), 0o700); err != nil {
-		t.Fatal(err)
+	// The older key's file delete fails too, with a different path in its
+	// error, so the test can tell which error came back.
+	var paths []string
+	for _, k := range keys[:2] {
+		p, err := keychain.FilePath(k)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := os.MkdirAll(filepath.Join(p, "x"), 0o700); err != nil {
+			t.Fatal(err)
+		}
+		paths = append(paths, filepath.Base(p))
 	}
 	// The current key holds a credential too, so loading does not migrate the
 	// older copy away before logout runs.
@@ -77,8 +87,50 @@ func TestLogoutAttemptsEveryKeyAfterAFailure(t *testing.T) {
 	if r.err == nil || !strings.HasPrefix(r.err.Error(), "logout: ") {
 		t.Fatalf("err = %v, want the first delete error prefixed \"logout: \"", r.err)
 	}
+	if !strings.Contains(r.err.Error(), paths[0]) || strings.Contains(r.err.Error(), paths[1]) {
+		t.Errorf("err = %v, want the first key's error (%s), not the second's (%s)", r.err, paths[0], paths[1])
+	}
 	if _, _, _, err := keychain.Load(keys[1]); err == nil {
 		t.Errorf("%s survived a logout whose first delete failed", keys[1])
+	}
+}
+
+// With the file backend, status reports the key the credential lives under
+// after loading has migrated it, so the printed file exists.
+func TestStatusReportsTheMigratedKeyFile(t *testing.T) {
+	keyring.MockInitWithError(keyring.ErrUnsupportedPlatform)
+	t.Cleanup(keyring.MockInit)
+	t.Setenv("C1I_CLIENT_ID", "")
+	t.Setenv("C1I_CLIENT_SECRET", "")
+	dir := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", dir)
+	t.Setenv("HOME", dir)
+	t.Setenv("AppData", dir)
+	base := "https://acme.example"
+	if _, err := keychain.Store(config.ExplicitPortKeychainService(base), "id", "secret"); err != nil {
+		t.Fatal(err)
+	}
+	srv := newMutServer(t, fixedReply(200, `{}`))
+	t.Setenv("C1I_URL", base)
+	// The real credential load (and its migration) runs ahead of the stubbed
+	// client, as it does in client.New.
+	r := runCLI(t, func() {
+		orig := newClient
+		newClient = func(_ *cobra.Command, u string) (*client.Client, error) {
+			client.ClearCachedToken(u)
+			return client.NewForTesting(srv.srv.URL, srv.srv.Client()), nil
+		}
+		t.Cleanup(func() { newClient = orig })
+	}, nil, "auth", "status")
+	if r.err != nil {
+		t.Fatalf("status: %v", r.err)
+	}
+	path, ok := strings.CutPrefix(strings.TrimSpace(strings.Split(r.stdout, "\n")[1]), "Source: file ")
+	if !ok {
+		t.Fatalf("stdout = %q, want a Source: file line", r.stdout)
+	}
+	if _, err := os.Stat(path); err != nil {
+		t.Errorf("status printed %s, which does not exist: %v", path, err)
 	}
 }
 

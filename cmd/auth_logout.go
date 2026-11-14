@@ -14,8 +14,8 @@ var authLogoutCmd = &cobra.Command{
 	Short: "Remove stored C1 credentials for the current URL",
 	Long: `Remove credentials stored for the current C1 URL from both the OS
 keyring and the file fallback, including older copies of the same tenant's
-credentials (a :443 name, the legacy *.conductor.one short name). Environment variables (C1I_CLIENT_ID,
-C1I_CLIENT_SECRET) are not affected.`,
+credentials (a :443 name, the legacy *.conductor.one short name).
+Environment variables (C1I_CLIENT_ID, C1I_CLIENT_SECRET) are not affected.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		baseURL, err := GetBaseURL()
 		if err != nil {
