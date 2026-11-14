@@ -42,6 +42,11 @@ func addAuthFlags(cmd *cobra.Command) {
 	cmd.Flags().String("basic-auth-username", "", "Basic-auth username (required with --auth basic-auth unless --token-sharing per-user or an explicit --update-mask omits it)")
 	cmd.Flags().String("basic-auth-password", "", "Basic-auth password (required with --auth basic-auth unless --token-sharing per-user or an explicit --update-mask omits it)")
 	cmd.Flags().String("token-sharing", "", "Token sharing: "+tokenSharingFlag.usage())
+	for flag, part := range map[string]string{"header-name": "name", "header-value": "value", "bearer-token": "value"} {
+		if err := cmd.Flags().SetAnnotation(flag, headerTextAnnotation, []string{part}); err != nil {
+			panic(err)
+		}
+	}
 	allowEmpty(cmd, emptyIsOmitted, "auth", "bearer-token", "header-name", "header-value", "basic-auth-username", "basic-auth-password", "token-sharing")
 	cmd.Flags().Bool("require-tool-approval", false, "Per-server override for tool auto-approval (omit to leave unset)")
 }
@@ -296,6 +301,50 @@ func sharedAuthFlagsChanged(cmd *cobra.Command) bool {
 	return false
 }
 
+// configHeaderSpec lists the auth-arm fields that reach an HTTP header, with
+// both spellings protobuf JSON accepts for the arm and for each field.
+var configHeaderSpec = []struct {
+	arm    [2]string
+	fields []struct {
+		name   [2]string
+		isName bool
+	}
+}{
+	{[2]string{"customHeader", "custom_header"}, []struct {
+		name   [2]string
+		isName bool
+	}{{[2]string{"headerName", "header_name"}, true}, {[2]string{keyHeaderValue, "header_value"}, false}}},
+	{[2]string{"bearerToken", "bearer_token"}, []struct {
+		name   [2]string
+		isName bool
+	}{{[2]string{keyToken, keyToken}, false}}},
+	{[2]string{"awsSigv4", "aws_sigv4"}, []struct {
+		name   [2]string
+		isName bool
+	}{{[2]string{"accessKeyId", "access_key_id"}, false}, {[2]string{keySessionToken, "session_token"}, false}}},
+}
+
+// checkConfigHeaders applies checkHeaderText to the header-bound auth fields of
+// a config read from a file, which bypasses the flag checks, in every arm and
+// field spelling. wrapper names the config in the error path.
+func checkConfigHeaders(wrapper string, cfg map[string]any) error {
+	for _, spec := range configHeaderSpec {
+		for _, armName := range spec.arm {
+			arm, _ := cfg[armName].(map[string]any)
+			for _, f := range spec.fields {
+				for _, fieldName := range f.name {
+					if text, ok := arm[fieldName].(string); ok {
+						if err := checkHeaderText(wrapper+"."+armName+"."+fieldName, "", text, f.isName); err != nil {
+							return err
+						}
+					}
+				}
+			}
+		}
+	}
+	return nil
+}
+
 // buildHostedConfig assembles the hostedConfig object from --hosted-config-file
 // (verbatim) or from the convenience flags (--catalog-id, --config-field, auth).
 // The two are mutually exclusive.
@@ -307,7 +356,11 @@ func buildHostedConfig(cmd *cobra.Command) (map[string]any, error) {
 		if usingFlags {
 			return nil, &usageError{fmt.Errorf("--hosted-config-file is mutually exclusive with --catalog-id/--source-app-id/--config-field and the auth flags (--auth/--bearer-token/--token-sharing/…)")}
 		}
-		return readJSONFile[map[string]any](cmd, "hosted-config-file", file)
+		cfg, err := readJSONFile[map[string]any](cmd, "hosted-config-file", file)
+		if err != nil {
+			return nil, err
+		}
+		return cfg, checkConfigHeaders("hostedConfig", cfg)
 	}
 
 	cfg := map[string]any{}
@@ -317,7 +370,11 @@ func buildHostedConfig(cmd *cobra.Command) (map[string]any, error) {
 	if sourceAppID, _ := cmd.Flags().GetString("source-app-id"); sourceAppID != "" {
 		cfg["sourceAppId"] = sourceAppID
 	}
-	fields, err := parseKeyValues(cmd, "config-field")
+	pairs, err := repeatableStringFlag(cmd, "config-field")
+	if err != nil {
+		return nil, err
+	}
+	fields, err := parseKeyValueFlag(pairs, "config-field", jsonKeyValues)
 	if err != nil {
 		return nil, err
 	}
@@ -341,7 +398,11 @@ func buildExternalConfig(cmd *cobra.Command) (map[string]any, error) {
 		if usingFlags {
 			return nil, &usageError{fmt.Errorf("--external-config-file is mutually exclusive with --server-url/--transport and the auth flags (--auth/--bearer-token/--token-sharing/…)")}
 		}
-		return readJSONFile[map[string]any](cmd, "external-config-file", file)
+		cfg, err := readJSONFile[map[string]any](cmd, "external-config-file", file)
+		if err != nil {
+			return nil, err
+		}
+		return cfg, checkConfigHeaders("externalConfig", cfg)
 	}
 
 	cfg := map[string]any{}
@@ -357,24 +418,4 @@ func buildExternalConfig(cmd *cobra.Command) (map[string]any, error) {
 		return nil, err
 	}
 	return cfg, nil
-}
-
-// parseKeyValues reads a repeatable "key=value" flag into a map.
-func parseKeyValues(cmd *cobra.Command, name string) (map[string]string, error) {
-	pairs, err := repeatableStringFlag(cmd, name)
-	if err != nil {
-		return nil, err
-	}
-	if len(pairs) == 0 {
-		return nil, nil
-	}
-	out := make(map[string]string, len(pairs))
-	for _, p := range pairs {
-		k, v, ok := strings.Cut(p, "=")
-		if !ok || k == "" {
-			return nil, &usageError{fmt.Errorf("invalid --%s %q: expected key=value", name, p)}
-		}
-		out[k] = v
-	}
-	return out, nil
 }

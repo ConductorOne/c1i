@@ -45,8 +45,7 @@ var tasksReassignCmd = &cobra.Command{
 --to-user-id sets the step's approvers to the users named; repeat it to
 assign several. Before sending, each id is looked up: an unknown user exits 2
 and no action is sent, because the API would store it as the step's approver.
-A --dry-run preview skips that lookup, so a preview does not prove the ids
-exist. A repeated id is sent once. If a step already names a bad approver,
+A --dry-run preview looks them up too. A repeated id is sent once. If a step already names a bad approver,
 re-run "tasks reassign" with valid ids; a system owner can also "tasks reset"
 or "tasks restart" where the task offers them.
 

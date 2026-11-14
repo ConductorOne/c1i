@@ -23,27 +23,34 @@ import (
 const DefaultMaxRetries = transport.DefaultMaxRetries
 
 // loadCredentials resolves the stored client_id/client_secret for baseURL,
-// falling back to (and migrating from) the legacy *.conductor.one keychain key.
+// falling back to (and migrating from) the older keychain keys.
 // New and Token share it so token minting resolves credentials identically to
 // an authenticated request.
 func loadCredentials(baseURL string) (clientID, clientSecret string, err error) {
 	service := config.KeychainService(baseURL)
 	clientID, clientSecret, _, err = keychain.Load(service)
 	if err != nil {
-		// Try legacy keychain key for *.conductor.one domains.
-		legacyService := config.LegacyKeychainService(baseURL)
-		if legacyService != "" && legacyService != service {
-			clientID, clientSecret, _, err = keychain.Load(legacyService)
-			if err == nil {
-				// Migrate: store under the new key, and only delete the legacy
-				// copy once the new one is safely written. Deleting first (or
-				// unconditionally) could drop the user's only credentials if
-				// Store fails — keychain.Store can error and internally clears
-				// the target before writing — forcing a re-login.
-				if _, serr := keychain.Store(service, clientID, clientSecret); serr == nil {
-					_, _ = keychain.Delete(legacyService)
+		// Older keys, in config.KeychainServices order (:443 before legacy: a
+		// :443 login never touched the legacy key, so it may be stale). A miss
+		// keeps the primary error, which names the key a login writes.
+		olders := config.KeychainServices(baseURL)[1:]
+		for _, older := range olders {
+			id, secret, _, lerr := keychain.Load(older)
+			if lerr != nil {
+				continue
+			}
+			clientID, clientSecret, err = id, secret, nil
+			// Migrate: store under the new key, and only delete the older
+			// copies once the new one is safely written. Deleting first (or
+			// unconditionally) could drop the user's only credentials if
+			// Store fails — keychain.Store can error and internally clears
+			// the target before writing — forcing a re-login.
+			if _, serr := keychain.Store(service, clientID, clientSecret); serr == nil {
+				for _, o := range olders {
+					_, _ = keychain.Delete(o)
 				}
 			}
+			break
 		}
 		if err != nil {
 			return "", "", &AuthError{fmt.Errorf("loading credentials: %w", err)}

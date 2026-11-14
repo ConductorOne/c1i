@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"errors"
 	"fmt"
 
 	"github.com/ConductorOne/c1i/internal/config"
@@ -17,14 +18,23 @@ var authStatusCmd = &cobra.Command{
 			return err
 		}
 
-		// Probe Load directly to learn which backend served the credentials.
-		// client.New does its own Load but doesn't expose the backend.
-		service := config.KeychainService(baseURL)
-		_, _, backend, loadErr := keychain.Load(service)
-
 		c, err := newClient(cmd, baseURL)
 		if err != nil {
 			return fmt.Errorf("not authenticated: %w", err)
+		}
+
+		// Probe Load directly to learn which backend served the credentials;
+		// client.New does its own Load but doesn't expose the backend. It runs
+		// after New, which may have moved an older key's credential to the
+		// current one, so the key reported is the one that still exists.
+		var service string
+		var backend keychain.Backend
+		loadErr := errors.New("no stored credentials")
+		for _, k := range config.KeychainServices(baseURL) {
+			if _, _, b, err := keychain.Load(k); err == nil {
+				service, backend, loadErr = k, b, nil
+				break
+			}
 		}
 
 		body := map[string]any{"pageSize": 1}

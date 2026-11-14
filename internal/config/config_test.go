@@ -378,3 +378,78 @@ func TestParseURLRejectsMalformedFallbackHost(t *testing.T) {
 		}
 	}
 }
+
+// TestParseURLDropsDefaultHTTPSPort: an explicit :443 is the same endpoint as
+// none, and credentials are keyed by host, so it must normalize away; any
+// other port is a different endpoint and stays. Path, query and fragment are
+// dropped as before.
+func TestParseURLDropsDefaultHTTPSPort(t *testing.T) {
+	cases := []struct{ input, want string }{
+		{"https://acme.conductor.one:443", "https://acme.conductor.one"},
+		{"https://acme.conductor.one:443/", "https://acme.conductor.one"},
+		{"HTTPS://ACME.conductor.one:443", "https://acme.conductor.one"},
+		{"//acme.conductor.one:443", "https://acme.conductor.one"},
+		{"acme.conductor.one:443", "https://acme.conductor.one"},
+		{"https://acme.conductor.one:443/x?y=1#z", "https://acme.conductor.one"},
+		{"https://user@acme.conductor.one:443", "https://acme.conductor.one"},
+		{"https://[::1]:443", "https://[::1]"},
+		{"https://acme.conductor.one:8443", "https://acme.conductor.one:8443"},
+		{"https://acme.conductor.one:4430", "https://acme.conductor.one:4430"},
+		{"https://acme.conductor.one:80", "https://acme.conductor.one:80"},
+		{"https://[::1]:8443", "https://[::1]:8443"},
+		{"https://acme.conductor.one:", "https://acme.conductor.one"},
+		{"https://acme.conductor.one:0443", "https://acme.conductor.one"},
+		{"https://acme.conductor.one:00443/", "https://acme.conductor.one"},
+		{"https://[::1]:", "https://[::1]"},
+	}
+	for _, tc := range cases {
+		got, _, err := ParseURL(tc.input)
+		if err != nil {
+			t.Fatalf("ParseURL(%q) error = %v", tc.input, err)
+		}
+		if got != tc.want {
+			t.Errorf("ParseURL(%q) = %q, want %q", tc.input, got, tc.want)
+		}
+	}
+}
+
+// TestKeychainServiceIgnoresDefaultPort: a caller that skips ParseURL still
+// gets the same key for :443 as for no port.
+func TestKeychainServiceIgnoresDefaultPort(t *testing.T) {
+	for in, want := range map[string]string{
+		"https://acme.conductor.one:443":  "c1i/acme.conductor.one",
+		"https://ACME.conductor.one:443/": "c1i/acme.conductor.one",
+		"https://acme.conductor.one:8443": "c1i/acme.conductor.one:8443",
+	} {
+		if got := KeychainService(in); got != want {
+			t.Errorf("KeychainService(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
+
+// TestExplicitPortKeychainService names the key a credential stored under an
+// explicit :443 used before the port was normalized away.
+func TestExplicitPortKeychainService(t *testing.T) {
+	for in, want := range map[string]string{
+		"https://acme.conductor.one":      "c1i/acme.conductor.one:443",
+		"https://acme.conductor.one:8443": "",
+	} {
+		if got := ExplicitPortKeychainService(in); got != want {
+			t.Errorf("ExplicitPortKeychainService(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
+
+// TestMalformedPortIsNotTheDefault: only an empty port or ASCII digits equal to
+// 443 are the default; anything else keeps its host as typed (and so fails as
+// before).
+func TestMalformedPortIsNotTheDefault(t *testing.T) {
+	for _, port := range []string{"+443", "-443", " 443", "4.43e2", "0x1bb", "\u0664\u0664\u0663"} {
+		if got := canonicalHost("acme.example:" + port); got != "acme.example:"+port {
+			t.Errorf("canonicalHost(port %q) = %q, want the port kept", port, got)
+		}
+		if got, _, err := ParseURL("acme.example:" + port); err == nil && got == "https://acme.example" {
+			t.Errorf("ParseURL(port %q) = %q, want it refused or kept", port, got)
+		}
+	}
+}

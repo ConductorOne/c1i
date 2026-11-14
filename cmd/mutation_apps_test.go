@@ -18,7 +18,8 @@ func TestAppsMutationPreview(t *testing.T) {
 		t.Run(format, func(t *testing.T) {
 			withDryRun(t)
 			t.Setenv("C1I_URL", mutTestURL)
-			r := runMutationCLI(t, nil, 0, nil, "apps", "set-owners", "app/1", "--user-id", "u1", "--wait", "--error-format", format)
+			s := preReadServer(t)
+			r := runMutationCLI(t, s.srv, 0, nil, "apps", "set-owners", "app/1", "--user-id", "u1", "--wait", "--error-format", format)
 			if r.err != nil {
 				t.Fatalf("exit %d: %v", r.exit, r.err)
 			}
@@ -237,8 +238,8 @@ func TestAppsSetOwnersWait(t *testing.T) {
 	})
 }
 
-// The pre-send reads (user and policy lookups) are skipped on a dry run and
-// a failure is applied:false.
+// The pre-send reads (user and policy lookups) run on a dry run too, and a
+// failure is applied:false.
 func TestAppsMutationPreReads(t *testing.T) {
 	s := newMutServer(t, func(r *http.Request, _ int) mutReply {
 		if r.Method == http.MethodGet {
@@ -256,9 +257,13 @@ func TestAppsMutationPreReads(t *testing.T) {
 	}
 
 	withDryRun(t)
-	r = runMutationCLI(t, nil, 0, nil, "apps", "create", "--display-name", "zz", "--grant-policy-id", "p1")
+	ok := preReadServer(t)
+	r = runMutationCLI(t, ok.srv, 0, nil, "apps", "create", "--display-name", "zz", "--grant-policy-id", "p1")
 	if r.err != nil || !strings.Contains(r.stdout, `"grantPolicyId": "p1"`) {
 		t.Errorf("dry run with a policy id: exit %d stdout %q", r.exit, r.stdout)
+	}
+	if got := ok.requests(); len(got) != 1 || got[0].method != http.MethodGet {
+		t.Errorf("dry run requests = %+v, want only the policy lookup", got)
 	}
 }
 

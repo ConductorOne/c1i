@@ -130,9 +130,9 @@ an intended non-GET REST write.`,
 		// Apply --query params to the path once; pagination adds page_token per
 		// iteration below for GET/DELETE.
 		for _, qp := range queryPairs {
-			k, v, ok := strings.Cut(qp, "=")
-			if !ok || k == "" {
-				return &usageError{fmt.Errorf("invalid --query %q: expected key=value", qp)}
+			k, v, err := cutKeyValue("query", qp)
+			if err != nil {
+				return err
 			}
 			path = setQueryParam(path, k, v)
 		}
@@ -332,23 +332,6 @@ an intended non-GET REST write.`,
 
 		return nil
 	},
-}
-
-// parseKeyValueFlag parses repeated "key=value" flag values into a map. flagName
-// is only used to make error messages point at the offending flag.
-func parseKeyValueFlag(pairs []string, flagName string) (map[string]string, error) {
-	if len(pairs) == 0 {
-		return nil, nil
-	}
-	m := make(map[string]string, len(pairs))
-	for _, p := range pairs {
-		k, v, ok := strings.Cut(p, "=")
-		if !ok || k == "" {
-			return nil, &usageError{fmt.Errorf("invalid --%s %q: expected key=value", flagName, p)}
-		}
-		m[k] = v
-	}
-	return m, nil
 }
 
 func init() {

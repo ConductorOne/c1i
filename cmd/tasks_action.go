@@ -72,7 +72,7 @@ func (a taskAction) runTaskAction(cmd *cobra.Command, args []string) error {
 // stepLookup resolves the current policy step before the send, on a dry run
 // too, and reports it on stderr.
 func (a taskAction) stepLookup(taskID string) preRead {
-	return preRead{OnDryRun: true, Run: func(ctx context.Context, c *client.Client, m *mutation) ([]resolvedID, error) {
+	return preRead{Run: func(ctx context.Context, c *client.Client, m *mutation) ([]resolvedID, error) {
 		stepID, err := resolvePolicyStepID(ctx, c, taskID, "", a.step == stepRequired)
 		if err != nil || stepID == "" {
 			return nil, err

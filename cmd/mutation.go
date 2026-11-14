@@ -77,10 +77,10 @@ type resolvedID struct {
 	ID    string
 }
 
-// preRead is a read the helper runs before the send. It may modify m.
+// preRead is a read the helper runs before the send, on a --dry-run too, so a
+// preview refuses what a real run refuses. It may modify m; it must not write.
 type preRead struct {
-	Run      func(ctx context.Context, c *client.Client, m *mutation) ([]resolvedID, error)
-	OnDryRun bool
+	Run func(ctx context.Context, c *client.Client, m *mutation) ([]resolvedID, error)
 }
 
 type secretKind int
@@ -139,6 +139,9 @@ func sendMutation(cmd *cobra.Command, m mutation, opts ...mutationOpt) error {
 	}
 	baseURL, err := GetBaseURL()
 	if err != nil {
+		return notApplied(err)
+	}
+	if err := checkMutationPath(baseURL, m); err != nil {
 		return notApplied(err)
 	}
 	c, err := runPreReads(cmd, baseURL, &m, o)
@@ -202,6 +205,17 @@ func sendMutationSequence(cmd *cobra.Command, steps []mutationStep, note string,
 	if err != nil {
 		return notApplied(err)
 	}
+	probeIDs := make([]string, 0, len(steps))
+	for _, s := range steps {
+		if err := checkMutationPath(baseURL, s.Build(probeIDs)); err != nil {
+			return notApplied(err)
+		}
+		probeIDs = append(probeIDs, s.Placeholder)
+	}
+	c, err := runPreReads(cmd, baseURL, nil, o)
+	if err != nil {
+		return notApplied(err)
+	}
 	if dryRunActive() {
 		ids := make([]string, 0, len(steps))
 		var reqs []previewRequest
@@ -225,10 +239,6 @@ func sendMutationSequence(cmd *cobra.Command, steps []mutationStep, note string,
 			notice(cmd, noticePlaceholders, note, map[string]any{"placeholders": placeholders})
 		}
 		return nil
-	}
-	c, err := runPreReads(cmd, baseURL, nil, o)
-	if err != nil {
-		return notApplied(err)
 	}
 	if c == nil {
 		if c, err = newMutationClient(cmd, baseURL); err != nil {
@@ -301,6 +311,11 @@ func sendMutationBatch(cmd *cobra.Command, ms []mutation, idKey string, label fu
 	unsent := func(i int, err error) error {
 		writeBatchItemError(cmd, o.batchNoun, labels[i], err, appliedFalse, len(ms) > 1)
 		return &mutationError{err: err, applied: appliedFalse, exit: exitCode(err), batch: &batchSummary{NotAttempted: labels}}
+	}
+	for i := range ms {
+		if err = checkMutationPath(baseURL, ms[i]); err != nil {
+			return unsent(i, err)
+		}
 	}
 	var c *client.Client
 	reqs := make([]previewRequest, len(ms))
@@ -404,14 +419,10 @@ func runPreReads(cmd *cobra.Command, baseURL string, m *mutation, o mutationOpts
 	return runPreReadsWith(cmd, baseURL, m, o, nil)
 }
 
-// runPreReadsWith runs o's pre-send reads that apply to this run, building a
-// client (reusing c) only when one does.
+// runPreReadsWith runs o's pre-send reads, building a client (reusing c) only
+// when there is one.
 func runPreReadsWith(cmd *cobra.Command, baseURL string, m *mutation, o mutationOpts, c *client.Client) (*client.Client, error) {
-	dry := dryRunActive()
 	for _, p := range o.preReads {
-		if dry && !p.OnDryRun {
-			continue
-		}
 		if c == nil {
 			var err error
 			if c, err = newMutationClient(cmd, baseURL); err != nil {
@@ -457,10 +468,16 @@ func prepareMutation(baseURL string, m mutation) (previewRequest, error) {
 	if err != nil {
 		return previewRequest{}, err
 	}
-	if err := checkMutationRequest(m.Method, baseURL+m.Path); err != nil {
+	if err := checkMutationPath(baseURL, m); err != nil {
 		return previewRequest{}, err
 	}
 	return previewRequest{Method: m.Method, URL: baseURL + m.Path, Body: body}, nil
+}
+
+// checkMutationPath is the send-time path guard alone. Callers run it before
+// any pre-read, so a bad id is refused without a request.
+func checkMutationPath(baseURL string, m mutation) error {
+	return checkMutationRequest(m.Method, baseURL+m.Path)
 }
 
 func checkMutationRequest(method, rawURL string) error {

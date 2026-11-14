@@ -64,3 +64,15 @@ func TestBatchNullBodyExitsOne(t *testing.T) {
 	r := runHelperCmd(t, c, s, context.Background(), nil, "json", "a", "b")
 	wantR17(t, r, s, exitError, "a", "a", "b")
 }
+
+// A bad path anywhere in the batch is refused before any pre-read or send.
+func TestBatchBadPathRefusedBeforeAnyPreRead(t *testing.T) {
+	s := newMutServer(t, func(r *http.Request, _ int) mutReply { return toolReply(r, 200) })
+	lookup := preRead{Run: func(ctx context.Context, c *client.Client, _ *mutation) ([]resolvedID, error) {
+		_, err := c.Get(ctx, "/api/v1/tools/lookup", nil)
+		return nil, err
+	}}
+	c := newTestBatchCmdWith(func(id string) any { return map[string]any{"id": id} }, withPreRead(lookup))
+	r := runHelperCmd(t, c, s, context.Background(), nil, "json", "a", ".", "c")
+	wantR17(t, r, s, exitUsage, ".", "a", ".", "c")
+}

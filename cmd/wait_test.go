@@ -485,11 +485,14 @@ func TestWaitFlagValues(t *testing.T) {
 		}
 	})
 
-	t.Run("non-positive timeout without --wait is accepted", func(t *testing.T) {
+	// Without --wait the timeout is never validated as a duration; the flag
+	// itself is refused instead (see wait_required_test.go).
+	t.Run("non-positive timeout without --wait is refused as stray, not as non-positive", func(t *testing.T) {
 		c := newCmd()
 		mustSet(t, c.Flags(), "wait-timeout", "0s")
-		if _, _, err := waitFlagValues(c); err != nil {
-			t.Errorf("err = %v, want nil (no --wait, so the timeout is unused)", err)
+		_, _, err := waitFlagValues(c)
+		if err == nil || !strings.Contains(err.Error(), "--wait-timeout requires --wait") {
+			t.Errorf("err = %v, want --wait-timeout requires --wait", err)
 		}
 	})
 

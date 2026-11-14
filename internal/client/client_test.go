@@ -11,6 +11,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/ConductorOne/c1i/internal/config"
+	"github.com/ConductorOne/c1i/internal/keychain"
 	"github.com/ConductorOne/c1i/internal/tokensource"
 	"github.com/zalando/go-keyring"
 )
@@ -301,5 +303,100 @@ func TestPatchSendsBodyAndContentType(t *testing.T) {
 	}
 	if gotBody != `{"hello":"world"}` {
 		t.Errorf("body = %q", gotBody)
+	}
+}
+
+// TestLoadCredentialsFindsCredentialStoredUnderExplicitPort: before :443 was
+// normalized away, "auth login --url https://host:443" stored under
+// "c1i/host:443". It must stay reachable, and move to the plain key.
+func TestLoadCredentialsFindsCredentialStoredUnderExplicitPort(t *testing.T) {
+	keyring.MockInit()
+	dir := t.TempDir()
+	switch runtime.GOOS {
+	case "windows":
+		t.Setenv("AppData", dir)
+	case "darwin":
+		t.Setenv("HOME", dir)
+	default:
+		t.Setenv("XDG_CONFIG_HOME", dir)
+	}
+	t.Setenv("C1I_CLIENT_ID", "")
+	t.Setenv("C1I_CLIENT_SECRET", "")
+	_ = os.Unsetenv("C1I_CLIENT_ID")
+	_ = os.Unsetenv("C1I_CLIENT_SECRET")
+	if _, err := keychain.Store("c1i/acme.example:443", "id-1", "secret-1"); err != nil {
+		t.Fatal(err)
+	}
+	id, secret, err := loadCredentials("https://acme.example")
+	if err != nil || id != "id-1" || secret != "secret-1" {
+		t.Fatalf("loadCredentials = %q, %q, %v; want the :443 credential", id, secret, err)
+	}
+	if _, _, _, err := keychain.Load("c1i/acme.example"); err != nil {
+		t.Errorf("credential was not migrated to the plain key: %v", err)
+	}
+	if _, _, _, err := keychain.Load("c1i/acme.example:443"); err == nil {
+		t.Error("the :443 copy was left behind after migration")
+	}
+}
+
+// TestLoadCredentialsErrorNamesCurrentKey: with nothing stored, the error names
+// the key a login would write, not an older fallback key.
+func TestLoadCredentialsErrorNamesCurrentKey(t *testing.T) {
+	keyring.MockInit()
+	dir := t.TempDir()
+	switch runtime.GOOS {
+	case "windows":
+		t.Setenv("AppData", dir)
+	case "darwin":
+		t.Setenv("HOME", dir)
+	default:
+		t.Setenv("XDG_CONFIG_HOME", dir)
+	}
+	_ = os.Unsetenv("C1I_CLIENT_ID")
+	_ = os.Unsetenv("C1I_CLIENT_SECRET")
+	for _, base := range []string{"https://acme.example", "https://acme.conductor.one"} {
+		_, _, err := loadCredentials(base)
+		want := "no credentials found for " + config.KeychainService(base) + ": run"
+		if err == nil || !strings.Contains(err.Error(), want) {
+			t.Errorf("loadCredentials(%q) err = %v, want it to contain %q", base, err, want)
+		}
+	}
+}
+
+// TestLoadCredentialsMigrationClearsEveryOlderKey: with both the legacy and the
+// :443 key stored, neither is left behind once one is migrated.
+func TestLoadCredentialsMigrationClearsEveryOlderKey(t *testing.T) {
+	keyring.MockInit()
+	dir := t.TempDir()
+	switch runtime.GOOS {
+	case "windows":
+		t.Setenv("AppData", dir)
+	case "darwin":
+		t.Setenv("HOME", dir)
+	default:
+		t.Setenv("XDG_CONFIG_HOME", dir)
+	}
+	_ = os.Unsetenv("C1I_CLIENT_ID")
+	_ = os.Unsetenv("C1I_CLIENT_SECRET")
+	for _, k := range []string{"c1i/acme", "c1i/acme.conductor.one:443"} {
+		if _, err := keychain.Store(k, "id-"+k, "s"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// The :443 key is the one a :443 login wrote, so it is the current one.
+	id, _, err := loadCredentials("https://acme.conductor.one")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if id != "id-c1i/acme.conductor.one:443" {
+		t.Errorf("loaded %q, want the :443 credential", id)
+	}
+	if got, _, _, err := keychain.Load("c1i/acme.conductor.one"); err != nil || got != id {
+		t.Errorf("plain key holds %q (%v), want the :443 credential", got, err)
+	}
+	for _, k := range []string{"c1i/acme", "c1i/acme.conductor.one:443"} {
+		if _, _, _, err := keychain.Load(k); err == nil {
+			t.Errorf("%s left behind after migration", k)
+		}
 	}
 }
