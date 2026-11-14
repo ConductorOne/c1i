@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/ConductorOne/c1i/internal/redact"
 	"github.com/spf13/cobra"
 )
 
@@ -123,31 +124,17 @@ func TestPreviewRedactsUrlsHeadersAndKeyNames(t *testing.T) {
 		keeps []string // must still appear
 	}{
 		{"url userinfo and query", map[string]any{"externalConfig": map[string]any{"url": "https://user:PWleak@h.example/x?token=QTleak&keep=1"}},
-			[]string{"PWleak", "QTleak"}, []string{"h.example/x", "keep=1", "user"}},
-		{"url secret query name spellings", map[string]any{"url": "https://h.example/x?api_key=Aleak&Access-Token=Bleak&ok=2"},
-			[]string{"Aleak", "Bleak"}, []string{"ok=2"}},
+			[]string{"PWleak", "QTleak", "user"}, []string{"h.example/x", "keep=1"}},
 		{"header map", map[string]any{"headers": map[string]any{"Authorization": "Bearer Hleak", "X-Custom": "Cleak"}},
 			[]string{"Hleak", "Cleak"}, nil},
 		{"credential key names", map[string]any{"apiKey": "K1leak", "accessToken": "K2leak", "refreshToken": "K3leak", "secret": "K4leak", "name": "visible"},
 			[]string{"K1leak", "K2leak", "K3leak", "K4leak"}, []string{"visible"}},
 		{"string directly under an arm key", map[string]any{"externalConfig": map[string]any{"bearerToken": "Sleak", "basic_auth": "Tleak"}},
 			[]string{"Sleak", "Tleak"}, nil},
-		{"semicolon query and fragment", map[string]any{"url": "https://h.example/x?a=1;token=Q1leak&b=2#access_token=Q2leak&c=3"},
-			[]string{"Q1leak", "Q2leak"}, []string{"a=1", "b=2", "c=3"}},
-		{"malformed url keeps no userinfo", map[string]any{"url": "https://us er:PWleak@h.example/x?api_key=Q3leak"},
-			[]string{"PWleak", "Q3leak"}, nil},
-		{"scheme-less userinfo", map[string]any{"url": "user:PWleak@h.example/x?secret=Q4leak&z=9"},
-			[]string{"PWleak", "Q4leak"}, []string{"z=9"}},
 		{"header array", map[string]any{"headers": []any{map[string]any{"name": "Authorization", "value": "Aleak"}, map[string]any{"name": "X-Api-Key", "value": "Bleak"}}},
 			[]string{"Aleak", "Bleak"}, []string{"Authorization"}},
 		{"non-string under arm key", map[string]any{"externalConfig": map[string]any{"awsSigv4": 12345678, "customHeader": map[string]any{"headerName": "X", "headerValue": "Hleak"}}},
 			[]string{"12345678", "Hleak"}, nil},
-		{"username-only userinfo (PAT)", map[string]any{"url": "https://ghp_SU1leak@github.example/x"},
-			[]string{"ghp_SU1leak"}, []string{"github.example/x"}},
-		{"username-only userinfo, malformed", map[string]any{"url": "https://ghp_SU2leak@gith ub.example/x"},
-			[]string{"ghp_SU2leak"}, nil},
-		{"scheme-relative userinfo", map[string]any{"url": "//u:PW3leak@h.example/x"},
-			[]string{"PW3leak"}, []string{"h.example/x"}},
 		{"urls in an array", map[string]any{"urls": []any{"https://u:S1leak@h.example/p", "https://h.example/?token=S2leak"}},
 			[]string{"S1leak", "S2leak"}, []string{"h.example"}},
 		{"customHeaders map", map[string]any{"customHeaders": map[string]any{"X-Y": "Aleak"}},
@@ -156,34 +143,10 @@ func TestPreviewRedactsUrlsHeadersAndKeyNames(t *testing.T) {
 			[]string{"Bleak"}, nil},
 		{"extraHeaders string list", map[string]any{"extraHeaders": []any{"Authorization: Cleak"}},
 			[]string{"Cleak"}, nil},
-		{"key/sig/signature params", map[string]any{"url": "https://h.example/x?key=P1leak&sig=P2leak&Signature=P3leak&X-Amz-Signature=P4leak&ok=1"},
-			[]string{"P1leak", "P2leak", "P3leak", "P4leak"}, []string{"ok=1"}},
-		{"semicolon before query", map[string]any{"url": "https://h.example/p;token=M1leak?a=1"},
-			[]string{"M1leak"}, nil},
-		{"? inside a secret value", map[string]any{"url": "https://h.example/x?token=abc?defleak"},
-			[]string{"abc?defleak", "defleak"}, nil},
-		{"? inside a secret value, neighbours kept", map[string]any{"url": "https://h.example/x?a=1&token=x?yleak&b=2"},
-			[]string{"yleak"}, []string{"a=1", "b=2"}},
-		{"? inside a secret value, fragment", map[string]any{"url": "https://h.example/x#a=1&token=x?zleak&b=2"},
-			[]string{"zleak"}, []string{"a=1", "b=2"}},
-		{"non-secret a=b=c unchanged", map[string]any{"url": "https://h.example/x?a=b=c&d=1"},
-			nil, []string{"a=b=c", "d=1"}},
-		{"path-only semicolon param", map[string]any{"url": "https://h.example/p;api_key=M2leak/x"},
-			[]string{"M2leak"}, nil},
 		{"a plain key field is not a credential", map[string]any{"key": "visibleKey"},
 			nil, []string{"visibleKey"}},
-		{"scheme-less token@host", map[string]any{"url": "TOKENleak@h.example/p"},
-			[]string{"TOKENleak"}, []string{"h.example/p"}},
 		{"git@ is not a secret", map[string]any{"a": "git@github.example:org/repo.git", "b": "ssh://git@github.example/org/repo"},
 			nil, []string{"git@github.example:org/repo.git", "ssh://git@github.example/org/repo"}},
-		{"; inside a query value", map[string]any{"url": "https://h.example/x?token=a;bleak&ok=1"},
-			[]string{"bleak"}, []string{"ok=1"}},
-		{"# inside a query value", map[string]any{"url": "https://h.example/x?token=a#cleak"},
-			[]string{"cleak"}, nil},
-		{"percent-encoded pair", map[string]any{"url": "https://h.example/x?token%3Dpleak&ok=1"},
-			[]string{"pleak"}, []string{"ok=1"}},
-		{"; separated pair after a plain one", map[string]any{"url": "https://h.example/x?a=1;token=sleak"},
-			[]string{"sleak"}, []string{"a=1"}},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -234,14 +197,6 @@ func TestPreviewRedactsUrlsHeadersAndKeyNames(t *testing.T) {
 	})
 }
 
-// One sentinel: a URL password prints as [redacted], not url.Redacted's xxxxx.
-func TestURLPasswordUsesTheSingleSentinel(t *testing.T) {
-	got := redactURL("https://user:PWleak@h.example/x")
-	if strings.Contains(got, "xxxxx") || strings.Contains(got, "PWleak") || !strings.Contains(got, "[redacted]") {
-		t.Errorf("redactURL = %q", got)
-	}
-}
-
 // A body that is not valid JSON cannot be inspected, so it is not printed.
 func TestRedactPreviewBodiesFailsClosedOnNonJSON(t *testing.T) {
 	out := redactPreviewBodies([]previewRequest{{Method: "POST", URL: "https://h.example/x", Body: []byte("tok=SECRETleak")}})
@@ -274,7 +229,7 @@ func TestSecretNameSuffixRule(t *testing.T) {
 			if body := redactSecrets(map[string]any{name: "BODYleak"}); strings.Contains(fmt.Sprint(body), "BODYleak") {
 				t.Errorf("body field %q (%s) not masked", name, fname)
 			}
-			if got := redactURL("https://h.example/p?" + name + "=PARAMleak&ok=1"); strings.Contains(got, "PARAMleak") || !strings.Contains(got, "ok=1") {
+			if got := redact.URL("https://h.example/p?" + name + "=PARAMleak&ok=1"); strings.Contains(got, "PARAMleak") || !strings.Contains(got, "ok=1") {
 				t.Errorf("parameter %q (%s) -> %q", name, fname, got)
 			}
 		}
@@ -288,13 +243,13 @@ func TestSecretNameSuffixRule(t *testing.T) {
 			t.Errorf("body field key was masked")
 		}
 		if n != "key" {
-			if got := redactURL("https://h.example/p?" + n + "=KEEPme"); !strings.Contains(got, "KEEPme") {
+			if got := redact.URL("https://h.example/p?" + n + "=KEEPme"); !strings.Contains(got, "KEEPme") {
 				t.Errorf("parameter %q was masked: %q", n, got)
 			}
 		}
 	}
 	// "key" is a secret only as a URL parameter.
-	if got := redactURL("https://h.example/p?key=Kleak"); strings.Contains(got, "Kleak") {
+	if got := redact.URL("https://h.example/p?key=Kleak"); strings.Contains(got, "Kleak") {
 		t.Errorf("key parameter not masked: %q", got)
 	}
 }

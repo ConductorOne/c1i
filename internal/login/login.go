@@ -67,7 +67,7 @@ func StartDeviceFlow(ctx context.Context, baseURL string, opts ...transport.Opti
 	if resp.StatusCode != http.StatusOK {
 		// Wrap as APIError so cmd/errors.go maps the status to the exit-code
 		// taxonomy (auth/rate-limited/server) instead of collapsing to exit 1.
-		return nil, fmt.Errorf("device authorization failed: %w", &client.APIError{Method: http.MethodPost, Path: req.URL.Path, StatusCode: resp.StatusCode, Body: string(resp.Body)})
+		return nil, fmt.Errorf("device authorization failed: %w", &client.APIError{Method: http.MethodPost, Path: req.URL.EscapedPath(), StatusCode: resp.StatusCode, Body: string(resp.Body)})
 	}
 
 	var code DeviceCode
@@ -135,7 +135,7 @@ func PollForToken(ctx context.Context, baseURL string, code *DeviceCode, opts ..
 		if resp.StatusCode != http.StatusOK {
 			apiErr := func() error {
 				return fmt.Errorf("token request failed: %w", &client.APIError{
-					Method: http.MethodPost, Path: req.URL.Path, StatusCode: resp.StatusCode, Body: string(resp.Body),
+					Method: http.MethodPost, Path: req.URL.EscapedPath(), StatusCode: resp.StatusCode, Body: string(resp.Body),
 				})
 			}
 
@@ -237,7 +237,7 @@ func CreatePersonalClient(ctx context.Context, baseURL, accessToken string, o Pe
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("failed to create personal client: %w", &client.APIError{Method: http.MethodPost, Path: req.URL.Path, StatusCode: resp.StatusCode, Body: string(resp.Body)})
+		return nil, fmt.Errorf("failed to create personal client: %w", &client.APIError{Method: http.MethodPost, Path: req.URL.EscapedPath(), StatusCode: resp.StatusCode, Body: string(resp.Body)})
 	}
 
 	var clientResp struct {

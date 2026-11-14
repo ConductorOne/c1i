@@ -13,6 +13,7 @@ import (
 
 	"github.com/ConductorOne/c1i/internal/client"
 	"github.com/ConductorOne/c1i/internal/keychain"
+	"github.com/ConductorOne/c1i/internal/redact"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
@@ -362,7 +363,7 @@ func errorObject(err error) map[string]any {
 	if errors.As(err, &apiErr) {
 		obj["status"] = apiErr.StatusCode
 		obj["method"] = apiErr.Method
-		obj["path"] = apiErr.Path
+		obj["path"] = redact.Path(apiErr.Path)
 		if apiErr.Body != "" {
 			obj["body"] = rawJSONOrString(apiErr.Body)
 		}

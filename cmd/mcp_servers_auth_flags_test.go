@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"strings"
 	"testing"
+
+	"github.com/ConductorOne/c1i/internal/redact"
 )
 
 // authArmCase pairs a --auth method with the companion flags it needs and a
@@ -132,8 +134,8 @@ func TestMcpAuthFlagsCompleteValuesPass(t *testing.T) {
 				}
 				for _, n := range c.companions {
 					want := c.values[n]
-					if isSecretKey(jsonKeyFor(n)) {
-						want = redactedPlaceholder // every preview masks credentials
+					if redact.IsSecretKey(jsonKeyFor(n)) {
+						want = redact.Placeholder // every preview masks credentials
 					}
 					if !strings.Contains(r.stdout, `"`+jsonKeyFor(n)+`": "`+want+`"`) {
 						t.Errorf("preview missing %s value %q:\n%s", n, c.values[n], r.stdout)

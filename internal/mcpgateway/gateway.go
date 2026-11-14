@@ -17,6 +17,7 @@ import (
 	"strings"
 
 	"github.com/ConductorOne/c1i/internal/client"
+	"github.com/ConductorOne/c1i/internal/redact"
 	"github.com/ConductorOne/c1i/internal/transport"
 )
 
@@ -350,6 +351,7 @@ func (c *Client) notify(ctx context.Context, method string) error {
 func (c *Client) post(ctx context.Context, rpcMethod string, payload []byte, wantID *int) (body []byte, sessionID string, err error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.endpoint, bytes.NewReader(payload))
 	if err != nil {
+		redact.ErrorURL(err)
 		return nil, "", err
 	}
 	req.Header.Set("Authorization", "Bearer "+c.token)
@@ -380,7 +382,7 @@ func (c *Client) post(ctx context.Context, rpcMethod string, payload []byte, wan
 			StatusCode: resp.StatusCode,
 			Body:       strings.TrimSpace(string(data)),
 			Method:     req.Method,
-			Path:       req.URL.Path,
+			Path:       req.URL.EscapedPath(),
 			RPCMethod:  rpcMethod,
 		}
 	}

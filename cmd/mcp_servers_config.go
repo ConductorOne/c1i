@@ -120,7 +120,7 @@ var authArmRules = map[string]authArmRule{
 }
 
 // The auth-arm fields that hold a credential. The builders here and in the
-// register template use these names, and isSecretKey (cmd/mutation.go) names the ones its
+// register template use these names, and redact.IsSecretKey names the ones its
 // suffix rule does not cover, so a preview masks what the builders write.
 const (
 	keyToken           = "token"

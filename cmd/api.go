@@ -12,6 +12,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/ConductorOne/c1i/internal/redact"
 	"github.com/spf13/cobra"
 )
 
@@ -54,7 +55,7 @@ an intended non-GET REST write.`,
 		// "hostapi", not "host") and fails as a DNS lookup error that never
 		// names the real problem: the path itself.
 		if !strings.HasPrefix(path, "/") {
-			return &usageError{fmt.Errorf("--path %q must start with a leading slash (e.g. \"/api/v1/users\")", path)}
+			return &usageError{fmt.Errorf("--path %q must start with a leading slash (e.g. \"/api/v1/users\")", redact.URL(path))}
 		}
 		method, _ := cmd.Flags().GetString("method")
 		body, _ := cmd.Flags().GetString("body")
@@ -181,7 +182,7 @@ an intended non-GET REST write.`,
 		guard := newPaginationCursorGuard()
 		var held []json.RawMessage
 		pageToken := ""
-		route := fmt.Sprintf("%s %s", method, path)
+		route := method + " " + redact.URL(path)
 		listKeySeen := listKey == ""
 		// failWith prints held rows before a failure that isn't the guard's:
 		// they were deferred only until the run proved it wasn't stuck.
@@ -273,7 +274,7 @@ an intended non-GET REST write.`,
 				// still a clear failure rather than this silent one.
 				if tok := nextPageTokenOf(data); tok != "" {
 					notice(cmd, noticeInfo, fmt.Sprintf(
-						"Warning: %s returned a partial result — more pages exist and c1i is discarding the cursor to them. Pass --paginate to fetch the rest (which emits NDJSON rows rather than a single JSON object).", path), nil)
+						"Warning: %s returned a partial result — more pages exist and c1i is discarding the cursor to them. Pass --paginate to fetch the rest (which emits NDJSON rows rather than a single JSON object).", redact.URL(path)), nil)
 				}
 				return writeObject(cmd, data)
 			}

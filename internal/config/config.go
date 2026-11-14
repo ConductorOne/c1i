@@ -5,6 +5,8 @@ import (
 	"net/url"
 	"strings"
 	"unicode"
+
+	"github.com/ConductorOne/c1i/internal/redact"
 )
 
 // ParseURL normalizes input to "https://{host}" (no trailing slash), lower-casing
@@ -81,7 +83,7 @@ func ParseURL(input string) (result string, warnings []string, err error) {
 			// "//", "://host") that only fails later, far from the input.
 			return "", nil, fmt.Errorf(
 				"url %q is not a valid host: pass a full host such as acme.conductor.one or acme.c1eu.ai",
-				withoutUserinfo(input))
+				redact.URL(withoutUserinfo(input)))
 		}
 		if stripped != input {
 			warnings = append(warnings, "--url embedded credentials were dropped; "+credentialsNotInURL)
@@ -95,7 +97,7 @@ func ParseURL(input string) (result string, warnings []string, err error) {
 	return "", nil, fmt.Errorf(
 		"url %q is not a full host: c1i no longer expands a bare name to a domain; "+
 			"pass a full host such as acme.conductor.one or acme.c1eu.ai",
-		withoutUserinfo(input))
+		redact.URL(withoutUserinfo(input)))
 }
 
 // credentialsNotInURL is shared by both credential-dropping warnings so they

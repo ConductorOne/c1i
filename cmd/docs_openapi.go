@@ -203,7 +203,7 @@ func fetchOpenAPISpec(cmd *cobra.Command) ([]byte, error) {
 		return staleOpenAPISpec(cmd, cachePath, externalServiceError(err, "fetching OpenAPI spec"))
 	}
 	if resp.StatusCode != http.StatusOK {
-		apiErr := &client.APIError{Method: req.Method, Path: req.URL.Path, StatusCode: resp.StatusCode}
+		apiErr := &client.APIError{Method: req.Method, Path: req.URL.EscapedPath(), StatusCode: resp.StatusCode}
 		return staleOpenAPISpec(cmd, cachePath, externalServiceError(apiErr, "fetching OpenAPI spec"))
 	}
 	data := resp.Body

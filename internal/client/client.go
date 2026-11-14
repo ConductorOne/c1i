@@ -12,6 +12,7 @@ import (
 
 	"github.com/ConductorOne/c1i/internal/config"
 	"github.com/ConductorOne/c1i/internal/keychain"
+	"github.com/ConductorOne/c1i/internal/redact"
 	"github.com/ConductorOne/c1i/internal/tokensource"
 	"github.com/ConductorOne/c1i/internal/transport"
 	"golang.org/x/oauth2"
@@ -269,7 +270,7 @@ func rewind(req *http.Request) (*http.Request, bool) {
 // G1, building the request from rawURL (its error is returned as is), then
 // G2, transport.CheckPath (a *PathError).
 func CheckRequest(method, rawURL string) error {
-	req, err := http.NewRequestWithContext(context.Background(), method, rawURL, nil)
+	req, err := newRequest(context.Background(), method, rawURL, nil)
 	if err != nil {
 		return err
 	}
@@ -352,9 +353,18 @@ func countStringVerbs(format string) int {
 	return n
 }
 
+// newRequest is http.NewRequestWithContext with the URL in its error masked
+// (an unbuildable URL is echoed back, query and all).
+func newRequest(ctx context.Context, method, rawURL string, body io.Reader) (*http.Request, error) {
+	req, err := http.NewRequestWithContext(ctx, method, rawURL, body)
+	redact.ErrorURL(err)
+	return req, err
+}
+
 func (c *Client) Get(ctx context.Context, path string, queryParams map[string]string) ([]byte, error) {
 	u, err := url.Parse(c.baseURL + path)
 	if err != nil {
+		redact.ErrorURL(err)
 		return nil, err
 	}
 	if len(queryParams) > 0 {
@@ -365,7 +375,7 @@ func (c *Client) Get(ctx context.Context, path string, queryParams map[string]st
 		u.RawQuery = q.Encode()
 	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u.String(), nil)
+	req, err := newRequest(ctx, http.MethodGet, u.String(), nil)
 	if err != nil {
 		return nil, err
 	}
@@ -378,7 +388,7 @@ func (c *Client) Post(ctx context.Context, path string, body any) ([]byte, error
 		return nil, err
 	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.baseURL+path, bytes.NewReader(data))
+	req, err := newRequest(ctx, http.MethodPost, c.baseURL+path, bytes.NewReader(data))
 	if err != nil {
 		return nil, err
 	}
@@ -392,7 +402,7 @@ func (c *Client) Put(ctx context.Context, path string, body any) ([]byte, error)
 		return nil, err
 	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodPut, c.baseURL+path, bytes.NewReader(data))
+	req, err := newRequest(ctx, http.MethodPut, c.baseURL+path, bytes.NewReader(data))
 	if err != nil {
 		return nil, err
 	}
@@ -401,7 +411,7 @@ func (c *Client) Put(ctx context.Context, path string, body any) ([]byte, error)
 }
 
 func (c *Client) Delete(ctx context.Context, path string) ([]byte, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodDelete, c.baseURL+path, nil)
+	req, err := newRequest(ctx, http.MethodDelete, c.baseURL+path, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -414,7 +424,7 @@ func (c *Client) Patch(ctx context.Context, path string, body any) ([]byte, erro
 		return nil, err
 	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodPatch, c.baseURL+path, bytes.NewReader(data))
+	req, err := newRequest(ctx, http.MethodPatch, c.baseURL+path, bytes.NewReader(data))
 	if err != nil {
 		return nil, err
 	}
@@ -432,7 +442,7 @@ func (c *Client) Request(ctx context.Context, method, path string, body []byte, 
 	if body != nil {
 		rdr = bytes.NewReader(body)
 	}
-	req, err := http.NewRequestWithContext(ctx, method, c.baseURL+path, rdr)
+	req, err := newRequest(ctx, method, c.baseURL+path, rdr)
 	if err != nil {
 		return nil, err
 	}
@@ -464,7 +474,7 @@ func (c *Client) do(req *http.Request) ([]byte, error) {
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		return nil, &APIError{
 			Method:     req.Method,
-			Path:       req.URL.Path,
+			Path:       req.URL.EscapedPath(),
 			StatusCode: resp.StatusCode,
 			Body:       string(resp.Body),
 			PriorSent:  resp.PriorSent,

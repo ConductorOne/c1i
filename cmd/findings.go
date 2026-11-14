@@ -6,6 +6,7 @@ import (
 	"net/http"
 
 	"github.com/ConductorOne/c1i/internal/client"
+	"github.com/ConductorOne/c1i/internal/redact"
 	"github.com/spf13/cobra"
 )
 
@@ -235,7 +236,7 @@ func getFixedList(cmd *cobra.Command, path string, row listRowFn) error {
 	// must not pass as a complete result.
 	if next != "" {
 		notice(cmd, noticeInfo, fmt.Sprintf(
-			"Warning: GET %s returned a partial result — the server reported more pages, which c1i does not fetch for this command.", path), nil)
+			"Warning: GET %s returned a partial result — the server reported more pages, which c1i does not fetch for this command.", redact.URL(path)), nil)
 	}
 	return nil
 }

@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/ConductorOne/c1i/internal/client"
+	"github.com/ConductorOne/c1i/internal/redact"
 	"github.com/spf13/cobra"
 )
 
@@ -99,10 +100,10 @@ func webhookFields(cmd *cobra.Command) (map[string]any, []string, error) {
 func validateWebhookURL(raw string) error {
 	u, err := url.Parse(raw)
 	if err != nil || u.Scheme != "https" || u.Hostname() == "" {
-		return &usageError{fmt.Errorf("--destination-url must be an absolute https:// URL with a host, got %q", raw)}
+		return &usageError{fmt.Errorf("--destination-url must be an absolute https:// URL with a host, got %q", redact.URL(raw))}
 	}
 	if strings.Contains(u.Hostname(), ":") {
-		return &usageError{fmt.Errorf("--destination-url must not use an IPv6 literal host, got %q", raw)}
+		return &usageError{fmt.Errorf("--destination-url must not use an IPv6 literal host, got %q", redact.URL(raw))}
 	}
 	return nil
 }

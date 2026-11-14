@@ -7,12 +7,11 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"net/url"
 	"reflect"
-	"regexp"
 	"strings"
 
 	"github.com/ConductorOne/c1i/internal/client"
+	"github.com/ConductorOne/c1i/internal/redact"
 	"github.com/spf13/cobra"
 )
 
@@ -169,7 +168,7 @@ func sendMutation(cmd *cobra.Command, m mutation, opts ...mutationOpt) error {
 		op := o.wait(c)
 		if _, err := runWait(cmd, op); err != nil {
 			return &mutationError{
-				err:     fmt.Errorf("%s %s was applied; waiting for %s failed: %w", m.Method, m.Path, op.Subject, err),
+				err:     fmt.Errorf("%s %s was applied; waiting for %s failed: %w", m.Method, redact.URL(m.Path), op.Subject, err),
 				applied: appliedTrue,
 			}
 		}
@@ -468,7 +467,8 @@ func checkMutationRequest(method, rawURL string) error {
 	err := client.CheckRequest(method, rawURL)
 	var pe *client.PathError
 	if err != nil && !errors.As(err, &pe) {
-		return &usageError{fmt.Errorf("building %s %s: %w", method, rawURL, err)}
+		redact.ErrorURL(err)
+		return &usageError{fmt.Errorf("building %s %s: %w", method, redact.URL(rawURL), err)}
 	}
 	return err
 }
@@ -494,7 +494,7 @@ func marshalMutationBody(m mutation) ([]byte, error) {
 		case reflect.Slice:
 			return []byte("[]"), nil
 		}
-		return nil, fmt.Errorf("refusing to send %s %s: the request body encodes to null", m.Method, m.Path)
+		return nil, fmt.Errorf("refusing to send %s %s: the request body encodes to null", m.Method, redact.URL(m.Path))
 	}
 	return b, nil
 }
@@ -531,7 +531,7 @@ func redactPreviewBodies(reqs []previewRequest) []previewRequest {
 	out := make([]previewRequest, len(reqs))
 	copy(out, reqs)
 	for i, r := range out {
-		out[i].URL = redactURL(r.URL)
+		out[i].URL = redact.URL(r.URL)
 		if len(r.Body) == 0 {
 			continue
 		}
@@ -574,55 +574,15 @@ func previewProbeIfDryRun(cmd *cobra.Command, baseURL, path string, body map[str
 	return true, writeMutationPreview(cmd, baseURL, []previewRequest{req})
 }
 
-const redactedPlaceholder = "[redacted]"
-
-// secretKey folds a JSON key's camelCase, snake_case and kebab-case spellings
-// (the API accepts the first two) into one lookup form.
-func secretKey(k string) string {
-	return strings.ToLower(strings.NewReplacer("_", "", "-", "").Replace(k))
-}
-
-var (
-	// A folded name is secret when it ends with one of these...
-	secretSuffixes = []string{"token", "secret", "secretkey", "password", "passphrase", "signature", "apikey", "privatekey", "accesskey", "signingkey", "encryptionkey", "sshkey", "credential", "credentials", "bearer"}
-	// ...or equals one of these, or one of the builders' names the suffixes miss.
-	secretExact = map[string]bool{
-		"auth": true, "authorization": true, "code": true, "sig": true,
-		"pwd": true, "pass": true, "otp": true, "jwt": true, "hmac": true, "cookie": true, "setcookie": true,
-		"connectionstring": true, "dsn": true,
-		secretKey(keyHeaderValue): true, secretKey(keyCredentialsJSON): true, secretKey(keySecretAccessKey): true,
-	}
-)
-
-// isSecretKey is the one rule for a credential-shaped name, shared by body
-// fields and URL parameters. It is best-effort by name; tokenType, secretName
-// and author stay visible because only suffixes and exact names count.
-func isSecretKey(k string) bool {
-	f := secretKey(k)
-	if secretExact[f] {
-		return true
-	}
-	for _, suf := range secretSuffixes {
-		if strings.HasSuffix(f, suf) {
-			return true
-		}
-	}
-	return false
-}
-
-// isSecretParam adds the names that are secret only as a URL parameter: a
-// body field called "key" is an ordinary field.
-func isSecretParam(k string) bool { return isSecretKey(k) || secretKey(k) == "key" }
-
 // maskValue reports whether the value under key k (folded sk) is a credential.
 // An object under an auth-arm key or a "credential(s)" key is a container, not
 // a payload: it is recursed into so its own credential fields are masked.
 func maskValue(k, sk string, v any) bool {
 	container := authArmKeys[sk] || sk == "credential" || sk == "credentials"
 	if isScalar(v) {
-		return authArmKeys[sk] || isSecretKey(k)
+		return authArmKeys[sk] || redact.IsSecretKey(k)
 	}
-	return isSecretKey(k) && !container
+	return redact.IsSecretKey(k) && !container
 }
 
 // redactSecrets returns a copy of v with the value of every secret key masked,
@@ -632,13 +592,13 @@ func redactSecrets(v any) any {
 	case map[string]any:
 		out := make(map[string]any, len(x))
 		for k, e := range x {
-			sk := secretKey(k)
+			sk := redact.FoldKey(k)
 			if !emptyJSONValue(e) && maskValue(k, sk, e) {
-				out[k] = redactedPlaceholder
+				out[k] = redact.Placeholder
 			} else if strings.Contains(sk, "headers") {
 				out[k] = redactHeaders(e)
 			} else if str, ok := e.(string); ok {
-				out[k] = redactURL(str)
+				out[k] = redact.URL(str)
 			} else {
 				out[k] = redactSecrets(e)
 			}
@@ -648,7 +608,7 @@ func redactSecrets(v any) any {
 		out := make([]any, len(x))
 		for i, e := range x {
 			if str, ok := e.(string); ok {
-				out[i] = redactURL(str)
+				out[i] = redact.URL(str)
 			} else {
 				out[i] = redactSecrets(e)
 			}
@@ -663,122 +623,10 @@ func redactSecrets(v any) any {
 var authArmKeys = func() map[string]bool {
 	m := map[string]bool{}
 	for _, v := range authTemplateFlag.values {
-		m[secretKey(v.api)] = true
+		m[redact.FoldKey(v.api)] = true
 	}
 	return m
 }()
-
-// redactURL masks a URL's userinfo (the password, or the username when there
-// is none: `https://<token>@host` is the common PAT form; the conventional
-// non-secret "git" user is kept) and the value of every secret-named query,
-// fragment or `;` parameter, leaving the rest as sent. A string that does not
-// parse as a URL with a host goes through redactURLText instead, so a
-// malformed or scheme-less one fails closed.
-func redactURL(s string) string {
-	u, err := url.Parse(s)
-	if err != nil || u.Host == "" {
-		return redactURLText(s)
-	}
-	if u.User != nil {
-		if _, has := u.User.Password(); has {
-			u.User = url.UserPassword(u.User.Username(), redactedPlaceholder)
-		} else if u.User.Username() != gitUser {
-			u.User = url.User(redactedPlaceholder)
-		}
-		s = strings.Replace(u.String(), "%5Bredacted%5D", redactedPlaceholder, 1)
-	}
-	return maskSecretPairs(s)
-}
-
-const gitUser = "git"
-
-var (
-	urlPasswordRE  = regexp.MustCompile(`(//[^/?#:@]*:)[^/?#]*@`)
-	urlUsernameRE  = regexp.MustCompile(`(//)([^/?#:@]+)@`)
-	bareUserinfoRE = regexp.MustCompile(`^([^/@\s:]+:)[^/@\s]*@`)
-	bareTokenRE    = regexp.MustCompile(`^([^/@\s:]+)@([^/@\s]*\.[^/@\s]*)`)
-	pathParamRE    = regexp.MustCompile(`;([^=;/?#\s]+)=([^;/?#\s]*)`)
-)
-
-// redactURLText is redactURL's fail-closed fallback for text url.Parse cannot
-// use: it masks userinfo (a bare "TOKEN@host.tld/..." too, which also hits an
-// email-shaped string in URL position) and the secret-named parameters.
-func redactURLText(s string) string {
-	s = urlPasswordRE.ReplaceAllString(s, "${1}"+redactedPlaceholder+"@")
-	s = urlUsernameRE.ReplaceAllStringFunc(s, func(m string) string {
-		if m == "//"+gitUser+"@" {
-			return m
-		}
-		return "//" + redactedPlaceholder + "@"
-	})
-	s = bareUserinfoRE.ReplaceAllString(s, "${1}"+redactedPlaceholder+"@")
-	s = bareTokenRE.ReplaceAllStringFunc(s, func(m string) string {
-		user, host, _ := strings.Cut(m, "@")
-		if user == gitUser {
-			return m
-		}
-		return redactedPlaceholder + "@" + host
-	})
-	return maskSecretPairs(s)
-}
-
-// maskSecretPairs masks secret-named parameters. In a query only "&" ends a
-// pair, so a ";", "#" or "?" inside a secret value cannot leave part of it
-// showing; a fragment's pairs end at "&" or ";"; path ";k=v" parameters end at
-// "/". Pairs are also tried percent-decoded ("token%3Dx"). The rest is as sent.
-func maskSecretPairs(s string) string {
-	end := strings.IndexAny(s, "?#")
-	head, tail := s, ""
-	if end >= 0 {
-		head, tail = s[:end], s[end:]
-	}
-	head = pathParamRE.ReplaceAllStringFunc(head, func(m string) string {
-		if k, _, _ := strings.Cut(m[1:], "="); isSecretParam(k) {
-			return ";" + k + "=" + redactedPlaceholder
-		}
-		return m
-	})
-	if tail == "" {
-		return head
-	}
-	inQuery := tail[0] == '?'
-	pieces := strings.Split(tail[1:], "&")
-	for i, p := range pieces {
-		if inQuery {
-			if m := maskPair(p); m != p {
-				pieces[i] = m
-				continue
-			}
-			if h, frag, ok := strings.Cut(p, "#"); ok {
-				pieces[i] = maskSemi(h) + "#" + maskSemi(frag)
-				continue
-			}
-		}
-		pieces[i] = maskSemi(p)
-	}
-	return head + tail[:1] + strings.Join(pieces, "&")
-}
-
-// maskSemi masks each ";"-separated pair of seg.
-func maskSemi(seg string) string {
-	parts := strings.Split(seg, ";")
-	for i, p := range parts {
-		parts[i] = maskPair(p)
-	}
-	return strings.Join(parts, ";")
-}
-
-// maskPair masks the whole of "k=v" when k, percent-decoded, is secret.
-func maskPair(p string) string {
-	d := p
-	if u, err := url.QueryUnescape(p); err == nil {
-		d = u
-	}
-	if k, _, ok := strings.Cut(d, "="); ok && isSecretParam(k) {
-		return k + "=" + redactedPlaceholder
-	}
-	return p
-}
 
 // redactHeaders masks every non-empty header value, as a {name: value} map or
 // a [{name, value}] list: any header can carry a credential (Authorization,
@@ -803,7 +651,7 @@ func redactHeaders(v any) any {
 			}
 			row := make(map[string]any, len(m))
 			for k, f := range m {
-				if n := secretKey(k); n == "name" || n == "key" || n == "headername" {
+				if n := redact.FoldKey(k); n == "name" || n == "key" || n == "headername" {
 					row[k] = f
 				} else {
 					row[k] = maskUnlessEmpty(f)
@@ -820,7 +668,7 @@ func maskUnlessEmpty(v any) any {
 	if emptyJSONValue(v) {
 		return v
 	}
-	return redactedPlaceholder
+	return redact.Placeholder
 }
 
 // isScalar reports a JSON value that is neither an object nor an array.
@@ -856,7 +704,7 @@ func writeMutationResult(cmd *cobra.Command, m mutation, data []byte, secret sec
 	if !json.Valid(doc) {
 		return &mutationError{
 			err: &nonJSONResponseError{fmt.Errorf("%s %s returned 2xx with a non-JSON body; the change may have been applied: %w",
-				m.Method, m.Path, jsonSyntaxErr(doc))},
+				m.Method, redact.URL(m.Path), jsonSyntaxErr(doc))},
 			applied: appliedTrue,
 		}
 	}
@@ -869,7 +717,7 @@ func writeMutationResult(cmd *cobra.Command, m mutation, data []byte, secret sec
 		err = json.Indent(&out, doc, "", "  ")
 	}
 	if err != nil {
-		return &mutationError{err: &nonJSONResponseError{fmt.Errorf("%s %s returned 2xx with a non-JSON body; the change may have been applied: %w", m.Method, m.Path, err)}, applied: appliedTrue}
+		return &mutationError{err: &nonJSONResponseError{fmt.Errorf("%s %s returned 2xx with a non-JSON body; the change may have been applied: %w", m.Method, redact.URL(m.Path), err)}, applied: appliedTrue}
 	}
 	out.WriteByte('\n')
 	if _, werr := cmd.OutOrStdout().Write(out.Bytes()); werr != nil {
@@ -878,7 +726,7 @@ func writeMutationResult(cmd *cobra.Command, m mutation, data []byte, secret sec
 			extra = "; " + extra
 		}
 		return &mutationError{
-			err:     fmt.Errorf("%s %s succeeded but writing its response failed: %w%s", m.Method, m.Path, werr, extra),
+			err:     fmt.Errorf("%s %s succeeded but writing its response failed: %w%s", m.Method, redact.URL(m.Path), werr, extra),
 			applied: appliedTrue,
 		}
 	}

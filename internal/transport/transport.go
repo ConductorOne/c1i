@@ -13,6 +13,8 @@ import (
 	"strings"
 	"sync/atomic"
 	"time"
+
+	"github.com/ConductorOne/c1i/internal/redact"
 )
 
 const (
@@ -106,14 +108,14 @@ type debugTripper struct {
 
 func (dt *debugTripper) RoundTrip(req *http.Request) (*http.Response, error) {
 	start := time.Now()
-	_, _ = fmt.Fprintf(dt.out, "> %s %s\n", req.Method, req.URL.String())
+	_, _ = fmt.Fprintf(dt.out, "> %s %s\n", req.Method, redact.URL(req.URL.String()))
 	resp, err := dt.next.RoundTrip(req)
 	elapsed := time.Since(start).Round(time.Millisecond)
 	if err != nil {
-		_, _ = fmt.Fprintf(dt.out, "< %s %s error after %s: %v\n", req.Method, req.URL.Path, elapsed, err)
+		_, _ = fmt.Fprintf(dt.out, "< %s %s error after %s: %v\n", req.Method, redact.Path(req.URL.EscapedPath()), elapsed, err)
 		return resp, err
 	}
-	_, _ = fmt.Fprintf(dt.out, "< %s %s %s (%s)\n", req.Method, req.URL.Path, resp.Status, elapsed)
+	_, _ = fmt.Fprintf(dt.out, "< %s %s %s (%s)\n", req.Method, redact.Path(req.URL.EscapedPath()), resp.Status, elapsed)
 	return resp, err
 }
 
@@ -314,6 +316,7 @@ func (c *Client) sendWithRetry(req *http.Request) (*Response, error) {
 
 		resp, err := c.httpClient.Do(attemptReq) // #nosec G704 -- req.URL is the operator's own --url/config target, not attacker-supplied input to an internal request
 		if err != nil {
+			redact.ErrorURL(err)
 			if c.nonRetryable != nil && c.nonRetryable(err) {
 				return nil, fail(err)
 			}

@@ -8,6 +8,7 @@ import (
 
 	"github.com/ConductorOne/c1i/internal/client"
 	"github.com/ConductorOne/c1i/internal/mcpgateway"
+	"github.com/ConductorOne/c1i/internal/redact"
 	"github.com/spf13/cobra"
 )
 
@@ -34,7 +35,7 @@ Subcommands:
 func deriveGatewayURL(baseURL string) (string, error) {
 	u, err := url.Parse(baseURL)
 	if err != nil || u.Host == "" {
-		return "", &usageError{fmt.Errorf("cannot derive gateway URL from %q", baseURL)}
+		return "", &usageError{fmt.Errorf("cannot derive gateway URL from %q", redact.URL(baseURL))}
 	}
 	hostname := u.Hostname()
 	if i := strings.Index(hostname, "--"); i > 0 {

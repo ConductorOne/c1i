@@ -336,7 +336,7 @@ stderr notice, `dry run: nothing was sent`, accompanies every preview.
 
 Every preview prints credential fields as `[redacted]`: fields whose name ends
 in `token`, `secret`, `password`, `signature`, `apikey` and the like (a
-best-effort suffix rule), header values, a URL's username or password, and
+best-effort suffix rule), header values, a URL's username (except `git`) and password, and
 secret-named URL parameters. Everything else is shown as sent, and a body that
 is not JSON prints as `"[redacted: not JSON]"`. A 0.9.2 preview showed them as
 typed.
@@ -377,7 +377,9 @@ APP_ID=$(c1i apps create --display-name "Example" | jq -er .id) || exit 1
 
 `--debug` (or `C1I_DEBUG=1`) traces each API HTTP request to stderr — method,
 URL, response status, and elapsed time, including every retry attempt. Headers
-and bodies are never logged, so credentials don't leak. Output goes to stderr,
+and bodies are never logged, and a URL's username (except `git`) and password, and the value of every
+secret-named parameter (names ending in `token`, including pagination cursors such as `page_token`, `api_key`, ...) print as `[redacted]`, as in
+`--dry-run` previews, so credentials don't leak. Output goes to stderr,
 so it won't corrupt piped JSON on stdout:
 
 ```sh
