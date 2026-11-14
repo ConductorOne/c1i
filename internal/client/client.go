@@ -30,16 +30,11 @@ func loadCredentials(baseURL string) (clientID, clientSecret string, err error) 
 	service := config.KeychainService(baseURL)
 	clientID, clientSecret, _, err = keychain.Load(service)
 	if err != nil {
-		// Older keys: the legacy *.conductor.one name, and the name stored
-		// while --url could carry an explicit :443.
-		// A miss keeps the primary error, which names the key a login writes.
-		// The :443 key goes first: a :443 login wrote it and never touched the
-		// legacy key, so where both exist the legacy one may be stale.
-		olders := []string{config.ExplicitPortKeychainService(baseURL), config.LegacyKeychainService(baseURL)}
+		// Older keys, in config.KeychainServices order (:443 before legacy: a
+		// :443 login never touched the legacy key, so it may be stale). A miss
+		// keeps the primary error, which names the key a login writes.
+		olders := config.KeychainServices(baseURL)[1:]
 		for _, older := range olders {
-			if older == "" || older == service {
-				continue
-			}
 			id, secret, _, lerr := keychain.Load(older)
 			if lerr != nil {
 				continue
@@ -52,9 +47,7 @@ func loadCredentials(baseURL string) (clientID, clientSecret string, err error) 
 			// the target before writing — forcing a re-login.
 			if _, serr := keychain.Store(service, clientID, clientSecret); serr == nil {
 				for _, o := range olders {
-					if o != "" && o != service {
-						_, _ = keychain.Delete(o)
-					}
+					_, _ = keychain.Delete(o)
 				}
 			}
 			break

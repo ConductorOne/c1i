@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net"
 	"net/url"
+	"slices"
 	"strconv"
 	"strings"
 	"unicode"
@@ -195,6 +196,19 @@ func ExplicitPortKeychainService(baseURL string) string {
 		return ""
 	}
 	return KeychainService(baseURL) + ":443"
+}
+
+// KeychainServices returns every key baseURL's credentials may live under: the
+// current one first, then the explicit-port and legacy keys. Load falls back
+// through them in order and logout deletes them all.
+func KeychainServices(baseURL string) []string {
+	keys := []string{KeychainService(baseURL)}
+	for _, k := range []string{ExplicitPortKeychainService(baseURL), LegacyKeychainService(baseURL)} {
+		if k != "" && !slices.Contains(keys, k) {
+			keys = append(keys, k)
+		}
+	}
+	return keys
 }
 
 // LegacyKeychainService returns the old-style keychain service name if the host

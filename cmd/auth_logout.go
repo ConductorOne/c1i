@@ -22,10 +22,15 @@ C1I_CLIENT_SECRET) are not affected.`,
 		}
 		warnPartialEnvCredentials(cmd)
 		client.ClearCachedToken(baseURL)
-		service := config.KeychainService(baseURL)
-		removed, err := keychain.Delete(service)
-		if err != nil {
-			return fmt.Errorf("logout: %w", err)
+		// Every key the credentials may live under, or a fallback would log
+		// the next command straight back in. One line, whichever were removed.
+		removed := false
+		for _, service := range config.KeychainServices(baseURL) {
+			r, err := keychain.Delete(service)
+			if err != nil {
+				return fmt.Errorf("logout: %w", err)
+			}
+			removed = removed || r
 		}
 
 		out := cmd.OutOrStdout()

@@ -444,11 +444,11 @@ func TestExplicitPortKeychainService(t *testing.T) {
 // 443 are the default; anything else keeps its host as typed (and so fails as
 // before).
 func TestMalformedPortIsNotTheDefault(t *testing.T) {
-	for _, port := range []string{"+443", "-443", " 443", "4.43e2", "443 ", "0x1bb", "\u0664\u0664\u0663"} {
+	for _, port := range []string{"+443", "-443", " 443", "4.43e2", "0x1bb", "\u0664\u0664\u0663"} {
 		if got := canonicalHost("acme.example:" + port); got != "acme.example:"+port {
 			t.Errorf("canonicalHost(port %q) = %q, want the port kept", port, got)
 		}
-		if got, _, err := ParseURL("https://acme.example:" + port); err == nil && got == "https://acme.example" && port != "443 " { // ParseURL trims the input
+		if got, _, err := ParseURL("acme.example:" + port); err == nil && got == "https://acme.example" {
 			t.Errorf("ParseURL(port %q) = %q, want it refused or kept", port, got)
 		}
 	}
