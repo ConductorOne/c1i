@@ -42,9 +42,11 @@ unfiltered list. Omit the flag when the variable is empty, for example
   stay visible. Encoded secret names (`;%74oken=`, `%3Btoken=`, `?%74oken=`)
   and values that decode into a separator are now masked, in previews too.
   Names ending in `token`, including pagination cursors such as
-  `page_token`, print as `[redacted]`. A URL's username is now masked too (except `git`), so
-  `https://<token>:x-oauth-basic@host` no longer prints the token, in previews
-  as well.
+  `page_token`, print as `[redacted]`. A URL's username is now masked too
+  (except `git`), so `https://<token>:x-oauth-basic@host` no longer prints the
+  token, in previews as well. Error messages, the JSON error's `path` and
+  `--debug` response lines now show the path as sent (escaped), so an id that
+  needed escaping prints encoded, for example `h%C3%A9llo` or `with%20space`.
 - A `--fields` value that names no field path (`,`, `.`, or `"$A,$B"` with
   both variables unset) or has an empty segment (`id.`, `a..b`) printed full,
   unprojected rows at exit 0. It is now a usage error (exit 2), and so is the
