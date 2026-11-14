@@ -321,7 +321,7 @@ var configHeaderSpec = []struct {
 	{[2]string{"awsSigv4", "aws_sigv4"}, []struct {
 		name   [2]string
 		isName bool
-	}{{[2]string{keySessionToken, "session_token"}, false}}},
+	}{{[2]string{"accessKeyId", "access_key_id"}, false}, {[2]string{keySessionToken, "session_token"}, false}}},
 }
 
 // checkConfigHeaders applies checkHeaderText to the header-bound auth fields of

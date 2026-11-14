@@ -22,11 +22,6 @@ type kvOpt int
 // headers: values are unchecked and a key is refused only for control characters.
 const jsonKeyValues kvOpt = 1
 
-// hasControlChar reports whether s holds an ASCII control character (C0 or DEL).
-func hasControlChar(s string) bool {
-	return strings.IndexFunc(s, isASCIIControl) >= 0
-}
-
 func isASCIIControl(r rune) bool { return r < 0x20 || r == 0x7f }
 
 // checkNoControl refuses a control character in text (tab too unless
@@ -105,9 +100,7 @@ func validatePathFlags(cmd *cobra.Command) error {
 		if err != nil || !f.Changed || !isPathFlag(f) {
 			return
 		}
-		if v := f.Value.String(); hasControlChar(v) {
-			err = &usageError{fmt.Errorf("--%s value %q contains a control character", f.Name, v)}
-		}
+		err = checkNoControl("--"+f.Name, "", "path", f.Value.String(), false)
 	})
 	return err
 }

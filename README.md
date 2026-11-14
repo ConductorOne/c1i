@@ -1799,12 +1799,15 @@ file, or `-` for stdin) — the two are mutually exclusive. GET and DELETE refus
 a body by default (a body on either is more likely a mistake than intent); pass
 `--allow-delete-body` to lift that for DELETE specifically, for the handful of
 C1 endpoints that require one. `--query key=value` and `--header key=value` are
-both repeatable. A header name must be letters, digits and `!#$%&'*+-.^_`+"`"+`|~`
-and a value may not hold a control character (newline, NUL, ...) except a tab;
-the same holds for `mcp servers` `--header-name`/`--header-value`/`--bearer-token`
-and those fields (plus `awsSigv4` `sessionToken`) inside `--hosted-config-file`/`--external-config-file`, in either JSON spelling. A
+both repeatable. A header name must be letters, digits and ``!#$%&'*+-.^_`|~``,
+and a value may not hold a control character (newline, NUL, ...) except a tab.
+The same holds for `mcp servers` `--header-name`/`--header-value`/`--bearer-token`
+and for those fields, plus `awsSigv4` `accessKeyId` and `sessionToken`, inside
+`--hosted-config-file`/`--external-config-file` in either JSON spelling
+(`customHeader`/`custom_header`, `headerValue`/`header_value`, ...). A
 violation is a usage error (exit 2) that names the flag or JSON path and never
-echoes the text.
+echoes the text. A control character in a `--config-field` key or in a path flag
+(`-o/--output`, `--out-dir`, `--*-file`) is also exit 2.
 
 With `--paginate`, each page's first array-valued field is unwrapped and each
 item is emitted as a single line of NDJSON, the same format list commands use.

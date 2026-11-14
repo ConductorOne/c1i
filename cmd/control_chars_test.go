@@ -81,7 +81,7 @@ func TestPathFlagsRefuseControlChars(t *testing.T) {
 
 func TestPathFlagAllowsStdinAndPlainPaths(t *testing.T) {
 	for _, v := range []string{"-", "out.md", "dir/sub dir/é.md"} {
-		if hasControlChar(v) {
+		if checkNoControl("--output", "", "path", v, false) != nil {
 			t.Errorf("%q must be allowed", v)
 		}
 	}
