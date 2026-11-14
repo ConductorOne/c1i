@@ -1,11 +1,13 @@
 package cmd
 
 import (
+	"bytes"
 	"net/http"
 	"strings"
 	"testing"
 
 	"github.com/ConductorOne/c1i/internal/redact"
+	"github.com/spf13/cobra"
 )
 
 const debugSecret = "SEKR3T"
@@ -130,6 +132,73 @@ func TestMalformedURLFlagErrorRedactsSecrets(t *testing.T) {
 	}
 	if strings.Contains(r.stderr, debugSecret) || !strings.Contains(r.stderr, "visible=1") {
 		t.Errorf("stderr = %q", r.stderr)
+	}
+}
+
+// ";" path parameters, plain or %3B-encoded, are masked wherever a path is
+// echoed: debug lines, the API error text and its JSON "path", the path guard.
+func TestPathParamSecretsNeverReachStderr(t *testing.T) {
+	for _, tc := range []struct{ name, path string }{
+		{"semicolon", "/api/v1/x;token=SEKA1/y?ok=1"},
+		{"encoded", "/api/v1/x%3Btoken=SEKA2?ok=1"},
+		{"encoded key", "/api/v1/x;%74oken=SEKA3/y?ok=1"},
+	} {
+		for _, format := range []string{"text", "json"} {
+			t.Run(tc.name+"/"+format, func(t *testing.T) {
+				s := newMutServer(t, fixedReply(404, `{}`))
+				t.Setenv("C1I_URL", mutTestURL)
+				var r mutResult
+				trace := captureStderr(t, func() {
+					r = runMutationCLI(t, s.srv, 0, nil, "api", "--path", tc.path, "--debug", "--error-format", format)
+				})
+				if r.err == nil {
+					t.Fatal("want a 404")
+				}
+				if all := trace + r.stderr; strings.Contains(all, "SEKA") || !strings.Contains(all, "[redacted]") {
+					t.Errorf("stderr = %q", all)
+				}
+			})
+		}
+	}
+	t.Run("path guard", func(t *testing.T) {
+		s := newMutServer(t, fixedReply(200, `{}`))
+		t.Setenv("C1I_URL", mutTestURL)
+		r := runMutationCLI(t, s.srv, 0, nil, "api", "--path", "/api/v1/./x;token=SEKG1")
+		if r.exit != exitUsage || strings.Contains(r.stderr, "SEKG1") {
+			t.Errorf("exit %d stderr %q", r.exit, r.stderr)
+		}
+	})
+	t.Run("GET that cannot be built", func(t *testing.T) {
+		t.Setenv("C1I_URL", mutTestURL)
+		s := newMutServer(t, fixedReply(200, `{}`))
+		r := runMutationCLI(t, s.srv, 0, nil, "api", "--path", "/x?token=SEKH1&ok=1\x01")
+		if r.err == nil || strings.Contains(r.stderr, "SEKH1") || !strings.Contains(r.stderr, "ok=1") {
+			t.Errorf("err %v stderr %q", r.err, r.stderr)
+		}
+	})
+}
+
+// The fixed-route list's partial-result notice and the gateway URL error echo
+// a path / URL; both mask it.
+func TestFindingsNoticeAndGatewayErrorRedact(t *testing.T) {
+	t.Setenv("C1I_URL", mutTestURL)
+	s := newMutServer(t, fixedReply(200, `{"list":[],"nextPageToken":"abc"}`))
+	stubMutationClient(t, s.srv, 0)
+	var errBuf bytes.Buffer
+	cmd := &cobra.Command{Use: "x"}
+	cmd.SetOut(&bytes.Buffer{})
+	cmd.SetErr(&errBuf)
+	cmd.SetContext(t.Context())
+	trace := captureStderr(t, func() {
+		if err := getFixedList(cmd, "/api/v1/x;token=SEKF1?ok=1", func(m map[string]any) map[string]any { return m }); err != nil {
+			t.Error(err)
+		}
+	})
+	if all := trace + errBuf.String(); !strings.Contains(all, "partial result") || strings.Contains(all, "SEKF1") {
+		t.Errorf("notice = %q", all)
+	}
+	if _, err := deriveGatewayURL("acme?token=SEKL1&ok=1"); err == nil || strings.Contains(err.Error(), "SEKL1") || !strings.Contains(err.Error(), "ok=1") {
+		t.Errorf("err = %v", err)
 	}
 }
 

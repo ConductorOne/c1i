@@ -6,7 +6,11 @@
 // depend on it without a cycle.
 package transport
 
-import "fmt"
+import (
+	"fmt"
+
+	"github.com/ConductorOne/c1i/internal/redact"
+)
 
 // APIError is returned when a request completes with a non-2xx status. It
 // carries the structured pieces so callers can branch on StatusCode and
@@ -25,9 +29,9 @@ type APIError struct {
 
 func (e *APIError) Error() string {
 	if e.Body == "" {
-		return fmt.Sprintf("API %s %s returned %d", e.Method, e.Path, e.StatusCode)
+		return fmt.Sprintf("API %s %s returned %d", e.Method, redact.Path(e.Path), e.StatusCode)
 	}
-	return fmt.Sprintf("API %s %s returned %d: %s", e.Method, e.Path, e.StatusCode, e.Body)
+	return fmt.Sprintf("API %s %s returned %d: %s", e.Method, redact.Path(e.Path), e.StatusCode, e.Body)
 }
 
 // PathError is returned when a request's path contains an empty segment (a
@@ -42,7 +46,7 @@ type PathError struct {
 }
 
 func (e *PathError) Error() string {
-	return fmt.Sprintf(`refusing to send %s %s: empty path segment or "."/".." segment (an id argument was likely "", ".", or "..")`, e.Method, e.Path)
+	return fmt.Sprintf(`refusing to send %s %s: empty path segment or "."/".." segment (an id argument was likely "", ".", or "..")`, e.Method, redact.Path(e.Path))
 }
 
 // RedirectError is returned when a 3xx response's target changes the

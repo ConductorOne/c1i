@@ -48,3 +48,14 @@ func TestSecretsNeverReachErrorsOrTrace(t *testing.T) {
 		}
 	})
 }
+
+func TestErrorTextMasksPathParams(t *testing.T) {
+	for _, err := range []error{
+		&APIError{Method: "POST", Path: "/mcp;api_key=SEKL4", StatusCode: 502},
+		&PathError{Method: "GET", Path: "/a/./x;token=SEKL4"},
+	} {
+		if strings.Contains(err.Error(), "SEKL4") {
+			t.Errorf("leaked: %q", err)
+		}
+	}
+}

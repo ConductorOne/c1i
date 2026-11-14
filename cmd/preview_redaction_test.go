@@ -124,7 +124,7 @@ func TestPreviewRedactsUrlsHeadersAndKeyNames(t *testing.T) {
 		keeps []string // must still appear
 	}{
 		{"url userinfo and query", map[string]any{"externalConfig": map[string]any{"url": "https://user:PWleak@h.example/x?token=QTleak&keep=1"}},
-			[]string{"PWleak", "QTleak"}, []string{"h.example/x", "keep=1", "user"}},
+			[]string{"PWleak", "QTleak", "user"}, []string{"h.example/x", "keep=1"}},
 		{"header map", map[string]any{"headers": map[string]any{"Authorization": "Bearer Hleak", "X-Custom": "Cleak"}},
 			[]string{"Hleak", "Cleak"}, nil},
 		{"credential key names", map[string]any{"apiKey": "K1leak", "accessToken": "K2leak", "refreshToken": "K3leak", "secret": "K4leak", "name": "visible"},

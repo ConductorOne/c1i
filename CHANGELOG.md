@@ -33,11 +33,15 @@ unfiltered list. Omit the flag when the variable is empty, for example
 
 ### Fixed
 
-- `--debug` traces and transport or redirect errors printed the request URL
-  verbatim, so a secret query value or URL userinfo reached stderr and CI logs.
-  So did the "building METHOD URL" usage error and a rejected `--url`. They
-  now mask both with the same rule as `--dry-run` previews (shared
-  `internal/redact`); non-secret parameters stay visible.
+- `--debug` traces, transport, redirect, API and path-guard errors, partial-result
+  and `INCOMPLETE` notices, and the unbuildable-request, `--path`, `--url` and
+  `--destination-url` errors printed the request URL or path verbatim, so a
+  secret query, fragment or `;` path parameter value (also percent-encoded) or
+  URL userinfo reached stderr and CI logs. They now mask them with the same
+  rule as `--dry-run` previews (shared `internal/redact`); non-secret parameters
+  stay visible. A URL's username is now masked too (except `git`), so
+  `https://<token>:x-oauth-basic@host` no longer prints the token, in previews
+  as well.
 - A `--fields` value that names no field path (`,`, `.`, or `"$A,$B"` with
   both variables unset) or has an empty segment (`id.`, `a..b`) printed full,
   unprojected rows at exit 0. It is now a usage error (exit 2), and so is the

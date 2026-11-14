@@ -31,7 +31,18 @@ func TestURLMasksSecretsAndKeepsTheRest(t *testing.T) {
 		{"# inside a query value", "https://h.example/x?token=a#cleak", []string{"cleak"}, nil},
 		{"percent-encoded pair", "https://h.example/x?token%3Dpleak&ok=1", []string{"pleak"}, []string{"ok=1"}},
 		{"; separated pair after a plain one", "https://h.example/x?a=1;token=sleak", []string{"sleak"}, []string{"a=1"}},
-		{"userinfo and query", "https://user:PWleak@h.example/x?token=QTleak&keep=1", []string{"PWleak", "QTleak"}, []string{"h.example/x", "keep=1", "user"}},
+		{"userinfo and query", "https://user:PWleak@h.example/x?token=QTleak&keep=1", []string{"PWleak", "QTleak", "user"}, []string{"h.example/x", "keep=1"}},
+		{"PAT with x-oauth-basic", "https://PAT1leak:x-oauth-basic@h.example/x", []string{"PAT1leak"}, []string{"h.example/x"}},
+		{"PAT with empty password", "https://PAT2leak:@h.example/x", []string{"PAT2leak"}, []string{"h.example/x"}},
+		{"PAT with password, malformed", "https://PAT3leak:p w@gith ub.example/x", []string{"PAT3leak"}, nil},
+		{"PAT with password, scheme-less", "PAT4leak:pw@h.example/x", []string{"PAT4leak"}, []string{"h.example/x"}},
+		{"git user with a password keeps the user", "https://git:PW5leak@h.example/x", []string{"PW5leak"}, []string{"git:"}},
+		{"; path param before a slash", "https://h.example/x;token=S1leak/y?ok=1", []string{"S1leak"}, []string{"/y?ok=1"}},
+		{"%3B path param", "https://h.example/x%3Btoken=S2leak?ok=1", []string{"S2leak"}, []string{"ok=1"}},
+		{"%3b path param, lower case", "https://h.example/x%3btoken=S2bleak/y", []string{"S2bleak"}, []string{"/y"}},
+		{"encoded key in a ; path param", "https://h.example/x;%74oken=S3leak/y", []string{"S3leak"}, []string{"/y"}},
+		{"encoded key, malformed value escape", "https://h.example/x?%74oken=S4%zzleak&ok=1", []string{"S4%zzleak", "S4"}, []string{"ok=1"}},
+		{"encoded ; inside a path param key", "https://h.example/x;a%3Btoken=S6leak/y", []string{"S6leak"}, []string{"/y"}},
 		{"git@ is not a secret", "ssh://git@github.example/org/repo", nil, []string{"ssh://git@github.example/org/repo"}},
 	}
 	for _, tc := range cases {
@@ -56,5 +67,12 @@ func TestURLPasswordUsesTheSingleSentinel(t *testing.T) {
 	got := URL("https://user:PWleak@h.example/x")
 	if strings.Contains(got, "xxxxx") || strings.Contains(got, "PWleak") || !strings.Contains(got, "[redacted]") {
 		t.Errorf("URL = %q", got)
+	}
+}
+
+func TestPathMasksParamsAndKeepsTheRest(t *testing.T) {
+	got := Path("/api/v1/x;token=SEKL4/y;ok=1")
+	if strings.Contains(got, "SEKL4") || !strings.Contains(got, ";ok=1") {
+		t.Errorf("Path = %q", got)
 	}
 }
