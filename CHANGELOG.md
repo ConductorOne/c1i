@@ -14,7 +14,8 @@ unfiltered list. Omit the flag when the variable is empty, for example
 `${STATE:+--state "$STATE"}`.
 
 A `--wait-*` flag (`--wait-timeout`, `grants list --wait-stable`/`--wait-min`)
-passed without `--wait` was ignored; it now exits 2. Drop it, or add `--wait`.
+given without `--wait` was ignored; it now exits 2. Drop it, or add `--wait`;
+an explicit `--wait=false` alongside it is still accepted.
 
 `--dry-run` now runs the same pre-send reads a real run does (checking that a
 user or policy id exists, or looking up a policy's type), so a preview that
@@ -68,22 +69,29 @@ still needs none.
   ignored; it is now a usage error (exit 2). Write `fields: "id,email"`.
 - `--dry-run` skipped the existence checks a real run makes, so it previewed
   success for an unknown user or policy id that the real run refuses. It now
-  refuses the same way, and `policies update --dry-run` on a steps change no
+  refuses the same way (a `.`/`..` id is refused before any read, in both
+  modes), and `policies update --dry-run` on a steps change no
   longer needs `--policy-type`: it looks up the policy's type for its checks,
   as a real run does.
 - `--url https://<tenant>:443` (also `C1I_URL` and `url:` in `~/.c1i.yaml`)
   failed with exit 3, "no credentials found", because credentials are stored
-  per host and `:443` counted as a different one. The default HTTPS port is now
-  dropped, and a credential saved under the `:443` name is found and moved on
-  first use. Any path, query or fragment in `--url` is ignored, as before.
+  per host and `:443` counted as a different one. The default HTTPS port
+  (`:443`, `:0443`, or an empty `:`) is now dropped, and a credential saved
+  under the `:443` name is found and moved on first use, with every older copy
+  removed. Any path, query or fragment in `--url` is ignored, as before.
 - A control character (newline, CR, NUL, ...) in a file-path flag (`-o`,
   `--out-dir`, every `--*-file`) or a header (`api --header`, `mcp servers`
-  `--header-name`/`--header-value`/`--bearer-token`) is now a usage error (exit
+  `--header-name`/`--header-value`/`--bearer-token`, and the same fields in a
+  `--hosted-config-file`/`--external-config-file`) is now a usage error (exit
   2) before anything is read, written or sent. `docs readme -o $'a\nb'` wrote a
   file named with a newline, and a CR/LF in a header failed only inside the
-  HTTP library. The error names the flag and the character's position, never a
-  header value; tab is still allowed in header values, and `--config-field`
-  values may still span lines.
+  HTTP library. A header name must also be a valid HTTP token, so
+  `api --header "Authorization: Bearer x=="` (a name containing a space and a
+  colon) is refused instead of reaching the HTTP library, which printed it.
+  The error names the flag (or JSON field) and the character's position; it
+  never prints a header value, or a header name that is itself invalid. Tab is
+  still allowed in header values, and `--config-field` values may still span
+  lines.
 - A malformed `key=value` (`api --header`/`--query`, `--config-field`) echoed
   the whole input in its error, which could expose a token missing its `=`; the
   error now names the flag only.
