@@ -32,24 +32,28 @@ func loadCredentials(baseURL string) (clientID, clientSecret string, err error) 
 	if err != nil {
 		// Older keys: the legacy *.conductor.one name, and the name stored
 		// while --url could carry an explicit :443.
-		for _, older := range []string{config.LegacyKeychainService(baseURL), config.ExplicitPortKeychainService(baseURL)} {
+		// A miss keeps the primary error, which names the key a login writes.
+		olders := []string{config.LegacyKeychainService(baseURL), config.ExplicitPortKeychainService(baseURL)}
+		for _, older := range olders {
 			if older == "" || older == service {
 				continue
 			}
-			var id, secret string
-			var lerr error
-			if id, secret, _, lerr = keychain.Load(older); lerr != nil {
-				err = lerr
+			id, secret, _, lerr := keychain.Load(older)
+			if lerr != nil {
 				continue
 			}
 			clientID, clientSecret, err = id, secret, nil
 			// Migrate: store under the new key, and only delete the older
-			// copy once the new one is safely written. Deleting first (or
+			// copies once the new one is safely written. Deleting first (or
 			// unconditionally) could drop the user's only credentials if
 			// Store fails — keychain.Store can error and internally clears
 			// the target before writing — forcing a re-login.
 			if _, serr := keychain.Store(service, clientID, clientSecret); serr == nil {
-				_, _ = keychain.Delete(older)
+				for _, o := range olders {
+					if o != "" && o != service {
+						_, _ = keychain.Delete(o)
+					}
+				}
 			}
 			break
 		}

@@ -141,6 +141,9 @@ func sendMutation(cmd *cobra.Command, m mutation, opts ...mutationOpt) error {
 	if err != nil {
 		return notApplied(err)
 	}
+	if err := checkMutationPath(baseURL, m); err != nil {
+		return notApplied(err)
+	}
 	c, err := runPreReads(cmd, baseURL, &m, o)
 	if err != nil {
 		return notApplied(err)
@@ -201,6 +204,13 @@ func sendMutationSequence(cmd *cobra.Command, steps []mutationStep, note string,
 	baseURL, err := GetBaseURL()
 	if err != nil {
 		return notApplied(err)
+	}
+	probeIDs := make([]string, 0, len(steps))
+	for _, s := range steps {
+		if err := checkMutationPath(baseURL, s.Build(probeIDs)); err != nil {
+			return notApplied(err)
+		}
+		probeIDs = append(probeIDs, s.Placeholder)
 	}
 	c, err := runPreReads(cmd, baseURL, nil, o)
 	if err != nil {
@@ -305,6 +315,9 @@ func sendMutationBatch(cmd *cobra.Command, ms []mutation, idKey string, label fu
 	var c *client.Client
 	reqs := make([]previewRequest, len(ms))
 	for i := range ms {
+		if err = checkMutationPath(baseURL, ms[i]); err != nil {
+			return unsent(i, err)
+		}
 		if c, err = runPreReadsWith(cmd, baseURL, &ms[i], o, c); err != nil {
 			return unsent(i, err)
 		}
@@ -453,10 +466,16 @@ func prepareMutation(baseURL string, m mutation) (previewRequest, error) {
 	if err != nil {
 		return previewRequest{}, err
 	}
-	if err := checkMutationRequest(m.Method, baseURL+m.Path); err != nil {
+	if err := checkMutationPath(baseURL, m); err != nil {
 		return previewRequest{}, err
 	}
 	return previewRequest{Method: m.Method, URL: baseURL + m.Path, Body: body}, nil
+}
+
+// checkMutationPath is the send-time path guard alone. Callers run it before
+// any pre-read, so a bad id is refused without a request.
+func checkMutationPath(baseURL string, m mutation) error {
+	return checkMutationRequest(m.Method, baseURL+m.Path)
 }
 
 func checkMutationRequest(method, rawURL string) error {

@@ -11,6 +11,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/ConductorOne/c1i/internal/config"
 	"github.com/ConductorOne/c1i/internal/keychain"
 	"github.com/ConductorOne/c1i/internal/tokensource"
 	"github.com/zalando/go-keyring"
@@ -335,5 +336,59 @@ func TestLoadCredentialsFindsCredentialStoredUnderExplicitPort(t *testing.T) {
 	}
 	if _, _, _, err := keychain.Load("c1i/acme.example:443"); err == nil {
 		t.Error("the :443 copy was left behind after migration")
+	}
+}
+
+// TestLoadCredentialsErrorNamesCurrentKey: with nothing stored, the error names
+// the key a login would write, not an older fallback key.
+func TestLoadCredentialsErrorNamesCurrentKey(t *testing.T) {
+	keyring.MockInit()
+	dir := t.TempDir()
+	switch runtime.GOOS {
+	case "windows":
+		t.Setenv("AppData", dir)
+	case "darwin":
+		t.Setenv("HOME", dir)
+	default:
+		t.Setenv("XDG_CONFIG_HOME", dir)
+	}
+	_ = os.Unsetenv("C1I_CLIENT_ID")
+	_ = os.Unsetenv("C1I_CLIENT_SECRET")
+	for _, base := range []string{"https://acme.example", "https://acme.conductor.one"} {
+		_, _, err := loadCredentials(base)
+		want := "no credentials found for " + config.KeychainService(base) + ": run"
+		if err == nil || !strings.Contains(err.Error(), want) {
+			t.Errorf("loadCredentials(%q) err = %v, want it to contain %q", base, err, want)
+		}
+	}
+}
+
+// TestLoadCredentialsMigrationClearsEveryOlderKey: with both the legacy and the
+// :443 key stored, neither is left behind once one is migrated.
+func TestLoadCredentialsMigrationClearsEveryOlderKey(t *testing.T) {
+	keyring.MockInit()
+	dir := t.TempDir()
+	switch runtime.GOOS {
+	case "windows":
+		t.Setenv("AppData", dir)
+	case "darwin":
+		t.Setenv("HOME", dir)
+	default:
+		t.Setenv("XDG_CONFIG_HOME", dir)
+	}
+	_ = os.Unsetenv("C1I_CLIENT_ID")
+	_ = os.Unsetenv("C1I_CLIENT_SECRET")
+	for _, k := range []string{"c1i/acme", "c1i/acme.conductor.one:443"} {
+		if _, err := keychain.Store(k, "id-"+k, "s"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, _, err := loadCredentials("https://acme.conductor.one"); err != nil {
+		t.Fatal(err)
+	}
+	for _, k := range []string{"c1i/acme", "c1i/acme.conductor.one:443"} {
+		if _, _, _, err := keychain.Load(k); err == nil {
+			t.Errorf("%s left behind after migration", k)
+		}
 	}
 }

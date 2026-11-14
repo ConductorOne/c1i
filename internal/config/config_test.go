@@ -397,6 +397,10 @@ func TestParseURLDropsDefaultHTTPSPort(t *testing.T) {
 		{"https://acme.conductor.one:4430", "https://acme.conductor.one:4430"},
 		{"https://acme.conductor.one:80", "https://acme.conductor.one:80"},
 		{"https://[::1]:8443", "https://[::1]:8443"},
+		{"https://acme.conductor.one:", "https://acme.conductor.one"},
+		{"https://acme.conductor.one:0443", "https://acme.conductor.one"},
+		{"https://acme.conductor.one:00443/", "https://acme.conductor.one"},
+		{"https://[::1]:", "https://[::1]"},
 	}
 	for _, tc := range cases {
 		got, _, err := ParseURL(tc.input)

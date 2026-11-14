@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net"
 	"net/url"
+	"strconv"
 	"strings"
 	"unicode"
 
@@ -140,13 +141,18 @@ func isHostShaped(s string) bool {
 // that decides this; every consumer reads the host ParseURL returns.
 func canonicalHost(host string) string {
 	host = strings.ToLower(host)
-	if h, port, err := net.SplitHostPort(host); err == nil && port == "443" {
-		if strings.Contains(h, ":") {
-			return "[" + h + "]"
-		}
-		return h
+	h, port, err := net.SplitHostPort(host)
+	if err != nil {
+		return host
 	}
-	return host
+	// An empty port ("host:") is the default; compare the number, so "0443" is too.
+	if n, perr := strconv.Atoi(port); port != "" && (perr != nil || n != 443) {
+		return host
+	}
+	if strings.Contains(h, ":") {
+		return "[" + h + "]"
+	}
+	return h
 }
 
 // KeychainService returns the keychain service name for a given base URL.

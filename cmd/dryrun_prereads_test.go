@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"fmt"
 	"net/http"
 	"strings"
 	"testing"
@@ -123,5 +124,38 @@ func TestDryRunPreviewsAfterPreReadsPass(t *testing.T) {
 				t.Errorf("dry run sent %+v", w)
 			}
 		})
+	}
+}
+
+// TestBadPathIDRefusedBeforePreReads: an empty, "." or ".." id is refused (exit
+// 2) before any request, the pre-read GET included, in both modes.
+func TestBadPathIDRefusedBeforePreReads(t *testing.T) {
+	t.Setenv("C1I_URL", mutTestURL)
+	for _, id := range []string{".", ".."} {
+		cases := map[string][]string{
+			"apps set-owners":         {"apps", "set-owners", id, "--user-id", "u1"},
+			"entitlements set-owners": {"entitlements", "set-owners", id, "--app-id", "app1", "--user-id", "u1"},
+			"tasks reassign":          {"tasks", "reassign", id, "--policy-step-id", "P1", "--to-user-id", "u1"},
+			"apps update":             {"apps", "update", id, "--grant-policy-id", "p1"},
+			"entitlements create":     {"entitlements", "create", "--app-id", id, "--display-name", "e", "--owner-id", "u1"},
+			"entitlements update":     {"entitlements", "update", id, "--app-id", "app1", "--grant-policy-id", "p1"},
+		}
+		for name, args := range cases {
+			for _, dry := range []bool{false, true} {
+				t.Run(fmt.Sprintf("%s %q dry=%v", name, id, dry), func(t *testing.T) {
+					if dry {
+						withDryRun(t)
+					}
+					s := preReadServer(t)
+					r := runMutationCLI(t, s.srv, 0, nil, args...)
+					if r.exit != exitUsage {
+						t.Errorf("exit %d (%v), want %d", r.exit, r.err, exitUsage)
+					}
+					if got := s.requests(); len(got) != 0 {
+						t.Errorf("requests sent: %+v", got)
+					}
+				})
+			}
+		}
 	}
 }
