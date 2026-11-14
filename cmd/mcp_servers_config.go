@@ -301,29 +301,45 @@ func sharedAuthFlagsChanged(cmd *cobra.Command) bool {
 	return false
 }
 
-// configHeaderFields lists, per auth arm spelling (camelCase or the proto
-// snake_case a file may use), the fields that reach an HTTP header.
-var configHeaderFields = []struct {
-	arm, field string
-	isName     bool
+// configHeaderSpec lists the auth-arm fields that reach an HTTP header, with
+// both spellings protobuf JSON accepts for the arm and for each field.
+var configHeaderSpec = []struct {
+	arm    [2]string
+	fields []struct {
+		name   [2]string
+		isName bool
+	}
 }{
-	{"customHeader", "headerName", true}, {"custom_header", "header_name", true},
-	{"customHeader", keyHeaderValue, false}, {"custom_header", "header_value", false},
-	{"bearerToken", keyToken, false}, {"bearer_token", keyToken, false},
+	{[2]string{"customHeader", "custom_header"}, []struct {
+		name   [2]string
+		isName bool
+	}{{[2]string{"headerName", "header_name"}, true}, {[2]string{keyHeaderValue, "header_value"}, false}}},
+	{[2]string{"bearerToken", "bearer_token"}, []struct {
+		name   [2]string
+		isName bool
+	}{{[2]string{keyToken, keyToken}, false}}},
+	{[2]string{"awsSigv4", "aws_sigv4"}, []struct {
+		name   [2]string
+		isName bool
+	}{{[2]string{keySessionToken, "session_token"}, false}}},
 }
 
 // checkConfigHeaders applies checkHeaderText to the header-bound auth fields of
-// a config read from a file, which bypasses the flag checks. wrapper names the
-// config in the error path.
+// a config read from a file, which bypasses the flag checks, in every arm and
+// field spelling. wrapper names the config in the error path.
 func checkConfigHeaders(wrapper string, cfg map[string]any) error {
-	for _, f := range configHeaderFields {
-		arm, _ := cfg[f.arm].(map[string]any)
-		text, ok := arm[f.field].(string)
-		if !ok {
-			continue
-		}
-		if err := checkHeaderText(wrapper+"."+f.arm+"."+f.field, "", text, f.isName); err != nil {
-			return err
+	for _, spec := range configHeaderSpec {
+		for _, armName := range spec.arm {
+			arm, _ := cfg[armName].(map[string]any)
+			for _, f := range spec.fields {
+				for _, fieldName := range f.name {
+					if text, ok := arm[fieldName].(string); ok {
+						if err := checkHeaderText(wrapper+"."+armName+"."+fieldName, "", text, f.isName); err != nil {
+							return err
+						}
+					}
+				}
+			}
 		}
 	}
 	return nil
@@ -358,7 +374,7 @@ func buildHostedConfig(cmd *cobra.Command) (map[string]any, error) {
 	if err != nil {
 		return nil, err
 	}
-	fields, err := parseKeyValueFlag(pairs, "config-field", allowValueControls)
+	fields, err := parseKeyValueFlag(pairs, "config-field", jsonKeyValues)
 	if err != nil {
 		return nil, err
 	}

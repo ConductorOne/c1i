@@ -30,10 +30,10 @@ func TestParseKeyValueFlagRefusesControlChars(t *testing.T) {
 	if _, err := parseKeyValueFlag([]string{"a\tb=x"}, "header"); err == nil {
 		t.Error("tab in a key must be refused")
 	}
-	if _, err := parseKeyValueFlag([]string{"K=a\nb"}, "config-field", allowValueControls); err != nil {
+	if _, err := parseKeyValueFlag([]string{"K=a\nb"}, "config-field", jsonKeyValues); err != nil {
 		t.Errorf("config-field values are JSON, a newline is legitimate: %v", err)
 	}
-	if _, err := parseKeyValueFlag([]string{"a\nb=x"}, "config-field", allowValueControls); err == nil {
+	if _, err := parseKeyValueFlag([]string{"a\nb=x"}, "config-field", jsonKeyValues); err == nil {
 		t.Error("a control character in a key is refused for every caller")
 	}
 }

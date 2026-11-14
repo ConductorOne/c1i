@@ -18,9 +18,9 @@ import (
 // kvOpt tunes parseKeyValueFlag.
 type kvOpt int
 
-// allowValueControls lets values carry control characters, for flags whose
-// values travel in a JSON body rather than an HTTP header.
-const allowValueControls kvOpt = 1
+// jsonKeyValues marks a flag whose pairs become JSON object entries, not HTTP
+// headers: values are unchecked and a key is refused only for control characters.
+const jsonKeyValues kvOpt = 1
 
 // hasControlChar reports whether s holds an ASCII control character (C0 or DEL).
 func hasControlChar(s string) bool {
@@ -29,25 +29,36 @@ func hasControlChar(s string) bool {
 
 func isASCIIControl(r rune) bool { return r < 0x20 || r == 0x7f }
 
+// checkNoControl refuses a control character in text (tab too unless
+// allowTab). what is "name", "value" or "key"; subject, if set, is quoted. The
+// error gives the character and byte offset, never the text: it may be a secret.
+func checkNoControl(where, subject, what, text string, allowTab bool) error {
+	for at, r := range text {
+		if isASCIIControl(r) && (!allowTab || r != '\t') {
+			if subject != "" {
+				subject = fmt.Sprintf(" %q", subject)
+			}
+			return &usageError{fmt.Errorf("invalid %s%s: %s has control character U+%04X at byte %d", where, subject, what, r, at)}
+		}
+	}
+	return nil
+}
+
 // checkHeaderText is the one rule for text that becomes an HTTP header. A name
 // must be an RFC 9110 token (tchar only); a value refuses control characters
 // except tab (legal per RFC 9110). where names the source ("--header", or a
 // JSON path). Either may be a secret (`--header "Authorization: Bearer x"`), so
-// the error gives the character and byte offset, never the text; key, a name
-// already checked, is quoted for a value.
+// errors never echo the text; key, a name already checked, is quoted for a value.
 func checkHeaderText(where, key, text string, isName bool) error {
+	if !isName {
+		return checkNoControl(where, key, "value", text, true)
+	}
+	if err := checkNoControl(where, "", "name", text, false); err != nil {
+		return err
+	}
 	for at, r := range text {
-		switch {
-		case isName && isASCIIControl(r):
-			return &usageError{fmt.Errorf("invalid %s: name has control character U+%04X at byte %d", where, r, at)}
-		case isName && !isTokenChar(r):
+		if !isTokenChar(r) {
 			return &usageError{fmt.Errorf("invalid %s: name has invalid character U+%04X at byte %d (a header name is letters, digits and !#$%%&'*+-.^_`|~)", where, r, at)}
-		case !isName && r != '\t' && isASCIIControl(r):
-			subject := ""
-			if key != "" {
-				subject = fmt.Sprintf(" %q", key)
-			}
-			return &usageError{fmt.Errorf("invalid %s%s: value has control character U+%04X at byte %d", where, subject, r, at)}
 		}
 	}
 	return nil
@@ -121,19 +132,24 @@ func parseKeyValueFlag(pairs []string, flagName string, opts ...kvOpt) (map[stri
 		return nil, nil
 	}
 	m := make(map[string]string, len(pairs))
-	valueControls := slices.Contains(opts, allowValueControls)
+	jsonPairs := slices.Contains(opts, jsonKeyValues)
 	for _, p := range pairs {
 		k, v, err := cutKeyValue(flagName, p)
 		if err != nil {
 			return nil, err
 		}
+		if jsonPairs {
+			if err := checkNoControl("--"+flagName, "", "key", k, false); err != nil {
+				return nil, err
+			}
+			m[k] = v
+			continue
+		}
 		if err := checkHeaderText("--"+flagName, "", k, true); err != nil {
 			return nil, err
 		}
-		if !valueControls {
-			if err := checkHeaderText("--"+flagName, k, v, false); err != nil {
-				return nil, err
-			}
+		if err := checkHeaderText("--"+flagName, k, v, false); err != nil {
+			return nil, err
 		}
 		m[k] = v
 	}

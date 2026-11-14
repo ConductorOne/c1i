@@ -1802,7 +1802,7 @@ C1 endpoints that require one. `--query key=value` and `--header key=value` are
 both repeatable. A header name must be letters, digits and `!#$%&'*+-.^_`+"`"+`|~`
 and a value may not hold a control character (newline, NUL, ...) except a tab;
 the same holds for `mcp servers` `--header-name`/`--header-value`/`--bearer-token`
-and those fields inside `--hosted-config-file`/`--external-config-file`. A
+and those fields (plus `awsSigv4` `sessionToken`) inside `--hosted-config-file`/`--external-config-file`, in either JSON spelling. A
 violation is a usage error (exit 2) that names the flag or JSON path and never
 echoes the text.
 
