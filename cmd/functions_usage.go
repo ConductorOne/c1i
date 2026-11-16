@@ -110,9 +110,9 @@ last_executed_at, args.`,
 						argKeys = append(argKeys, k)
 					}
 					if err := enc.Encode(map[string]any{
-						"automation_id":    a.ID,
-						"automation_name":  a.DisplayName,
-						"step_name":        step.StepName,
+						"automation_id":    nilIfEmpty(a.ID),
+						"automation_name":  nilIfEmpty(a.DisplayName),
+						"step_name":        nilIfEmpty(step.StepName),
 						"enabled":          a.Enabled,
 						"last_executed_at": nilIfEmpty(a.LastExecutedAt),
 						"args":             argKeys,

@@ -5,12 +5,12 @@ import (
 	"testing"
 )
 
-// TestAppOwnerRowKeepsRealTypesAndOmitsEmptyDeletedAt pins the row
-// projection GET .../owners feeds the emitter: strings pass through
-// untouched, and deleted_at is untyped nil (not "") when the owner isn't
-// deleted -- CLAUDE.md's row-fidelity rule (a "" would make
-// `jq 'select(.deleted_at)'` match every live owner).
-func TestAppOwnerRowKeepsRealTypesAndOmitsEmptyDeletedAt(t *testing.T) {
+// TestAppOwnerRowEmitsNullForEmptyStrings pins the row
+// projection GET .../owners feeds the emitter: a non-empty string passes
+// through, and an empty one (deleted_at on a live owner, or any other absent
+// field) is untyped nil, not "" -- CLAUDE.md's row-fidelity rule (a "" would
+// make `jq 'select(.deleted_at)'` match every live owner).
+func TestAppOwnerRowEmitsNullForEmptyStrings(t *testing.T) {
 	cases := []struct {
 		name string
 		in   appOwner
@@ -45,11 +45,11 @@ func TestAppOwnerRowKeepsRealTypesAndOmitsEmptyDeletedAt(t *testing.T) {
 			},
 			want: map[string]any{
 				"id":           "u2",
-				"display_name": "",
-				"email":        "",
-				"username":     "",
+				"display_name": nil,
+				"email":        nil,
+				"username":     nil,
 				"status":       "DELETED",
-				"job_title":    "",
+				"job_title":    nil,
 				"deleted_at":   "2026-01-01T00:00:00Z",
 			},
 		},

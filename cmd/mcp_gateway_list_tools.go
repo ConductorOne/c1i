@@ -39,7 +39,7 @@ func emitGatewayTools(cmd *cobra.Command, tools []mcpgateway.Tool, full bool, li
 		if limitReached(enc.Written(), limit) {
 			break
 		}
-		row := map[string]any{"name": t.Name, "description": t.Description}
+		row := map[string]any{"name": nilIfEmpty(t.Name), "description": nilIfEmpty(t.Description)}
 		if full && len(t.InputSchema) > 0 {
 			row["input_schema"] = json.RawMessage(t.InputSchema)
 		}

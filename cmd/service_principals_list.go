@@ -23,8 +23,8 @@ type spListItem struct {
 // timestamps and email emit null, not "", per CLAUDE.md's row-fidelity rule.
 func spRow(sp spListItem) map[string]any {
 	return map[string]any{
-		"id":           sp.ID,
-		"display_name": sp.DisplayName,
+		"id":           nilIfEmpty(sp.ID),
+		"display_name": nilIfEmpty(sp.DisplayName),
 		"email":        nilIfEmpty(sp.User.Email),
 		"created_at":   nilIfEmpty(sp.CreatedAt),
 		"updated_at":   nilIfEmpty(sp.UpdatedAt),

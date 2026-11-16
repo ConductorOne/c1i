@@ -106,15 +106,15 @@ var accountsListCmd = &cobra.Command{
 				if unmappedOnly && a.IdentityUserID != "" {
 					continue
 				}
-				if err := enc.Encode(map[string]string{
-					"id":               a.ID,
-					"app_id":           a.AppID,
-					"display_name":     a.DisplayName,
-					"email":            a.Email,
-					"username":         a.Username,
-					"identity_user_id": a.IdentityUserID,
-					"app_user_type":    a.AppUserType,
-					"status":           a.Status.Status,
+				if err := enc.Encode(map[string]any{
+					"id":               nilIfEmpty(a.ID),
+					"app_id":           nilIfEmpty(a.AppID),
+					"display_name":     nilIfEmpty(a.DisplayName),
+					"email":            nilIfEmpty(a.Email),
+					"username":         nilIfEmpty(a.Username),
+					"identity_user_id": nilIfEmpty(a.IdentityUserID),
+					"app_user_type":    nilIfEmpty(a.AppUserType),
+					"status":           nilIfEmpty(a.Status.Status),
 				}); err != nil {
 					return err
 				}

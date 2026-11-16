@@ -226,25 +226,25 @@ func getRoleMining(cmd *cobra.Command, path string, write func([]byte) error) er
 
 func roleMiningSuggestionRow(item map[string]any) map[string]any {
 	return map[string]any{
-		"id": jsonString(item, "id"), "suggested_name": jsonString(item, "suggestedName"), "state": jsonString(item, "suggestionState"), "confidence": item["confidence"], "cohort_size": item["cohortSize"], "users_with_all": item["usersWithAll"], "run_id": jsonString(item, "runId"), "updated_at": item["updatedAt"],
+		"id": optString(item, "id"), "suggested_name": optString(item, "suggestedName"), "state": optString(item, "suggestionState"), "confidence": item["confidence"], "cohort_size": item["cohortSize"], "users_with_all": item["usersWithAll"], "run_id": optString(item, "runId"), "updated_at": optString(item, "updatedAt"),
 	}
 }
 
 func roleMiningRunRow(item map[string]any) map[string]any {
 	return map[string]any{
-		"id": jsonString(item, "id"), "status": jsonString(item, "status"), "trigger_type": jsonString(item, "triggerType"), "total_users": item["totalUsers"], "cohorts_analyzed": item["cohortsAnalyzed"], "suggestions_generated": item["suggestionsGenerated"], "completed_at": item["completedAt"], "error_message": jsonString(item, "errorMessage"),
+		"id": optString(item, "id"), "status": optString(item, "status"), "trigger_type": optString(item, "triggerType"), "total_users": item["totalUsers"], "cohorts_analyzed": item["cohortsAnalyzed"], "suggestions_generated": item["suggestionsGenerated"], "completed_at": optString(item, "completedAt"), "error_message": optString(item, "errorMessage"),
 	}
 }
 
 func roleMiningAnalysisRow(item map[string]any) map[string]any {
 	return map[string]any{
-		"id": jsonString(item, "id"), "status": jsonString(item, "status"), "cohort_size": item["cohortSize"], "suggestions_generated": item["suggestionsGenerated"], "created_at": item["createdAt"], "completed_at": item["completedAt"], "error_message": jsonString(item, "errorMessage"),
+		"id": optString(item, "id"), "status": optString(item, "status"), "cohort_size": item["cohortSize"], "suggestions_generated": item["suggestionsGenerated"], "created_at": optString(item, "createdAt"), "completed_at": optString(item, "completedAt"), "error_message": optString(item, "errorMessage"),
 	}
 }
 
 func roleMiningUserRow(item map[string]any) map[string]any {
 	return map[string]any{
-		"id": jsonString(item, "id"), "display_name": jsonString(item, "displayName"), "email": jsonString(item, "email"), "department": jsonString(item, "department"), "job_title": jsonString(item, "jobTitle"), "status": jsonString(item, "status"),
+		"id": optString(item, "id"), "display_name": optString(item, "displayName"), "email": optString(item, "email"), "department": optString(item, "department"), "job_title": optString(item, "jobTitle"), "status": optString(item, "status"),
 	}
 }
 

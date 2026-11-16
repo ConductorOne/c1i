@@ -67,7 +67,7 @@ no bindings are still emitted with an empty toolsets array.`,
 				toolsets = append(toolsets, toolsetRow(p))
 			}
 			if err := enc.Encode(map[string]any{
-				"mcp_tool_id": group.MCPToolID,
+				"mcp_tool_id": nilIfEmpty(group.MCPToolID),
 				"toolsets":    toolsets,
 			}); err != nil {
 				return err

@@ -112,16 +112,16 @@ type toolView struct {
 
 func toolRow(t toolView) map[string]any {
 	return map[string]any{
-		"id":                 t.ID,
-		"app_id":             t.AppID,
-		"connector_id":       t.ConnectorID,
-		"tool_name":          t.ToolName,
-		"app_entitlement_id": t.AppEntitlementID,
-		"display_name":       firstNonEmpty(t.DisplayName, t.DefaultDisplayName),
-		"description":        t.Description,
-		"classification":     t.Classification,
-		"state":              t.State,
-		"visibility":         firstNonEmpty(t.Visibility, t.DefaultVisibility),
+		"id":                 nilIfEmpty(t.ID),
+		"app_id":             nilIfEmpty(t.AppID),
+		"connector_id":       nilIfEmpty(t.ConnectorID),
+		"tool_name":          nilIfEmpty(t.ToolName),
+		"app_entitlement_id": nilIfEmpty(t.AppEntitlementID),
+		"display_name":       nilIfEmpty(firstNonEmpty(t.DisplayName, t.DefaultDisplayName)),
+		"description":        nilIfEmpty(t.Description),
+		"classification":     nilIfEmpty(t.Classification),
+		"state":              nilIfEmpty(t.State),
+		"visibility":         nilIfEmpty(firstNonEmpty(t.Visibility, t.DefaultVisibility)),
 		"deleted_at":         nilIfEmpty(t.DeletedAt),
 	}
 }

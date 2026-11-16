@@ -15,13 +15,13 @@ var rolesCmd = &cobra.Command{
 
 func roleRow(item map[string]any) map[string]any {
 	return map[string]any{
-		"id":              item["id"],
-		"name":            item["name"],
-		"display_name":    item["displayName"],
+		"id":              optString(item, "id"),
+		"name":            optString(item, "name"),
+		"display_name":    optString(item, "displayName"),
 		"system_builtin":  item["systemBuiltin"] == true,
 		"system_api_only": item["systemApiOnly"] == true,
-		"created_at":      item["createdAt"],
-		"updated_at":      item["updatedAt"],
+		"created_at":      optString(item, "createdAt"),
+		"updated_at":      optString(item, "updatedAt"),
 	}
 }
 

@@ -34,10 +34,10 @@ type spCredential struct {
 // is never part of this — it is returned only once, by create.
 func spCredentialRow(c spCredential) map[string]any {
 	return map[string]any{
-		"id":                   c.ID,
-		"service_principal_id": c.ServicePrincipal,
-		"display_name":         c.DisplayName,
-		"client_id":            c.ClientID,
+		"id":                   nilIfEmpty(c.ID),
+		"service_principal_id": nilIfEmpty(c.ServicePrincipal),
+		"display_name":         nilIfEmpty(c.DisplayName),
+		"client_id":            nilIfEmpty(c.ClientID),
 		"require_dpop":         c.RequireDPoP,
 		"scoped_role_ids":      c.ScopedRoleIDs,
 		"allow_source_cidrs":   c.AllowSourceCIDRs,

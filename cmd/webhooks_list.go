@@ -22,9 +22,9 @@ type webhookListItem struct {
 // webhookRow flattens a webhook into an NDJSON row; absent values are null.
 func webhookRow(w webhookListItem) map[string]any {
 	return map[string]any{
-		"id":               w.ID,
-		"display_name":     w.DisplayName,
-		"url":              w.URL,
+		"id":               nilIfEmpty(w.ID),
+		"display_name":     nilIfEmpty(w.DisplayName),
+		"url":              nilIfEmpty(w.URL),
 		"description":      nilIfEmpty(w.Description),
 		"callback_timeout": nilIfEmpty(w.CallbackTimeout),
 		"created_at":       nilIfEmpty(w.CreatedAt),

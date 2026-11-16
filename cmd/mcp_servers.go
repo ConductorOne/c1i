@@ -84,13 +84,32 @@ func (f *flexInt64) UnmarshalJSON(data []byte) error {
 
 // nilIfEmpty converts an empty string to untyped nil so an absent value
 // round-trips as JSON null, not "" — "" is truthy in jq, so `jq
-// 'select(.field)'` would otherwise match every row. See cmd/policies.go's
-// policyRow for the convention this codifies.
+// 'select(.field)'` would otherwise match every row. See CLAUDE.md's "Row
+// values keep their real JSON types".
 func nilIfEmpty(s string) any {
 	if s == "" {
 		return nil
 	}
 	return s
+}
+
+// optString reads an optional field of a decoded object for a row: nil when
+// missing or "", any other value unchanged.
+func optString(item map[string]any, key string) any {
+	if value, ok := item[key].(string); ok {
+		return nilIfEmpty(value)
+	}
+	return item[key]
+}
+
+func boolField(item map[string]any, key string) bool {
+	value, _ := item[key].(bool)
+	return value
+}
+
+func arrayField(item map[string]any, key string) []any {
+	value, _ := item[key].([]any)
+	return value
 }
 
 // serverView is the subset of MCPServerView we surface in NDJSON list rows.
@@ -116,18 +135,18 @@ type serverView struct {
 
 func serverRow(s serverView) map[string]any {
 	return map[string]any{
-		"connector_id":          s.ConnectorID,
-		"app_id":                s.AppID,
-		"display_name":          s.DisplayName,
-		"description":           s.Description,
-		"server_type":           s.ServerType,
-		"data_sensitivity":      s.DataSensitivity,
-		"auth_method":           s.AuthMethod,
-		"mcp_server_catalog_id": s.MCPServerCatalogID,
-		"tool_prefix":           s.ToolPrefix,
-		"endpoint_url":          s.EndpointURL,
-		"token_sharing":         s.TokenSharing,
-		"created_at":            s.CreatedAt,
+		"connector_id":          nilIfEmpty(s.ConnectorID),
+		"app_id":                nilIfEmpty(s.AppID),
+		"display_name":          nilIfEmpty(s.DisplayName),
+		"description":           nilIfEmpty(s.Description),
+		"server_type":           nilIfEmpty(s.ServerType),
+		"data_sensitivity":      nilIfEmpty(s.DataSensitivity),
+		"auth_method":           nilIfEmpty(s.AuthMethod),
+		"mcp_server_catalog_id": nilIfEmpty(s.MCPServerCatalogID),
+		"tool_prefix":           nilIfEmpty(s.ToolPrefix),
+		"endpoint_url":          nilIfEmpty(s.EndpointURL),
+		"token_sharing":         nilIfEmpty(s.TokenSharing),
+		"created_at":            nilIfEmpty(s.CreatedAt),
 	}
 }
 

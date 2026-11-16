@@ -73,8 +73,8 @@ resources. Pass a returned path to "docs endpoint" for its full schema.`,
 		type endpoint struct {
 			Method      string `json:"method"`
 			Path        string `json:"path"`
-			Summary     string `json:"summary"`
-			OperationID string `json:"operation_id"`
+			Summary     any    `json:"summary"`
+			OperationID any    `json:"operation_id"`
 		}
 
 		var endpoints []endpoint
@@ -86,11 +86,11 @@ resources. Pass a returned path to "docs endpoint" for its full schema.`,
 				e := endpoint{
 					Method:      strings.ToUpper(method),
 					Path:        path,
-					Summary:     op.Summary,
-					OperationID: op.OperationID,
+					Summary:     nilIfEmpty(op.Summary),
+					OperationID: nilIfEmpty(op.OperationID),
 				}
 				if filter != "" {
-					haystack := strings.ToLower(e.Path + " " + e.Summary + " " + e.OperationID + " " + op.Description)
+					haystack := strings.ToLower(e.Path + " " + op.Summary + " " + op.OperationID + " " + op.Description)
 					if !strings.Contains(haystack, filter) {
 						continue
 					}

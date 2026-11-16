@@ -8,6 +8,27 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Upgrading from 0.10.1
 
+A list row's string field that is absent in the API response is now `null`
+instead of `""` on every list and search row c1i builds, so `jq 'select(.field)'`
+no longer matches every row. Use `select(.field != null)`, or `.field // empty`;
+a script that compared a field to `""` should test for `null` instead. This
+covers, among others, `findings` `task_id`, `ticket_id` and
+`assignee_identity_user_id`; `role-mining` `error_message` (it was `""` on
+every successful run); `mcp classifiers` `grant_policy_id` and `description`;
+and the `description`, `display_name`, `email`, `department`, `job_title` and
+timestamp fields of `users`, `accounts`, `apps`, `tasks`, `requests`,
+`entitlements`, `functions`, `mcp` and `service-principals` rows, plus
+`docs search` `title`/`path`/`content` and `docs endpoints`
+`summary`/`operation_id`, and `mcp gateway list-tools` `name`/`description`.
+A real value, and every boolean and number, is unchanged. Commands that print
+the API's own objects (`access-reviews list`, `export events`, the `history`
+commands, `api`) are unchanged. Some keys are still
+omitted rather than null, as before: `origin` on `users list`, `outcome` on
+`tasks`/`requests` rows, `type`/`app_id`/`app_entitlement_id` on a `tasks`/`requests` row
+whose task type does not carry them, and `tool_count`/`last_called_at` on
+`mcp servers search` without `--tool-state` / `--include-last-called-at`
+(`last_called_at` also when the server was never called).
+
 A script that passes a possibly-empty variable to a filter
 (`--state "$STATE"`) now exits 2 when it is empty instead of returning an
 unfiltered list. Omit the flag when the variable is empty, for example
@@ -49,6 +70,9 @@ still needs none.
   `policies create` no longer claims `--display-name` and `--policy-type` are
   plain "(required)"; they are "(required unless --body-file)". Behavior is
   unchanged.
+- List rows emitted `""` for a string field with nothing to report, which jq
+  treats as truthy (`select(.task_id)` matched every finding). Absent fields
+  are now `null`; see "Upgrading from 0.10.1".
 - `--debug` traces, transport, redirect, API and path-guard errors, partial-result
   and `INCOMPLETE` notices, and the unbuildable-request, `--path`, `--url` and
   `--destination-url` errors printed the request URL or path verbatim, so a

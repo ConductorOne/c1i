@@ -59,12 +59,12 @@ type automationListItem struct {
 // last_executed_at is nil, not "", for an automation that has never run.
 func automationRow(a automationListItem) map[string]any {
 	return map[string]any{
-		"id":                   a.ID,
-		"display_name":         a.DisplayName,
-		"description":          a.Description,
+		"id":                   nilIfEmpty(a.ID),
+		"display_name":         nilIfEmpty(a.DisplayName),
+		"description":          nilIfEmpty(a.Description),
 		"enabled":              a.Enabled,
 		"last_executed_at":     nilIfEmpty(a.LastExecutedAt),
-		"primary_trigger_type": a.PrimaryTriggerType,
+		"primary_trigger_type": nilIfEmpty(a.PrimaryTriggerType),
 		"is_draft":             a.IsDraft,
 		"function_ids":         uniqueFunctionIDs(a.AutomationSteps),
 	}

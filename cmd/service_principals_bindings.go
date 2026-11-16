@@ -26,7 +26,7 @@ type spBinding struct {
 
 func spBindingRow(b spBinding) map[string]any {
 	return map[string]any{
-		"service_principal_id": b.ServicePrincipal,
+		"service_principal_id": nilIfEmpty(b.ServicePrincipal),
 		"created_at":           nilIfEmpty(b.CreatedAt),
 		"updated_at":           nilIfEmpty(b.UpdatedAt),
 	}

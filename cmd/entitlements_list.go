@@ -27,13 +27,13 @@ type entitlementListItem struct {
 func entitlementRow(item entitlementListItem) map[string]any {
 	e := item.AppEntitlement
 	return map[string]any{
-		"id":           e.ID,
-		"app_id":       e.AppID,
-		"display_name": e.DisplayName,
-		"description":  e.Description,
-		"slug":         e.Slug,
+		"id":           nilIfEmpty(e.ID),
+		"app_id":       nilIfEmpty(e.AppID),
+		"display_name": nilIfEmpty(e.DisplayName),
+		"description":  nilIfEmpty(e.Description),
+		"slug":         nilIfEmpty(e.Slug),
 		"grant_count":  int64(e.GrantCount),
-		"purpose":      e.Purpose,
+		"purpose":      nilIfEmpty(e.Purpose),
 		"deleted_at":   nilIfEmpty(e.DeletedAt),
 	}
 }

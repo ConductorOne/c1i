@@ -78,22 +78,22 @@ func grantRow(item grantListItem) map[string]any {
 	au := b.AppUser.AppUser
 	appID := grantAppID(item)
 	return map[string]any{
-		"app_id":                   appID,
-		"entitlement_id":           grantEntitlementID(item),
-		"entitlement_display_name": e.DisplayName,
-		"entitlement_slug":         e.Slug,
+		"app_id":                   nilIfEmpty(appID),
+		"entitlement_id":           nilIfEmpty(grantEntitlementID(item)),
+		"entitlement_display_name": nilIfEmpty(e.DisplayName),
+		"entitlement_slug":         nilIfEmpty(e.Slug),
 		// A grant to a soft-deleted entitlement or account is still an active
 		// binding server-side (only the entitlement/account itself, not this
 		// grant, was deleted) — surface both so a stale grant is visible.
 		"entitlement_deleted_at": nilIfEmpty(e.DeletedAt),
-		"app_user_id":            grantAppUserID(item),
-		"app_user_display_name":  au.DisplayName,
+		"app_user_id":            nilIfEmpty(grantAppUserID(item)),
+		"app_user_display_name":  nilIfEmpty(au.DisplayName),
 		"app_user_deleted_at":    nilIfEmpty(au.DeletedAt),
-		"email":                  au.Email,
-		"username":               au.Username,
-		"identity_user_id":       au.IdentityUserID,
-		"app_user_type":          au.AppUserType,
-		"created_at":             b.CreatedAt,
+		"email":                  nilIfEmpty(au.Email),
+		"username":               nilIfEmpty(au.Username),
+		"identity_user_id":       nilIfEmpty(au.IdentityUserID),
+		"app_user_type":          nilIfEmpty(au.AppUserType),
+		"created_at":             nilIfEmpty(b.CreatedAt),
 		"deprovision_at":         nilIfEmpty(b.DeprovisionAt),
 		// 0 = direct grant; >0 = inherited through that many groups/roles.
 		"grant_source_count": len(b.GrantSources),

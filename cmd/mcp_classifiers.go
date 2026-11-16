@@ -485,83 +485,61 @@ func readMaskedClassifierObject(cmd *cobra.Command, field, id string) (map[strin
 
 func classifierRow(item map[string]any) map[string]any {
 	return map[string]any{
-		"id":               stringField(item, "id"),
-		"display_name":     stringField(item, "displayName"),
-		"description":      stringField(item, "description"),
-		"applicable_type":  stringField(item, "applicableType"),
-		"managed_by":       stringField(item, "managedBy"),
-		"default_outcome":  stringField(item, "defaultOutcome"),
+		"id":               optString(item, "id"),
+		"display_name":     optString(item, "displayName"),
+		"description":      optString(item, "description"),
+		"applicable_type":  optString(item, "applicableType"),
+		"managed_by":       optString(item, "managedBy"),
+		"default_outcome":  optString(item, "defaultOutcome"),
 		"rule_count":       len(arrayField(item, "rules")),
 		"template_id":      nestedStringField(item, "templateRef", "templateId"),
 		"template_version": nestedStringField(item, "templateRef", "version"),
-		"deleted_at":       nilIfBlank(item["deletedAt"]),
+		"deleted_at":       optString(item, "deletedAt"),
 	}
 }
 
 func classifierBindingRow(item map[string]any) map[string]any {
 	return map[string]any{
-		"id":            stringField(item, "id"),
-		"classifier_id": stringField(item, "classifierId"),
-		"surface":       stringField(item, "surface"),
-		"target_id":     stringField(item, "targetId"),
-		"deleted_at":    nilIfBlank(item["deletedAt"]),
+		"id":            optString(item, "id"),
+		"classifier_id": optString(item, "classifierId"),
+		"surface":       optString(item, "surface"),
+		"target_id":     optString(item, "targetId"),
+		"deleted_at":    optString(item, "deletedAt"),
 	}
 }
 
 func classifierTemplateRow(item map[string]any) map[string]any {
 	return map[string]any{
-		"id":                   stringField(item, "id"),
-		"template_version":     stringField(item, "templateVersion"),
-		"display_name":         stringField(item, "displayName"),
-		"applicable_type":      stringField(item, "applicableType"),
-		"distribution":         stringField(item, "distribution"),
-		"managed_by":           stringField(item, "managedBy"),
-		"preset_tier":          stringField(item, "presetTier"),
+		"id":                   optString(item, "id"),
+		"template_version":     optString(item, "templateVersion"),
+		"display_name":         optString(item, "displayName"),
+		"applicable_type":      optString(item, "applicableType"),
+		"distribution":         optString(item, "distribution"),
+		"managed_by":           optString(item, "managedBy"),
+		"preset_tier":          optString(item, "presetTier"),
 		"is_latest":            boolField(item, "isLatest"),
 		"rule_count":           len(arrayField(item, "rules")),
 		"required_param_count": len(arrayField(item, "requiredParams")),
-		"deleted_at":           nilIfBlank(item["deletedAt"]),
+		"deleted_at":           optString(item, "deletedAt"),
 	}
 }
 
 func toolGateRow(item map[string]any) map[string]any {
 	return map[string]any{
-		"id":               stringField(item, "id"),
-		"display_name":     stringField(item, "displayName"),
-		"description":      stringField(item, "description"),
+		"id":               optString(item, "id"),
+		"display_name":     optString(item, "displayName"),
+		"description":      optString(item, "description"),
 		"priority":         item["priority"],
 		"enabled":          boolField(item, "enabled"),
-		"grant_policy_id":  stringField(item, "grantPolicyId"),
+		"grant_policy_id":  optString(item, "grantPolicyId"),
 		"built_in_pattern": nestedStringField(item, "filter", "builtInPattern"),
-		"deleted_at":       nilIfBlank(item["deletedAt"]),
+		"deleted_at":       optString(item, "deletedAt"),
 	}
 }
 
-func stringField(item map[string]any, key string) string {
-	value, _ := item[key].(string)
-	return value
-}
-
-func nestedStringField(item map[string]any, parent, key string) string {
+func nestedStringField(item map[string]any, parent, key string) any {
 	child, _ := item[parent].(map[string]any)
-	return stringField(child, key)
-}
-
-func arrayField(item map[string]any, key string) []any {
-	value, _ := item[key].([]any)
-	return value
-}
-
-func boolField(item map[string]any, key string) bool {
-	value, _ := item[key].(bool)
-	return value
-}
-
-func nilIfBlank(value any) any {
-	if value == nil || value == "" {
-		return nil
-	}
-	return value
+	return optString(child, key)
 }
 
 func init() {
