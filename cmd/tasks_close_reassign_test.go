@@ -285,8 +285,8 @@ func TestTasksReassignRefusesAnUnknownUser(t *testing.T) {
 	if err == nil {
 		t.Fatal("reassign accepted an unknown user")
 	}
-	if got, want := exitCode(err), exitUsage; got != want {
-		t.Errorf("exitCode = %d, want %d (exitUsage); err = %v", got, want, err)
+	if got, want := exitCode(err), exitNotFound; got != want {
+		t.Errorf("exitCode = %d, want %d (exitNotFound); err = %v", got, want, err)
 	}
 	if !strings.Contains(err.Error(), unknown) || !strings.Contains(err.Error(), "no such user") {
 		t.Errorf("error = %q, want it to name the unknown --to-user-id", err.Error())

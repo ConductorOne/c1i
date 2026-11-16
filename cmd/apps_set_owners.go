@@ -30,9 +30,7 @@ const (
 
 // The paragraphs both set-owners commands share, so the families can't drift.
 const (
-	setOwnersLookupNote = `Before the PUT, each distinct --user-id is looked up with GET
-/api/v1/users/{id}; an unknown one exits 2 naming it, and nothing is sent.
---dry-run looks them up too. A repeated --user-id is sent once.`
+	setOwnersLookupNote = `A repeated --user-id is sent once.`
 
 	setOwnersWaitNote = `Pass --wait to block and poll GET .../ownerids until the owner set equals
 the requested ids -- additions landed and replaced owners gone -- or
@@ -161,5 +159,6 @@ func addSetOwnersFlags(cmd *cobra.Command) {
 func init() {
 	addSetOwnersFlags(appsSetOwnersCmd)
 	markMutating(appsSetOwnersCmd)
+	markUserRefChecked(appsSetOwnersCmd, "user-id")
 	appsCmd.AddCommand(appsSetOwnersCmd)
 }

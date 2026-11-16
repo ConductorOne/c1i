@@ -88,10 +88,14 @@ func TestAccessMutationPreview(t *testing.T) {
 			t.Errorf("requests = %+v, want only the step lookup", reqs)
 		}
 	})
-	t.Run("grant with --user-id needs no credentials", func(t *testing.T) {
+	t.Run("grant with --user-id looks the user up", func(t *testing.T) {
 		withDryRun(t)
 		t.Setenv("C1I_URL", mutTestURL)
-		r := runMutationCLI(t, nil, 0, nil, "requests", "create", "grant", "--app-id", "a", "--entitlement-id", "e", "--user-id", "u1")
+		s := newMutServer(t, accessRoute(accessTaskEnvelope))
+		r := runMutationCLI(t, s.srv, 0, nil, "requests", "create", "grant", "--app-id", "a", "--entitlement-id", "e", "--user-id", "u1")
+		if reqs := s.requests(); len(reqs) != 1 || reqs[0].method != http.MethodGet || reqs[0].rawPath != "/api/v1/users/u1" {
+			t.Errorf("requests = %+v, want only the user lookup", reqs)
+		}
 		want := preview("POST", "/api/v1/task/grant", "{\n        \"appEntitlementId\": \"e\",\n        \"appId\": \"a\",\n        \"identityUserId\": \"u1\"\n      }")
 		if r.err != nil || r.stdout != want {
 			t.Errorf("exit %d stdout %q, want %q", r.exit, r.stdout, want)
@@ -134,7 +138,15 @@ func TestAccessMutationApplied(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			s := newMutServer(t, tc.route)
+			// An explicit --user-id is looked up first; the case under test is
+			// the write's answer, so that lookup succeeds.
+			route := func(r *http.Request, n int) mutReply {
+				if r.Method == http.MethodGet && strings.HasPrefix(r.URL.Path, "/api/v1/users/") {
+					return mutReply{body: `{"user":{"id":"u"}}`}
+				}
+				return tc.route(r, n)
+			}
+			s := newMutServer(t, route)
 			t.Setenv("C1I_URL", mutTestURL)
 			r := runMutationCLI(t, s.srv, 0, nil, append(tc.args, "--error-format", "json")...)
 			if r.exit != tc.exit {

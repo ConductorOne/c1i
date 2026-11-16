@@ -365,9 +365,12 @@ something up so the previewed body is exact:
   reads the server to resolve its catalog id;
 - `requests create grant`/`revoke` without `--user-id` resolve the caller;
 - the pre-send existence checks (a `--user-id`, `--owner-id` or `--to-user-id`
-  user, a policy id on `apps` and `entitlements` writes, the policy type
+  user on a write (`remove-owner` excepted), a policy id on `apps` and `entitlements` writes, the policy type
   `policies update` looks up) run on a preview too, so it refuses what a real
-  run refuses; they are reads, and the preview still sends no write;
+  run refuses and a preview needs credentials with user (or policy) read; they
+  are reads, and the preview still sends no write. The one exception is
+  `remove-owner`, which never pre-checks: the server decides, so a preview can
+  pass an id the real run 404s;
 - `upgrade` fetches and verifies the release (see [Updating the binary](#updating-the-binary-c1i-upgrade)).
 
 **An inherited `C1I_DRY_RUN=1` turns every write in a script into a
@@ -644,9 +647,9 @@ branch on without parsing text:
 |------|---------|
 | `0` | success |
 | `1` | generic / unclassified error |
-| `2` | usage error (bad flags or arguments, an empty, `.` or `..` id, a blank flag or positional, a missing, malformed, `null` or wrong-shape `--*-file` input, a non-object element in an array `--*-file` or `--body-file`, a refused redirect (but `upgrade` and the `docs` commands exit `8`), or the API returned any `4xx` other than `401`/`403`/`404`/`408`/`429`/`499`) |
+| `2` | usage error (bad flags or arguments, an empty, `.` or `..` id, a blank flag or positional, a missing, malformed, `null` or wrong-shape `--*-file` input, a non-object element in an array `--*-file` or `--body-file`, a referenced id that exists but is soft-deleted or of the wrong kind (a deleted or wrong-type policy), a refused redirect (but `upgrade` and the `docs` commands exit `8`), or the API returned any `4xx` other than `401`/`403`/`404`/`408`/`429`/`499`) |
 | `3` | not authenticated, or API returned `401`/`403` (including a `400`/`401`/`403` from the token endpoint; any other token-endpoint failure is classified like an API response: `404` exits 4, `429` 5, `5xx` or a `200` that is not a token 6) |
-| `4` | API returned `404` (not found) |
+| `4` | API returned `404` (not found), or a referenced id (`--user-id`, a policy id) that does not exist, whether the server or a c1i pre-check catches it |
 | `5` | API returned `429` (rate limited — back off and retry) |
 | `6` | C1 failed: the API returned `5xx`, a redirect chain never settled, it answered `200` with a body that isn't JSON or a usable token, a list command's pagination cursor stopped advancing, or a list page in a shape the command doesn't recognize |
 | `7` | `mcp gateway call` completed, but the tool itself reported an error (`isError: true` in its result) |
@@ -774,9 +777,9 @@ mutation is a usage error (exit `2`).
 updated app the same way. `--grant-policy-id`, `--revoke-policy-id` and
 `--certify-policy-id` bind policies, on `apps create` too (omitted at create,
 the server assigns its default grant and revoke policies and no certify
-policy). Before sending, c1i fetches each policy and refuses (exit `2`,
-nothing sent) an id that doesn't exist, is deleted, or isn't of the flag's
-type (a `--dry-run` preview does it too). An empty policy id is a usage error, not
+policy). Before sending, c1i fetches each policy and refuses (nothing sent)
+an id that doesn't exist (exit `4`), is deleted, or isn't of the flag's
+type (exit `2`) (a `--dry-run` preview does it too). An empty policy id is a usage error, not
 an unbind: unbind with `--unbind-policy grant|revoke|certify` (repeatable),
 which can't be combined with setting the same kind.
 `--identity-matching` takes `strict`, `display-name`, `custom`, or the full
@@ -802,7 +805,9 @@ for a well-formed but nonexistent app id, so an empty result can also mean
 "wrong id". `apps add-owner` and `apps remove-owner` change one owner at a time
 (a single `--user-id`; use `set-owners` for many). A repeated `--user-id` exits
 `2` before any request, here, on `entitlements add-owner|remove-owner` and on
-`accounts set-owner`.
+`accounts set-owner`. `apps add-owner` looks the user up first like `set-owners`
+(an unknown one exits `4`, nothing sent); `remove-owner` does not, so a deleted
+user can still be removed (and `--dry-run` previews an unknown one).
 
 **Owner commands (apps and entitlements).** Owner changes are applied
 asynchronously and can take several minutes to appear; pass --wait to block
@@ -817,7 +822,7 @@ write. With `--dry-run` the preview still only covers the write; `--wait` never
 polls. A `--wait-*` flag given without `--wait` (an explicit `--wait=false` is fine) is a usage error (exit 2).
 
 `set-owners` looks up each distinct `--user-id` with `GET /api/v1/users/{id}`
-before the `PUT`: an unknown one exits `2` naming it and nothing is sent
+before the `PUT`: an unknown one exits `4` naming it and nothing is sent
 (a `--dry-run` preview looks them up too), and a repeated `--user-id` is sent once. The
 API would otherwise accept an unknown id at exit `0`, so a set naming only
 unknown ids would leave no real owners: an app stores the id (`GET .../ownerids`
@@ -830,6 +835,9 @@ c1i accounts list --app-id <id> [--status enabled|disabled|deleted] [--type user
 
 c1i accounts set-owner <app-user-id> --app-id <id> --user-id <id>
 ```
+
+`accounts set-owner` looks the `--user-id` user up first: an unknown one exits `4`
+and nothing is sent (`--dry-run` looks it up too, so the lookup needs user read).
 
 `accounts set-owner` prints the app user as pretty JSON, unwrapped like the
 reads: `jq -er .id` is the account and `.identityUserId` its owner.
@@ -884,7 +892,8 @@ them with this first.
 
 `entitlements update` builds the update mask from exactly the flags you pass.
 Each policy id is checked before anything is sent: it must exist, not be
-deleted, and be of the slot's type, or the command exits `2`.
+deleted, and be of the slot's type: an unknown policy exits `4`, a deleted or
+wrong-type one `2`.
 `--emergency-grant-policy-id` takes a grant policy; the server enforces that
 only when the same call enables emergency grants (`emergency policy id must
 reference a grant policy`) and otherwise stores any id. An empty policy id is
@@ -923,7 +932,7 @@ Reusing a resource with `--resource-id` likewise means you drop
 `--resource-display-name`. `--owner-id` is repeatable and goes inline in the
 create request, so no follow-up call is needed; an empty one is a usage error
 rather than an owner quietly dropped, and each id is checked before the first
-create (an unknown user exits `2` and creates nothing; the check reads the user,
+create (an unknown user exits `4` and creates nothing; the check reads the user,
 so a credential without read access exits `3`, a `--dry-run` preview included). `--duration-grant` follows the [Durations](#durations)
 rule; omit it for standing access.
 
@@ -949,7 +958,7 @@ array naming each attempted request.
 the API takes an empty list as "remove every owner"; `remove-owner` can still
 remove the last owner. A repeated `--user-id` is sent once because the API
 answers a duplicate with a 500. An unknown user, entitlement or app exits `4`
-on `add-owner`. `remove-owner` exits `4` on a user who was never an owner as
+on `add-owner` (c1i looks the user up first, so `--dry-run` refuses it too). `remove-owner` exits `4` on a user who was never an owner as
 well as on an unknown one, so `4` cannot tell those apart; a user who was an
 owner and is already removed exits `0`. `owners` returns zero rows at exit `0`
 for a nonexistent entitlement or app.
@@ -1070,7 +1079,7 @@ closed` (exit 2).
 
 `reassign` sets the step's approvers to the users named by `--to-user-id`;
 repeat the flag to assign several. Before sending it looks each id up: an
-unknown user exits `2` and nothing is sent, because the API would store the id
+unknown user exits `4` and nothing is sent, because the API would store the id
 as the step's approver; a `--dry-run` preview looks them up too. A repeated id is sent once; recover a step already given a
 bad approver by re-running `reassign` with valid ids (a system owner can also
 `reset`/`restart` where the task offers them).
@@ -1239,6 +1248,7 @@ c1i mcp servers get                <connector-id> --app-id <id>
 c1i mcp servers search             --app-id <id> [--query <text>] [--tool-state approved|pending|disabled|removed] [--include-last-called-at] [--limit N]
 c1i mcp servers register           --app-id <id> --type hosted   --display-name <name> --catalog-id <cid> [--source-app-id <id>] [--auth ... ] [--config-field k=v ...] [--user-id <id> ...]
 c1i mcp servers register           --app-id <id> --type external --display-name <name> --server-url <url> [--transport streamable-http|sse] [--auth ...] [--user-id <id> ...]
+# --user-id (integration owner) is looked up before sending: an unknown user exits 4, nothing registered
 c1i mcp servers update             <connector-id> --app-id <id> [--display-name <name>] [--description <text>] [--data-sensitivity ...] [--tool-prefix <p>] [--require-tool-approval]
 c1i mcp servers update-credentials <connector-id> --app-id <id> --type hosted|external [--auth ...] [--update-mask <paths>]
 c1i mcp servers delete             <connector-id> --app-id <id>
@@ -1386,7 +1396,9 @@ c1i requests list [--user-id <id> | --all] [--app-id <id>] [--entitlement-id <id
 c1i requests get <request-id>
 ```
 
-On `create`, `--user-id` defaults to the authenticated user when omitted.
+On `create`, `--user-id` defaults to the authenticated user when omitted; an
+explicit one is looked up first (an unknown user exits `4`, nothing is sent,
+`--dry-run` included).
 `requests create grant --duration` follows the [Durations](#durations) rule
 (`24h`, `86400s`); the server refuses `0s` with `value must be greater than
 0s`.

@@ -25,9 +25,9 @@ nothing sent. Sent as is, "" made c1i exit 0 while the server kept the old
 name, and the server stores "  " verbatim.
 
 --grant-policy-id, --revoke-policy-id and --certify-policy-id bind a policy
-to the app. Before sending, c1i fetches each policy and refuses (exit 2,
-nothing sent) an id that doesn't exist, is deleted, or isn't of the flag's
-type (POLICY_TYPE_GRANT, _REVOKE or _CERTIFY). --dry-run does the check too.
+to the app. Before sending, c1i fetches each policy and refuses (nothing sent)
+an id that doesn't exist (exit 4), is deleted, or isn't of the flag's type
+(POLICY_TYPE_GRANT, _REVOKE or _CERTIFY; exit 2). --dry-run does the check too.
 
 To unbind, pass --unbind-policy grant|revoke|certify (repeatable). An empty
 policy id is a usage error rather than an unbind, so an unset shell variable

@@ -20,14 +20,14 @@ func dryRunCases(t *testing.T) []dryRunCase {
 	t.Helper()
 	steps := writeTempJSON(t, "steps.json", `[{"approval":{}}]`)
 	return []dryRunCase{
-		{"apps set-owners", []string{"apps", "set-owners", "app1", "--user-id", "ghost"}, exitUsage, false},
-		{"tasks reassign", []string{"tasks", "reassign", "t1", "--policy-step-id", "P1", "--to-user-id", "ghost"}, exitUsage, false},
-		{"entitlements create owner", []string{"entitlements", "create", "--app-id", "app-1", "--display-name", "e", "--owner-id", "ghost"}, exitUsage, false},
-		{"entitlements set-owners", []string{"entitlements", "set-owners", "ent1", "--app-id", "app1", "--user-id", "ghost"}, exitUsage, false},
-		{"apps create policy", []string{"apps", "create", "--display-name", "x", "--grant-policy-id", "ghost"}, exitUsage, true},
-		{"apps update policy", []string{"apps", "update", "app1", "--grant-policy-id", "ghost"}, exitUsage, true},
-		{"entitlements create policy", []string{"entitlements", "create", "--app-id", "app-1", "--display-name", "e", "--grant-policy-id", "ghost"}, exitUsage, true},
-		{"entitlements update policy", []string{"entitlements", "update", "ent1", "--app-id", "app1", "--grant-policy-id", "ghost"}, exitUsage, true},
+		{"apps set-owners", []string{"apps", "set-owners", "app1", "--user-id", "ghost"}, exitNotFound, false},
+		{"tasks reassign", []string{"tasks", "reassign", "t1", "--policy-step-id", "P1", "--to-user-id", "ghost"}, exitNotFound, false},
+		{"entitlements create owner", []string{"entitlements", "create", "--app-id", "app-1", "--display-name", "e", "--owner-id", "ghost"}, exitNotFound, false},
+		{"entitlements set-owners", []string{"entitlements", "set-owners", "ent1", "--app-id", "app1", "--user-id", "ghost"}, exitNotFound, false},
+		{"apps create policy", []string{"apps", "create", "--display-name", "x", "--grant-policy-id", "ghost"}, exitNotFound, true},
+		{"apps update policy", []string{"apps", "update", "app1", "--grant-policy-id", "ghost"}, exitNotFound, true},
+		{"entitlements create policy", []string{"entitlements", "create", "--app-id", "app-1", "--display-name", "e", "--grant-policy-id", "ghost"}, exitNotFound, true},
+		{"entitlements update policy", []string{"entitlements", "update", "ent1", "--app-id", "app1", "--grant-policy-id", "ghost"}, exitNotFound, true},
 		{"policies update type lookup", []string{"policies", "update", "ghost", "--steps-file", steps}, exitNotFound, true},
 	}
 }

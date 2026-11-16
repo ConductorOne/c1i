@@ -9,12 +9,12 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// selfUserOpts resolves a missing --user-id to the caller before the send, on
-// a dry run too, so the preview's body matches what would be sent. An explicit
-// --user-id needs no read, so its preview needs no credentials.
+// selfUserOpts resolves a missing --user-id to the caller before the send, and
+// looks an explicit one up, on a dry run too, so the preview's body matches
+// what would be sent and refuses what a real run refuses.
 func selfUserOpts(userID string) []mutationOpt {
 	if userID != "" {
-		return nil
+		return []mutationOpt{withPreRead(existingUsersCheck("user-id", []string{userID}))}
 	}
 	return []mutationOpt{withPreRead(preRead{Run: func(ctx context.Context, c *client.Client, m *mutation) ([]resolvedID, error) {
 		id, err := currentUserID(ctx, c)
@@ -65,6 +65,8 @@ var requestsCreateGrantCmd = &cobra.Command{
 anything else, such as -1h, 1.5h or 7d, exits 2 before sending. Zero is sent,
 and the server refuses it with "value must be greater than 0s".
 
+An omitted --user-id is the caller.
+
 Prints the created task as pretty JSON, unwrapped like "requests get": the id
 is .id. Its .state is a snapshot from creation, not the outcome; re-read with
 "c1i requests get <task-id>" before acting on it. --fields is a usage error on
@@ -101,5 +103,6 @@ func init() {
 	markRequired(requestsCreateGrantCmd, "app-id")
 	markRequired(requestsCreateGrantCmd, "entitlement-id")
 	markMutating(requestsCreateGrantCmd)
+	markUserRefChecked(requestsCreateGrantCmd, "user-id")
 	requestsCreateCmd.AddCommand(requestsCreateGrantCmd)
 }

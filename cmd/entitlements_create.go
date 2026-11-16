@@ -85,16 +85,14 @@ No sign, no decimals: -1h or 1.5h exits 2 before sending. Zero is sent as
 
 Each --<kind>-policy-id is checked before the first create: it must name an
 existing, undeleted policy of the slot's type (a grant policy for
---emergency-grant-policy-id), or the command exits 2 and creates nothing. An
-empty one is a usage error. Omitting one leaves that policy unset on the
+--emergency-grant-policy-id), or the command exits 4 (2 for a deleted or
+wrong-type policy) and creates nothing. An empty one is a usage error. Omitting one leaves that policy unset on the
 entitlement. --dry-run does the check too.
 
 Assign owners inline with --owner-id: the create request carries
 appEntitlementOwnerIds, so no follow-up call is needed. An empty --owner-id is
 a usage error, not an owner quietly dropped. Each id is checked before the
-first create and must name an existing user, or the command exits 2 and
-creates nothing; the check is a user read, so a credential without read access
-exits 3, --dry-run included. Owner provisioning is
+first create and must name an existing user. Owner provisioning is
 asynchronous — one measured create took 116s to read back on
 "GET /api/v1/apps/{app-id}/entitlements/{id}/ownerids".
 
@@ -474,5 +472,6 @@ func addEntitlementCreateFlags(cmd *cobra.Command) {
 func init() {
 	addEntitlementCreateFlags(entitlementsCreateCmd)
 	markMutating(entitlementsCreateCmd)
+	markUserRefChecked(entitlementsCreateCmd, "owner-id")
 	entitlementsCmd.AddCommand(entitlementsCreateCmd)
 }

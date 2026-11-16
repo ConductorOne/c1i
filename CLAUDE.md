@@ -328,9 +328,9 @@ tracked root file outside its allowlist. Stage explicit paths rather than `-A`.
   |------|---------|
   | `0` | ok |
   | `1` | generic |
-  | `2` | usage (bad flags/args, an empty, `.` or `..` id, a blank flag or positional, a missing, malformed, `null` or wrong-shape `--*-file` input, a non-object element in an array `--*-file` or `--body-file`, a refused redirect (but `upgrade` and the `docs` commands exit `8`), or any API `4xx` other than `401`/`403`/`404`/`408`/`429`/`499`) |
+  | `2` | usage (bad flags/args, an empty, `.` or `..` id, a blank flag or positional, a missing, malformed, `null` or wrong-shape `--*-file` input, a non-object element in an array `--*-file` or `--body-file`, a referenced id that exists but is soft-deleted or of the wrong kind (a deleted or wrong-type policy), a refused redirect (but `upgrade` and the `docs` commands exit `8`), or any API `4xx` other than `401`/`403`/`404`/`408`/`429`/`499`) |
   | `3` | auth (`401`/`403`) |
-  | `4` | not-found (`404`) |
+  | `4` | not-found (`404`), or a referenced id that does not exist, whether the server or a client pre-check catches it |
   | `5` | rate-limited (`429`) |
   | `6` | C1 failed (API `5xx`, a redirect loop, a `200` with a non-JSON body, a stuck pagination cursor, or a list page in a shape the command doesn't recognize) |
   | `7` | tool-execution error (`mcp gateway call` result has `isError: true`) |

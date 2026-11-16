@@ -27,7 +27,8 @@ mutation. Honors --dry-run.`,
 			},
 			"updateMask": "identityUserId",
 		}
-		return sendMutation(cmd, mutation{Method: http.MethodPost, Path: path, Body: body})
+		return sendMutation(cmd, mutation{Method: http.MethodPost, Path: path, Body: body},
+			withPreRead(existingUsersCheck("user-id", []string{userID})))
 	},
 }
 
@@ -38,5 +39,6 @@ func init() {
 	markRequired(accountsSetOwnerCmd, "app-id")
 	markRequired(accountsSetOwnerCmd, "user-id")
 	markMutating(accountsSetOwnerCmd)
+	markUserRefChecked(accountsSetOwnerCmd, "user-id")
 	accountsCmd.AddCommand(accountsSetOwnerCmd)
 }

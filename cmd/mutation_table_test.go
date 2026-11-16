@@ -114,12 +114,12 @@ var mutationTable = []mutationRow{
 	{cmd: "accounts set-owner", args: []string{"au-1", "--app-id", "app-1", "--user-id", "u1"},
 		body: `{"appUserView":{"appUser":{"id":"au-1","identityUserId":"u1"},"appPath":"p","identityUserPath":"i","lastUsagePath":"l"},"expanded":[]}`,
 		want: `{"id":"au-1","identityUserId":"u1","expanded":[],"appPath":"p","identityUserPath":"i","lastUsagePath":"l"}`,
-		ids:  []string{".id", ".identityUserId"}, method: "POST", path: "/api/v1/apps/app-1/app_users/au-1"},
+		ids:  []string{".id", ".identityUserId"}, method: "POST", path: "/api/v1/apps/app-1/app_users/au-1", reads: 1},
 	// apps
 	{cmd: "apps create", args: []string{"--display-name", "zz"}, body: tblApp, want: tblAppDoc, ids: idPath, method: "POST", path: "/api/v1/apps"},
 	{cmd: "apps update", args: []string{"app-1", "--description", "d"}, body: tblApp, want: tblAppDoc, ids: idPath},
 	{cmd: "apps delete", args: []string{"app-1"}, body: `{}`, method: "DELETE", path: "/api/v1/apps/app-1"},
-	{cmd: "apps add-owner", args: []string{"app-1", "--user-id", "u1"}, body: `{}`},
+	{cmd: "apps add-owner", args: []string{"app-1", "--user-id", "u1"}, body: `{}`, reads: 1},
 	{cmd: "apps remove-owner", args: []string{"app-1", "--user-id", "u1"}, body: `{}`},
 	{cmd: "apps set-owners", args: []string{"app-1", "--user-id", "u1"}, body: `{}`, method: "PUT", path: "/api/v1/apps/app-1/owners", reads: 1},
 	// automations
@@ -132,7 +132,7 @@ var mutationTable = []mutationRow{
 		body: tblEnt, want: tblEntDoc, ids: []string{".id", ".appResourceTypeId", ".appResourceId"}, method: "POST", path: "/api/v1/apps/app-1/entitlements"},
 	{cmd: "entitlements update", args: []string{"e-1", "--app-id", "app-1", "--description", "d"}, body: tblEnt, want: tblEntDoc, ids: idPath, method: "POST", path: "/api/v1/apps/app-1/entitlements/e-1"},
 	{cmd: "entitlements delete", args: []string{"e-1", "--app-id", "app-1"}, body: `{}`, method: "DELETE", path: "/api/v1/apps/app-1/entitlements/e-1"},
-	{cmd: "entitlements add-owner", args: []string{"e-1", "--app-id", "app-1", "--user-id", "u1"}, body: `{}`, method: "POST", path: "/api/v1/apps/app-1/entitlements/e-1/owners"},
+	{cmd: "entitlements add-owner", args: []string{"e-1", "--app-id", "app-1", "--user-id", "u1"}, body: `{}`, method: "POST", path: "/api/v1/apps/app-1/entitlements/e-1/owners", reads: 1},
 	{cmd: "entitlements remove-owner", args: []string{"e-1", "--app-id", "app-1", "--user-id", "u1"}, body: `{}`, method: "DELETE", path: "/api/v1/apps/app-1/entitlements/e-1/owners/u1"},
 	{cmd: "entitlements set-owners", args: []string{"e-1", "--app-id", "app-1", "--user-id", "u1"}, body: `{}`, method: "PUT", path: "/api/v1/apps/app-1/entitlements/e-1/owners", reads: 1},
 	{cmd: "entitlements proxy-bindings create", args: []string{"--source-app-id", "sa", "--source-entitlement-id", "se", "--destination-app-id", "da", "--destination-entitlement-id", "de"},
@@ -184,8 +184,8 @@ var mutationTable = []mutationRow{
 	{cmd: "policies update", args: []string{"pol1", "--display-name", "zz"}, body: tblPolicy, want: tblPolicyDoc, ids: idPath},
 	{cmd: "policies delete", args: []string{"pol1"}, body: `{}`},
 	// requests
-	{cmd: "requests create grant", args: cat([]string{"--user-id", "u1"}, ent), body: tblTask(""), want: tblTaskDoc(""), ids: idPath},
-	{cmd: "requests create revoke", args: cat([]string{"--user-id", "u1"}, ent), body: tblTask(""), want: tblTaskDoc(""), ids: idPath},
+	{cmd: "requests create grant", args: cat([]string{"--user-id", "u1"}, ent), body: tblTask(""), want: tblTaskDoc(""), ids: idPath, reads: 1},
+	{cmd: "requests create revoke", args: cat([]string{"--user-id", "u1"}, ent), body: tblTask(""), want: tblTaskDoc(""), ids: idPath, reads: 1},
 	// role-mining
 	{cmd: "role-mining trigger", body: `{"runId":"run1"}`, ids: []string{".runId"}},
 	{cmd: "role-mining suggestions state", args: []string{"s1", "--body-file", "@{}"}, body: `{"suggestion":{"id":"s1","suggestionState":"DISMISSED"}}`, want: `{"id":"s1","suggestionState":"DISMISSED"}`, ids: idPath},

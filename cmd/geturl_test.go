@@ -20,7 +20,18 @@ func runRootWithArgs(t *testing.T, args []string) error {
 	rootCmd.SetOut(&out)
 	rootCmd.SetErr(&out)
 	rootCmd.SetArgs(args)
+	freshContexts(rootCmd)
 	return rootCmd.ExecuteContext(context.Background())
+}
+
+// freshContexts gives every command in the tree a live context. Cobra keeps a
+// subcommand's first context, so one pinned by an earlier test's
+// ExecuteContext(t.Context()) is cancelled by the time a later test runs it.
+func freshContexts(c *cobra.Command) {
+	c.SetContext(context.Background())
+	for _, sub := range c.Commands() {
+		freshContexts(sub)
+	}
 }
 
 // --- A bare token is refused, one test per source ---

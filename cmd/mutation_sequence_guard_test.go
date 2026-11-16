@@ -275,7 +275,7 @@ func TestSequenceCommandsRefuseBadInputBeforeStepOne(t *testing.T) {
 					{"padded dotdot", f, " .. ", 200, []int{exitUsage}},
 				}
 				if slices.Contains(tc.preChecked, flag) {
-					out = append(out, scenario{"unknown", f, "no-such-id", http.StatusNotFound, []int{exitUsage, exitNotFound}})
+					out = append(out, scenario{"unknown", f, "no-such-id", http.StatusNotFound, []int{exitNotFound}})
 				}
 				return out
 			}
