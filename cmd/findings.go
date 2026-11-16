@@ -32,13 +32,14 @@ var findingsSearchCmd = &cobra.Command{
 
 The object may contain query, severities, states, findingTypes, appIds, target
 IDs, sourceKinds, refs, assigneeIdentityUserIds, and the other public search
-filters. A missing --body-file searches all accessible findings.`,
+filters. A missing --body-file searches all accessible findings. Paging belongs
+to --page-size and --page-token; a pageToken or pageSize in the file is refused.`,
 	RunE: func(cmd *cobra.Command, _ []string) error {
 		body, err := readOptionalJSONObject(cmd, "body-file")
 		if err != nil {
 			return err
 		}
-		return postFindingsList(cmd, "/api/v1/findings/search", body, findingRow, "id")
+		return postBodyList(cmd, "/api/v1/findings/search", body, findingRow, "id")
 	},
 }
 
@@ -147,6 +148,9 @@ func newFindingRulesCmd(name, short, path, key string, row listRowFn) *cobra.Com
 	}}
 	for _, command := range []*cobra.Command{create, update} {
 		command.Flags().String("body-file", "", "JSON resource object file (or \"-\" for stdin)")
+	}
+	ownBodyKeys(update, "body-file", argBodyKeys(0, "<rule-id>", "id"))
+	for _, command := range []*cobra.Command{create, update} {
 		annotateRequired(command, "body-file")
 	}
 	for _, command := range []*cobra.Command{create, update, deleteCmd} {
@@ -177,7 +181,7 @@ var findingsAuditsSearchCmd = &cobra.Command{Use: "search", Short: "Search findi
 	if err != nil {
 		return err
 	}
-	return postFindingsList(cmd, "/api/v1/search/finding_audits", body, findingAuditRow, "finding_id", "event_id")
+	return postBodyList(cmd, "/api/v1/search/finding_audits", body, findingAuditRow, "finding_id", "event_id")
 }}
 
 var findingsShadowMCPOccurrencesCmd = &cobra.Command{Use: "shadow-mcp-occurrences", Short: "Search occurrences behind shadow MCP findings"}
@@ -186,12 +190,14 @@ var findingsShadowMCPOccurrencesSearchCmd = &cobra.Command{Use: "search", Short:
 	if err != nil {
 		return err
 	}
-	return postFindingsList(cmd, "/api/v1/search/shadow_mcp_occurrences", body, shadowMCPOccurrenceRow)
+	return postBodyList(cmd, "/api/v1/search/shadow_mcp_occurrences", body, shadowMCPOccurrenceRow)
 }}
 
 type listRowFn func(map[string]any) map[string]any
 
-func postFindingsList(cmd *cobra.Command, path string, request map[string]any, row listRowFn, idKeys ...string) error {
+// postBodyList pages a POST list/search whose filter comes from --body-file;
+// the paging keys are the flags' (see ownBodyKeys).
+func postBodyList(cmd *cobra.Command, path string, request map[string]any, row listRowFn, idKeys ...string) error {
 	return listJSONPages(cmd, "POST "+path, idKeys, row, func(c *client.Client, size int, token string) ([]byte, error) {
 		body := cloneJSONObject(request)
 		body["pageSize"] = size
@@ -414,6 +420,12 @@ func init() {
 	}
 	for _, command := range []*cobra.Command{findingsCreateCmd, findingsStateCmd, findingsAssigneeCmd, findingsBulkStateCmd, findingsBulkCreateTasksCmd, findingsShadowMCPOccurrencesSearchCmd} {
 		annotateRequired(command, "body-file")
+	}
+	for _, command := range []*cobra.Command{findingsSearchCmd, findingsAuditsSearchCmd, findingsShadowMCPOccurrencesSearchCmd} {
+		ownBodyKeys(command, "body-file", pagingBodyKeys)
+	}
+	for _, command := range []*cobra.Command{findingsStateCmd, findingsAssigneeCmd} {
+		ownBodyKeys(command, "body-file", argBodyKeys(0, "<finding-id>", "findingId", "finding_id"))
 	}
 	addPaginationFlags(findingsSearchCmd)
 	addPaginationFlags(findingsAuditsSearchCmd)

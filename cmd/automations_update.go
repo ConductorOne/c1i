@@ -103,6 +103,7 @@ func init() {
 	f.String("body-file", "", "Automation JSON object, sent verbatim (file, or \"-\" for stdin); requires --update-mask; mutually exclusive with the flags above")
 	f.String("update-mask", "", bodyFileMaskUsage)
 	setBlankHint(automationsUpdateCmd, "update-mask", updateMaskBlankHint)
+	ownBodyKeys(automationsUpdateCmd, "body-file", argBodyKeys(0, "<automation-id>", "id"))
 	markMutating(automationsUpdateCmd)
 	automationsCmd.AddCommand(automationsUpdateCmd)
 }

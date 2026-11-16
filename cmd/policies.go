@@ -115,6 +115,11 @@ func readJSONFile[T []any | map[string]any](cmd *cobra.Command, flag, path strin
 			return nil, err
 		}
 	}
+	if obj, ok := any(v).(map[string]any); ok {
+		if err := refuseCLIOwnedBodyKeys(cmd, flag, obj); err != nil {
+			return nil, err
+		}
+	}
 	return v, nil
 }
 
