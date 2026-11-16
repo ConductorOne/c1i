@@ -23,12 +23,12 @@ type executionListItem struct {
 // creating, waiting).
 func executionRow(e executionListItem) map[string]any {
 	return map[string]any{
-		"id":                     e.ID,
-		"automation_template_id": e.AutomationTemplateID,
-		"state":                  e.State,
-		"created_at":             e.CreatedAt,
+		"id":                     nilIfEmpty(e.ID),
+		"automation_template_id": nilIfEmpty(e.AutomationTemplateID),
+		"state":                  nilIfEmpty(e.State),
+		"created_at":             nilIfEmpty(e.CreatedAt),
 		"completed_at":           nilIfEmpty(e.CompletedAt),
-		"duration":               e.Duration,
+		"duration":               nilIfEmpty(e.Duration),
 		"is_draft":               e.IsDraft,
 	}
 }

@@ -379,39 +379,33 @@ func cloneJSONObject(input map[string]any) map[string]any {
 
 func findingRow(item map[string]any) map[string]any {
 	return map[string]any{
-		"id": jsonString(item, "id"), "app_id": jsonString(item, "appId"), "severity": jsonString(item, "severity"), "state": jsonString(item, "state"), "task_id": jsonString(item, "taskId"), "assignee_identity_user_id": jsonString(item, "assigneeIdentityUserId"), "finding_type": findingType(item), "updated_at": item["updatedAt"],
+		"id": optString(item, "id"), "app_id": optString(item, "appId"), "severity": optString(item, "severity"), "state": optString(item, "state"), "task_id": optString(item, "taskId"), "assignee_identity_user_id": optString(item, "assigneeIdentityUserId"), "finding_type": findingType(item), "updated_at": optString(item, "updatedAt"),
 	}
 }
 func findingRuleRow(item map[string]any) map[string]any {
 	return map[string]any{
-		"id": jsonString(item, "id"), "app_id": jsonString(item, "appId"), "display_name": jsonString(item, "displayName"), "description": jsonString(item, "description"), "priority": item["priority"], "enabled": findingBool(item, "enabled"), "finding_type": jsonString(item, "findingType"),
+		"id": optString(item, "id"), "app_id": optString(item, "appId"), "display_name": optString(item, "displayName"), "description": optString(item, "description"), "priority": item["priority"], "enabled": boolField(item, "enabled"), "finding_type": optString(item, "findingType"),
 	}
 }
 func findingTransformationRuleRow(item map[string]any) map[string]any {
 	row := findingRuleRow(item)
 	row["evaluation_order"] = item["evaluationOrder"]
-	row["transform_count"] = len(findingArray(item, "transforms"))
+	row["transform_count"] = len(arrayField(item, "transforms"))
 	return row
 }
 func findingAuditRow(item map[string]any) map[string]any {
-	return map[string]any{"event_id": jsonString(item, "eventId"), "finding_id": jsonString(item, "findingId"), "event_type": jsonString(item, "eventType"), "created_at": item["createdAt"], "actor_principal_id": jsonString(item, "actorPrincipalId"), "app_id": jsonString(item, "appId"), "ticket_id": jsonString(item, "ticketId")}
+	return map[string]any{"event_id": optString(item, "eventId"), "finding_id": optString(item, "findingId"), "event_type": optString(item, "eventType"), "created_at": optString(item, "createdAt"), "actor_principal_id": optString(item, "actorPrincipalId"), "app_id": optString(item, "appId"), "ticket_id": optString(item, "ticketId")}
 }
 func shadowMCPOccurrenceRow(item map[string]any) map[string]any {
-	return map[string]any{"harness_kind": jsonString(item, "harnessKind"), "device_id": jsonString(item, "deviceId"), "user_id": jsonString(item, "userId"), "first_seen_at": item["firstSeenAt"], "last_seen_at": item["lastSeenAt"]}
+	return map[string]any{"harness_kind": optString(item, "harnessKind"), "device_id": optString(item, "deviceId"), "user_id": optString(item, "userId"), "first_seen_at": optString(item, "firstSeenAt"), "last_seen_at": optString(item, "lastSeenAt")}
 }
-func jsonString(item map[string]any, key string) string {
-	value, _ := item[key].(string)
-	return value
-}
-func findingBool(item map[string]any, key string) bool   { value, _ := item[key].(bool); return value }
-func findingArray(item map[string]any, key string) []any { value, _ := item[key].([]any); return value }
-func findingType(item map[string]any) string {
+func findingType(item map[string]any) any {
 	for _, key := range []string{"similarUsernameMatch", "serviceAccountMisclassification", "nhiUnowned", "serviceAccountUnowned", "decoyCredentialUsed", "custom", "connectorAnomalyDetectionDisabled", "deactivatedOwner", "unusedSecret", "credentialPubliclyExposed", "decoyPubliclyExposed", "credentialExpiring", "connectorSyncFailing", "shadowMcp", "shadowApp"} {
 		if _, ok := item[key]; ok {
 			return key
 		}
 	}
-	return ""
+	return nil
 }
 
 func init() {

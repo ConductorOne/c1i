@@ -31,12 +31,12 @@ func functionIsPublished(f functionListItem) bool {
 // published_commit_id and deleted_at are nil, not "", when unset/live.
 func functionRow(f functionListItem) map[string]any {
 	return map[string]any{
-		"id":                  f.ID,
-		"display_name":        f.DisplayName,
-		"description":         f.Description,
-		"function_type":       f.FunctionType,
+		"id":                  nilIfEmpty(f.ID),
+		"display_name":        nilIfEmpty(f.DisplayName),
+		"description":         nilIfEmpty(f.Description),
+		"function_type":       nilIfEmpty(f.FunctionType),
 		"published_commit_id": nilIfEmpty(f.PublishedCommitID),
-		"head":                f.Head,
+		"head":                nilIfEmpty(f.Head),
 		"is_draft":            f.IsDraft,
 		"use_spn":             f.UseSpn,
 		"deleted_at":          nilIfEmpty(f.DeletedAt),

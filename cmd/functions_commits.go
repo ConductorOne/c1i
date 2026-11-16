@@ -79,12 +79,12 @@ var functionsCommitsCmd = &cobra.Command{
 			resp.List = keepRows(resp.List, keep)
 
 			for _, c := range resp.List {
-				if err := enc.Encode(map[string]string{
-					"id":          c.ID,
-					"function_id": c.FunctionID,
-					"author":      c.Author,
-					"message":     c.Message,
-					"created_at":  c.CreatedAt,
+				if err := enc.Encode(map[string]any{
+					"id":          nilIfEmpty(c.ID),
+					"function_id": nilIfEmpty(c.FunctionID),
+					"author":      nilIfEmpty(c.Author),
+					"message":     nilIfEmpty(c.Message),
+					"created_at":  nilIfEmpty(c.CreatedAt),
 				}); err != nil {
 					return err
 				}

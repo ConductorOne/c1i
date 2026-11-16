@@ -30,11 +30,11 @@ type connectionView struct {
 
 func connectionRow(v connectionView) map[string]any {
 	return map[string]any{
-		"connector_id":        v.ConnectorID,
-		"app_id":              v.AppID,
-		"display_name":        v.DisplayName,
-		"server_type":         v.ServerType,
-		"auth_method":         v.AuthMethod,
+		"connector_id":        nilIfEmpty(v.ConnectorID),
+		"app_id":              nilIfEmpty(v.AppID),
+		"display_name":        nilIfEmpty(v.DisplayName),
+		"server_type":         nilIfEmpty(v.ServerType),
+		"auth_method":         nilIfEmpty(v.AuthMethod),
 		"connected":           v.Connected,
 		"authorized_as_email": nilIfEmpty(v.AuthorizedAsEmail),
 		"authorized_as_name":  nilIfEmpty(v.AuthorizedAsName),

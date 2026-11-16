@@ -33,9 +33,9 @@ type catalogListItem struct {
 // convention.
 func catalogRow(c catalogListItem) map[string]any {
 	return map[string]any{
-		"id":                  c.RequestCatalog.ID,
-		"display_name":        c.RequestCatalog.DisplayName,
-		"description":         c.RequestCatalog.Description,
+		"id":                  nilIfEmpty(c.RequestCatalog.ID),
+		"display_name":        nilIfEmpty(c.RequestCatalog.DisplayName),
+		"description":         nilIfEmpty(c.RequestCatalog.Description),
 		"published":           c.RequestCatalog.Published,
 		"visible_to_everyone": c.RequestCatalog.VisibleToEveryone,
 		"request_bundle":      c.RequestCatalog.RequestBundle,

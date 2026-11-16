@@ -22,9 +22,9 @@ type appListItem struct {
 // deleted_at, because the endpoint omits deleted apps.
 func appRow(a appListItem) map[string]any {
 	return map[string]any{
-		"id":           a.ID,
-		"display_name": a.DisplayName,
-		"description":  a.Description,
+		"id":           nilIfEmpty(a.ID),
+		"display_name": nilIfEmpty(a.DisplayName),
+		"description":  nilIfEmpty(a.Description),
 		"user_count":   int64(a.UserCount),
 	}
 }

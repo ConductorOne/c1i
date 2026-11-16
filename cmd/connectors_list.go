@@ -27,10 +27,10 @@ type connectorListItem struct {
 func connectorRow(item connectorListItem) map[string]any {
 	conn := item.Connector
 	return map[string]any{
-		"id":           conn.ID,
-		"app_id":       conn.AppID,
-		"display_name": conn.DisplayName,
-		"status":       conn.Status.Status,
+		"id":           nilIfEmpty(conn.ID),
+		"app_id":       nilIfEmpty(conn.AppID),
+		"display_name": nilIfEmpty(conn.DisplayName),
+		"status":       nilIfEmpty(conn.Status.Status),
 		"deleted_at":   nilIfEmpty(conn.DeletedAt),
 	}
 }

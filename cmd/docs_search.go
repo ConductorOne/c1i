@@ -91,11 +91,11 @@ Examples:
 
 		enc := newEmitter(cmd)
 		for _, r := range results {
-			if err := enc.Encode(map[string]string{
-				"title":   r.Metadata.Title,
-				"path":    r.Path,
+			if err := enc.Encode(map[string]any{
+				"title":   nilIfEmpty(r.Metadata.Title),
+				"path":    nilIfEmpty(r.Path),
 				"url":     docsBaseURL + r.Path,
-				"content": r.Content,
+				"content": nilIfEmpty(r.Content),
 			}); err != nil {
 				return err
 			}

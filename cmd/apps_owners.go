@@ -30,12 +30,12 @@ type appOwner struct {
 // on a live user -- see CLAUDE.md's row-fidelity convention.
 func appOwnerRow(u appOwner) map[string]any {
 	return map[string]any{
-		"id":           u.ID,
-		"display_name": u.DisplayName,
-		"email":        u.Email,
-		"username":     u.Username,
-		"status":       u.Status,
-		"job_title":    u.JobTitle,
+		"id":           nilIfEmpty(u.ID),
+		"display_name": nilIfEmpty(u.DisplayName),
+		"email":        nilIfEmpty(u.Email),
+		"username":     nilIfEmpty(u.Username),
+		"status":       nilIfEmpty(u.Status),
+		"job_title":    nilIfEmpty(u.JobTitle),
 		"deleted_at":   nilIfEmpty(u.DeletedAt),
 	}
 }

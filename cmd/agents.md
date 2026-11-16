@@ -251,7 +251,7 @@ Rule of thumb: a product concept starts at `docs search` → `docs page`; a raw
 
 ## Reading output
 
-- List commands emit NDJSON: one object per line. With `--fields`/
+- List commands emit NDJSON: one object per line. In rows c1i builds, a string field with nothing to report is `null`, never `""`, so `jq 'select(.field)'` selects only rows that have it. Some keys are present only when they apply: `type`, `app_id` and `app_entitlement_id` on `tasks`/`requests` rows (by task type), `outcome` on `tasks`/`requests` rows, `tool_count` and `last_called_at` on `mcp servers search` rows (only with `--tool-state` / `--include-last-called-at`, and `last_called_at` only once the server has been called), and `origin` on `users list` rows. With `--fields`/
   `C1I_FIELDS`, a row whose projection matches nothing is skipped entirely
   (never printed as `{}`), so the line count can be less than the underlying
   result count.

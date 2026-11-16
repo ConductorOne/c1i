@@ -105,12 +105,12 @@ type toolsetView struct {
 
 func toolsetRow(t toolsetView) map[string]any {
 	return map[string]any{
-		"id":                 t.ID,
-		"app_id":             t.AppID,
-		"connector_id":       t.ConnectorID,
-		"display_name":       t.DisplayName,
-		"description":        t.Description,
-		"app_entitlement_id": t.AppEntitlementID,
+		"id":                 nilIfEmpty(t.ID),
+		"app_id":             nilIfEmpty(t.AppID),
+		"connector_id":       nilIfEmpty(t.ConnectorID),
+		"display_name":       nilIfEmpty(t.DisplayName),
+		"description":        nilIfEmpty(t.Description),
+		"app_entitlement_id": nilIfEmpty(t.AppEntitlementID),
 		"tool_count":         int64(t.ToolCount),
 		"deleted_at":         nilIfEmpty(t.DeletedAt),
 	}

@@ -245,33 +245,20 @@ func policyStepCount(p policyListItem) int {
 // necessarily hold step_count entries.
 func policyRow(p policyListItem) map[string]any {
 	stepKinds := policyStepKinds(p)
-	// deleted_at is nil, not "", on a live policy: `jq 'select(.deleted_at)'`
-	// must not match one. An empty string is truthy in jq, so emitting "" here
-	// would silently select every row.
-	var deletedAt any
-	if p.DeletedAt != "" {
-		deletedAt = p.DeletedAt
-	}
-	// Same nil-not-"" reason as deleted_at, and the same jq consequence: this
-	// is the key that tells an empty step_kinds caused by delegation apart
-	// from one caused by a policy with no baseline at all.
-	var baselinePolicyID any
-	if p.BaselinePolicyID != "" {
-		baselinePolicyID = p.BaselinePolicyID
-	}
 	return map[string]any{
-		"id":                 p.ID,
-		"display_name":       p.DisplayName,
-		"description":        p.Description,
-		"policy_type":        p.PolicyType,
-		"system_builtin":     p.SystemBuiltin,
-		"rule_count":         len(p.Rules),
-		"step_count":         policyStepCount(p),
-		"step_kinds":         stepKinds,
-		"created_at":         p.CreatedAt,
-		"updated_at":         p.UpdatedAt,
-		"deleted_at":         deletedAt,
-		"baseline_policy_id": baselinePolicyID,
+		"id":             nilIfEmpty(p.ID),
+		"display_name":   nilIfEmpty(p.DisplayName),
+		"description":    nilIfEmpty(p.Description),
+		"policy_type":    nilIfEmpty(p.PolicyType),
+		"system_builtin": p.SystemBuiltin,
+		"rule_count":     len(p.Rules),
+		"step_count":     policyStepCount(p),
+		"step_kinds":     stepKinds,
+		"created_at":     nilIfEmpty(p.CreatedAt),
+		"updated_at":     nilIfEmpty(p.UpdatedAt),
+		"deleted_at":     nilIfEmpty(p.DeletedAt),
+		// null tells an empty step_kinds caused by delegation from a policy with no baseline.
+		"baseline_policy_id": nilIfEmpty(p.BaselinePolicyID),
 	}
 }
 

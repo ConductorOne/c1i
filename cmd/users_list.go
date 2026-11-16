@@ -107,13 +107,13 @@ row's origin prints) to pick origins.`,
 			resp.List = keepRows(resp.List, keep)
 			for _, item := range resp.List {
 				u := item.User
-				row := map[string]string{
-					"id":           u.ID,
-					"display_name": u.DisplayName,
-					"email":        u.Email,
-					"department":   u.Department,
-					"job_title":    u.JobTitle,
-					"status":       u.Status,
+				row := map[string]any{
+					"id":           nilIfEmpty(u.ID),
+					"display_name": nilIfEmpty(u.DisplayName),
+					"email":        nilIfEmpty(u.Email),
+					"department":   nilIfEmpty(u.Department),
+					"job_title":    nilIfEmpty(u.JobTitle),
+					"status":       nilIfEmpty(u.Status),
 				}
 				if u.Origin != "" {
 					row["origin"] = u.Origin

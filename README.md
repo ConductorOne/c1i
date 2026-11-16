@@ -393,7 +393,7 @@ $ cat trace.log
 
 ## Output Conventions
 
-- **List commands** (`users list`, `apps list`, etc.) output NDJSON (one JSON object per line).
+- **List commands** (`users list`, `apps list`, etc.) output NDJSON (one JSON object per line). In rows c1i builds, a string field with nothing to report is `null`, never `""`, so `jq 'select(.field)'` selects only rows that have it. Some keys are present only when they apply: `type`, `app_id` and `app_entitlement_id` on `tasks`/`requests` rows (by task type), `outcome` on `tasks`/`requests` rows, `tool_count` and `last_called_at` on `mcp servers search` rows (only with `--tool-state` / `--include-last-called-at`, and `last_called_at` only once the server has been called), and `origin` on `users list` rows.
 - **Mutations** (create, update, delete, owner changes, task actions,
   bindings) print the API's response as pretty JSON, unwrapped the same way the
   matching `get` unwraps it; every other envelope key, `expanded` included,

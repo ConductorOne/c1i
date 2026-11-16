@@ -66,28 +66,28 @@ type taskGrantRevoke struct {
 // taskRow flattens a task into the NDJSON output row shared by the task and
 // request list commands. The type-specific fields (app/entitlement/outcome)
 // are pulled from whichever of grant/revoke/certify is set.
-func taskRow(t taskSummary) map[string]string {
-	row := map[string]string{
-		"id":                 t.ID,
-		"display_name":       t.DisplayName,
-		"description":        t.Description,
-		"state":              t.State,
-		"user_id":            t.UserID,
-		"created_by_user_id": t.CreatedByUserID,
-		"created_at":         t.CreatedAt,
+func taskRow(t taskSummary) map[string]any {
+	row := map[string]any{
+		"id":                 nilIfEmpty(t.ID),
+		"display_name":       nilIfEmpty(t.DisplayName),
+		"description":        nilIfEmpty(t.Description),
+		"state":              nilIfEmpty(t.State),
+		"user_id":            nilIfEmpty(t.UserID),
+		"created_by_user_id": nilIfEmpty(t.CreatedByUserID),
+		"created_at":         nilIfEmpty(t.CreatedAt),
 	}
 	switch {
 	case t.Type.Grant != nil:
 		row["type"] = "grant"
-		row["app_id"] = t.Type.Grant.AppID
-		row["app_entitlement_id"] = t.Type.Grant.AppEntitlementID
+		row["app_id"] = nilIfEmpty(t.Type.Grant.AppID)
+		row["app_entitlement_id"] = nilIfEmpty(t.Type.Grant.AppEntitlementID)
 		if o := finalOutcome(t.Type.Grant.Outcome); o != "" {
 			row["outcome"] = o
 		}
 	case t.Type.Revoke != nil:
 		row["type"] = "revoke"
-		row["app_id"] = t.Type.Revoke.AppID
-		row["app_entitlement_id"] = t.Type.Revoke.AppEntitlementID
+		row["app_id"] = nilIfEmpty(t.Type.Revoke.AppID)
+		row["app_entitlement_id"] = nilIfEmpty(t.Type.Revoke.AppEntitlementID)
 		if o := finalOutcome(t.Type.Revoke.Outcome); o != "" {
 			row["outcome"] = o
 		}

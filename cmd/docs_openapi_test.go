@@ -26,14 +26,16 @@ paths:
 // OpenAPI cache file so fetchOpenAPISpec reads the stub spec above without
 // hitting the network. The cache file's mtime is "now", which is inside the 24h
 // cacheMaxAge window fetchOpenAPISpec checks.
-func primeOpenAPICache(t *testing.T) {
+func primeOpenAPICache(t *testing.T) { primeOpenAPICacheWith(t, stubOpenAPISpec) }
+
+func primeOpenAPICacheWith(t *testing.T, spec string) {
 	t.Helper()
 	cacheDir := filepath.Dir(useTempHome(t))
 	if err := os.MkdirAll(cacheDir, 0o700); err != nil {
 		t.Fatalf("failed to create cache dir: %v", err)
 	}
 	cachePath := filepath.Join(cacheDir, cacheFileName)
-	if err := os.WriteFile(cachePath, []byte(stubOpenAPISpec), 0o600); err != nil {
+	if err := os.WriteFile(cachePath, []byte(spec), 0o600); err != nil {
 		t.Fatalf("failed to write stub cache: %v", err)
 	}
 }
