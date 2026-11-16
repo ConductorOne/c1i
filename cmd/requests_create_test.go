@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/ConductorOne/c1i/internal/client"
+	"github.com/ConductorOne/c1i/internal/testenv"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
@@ -519,13 +520,9 @@ func TestRequestsCreateGrantDryRunIntrospectServerFailureClassifies(t *testing.T
 // this bounded without needing to fully exhaust the client's real retry
 // backoff (500ms+ per attempt).
 func TestRequestsCreateGrantDryRunIntrospectNetworkFailureExitsGenerically(t *testing.T) {
-	// A server that is opened then immediately closed hands back a real,
-	// already-assigned "http://127.0.0.1:PORT" that nothing is listening on
-	// -- connection refused, not a DNS failure, which is the more realistic
-	// shape of "the gateway/API host is briefly unreachable".
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
-	deadURL := srv.URL
-	srv.Close()
+	// Connection refused, not a DNS failure: the realistic shape of "the
+	// gateway/API host is briefly unreachable".
+	deadURL := testenv.DeadURL
 
 	resetCmdFlags(t, requestsCreateGrantCmd)
 	origNewGrantClient := newClient
@@ -922,9 +919,7 @@ func TestRequestsCreateRevokeDryRunIntrospectServerFailureClassifies(t *testing.
 // mirrors TestRequestsCreateGrantDryRunIntrospectNetworkFailureExitsGenerically
 // for revoke.
 func TestRequestsCreateRevokeDryRunIntrospectNetworkFailureExitsGenerically(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
-	deadURL := srv.URL
-	srv.Close()
+	deadURL := testenv.DeadURL
 
 	resetCmdFlags(t, requestsCreateRevokeCmd)
 	origNewRevokeClient := newClient

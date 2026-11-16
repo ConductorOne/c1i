@@ -13,6 +13,7 @@ import (
 
 	"github.com/ConductorOne/c1i/internal/client"
 	"github.com/ConductorOne/c1i/internal/mcpgateway"
+	"github.com/ConductorOne/c1i/internal/testenv"
 	"github.com/ConductorOne/c1i/internal/transport"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -281,24 +282,26 @@ func TestGatewayJSONRPCErrorNoCodeExitsGeneric(t *testing.T) {
 // TestGatewayErrorExitCodes' HTTPError cases -- classifies to exit 8, both at
 // the handshake (Initialize, wrapped exactly as newGatewayClient does) and
 // after a successful handshake (ListTools, wrapped exactly as
-// mcp_gateway_list_tools.go's RunE does). It closes a real httptest.Server
-// to get a guaranteed connection-refused target rather than relying on an
-// unreachable hostname, so the test has no network dependency.
+// mcp_gateway_list_tools.go's RunE does). The handshake dials testenv.DeadURL;
+// the post-handshake case has the server drop the connection mid-request. No
+// network dependency.
 //
 // The negative pair alongside it re-asserts (from TestGatewayErrorExitCodes)
 // that an actual 401 response still classifies as exitAuth: this change must
 // not sweep a credential failure into exit 8 just because it also travels
 // through classifyGatewayError.
 func TestGatewayTransportFailureExitsUpstream(t *testing.T) {
-	closedSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
-	closedURL := closedSrv.URL
-	closedSrv.Close() // nothing is listening on this port now: connection refused
+	closedURL := testenv.DeadURL
 
 	t.Run("handshake", func(t *testing.T) {
 		gc := mcpgateway.New(closedURL, "test-token", nil)
 		err := gc.Initialize(context.Background())
 		if err == nil {
 			t.Fatal("expected Initialize to fail against a closed port")
+		}
+		var te *mcpgateway.TransportError
+		if !errors.As(err, &te) {
+			t.Errorf("error = %T, want *mcpgateway.TransportError", err)
 		}
 		wrapped := fmt.Errorf("gateway handshake failed: %w", classifyGatewayError(err))
 		if got := exitCode(wrapped); got != exitUpstream {
@@ -316,17 +319,25 @@ func TestGatewayTransportFailureExitsUpstream(t *testing.T) {
 				_, _ = fmt.Fprint(w, `{"jsonrpc":"2.0","id":1,"result":{}}`)
 			case 2: // notifications/initialized
 				w.WriteHeader(http.StatusAccepted)
+			default: // tools/list: sever the connection without a response
+				conn, _, err := w.(http.Hijacker).Hijack()
+				if err == nil {
+					_ = conn.Close()
+				}
 			}
 		}))
+		defer srv.Close()
 		gc := mcpgateway.New(srv.URL, "test-token", srv.Client())
 		if err := gc.Initialize(context.Background()); err != nil {
 			t.Fatalf("unexpected Initialize failure: %v", err)
 		}
-		srv.Close() // sever the connection before tools/list
-
 		_, err := gc.ListTools(context.Background())
 		if err == nil {
-			t.Fatal("expected ListTools to fail once the server is gone")
+			t.Fatal("expected ListTools to fail when the server drops the connection")
+		}
+		var te *mcpgateway.TransportError
+		if !errors.As(err, &te) {
+			t.Errorf("error = %T, want *mcpgateway.TransportError", err)
 		}
 		wrapped := fmt.Errorf("tools/list failed: %w", classifyGatewayError(err))
 		if got := exitCode(wrapped); got != exitUpstream {

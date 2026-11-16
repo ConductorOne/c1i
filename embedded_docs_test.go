@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"runtime"
 	"testing"
+
+	"github.com/ConductorOne/c1i/internal/testenv"
 )
 
 // TestEmbeddedDocsMatchRepoFiles runs the real binary with no credentials
@@ -24,9 +26,8 @@ func TestEmbeddedDocsMatchRepoFiles(t *testing.T) {
 	if out, err := exec.Command("go", "build", "-o", bin, ".").CombinedOutput(); err != nil {
 		t.Fatalf("go build: %v\n%s", err, out)
 	}
-	env := append(os.Environ(),
-		"HOME="+dir, "XDG_CONFIG_HOME="+dir, "APPDATA="+dir, "USERPROFILE="+dir,
-		"C1I_URL=http://127.0.0.1:1", "C1I_CLIENT_ID=", "C1I_CLIENT_SECRET=")
+	// TestMain already isolated HOME/config and unset C1I_*.
+	env := append(os.Environ(), "C1I_URL="+testenv.DeadURL)
 
 	for sub, file := range map[string]string{"readme": "README.md", "changelog": "CHANGELOG.md"} {
 		want, err := os.ReadFile(file)

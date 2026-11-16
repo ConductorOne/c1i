@@ -16,6 +16,7 @@ import (
 	"testing"
 
 	"github.com/ConductorOne/c1i/internal/client"
+	"github.com/ConductorOne/c1i/internal/testenv"
 	"github.com/ConductorOne/c1i/internal/transport"
 )
 
@@ -735,11 +736,7 @@ func TestHTTPErrorClassificationAcrossStatuses(t *testing.T) {
 // cmd/mcp_gateway.go's classifyGatewayError needs to route it to exit 8
 // instead.
 func TestTransportFailureReturnsTransportError(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
-	closedURL := srv.URL
-	srv.Close() // nothing is listening on this port now: connection refused
-
-	c := New(closedURL, "test-token", nil)
+	c := New(testenv.DeadURL, "test-token", nil)
 	err := c.Initialize(context.Background())
 	if err == nil {
 		t.Fatal("expected an error against a closed port")

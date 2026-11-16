@@ -17,6 +17,7 @@ import (
 	"testing"
 
 	"github.com/ConductorOne/c1i/internal/selfupdate"
+	"github.com/ConductorOne/c1i/internal/testenv"
 	"github.com/ConductorOne/c1i/internal/transport"
 	"github.com/sigstore/sigstore-go/pkg/root"
 	"github.com/spf13/cobra"
@@ -262,6 +263,7 @@ func TestUpgradeExitCodes(t *testing.T) {
 			useDist(t, d, nil, "v0.6.0")
 			if tc.closed {
 				d.srv.Close()
+				d.srv.URL = testenv.DeadURL // a closed ephemeral port can be recycled by another process
 			}
 			_, err := runUpgrade(t, "-y")
 			if got := exitCode(err); got != tc.want {
