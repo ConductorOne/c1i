@@ -8,7 +8,9 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
 	"strings"
@@ -37,14 +39,33 @@ var (
 )
 
 // TokenError is returned when the token endpoint rejects the client credentials
-// (a non-200 on the client_credentials grant). Callers use errors.As to treat
-// it as an authentication failure rather than a generic request error.
+// (400, 401 or 403 on the client_credentials grant). Callers use errors.As to
+// treat it as an authentication failure rather than a generic request error.
+// Any other failure of the token request is a *MintError.
 type TokenError struct {
 	StatusCode int
 }
 
 func (e *TokenError) Error() string {
 	return fmt.Sprintf("token request failed with status %d", e.StatusCode)
+}
+
+// MintError wraps a failure of the token request that says nothing about the
+// credentials: a transport failure, an unusable 200, or a status other than
+// 400/401/403 (a
+// *transport.APIError, so callers classify 429 and 5xx like any API response).
+// The mint has already spent its retry budget, so callers must not retry it.
+type MintError struct{ Err error }
+
+func (e *MintError) Error() string { return e.Err.Error() }
+func (e *MintError) Unwrap() error { return e.Err }
+
+// ErrBadTokenResponse marks a 200 from the token endpoint whose body is
+// unusable; cmd classifies it like any other non-JSON 200 (exit 6).
+var ErrBadTokenResponse = errors.New("unusable token response")
+
+func rejectsCredentials(status int) bool {
+	return status == http.StatusBadRequest || status == http.StatusUnauthorized || status == http.StatusForbidden
 }
 
 type c1Token struct {
@@ -102,13 +123,22 @@ func randomNonce() (string, error) {
 	return hex.EncodeToString(b), nil
 }
 
+// newNonce is a seam so a test can force a re-signed body to change length.
+var newNonce = randomNonce
+
 type nonceSource struct{}
 
 func (n *nonceSource) Nonce() (string, error) {
-	return randomNonce()
+	return newNonce()
 }
 
-func (c *c1TokenSource) Token() (*oauth2.Token, error) {
+// now is a seam so a test can prove each attempt signs a fresh assertion.
+var now = time.Now
+
+// formBody signs a new client assertion (fresh iat/exp/nonce) and returns the
+// encoded token request body. A retry calls it again: a replayed assertion
+// would have expired by the time a long Retry-After wait ends.
+func (c *c1TokenSource) formBody() (string, error) {
 	jsigner, err := jose.NewSigner(
 		jose.SigningKey{
 			Algorithm: jose.EdDSA,
@@ -118,7 +148,7 @@ func (c *c1TokenSource) Token() (*oauth2.Token, error) {
 			NonceSource: &nonceSource{},
 		})
 	if err != nil {
-		return nil, fmt.Errorf("creating signer: %w", err)
+		return "", fmt.Errorf("creating signer: %w", err)
 	}
 
 	aud := c.tokenHost
@@ -126,57 +156,80 @@ func (c *c1TokenSource) Token() (*oauth2.Token, error) {
 		aud = h
 	}
 
-	now := time.Now()
+	t := now()
 	claims := &jwt.Claims{
 		Issuer:    c.clientID,
 		Subject:   c.clientID,
 		Audience:  jwt.Audience{aud},
-		Expiry:    jwt.NewNumericDate(now.Add(2 * time.Minute)),
-		IssuedAt:  jwt.NewNumericDate(now),
-		NotBefore: jwt.NewNumericDate(now.Add(-2 * time.Minute)),
+		Expiry:    jwt.NewNumericDate(t.Add(2 * time.Minute)),
+		IssuedAt:  jwt.NewNumericDate(t),
+		NotBefore: jwt.NewNumericDate(t.Add(-2 * time.Minute)),
 	}
 
 	s, err := jwt.Signed(jsigner).Claims(claims).Serialize()
 	if err != nil {
-		return nil, fmt.Errorf("signing JWT: %w", err)
+		return "", fmt.Errorf("signing JWT: %w", err)
 	}
 
-	body := url.Values{
+	return url.Values{
 		"client_id":             {c.clientID},
 		"grant_type":            {"client_credentials"},
 		"client_assertion_type": {assertionType},
 		"client_assertion":      {s},
+	}.Encode(), nil
+}
+
+func (c *c1TokenSource) Token() (*oauth2.Token, error) {
+	body, err := c.formBody()
+	if err != nil {
+		return nil, err
 	}
 
 	tokenURL := url.URL{
 		Scheme: "https",
 		Host:   c.tokenHost,
-		Path:   "auth/v1/token",
+		Path:   "/auth/v1/token",
 	}
 
-	req, err := http.NewRequestWithContext(context.Background(), http.MethodPost, tokenURL.String(), strings.NewReader(body.Encode()))
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodPost, tokenURL.String(), strings.NewReader(body))
 	if err != nil {
 		return nil, err
+	}
+	// A re-signed body is normally the same length (fixed-width timestamps,
+	// nonce and signature), which keeps the ContentLength NewRequest set valid;
+	// refuse one that isn't rather than send a short body.
+	req.GetBody = func() (io.ReadCloser, error) {
+		b, err := c.formBody()
+		if err != nil {
+			return nil, err
+		}
+		if len(b) != len(body) {
+			return nil, errors.New("re-signed token body changed length")
+		}
+		return io.NopCloser(strings.NewReader(b)), nil
 	}
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 
 	resp, err := c.transport.Do(req)
 	if err != nil {
-		return nil, err
+		return nil, &MintError{Err: err}
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, &TokenError{StatusCode: resp.StatusCode}
+		if rejectsCredentials(resp.StatusCode) {
+			return nil, &TokenError{StatusCode: resp.StatusCode}
+		}
+		return nil, &MintError{Err: &transport.APIError{Method: http.MethodPost, Path: tokenURL.EscapedPath(), StatusCode: resp.StatusCode}}
 	}
 
 	c1t := &c1Token{}
 	err = json.Unmarshal(resp.Body, c1t)
 	if err != nil {
-		return nil, err
+		return nil, &MintError{Err: fmt.Errorf("%w: %v", ErrBadTokenResponse, err)}
 	}
 
 	if c1t.AccessToken == "" {
-		return nil, fmt.Errorf("token response contained empty access token")
+		return nil, &MintError{Err: fmt.Errorf("%w: empty access token", ErrBadTokenResponse)}
 	}
 
 	return &oauth2.Token{
@@ -215,7 +268,9 @@ func newMintSource(clientID string, clientSecret string, tokenHost string, opts 
 	if err != nil {
 		return nil, err
 	}
-	t := transport.New(nil, append(opts, transport.WithTimeout(tokenRequestTimeout))...)
+	// The grant is safe to repeat, so retry its 5xx and transport failures
+	// like a read (a POST would otherwise not be).
+	t := transport.New(nil, append(opts, transport.WithTimeout(tokenRequestTimeout), transport.WithReadOnly())...)
 	return &c1TokenSource{
 		clientID:     clientID,
 		clientSecret: secret,

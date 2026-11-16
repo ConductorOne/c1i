@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/ConductorOne/c1i/internal/client"
+	"github.com/ConductorOne/c1i/internal/tokensource"
 	"github.com/ConductorOne/c1i/internal/transport"
 )
 
@@ -149,7 +150,13 @@ func PollForToken(ctx context.Context, baseURL string, code *DeviceCode, opts ..
 			// {"message":"..."} — leaves Error empty and must NOT be read as
 			// one, or a server failure would classify as an auth failure
 			// (exit 3) instead of exit 6.
-			if err := json.Unmarshal(resp.Body, &errResp); err != nil || errResp.Error == "" {
+			uerr := json.Unmarshal(resp.Body, &errResp)
+			// Rate limiting asks for fewer polls, which is what slow_down
+			// means; RFC 8628 has no 429 code, so it needs no OAuth body.
+			if resp.StatusCode == http.StatusTooManyRequests {
+				errResp.Error, uerr = "slow_down", nil
+			}
+			if uerr != nil || errResp.Error == "" {
 				return "", apiErr()
 			}
 
@@ -188,7 +195,10 @@ func PollForToken(ctx context.Context, baseURL string, code *DeviceCode, opts ..
 			AccessToken string `json:"access_token"`
 		}
 		if err := json.Unmarshal(resp.Body, &tokenResp); err != nil {
-			return "", fmt.Errorf("failed to parse token response: %w", err)
+			return "", fmt.Errorf("%w: parsing token response: %v", tokensource.ErrBadTokenResponse, err)
+		}
+		if tokenResp.AccessToken == "" {
+			return "", fmt.Errorf("%w: empty access token", tokensource.ErrBadTokenResponse)
 		}
 		return tokenResp.AccessToken, nil
 	}

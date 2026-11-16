@@ -4,6 +4,9 @@ import (
 	"context"
 	"crypto/ed25519"
 	"encoding/base64"
+	"encoding/json"
+	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -172,5 +175,126 @@ func TestTokenSource_EmptyAccessTokenIsError(t *testing.T) {
 
 	if _, err := newTestTokenSource(t, srv).Token(); err == nil {
 		t.Fatal("expected an error for an empty access token")
+	}
+}
+
+func TestTokenSource_NonCredentialStatusIsMintError(t *testing.T) {
+	for _, status := range []int{http.StatusTooManyRequests, http.StatusInternalServerError, http.StatusServiceUnavailable} {
+		srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(status)
+		}))
+		_, err := newTestTokenSource(t, srv, transport.WithMaxRetries(0)).Token()
+		srv.Close()
+		var mintErr *MintError
+		if !errors.As(err, &mintErr) {
+			t.Fatalf("status %d: error = %T (%v), want *MintError", status, err, err)
+		}
+		var apiErr *transport.APIError
+		if !errors.As(err, &apiErr) || apiErr.StatusCode != status {
+			t.Errorf("status %d: error = %v, want a *transport.APIError carrying the status", status, err)
+		}
+		var tokErr *TokenError
+		if errors.As(err, &tokErr) {
+			t.Errorf("status %d: must not be a *TokenError", status)
+		}
+	}
+}
+
+// Each attempt must sign a fresh assertion: a replayed one expires (2m) during
+// a long Retry-After wait and the final attempt would 401.
+func TestTokenSource_RetryResignsAssertion(t *testing.T) {
+	base := time.Unix(1_800_000_000, 0)
+	var calls int
+	origNow := now
+	now = func() time.Time { calls++; return base.Add(time.Duration(calls-1) * 3 * time.Minute) }
+	t.Cleanup(func() { now = origNow })
+
+	var iats []int64
+	var nonces, lens []string
+	var contentLens []int64
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if err := r.ParseForm(); err != nil {
+			t.Error(err)
+		}
+		a := r.PostForm.Get("client_assertion")
+		parts := strings.Split(a, ".")
+		raw, _ := base64.RawURLEncoding.DecodeString(parts[1])
+		var c struct{ Iat, Exp int64 }
+		_ = json.Unmarshal(raw, &c)
+		hdr, _ := base64.RawURLEncoding.DecodeString(parts[0])
+		var h struct{ Nonce string }
+		_ = json.Unmarshal(hdr, &h)
+		iats = append(iats, c.Iat)
+		nonces = append(nonces, h.Nonce)
+		lens = append(lens, fmt.Sprint(len(a)))
+		contentLens = append(contentLens, r.ContentLength)
+		if c.Exp <= c.Iat {
+			t.Errorf("exp %d not after iat %d", c.Exp, c.Iat)
+		}
+		w.Header().Set("Retry-After", "0")
+		w.WriteHeader(http.StatusServiceUnavailable)
+	}))
+	defer srv.Close()
+
+	_, _ = newTestTokenSource(t, srv, transport.WithMaxRetries(2), transport.WithReadOnly()).Token()
+	if len(iats) != 3 {
+		t.Fatalf("attempts = %d, want 3", len(iats))
+	}
+	for i, iat := range iats {
+		if want := base.Add(time.Duration(i) * 3 * time.Minute).Unix(); iat != want {
+			t.Errorf("attempt %d iat = %d, want %d (a fresh assertion signed at attempt time)", i, iat, want)
+		}
+		if i > 0 && (nonces[i] == nonces[i-1] || lens[i] != lens[0] || contentLens[i] != contentLens[0]) {
+			t.Errorf("attempt %d: nonce/length not fresh-and-constant: %v %v %v", i, nonces, lens, contentLens)
+		}
+	}
+}
+
+func TestTokenSource_UnusableTokenResponseIsMintError(t *testing.T) {
+	for _, body := range []string{`<html>`, `{"access_token":""}`} {
+		srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { _, _ = w.Write([]byte(body)) }))
+		_, err := newTestTokenSource(t, srv).Token()
+		srv.Close()
+		var mintErr *MintError
+		if !errors.As(err, &mintErr) || !errors.Is(err, ErrBadTokenResponse) {
+			t.Errorf("body %q: error = %v, want a *MintError wrapping ErrBadTokenResponse", body, err)
+		}
+	}
+}
+
+func TestRejectsCredentialsIsExactlyBadCredentialStatuses(t *testing.T) {
+	for status := 100; status < 600; status++ {
+		want := status == 400 || status == 401 || status == 403
+		if got := rejectsCredentials(status); got != want {
+			t.Errorf("rejectsCredentials(%d) = %v, want %v", status, got, want)
+		}
+	}
+}
+
+// A re-signed body of a different length must fail the retry, not be sent
+// under the original ContentLength.
+func TestTokenSource_RetryFailsClosedOnBodyLengthChange(t *testing.T) {
+	var n int
+	orig := newNonce
+	newNonce = func() (string, error) {
+		n++
+		return strings.Repeat("a", 31+n), nil
+	}
+	t.Cleanup(func() { newNonce = orig })
+
+	var hits int
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hits++
+		w.Header().Set("Retry-After", "0")
+		w.WriteHeader(http.StatusServiceUnavailable)
+	}))
+	defer srv.Close()
+
+	_, err := newTestTokenSource(t, srv, transport.WithMaxRetries(1), transport.WithReadOnly()).Token()
+	if err == nil || !strings.Contains(err.Error(), "re-signed token body changed length") {
+		t.Fatalf("error = %v, want the body-length refusal", err)
+	}
+	if hits != 1 {
+		t.Errorf("requests = %d, want 1 (the retry must not be sent)", hits)
 	}
 }

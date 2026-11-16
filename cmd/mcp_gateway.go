@@ -73,7 +73,10 @@ func newGatewayClient(cmd *cobra.Command) (*mcpgateway.Client, error) {
 	}
 	tok, err := client.Token(cmd.Context(), baseURL, globalClientOptions()...)
 	if err != nil {
-		return nil, fmt.Errorf("authentication failed: %w", err)
+		if errors.As(err, new(*client.AuthError)) {
+			return nil, fmt.Errorf("authentication failed: %w", err)
+		}
+		return nil, err
 	}
 	gc := mcpgateway.New(endpoint, tok.AccessToken, nil, globalTransportOptions()...)
 	// *mcpgateway.HTTPError unwraps to a *client.APIError, so wrapping with %w

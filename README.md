@@ -296,8 +296,11 @@ mapping, a directory, no read permission) exits `2` naming the file, even with
 broken one.
 
 This covers the token mint too: minting or refreshing the OAuth2 bearer
-c1i authenticates with is itself a request, subject to the same 429 retry
-(never 5xx/network, since it's a POST) and the same `--max-retries` budget.
+c1i authenticates with is itself a request, subject to the same 429/5xx/network retry
+and the same `--max-retries` budget. A `400`/`401`/`403` from the token endpoint
+means the credentials were rejected (exit 3, not retried); a persistent `429`
+exits 5 and a persistent `5xx` exits 6. Against a hung token host the
+worst case is about `(--max-retries + 1) × 30s` plus backoff.
 
 Every request also gets a fixed timeout, per attempt (a retried request
 gets a fresh budget, not a shrinking share of one deadline): 10 minutes
@@ -642,10 +645,10 @@ branch on without parsing text:
 | `0` | success |
 | `1` | generic / unclassified error |
 | `2` | usage error (bad flags or arguments, an empty, `.` or `..` id, a blank flag or positional, a missing, malformed, `null` or wrong-shape `--*-file` input, a non-object element in an array `--*-file` or `--body-file`, a refused redirect (but `upgrade` and the `docs` commands exit `8`), or the API returned any `4xx` other than `401`/`403`/`404`/`408`/`429`/`499`) |
-| `3` | not authenticated, or API returned `401`/`403` |
+| `3` | not authenticated, or API returned `401`/`403` (including a `400`/`401`/`403` from the token endpoint; any other token-endpoint failure is classified like an API response: `404` exits 4, `429` 5, `5xx` or a `200` that is not a token 6) |
 | `4` | API returned `404` (not found) |
 | `5` | API returned `429` (rate limited — back off and retry) |
-| `6` | C1 failed: the API returned `5xx`, a redirect chain never settled, it answered `200` with a body that isn't JSON, a list command's pagination cursor stopped advancing, or a list page in a shape the command doesn't recognize |
+| `6` | C1 failed: the API returned `5xx`, a redirect chain never settled, it answered `200` with a body that isn't JSON or a usable token, a list command's pagination cursor stopped advancing, or a list page in a shape the command doesn't recognize |
 | `7` | `mcp gateway call` completed, but the tool itself reported an error (`isError: true` in its result) |
 | `8` | a system beyond C1, or the MCP protocol layer, failed — an upstream connector was unreachable or errored, the gateway itself was unreachable (DNS failure, refused connection), `mcp servers test-connection` reported an EXTERNAL server unreachable (its JSON is still printed), or the gateway returned a protocol-level JSON-RPC error |
 
