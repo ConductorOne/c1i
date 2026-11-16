@@ -43,6 +43,10 @@ Exits 8 when the server is unreachable; the JSON is still printed.`,
 			return err
 		}
 
+		mask, err := optionalUpdateMask(cmd)
+		if err != nil {
+			return err
+		}
 		appID, _ := cmd.Flags().GetString("app-id")
 		var connectorID string
 		if len(args) > 0 {
@@ -51,6 +55,9 @@ Exits 8 when the server is unreachable; the JSON is still printed.`,
 		editMode := appID != "" || connectorID != ""
 
 		body := map[string]any{}
+		if !editMode && mask != "" {
+			return &usageError{fmt.Errorf("--update-mask applies only in edit mode (<connector-id> --app-id)")}
+		}
 		if editMode {
 			if connectorID == "" {
 				return &usageError{fmt.Errorf("edit mode requires <connector-id> as a positional argument (in addition to --app-id)")}
@@ -60,7 +67,7 @@ Exits 8 when the server is unreachable; the JSON is still printed.`,
 			}
 			body["appId"] = appID
 			body["connectorId"] = connectorID
-			if mask, _ := cmd.Flags().GetString("update-mask"); mask != "" {
+			if mask != "" {
 				body["updateMask"] = mask
 			}
 		}
@@ -75,6 +82,11 @@ Exits 8 when the server is unreachable; the JSON is still printed.`,
 				return err
 			}
 			if len(ext) > 0 {
+				if mask != "" {
+					if err := requireMaskCoversConfig(mask, ext); err != nil {
+						return err
+					}
+				}
 				body["externalConfig"] = ext
 			} else if !editMode {
 				return &usageError{fmt.Errorf("provide the config to probe: --server-url (with optional --transport/--auth) or --external-config-file, or pass <connector-id> and --app-id to probe an existing server")}
@@ -124,8 +136,9 @@ func init() {
 	mcpServersTestConnectionCmd.Flags().String("server-url", "", "External MCP server URL (create mode)")
 	mcpServersTestConnectionCmd.Flags().String("transport", "", "Transport: streamable-http or sse")
 	mcpServersTestConnectionCmd.Flags().String("external-config-file", "", "Full externalConfig JSON (file or \"-\" for stdin)")
-	mcpServersTestConnectionCmd.Flags().String("update-mask", "", "Comma-separated changed externalConfig paths (edit mode)")
+	mcpServersTestConnectionCmd.Flags().String("update-mask", "", "Comma-separated changed externalConfig paths; edit mode only; trimmed; an empty path or segment exits 2")
 	allowEmpty(mcpServersTestConnectionCmd, emptyIsOmitted, "server-url", "transport", "external-config-file", "update-mask")
+	setBlankHint(mcpServersTestConnectionCmd, "update-mask", updateMaskBlankHint)
 	addAuthFlags(mcpServersTestConnectionCmd)
 	mcpServersCmd.AddCommand(mcpServersTestConnectionCmd)
 }

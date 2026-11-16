@@ -49,7 +49,8 @@ The update_mask is derived from the fields you supply — e.g. --auth bearer-tok
 masks "bearerToken"; --server-url masks "url". Pass --update-mask with comma-separated
 proto field paths to override. Note the mask uses the auth oneof case name
 ("bearerToken", "customHeader", "basicAuth", "oauth2", "none"), not the
-"hostedConfig"/"externalConfig" wrapper.
+"hostedConfig"/"externalConfig" wrapper. An explicit mask must name every
+top-level key the command sends (e.g. "url" for --server-url), else exit 2.
 
 Companion values are required for the selected arm, with two exceptions. With
 --token-sharing per-user the secret is left to each user. With an explicit
@@ -67,6 +68,10 @@ For a hosted server without --catalog-id, c1i first looks the catalog id up
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 
+		mask, err := optionalUpdateMask(cmd)
+		if err != nil {
+			return err
+		}
 		appID, _ := cmd.Flags().GetString("app-id")
 		connectorID := args[0]
 		typ, _ := cmd.Flags().GetString("type")
@@ -78,7 +83,7 @@ For a hosted server without --catalog-id, c1i first looks the catalog id up
 
 		var cfg map[string]any
 		var wrapperKey string
-		typ, err := serverTypeFlag.parse(typ)
+		typ, err = serverTypeFlag.parse(typ)
 		if err != nil {
 			return err
 		}
@@ -96,18 +101,25 @@ For a hosted server without --catalog-id, c1i first looks the catalog id up
 			return err
 		}
 
-		mask, _ := cmd.Flags().GetString("update-mask")
 		// Guard the destructive case: an empty config with no mask would leave
 		// the backend nothing to apply. Require the caller to supply what to set.
 		// An explicit --update-mask is trusted as intent.
 		if len(cfg) == 0 && mask == "" {
 			return &usageError{fmt.Errorf("nothing to update: supply the new config via the auth flags (--auth/--bearer-token/…), --config-field, --server-url, or --%s-config-file", strings.TrimSuffix(wrapperKey, "Config"))}
 		}
+		if mask != "" {
+			if err := requireMaskCoversConfig(mask, cfg); err != nil {
+				return err
+			}
+		}
 		// Derive the mask from the fields the caller set, BEFORE the catalog-id
 		// injection below. The update_mask must name the proto paths inside the
 		// config (e.g. "bearerToken"), NOT the hostedConfig/externalConfig
 		// wrapper — see deriveCredentialUpdateMask.
 		if mask == "" {
+			if err := checkDerivedMaskKeys(cfg); err != nil {
+				return err
+			}
 			mask = deriveCredentialUpdateMask(cfg)
 		}
 
@@ -151,8 +163,9 @@ func init() {
 	mcpServersUpdateCredentialsCmd.Flags().String("external-config-file", "", "Full externalConfig JSON (file or \"-\" for stdin)")
 	// Shared auth
 	addAuthFlags(mcpServersUpdateCredentialsCmd)
-	mcpServersUpdateCredentialsCmd.Flags().String("update-mask", "", "Comma-separated proto field paths to update (default: derived from the fields you supply)")
+	mcpServersUpdateCredentialsCmd.Flags().String("update-mask", "", "Comma-separated proto field paths to update; each path is trimmed, an empty path or segment exits 2 (default: derived from the fields you supply)")
 	allowEmpty(mcpServersUpdateCredentialsCmd, emptyIsOmitted, "hosted-config-file", "server-url", "transport", "external-config-file", "update-mask")
+	setBlankHint(mcpServersUpdateCredentialsCmd, "update-mask", updateMaskBlankHint)
 	markRequired(mcpServersUpdateCredentialsCmd, "app-id", "type")
 	markMutating(mcpServersUpdateCredentialsCmd)
 	mcpServersCmd.AddCommand(mcpServersUpdateCredentialsCmd)

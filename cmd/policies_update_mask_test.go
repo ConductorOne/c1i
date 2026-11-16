@@ -20,7 +20,7 @@ func TestPoliciesUpdateBodyFileMaskRules(t *testing.T) {
 	}{
 		{"mask without body-file", []string{"--display-name", "x", "--update-mask", "description"}, exitUsage, "requires --body-file", ""},
 		{"padded mask is trimmed", []string{"--body-file", "BODY", "--update-mask", " description, steps"}, 0, "", "description,steps"},
-		{"empty path", []string{"--body-file", "BODY", "--update-mask", "description,,steps"}, exitUsage, "empty path", ""},
+		{"empty path", []string{"--body-file", "BODY", "--update-mask", "description,,steps"}, exitUsage, "path 2 is empty", ""},
 		{"body-file with a convenience flag", []string{"--body-file", "BODY", "--display-name", "x", "--update-mask", "description"}, exitUsage, "mutually exclusive", ""},
 		{"mask with steps-file only", []string{"--steps-file", "BODY", "--update-mask", "steps"}, exitUsage, "requires --body-file", ""},
 		{"whitespace-only mask", []string{"--body-file", "BODY", "--update-mask", "  "}, exitUsage, "--update-mask requires a non-empty value; name the changed field paths", ""},
@@ -100,8 +100,8 @@ func TestMaskedUpdatesTrimAndRejectEmptyMaskPaths(t *testing.T) {
 		})
 		t.Run(tc.name+"/empty path", func(t *testing.T) {
 			r, reqs := run(t, "displayName,,description")
-			if r.exit != exitUsage || !strings.Contains(r.err.Error(), "empty path") || len(reqs) != 0 {
-				t.Errorf("exit %d (%v), %d requests; want exit 2, empty path, none sent", r.exit, r.err, len(reqs))
+			if r.exit != exitUsage || !strings.Contains(r.err.Error(), "path 2 is empty") || len(reqs) != 0 {
+				t.Errorf("exit %d (%v), %d requests; want exit 2, path 2 is empty, none sent", r.exit, r.err, len(reqs))
 			}
 		})
 	}

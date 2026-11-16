@@ -512,15 +512,27 @@ Ranges beyond that are the server's too and are noted per flag.
 
 ### Update masks
 
-`--update-mask` takes comma-separated field paths; spaces around each path are
-trimmed, and an empty path (`a,,b`) or a blank mask exits `2`. It applies to
-`policies update`, `automations update`, `access-reviews update`,
-`mcp classifiers update`, `mcp classifiers policy update` and
-`mcp classifiers tool-gates update`, which send the object in `--body-file` with
-that mask. `--body-file` requires `--update-mask`; on `policies update` and
-`automations update`, which otherwise derive the mask from their flags,
-`--update-mask` without `--body-file` exits `2`. (`mcp servers update-credentials`
-has its own optional mask, described under Auth in the MCP section.)
+`--update-mask` takes comma-separated field paths, written as the API's
+camelCase JSON names and sent as given (a snake_case path is a 400,
+`FieldMask.paths contains invalid path`). Spaces around each path are trimmed.
+An empty path (`a,,b`, a leading or trailing comma) or an empty dot-segment
+(`a..b`, `.a`, `a.`) exits `2` and names its position. Unlike `--fields`, a
+trailing or doubled comma is an error, because a mask scopes a write.
+
+- `policies update`, `automations update`, `access-reviews update`,
+  `mcp classifiers update`, `mcp classifiers policy update` and
+  `mcp classifiers tool-gates update` send the object in `--body-file` with
+  that mask. `--body-file` requires `--update-mask`, and a blank mask exits `2`.
+  On `policies update` and `automations update`, which otherwise derive the
+  mask from their flags, `--update-mask` without `--body-file` exits `2`.
+- `mcp servers update-credentials` derives the mask from the config you supply
+  when `--update-mask` is omitted; `--update-mask ""` counts as omitted. An
+  explicit mask must name (or be nested under) every top-level config key the
+  command sends, such as `url` for `--server-url`; otherwise it exits `2` naming
+  the uncovered key, since the server would not apply it.
+- `mcp servers test-connection` sends no mask when `--update-mask` is omitted
+  (or `""`). A non-empty mask is edit mode only (`<connector-id> --app-id`);
+  create mode exits `2`. In edit mode the same coverage rule applies.
 
 ### Soft delete
 
@@ -1343,9 +1355,9 @@ classifier. A tool gate's `filter` must select either `builtInPattern` or
   two exceptions. `--token-sharing per-user` leaves the secret to each user
   (`SubmitUserCredential`). On `update-credentials` / `test-connection` an
   explicit `--update-mask` requires only the arm fields whose path it names: a
-  coarse path such as `basicAuth` requires both, and a mask naming none of the
-  arm requires none, because the server carries the rest forward from the
-  stored server. `register` has no mask, so it always needs the full arm (a
+  coarse path such as `basicAuth` requires both; the rest is carried forward
+  from the stored server. A mask must still name the arm itself (or a field in
+  it), or it exits `2` as an uncovered config key. `register` has no mask, so it always needs the full arm (a
   custom header's name even under `per-user`).
 - `--token-sharing shared|per-user` sets the server's token-sharing mode
   (case-insensitive; `per_user`/`peruser` are also accepted). Per the register

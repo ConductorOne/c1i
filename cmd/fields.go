@@ -36,12 +36,9 @@ func parseFieldSpec(spec string) ([][]string, error) {
 		if !hasVisibleRune(raw) {
 			continue
 		}
-		var segs []string
-		for _, seg := range strings.Split(raw, ".") {
-			if !hasVisibleRune(seg) {
-				return nil, fmt.Errorf("%q has an empty path segment", strings.TrimSpace(raw))
-			}
-			segs = append(segs, strings.TrimSpace(seg))
+		segs, bad := splitPathSegments(raw)
+		if bad != 0 {
+			return nil, fmt.Errorf("%q has an empty path segment", strings.TrimSpace(raw))
 		}
 		paths = append(paths, segs)
 	}
@@ -49,6 +46,18 @@ func parseFieldSpec(spec string) ([][]string, error) {
 		return nil, errors.New("names no field path")
 	}
 	return paths, nil
+}
+
+// splitPathSegments splits a dotted path into trimmed segments. bad is the
+// 1-based index of the first segment with no visible character, or 0.
+func splitPathSegments(path string) (segs []string, bad int) {
+	for i, seg := range strings.Split(path, ".") {
+		if !hasVisibleRune(seg) {
+			return nil, i + 1
+		}
+		segs = append(segs, strings.TrimSpace(seg))
+	}
+	return segs, 0
 }
 
 // parseFieldsSetting is fields' globalEnvSettings parser.

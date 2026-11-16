@@ -231,7 +231,7 @@ func TestMcpAuthExplicitMaskScopesRequirements(t *testing.T) {
 		{"custom coarse needs both", "custom-header", []string{"--header-name=X-Key"}, "customHeader", "--header-value"},
 		{"bearer token", "bearer-token", []string{"--bearer-token=tok"}, "bearerToken.token", ""},
 		{"bearer masked but missing", "bearer-token", nil, "bearerToken.token", "--bearer-token"},
-		{"mask names no arm field", "basic-auth", nil, "url", ""},
+		{"mask leaves out the arm it sends", "basic-auth", nil, "url", "basicAuth"},
 	}
 	for _, tc := range cases {
 		for _, cmdName := range []string{"update-credentials", "test-connection"} {
@@ -285,18 +285,17 @@ func TestMcpAuthExplicitMaskScopesRequirements(t *testing.T) {
 	}
 }
 
-// TestMcpAuthCreateProbeIgnoresMask pins that a mask is only trusted where it
-// is sent: test-connection's create mode ignores --update-mask, so it still
-// needs the full arm.
-func TestMcpAuthCreateProbeIgnoresMask(t *testing.T) {
+// TestMcpAuthCreateProbeRefusesMask pins that test-connection's create mode,
+// which would not send the mask, refuses it instead of dropping it.
+func TestMcpAuthCreateProbeRefusesMask(t *testing.T) {
 	withDryRun(t)
 	t.Setenv("C1I_URL", mutTestURL)
 	s := newMutServer(t, fixedReply(200, `{"reachable":true}`))
 	r := runMutationCLI(t, s.srv, 0, nil,
 		"mcp", "servers", "test-connection", "--server-url=https://mcp.example.com/sse",
 		"--auth=basic-auth", "--update-mask=basicAuth.password")
-	if r.exit != exitUsage || r.err == nil || !strings.Contains(r.err.Error(), "--basic-auth-username") {
-		t.Fatalf("exit %d (%v), want 2 naming --basic-auth-username", r.exit, r.err)
+	if r.exit != exitUsage || r.err == nil || !strings.Contains(r.err.Error(), "--update-mask applies only in edit mode (<connector-id> --app-id)") {
+		t.Fatalf("exit %d (%v), want 2 saying the mask applies only in edit mode", r.exit, r.err)
 	}
 	if len(s.requests()) != 0 {
 		t.Errorf("%d request(s), want none", len(s.requests()))
