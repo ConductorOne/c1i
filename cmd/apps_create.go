@@ -22,7 +22,7 @@ the whole list -- including you.
 at creation. Omitted, the server assigns its default grant and revoke
 policies and no certify policy. As with "apps update", c1i first checks
 each id exists and has the flag's type (exit 2 otherwise, nothing sent);
---dry-run skips the check. An empty policy id is a usage error.
+--dry-run does the check too. An empty policy id is a usage error.
 --identity-matching takes the same values as on "apps update".
 
 Prints the created app as pretty JSON, unwrapped like "apps get": the id is
@@ -39,7 +39,7 @@ Example:
 			return &usageError{err}
 		}
 		return sendMutation(cmd, mutation{Method: http.MethodPost, Path: "/api/v1/apps", Body: body},
-			withPreRead(policyBindingsCheck(cmd, appPolicyKinds)))
+			withPolicyBindingsCheck(cmd, appPolicyKinds))
 	},
 }
 

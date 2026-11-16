@@ -345,9 +345,9 @@ func TestTasksReassignDeduplicatesUserIDs(t *testing.T) {
 	}
 }
 
-// TestTasksReassignDryRunSkipsTheUserLookup: a preview needs no existence
-// proof (nothing is written), but must still show the ids it would send.
-func TestTasksReassignDryRunSkipsTheUserLookup(t *testing.T) {
+// TestTasksReassignDryRunLooksUpUsers: a preview does the user existence read
+// (nothing is written) and shows the ids it would send.
+func TestTasksReassignDryRunLooksUpUsers(t *testing.T) {
 	const taskID = "zz-c1i-test-task-8"
 	const user = "aaaaaaaaaaaaaaaaaaaaaaaaaaa"
 
@@ -380,8 +380,8 @@ func TestTasksReassignDryRunSkipsTheUserLookup(t *testing.T) {
 	if err := tasksReassignCmd.RunE(tasksReassignCmd, []string{taskID}); err != nil {
 		t.Fatalf("reassign --dry-run: %v", err)
 	}
-	if len(userGets) != 0 {
-		t.Errorf("--dry-run looked up users: %v", userGets)
+	if len(userGets) != 1 {
+		t.Errorf("--dry-run looked up users: %v, want one lookup", userGets)
 	}
 	if len(posts) != 0 {
 		t.Errorf("--dry-run posted: %v", posts)

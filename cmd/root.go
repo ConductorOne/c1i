@@ -65,6 +65,12 @@ For raw API exploration, also with no authentication required:
 		if err := validateBlankFlags(cmd); err != nil {
 			return err
 		}
+		if err := validatePathFlags(cmd); err != nil {
+			return err
+		}
+		if err := validateHeaderFlags(cmd); err != nil {
+			return err
+		}
 		if err := validateDotSegmentIDFlags(cmd); err != nil {
 			return err
 		}

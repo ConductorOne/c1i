@@ -102,14 +102,18 @@ func TestPolicyBindingValidation(t *testing.T) {
 			wantLookups: 1, wantPosts: 1, wantReq: `"grantPolicyId":"gp"`},
 		{name: "create trims policy id", args: []string{"apps", "create", "--display-name", "a", "--grant-policy-id", "\tgp\n"},
 			wantLookups: 1, wantPosts: 1, wantReq: `"grantPolicyId":"gp"`},
-		{name: "update dry run sends nothing", args: []string{"apps", "update", "app-1", "--grant-policy-id", "nope"}, dryRun: true},
+		{name: "update dry run refuses like a real run", args: []string{"apps", "update", "app-1", "--grant-policy-id", "nope"}, dryRun: true,
+			wantErr: `--grant-policy-id "nope": no such policy`, wantLookups: 1},
+		{name: "update dry run looks up and sends nothing", args: []string{"apps", "update", "app-1", "--grant-policy-id", "gp"}, dryRun: true, wantLookups: 1},
 		{name: "create 404", args: []string{"apps", "create", "--display-name", "a", "--revoke-policy-id", "nope"},
 			wantErr: "no such policy", wantLookups: 1},
 		{name: "create wrong type", args: []string{"apps", "create", "--display-name", "a", "--certify-policy-id", "gp"},
 			wantErr: "it must be POLICY_TYPE_CERTIFY", wantLookups: 1},
 		{name: "create right type", args: []string{"apps", "create", "--display-name", "a", "--grant-policy-id", "gp"},
 			wantLookups: 1, wantPosts: 1},
-		{name: "create dry run sends nothing", args: []string{"apps", "create", "--display-name", "a", "--grant-policy-id", "nope"}, dryRun: true},
+		{name: "create dry run refuses like a real run", args: []string{"apps", "create", "--display-name", "a", "--grant-policy-id", "nope"}, dryRun: true,
+			wantErr: `--grant-policy-id "nope": no such policy`, wantLookups: 1},
+		{name: "create dry run looks up and sends nothing", args: []string{"apps", "create", "--display-name", "a", "--grant-policy-id", "gp"}, dryRun: true, wantLookups: 1},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

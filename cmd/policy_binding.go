@@ -113,12 +113,18 @@ func applyPolicyUpdates(cmd *cobra.Command, kinds []policyKind, obj map[string]a
 	return paths, nil
 }
 
-// policyBindingsCheck is validatePolicyBindings as a mutation's pre-send read;
-// a dry run skips it.
-func policyBindingsCheck(cmd *cobra.Command, kinds []policyKind) preRead {
-	return preRead{Run: func(ctx context.Context, c *client.Client, _ *mutation) ([]resolvedID, error) {
-		return nil, validatePolicyBindings(ctx, cmd, c, kinds)
-	}}
+// withPolicyBindingsCheck is validatePolicyBindings as a mutation's pre-send
+// read. With no policy-id flag set it adds nothing, so a preview of such a
+// call still needs no credentials.
+func withPolicyBindingsCheck(cmd *cobra.Command, kinds []policyKind) mutationOpt {
+	for _, k := range kinds {
+		if cmd.Flags().Changed(k.flag) {
+			return withPreRead(preRead{Run: func(ctx context.Context, c *client.Client, _ *mutation) ([]resolvedID, error) {
+				return nil, validatePolicyBindings(ctx, cmd, c, kinds)
+			}})
+		}
+	}
+	return func(*mutationOpts) {}
 }
 
 // validatePolicyBindings checks that every policy id being bound names an

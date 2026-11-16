@@ -142,15 +142,17 @@ func TestAppsSetOwnersChecksUsersExist(t *testing.T) {
 			t.Errorf("dry-run preview =\n%s\nwant\n%s", out, want)
 		}
 	})
-	t.Run("dry-run does no lookups", func(t *testing.T) {
+	t.Run("dry-run refuses an unknown user like a real run", func(t *testing.T) {
 		withDryRun(t)
 		_, seen := entOwnerServerUsers(t, []string{`{"userIds":[]}`}, map[string]int{"ghost": http.StatusNotFound})
-		if _, _, err := runEntOwnerCmd(t, appsSetOwnersCmd,
-			map[string][]string{"user-id": {"ghost"}}, "app1"); err != nil {
-			t.Fatalf("RunE: %v", err)
+		_, _, err := runEntOwnerCmd(t, appsSetOwnersCmd,
+			map[string][]string{"user-id": {"ghost"}}, "app1")
+		var ue *usageError
+		if !errors.As(err, &ue) || !strings.Contains(err.Error(), `"ghost"`) {
+			t.Fatalf("error = %v, want a *usageError naming ghost", err)
 		}
-		if n := len(seen()); n != 0 {
-			t.Errorf("dry-run sent %d request(s)", n)
+		if w := withoutUserLookups(seen()); len(w) != 0 {
+			t.Errorf("dry-run sent %+v", w)
 		}
 	})
 }

@@ -32,7 +32,7 @@ const (
 const (
 	setOwnersLookupNote = `Before the PUT, each distinct --user-id is looked up with GET
 /api/v1/users/{id}; an unknown one exits 2 naming it, and nothing is sent.
---dry-run skips the lookups. A repeated --user-id is sent once.`
+--dry-run looks them up too. A repeated --user-id is sent once.`
 
 	setOwnersWaitNote = `Pass --wait to block and poll GET .../ownerids until the owner set equals
 the requested ids -- additions landed and replaced owners gone -- or

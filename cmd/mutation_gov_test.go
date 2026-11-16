@@ -76,12 +76,23 @@ func TestPoliciesUpdateTypeLookup(t *testing.T) {
 			t.Errorf("exit %d, %d requests, stderr %q", r.exit, len(s.requests()), r.stderr)
 		}
 	})
-	t.Run("dry run cannot look up", func(t *testing.T) {
+	t.Run("dry run looks up and previews the full body", func(t *testing.T) {
 		withDryRun(t)
+		s := newMutServer(t, fixedReply(200, `{"policy":{"id":"pol1","policyType":"POLICY_TYPE_GRANT"}}`))
 		t.Setenv("C1I_URL", mutTestURL)
-		r := runMutationCLI(t, nil, 0, nil, "policies", "update", "pol1", "--steps-file", stepsFile(t))
-		if r.exit != exitUsage || r.stdout != "" {
-			t.Errorf("exit %d stdout %q, want exit 2 and nothing", r.exit, r.stdout)
+		r := runMutationCLI(t, s.srv, 0, nil, "policies", "update", "pol1", "--steps-file", stepsFile(t))
+		reqs := s.requests()
+		if r.err != nil || len(reqs) != 1 || reqs[0].method != http.MethodGet || !strings.Contains(r.stdout, `"grant"`) {
+			t.Errorf("exit %d err %v requests %v stdout %q, want one GET and a preview with the grant key", r.exit, r.err, reqs, r.stdout)
+		}
+	})
+	t.Run("dry run lookup 404 refuses like a real run", func(t *testing.T) {
+		withDryRun(t)
+		s := newMutServer(t, fixedReply(404, `{}`))
+		t.Setenv("C1I_URL", mutTestURL)
+		r := runMutationCLI(t, s.srv, 0, nil, "policies", "update", "pol1", "--steps-file", stepsFile(t))
+		if r.exit != exitNotFound || r.stdout != "" {
+			t.Errorf("exit %d stdout %q, want exit 4 and nothing", r.exit, r.stdout)
 		}
 	})
 }

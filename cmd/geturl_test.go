@@ -270,3 +270,41 @@ func TestRelativeHomeSkipsConfigFile(t *testing.T) {
 		t.Errorf("read url %q from the working directory's .c1i.yaml", got)
 	}
 }
+
+// TestGetBaseURLDropsDefaultHTTPSPort: :443 is the same tenant as no port, from
+// every source, so credential lookup and the request URL agree. A non-default
+// port stays.
+func TestGetBaseURLDropsDefaultHTTPSPort(t *testing.T) {
+	for _, tc := range []struct{ raw, want string }{
+		{"https://acme.example:443", "https://acme.example"},
+		{"https://acme.example:443/api/v1?x=1", "https://acme.example"},
+		{"https://acme.example:8443", "https://acme.example:8443"},
+	} {
+		t.Run("env "+tc.raw, func(t *testing.T) {
+			resetCmdFlags(t, rootCmd)
+			t.Setenv("C1I_URL", tc.raw)
+			if got, err := GetBaseURL(); err != nil || got != tc.want {
+				t.Errorf("GetBaseURL() = %q, %v; want %q", got, err, tc.want)
+			}
+		})
+		t.Run("flag "+tc.raw, func(t *testing.T) {
+			resetCmdFlags(t, rootCmd)
+			t.Setenv("C1I_URL", "")
+			if err := rootCmd.PersistentFlags().Set("url", tc.raw); err != nil {
+				t.Fatal(err)
+			}
+			if got, err := GetBaseURL(); err != nil || got != tc.want {
+				t.Errorf("GetBaseURL() = %q, %v; want %q", got, err, tc.want)
+			}
+		})
+		t.Run("config "+tc.raw, func(t *testing.T) {
+			resetCmdFlags(t, rootCmd)
+			t.Setenv("C1I_URL", "")
+			viper.Set("url", tc.raw)
+			t.Cleanup(func() { viper.Set("url", nil) })
+			if got, err := GetBaseURL(); err != nil || got != tc.want {
+				t.Errorf("GetBaseURL() = %q, %v; want %q", got, err, tc.want)
+			}
+		})
+	}
+}

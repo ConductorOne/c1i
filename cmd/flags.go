@@ -5,13 +5,149 @@ import (
 	"errors"
 	"fmt"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
 	"unicode"
 
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 )
+
+// kvOpt tunes parseKeyValueFlag.
+type kvOpt int
+
+// jsonKeyValues marks a flag whose pairs become JSON object entries, not HTTP
+// headers: values are unchecked and a key is refused only for control characters.
+const jsonKeyValues kvOpt = 1
+
+func isASCIIControl(r rune) bool { return r < 0x20 || r == 0x7f }
+
+// checkNoControl refuses a control character in text (tab too unless
+// allowTab). what is "name", "value" or "key"; subject, if set, is quoted. The
+// error gives the character and byte offset, never the text: it may be a secret.
+func checkNoControl(where, subject, what, text string, allowTab bool) error {
+	for at, r := range text {
+		if isASCIIControl(r) && (!allowTab || r != '\t') {
+			if subject != "" {
+				subject = fmt.Sprintf(" %q", subject)
+			}
+			return &usageError{fmt.Errorf("invalid %s%s: %s has control character U+%04X at byte %d", where, subject, what, r, at)}
+		}
+	}
+	return nil
+}
+
+// checkHeaderText is the one rule for text that becomes an HTTP header. A name
+// must be an RFC 9110 token (tchar only); a value refuses control characters
+// except tab (legal per RFC 9110). where names the source ("--header", or a
+// JSON path). Either may be a secret (`--header "Authorization: Bearer x"`), so
+// errors never echo the text; key, a name already checked, is quoted for a value.
+func checkHeaderText(where, key, text string, isName bool) error {
+	if !isName {
+		return checkNoControl(where, key, "value", text, true)
+	}
+	if err := checkNoControl(where, "", "name", text, false); err != nil {
+		return err
+	}
+	for at, r := range text {
+		if !isTokenChar(r) {
+			return &usageError{fmt.Errorf("invalid %s: name has invalid character U+%04X at byte %d (a header name is letters, digits and !#$%%&'*+-.^_`|~)", where, r, at)}
+		}
+	}
+	return nil
+}
+
+// isTokenChar reports whether r is an RFC 9110 tchar.
+func isTokenChar(r rune) bool {
+	return r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9' || r < 0x80 && strings.ContainsRune("!#$%&'*+-.^_`|~", r)
+}
+
+// headerTextAnnotation marks a single-value flag that becomes an HTTP header
+// name ("name") or value ("value"); validateHeaderFlags checks it centrally.
+const headerTextAnnotation = "c1i_header_text"
+
+// validateHeaderFlags applies checkHeaderText to every set flag annotated as a
+// header name or value, before any request or --dry-run preview.
+func validateHeaderFlags(cmd *cobra.Command) error {
+	var err error
+	cmd.Flags().VisitAll(func(f *pflag.Flag) {
+		a := f.Annotations[headerTextAnnotation]
+		if err != nil || !f.Changed || len(a) == 0 {
+			return
+		}
+		v := f.Value.String()
+		err = checkHeaderText("--"+f.Name, "", v, a[0] == "name")
+	})
+	return err
+}
+
+// pathFlagNames are the string flags that name a file or directory without the
+// "-file" suffix. TestEveryPathLikeFlagIsCovered fails on a path flag this misses.
+var pathFlagNames = map[string]bool{"output": true, "out-dir": true}
+
+// isPathFlag reports whether f names a file or directory ("-" is stdin/stdout).
+func isPathFlag(f *pflag.Flag) bool {
+	return f.Value.Type() == "string" && (pathFlagNames[f.Name] || strings.HasSuffix(f.Name, "-file"))
+}
+
+// validatePathFlags refuses a set path flag holding a control character: it
+// would create or read a file whose name carries a newline, silently.
+func validatePathFlags(cmd *cobra.Command) error {
+	var err error
+	cmd.Flags().VisitAll(func(f *pflag.Flag) {
+		if err != nil || !f.Changed || !isPathFlag(f) {
+			return
+		}
+		err = checkNoControl("--"+f.Name, "", "path", f.Value.String(), false)
+	})
+	return err
+}
+
+// cutKeyValue splits one "key=value" occurrence of flagName. The error never
+// echoes the input: a mistyped pair can be a secret (a token missing its "=").
+func cutKeyValue(flagName, p string) (string, string, error) {
+	k, v, ok := strings.Cut(p, "=")
+	switch {
+	case !ok:
+		return "", "", &usageError{fmt.Errorf(`invalid --%s: expected key=value, but a value has no "="`, flagName)}
+	case k == "":
+		return "", "", &usageError{fmt.Errorf("invalid --%s: expected key=value, but a key is empty", flagName)}
+	}
+	return k, v, nil
+}
+
+// parseKeyValueFlag parses repeated "key=value" flag values into a map. flagName
+// only makes errors point at the offending flag.
+func parseKeyValueFlag(pairs []string, flagName string, opts ...kvOpt) (map[string]string, error) {
+	if len(pairs) == 0 {
+		return nil, nil
+	}
+	m := make(map[string]string, len(pairs))
+	jsonPairs := slices.Contains(opts, jsonKeyValues)
+	for _, p := range pairs {
+		k, v, err := cutKeyValue(flagName, p)
+		if err != nil {
+			return nil, err
+		}
+		if jsonPairs {
+			if err := checkNoControl("--"+flagName, "", "key", k, false); err != nil {
+				return nil, err
+			}
+			m[k] = v
+			continue
+		}
+		if err := checkHeaderText("--"+flagName, "", k, true); err != nil {
+			return nil, err
+		}
+		if err := checkHeaderText("--"+flagName, k, v, false); err != nil {
+			return nil, err
+		}
+		m[k] = v
+	}
+	return m, nil
+}
 
 // markRequired marks a flag as required AND appends "(required)" to its
 // help description. Cobra's MarkFlagRequired enforces presence at runtime
@@ -493,25 +629,39 @@ func scopedRowID(parts ...string) string {
 }
 
 // requireNonEmpty errors when any named string flag is unset or blank. Use it
-// only for annotateRequired flags, which cobra does not presence-check; a SET
-// blank required or id-shaped flag is already refused by validateBlankFlags.
+// only for flags the command itself requires (annotateRequired, or required in
+// one mode), which cobra does not presence-check; a SET blank required or
+// id-shaped flag is already refused by validateBlankFlags. An unset flag reads
+// like cobra's own missing-required-flag error; a given-but-blank one says so.
 // The error is a *usageError (exit 2); callers just `return err`.
 func requireNonEmpty(cmd *cobra.Command, names ...string) error {
-	var missing []string
+	var unset, blank []string
 	for _, n := range names {
 		v, _ := cmd.Flags().GetString(n)
-		if !hasVisibleRune(v) {
-			missing = append(missing, "--"+n)
+		if hasVisibleRune(v) {
+			continue
+		}
+		if cmd.Flags().Changed(n) {
+			blank = append(blank, "--"+n)
+		} else {
+			unset = append(unset, strconv.Quote(n))
 		}
 	}
-	switch len(missing) {
-	case 0:
-		return nil
-	case 1:
-		return &usageError{fmt.Errorf("flag %s requires a non-empty value", missing[0])}
-	default:
-		return &usageError{fmt.Errorf("flags %s require non-empty values", strings.Join(missing, ", "))}
+	var msgs []string
+	if len(unset) > 0 {
+		msgs = append(msgs, fmt.Sprintf("required flag(s) %s not set", strings.Join(unset, ", ")))
 	}
+	switch len(blank) {
+	case 0:
+	case 1:
+		msgs = append(msgs, fmt.Sprintf("flag %s requires a non-empty value", blank[0]))
+	default:
+		msgs = append(msgs, fmt.Sprintf("flags %s require non-empty values", strings.Join(blank, ", ")))
+	}
+	if len(msgs) == 0 {
+		return nil
+	}
+	return &usageError{errors.New(strings.Join(msgs, "; "))}
 }
 
 // displayNameRule is the one wording for every --display-name: blank exits 2

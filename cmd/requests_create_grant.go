@@ -16,7 +16,7 @@ func selfUserOpts(userID string) []mutationOpt {
 	if userID != "" {
 		return nil
 	}
-	return []mutationOpt{withPreRead(preRead{OnDryRun: true, Run: func(ctx context.Context, c *client.Client, m *mutation) ([]resolvedID, error) {
+	return []mutationOpt{withPreRead(preRead{Run: func(ctx context.Context, c *client.Client, m *mutation) ([]resolvedID, error) {
 		id, err := currentUserID(ctx, c)
 		if err != nil {
 			return nil, err

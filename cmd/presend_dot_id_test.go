@@ -131,7 +131,7 @@ func TestDottedBodyIDValuesStillAccepted(t *testing.T) {
 	t.Run("apps create preview", func(t *testing.T) {
 		t.Setenv("C1I_URL", mutTestURL)
 		withDryRun(t)
-		srv := newMutServer(t, fixedReply(200, `{}`))
+		srv := preReadServer(t)
 		res := runMutationCLI(t, srv.srv, 0, nil, "apps", "create", "--display-name", "x", "--grant-policy-id", "policy.with.dots")
 		if res.exit != 0 {
 			t.Fatalf("exit = %d, err = %v; want 0", res.exit, res.err)
@@ -139,8 +139,8 @@ func TestDottedBodyIDValuesStillAccepted(t *testing.T) {
 		if !strings.Contains(res.stdout, "policy.with.dots") {
 			t.Errorf("preview = %q, want the dotted policy id", res.stdout)
 		}
-		if got := srv.requests(); len(got) != 0 {
-			t.Errorf("requests sent: %v", got)
+		if got := nonGETRequests(srv); len(got) != 0 {
+			t.Errorf("writes sent: %v", got)
 		}
 	})
 

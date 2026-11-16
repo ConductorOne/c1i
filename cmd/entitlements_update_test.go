@@ -199,12 +199,14 @@ func TestEntitlementsUpdateEscapesBothIDs(t *testing.T) {
 }
 
 // TestEntitlementsUpdateDryRunSendsNothing pins that --dry-run previews the
-// wrapped body and never reaches the server.
+// wrapped body, reads the policy, and sends no write.
 func TestEntitlementsUpdateDryRunSendsNothing(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		t.Errorf("dry-run must not send, got %s %s", r.Method, r.URL.Path)
-	}))
-	t.Cleanup(srv.Close)
+	srv, requests := policyBindingServer(t, entitlementTestPolicies)
+	t.Cleanup(func() {
+		if got := countRequests(requests(), "POST "); got != 0 {
+			t.Errorf("dry-run sent %d write(s)", got)
+		}
+	})
 	out, err := runEntitlementsUpdate(t, srv, true, "ent-1", withAppID(map[string]string{"grant-policy-id": "pol-g"}))
 	if err != nil {
 		t.Fatalf("RunE: %v", err)
@@ -269,11 +271,13 @@ func TestEntitlementPolicyBindingValidation(t *testing.T) {
 		{name: "update emergency certify", args: with(upd, "--emergency-grant-policy-id", "cp"), wantErr: "it must be POLICY_TYPE_GRANT", wantLookups: 1},
 		{name: "update all right", args: with(upd, "--grant-policy-id", "gp", "--revoke-policy-id", "rp", "--certify-policy-id", "cp", "--emergency-grant-policy-id", "gp"), wantLookups: 3, wantPosts: 1},
 		{name: "update unbind not looked up", args: with(upd, "--unbind-policy", "emergency-grant"), wantPosts: 1},
-		{name: "update dry run", args: with(upd, "--grant-policy-id", "nope"), dryRun: true},
+		{name: "update dry run refuses like a real run", args: with(upd, "--grant-policy-id", "nope"), dryRun: true, wantErr: `--grant-policy-id "nope": no such policy`, wantLookups: 1},
+		{name: "update dry run looks up and sends nothing", args: with(upd, "--grant-policy-id", "gp"), dryRun: true, wantLookups: 1},
 		{name: "create missing", args: with(crt, "--revoke-policy-id", "nope"), wantErr: "no such policy", wantLookups: 1},
 		{name: "create emergency certify", args: with(crt, "--emergency-grant-policy-id", "cp"), wantErr: "it must be POLICY_TYPE_GRANT", wantLookups: 1},
 		{name: "create all right", args: with(crt, "--grant-policy-id", "gp", "--revoke-policy-id", "rp", "--certify-policy-id", "cp", "--emergency-grant-policy-id", "gp"), wantLookups: 3, wantPosts: 1},
-		{name: "create dry run", args: with(crt, "--grant-policy-id", "nope"), dryRun: true},
+		{name: "create dry run refuses like a real run", args: with(crt, "--grant-policy-id", "nope"), dryRun: true, wantErr: `--grant-policy-id "nope": no such policy`, wantLookups: 1},
+		{name: "create dry run looks up and sends nothing", args: with(crt, "--grant-policy-id", "gp"), dryRun: true, wantLookups: 1},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

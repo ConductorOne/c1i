@@ -22,8 +22,8 @@ exit 0.
 `c1i` resolves the tenant in this order: `--url`, `C1I_URL`, then `url:` in
 `~/.c1i.yaml` (never read with a relative `HOME`). It must be a full host —
 `example.conductor.one` or `example.c1eu.ai` (EU) — and `https` is
-required:
-a bare `example`, a non-https scheme, and a malformed host (an embedded space
+required. An explicit `:443` is dropped (another port is kept) and a path, query
+or fragment is ignored. A bare `example`, a non-https scheme, and a malformed host (an embedded space
 or control character, or a stray scheme like `://host`) are all usage errors
 (exit `2`) before any request is sent.
 Every command that resolves a C1 tenant URL prints a `Warning: no --url flag
@@ -315,7 +315,7 @@ APP_ID=$(c1i apps create --display-name "Example" | jq -er .id)
 |---|---|---|
 | 0 | success | — |
 | 1 | generic / unclassified error | inspect the message; on a write, read `applied` (a `--wait` timeout or failed stdout write is `true`) before retrying |
-| 2 | usage error (bad flags/args, an empty, `.` or `..` id, a blank flag or positional, a missing, malformed, `null` or wrong-shape `--*-file` input, a non-object element in an array `--*-file` or `--body-file`, a refused redirect (but `upgrade` and the `docs` commands exit `8`), or any API `4xx` other than `401`/`403`/`404`/`408`/`429`/`499`) | fix the invocation, don't retry as-is — but read the message first: an API `4xx` can also be a state rejection (e.g. `task is closed`) rather than a bad argument |
+| 2 | usage error (bad flags/args, an empty, `.` or `..` id, a blank flag or positional, a control character in a path flag (`-o/--output`, `--out-dir`, `--*-file`) an invalid header name or a control character in a header value (`api --header`, MCP `--header-name`/`--header-value`/`--bearer-token`, and those fields plus `awsSigv4` `accessKeyId`/`sessionToken` in a `--*-config-file`, either JSON spelling), a control character in a `--config-field` key, a missing, malformed, `null` or wrong-shape `--*-file` input, a non-object element in an array `--*-file` or `--body-file`, a refused redirect (but `upgrade` and the `docs` commands exit `8`), or any API `4xx` other than `401`/`403`/`404`/`408`/`429`/`499`) | fix the invocation, don't retry as-is — but read the message first: an API `4xx` can also be a state rejection (e.g. `task is closed`) rather than a bad argument |
 | 3 | not authenticated, or API `401`/`403` | re-authenticate (`c1i auth login`); a scoped credential needs a role that covers the call |
 | 4 | API `404` | stop — the resource/path doesn't exist |
 | 5 | API `429` | back off and retry |
@@ -389,7 +389,9 @@ password and secret-named parameters) print as `[redacted]`, a non-JSON body as
 without) and refuses an empty, `.` or `..` id (exit 2) as a real send does —
 including one carried only in a request body (`--grant-policy-id`,
 `--owner-id`, ...), so the preview cannot print a value a send would refuse. It
-needs no credentials unless c1i must look something up for an exact body: a
+needs no credentials unless c1i must look something up (reads only; a preview
+sends no write): the pre-send existence checks (user and policy ids, `policies
+update`'s current type), which refuse as a real run does, a
 task action's current policy step without `--policy-step-id`, a hosted MCP
 server's catalog id (`mcp servers update-credentials` without `--catalog-id`), or the caller for
 `requests create` without `--user-id`. `mcp gateway call` rejects it: c1i
@@ -526,6 +528,7 @@ resource with `--resource-id` likewise means you drop
   pure NDJSON, and a timeout exits `1` printing no rows. `--wait` fetches every
   page on every poll regardless of `--limit`, which only truncates what is
   printed, and it is mutually exclusive with `--page-token`.
+- A `--wait-*` flag (`--wait-timeout`, `--wait-stable`, `--wait-min`) given without `--wait` exits `2` (an explicit `--wait=false` is accepted).
 - `--wait-stable` counts consecutive identical reads (default `3`, minimum
   `2`). Two is not enough: a pause mid-change is indistinguishable from
   completion. Three is a heuristic, not a proof -- size it past the longest
@@ -557,8 +560,8 @@ resource with `--resource-id` likewise means you drop
   `state`. The same holds for `restart`, `reset`, `skip-step`, `process` and
   `update-grant-duration`. `reassign` looks up each `--to-user-id` before
   sending: an unknown user exits 2, because the API stores it as the step's
-  approver (`--dry-run` skips that lookup, so a preview proves nothing about
-  the ids). A repeated id is sent once. Recover a step that already names a bad
+  approver (`--dry-run` looks them up too, so a preview refuses what a real run
+  does). A repeated id is sent once. Recover a step that already names a bad
   approver by re-running `reassign` with valid ids; a system owner can also
   `reset`/`restart` where the task offers them.
 - Which actions a task accepts depends on its state, and the server refuses the

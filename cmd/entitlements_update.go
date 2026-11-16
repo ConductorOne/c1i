@@ -28,8 +28,8 @@ name an existing, undeleted policy of the slot's type, or the command exits 2.
 when the same call enables emergency grants, and otherwise stores any id, so
 this command checks it on every bind. Unbind a slot with the repeatable
 --unbind-policy grant|revoke|certify|emergency-grant; an empty policy id is a
-usage error, so an unset shell variable cannot unbind one. --dry-run skips the
-check.
+usage error, so an unset shell variable cannot unbind one. --dry-run does the
+check too.
 
 --emergency-grant-enabled=true needs --emergency-grant-policy-id in the same
 call, even when the entitlement already has one stored; the server refuses it
@@ -70,7 +70,7 @@ Example:
 
 		path := client.Path("/api/v1/apps/%s/entitlements/%s", appID, id)
 		return sendMutation(cmd, mutation{Method: http.MethodPost, Path: path, Body: body},
-			withPreRead(policyBindingsCheck(cmd, entitlementPolicyKinds)))
+			withPolicyBindingsCheck(cmd, entitlementPolicyKinds))
 	},
 }
 

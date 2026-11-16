@@ -88,7 +88,11 @@ func TestParseKeyValues(t *testing.T) {
 			t.Fatalf("setting --config-field: %v", err)
 		}
 	}
-	got, err := parseKeyValues(cmd, "config-field")
+	pairs, err := repeatableStringFlag(cmd, "config-field")
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := parseKeyValueFlag(pairs, "config-field")
 	if err != nil {
 		t.Fatalf("parseKeyValues: %v", err)
 	}
@@ -102,7 +106,11 @@ func TestParseKeyValues(t *testing.T) {
 	if err := bad.Flags().Set("config-field", "noequals"); err != nil {
 		t.Fatalf("setting --config-field: %v", err)
 	}
-	if _, err := parseKeyValues(bad, "config-field"); err == nil {
+	badPairs, err := repeatableStringFlag(bad, "config-field")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := parseKeyValueFlag(badPairs, "config-field"); err == nil {
 		t.Error("expected error for missing '='")
 	}
 }

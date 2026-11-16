@@ -87,14 +87,14 @@ Each --<kind>-policy-id is checked before the first create: it must name an
 existing, undeleted policy of the slot's type (a grant policy for
 --emergency-grant-policy-id), or the command exits 2 and creates nothing. An
 empty one is a usage error. Omitting one leaves that policy unset on the
-entitlement. --dry-run skips the check.
+entitlement. --dry-run does the check too.
 
 Assign owners inline with --owner-id: the create request carries
 appEntitlementOwnerIds, so no follow-up call is needed. An empty --owner-id is
 a usage error, not an owner quietly dropped. Each id is checked before the
 first create and must name an existing user, or the command exits 2 and
 creates nothing; the check is a user read, so a credential without read access
-exits 3, and --dry-run skips it. Owner provisioning is
+exits 3, --dry-run included. Owner provisioning is
 asynchronous — one measured create took 116s to read back on
 "GET /api/v1/apps/{app-id}/entitlements/{id}/ownerids".
 
@@ -130,8 +130,8 @@ Example:
 
 		// Both checks run before step 1: an unknown owner (or bad policy)
 		// otherwise fails at step 3, after the resource type and resource
-		// already exist. --dry-run skips the pre-reads.
-		opts := []mutationOpt{withPreRead(policyBindingsCheck(cmd, entitlementPolicyKinds))}
+		// already exist. --dry-run runs them too.
+		opts := []mutationOpt{withPolicyBindingsCheck(cmd, entitlementPolicyKinds)}
 		if len(plan.owners) > 0 {
 			opts = append(opts, withPreRead(existingUsersCheck("owner-id", plan.owners)))
 		}
