@@ -246,8 +246,10 @@ var reportFormatFlag = enumFlag{flag: "format", prefix: "ACCESS_REVIEW_REPORT_FO
 }}
 
 func init() {
-	accessReviewsCreateCmd.Flags().String("body-file", "", "Full CreateAccessReview request JSON object (required; file or \"-\" for stdin)")
-	accessReviewsUpdateCmd.Flags().String("body-file", "", "Partial AccessReview JSON object (required; file or \"-\" for stdin)")
+	accessReviewsCreateCmd.Flags().String("body-file", "", "Full CreateAccessReview request JSON object (file or \"-\" for stdin)")
+	annotateRequired(accessReviewsCreateCmd, "body-file")
+	accessReviewsUpdateCmd.Flags().String("body-file", "", "Partial AccessReview JSON object (file or \"-\" for stdin)")
+	annotateRequired(accessReviewsUpdateCmd, "body-file")
 	accessReviewsUpdateCmd.Flags().String("update-mask", "", "Comma-separated campaign fields to update")
 	setBlankHint(accessReviewsUpdateCmd, "update-mask", updateMaskBlankHint)
 	markRequired(accessReviewsUpdateCmd, "update-mask")

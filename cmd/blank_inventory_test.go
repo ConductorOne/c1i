@@ -195,7 +195,7 @@ func TestEmptyAllowedFlagsAcceptEmpty(t *testing.T) {
 var inventoryExtraArgs = map[string][]string{
 	"c1i api":                            {"--path=/api/v1/users"},
 	"c1i webhooks create":                {"--destination-url=https://hooks.example.com/x"},
-	"c1i policies create":                {"--policy-type=grant", "--allow-deny-all=true"},
+	"c1i policies create":                {"--display-name=x", "--policy-type=grant", "--allow-deny-all=true"},
 	"c1i requests create grant":          {"--user-id=u1"},
 	"c1i requests create revoke":         {"--user-id=u1"},
 	"c1i tasks reassign":                 {"--to-user-id=u2", "--policy-step-id=s1"},

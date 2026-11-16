@@ -94,6 +94,8 @@ var pathFlagNotPaths = map[string]string{
 	"c1i access-reviews reports generate --format": "help mentions --body-file; the value is a format name",
 	"c1i automations update --update-mask":         "help mentions --body-file; the value is a field mask",
 	"c1i policies update --update-mask":            "help mentions --body-file; the value is a field mask",
+	"c1i policies create --display-name":           "help mentions --body-file; the value is a name",
+	"c1i policies create --policy-type":            "help mentions --body-file; the value is a policy type",
 	"c1i mcp servers register --auth":              "help mentions a config file; the value is an auth mode",
 	"c1i mcp servers test-connection --auth":       "help mentions a config file; the value is an auth mode",
 	"c1i mcp servers update-credentials --auth":    "help mentions a config file; the value is an auth mode",

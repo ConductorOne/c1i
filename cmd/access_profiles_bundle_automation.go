@@ -170,6 +170,8 @@ func validateBundleAutomationBody(body map[string]any) error {
 func init() {
 	accessProfilesBundleAutomationCreateCmd.Flags().String("body-file", "", "Bundle automation JSON object (file, or \"-\" for stdin)")
 	accessProfilesBundleAutomationSetCmd.Flags().String("body-file", "", "Bundle automation JSON object (file, or \"-\" for stdin)")
+	annotateRequired(accessProfilesBundleAutomationCreateCmd, "body-file")
+	annotateRequired(accessProfilesBundleAutomationSetCmd, "body-file")
 	accessProfilesBundleAutomationRunCmd.Flags().String("refs-file", "", "JSON array of AppEntitlementRef objects to run (file, or \"-\" for stdin)")
 	allowEmpty(accessProfilesBundleAutomationRunCmd, emptyIsOmitted, "refs-file")
 

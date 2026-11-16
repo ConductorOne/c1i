@@ -42,6 +42,13 @@ still needs none.
 
 ### Fixed
 
+- `--help` now marks "(required)" on `--body-file`, `--refs-file` and
+  `--entitlement-id` of every command that demands them at run time, such as
+  `findings create`, `role-mining config update`, `mcp classifiers create`,
+  `access-reviews create` and `access-profiles requestable-entitlements add`.
+  `policies create` no longer claims `--display-name` and `--policy-type` are
+  plain "(required)"; they are "(required unless --body-file)". Behavior is
+  unchanged.
 - `--debug` traces, transport, redirect, API and path-guard errors, partial-result
   and `INCOMPLETE` notices, and the unbuildable-request, `--path`, `--url` and
   `--destination-url` errors printed the request URL or path verbatim, so a

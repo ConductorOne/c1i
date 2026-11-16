@@ -147,6 +147,7 @@ func newFindingRulesCmd(name, short, path, key string, row listRowFn) *cobra.Com
 	}}
 	for _, command := range []*cobra.Command{create, update} {
 		command.Flags().String("body-file", "", "JSON resource object file (or \"-\" for stdin)")
+		annotateRequired(command, "body-file")
 	}
 	for _, command := range []*cobra.Command{create, update, deleteCmd} {
 		markMutating(command)
@@ -417,6 +418,9 @@ func init() {
 	for _, command := range []*cobra.Command{findingsSearchCmd, findingsCreateCmd, findingsStateCmd, findingsAssigneeCmd, findingsBulkStateCmd, findingsBulkCreateTasksCmd, findingsAuditsSearchCmd, findingsShadowMCPOccurrencesSearchCmd} {
 		command.Flags().String("body-file", "", "JSON request object file (or \"-\" for stdin)")
 	}
+	for _, command := range []*cobra.Command{findingsCreateCmd, findingsStateCmd, findingsAssigneeCmd, findingsBulkStateCmd, findingsBulkCreateTasksCmd, findingsShadowMCPOccurrencesSearchCmd} {
+		annotateRequired(command, "body-file")
+	}
 	addPaginationFlags(findingsSearchCmd)
 	addPaginationFlags(findingsAuditsSearchCmd)
 	addPaginationFlags(findingsShadowMCPOccurrencesSearchCmd)
@@ -425,6 +429,7 @@ func init() {
 	}
 	findingsCreateTaskCmd.Flags().String("policy-id", "", "Optional remediation policy ID")
 	findingsSettingsUpdateCmd.Flags().String("body-file", "", "JSON request object file (or \"-\" for stdin)")
+	annotateRequired(findingsSettingsUpdateCmd, "body-file")
 	findingsSettingsCmd.AddCommand(findingsSettingsShowCmd, findingsSettingsUpdateCmd)
 	findingsAuditsCmd.AddCommand(findingsAuditsSearchCmd)
 	findingsShadowMCPOccurrencesCmd.AddCommand(findingsShadowMCPOccurrencesSearchCmd)
