@@ -205,33 +205,27 @@ func sendMutationSequence(cmd *cobra.Command, steps []mutationStep, note string,
 	if err != nil {
 		return notApplied(err)
 	}
+	// Every step's request is built and checked before step 1 is sent, with
+	// placeholder ids; --dry-run previews these same requests.
 	probeIDs := make([]string, 0, len(steps))
+	reqs := make([]previewRequest, 0, len(steps))
+	var placeholders []string
 	for _, s := range steps {
-		if err := checkMutationPath(baseURL, s.Build(probeIDs)); err != nil {
+		req, err := prepareMutation(baseURL, s.Build(probeIDs))
+		if err != nil {
 			return notApplied(err)
 		}
+		reqs = append(reqs, req)
 		probeIDs = append(probeIDs, s.Placeholder)
+		if s.Placeholder != "" {
+			placeholders = append(placeholders, s.Placeholder)
+		}
 	}
 	c, err := runPreReads(cmd, baseURL, nil, o)
 	if err != nil {
 		return notApplied(err)
 	}
 	if dryRunActive() {
-		ids := make([]string, 0, len(steps))
-		var reqs []previewRequest
-		var placeholders []string
-		for _, s := range steps {
-			m := s.Build(ids)
-			req, err := prepareMutation(baseURL, m)
-			if err != nil {
-				return notApplied(err)
-			}
-			reqs = append(reqs, req)
-			ids = append(ids, s.Placeholder)
-			if s.Placeholder != "" {
-				placeholders = append(placeholders, s.Placeholder)
-			}
-		}
 		if err := writeMutationPreview(cmd, baseURL, reqs); err != nil {
 			return notApplied(err)
 		}
