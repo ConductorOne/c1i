@@ -12,6 +12,7 @@ import (
 	"testing"
 
 	"github.com/ConductorOne/c1i/internal/client"
+	"github.com/ConductorOne/c1i/internal/testenv"
 	"github.com/spf13/cobra"
 )
 
@@ -185,12 +186,11 @@ func runCLI(t *testing.T, stub func(), out io.Writer, args ...string) mutResult 
 	return mutResult{stdout: stdout.String(), stderr: stderr.String(), exit: exitCode(err), err: err}
 }
 
-// closedPortServer returns a server whose URL refuses connections. Port 1 is
-// privileged, so no test process can bind it; a closed ephemeral port could be
-// reused by a concurrent run and answer with EOF instead of a dial error.
+// closedPortServer returns a server whose URL refuses connections
+// (testenv.DeadURL).
 func closedPortServer(t *testing.T) *httptest.Server {
 	t.Helper()
-	return &httptest.Server{URL: "http://127.0.0.1:1"}
+	return &httptest.Server{URL: testenv.DeadURL}
 }
 
 func indentJSON(t *testing.T, compact string) string {

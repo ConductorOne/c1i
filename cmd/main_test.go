@@ -4,13 +4,9 @@ import (
 	"os"
 	"testing"
 
-	"github.com/zalando/go-keyring"
+	"github.com/ConductorOne/c1i/internal/testenv"
 )
 
-// TestMain swaps in go-keyring's in-memory mock for the whole package: it is
-// process-global with no reset, so setting it per test would make keyring
-// state depend on test order.
-func TestMain(m *testing.M) {
-	keyring.MockInit()
-	os.Exit(m.Run())
-}
+// TestMain isolates HOME/config dirs, C1I_* and the keyring (see testenv.Run)
+// so no test can reach the developer's real config or credentials.
+func TestMain(m *testing.M) { os.Exit(testenv.Run(m)) }

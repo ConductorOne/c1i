@@ -25,6 +25,7 @@ var allowedRootFiles = map[string]bool{
 	"go.mod":                  true,
 	"go.sum":                  true,
 	"main.go":                 true,
+	"main_test.go":            true,
 	"repo_root_files_test.go": true,
 }
 

@@ -3,12 +3,14 @@ package transport
 import (
 	"context"
 	"errors"
-	"net"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/ConductorOne/c1i/internal/testenv"
 )
 
 func doMethod(t *testing.T, c *Client, ctx context.Context, method, url string) (*Response, error) {
@@ -69,15 +71,8 @@ func attemptErr(t *testing.T, err error) *AttemptError {
 
 func TestDo_DialErrorIsNotSent(t *testing.T) {
 	deterministicBackoff(t)
-	ln, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		t.Fatal(err)
-	}
-	addr := ln.Addr().String()
-	_ = ln.Close()
-
 	c := New(http.DefaultTransport, WithMaxRetries(1))
-	_, err = doMethod(t, c, context.Background(), http.MethodDelete, "http://"+addr+"/api/v1/x")
+	_, err := doMethod(t, c, context.Background(), http.MethodDelete, testenv.DeadURL+"/api/v1/x")
 	ae := attemptErr(t, err)
 	if ae.Sent || ae.PriorSent {
 		t.Errorf("Sent=%v PriorSent=%v, want both false for a refused dial", ae.Sent, ae.PriorSent)
@@ -131,10 +126,17 @@ func TestDo_DialFailureAfterSentAttemptKeepsPriorSent(t *testing.T) {
 		go srv.CloseClientConnections()
 	}))
 	url := srv.URL
-	c := newTestClient(srv, 1)
-	// Close the listener after the first response so the retry cannot dial.
-	origSleep := sleepFn
-	sleepFn = func(ctx context.Context, d time.Duration) error { srv.Close(); return origSleep(ctx, 0) }
+	t.Cleanup(srv.Close)
+	// Redirect the retry to a dead port: closing srv would free its port for
+	// another process to bind.
+	var calls int
+	c := New(roundTripFunc(func(r *http.Request) (*http.Response, error) {
+		if calls++; calls > 1 {
+			r = r.Clone(r.Context())
+			r.URL.Host = strings.TrimPrefix(testenv.DeadURL, "http://")
+		}
+		return srv.Client().Transport.RoundTrip(r)
+	}), WithMaxRetries(1))
 	_, err := doMethod(t, c, context.Background(), http.MethodDelete, url+"/api/v1/x")
 	ae := attemptErr(t, err)
 	if ae.Sent || !ae.PriorSent {
@@ -163,3 +165,7 @@ func TestCheckPath(t *testing.T) {
 		t.Errorf("CheckPath on a good path = %v", err)
 	}
 }
+
+type roundTripFunc func(*http.Request) (*http.Response, error)
+
+func (f roundTripFunc) RoundTrip(r *http.Request) (*http.Response, error) { return f(r) }
