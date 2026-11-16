@@ -112,7 +112,9 @@ or parsed exits 2 naming the file, even with `--url` (a missing one is fine; `do
 `--error-format json` is the one worth setting by default if you parse
 failures: stderr becomes NDJSON. Error objects carry `"error"` (select them
 with `jq 'select(.error)'`) plus `status`, `method`, `path`, and the response
-`body` when the failure came from the API; notices carry `"notice"` and a `"kind"` (such as `dryRun`), `--wait`
+`body` when the failure came from the API (masked: a secret-named parameter or field
+value is replaced by `[redacted]` where it sits in a value position, every other byte as
+sent; a whole-JSON body with a mask is re-encoded compactly, one with nothing masked is unchanged; if a secret cannot be placed in the original bytes, the body falls back to its decoded text with every secret masked); notices carry `"notice"` and a `"kind"` (such as `dryRun`), `--wait`
 progress `"progress"`, and `--debug` lines `"debug"`. A write command's error
 also carries `"applied"`: `true`, `false`, or `"unknown"` (the request may
 have reached the server, including when a retried attempt was sent before the

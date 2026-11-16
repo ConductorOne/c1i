@@ -31,7 +31,7 @@ func (e *APIError) Error() string {
 	if e.Body == "" {
 		return fmt.Sprintf("API %s %s returned %d", e.Method, redact.Path(e.Path), e.StatusCode)
 	}
-	return fmt.Sprintf("API %s %s returned %d: %s", e.Method, redact.Path(e.Path), e.StatusCode, e.Body)
+	return fmt.Sprintf("API %s %s returned %d: %s", e.Method, redact.Path(e.Path), e.StatusCode, redact.Body(e.Body))
 }
 
 // PathError is returned when a request's path contains an empty segment (a

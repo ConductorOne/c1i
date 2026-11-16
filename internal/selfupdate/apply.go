@@ -16,6 +16,8 @@ import (
 	"path"
 	"path/filepath"
 	"strings"
+
+	"github.com/ConductorOne/c1i/internal/redact"
 )
 
 // FetchBinary downloads asset, verifies its sha256, and returns the c1i
@@ -41,7 +43,7 @@ func (c *Client) download(ctx context.Context, url string) ([]byte, error) {
 	}
 	// The Doer may not be size-bounded.
 	if len(body) > MaxArtifactBytes {
-		return nil, fmt.Errorf("downloading %s: artifact exceeds %d bytes", url, MaxArtifactBytes)
+		return nil, fmt.Errorf("downloading %s: artifact exceeds %d bytes", redact.URL(url), MaxArtifactBytes)
 	}
 	return body, nil
 }

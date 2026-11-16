@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 
+	"github.com/ConductorOne/c1i/internal/redact"
 	"github.com/ConductorOne/c1i/internal/transport"
 	"github.com/spf13/cobra"
 )
@@ -43,7 +44,7 @@ func postDocs(cmd *cobra.Command, url string, payload any, what string) ([]byte,
 		return nil, externalServiceError(err, "%s request failed", what)
 	}
 	if resp.StatusCode != http.StatusOK {
-		return nil, externalServiceError(fmt.Errorf("HTTP %d: %s", resp.StatusCode, resp.Body), "%s API failed", what)
+		return nil, externalServiceError(fmt.Errorf("HTTP %d: %s", resp.StatusCode, redact.Body(string(resp.Body))), "%s API failed", what)
 	}
 	return resp.Body, nil
 }

@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/ConductorOne/c1i/internal/client"
+	"github.com/ConductorOne/c1i/internal/redact"
 	"github.com/ConductorOne/c1i/internal/tokensource"
 	"github.com/ConductorOne/c1i/internal/transport"
 )
@@ -188,7 +189,7 @@ func PollForToken(ctx context.Context, baseURL string, code *DeviceCode, opts ..
 			if detail == "" {
 				detail = errResp.Error
 			}
-			return "", &client.AuthError{Err: fmt.Errorf("authorization failed: %s", detail)}
+			return "", &client.AuthError{Err: fmt.Errorf("authorization failed: %s", redact.Text(detail))}
 		}
 
 		var tokenResp struct {

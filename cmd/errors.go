@@ -366,7 +366,7 @@ func errorObject(err error) map[string]any {
 		obj["method"] = apiErr.Method
 		obj["path"] = redact.Path(apiErr.Path)
 		if apiErr.Body != "" {
-			obj["body"] = rawJSONOrString(apiErr.Body)
+			obj["body"] = rawJSONOrString(redact.Body(apiErr.Body))
 		}
 	}
 	return obj

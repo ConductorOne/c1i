@@ -14,6 +14,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/ConductorOne/c1i/internal/redact"
 	"github.com/ConductorOne/c1i/internal/transport"
 	"github.com/sigstore/sigstore-go/pkg/root"
 )
@@ -91,17 +92,18 @@ func (c *Client) downloadDoer() Doer {
 func (c *Client) validateURL(raw string) error {
 	u, err := url.Parse(raw)
 	if err != nil {
-		return fmt.Errorf("invalid URL %q: %w", raw, err)
+		redact.ErrorURL(err)
+		return fmt.Errorf("invalid URL %q: %w", redact.URL(raw), err)
 	}
 	if !strings.EqualFold(u.Scheme, "https") {
-		return fmt.Errorf("refusing to fetch non-https URL %q", raw)
+		return fmt.Errorf("refusing to fetch non-https URL %q", redact.URL(raw))
 	}
 	base, err := url.Parse(c.baseURL())
 	if err != nil {
 		return fmt.Errorf("invalid base URL %q: %w", c.baseURL(), err)
 	}
 	if !strings.EqualFold(u.Host, base.Host) {
-		return fmt.Errorf("refusing to fetch off-host URL %q (expected host %q)", raw, base.Host)
+		return fmt.Errorf("refusing to fetch off-host URL %q (expected host %q)", redact.URL(raw), base.Host)
 	}
 	return nil
 }
@@ -136,7 +138,7 @@ func (c *Client) ManifestRaw(ctx context.Context, url string) (*Manifest, []byte
 	}
 	var m Manifest
 	if err := json.Unmarshal(raw, &m); err != nil {
-		return nil, nil, fmt.Errorf("parsing %s: %w", url, err)
+		return nil, nil, fmt.Errorf("parsing %s: %w", redact.URL(url), err)
 	}
 	return &m, raw, nil
 }
@@ -153,7 +155,7 @@ func (c *Client) getJSON(ctx context.Context, url string, out any) error {
 		return err
 	}
 	if err := json.Unmarshal(raw, out); err != nil {
-		return fmt.Errorf("parsing %s: %w", url, err)
+		return fmt.Errorf("parsing %s: %w", redact.URL(url), err)
 	}
 	return nil
 }
@@ -165,7 +167,7 @@ func (c *Client) getJSONBytes(ctx context.Context, url string) ([]byte, error) {
 	}
 	// dist answers a path with no object with its HTML app shell and a 200.
 	if ct := header.Get("Content-Type"); ct != "" && !strings.Contains(ct, "json") {
-		return nil, fmt.Errorf("fetching %s: expected JSON, got Content-Type %q (no such release object?)", url, ct)
+		return nil, fmt.Errorf("fetching %s: expected JSON, got Content-Type %q (no such release object?)", redact.URL(url), ct)
 	}
 	return body, nil
 }
@@ -182,7 +184,7 @@ func (c *Client) get(ctx context.Context, doer Doer, url string) ([]byte, http.H
 	}
 	resp, err := doer.Do(req)
 	if err != nil {
-		return nil, nil, fmt.Errorf("fetching %s: %w", url, err)
+		return nil, nil, fmt.Errorf("fetching %s: %w", redact.URL(url), err)
 	}
 	if resp.StatusCode != http.StatusOK {
 		return nil, nil, &transport.APIError{Method: req.Method, Path: req.URL.EscapedPath(), StatusCode: resp.StatusCode, Body: string(resp.Body)}
