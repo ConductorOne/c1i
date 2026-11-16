@@ -21,6 +21,7 @@ import (
 	"github.com/ConductorOne/c1i/internal/transport"
 	"github.com/sigstore/sigstore-go/pkg/root"
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 )
 
 // fakeDist is an httptest distribution center. files maps a path under /c1i
@@ -72,6 +73,8 @@ type release struct {
 	target, manifestSemver string
 	archive                []byte
 	sha                    string // manifest's sha256; the archive's when empty
+	href                   string // asset href; the fake dist's archive when empty
+	noSHA                  bool   // publish the asset with an empty sha256
 	unsigned               bool
 	// tamper rewrites the manifest after it is signed.
 	tamper func(m map[string]any)
@@ -79,16 +82,19 @@ type release struct {
 
 func (d *fakeDist) publish(t *testing.T, sig *fakeSigstore, r release) {
 	t.Helper()
-	if r.sha == "" {
+	if r.sha == "" && !r.noSHA {
 		sum := sha256.Sum256(r.archive)
 		r.sha = hex.EncodeToString(sum[:])
 	}
 	d.files["c1i.tar.gz"] = r.archive
+	if r.href == "" {
+		r.href = d.url("c1i.tar.gz")
+	}
 	manifest := map[string]any{
 		"semver":              r.manifestSemver,
 		"signatureBundleHref": d.url("manifest.json.sigstore.json"),
 		"assets": map[string]any{selfupdate.PlatformKey(): map[string]any{
-			"filename": "c1i.tar.gz", "sha256": r.sha, "href": d.url("c1i.tar.gz"),
+			"filename": "c1i.tar.gz", "sha256": r.sha, "href": r.href,
 		}},
 	}
 	raw, _ := json.Marshal(manifest)
@@ -583,5 +589,260 @@ func TestUpgradeChannelCompletesChannels(t *testing.T) {
 	want := "stable\nlatest\npreview\n:4\n" // 4 = ShellCompDirectiveNoFileComp
 	if got := out.String(); got != want {
 		t.Errorf("completions = %q, want %q", got, want)
+	}
+}
+
+type upgradePreviewOut struct {
+	DryRun   bool `json:"dryRun"`
+	Requests []struct{ Method, URL string }
+	Upgrade  map[string]any
+}
+
+// runUpgradeDryRun runs `upgrade --dry-run` and parses stdout as the one
+// preview document.
+func runUpgradeDryRun(t *testing.T, args ...string) (upgradePreviewOut, string, string) {
+	t.Helper()
+	withDryRun(t) // a sibling test can leave viper's dry_run pinned off
+	resetCmds(t, upgradeCmd)
+	resetCmdFlags(t, rootCmd)
+	var stdout, stderr bytes.Buffer
+	rootCmd.SetOut(&stdout)
+	rootCmd.SetErr(&stderr)
+	t.Cleanup(func() { rootCmd.SetOut(nil); rootCmd.SetErr(nil) })
+	upgradeCmd.SetContext(t.Context())
+	rootCmd.SetArgs(append([]string{"upgrade", "--dry-run"}, args...))
+	if err := rootCmd.ExecuteContext(t.Context()); err != nil {
+		t.Fatalf("upgrade --dry-run: %v", err)
+	}
+	var got upgradePreviewOut
+	if err := json.Unmarshal(stdout.Bytes(), &got); err != nil {
+		t.Fatalf("stdout is not one JSON object: %v\n%s", err, stdout.String())
+	}
+	if !got.DryRun || got.Requests == nil {
+		t.Errorf("preview = %+v, want dryRun and a requests array", got)
+	}
+	return got, stdout.String(), stderr.String()
+}
+
+// Every non-error --dry-run path prints the same document, with the --check
+// keys in .upgrade and the asset keys only when a standalone update is due.
+func TestUpgradeDryRunEveryPathPrintsJSON(t *testing.T) {
+	check := func(t *testing.T, got upgradePreviewOut, stderr string, want map[string]any, nReqs int) {
+		t.Helper()
+		if len(got.Requests) != nReqs {
+			t.Errorf("requests = %+v, want %d", got.Requests, nReqs)
+		}
+		for k, v := range want {
+			if got.Upgrade[k] != v {
+				t.Errorf("upgrade.%s = %v, want %v", k, got.Upgrade[k], v)
+			}
+		}
+		if len(got.Upgrade) != len(want) {
+			t.Errorf("upgrade keys = %v, want exactly %d", got.Upgrade, len(want))
+		}
+		if !strings.Contains(stderr, "dry run: nothing was installed") {
+			t.Errorf("stderr = %q, want the dry-run notice", stderr)
+		}
+	}
+	t.Run("standalone update", func(t *testing.T) {
+		sig, d := newFakeSigstore(t), newFakeDist(t)
+		archive := tarGz(t, []byte("NEW BINARY"))
+		d.publish(t, sig, release{target: "v0.7.0", manifestSemver: "v0.7.0", archive: archive})
+		exe := useDist(t, d, sig.root, "v0.6.0")
+		got, out, stderr := runUpgradeDryRun(t)
+		sum := sha256.Sum256(archive)
+		check(t, got, stderr, map[string]any{
+			"current": "v0.6.0", "latest": "v0.7.0", "channel": "stable", "update_available": true,
+			"install_method": "standalone", "asset_url": d.url("c1i.tar.gz"),
+			"sha256": hex.EncodeToString(sum[:]), "destination": exe,
+		}, 1)
+		if got.Requests[0].Method != "GET" || got.Requests[0].URL != d.url("c1i.tar.gz") {
+			t.Errorf("requests = %+v, want one GET of the asset", got.Requests)
+		}
+		if strings.Contains(out, "[dry-run]") {
+			t.Errorf("stdout carries text lines: %s", out)
+		}
+		if b := readFile(t, exe); b != "OLD BINARY" {
+			t.Errorf("binary = %q; --dry-run must not replace it", b)
+		}
+	})
+	t.Run("already current", func(t *testing.T) {
+		d := newFakeDist(t)
+		publishIndex(t, d, idxStable06Latest07)
+		useDist(t, d, nil, "v0.7.0")
+		got, _, stderr := runUpgradeDryRun(t, "--channel", "latest")
+		check(t, got, stderr, map[string]any{"current": "v0.7.0", "latest": "v0.7.0", "channel": "latest", "update_available": false, "install_method": "standalone"}, 0)
+	})
+	t.Run("newer than channel", func(t *testing.T) {
+		d := newFakeDist(t)
+		publishIndex(t, d, idxStable06Latest07)
+		useDist(t, d, nil, "v0.9.0")
+		got, _, stderr := runUpgradeDryRun(t)
+		check(t, got, stderr, map[string]any{"current": "v0.9.0", "latest": "v0.6.0", "channel": "stable", "update_available": false, "install_method": "standalone"}, 0)
+	})
+	t.Run("development build", func(t *testing.T) {
+		d := newFakeDist(t)
+		publishIndex(t, d, idxStable06Latest07)
+		useDist(t, d, nil, "dev")
+		got, _, stderr := runUpgradeDryRun(t)
+		check(t, got, stderr, map[string]any{"current": "dev", "latest": "v0.6.0", "channel": "stable", "update_available": false, "install_method": "standalone"}, 0)
+	})
+	t.Run("not standalone", func(t *testing.T) {
+		d := newFakeDist(t)
+		publishIndex(t, d, idxStable06Latest07)
+		useDist(t, d, nil, "v0.5.0")
+		upgradeExecutable = func() (string, error) { return "/opt/homebrew/Cellar/c1i/0.5.0/bin/c1i", nil }
+		got, _, stderr := runUpgradeDryRun(t)
+		cmdText, _ := got.Upgrade["upgrade_command"].(string)
+		if cmdText == "" {
+			t.Errorf("upgrade = %v, want an upgrade_command", got.Upgrade)
+		}
+		check(t, got, stderr, map[string]any{"current": "v0.5.0", "latest": "v0.6.0", "channel": "stable", "update_available": true, "install_method": "homebrew", "upgrade_command": cmdText}, 0)
+	})
+}
+
+// The preview masks credentials in the download URL both in requests[] and in
+// .upgrade, whatever the writer is handed.
+func TestUpgradeDryRunRedactsAssetURL(t *testing.T) {
+	sig, d := newFakeSigstore(t), newFakeDist(t)
+	href := "https://user:hunter2@dl.example.invalid/c1i.tar.gz?X-Amz-Signature=sigsecret&X-Amz-Credential=credsecret&token=tok123&keep=ok"
+	d.publish(t, sig, release{target: "v0.7.0", manifestSemver: "v0.7.0", archive: tarGz(t, []byte("NEW")), href: href})
+	useDist(t, d, sig.root, "v0.6.0")
+	got, out, _ := runUpgradeDryRun(t)
+	for _, secret := range []string{"hunter2", "sigsecret", "credsecret", "tok123"} {
+		if strings.Contains(out, secret) {
+			t.Errorf("preview leaks %q:\n%s", secret, out)
+		}
+	}
+	for name, u := range map[string]string{"requests[0].url": got.Requests[0].URL, "upgrade.asset_url": got.Upgrade["asset_url"].(string)} {
+		if !strings.Contains(u, "[redacted]") || !strings.Contains(u, "keep=ok") {
+			t.Errorf("%s = %q, want masked secrets and the plain parameter kept", name, u)
+		}
+	}
+}
+
+// --fields never applies to a preview or a real run; --check still takes it.
+func TestUpgradeRefusesFieldsOutsideCheck(t *testing.T) {
+	for _, args := range [][]string{{"--dry-run", "--fields", "upgrade"}, {"-y", "--fields", "upgrade"}} {
+		d := newFakeDist(t)
+		publishIndex(t, d, idxStable06Latest07)
+		useDist(t, d, nil, "v0.7.0")
+		resetCmds(t, upgradeCmd)
+		resetCmdFlags(t, rootCmd)
+		var out bytes.Buffer
+		rootCmd.SetOut(&out)
+		rootCmd.SetErr(&out)
+		t.Cleanup(func() { rootCmd.SetOut(nil); rootCmd.SetErr(nil) })
+		upgradeCmd.SetContext(t.Context())
+		rootCmd.SetArgs(append([]string{"upgrade"}, args...))
+		err := rootCmd.ExecuteContext(t.Context())
+		if err == nil || exitCode(err) != exitUsage {
+			t.Errorf("upgrade %v: error %v (exit %d), want a usage error", args, err, exitCode(err))
+		}
+	}
+}
+
+// runUpgradeRaw runs `upgrade args...` with separate stdout and stderr.
+func runUpgradeRaw(t *testing.T, args ...string) (stdout, stderr string, err error) {
+	t.Helper()
+	resetCmds(t, upgradeCmd)
+	resetCmdFlags(t, rootCmd)
+	var o, e bytes.Buffer
+	rootCmd.SetOut(&o)
+	rootCmd.SetErr(&e)
+	t.Cleanup(func() { rootCmd.SetOut(nil); rootCmd.SetErr(nil) })
+	upgradeCmd.SetContext(t.Context())
+	rootCmd.SetArgs(append([]string{"upgrade"}, args...))
+	err = rootCmd.ExecuteContext(t.Context())
+	return o.String(), e.String(), err
+}
+
+// --check wins over --dry-run (flag or env): the bare report, no dryRun key,
+// no notice, and --fields honoured.
+func TestUpgradeCheckWinsOverDryRun(t *testing.T) {
+	d := newFakeDist(t)
+	publishIndex(t, d, idxStable06Latest07)
+	useDist(t, d, nil, "v0.5.0")
+	for name, setup := range map[string]func(){
+		"flag": func() {},
+		"env":  func() { withDryRun(t) },
+	} {
+		t.Run(name, func(t *testing.T) {
+			setup()
+			args := []string{"--check"}
+			if name == "flag" {
+				args = append(args, "--dry-run")
+			}
+			out, errOut, err := runUpgradeRaw(t, args...)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if strings.Contains(out, "dryRun") || strings.Contains(errOut, "dry run") {
+				t.Errorf("--check printed a preview: stdout %q stderr %q", out, errOut)
+			}
+			var rep map[string]any
+			if err := json.Unmarshal([]byte(out), &rep); err != nil || rep["update_available"] != true {
+				t.Errorf("stdout = %q (%v), want the --check report", out, err)
+			}
+			viper.Set("fields", "current") // as --fields / C1I_FIELDS resolve
+			t.Cleanup(func() { viper.Set("fields", "") })
+			out, _, err = runUpgradeRaw(t, args...)
+			if err != nil || strings.TrimSpace(out) != "{\n  \"current\": \"v0.5.0\"\n}" {
+				t.Errorf("--fields not honoured: %q (%v)", out, err)
+			}
+		})
+	}
+}
+
+// A preview refuses an asset a real run refuses, with the same error and exit.
+func TestUpgradeDryRunRefusesWhatARealRunRefuses(t *testing.T) {
+	sig, d := newFakeSigstore(t), newFakeDist(t)
+	d.publish(t, sig, release{target: "v0.7.0", manifestSemver: "v0.7.0", archive: tarGz(t, []byte("NEW")), noSHA: true})
+	exe := useDist(t, d, sig.root, "v0.6.0")
+	_, _, realErr := runUpgradeRaw(t, "-y")
+	withDryRun(t)
+	out, _, dryErr := runUpgradeRaw(t, "--dry-run")
+	if realErr == nil || !strings.Contains(realErr.Error(), "manifest asset has no sha256") {
+		t.Fatalf("real run error = %v, want the missing-sha256 refusal", realErr)
+	}
+	if dryErr == nil || dryErr.Error() != realErr.Error() || exitCode(dryErr) != exitCode(realErr) {
+		t.Errorf("preview error = %v (exit %d), want %v (exit %d)", dryErr, exitCode(dryErr), realErr, exitCode(realErr))
+	}
+	if out != "" {
+		t.Errorf("preview printed %q before refusing", out)
+	}
+	if b := readFile(t, exe); b != "OLD BINARY" {
+		t.Errorf("binary = %q", b)
+	}
+}
+
+// The --check bytes are shipped: key order and layout are pinned.
+func TestUpgradeCheckExactBytes(t *testing.T) {
+	const want = "{\n  \"channel\": \"stable\",\n  \"current\": \"v0.5.0\",\n  \"install_method\": \"standalone\",\n  \"latest\": \"v0.6.0\",\n  \"update_available\": true\n}\n"
+	for _, args := range [][]string{{"--check"}, {"--check", "--error-format", "json"}} {
+		d := newFakeDist(t)
+		publishIndex(t, d, idxStable06Latest07)
+		useDist(t, d, nil, "v0.5.0")
+		out, _, err := runUpgradeRaw(t, args...)
+		if err != nil || out != want {
+			t.Errorf("upgrade %v = %q (%v), want %q", args, out, err, want)
+		}
+	}
+}
+
+// destination is a filesystem path, not a URL: it is never masked.
+func TestUpgradeDryRunLeavesDestinationLiteral(t *testing.T) {
+	sig, d := newFakeSigstore(t), newFakeDist(t)
+	d.publish(t, sig, release{target: "v0.7.0", manifestSemver: "v0.7.0", archive: tarGz(t, []byte("NEW"))})
+	useDist(t, d, sig.root, "v0.6.0")
+	dir := filepath.Join(t.TempDir(), "x?token=abc")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Skip(err)
+	}
+	exe := filepath.Join(dir, "c1i")
+	upgradeExecutable = func() (string, error) { return exe, nil }
+	got, _, _ := runUpgradeDryRun(t)
+	if got.Upgrade["destination"] != exe {
+		t.Errorf("destination = %v, want the literal %q", got.Upgrade["destination"], exe)
 	}
 }

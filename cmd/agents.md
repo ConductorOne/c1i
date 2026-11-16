@@ -95,7 +95,7 @@ apply it for a whole session; the flag wins for a single invocation.
 |---|---|---|
 | `--url` | `C1I_URL` | tenant host — see above |
 | `--fields` | `C1I_FIELDS` | comma-separated dot-paths to keep in JSON output — see "Reading output" |
-| `--dry-run` | `C1I_DRY_RUN` | preview a C1 REST mutation as one JSON object (`.requests[]`: method, URL, body); it never has an `id`, and credential fields print as `[redacted]` (`upgrade --dry-run` prints plain `[dry-run]` text instead); unsupported for `mcp gateway call` and `auth login` |
+| `--dry-run` | `C1I_DRY_RUN` | preview a mutation (a C1 REST write, or `upgrade`) as one JSON object (`.requests[]`: method, URL, body); it never has an `id`, and credential fields print as `[redacted]` (`upgrade --dry-run` adds an `.upgrade` object); unsupported for `mcp gateway call` and `auth login` |
 | `--debug` | `C1I_DEBUG` | trace API HTTP requests (method, URL, status, timing) to stderr; a URL's username (except `git`), password and secret-named parameter values (names ending in `token`, including pagination cursors such as `page_token`; query, fragment and `;` path parameters) print as `[redacted]`, as in `--dry-run` |
 | `--max-retries` | `C1I_MAX_RETRIES` | retries for transient API failures (`429`/`5xx`); `0` disables; negative exits 2 (flag, env and config alike) |
 | `--error-format` | `C1I_ERROR_FORMAT` | `text` (default) or `json` |
@@ -400,10 +400,17 @@ the server returns.
 
 ## Before you mutate
 
-`--dry-run` (or `C1I_DRY_RUN`) previews a C1 REST mutation without sending
-it: one JSON object, `{"dryRun":true,"requests":[{"method","url","body"}]}`,
-never with an `id`, plus a stderr notice (`upgrade --dry-run` instead prints plain
-`[dry-run]` text lines). Credential fields (names ending in token, secret,
+`--dry-run` (or `C1I_DRY_RUN`) previews a mutation without performing it:
+one JSON object, `{"dryRun":true,"requests":[{"method","url","body"}]}`,
+never with an `id`, plus a stderr notice. `upgrade --dry-run` prints the same
+object on every non-error path without `--check` (never text; `--check` wins
+over `--dry-run` and prints its bare report, `--fields` honoured), adding `.upgrade`: the
+`upgrade --check` keys (always `current`, `latest`, `channel`,
+`update_available`, `install_method`; `upgrade_command` only for a Homebrew,
+`go install` or container install) plus `asset_url`, `sha256`, `destination` only when an update is due
+on a standalone install. Its `requests` holds just the download `GET`
+(manifest and signature were already fetched), `[]` when nothing downloads.
+`--fields` is exit 2. Credential fields (names ending in token, secret,
 password, signature, apikey and the like; header values; a URL's username (except `git`) and
 password and secret-named parameters) print as `[redacted]`, a non-JSON body as
 `"[redacted: not JSON]"`; the rest is as sent. It needs a configured URL (exit 2
@@ -723,8 +730,7 @@ channel's current release, or a non-standalone install, which prints that
 command (Windows and system installs get a hint but no `upgrade_command`). Without a terminal it needs `-y`/`--yes`. `stable` is the
 default channel; `latest` and `preview` are separate channels. `--dry-run`
 fetches and verifies the release (index, manifest, signature, TUF root) and
-checks the install directory is writable, then prints what it would download
-and replace; it takes no lock, doesn't prompt, and installs nothing.
+checks the install directory is writable, then prints a JSON preview (see "Before you mutate"); it takes no lock, doesn't prompt, and installs nothing.
 
 Exit codes treat the distribution center as a system beyond C1: a dist `404`,
 `429`, or `5xx` exits 4, 5, or 6, but any other

@@ -120,3 +120,21 @@ func TestDocsReadmeHelpDistinguishesFromAgents(t *testing.T) {
 		t.Errorf("docs readme --help must say README is the full reference and docs agents the concise agent guide:\n%s", docsReadmeCmd.Long)
 	}
 }
+
+// A failed stdout write fails the command (exit 1) and prints no success footer.
+func TestEmbeddedDocWriteFailureIsAnErrorWithoutFooter(t *testing.T) {
+	withEmbeddedDocs(t, "# R\n", "# C\n", "v1.2.3")
+	for _, c := range []*cobra.Command{docsReadmeCmd, docsChangelogCmd} {
+		t.Run(c.Name(), func(t *testing.T) {
+			var errBuf bytes.Buffer
+			c.SetOut(failingWriter{})
+			c.SetErr(&errBuf)
+			t.Cleanup(func() { c.SetOut(nil); c.SetErr(nil) })
+			resetCmdFlags(t, c)
+			assertOutputWriteFailure(t, c.RunE(c, nil))
+			if errBuf.Len() != 0 {
+				t.Errorf("stderr = %q, want no footer after a failed write", errBuf.String())
+			}
+		})
+	}
+}

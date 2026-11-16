@@ -138,6 +138,7 @@ func TestTextOutputFailsOnOutputWriteError(t *testing.T) {
 	}{
 		{name: "version", args: []string{"version"}},
 		{name: "docs guide list", args: []string{"docs", "guide"}},
+		{name: "docs agents", args: []string{"docs", "agents"}},
 		{name: "apps delete", args: []string{"apps", "delete", "app-x"}, reset: []*cobra.Command{appsDeleteCmd}, requests: 1, mutation: "DELETE /api/v1/apps/app-x"},
 		{name: "automations delete", args: []string{"automations", "delete", "auto-x"}, reset: []*cobra.Command{automationsDeleteCmd}, requests: 1, mutation: "DELETE /api/v1/automations/auto-x"},
 		{
@@ -236,6 +237,13 @@ func TestUpgradeResultFailsOnOutputWriteError(t *testing.T) {
 		useDist(t, d, nil, "v0.5.0")
 		upgradeExecutable = func() (string, error) { return "/opt/homebrew/Cellar/c1i/0.5.0/bin/c1i", nil }
 		assertOutputWriteFailure(t, runUpgradeToDeadStdout(t, "-y"))
+	})
+	t.Run("dry-run preview", func(t *testing.T) {
+		sig, d := newFakeSigstore(t), newFakeDist(t)
+		d.publish(t, sig, release{target: "v0.7.0", manifestSemver: "v0.7.0", archive: tarGz(t, []byte("NEW BINARY"))})
+		useDist(t, d, sig.root, "v0.6.0")
+		withDryRun(t)
+		assertOutputWriteFailure(t, runUpgradeToDeadStdout(t, "--dry-run"))
 	})
 	t.Run("upgraded", func(t *testing.T) {
 		sig, d := newFakeSigstore(t), newFakeDist(t)

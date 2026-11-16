@@ -313,9 +313,7 @@ that legitimately runs long. Neither is configurable.
 
 `--dry-run` (or `C1I_DRY_RUN=1`) previews a C1 REST mutation and returns
 without sending it. The preview is one JSON object on stdout, the requests in
-send order with the full URL and the body as sent (`upgrade --dry-run` is the
-exception: it prints plain `[dry-run]` text lines, since it sends no C1 API
-mutation):
+send order with the full URL and the body as sent:
 
 ```sh
 $ c1i requests create grant --app-id A1 --entitlement-id E1 --user-id U1 --dry-run
@@ -335,12 +333,26 @@ $ c1i requests create grant --app-id A1 --entitlement-id E1 --user-id U1 --dry-r
 }
 ```
 
-Its only keys are `dryRun` and `requests` (one entry per request: several for
-`mcp tools approve` with several ids, up to three for `entitlements create`);
-it never has an `id`, and `body` is omitted when the request has none. A
-stderr notice, `dry run: nothing was sent`, accompanies every preview.
+A REST preview has only the keys `dryRun` and `requests` (one entry per
+request: several for `mcp tools approve` with several ids, up to three for
+`entitlements create`); it never has an `id`, and `body` is omitted when the
+request has none. A stderr notice, `dry run: nothing was sent`, accompanies it.
 
-Every preview prints credential fields as `[redacted]`: fields whose name ends
+`upgrade --dry-run` prints the same object plus an `upgrade` key, on every
+non-error path without `--check` (`--check` wins over `--dry-run` and prints its
+bare report, with no `dryRun` key and no notice; `--fields` is honoured): an update due, already current, newer than the
+channel, a source build, or a Homebrew, `go install` or container install. It
+is never text, and its stderr notice is `dry run: nothing was installed`.
+`requests` lists only what a real run would send that the preview did not (the
+asset download, one `GET`); it is `[]` when nothing would be downloaded. The
+manifest and signature are fetched during the preview itself. `.upgrade` holds
+the `upgrade --check` report: always `current`, `latest`, `channel`,
+`update_available` and `install_method`; `upgrade_command` only for a Homebrew,
+`go install` or container install; and `asset_url`, `sha256` and `destination`
+(the binary it would replace) only when `update_available` is true on a
+standalone install. `--fields` is a usage error on a preview.
+
+Every preview, `.upgrade` included, prints credential fields as `[redacted]`: fields whose name ends
 in `token`, `secret`, `password`, `signature`, `apikey` and the like (a
 best-effort suffix rule), header values, a URL's username (except `git`) and password, and
 secret-named URL parameters. Everything else is shown as sent, and a body that
@@ -1981,8 +1993,8 @@ without replacing anything; Windows and system installs print a hint but no
 replaced: `upgrade` prints the channel's release and exits 0, and `--check`
 reports `update_available: false`. `--dry-run` fetches and verifies the release (index,
 manifest, signature, TUF root) and checks the install directory is writable,
-then prints what it would download and replace; it takes no lock, doesn't
-prompt, and installs nothing.
+then prints a JSON preview (see [Dry run](#dry-run)); it takes no lock, doesn't
+prompt, and installs nothing. `--fields` is a usage error except with `--check`.
 
 `upgrade` treats the distribution center as a system beyond C1: a dist `404`,
 `429`, or `5xx` exits `4`, `5`, or `6`, but
