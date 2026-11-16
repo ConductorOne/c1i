@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 	"testing"
 
@@ -36,10 +37,10 @@ func isRequiredFlag(f *pflag.Flag) bool {
 	return f.Annotations[cobra.BashCompOneRequiredFlag] != nil || f.Annotations[requiredAnnotation] != nil
 }
 
-// blankArgs builds a valid-looking invocation of c with every required flag
-// and positional filled with a placeholder, except flag blankFlag, which gets
-// value. blankFlag "" blanks the first positional instead.
-func blankArgs(t *testing.T, c *cobra.Command, blankFlag, value string) []string {
+// requiredInvocation builds a valid-looking invocation of c: its positionals
+// (the first is firstPositional, the rest "x") and every required flag of one of
+// the given value types, set to "x", except those skip names.
+func requiredInvocation(t *testing.T, c *cobra.Command, firstPositional string, skip func(string) bool, types ...string) []string {
 	t.Helper()
 	spec, err := parseUsePositionals(c.Use)
 	if err != nil {
@@ -47,17 +48,30 @@ func blankArgs(t *testing.T, c *cobra.Command, blankFlag, value string) []string
 	}
 	args := strings.Fields(strings.TrimPrefix(c.CommandPath(), rootCmd.Name()+" "))
 	for i := 0; i < spec.required; i++ {
-		if blankFlag == "" && i == 0 {
-			args = append(args, value)
+		if i == 0 {
+			args = append(args, firstPositional)
 		} else {
 			args = append(args, "x")
 		}
 	}
 	c.Flags().VisitAll(func(f *pflag.Flag) {
-		if isRequiredFlag(f) && f.Value.Type() == "string" && f.Name != blankFlag {
+		if isRequiredFlag(f) && slices.Contains(types, f.Value.Type()) && !skip(f.Name) {
 			args = append(args, "--"+f.Name, "x")
 		}
 	})
+	return args
+}
+
+// blankArgs is requiredInvocation with every required string flag and
+// positional filled, except flag blankFlag, which gets value. blankFlag ""
+// blanks the first positional instead.
+func blankArgs(t *testing.T, c *cobra.Command, blankFlag, value string) []string {
+	t.Helper()
+	first := "x"
+	if blankFlag == "" {
+		first = value
+	}
+	args := requiredInvocation(t, c, first, func(n string) bool { return n == blankFlag }, "string")
 	if blankFlag != "" {
 		args = append(args, "--"+blankFlag, value)
 	}

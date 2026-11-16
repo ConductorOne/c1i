@@ -251,6 +251,7 @@ func roleMiningUserRow(item map[string]any) map[string]any {
 func init() {
 	for _, command := range []*cobra.Command{roleMiningSuggestionsSearchCmd, roleMiningSuggestionsStateCmd, roleMiningSuggestionsUsersCmd, roleMiningConfigUpdateCmd, roleMiningCustomAnalysisTriggerCmd, roleMiningCustomAnalysisEvaluateCmd, roleMiningAccessProfilesCreateCmd} {
 		command.Flags().String("body-file", "", "JSON request object file (or \"-\" for stdin)")
+		annotateRequired(command, "body-file")
 	}
 	for _, command := range []*cobra.Command{roleMiningTriggerCmd, roleMiningSuggestionsStateCmd, roleMiningConfigUpdateCmd, roleMiningCustomAnalysisTriggerCmd, roleMiningCustomAnalysisEvaluateCmd, roleMiningAccessProfilesCreateCmd} {
 		markMutating(command)

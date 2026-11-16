@@ -298,8 +298,10 @@ func init() {
 		cmd.Flags().String("app-id", "", "Application ID")
 		addRepeatableStringFlag(cmd, "entitlement-id", "Application entitlement ID (repeatable)")
 		markRequired(cmd, "app-id")
+		annotateRequired(cmd, "entitlement-id")
 	}
 	accessProfilesRequestableEntitlementsSetCmd.Flags().String("refs-file", "", "JSON array of AppEntitlementRef objects (file, or \"-\" for stdin)")
+	annotateRequired(accessProfilesRequestableEntitlementsSetCmd, "refs-file")
 	accessProfilesRequestableEntitlementsAddCmd.Flags().Bool("create-requests", false, "Create requests for users in the access profile when adding these entitlements")
 
 	for _, c := range []*cobra.Command{

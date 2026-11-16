@@ -147,15 +147,14 @@ func mustGetString(cmd *cobra.Command, name string) string {
 }
 
 func init() {
-	policiesCreateCmd.Flags().String("display-name", "", "Display name for the new policy ("+displayNameRule+")")
+	policiesCreateCmd.Flags().String("display-name", "", "Display name for the new policy ("+displayNameRule+") (required unless --body-file)")
 	policiesCreateCmd.Flags().String("description", "", "Description for the new policy")
-	policiesCreateCmd.Flags().String("policy-type", "", "Policy type: "+policyTypeFlag.usage()+" (access-request is deprecated; provision is server-internal)")
+	policiesCreateCmd.Flags().String("policy-type", "", "Policy type: "+policyTypeFlag.usage()+" (access-request is deprecated; provision is server-internal) (required unless --body-file)")
 	policiesCreateCmd.Flags().String("steps-file", "", "JSON array: the baseline policySteps.steps content (file, or \"-\" for stdin)")
 	policiesCreateCmd.Flags().String("rules-file", "", "JSON array of routing rules: [{\"condition\":\"<CEL>\",\"stepKey\":\"<key>\"}] (file, or \"-\" for stdin)")
 	allowEmpty(policiesCreateCmd, emptyIsOmitted, "description", "steps-file", "rules-file")
 	policiesCreateCmd.Flags().String("body-file", "", "Full CreatePolicyRequest JSON body, verbatim (file, or \"-\" for stdin); mutually exclusive with the flags above")
 	policiesCreateCmd.Flags().Bool("allow-deny-all", false, "Allow creating a policy with no steps (or an explicit deny-all) — bypasses the empty-steps guard on purpose")
-	annotateRequired(policiesCreateCmd, "display-name", "policy-type")
 	markMutating(policiesCreateCmd)
 	policiesCmd.AddCommand(policiesCreateCmd)
 }

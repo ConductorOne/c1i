@@ -163,7 +163,7 @@ func markRequired(cmd *cobra.Command, names ...string) {
 
 // requiredAnnotation tags every flag documented "(required)", whether cobra
 // enforces its presence (markRequired) or the command does (annotateRequired).
-// validateBlankFlags reads it, so a required flag is detected one way.
+// Only the tree tests read it, to hold usage text and enforcement together.
 const requiredAnnotation = "c1i_required"
 
 // blankHintAnnotation holds text validateBlankFlags appends to a flag's
@@ -212,12 +212,10 @@ func allowEmpty(cmd *cobra.Command, reason string, names ...string) {
 }
 
 // annotateRequired appends "(required)" to each named flag's usage WITHOUT
-// enabling cobra's pre-run required-flag validation. Use it when a command has
-// an escape-hatch flag (e.g. register's --print-config-template) that is valid
-// on its own without the otherwise-required flags: cobra validates required
-// flags before RunE runs, so the escape hatch could never short-circuit if the
-// flags were cobra-required. The command must enforce presence itself in RunE
-// (via requireNonEmpty).
+// enabling cobra's pre-run required-flag validation. Use it when the command,
+// not cobra, enforces presence in RunE (via requireNonEmpty or its own check),
+// e.g. register, whose --print-config-template escape hatch must run without
+// the otherwise-required flags.
 func annotateRequired(cmd *cobra.Command, names ...string) {
 	for _, n := range names {
 		if f := cmd.Flags().Lookup(n); f != nil {
