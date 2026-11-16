@@ -12,6 +12,7 @@ import (
 
 	"github.com/ConductorOne/c1i/internal/client"
 	"github.com/ConductorOne/c1i/internal/redact"
+	"github.com/ConductorOne/c1i/internal/tokensource"
 	"github.com/spf13/cobra"
 )
 
@@ -779,6 +780,14 @@ func classifyApplied(err error) appliedState {
 	hasAttempt := errors.As(err, &attempt)
 	if hasAttempt {
 		prior = attempt.PriorSent
+	}
+	// A token-request failure is not the mutation's own outcome: nothing was
+	// sent by it, though an earlier retried attempt of the mutation may have been.
+	if errors.As(err, new(*tokensource.MintError)) || errors.As(err, new(*tokensource.TokenError)) {
+		if prior {
+			return appliedUnknown
+		}
+		return appliedFalse
 	}
 	switch {
 	case errors.As(err, &apiErr):

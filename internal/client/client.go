@@ -70,13 +70,13 @@ func ClearCachedToken(baseURL string) {
 	tokensource.InvalidateCachedToken(baseURL, clientID, clientSecret)
 }
 
-// isTokenError reports whether err is (or wraps) a rejected client_credentials
-// grant. It powers two things: telling transport.Do to fail fast on it rather
-// than burn the retry budget on credentials that won't fix themselves, and
-// classifying it as an *AuthError once Do returns.
+// isTokenError reports whether err came from the token request (a rejected
+// grant or any other failure of it). transport.Do fails fast on it: the mint
+// already retried, and credentials that were rejected won't fix themselves.
 func isTokenError(err error) bool {
 	var tokErr *tokensource.TokenError
-	return errors.As(err, &tokErr)
+	var mintErr *tokensource.MintError
+	return errors.As(err, &tokErr) || errors.As(err, &mintErr)
 }
 
 // Token mints a fresh OAuth2 bearer token from the stored credentials for
@@ -105,7 +105,8 @@ func Token(ctx context.Context, baseURL string, opts ...Option) (*oauth2.Token, 
 // always finish and be collected even after we've returned; the tokensource
 // HTTP client has its own timeout, so a hung token host can't keep that
 // goroutine (or its socket) alive indefinitely. A mint error is wrapped as
-// AuthError (exit 3); a ctx cancellation returns ctx.Err() unwrapped so callers
+// AuthError (exit 3) unless it is a *tokensource.MintError, which keeps its own
+// type; a ctx cancellation returns ctx.Err() unwrapped so callers
 // can distinguish it from an authentication failure.
 func mintWithContext(ctx context.Context, ts oauth2.TokenSource) (*oauth2.Token, error) {
 	type result struct {
@@ -123,6 +124,10 @@ func mintWithContext(ctx context.Context, ts oauth2.TokenSource) (*oauth2.Token,
 		return nil, ctx.Err()
 	case r := <-ch:
 		if r.err != nil {
+			var mintErr *tokensource.MintError
+			if errors.As(r.err, &mintErr) {
+				return nil, r.err // not a credential problem; classified by its own type
+			}
 			return nil, &AuthError{fmt.Errorf("minting token: %w", r.err)}
 		}
 		return r.tok, nil
@@ -464,7 +469,8 @@ func (c *Client) Request(ctx context.Context, method, path string, body []byte, 
 
 // do sends req through the shared transport and applies this client's
 // response policy: a non-2xx status is an *APIError, a rejected
-// client_credentials grant is an *AuthError, and everything else (a path/
+// client_credentials grant is an *AuthError (any other token-request failure
+// keeps its own type), and everything else (a path/
 // redirect refusal, an exhausted transport-error retry budget) passes
 // through as transport already classified it. It's the single chokepoint
 // every request (Get/Post/Put/Patch/Delete/Request, including the `api`
@@ -473,7 +479,8 @@ func (c *Client) Request(ctx context.Context, method, path string, body []byte, 
 func (c *Client) do(req *http.Request) ([]byte, error) {
 	resp, err := c.t.Do(req)
 	if err != nil {
-		if isTokenError(err) {
+		var tokErr *tokensource.TokenError
+		if errors.As(err, &tokErr) {
 			return nil, &AuthError{fmt.Errorf("token request failed: %w", err)}
 		}
 		return nil, err

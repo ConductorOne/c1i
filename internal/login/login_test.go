@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/ConductorOne/c1i/internal/client"
+	"github.com/ConductorOne/c1i/internal/tokensource"
 )
 
 // TestStartDeviceFlowClassifiesHTTPError verifies a non-2xx from the device
@@ -281,5 +282,58 @@ func TestDeviceFlowSendsUserAgent(t *testing.T) {
 	_, _ = CreatePersonalClient(context.Background(), srv.URL, "tok", PersonalClientOptions{})
 	if !strings.HasPrefix(gotUA, "c1.ai/c1i") {
 		t.Errorf("personal_clients User-Agent = %q, want it to start with c1.ai/c1i", gotUA)
+	}
+}
+
+// pollOutcome polls a token endpoint answering every request with status and
+// body for up to d, returning the request count and the error.
+func pollOutcome(t *testing.T, status int, body string, d time.Duration) (int, error) {
+	t.Helper()
+	var requests int
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests++
+		w.WriteHeader(status)
+		_, _ = w.Write([]byte(body))
+	}))
+	defer srv.Close()
+	ctx, cancel := context.WithTimeout(context.Background(), d)
+	defer cancel()
+	_, err := PollForToken(ctx, srv.URL, &DeviceCode{DeviceCode: "dc", Interval: 1, ExpiresIn: 30})
+	return requests, err
+}
+
+// A 429 (with or without an OAuth body) is handled like slow_down: the poll
+// backs off and continues instead of aborting the login. After the first
+// request the interval is 6s, so exactly one request fits in the window.
+func TestPollForTokenTooManyRequestsSlowsDownAndKeepsPolling(t *testing.T) {
+	for _, body := range []string{``, `{"error":"access_denied"}`} {
+		n, err := pollOutcome(t, http.StatusTooManyRequests, body, 2*time.Second)
+		if !errors.Is(err, context.DeadlineExceeded) || n != 1 {
+			t.Errorf("body %q: requests=%d err=%v, want 1 request then the context deadline", body, n, err)
+		}
+	}
+}
+
+// 400 authorization_pending keeps polling at the unchanged interval.
+func TestPollForTokenPendingKeepsPolling(t *testing.T) {
+	n, err := pollOutcome(t, http.StatusBadRequest, `{"error":"authorization_pending"}`, 2500*time.Millisecond)
+	if !errors.Is(err, context.DeadlineExceeded) || n < 2 {
+		t.Errorf("requests=%d err=%v, want >=2 requests then the context deadline", n, err)
+	}
+}
+
+// A 200 with no access token is an unusable response (exit 6), not an empty
+// token returned as success.
+func TestPollForTokenEmptyAccessTokenIsBadResponse(t *testing.T) {
+	_, err := pollOutcome(t, http.StatusOK, `{"access_token":""}`, 5*time.Second)
+	if !errors.Is(err, tokensource.ErrBadTokenResponse) {
+		t.Errorf("error = %v, want one wrapping tokensource.ErrBadTokenResponse", err)
+	}
+}
+
+func TestPollForTokenNonJSONOKIsBadResponse(t *testing.T) {
+	_, err := pollOutcome(t, http.StatusOK, `<html>gateway</html>`, 5*time.Second)
+	if !errors.Is(err, tokensource.ErrBadTokenResponse) {
+		t.Errorf("error = %v, want one wrapping tokensource.ErrBadTokenResponse", err)
 	}
 }

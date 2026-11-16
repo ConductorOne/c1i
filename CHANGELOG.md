@@ -43,6 +43,13 @@ user or policy id exists, or looking up a policy's type), so a preview that
 names such an id needs credentials that can read it. A preview with no such id
 still needs none.
 
+A token-endpoint outage no longer reads as bad credentials: a persistent `429`
+or `5xx` from the token service now exits 5 or 6 (was 3), and a failure to
+reach it is no longer exit 3. Only a `400`/`401`/`403` there exits 3: a `404`
+there now exits 4 (was 3), a `408` exits 1 (was 3), and a `200` that is not a
+token exits 6. A script that treated exit 3 as "re-authenticate" should retry
+on 5 and 6.
+
 ### Changed
 
 - **A blank value on any flag is now a usage error (exit 2)**, checked before
@@ -73,6 +80,15 @@ still needs none.
 - List rows emitted `""` for a string field with nothing to report, which jq
   treats as truthy (`select(.task_id)` matched every finding). Absent fields
   are now `null`; see "Upgrading from 0.10.1".
+- **A token-service `429`, `5xx` or network failure no longer reports "not
+  authenticated" (exit 3).** The token request is retried like other requests
+  (it skipped 5xx and network failures), then exits 5, 6 or the usual
+  transport-failure code; a `200` that is not a token exits 6, and only a
+  `400`/`401`/`403` there is exit 3. Each retry signs a fresh assertion; a token
+  failure on a mutation reports `applied: false` unless an earlier attempt
+  reached the API (then `unknown`); `auth login` polling treats a `429` like
+  `slow_down` (backs off, keeps polling); and a device-flow `200` that is not a
+  usable token exits 6.
 - `--debug` traces, transport, redirect, API and path-guard errors, partial-result
   and `INCOMPLETE` notices, and the unbuildable-request, `--path`, `--url` and
   `--destination-url` errors printed the request URL or path verbatim, so a

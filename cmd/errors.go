@@ -14,6 +14,7 @@ import (
 	"github.com/ConductorOne/c1i/internal/client"
 	"github.com/ConductorOne/c1i/internal/keychain"
 	"github.com/ConductorOne/c1i/internal/redact"
+	"github.com/ConductorOne/c1i/internal/tokensource"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
@@ -285,7 +286,7 @@ func exitCode(err error) int {
 		return exitServer
 	}
 	var nonJSONErr *nonJSONResponseError
-	if errors.As(err, &nonJSONErr) {
+	if errors.As(err, &nonJSONErr) || errors.Is(err, tokensource.ErrBadTokenResponse) {
 		return exitServer
 	}
 	var usageErr *usageError
