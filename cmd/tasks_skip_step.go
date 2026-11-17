@@ -10,7 +10,11 @@ var tasksSkipStepAction = taskAction{
 var tasksSkipStepCmd = &cobra.Command{
 	Use:   "skip-step <task-id>",
 	Short: "Skip a task's current policy step",
-	Long: `Skip a task's current approval step, advancing the policy without a decision.
+	Long: `Skip the task's current policy step, advancing the policy without a decision.
+
+The step does not have to be an approval: on a provision step this abandons
+provisioning, so the task can stay on that step or close depending on the
+policy. Re-read with "c1i tasks get" before using it on a provision step.
 
 The step id is required by the server, which rejects a missing one with:
   invalid TaskActionsServiceSkipStepRequest.PolicyStepId: value does not match regex pattern "^[a-zA-Z0-9]{27}$"

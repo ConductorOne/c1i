@@ -95,7 +95,10 @@ runs, filtered to whichever recipient was named. The task is printed as soon
 as it is created; progress goes to stderr. A
 timeout exits 1 even though the request was accepted: provisioning can take
 minutes, and a request that still needs approval does not produce the grant
-until someone approves it. --wait-min defaults to 1 (unlike "grants list",
+until someone approves it. If the recipient already holds the entitlement, the
+existing grant satisfies the wait immediately: exit 0 then reports that the
+grant exists, not that this request was approved or provisioned; re-read the
+task for that. --wait-min defaults to 1 (unlike "grants list",
 where an empty set is a valid answer); --wait-stable and --wait-timeout match
 "grants list". --dry-run never polls.
 

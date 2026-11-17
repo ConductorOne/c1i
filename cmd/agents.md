@@ -613,6 +613,9 @@ resource with `--resource-id` likewise means you drop
   does). A repeated id is sent once. Recover a step that already names a bad
   approver by re-running `reassign` with valid ids; a system owner can also
   `reset`/`restart` where the task offers them.
+- `skip-step` also accepts a provision step, where it abandons provisioning:
+  the task can stay on that step with no grant or close depending on the policy.
+  Check `tasks get` before using it there.
 - Which actions a task accepts depends on its state, and the server refuses the
   rest with `action not permitted`. Read the task's own list first:
   `c1i api --path /api/v1/tasks/<task-id> --fields actions`. `restart`, `reset` and
@@ -645,7 +648,10 @@ resource with `--resource-id` likewise means you drop
   progress goes to stderr. `--wait-min` defaults to 1, `--wait-stable` to 3,
   `--wait-timeout` to 4m; a timeout exits 1 although the request was accepted.
   A request that still needs approval does not produce the grant until it is
-  approved, so it waits until the timeout. `--dry-run` never polls.
+  approved, so it waits until the timeout. If the recipient already holds the
+  entitlement, the existing grant satisfies the wait immediately; exit 0 then
+  reports the grant's presence, not that this request was approved. `--dry-run`
+  never polls.
 - `grants add --app-id --entitlement-id --user-id ... [--wait]` grants a
   manually managed entitlement directly, **bypassing grant policy and
   approval**; prefer `requests create grant` unless that is what you want. One

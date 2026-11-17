@@ -1136,6 +1136,10 @@ so a `--policy-step-id` captured before one of them goes stale — the server
 answers `this action is no longer available: the request has advanced to a new
 approval step`. Omit the flag to act on whatever step is current.
 
+`skip-step` is not limited to approval steps. On a provision step it skips
+provisioning, so the task can stay on that step (no grant, no outcome) or close
+depending on the policy; check with `tasks get` before using it there.
+
 Which actions a task accepts depends on its state; the server refuses the rest
 with `action not permitted`. Read the task's own list with
 `c1i api --path /api/v1/tasks/<task-id> --fields actions`.
@@ -1516,7 +1520,10 @@ identifies the recipient, and with both the account must belong to the user.
 `grants list --wait` runs. The task is printed as soon as it is created
 (stdout), while progress goes to stderr. A timeout exits `1` even though the
 request was accepted: provisioning takes time, and a request that still needs
-approval will not produce the grant until someone approves it. `--wait-min`
+approval will not produce the grant until someone approves it. If the recipient
+already holds the entitlement, the existing grant satisfies the wait
+immediately: exit `0` then reports that the grant exists, not that this request
+was approved or provisioned; re-read the task for that. `--wait-min`
 defaults to `1` (unlike `grants list`, where an empty set is a valid answer);
 `--wait-stable` (default `3`) and `--wait-timeout` (default `4m`) match
 `grants list`. `--dry-run` never polls.

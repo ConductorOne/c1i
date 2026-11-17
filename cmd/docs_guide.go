@@ -732,7 +732,8 @@ access that way unless you already know how you'd take it back.
    Prints the task as JSON; capture "jq -er .id" as TASK_ID (.state is a
    snapshot from creation, not the outcome; re-read with requests get). Add
    "--wait" to block until the grant appears in "grants list" before the
-   command returns (a request that needs approval will wait until the timeout).
+   command returns (a request that needs approval waits until the timeout; if
+   the recipient already has the grant, the wait settles on it immediately).
    A 403 here (target
    user is not allowed to request that resource) means the entitlement
    isn't reachable through any request catalog for this user — a
