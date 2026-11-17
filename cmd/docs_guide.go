@@ -820,8 +820,8 @@ DELETING THE SERVER IS A CASCADE: it is not just the connector that goes.
     c1i mcp tools list --app-id "$APP_ID" --connector-id "$CONNECTOR_ID"
     c1i mcp toolsets list --app-id "$APP_ID" --connector-id "$CONNECTOR_ID"
 
-Every tool row carries app_entitlement_id (its tool entitlement) and every
-toolset row carries app_entitlement_id (its toolset entitlement). The list
+Every toolset row carries app_entitlement_id (its toolset entitlement), and so
+does each approved tool's row (it is null until the tool is approved). The list
 includes the toolsets C1 creates for each server itself (for example "All
 approved tools - <server>"), not only yours. For each toolset, see which tools
 it bundles:

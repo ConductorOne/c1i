@@ -117,7 +117,7 @@ type writeOutcome struct {
 }
 
 // withResponse reads the write's raw response once it is printed. waitEnabled
-// says whether Wait is polled.
+// says whether Wait is polled. withWait also sets respond; the last one passed wins.
 func withResponse(f func(c *client.Client, resp []byte) writeOutcome, waitEnabled bool) mutationOpt {
 	return func(o *mutationOpts) { o.respond, o.waitEnabled = f, waitEnabled }
 }

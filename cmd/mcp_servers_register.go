@@ -63,8 +63,9 @@ extract with jq -er, which fails on a --dry-run preview where jq -r exits 0
 with null.
 
 --wait polls "mcp servers list --app-id" until the new server appears in it
-(--wait-timeout bounds the wait). A list read right after register can omit the
-server for up to about a second while "mcp servers get" already returns it.
+(--wait-timeout bounds the wait). In the runs checked, a list read right after
+register omitted the server for a second or two while "mcp servers get" already
+returned it.
 
 NOTE: registering under app_id="" (new managed app) or via an
 app_managed_state_binding_ref is not reachable over REST — this command
@@ -150,7 +151,7 @@ func serverListedWaitOp(c *client.Client, appID, connectorID string, timeout tim
 		Timeout:  timeout,
 		Subject:  "MCP server " + connectorID + " to appear in the app's server list",
 		Success:  "MCP server " + connectorID + " is listed",
-		Slow:     "the list can trail a register by about a second",
+		Slow:     "the list can trail a register by a second or two",
 		Recheck:  "c1i mcp servers list --app-id " + appID,
 	}
 }
