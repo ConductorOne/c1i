@@ -613,9 +613,10 @@ resource with `--resource-id` likewise means you drop
   does). A repeated id is sent once. Recover a step that already names a bad
   approver by re-running `reassign` with valid ids; a system owner can also
   `reset`/`restart` where the task offers them.
-- `skip-step` also accepts a provision step, where it abandons provisioning:
-  the task can stay on that step with no grant or close depending on the policy.
-  Check `tasks get` before using it there.
+- `skip-step` refuses the current step when it is not an approval step (exit 2,
+  nothing sent). Skipping a provision step abandons provisioning (the task can
+  stay there with no grant or close); name it with `--policy-step-id` only if
+  you intend that.
 - Which actions a task accepts depends on its state, and the server refuses the
   rest with `action not permitted`. Read the task's own list first:
   `c1i api --path /api/v1/tasks/<task-id> --fields actions`. `restart`, `reset` and

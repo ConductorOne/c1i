@@ -1136,9 +1136,10 @@ so a `--policy-step-id` captured before one of them goes stale — the server
 answers `this action is no longer available: the request has advanced to a new
 approval step`. Omit the flag to act on whatever step is current.
 
-`skip-step` is not limited to approval steps. On a provision step it skips
-provisioning, so the task can stay on that step (no grant, no outcome) or close
-depending on the policy; check with `tasks get` before using it there.
+`skip-step` refuses the current step when it is not an approval step (exit
+`2`, nothing sent). Skipping a provision step abandons provisioning, so the
+task can stay on that step (no grant, no outcome) or close depending on the
+policy; name the step with `--policy-step-id` only if you intend that.
 
 Which actions a task accepts depends on its state; the server refuses the rest
 with `action not permitted`. Read the task's own list with

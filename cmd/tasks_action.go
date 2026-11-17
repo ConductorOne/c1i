@@ -29,6 +29,9 @@ type taskAction struct {
 	// a flag names a real user. Runs before the send, on a dry run too unless
 	// the returned preRead says otherwise.
 	preReads func(cmd *cobra.Command) []preRead
+	// stepCheck rejects a current step the verb must not act on. It runs after
+	// the lookup and before the send; an explicit --policy-step-id bypasses it.
+	stepCheck func(taskID string, taskData []byte) error
 }
 
 // runTaskAction is the shared RunE. Flags are validated before a client is
@@ -73,9 +76,14 @@ func (a taskAction) runTaskAction(cmd *cobra.Command, args []string) error {
 // too, and reports it on stderr.
 func (a taskAction) stepLookup(taskID string) preRead {
 	return preRead{Run: func(ctx context.Context, c *client.Client, m *mutation) ([]resolvedID, error) {
-		stepID, err := resolvePolicyStepID(ctx, c, taskID, "", a.step == stepRequired)
+		stepID, data, err := fetchCurrentPolicyStep(ctx, c, taskID, a.step == stepRequired)
 		if err != nil || stepID == "" {
 			return nil, err
+		}
+		if a.stepCheck != nil {
+			if err := a.stepCheck(taskID, data); err != nil {
+				return nil, err
+			}
 		}
 		m.Body.(map[string]any)["policyStepId"] = stepID
 		return []resolvedID{{Name: "policyStepId", Label: "policy step", ID: stepID}}, nil
