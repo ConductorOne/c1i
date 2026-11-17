@@ -30,7 +30,7 @@ func TestResolveAllowedRedirect_Scheme(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			_, ok := resolveAllowedRedirect(base, tc.loc)
+			_, _, ok := resolveAllowedRedirect(base, tc.loc)
 			if ok != tc.wantOK {
 				t.Errorf("resolveAllowedRedirect(%q, %q) ok = %v, want %v", tc.base, tc.loc, ok, tc.wantOK)
 			}

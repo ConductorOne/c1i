@@ -373,7 +373,7 @@ func TestResolveAllowedRedirect(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			_, ok := resolveAllowedRedirect(base, tc.location)
+			_, _, ok := resolveAllowedRedirect(base, tc.location)
 			if ok != tc.wantOK {
 				t.Errorf("resolveAllowedRedirect(%q) ok = %v, want %v", tc.location, ok, tc.wantOK)
 			}
