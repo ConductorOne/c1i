@@ -648,10 +648,10 @@ resource with `--resource-id` likewise means you drop
   progress goes to stderr. `--wait-min` defaults to 1, `--wait-stable` to 3,
   `--wait-timeout` to 4m; a timeout exits 1 although the request was accepted.
   A request that still needs approval does not produce the grant until it is
-  approved, so it waits until the timeout. If the recipient already holds the
-  entitlement, the existing grant satisfies the wait immediately; exit 0 then
-  reports the grant's presence, not that this request was approved. `--dry-run`
-  never polls.
+  approved, so it waits until the timeout. The wait reads the matching set
+  before sending and settles only on a grant that was not already there; a
+  recipient who already holds the entitlement therefore waits to the timeout
+  (the request may still be pending). `--dry-run` never polls.
 - `grants add --app-id --entitlement-id --user-id ... [--wait]` grants a
   manually managed entitlement directly, **bypassing grant policy and
   approval**; prefer `requests create grant` unless that is what you want. One

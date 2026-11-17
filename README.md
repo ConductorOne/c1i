@@ -1520,10 +1520,10 @@ identifies the recipient, and with both the account must belong to the user.
 `grants list --wait` runs. The task is printed as soon as it is created
 (stdout), while progress goes to stderr. A timeout exits `1` even though the
 request was accepted: provisioning takes time, and a request that still needs
-approval will not produce the grant until someone approves it. If the recipient
-already holds the entitlement, the existing grant satisfies the wait
-immediately: exit `0` then reports that the grant exists, not that this request
-was approved or provisioned; re-read the task for that. `--wait-min`
+approval will not produce the grant until someone approves it. The wait reads
+the matching grant set before sending and settles only on a grant that was not
+already there, so a recipient who already holds the entitlement waits to the
+timeout (the request may still be pending). `--wait-min`
 defaults to `1` (unlike `grants list`, where an empty set is a valid answer);
 `--wait-stable` (default `3`) and `--wait-timeout` (default `4m`) match
 `grants list`. `--dry-run` never polls.

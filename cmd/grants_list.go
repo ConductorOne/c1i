@@ -288,8 +288,8 @@ func fetchAllGrants(ctx context.Context, c *client.Client, q grantsQuery, pageSi
 // reduced to the sorted grant keys, so a mutating command can hand it to
 // withWait, which only carries []string results. It is what
 // "requests create grant --wait" polls.
-func grantsWaitOp(cmd *cobra.Command, c *client.Client, q grantsQuery, pageSize, stableReads, minGrants int, timeout time.Duration) waitOp[[]string] {
-	done := stableAndAtLeast(
+func grantsWaitOp(cmd *cobra.Command, c *client.Client, q grantsQuery, pageSize, stableReads, minGrants int, timeout time.Duration, baseline map[string]struct{}, subject string) waitOp[[]string] {
+	settled := stableAndAtLeast(
 		stableReads,
 		func(keys []string) string { return strings.Join(keys, "\x02") },
 		func(keys []string) bool { return len(keys) >= minGrants },
@@ -302,10 +302,23 @@ func grantsWaitOp(cmd *cobra.Command, c *client.Client, q grantsQuery, pageSize,
 			}
 			return grantKeys(items), nil
 		},
-		Done:     done,
+		Done: func(keys []string) bool {
+			if !settled(keys) {
+				return false
+			}
+			if baseline == nil {
+				return true
+			}
+			for _, k := range keys {
+				if _, ok := baseline[k]; !ok {
+					return true
+				}
+			}
+			return false
+		},
 		Interval: grantsWaitPollInterval,
 		Timeout:  timeout,
-		Subject:  grantsWaitSubject(minGrants),
+		Subject:  subject,
 		Success:  "Grants settled",
 		Slow:     "grant provisioning can take several minutes",
 		Recheck:  "c1i grants list " + strings.Join(q.rescanFlags(), " "),

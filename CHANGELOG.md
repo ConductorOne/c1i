@@ -188,9 +188,9 @@ Inputs now refused (exit 2):
   grant; `grants list` keeps `0` because an empty set is a valid answer),
   `--wait-stable` defaults to `3` and `--wait-timeout` to `4m`. The task is
   printed as soon as it is created, progress goes to stderr, and a timeout
-  exits `1` although the request was accepted. If the recipient already holds
-  the entitlement, the existing grant satisfies the wait immediately; exit `0`
-  then reports the grant's presence, not that this request was approved.
+  exits `1` although the request was accepted. The wait reads the matching set
+  before sending and settles only on a grant that was not already there, so a
+  recipient who already holds the entitlement waits to the timeout.
   `--dry-run` never polls.
 - `grants add --app-id --entitlement-id --user-id ...` grants users a manually
   managed entitlement directly (`POST .../add-manual-user`), skipping request

@@ -39,6 +39,32 @@ func recipientOpts(appID, userID, appUserID string) []mutationOpt {
 	return opts
 }
 
+// grantBaselinePreRead records the matching grant set before the request is
+// sent, so the wait can require a grant that was not already there. The
+// recipient may come from the body (an omitted --user-id resolved by an
+// earlier pre-read) or from --app-user-id.
+func grantBaselinePreRead(appID, entitlementID, appUserID string, dst *map[string]struct{}) preRead {
+	return preRead{Run: func(ctx context.Context, c *client.Client, m *mutation) ([]resolvedID, error) {
+		q := grantsQuery{appID: appID, entitlementID: entitlementID, appUserID: appUserID}
+		if body, ok := m.Body.(map[string]any); ok {
+			q.userID, _ = body["identityUserId"].(string)
+		}
+		if q.userID == "" && q.appUserID == "" {
+			return nil, &usageError{fmt.Errorf("--wait could not resolve the requesting user; pass --user-id or --app-user-id")}
+		}
+		items, err := fetchAllGrants(ctx, c, q, defaultPageSize)
+		if err != nil {
+			return nil, fmt.Errorf("reading the current grants before the request: %w", err)
+		}
+		keys := grantKeys(items)
+		*dst = make(map[string]struct{}, len(keys))
+		for _, k := range keys {
+			(*dst)[k] = struct{}{}
+		}
+		return nil, nil
+	}}
+}
+
 // buildGrantTaskBody builds the CreateGrantTaskRequest wire body for
 // POST /api/v1/task/grant (c1.api.task.v1.TaskService.CreateGrantTask).
 // The endpoint expects the request fields at the TOP LEVEL — wrapping them
@@ -95,10 +121,10 @@ runs, filtered to whichever recipient was named. The task is printed as soon
 as it is created; progress goes to stderr. A
 timeout exits 1 even though the request was accepted: provisioning can take
 minutes, and a request that still needs approval does not produce the grant
-until someone approves it. If the recipient already holds the entitlement, the
-existing grant satisfies the wait immediately: exit 0 then reports that the
-grant exists, not that this request was approved or provisioned; re-read the
-task for that. --wait-min defaults to 1 (unlike "grants list",
+until someone approves it. The wait reads the matching grant set before sending
+and settles only on a grant that was not already there, so a recipient who
+already holds the entitlement waits to the timeout (the request may still be
+pending). --wait-min defaults to 1 (unlike "grants list",
 where an empty set is a valid answer); --wait-stable and --wait-timeout match
 "grants list". --dry-run never polls.
 
@@ -139,26 +165,35 @@ Example:
 		}
 
 		body := buildGrantTaskBody(appID, entitlementID, userID, appUserID, duration, description, emergency)
-		return sendMutation(cmd, mutation{Method: http.MethodPost, Path: "/api/v1/task/grant", Body: body},
-			append(recipientOpts(appID, userID, appUserID), withWait(func(c *client.Client) waitOp[[]string] {
-				// The pre-read resolved an omitted --user-id into the body; an
-				// explicit one is already there. Either recipient flag names
-				// the grant to wait for.
-				identityUserID, _ := body["identityUserId"].(string)
-				if identityUserID == "" {
-					identityUserID = userID
+		var baseline map[string]struct{}
+		opts := recipientOpts(appID, userID, appUserID)
+		if wait && !dryRunActive() {
+			opts = append(opts, withPreRead(grantBaselinePreRead(appID, entitlementID, appUserID, &baseline)))
+		}
+		opts = append(opts, withWait(func(c *client.Client) waitOp[[]string] {
+			// The pre-read resolved an omitted --user-id into the body; an
+			// explicit one is already there. Either recipient flag names
+			// the grant to wait for.
+			identityUserID, _ := body["identityUserId"].(string)
+			if identityUserID == "" {
+				identityUserID = userID
+			}
+			if identityUserID == "" && appUserID == "" {
+				return waitOp[[]string]{
+					Poll: func(context.Context) ([]string, error) {
+						return nil, &usageError{fmt.Errorf("--wait could not resolve the requesting user; pass --user-id or --app-user-id")}
+					},
+					Done: func([]string) bool { return false },
 				}
-				if identityUserID == "" && appUserID == "" {
-					return waitOp[[]string]{
-						Poll: func(context.Context) ([]string, error) {
-							return nil, &usageError{fmt.Errorf("--wait could not resolve the requesting user; pass --user-id or --app-user-id")}
-						},
-						Done: func([]string) bool { return false },
-					}
-				}
-				return grantsWaitOp(cmd, c, grantsQuery{appID: appID, entitlementID: entitlementID, userID: identityUserID, appUserID: appUserID},
-					defaultPageSize, stableReads, minGrants, waitTimeout)
-			}, wait))...)
+			}
+			subject := grantsWaitSubject(minGrants)
+			if baseline != nil {
+				subject = "a new matching grant to appear and stop changing"
+			}
+			return grantsWaitOp(cmd, c, grantsQuery{appID: appID, entitlementID: entitlementID, userID: identityUserID, appUserID: appUserID},
+				defaultPageSize, stableReads, minGrants, waitTimeout, baseline, subject)
+		}, wait))
+		return sendMutation(cmd, mutation{Method: http.MethodPost, Path: "/api/v1/task/grant", Body: body}, opts...)
 	},
 }
 
@@ -172,9 +207,9 @@ func init() {
 	requestsCreateGrantCmd.Flags().String("description", "", "Justification or description")
 	allowEmpty(requestsCreateGrantCmd, emptyIsOmitted, "description")
 	requestsCreateGrantCmd.Flags().Bool("emergency", false, "Request emergency access")
-	addWaitFlags(requestsCreateGrantCmd, "GET /api/v1/search/grants until the requested grant appears and stops changing", 4*time.Minute)
+	addWaitFlags(requestsCreateGrantCmd, "GET /api/v1/search/grants until a new grant for this request appears and stops changing", 4*time.Minute)
 	requestsCreateGrantCmd.Flags().Int("wait-stable", 3, "Consecutive identical reads --wait requires before it settles (min 2)")
-	requestsCreateGrantCmd.Flags().Int("wait-min", 1, "Minimum matching grants --wait requires before it settles (default 1; 0 lets an empty result settle)")
+	requestsCreateGrantCmd.Flags().Int("wait-min", 1, "Minimum matching grants --wait requires before it settles (default 1; a new grant is always required, so 0 cannot settle on an empty set)")
 	markRequired(requestsCreateGrantCmd, "app-id")
 	markRequired(requestsCreateGrantCmd, "entitlement-id")
 	markMutating(requestsCreateGrantCmd)
