@@ -727,7 +727,9 @@ access that way unless you already know how you'd take it back.
        c1i requests create grant --app-id "$APP_ID" --entitlement-id "$ENTITLEMENT_ID" --user-id "$USER_ID" --description "<why>"
 
    Prints the task as JSON; capture "jq -er .id" as TASK_ID (.state is a
-   snapshot from creation, not the outcome; re-read with requests get).
+   snapshot from creation, not the outcome; re-read with requests get). Add
+   "--wait" to block until the grant appears in "grants list" before the
+   command returns (a request that needs approval will wait until the timeout).
    A 403 here (target
    user is not allowed to request that resource) means the entitlement
    isn't reachable through any request catalog for this user — a

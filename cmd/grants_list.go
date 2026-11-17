@@ -240,15 +240,22 @@ type grantsSnapshot struct {
 // drive the loop faster than real time.
 var grantsWaitPollInterval = 5 * time.Second
 
-// grantSetFingerprint identifies the set of grants independently of the page
-// order the server happens to return them in: a grant is (entitlement,
-// account), and a re-ordered page is not a change.
-func grantSetFingerprint(items []grantListItem) string {
+// grantKeys names each grant by (entitlement, account), sorted so page order
+// is not a change. Both the fingerprint and the mutation wait use it.
+func grantKeys(items []grantListItem) []string {
 	keys := make([]string, 0, len(items))
 	for _, it := range items {
 		keys = append(keys, it.Entitlement.AppEntitlement.ID+"\x00"+it.AppEntitlementUserBinding.AppUser.AppUser.ID)
 	}
 	sort.Strings(keys)
+	return keys
+}
+
+// grantSetFingerprint identifies the set of grants independently of the page
+// order the server happens to return them in: a grant is (entitlement,
+// account), and a re-ordered page is not a change.
+func grantSetFingerprint(items []grantListItem) string {
+	keys := grantKeys(items)
 	return strconv.Itoa(len(keys)) + "\x01" + strings.Join(keys, "\x02")
 }
 
@@ -275,6 +282,35 @@ func fetchAllGrants(ctx context.Context, c *client.Client, q grantsQuery, pageSi
 	s := grantSpec(ctx, q)
 	s.PageSize = pageSize
 	return collectPages(c, s)
+}
+
+// grantsWaitOp is the same wait as waitForGrants with the polled value
+// reduced to the sorted grant keys, so a mutating command can hand it to
+// withWait, which only carries []string results. It is what
+// "requests create grant --wait" polls.
+func grantsWaitOp(cmd *cobra.Command, c *client.Client, q grantsQuery, pageSize, stableReads, minGrants int, timeout time.Duration) waitOp[[]string] {
+	done := stableAndAtLeast(
+		stableReads,
+		func(keys []string) string { return strings.Join(keys, "\x02") },
+		func(keys []string) bool { return len(keys) >= minGrants },
+	)
+	return waitOp[[]string]{
+		Poll: func(ctx context.Context) ([]string, error) {
+			items, err := fetchAllGrants(ctx, c, q, pageSize)
+			if err != nil {
+				return nil, err
+			}
+			return grantKeys(items), nil
+		},
+		Done:     done,
+		Interval: grantsWaitPollInterval,
+		Timeout:  timeout,
+		Subject:  grantsWaitSubject(minGrants),
+		Success:  "Grants settled",
+		Slow:     "grant provisioning can take several minutes",
+		Recheck:  "c1i grants list " + strings.Join(q.rescanFlags(), " "),
+		Out:      cmd.ErrOrStderr(),
+	}
 }
 
 // waitForGrants blocks until the matching grant set comes back identical
