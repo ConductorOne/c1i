@@ -90,7 +90,7 @@ func TestGetBaseURLWithSourceSilentForExplicitFlag(t *testing.T) {
 		rootCmd.SetOut(&stdout)
 		rootCmd.SetErr(&stdout)
 		rootCmd.SetArgs([]string{"users", "get", "someid", "--url", "acme.conductor.one"})
-		_ = rootCmd.ExecuteContext(t.Context())
+		_ = executeRoot()
 	})
 
 	if strings.Contains(stderr, "Warning: no --url flag given") {
@@ -111,7 +111,7 @@ func TestGetBaseURLWithSourceSilentForEnvSource(t *testing.T) {
 		rootCmd.SetOut(&stdout)
 		rootCmd.SetErr(&stdout)
 		rootCmd.SetArgs([]string{"users", "get", "someid"})
-		_ = rootCmd.ExecuteContext(t.Context())
+		_ = executeRoot()
 	})
 
 	if strings.Contains(stderr, "Warning: no --url flag given") {
@@ -130,16 +130,15 @@ func TestGetBaseURLWithSourceSilentForEnvSource(t *testing.T) {
 func TestGetBaseURLWithSourceWarnsForConfigSource(t *testing.T) {
 	resetCmdFlags(t, rootCmd)
 	t.Setenv("C1I_URL", "")
-	orig := viper.GetString("url")
+	clearViperOverrides(t, "url")
 	viper.Set("url", "acme.conductor.one")
-	t.Cleanup(func() { viper.Set("url", orig) })
 
 	var stdout bytes.Buffer
 	stderr := captureStderr(t, func() {
 		rootCmd.SetOut(&stdout)
 		rootCmd.SetErr(&stdout)
 		rootCmd.SetArgs([]string{"users", "get", "someid"})
-		_ = rootCmd.ExecuteContext(t.Context())
+		_ = executeRoot()
 	})
 
 	if !strings.Contains(stderr, "Warning: no --url flag given") {
@@ -163,16 +162,15 @@ func TestGetBaseURLWithSourceWarnsForConfigSource(t *testing.T) {
 func TestGetBaseURLWithSourceWarnsOnceForPaginatedList(t *testing.T) {
 	resetCmdFlags(t, rootCmd)
 	t.Setenv("C1I_URL", "")
-	orig := viper.GetString("url")
+	clearViperOverrides(t, "url")
 	viper.Set("url", "acme.conductor.one")
-	t.Cleanup(func() { viper.Set("url", orig) })
 
 	var stdout bytes.Buffer
 	stderr := captureStderr(t, func() {
 		rootCmd.SetOut(&stdout)
 		rootCmd.SetErr(&stdout)
 		rootCmd.SetArgs([]string{"apps", "list"})
-		_ = rootCmd.ExecuteContext(t.Context())
+		_ = executeRoot()
 	})
 
 	if got := strings.Count(stderr, "Warning: no --url flag given"); got != 1 {

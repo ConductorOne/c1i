@@ -380,7 +380,7 @@ func runDocsOpenapiRoot(t *testing.T, rt http.RoundTripper, args ...string) (str
 		docsOpenapiCmd.SetContext(prevCtx)
 	})
 	rootCmd.SetArgs(append([]string{"docs", "openapi"}, args...))
-	err := rootCmd.ExecuteContext(t.Context())
+	err := executeRoot()
 	return out.String(), err
 }
 

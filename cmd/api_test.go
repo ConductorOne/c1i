@@ -224,7 +224,7 @@ func TestAPIDeleteBodyRefusedByDefault(t *testing.T) {
 		"--body", `{"a":1}`,
 	})
 
-	err := rootCmd.ExecuteContext(context.Background())
+	err := executeRoot()
 	if err == nil {
 		t.Fatal("expected an error, got nil")
 	}
@@ -257,7 +257,7 @@ func TestAPIGetBodyRefused(t *testing.T) {
 		"--body", `{"a":1}`,
 	})
 
-	err := rootCmd.ExecuteContext(context.Background())
+	err := executeRoot()
 	if err == nil {
 		t.Fatal("expected an error, got nil")
 	}
@@ -304,7 +304,7 @@ func TestAPIDeleteBodyOptInSendsBodyOnWire(t *testing.T) {
 		"--allow-delete-body",
 	})
 
-	if err := rootCmd.ExecuteContext(context.Background()); err != nil {
+	if err := executeRoot(); err != nil {
 		t.Fatalf("ExecuteContext: %v", err)
 	}
 
@@ -337,9 +337,8 @@ func TestAPIDeleteBodyOptInDryRunPreviewsWithoutSending(t *testing.T) {
 	// parse, not name the real target.
 	t.Setenv("C1I_URL", "https://example.invalid")
 
-	origDryRun := viper.GetBool("dry_run")
+	clearViperOverrides(t, "dry_run")
 	viper.Set("dry_run", true)
-	t.Cleanup(func() { viper.Set("dry_run", origDryRun) })
 
 	var out bytes.Buffer
 	apiCmd.SetOut(&out)
@@ -352,7 +351,7 @@ func TestAPIDeleteBodyOptInDryRunPreviewsWithoutSending(t *testing.T) {
 		"--allow-delete-body",
 	})
 
-	if err := rootCmd.ExecuteContext(context.Background()); err != nil {
+	if err := executeRoot(); err != nil {
 		t.Fatalf("ExecuteContext: %v", err)
 	}
 
@@ -417,8 +416,8 @@ func TestAPIPaginateFieldsZeroMatchAcrossAllPagesErrors(t *testing.T) {
 	resetCmdFlags(t, apiCmd)
 	stubNewAPIClient(t, srv)
 	t.Setenv("C1I_URL", srv.URL)
+	clearViperOverrides(t, "fields")
 	viper.Set("fields", "id")
-	t.Cleanup(func() { viper.Set("fields", "") })
 
 	var out bytes.Buffer
 	apiCmd.SetOut(&out)
@@ -430,7 +429,7 @@ func TestAPIPaginateFieldsZeroMatchAcrossAllPagesErrors(t *testing.T) {
 		"--paginate",
 	})
 
-	err := rootCmd.ExecuteContext(context.Background())
+	err := executeRoot()
 	if err == nil {
 		t.Fatalf("expected an error (exit 2) when --fields matches nothing on any page; output: %s", out.String())
 	}
@@ -461,8 +460,8 @@ func TestAPIPaginateFieldsPartialMatchAcrossPagesSucceeds(t *testing.T) {
 	resetCmdFlags(t, apiCmd)
 	stubNewAPIClient(t, srv)
 	t.Setenv("C1I_URL", srv.URL)
+	clearViperOverrides(t, "fields")
 	viper.Set("fields", "id")
-	t.Cleanup(func() { viper.Set("fields", "") })
 
 	var out bytes.Buffer
 	apiCmd.SetOut(&out)
@@ -474,7 +473,7 @@ func TestAPIPaginateFieldsPartialMatchAcrossPagesSucceeds(t *testing.T) {
 		"--paginate",
 	})
 
-	if err := rootCmd.ExecuteContext(context.Background()); err != nil {
+	if err := executeRoot(); err != nil {
 		t.Fatalf("expected exit 0 (page 2 matched --fields), got error: %v; output: %s", err, out.String())
 	}
 	gotLines := strings.Split(strings.TrimSpace(out.String()), "\n")
@@ -520,8 +519,8 @@ func TestAPIPaginateLimitWithSparseFieldsContinuesPastFilteredPage(t *testing.T)
 	resetCmdFlags(t, apiCmd)
 	stubNewAPIClient(t, srv)
 	t.Setenv("C1I_URL", srv.URL)
+	clearViperOverrides(t, "fields")
 	viper.Set("fields", "id")
-	t.Cleanup(func() { viper.Set("fields", "") })
 
 	var out bytes.Buffer
 	apiCmd.SetOut(&out)
@@ -534,7 +533,7 @@ func TestAPIPaginateLimitWithSparseFieldsContinuesPastFilteredPage(t *testing.T)
 		"--limit", "1",
 	})
 
-	if err := rootCmd.ExecuteContext(context.Background()); err != nil {
+	if err := executeRoot(); err != nil {
 		t.Fatalf("expected exit 0 (page 2's row matched --fields), got error: %v; output: %s", err, out.String())
 	}
 	if requestCount != 2 {
@@ -563,7 +562,7 @@ func TestAPIPathWithoutLeadingSlashIsUsageError(t *testing.T) {
 	apiCmd.SetErr(&out)
 	rootCmd.SetArgs([]string{"api", "--path", "api/v1/users"})
 
-	err := rootCmd.ExecuteContext(context.Background())
+	err := executeRoot()
 	if err == nil {
 		t.Fatal("expected an error for a --path without a leading slash, got nil")
 	}
@@ -596,7 +595,7 @@ func TestAPIPathWithLeadingSlashStillWorks(t *testing.T) {
 	apiCmd.SetErr(&out)
 	rootCmd.SetArgs([]string{"api", "--path", "/api/v1/users"})
 
-	if err := rootCmd.ExecuteContext(context.Background()); err != nil {
+	if err := executeRoot(); err != nil {
 		t.Fatalf("expected exit 0 for a well-formed --path, got: %v; output: %s", err, out.String())
 	}
 }
@@ -629,7 +628,7 @@ func TestAPINonJSON200BodyIsError(t *testing.T) {
 	apiCmd.SetErr(&out)
 	rootCmd.SetArgs([]string{"api", "--path", "/api/v1/../../etc/passwd"})
 
-	err := rootCmd.ExecuteContext(context.Background())
+	err := executeRoot()
 	if err == nil {
 		t.Fatalf("expected an error for a non-JSON 200 body, got nil; output: %s", out.String())
 	}
@@ -659,7 +658,7 @@ func TestAPIEmpty200BodySucceeds(t *testing.T) {
 	apiCmd.SetErr(&out)
 	rootCmd.SetArgs([]string{"api", "--path", "/api/v1/things/1", "--method", "DELETE"})
 
-	if err := rootCmd.ExecuteContext(context.Background()); err != nil {
+	if err := executeRoot(); err != nil {
 		t.Fatalf("expected exit 0 for a legitimately empty 200 body, got: %v; output: %s", err, out.String())
 	}
 	if out.String() != "" {
@@ -685,7 +684,7 @@ func TestAPINormalJSONBodyStillWorks(t *testing.T) {
 	apiCmd.SetErr(&out)
 	rootCmd.SetArgs([]string{"api", "--path", "/api/v1/things/1"})
 
-	if err := rootCmd.ExecuteContext(context.Background()); err != nil {
+	if err := executeRoot(); err != nil {
 		t.Fatalf("expected exit 0 for a normal JSON body, got: %v; output: %s", err, out.String())
 	}
 	var got map[string]any
@@ -737,7 +736,7 @@ func TestAPITruncatedPageWarns(t *testing.T) {
 			apiCmd.SetErr(&errOut)
 			rootCmd.SetArgs([]string{"api", "--path", "/api/v1/catalogs"})
 
-			if err := rootCmd.ExecuteContext(context.Background()); err != nil {
+			if err := executeRoot(); err != nil {
 				t.Fatalf("ExecuteContext: %v", err)
 			}
 
@@ -788,7 +787,7 @@ func TestAPIPaginateDrainsCursorWithoutWarning(t *testing.T) {
 	apiCmd.SetErr(&errOut)
 	rootCmd.SetArgs([]string{"api", "--path", "/api/v1/catalogs", "--paginate"})
 
-	if err := rootCmd.ExecuteContext(context.Background()); err != nil {
+	if err := executeRoot(); err != nil {
 		t.Fatalf("ExecuteContext: %v", err)
 	}
 
@@ -829,7 +828,7 @@ func TestAPIPaginateSameTokenTwiceReturnsExitServer(t *testing.T) {
 	apiCmd.SetErr(&errOut)
 	rootCmd.SetArgs([]string{"api", "--path", "/api/v1/automations", "--paginate"})
 
-	err := rootCmd.ExecuteContext(context.Background())
+	err := executeRoot()
 	if err == nil {
 		t.Fatalf("ExecuteContext: want an error (stuck cursor -> exit 6), got nil; stdout=%q stderr=%q", out.String(), errOut.String())
 	}
@@ -870,7 +869,7 @@ func TestAPIPaginateKeepsItemsSharingAnIdentity(t *testing.T) {
 	apiCmd.SetOut(&out)
 	apiCmd.SetErr(&errOut)
 	rootCmd.SetArgs([]string{"api", "--path", "/api/v1/x", "--paginate"})
-	if err := rootCmd.ExecuteContext(context.Background()); err != nil {
+	if err := executeRoot(); err != nil {
 		t.Fatalf("ExecuteContext: %v (stderr %q)", err, errOut.String())
 	}
 	if rows := decodeNDJSONRows(t, out.String()); len(rows) != 6 {
@@ -912,7 +911,7 @@ func TestAPIPaginatePrintsIsolatedAllSeenPage(t *testing.T) {
 			apiCmd.SetOut(&out)
 			apiCmd.SetErr(&errOut)
 			rootCmd.SetArgs([]string{"api", "--path", "/api/v1/x", "--paginate"})
-			if err := rootCmd.ExecuteContext(context.Background()); err != nil {
+			if err := executeRoot(); err != nil {
 				t.Fatalf("ExecuteContext: %v (stderr %q)", err, errOut.String())
 			}
 			if rows := decodeNDJSONRows(t, out.String()); len(rows) != tc.want {
@@ -956,7 +955,7 @@ func TestAPIPaginateChangingTokenSameRowsReturnsExitServer(t *testing.T) {
 	apiCmd.SetErr(&errOut)
 	rootCmd.SetArgs([]string{"api", "--path", "/api/v1/automations", "--paginate"})
 
-	err := rootCmd.ExecuteContext(context.Background())
+	err := executeRoot()
 	if err == nil {
 		t.Fatalf("ExecuteContext: want an error (stuck cursor -> exit 6), got nil; stdout=%q stderr=%q", out.String(), errOut.String())
 	}
@@ -1011,7 +1010,7 @@ func TestAPIPaginateStuckCursorWithoutIDFallsBackToCanonicalJSON(t *testing.T) {
 	apiCmd.SetErr(&errOut)
 	rootCmd.SetArgs([]string{"api", "--path", "/api/v1/decoys", "--paginate"})
 
-	err := rootCmd.ExecuteContext(context.Background())
+	err := executeRoot()
 	if err == nil {
 		t.Fatalf("ExecuteContext: want an error (stuck cursor -> exit 6), got nil; stdout=%q stderr=%q", out.String(), errOut.String())
 	}
@@ -1059,7 +1058,7 @@ func TestAPIPaginateSingleRepeatedPageIsNotStuck(t *testing.T) {
 	apiCmd.SetErr(&errOut)
 	rootCmd.SetArgs([]string{"api", "--path", "/api/v1/things", "--paginate"})
 
-	if err := rootCmd.ExecuteContext(context.Background()); err != nil {
+	if err := executeRoot(); err != nil {
 		t.Fatalf("ExecuteContext: %v (exit %d); stderr=%q", err, exitCode(err), errOut.String())
 	}
 	var got []string
@@ -1130,7 +1129,7 @@ func TestAPIPaginateStuckCycleShapesReturnExitServer(t *testing.T) {
 			}
 			rootCmd.SetArgs(args)
 
-			err := rootCmd.ExecuteContext(context.Background())
+			err := executeRoot()
 			if got := exitCode(err); got != exitServer {
 				t.Fatalf("exitCode = %d, want %d (exitServer); err=%v stderr=%q", got, exitServer, err, errOut.String())
 			}
@@ -1173,7 +1172,7 @@ func TestAPIPaginateListKeyAbsent(t *testing.T) {
 			apiCmd.SetErr(&errOut)
 			rootCmd.SetArgs([]string{"api", "--path", "/api/v1/automations", "--paginate", "--list-key", "nope"})
 
-			err := rootCmd.ExecuteContext(context.Background())
+			err := executeRoot()
 			if !tc.wantErr {
 				if err != nil {
 					t.Fatalf("ExecuteContext: %v", err)
@@ -1218,7 +1217,7 @@ func TestAPIPaginateListKeyOmittedOnLaterPage(t *testing.T) {
 	apiCmd.SetErr(&errOut)
 	rootCmd.SetArgs([]string{"api", "--path", "/api/v1/automations", "--paginate", "--list-key", "list"})
 
-	if err := rootCmd.ExecuteContext(context.Background()); err != nil {
+	if err := executeRoot(); err != nil {
 		t.Fatalf("ExecuteContext: %v; stderr=%q", err, errOut.String())
 	}
 	rows := decodeNDJSONRows(t, out.String())
@@ -1319,7 +1318,7 @@ func runAPIHeldPageThenFail(t *testing.T, out io.Writer, fail func(http.Response
 	apiCmd.SetOut(out)
 	apiCmd.SetErr(&errOut)
 	rootCmd.SetArgs(append([]string{"api", "--path", "/api/v1/things", "--paginate"}, extraArgs...))
-	return rootCmd.ExecuteContext(context.Background())
+	return executeRoot()
 }
 
 // --limit still caps rows written while held rows are flushed.
@@ -1365,7 +1364,7 @@ func TestAPIPaginateNonJSONFirstPageIsExitServer(t *testing.T) {
 			apiCmd.SetOut(&out)
 			apiCmd.SetErr(&errOut)
 			rootCmd.SetArgs([]string{"api", "--path", "/api/v1/things", "--paginate"})
-			err := rootCmd.ExecuteContext(context.Background())
+			err := executeRoot()
 			if got := exitCode(err); got != exitServer {
 				t.Errorf("exitCode = %d, want %d; err=%v", got, exitServer, err)
 			}
@@ -1398,7 +1397,7 @@ func TestAPIPaginateListKeyNotArrayIsUsageError(t *testing.T) {
 			apiCmd.SetOut(&out)
 			apiCmd.SetErr(&errOut)
 			rootCmd.SetArgs([]string{"api", "--path", "/api/v1/things", "--paginate", "--list-key", "foo"})
-			err := rootCmd.ExecuteContext(context.Background())
+			err := executeRoot()
 			if got := exitCode(err); got != exitUsage {
 				t.Errorf("exitCode = %d, want %d; err=%v", got, exitUsage, err)
 			}
@@ -1433,7 +1432,7 @@ func TestAPINullBodyIsUsageError(t *testing.T) {
 			apiCmd.SetOut(&out)
 			apiCmd.SetErr(&errOut)
 			rootCmd.SetArgs(append([]string{"api", "--method", "POST", "--path", "/api/v1/search/catalogs", "--body", "null"}, extra...))
-			err := rootCmd.ExecuteContext(context.Background())
+			err := executeRoot()
 			if exitCode(err) != exitUsage || !strings.Contains(fmt.Sprint(err), "JSON object") {
 				t.Fatalf("err = %v (exit %d), want exit %d naming a JSON object", err, exitCode(err), exitUsage)
 			}

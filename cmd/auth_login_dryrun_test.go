@@ -10,7 +10,6 @@ import (
 
 	"github.com/ConductorOne/c1i/internal/client"
 	"github.com/spf13/cobra"
-	"github.com/spf13/viper"
 )
 
 // auth login can't preview a login, so --dry-run must stop it before any
@@ -53,10 +52,9 @@ func TestAuthLoginRejectsDryRun(t *testing.T) {
 
 			resetCmds(t, authLoginCmd)
 			resetCmdFlags(t, rootCmd)
-			// Other tests leave a viper.Set override, which beats the flag and
-			// env; a nil override falls through to them.
-			viper.Set("dry_run", nil)
-			t.Cleanup(func() { viper.Set("dry_run", nil) })
+			// A viper override beats the flag and env; a nil override falls
+			// through to them.
+			clearViperOverrides(t, "dry_run")
 			t.Setenv("C1I_DRY_RUN", "")
 			if tc.env {
 				t.Setenv("C1I_DRY_RUN", "1")

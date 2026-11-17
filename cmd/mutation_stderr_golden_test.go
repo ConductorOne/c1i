@@ -2,7 +2,6 @@ package cmd
 
 import (
 	"bytes"
-	"context"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -112,7 +111,6 @@ func runStderrScenario(t *testing.T, sc stderrScenario) string {
 	for _, c := range []*cobra.Command{rootCmd, leaf} {
 		c.SetOut(&stdout)
 		c.SetErr(&stderr)
-		c.SetContext(context.Background())
 	}
 	t.Cleanup(func() {
 		for _, c := range []*cobra.Command{rootCmd, leaf} {
@@ -121,7 +119,7 @@ func runStderrScenario(t *testing.T, sc stderrScenario) string {
 		}
 	})
 	rootCmd.SetArgs(sc.args)
-	ran, err := rootCmd.ExecuteC()
+	ran, err := executeRootC()
 	if err != nil {
 		renderTextError(&stderr, err, ran)
 	}

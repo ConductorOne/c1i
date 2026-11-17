@@ -2,7 +2,6 @@ package cmd
 
 import (
 	"bytes"
-	"context"
 	"strings"
 	"testing"
 
@@ -97,7 +96,7 @@ func TestNonUTF8PositionalArgIsUsageError(t *testing.T) {
 	rootCmd.SetErr(&out)
 	rootCmd.SetArgs([]string{"users", "get", invalidUTF8Arg})
 
-	err := rootCmd.ExecuteContext(context.Background())
+	err := executeRoot()
 	if err == nil {
 		t.Fatal("expected an error for a non-UTF-8 positional argument, got nil")
 	}
@@ -124,7 +123,7 @@ func TestValidUTF8PositionalArgUnaffected(t *testing.T) {
 	rootCmd.SetErr(&out)
 	rootCmd.SetArgs([]string{"users", "get", "a-perfectly-normal-id"})
 
-	err := rootCmd.ExecuteContext(context.Background())
+	err := executeRoot()
 	if err == nil {
 		t.Fatal("expected an error (no credentials configured), got nil")
 	}
@@ -151,7 +150,7 @@ func TestNonUTF8FlagValueIsUsageError(t *testing.T) {
 	rootCmd.SetErr(&out)
 	rootCmd.SetArgs([]string{"mcp", "servers", "get", "someid", "--app-id", invalidUTF8Arg})
 
-	err := rootCmd.ExecuteContext(context.Background())
+	err := executeRoot()
 	if err == nil {
 		t.Fatal("expected an error for a non-UTF-8 flag value, got nil")
 	}
@@ -179,7 +178,7 @@ func TestValidUTF8FlagValueUnaffected(t *testing.T) {
 	rootCmd.SetErr(&out)
 	rootCmd.SetArgs([]string{"mcp", "servers", "get", "someid", "--app-id", "a-perfectly-normal-app-id"})
 
-	err := rootCmd.ExecuteContext(context.Background())
+	err := executeRoot()
 	if err == nil {
 		t.Fatal("expected an error (no credentials configured), got nil")
 	}

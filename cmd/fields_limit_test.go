@@ -93,8 +93,8 @@ func TestTasksListLimitWithSparseFieldsContinuesPastFilteredPage(t *testing.T) {
 	t.Cleanup(func() { newListClient = orig })
 	t.Setenv("C1I_URL", "https://example.invalid")
 
+	clearViperOverrides(t, "fields")
 	viper.Set("fields", "outcome")
-	t.Cleanup(func() { viper.Set("fields", "") })
 	if err := tasksListCmd.Flags().Set("limit", "1"); err != nil {
 		t.Fatalf("setting --limit: %v", err)
 	}
@@ -163,8 +163,8 @@ func TestTasksListPageSizeStaysFullDuringSparseFieldsScan(t *testing.T) {
 	t.Cleanup(func() { newListClient = orig })
 	t.Setenv("C1I_URL", "https://example.invalid")
 
+	clearViperOverrides(t, "fields")
 	viper.Set("fields", "outcome")
-	t.Cleanup(func() { viper.Set("fields", "") })
 	if err := tasksListCmd.Flags().Set("page-size", fmt.Sprint(requestedPageSize)); err != nil {
 		t.Fatalf("setting --page-size: %v", err)
 	}

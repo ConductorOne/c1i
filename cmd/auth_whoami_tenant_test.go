@@ -2,7 +2,6 @@ package cmd
 
 import (
 	"bytes"
-	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -68,7 +67,7 @@ func runWhoami(t *testing.T, args []string) (string, error) {
 		rootCmd.SetArgs(nil)
 	})
 	rootCmd.SetArgs(append([]string{"auth", "whoami"}, args...))
-	err := rootCmd.ExecuteContext(context.Background())
+	err := executeRoot()
 	return out.String(), err
 }
 
@@ -102,9 +101,8 @@ func TestWhoamiReportsResolvedTenant(t *testing.T) {
 			name: "config",
 			setup: func(t *testing.T) {
 				t.Setenv("C1I_URL", "")
-				orig := viper.GetString("url")
+				clearViperOverrides(t, "url")
 				viper.Set("url", "https://acme-config.conductor.one")
-				t.Cleanup(func() { viper.Set("url", orig) })
 			},
 			wantTenant: "https://acme-config.conductor.one",
 			wantSource: "config",
@@ -172,9 +170,8 @@ func TestWhoamiTenantSurvivesFieldsProjection(t *testing.T) {
 	t.Setenv("C1I_URL", "")
 	stubWhoamiServer(t, http.StatusOK)
 
-	orig := viper.GetString("fields")
+	clearViperOverrides(t, "fields")
 	viper.Set("fields", "tenant")
-	t.Cleanup(func() { viper.Set("fields", orig) })
 
 	out, err := runWhoami(t, []string{"--url", "https://acme.conductor.one"})
 	if err != nil {

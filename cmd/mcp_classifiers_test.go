@@ -26,9 +26,8 @@ func writeClassifierJSON(t *testing.T, name, content string) string {
 
 func enableClassifierDryRun(t *testing.T) {
 	t.Helper()
-	original := viper.GetBool("dry_run")
+	clearViperOverrides(t, "dry_run")
 	viper.Set("dry_run", true)
-	t.Cleanup(func() { viper.Set("dry_run", original) })
 }
 
 func setClassifierFlag(t *testing.T, cmd *cobra.Command, name, value string) {

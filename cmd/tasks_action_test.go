@@ -449,7 +449,7 @@ func TestTaskActionsDryRunStillResolvesTheURL(t *testing.T) {
 			rootCmd.SetOut(&out)
 			rootCmd.SetErr(&out)
 			rootCmd.SetArgs([]string{"tasks", name, actionTestTaskID, "--dry-run", "--url", "not a url"})
-			err := rootCmd.ExecuteContext(t.Context())
+			err := executeRoot()
 			if err == nil {
 				t.Fatalf("tasks %s --dry-run accepted a malformed --url; a typo'd tenant previews as though it were real", name)
 			}
@@ -469,8 +469,8 @@ func TestTaskActionsDryRunStillResolvesTheURL(t *testing.T) {
 // C1I_DRY_RUN in whichever test runs next.
 func withDryRun(t *testing.T) {
 	t.Helper()
+	clearViperOverrides(t, "dry_run")
 	viper.Set("dry_run", true)
-	t.Cleanup(func() { viper.Set("dry_run", nil) })
 }
 
 // TestStepUnusedActionsPreviewWithoutCredentials: an action needing no step

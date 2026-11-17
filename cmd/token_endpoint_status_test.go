@@ -98,7 +98,7 @@ func runAgainst(t *testing.T, hits *int32, h http.HandlerFunc, args ...string) (
 		authTokenCmd.SetContext(context.Background())
 		apiCmd.SetContext(context.Background())
 	})
-	stderr := captureStderr(t, func() { err = rootCmd.ExecuteContext(t.Context()) })
+	stderr := captureStderr(t, func() { err = executeRoot() })
 	if err == nil {
 		t.Fatalf("%v: want an error, got none", args)
 	}

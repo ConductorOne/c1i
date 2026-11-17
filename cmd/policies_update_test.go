@@ -35,8 +35,8 @@ func stubPoliciesClient(t *testing.T, srv *httptest.Server) {
 // of restoring it, so a parked false cannot outrank C1I_DRY_RUN in a later test.
 func withRealDryRun(t *testing.T) {
 	t.Helper()
+	clearViperOverrides(t, "dry_run")
 	viper.Set("dry_run", false)
-	t.Cleanup(func() { viper.Set("dry_run", nil) })
 }
 
 // TestPoliciesUpdateSendsWrappedBody is the load-bearing proof that "update"
@@ -117,9 +117,8 @@ func TestPoliciesUpdateDryRunPreviewsWrappedBodyWithoutSending(t *testing.T) {
 	resetCmdFlags(t, policiesUpdateCmd)
 	stubPoliciesClient(t, srv)
 	t.Setenv("C1I_URL", "https://example.invalid")
-	orig := viper.GetBool("dry_run")
+	clearViperOverrides(t, "dry_run")
 	viper.Set("dry_run", true)
-	t.Cleanup(func() { viper.Set("dry_run", orig) })
 
 	_ = policiesUpdateCmd.Flags().Set("description", "new desc")
 

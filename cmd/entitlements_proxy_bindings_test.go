@@ -33,9 +33,8 @@ func proxyBindingTestValues() map[string]string {
 }
 
 func TestProxyBindingMutationsDryRunUseEscapedDirectionalPath(t *testing.T) {
-	origDryRun := viper.GetBool("dry_run")
+	clearViperOverrides(t, "dry_run")
 	viper.Set("dry_run", true)
-	t.Cleanup(func() { viper.Set("dry_run", origDryRun) })
 	t.Setenv("C1I_URL", "https://example.invalid")
 
 	for _, tt := range []struct {
@@ -88,9 +87,8 @@ func TestProxyBindingGetUnwrapsResponseAndUsesDirectionalPath(t *testing.T) {
 		return client.NewForTesting(srv.URL, srv.Client()), nil
 	}
 	t.Cleanup(func() { newClient = orig })
-	origDryRun := viper.GetBool("dry_run")
+	clearViperOverrides(t, "dry_run")
 	viper.Set("dry_run", false)
-	t.Cleanup(func() { viper.Set("dry_run", origDryRun) })
 
 	resetCmdFlags(t, entitlementsProxyBindingsGetCmd)
 	setProxyBindingFlags(t, entitlementsProxyBindingsGetCmd, proxyBindingTestValues())

@@ -12,8 +12,8 @@ import (
 )
 
 func TestFieldPathsAndEmitterReadViper(t *testing.T) {
+	clearViperOverrides(t, "fields")
 	viper.Set("fields", "id,user.email")
-	t.Cleanup(func() { viper.Set("fields", "") })
 
 	if got, want := fieldPaths(), [][]string{{"id"}, {"user", "email"}}; !reflect.DeepEqual(got, want) {
 		t.Fatalf("fieldPaths() = %v, want %v", got, want)
@@ -249,8 +249,8 @@ func TestWriteObjectProjects(t *testing.T) {
 	}
 
 	// With --fields set, writeObject projects the single object.
+	clearViperOverrides(t, "fields")
 	viper.Set("fields", "id")
-	t.Cleanup(func() { viper.Set("fields", "") })
 	buf.Reset()
 	if err := writeObject(cmd, []byte(`{"id":"1","name":"n"}`)); err != nil {
 		t.Fatalf("writeObject project: %v", err)
@@ -376,8 +376,8 @@ func TestProjectValueDepthInsensitiveDoesNotDescendIntoArrays(t *testing.T) {
 // or a field that truly doesn't exist) must not silently print "{}" with exit
 // 0 — it must return a *usageError (exit 2) instead.
 func TestWriteObjectFailsLoudlyOnNoMatch(t *testing.T) {
+	clearViperOverrides(t, "fields")
 	viper.Set("fields", "totally_bogus_field")
-	t.Cleanup(func() { viper.Set("fields", "") })
 
 	cmd := &cobra.Command{}
 	var buf bytes.Buffer
@@ -414,8 +414,8 @@ func TestWriteObjectFailsLoudlyOnNoMatch(t *testing.T) {
 //
 // Do not "fix" this into an error without confronting that consequence first.
 func TestWriteObjectPartialMatchStillSucceeds(t *testing.T) {
+	clearViperOverrides(t, "fields")
 	viper.Set("fields", "id,totally_bogus_field")
-	t.Cleanup(func() { viper.Set("fields", "") })
 
 	cmd := &cobra.Command{}
 	var buf bytes.Buffer
@@ -437,8 +437,8 @@ func TestWriteObjectPartialMatchStillSucceeds(t *testing.T) {
 func TestWriteRawObjectIgnoresFields(t *testing.T) {
 	// Mutation confirmations must NOT be trimmed by a session-wide C1I_FIELDS,
 	// or a delete's status object would silently collapse to {}.
+	clearViperOverrides(t, "fields")
 	viper.Set("fields", "id")
-	t.Cleanup(func() { viper.Set("fields", "") })
 
 	cmd := &cobra.Command{}
 	var buf bytes.Buffer

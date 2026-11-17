@@ -27,10 +27,9 @@ func writeJSONFile(t *testing.T, name, content string) string {
 
 func enableBundleAutomationDryRun(t *testing.T) {
 	t.Helper()
-	orig := viper.GetBool("dry_run")
+	clearViperOverrides(t, "dry_run")
 	viper.Set("dry_run", true)
 	t.Setenv("C1I_URL", "https://example.invalid") // a preview resolves the URL first
-	t.Cleanup(func() { viper.Set("dry_run", orig) })
 }
 
 // TestBundleAutomationMutationsDryRun proves all five mutating leaves render
@@ -255,9 +254,8 @@ func TestBundleAutomationGetEscapesAccessProfileID(t *testing.T) {
 	t.Cleanup(func() { newClient = origNewClient })
 
 	resetCmdFlags(t, accessProfilesBundleAutomationGetCmd)
-	origDryRun := viper.GetBool("dry_run")
+	clearViperOverrides(t, "dry_run")
 	viper.Set("dry_run", false)
-	t.Cleanup(func() { viper.Set("dry_run", origDryRun) })
 	t.Setenv("C1I_URL", "https://example.invalid")
 
 	var out bytes.Buffer

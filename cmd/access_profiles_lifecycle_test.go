@@ -41,9 +41,8 @@ func stubCatalogClient(t *testing.T, srv *httptest.Server) {
 
 func withCatalogDryRun(t *testing.T, enabled bool) {
 	t.Helper()
-	orig := viper.GetBool("dry_run")
+	clearViperOverrides(t, "dry_run")
 	viper.Set("dry_run", enabled)
-	t.Cleanup(func() { viper.Set("dry_run", orig) })
 }
 
 // TestBuildAccessProfileCreateBodyAllWritableFields verifies that create sends

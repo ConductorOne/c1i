@@ -527,8 +527,8 @@ func TestEveryTypedGetIsCovered(t *testing.T) {
 // C1I_FIELDS, so anything less loses to another test's leftover).
 func setFieldsFlag(t *testing.T, value string) {
 	t.Helper()
+	clearViperOverrides(t, "fields")
 	viper.Set("fields", value)
-	t.Cleanup(func() { viper.Set("fields", "") })
 }
 
 func sortedKeys(m map[string]any) []string {

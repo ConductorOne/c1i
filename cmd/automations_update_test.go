@@ -132,6 +132,7 @@ func TestAutomationsUpdateBodyFileAcceptsIdEqualToPositional(t *testing.T) {
 	_ = automationsUpdateCmd.Flags().Set("update-mask", "triggers")
 	// RunE called directly: record the positional the way cobra does.
 	_ = automationsUpdateCmd.Flags().Parse([]string{"a1"})
+	t.Cleanup(func() { _ = automationsUpdateCmd.Flags().Parse(nil) }) // drop the recorded positional
 
 	if _, err := runAutomationsUpdate(t, "a1"); err != nil {
 		t.Fatalf("RunE: %v", err)

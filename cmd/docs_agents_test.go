@@ -2,7 +2,6 @@ package cmd
 
 import (
 	"bytes"
-	"context"
 	"os"
 	"path/filepath"
 	"strings"
@@ -168,7 +167,7 @@ func runThroughRoot(t *testing.T, args ...string) string {
 		rootCmd.SetErr(nil)
 		rootCmd.SetArgs(nil)
 	})
-	if err := rootCmd.ExecuteContext(context.Background()); err != nil {
+	if err := executeRoot(); err != nil {
 		t.Fatalf("%v: unexpected error: %v", args, err)
 	}
 	return out.String()

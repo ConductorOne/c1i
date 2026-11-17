@@ -2,7 +2,6 @@ package cmd
 
 import (
 	"bytes"
-	"context"
 	"fmt"
 	"regexp"
 	"strings"
@@ -439,7 +438,7 @@ func TestStrayPositionalRejectedOnCollectionCommand(t *testing.T) {
 			rootCmd.SetErr(&out)
 			rootCmd.SetArgs(args)
 
-			err := rootCmd.ExecuteContext(context.Background())
+			err := executeRoot()
 			if err == nil {
 				t.Fatalf("expected the stray positional %q to be rejected, got nil error (silently accepted)", args[len(args)-1])
 			}

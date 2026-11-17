@@ -27,7 +27,7 @@ func TestMcpToolsApproveBatchesOnePostPerId(t *testing.T) {
 		"--app-id", "app-x", "--connector-id", "conn-y",
 		"--dry-run", "--url", "acme.conductor.one",
 	})
-	if err := rootCmd.ExecuteContext(t.Context()); err != nil {
+	if err := executeRoot(); err != nil {
 		t.Fatalf("approve of three ids errored: %v", err)
 	}
 

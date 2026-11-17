@@ -2,7 +2,6 @@ package cmd
 
 import (
 	"bytes"
-	"context"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -71,7 +70,7 @@ func TestAPIGuardsExitUsage(t *testing.T) {
 			apiCmd.SetErr(&out)
 			rootCmd.SetArgs(tc.args)
 
-			err := rootCmd.ExecuteContext(context.Background())
+			err := executeRoot()
 			if err == nil {
 				t.Fatal("expected an error, got nil")
 			}
@@ -93,16 +92,15 @@ func TestAPIInvalidJSONBodyExitsUsage(t *testing.T) {
 		resetCmdFlags(t, apiCmd)
 		t.Setenv("C1I_URL", "https://example.invalid")
 
-		origDryRun := viper.GetBool("dry_run")
+		clearViperOverrides(t, "dry_run")
 		viper.Set("dry_run", true)
-		t.Cleanup(func() { viper.Set("dry_run", origDryRun) })
 
 		var out bytes.Buffer
 		apiCmd.SetOut(&out)
 		apiCmd.SetErr(&out)
 		rootCmd.SetArgs([]string{"api", "--path", "/api/v1/apps", "--method", "POST", "--body", "not json"})
 
-		err := rootCmd.ExecuteContext(context.Background())
+		err := executeRoot()
 		if err == nil {
 			t.Fatal("expected an error, got nil")
 		}
@@ -127,7 +125,7 @@ func TestAPIInvalidJSONBodyExitsUsage(t *testing.T) {
 		apiCmd.SetErr(&out)
 		rootCmd.SetArgs([]string{"api", "--path", "/api/v1/apps", "--method", "POST", "--body", "not json"})
 
-		err := rootCmd.ExecuteContext(context.Background())
+		err := executeRoot()
 		if err == nil {
 			t.Fatal("expected an error, got nil")
 		}
@@ -152,7 +150,7 @@ func TestAPIInvalidJSONBodyExitsUsage(t *testing.T) {
 		apiCmd.SetErr(&out)
 		rootCmd.SetArgs([]string{"api", "--path", "/api/v1/apps", "--method", "DELETE", "--allow-delete-body", "--body", "not json"})
 
-		err := rootCmd.ExecuteContext(context.Background())
+		err := executeRoot()
 		if err == nil {
 			t.Fatal("expected an error, got nil")
 		}
