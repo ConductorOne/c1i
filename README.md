@@ -1490,8 +1490,10 @@ The rule-list endpoints do not currently expose public filtering or paging; use
 `--limit` only to cap local output. The upstream mapping gap is tracked in
 [#131](https://github.com/ConductorOne/c1i/issues/131). Use JSON files for oneof actions, custom
 finding targets, and nested rules; the commands insert positional IDs into the
-request. `findings create-task` accepts an optional `--policy-id`; C1 otherwise
-selects the app policy or built-in Finding Review policy. `bulk-state` and
+request. `findings create-task` accepts an optional `--policy-id`, looked up first (no
+type check): unknown exits `4`, deleted `2`, and the credential needs policy
+read (else `3`), `--dry-run` included; C1 otherwise selects the app policy or
+built-in Finding Review policy. `bulk-state` and
 `bulk-create-tasks` are asynchronous and return a `bulkActionId`; prefer
 explicit `refs` in the JSON to avoid unexpectedly applying a broad
 `searchRequest`.

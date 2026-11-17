@@ -339,7 +339,10 @@ Branch on the exit code, not stderr text. An empty id argument is a usage error
 build ids programmatically, because it used to return the whole collection with
 exit 0. An id of `.` or `..` (also with a `;` suffix, such as `..;x`, or
 percent-encoded as `%2E`) is refused before sending too, since the API resolves
-it to the parent or collection. An id of `/` is never valid, and the exit
+it to the parent or collection. That holds for every id argument (a flag ending
+`-id`, `-ids`, `-uid` or `-uids`, or a positional documented `<…-id>`), whether
+the id goes in a path or a body, and before any credential is loaded. An id of
+`/` is never valid, and the exit
 depends on the route: as the URL's final segment (`c1i users get /`) it escapes
 to a path the API redirects to the collection, and the REST client refuses that
 path change (exit 2); on a multi-segment route (`c1i apps owners /`) the request

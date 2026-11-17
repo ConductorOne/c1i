@@ -7,6 +7,8 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"unicode/utf8"
@@ -340,23 +342,32 @@ func parseMaxRetries(s string) error {
 	return nil
 }
 
-// validateDotSegmentIDFlags rejects a set *-id flag (or one occurrence of a
+// idArgSuffixes name an id-valued argument: a flag by its own name, a
+// positional by its documented "<name>" in Use. Every such value is held to
+// the dot rule, so a new id argument is covered by its name alone.
+var idArgSuffixes = []string{"-id", "-ids", "-uid", "-uids"}
+
+func isIDArgName(name string) bool {
+	return slices.ContainsFunc(idArgSuffixes, func(s string) bool { return strings.HasSuffix(name, s) })
+}
+
+// validateDotSegmentIDFlags rejects a set id flag (or one occurrence of a
 // repeatable one) whose value the server would normalize to the parent or
 // collection: exactly "." or ".." once percent-encoded, a ";params" suffix and
 // surrounding whitespace are ignored -- the same predicate the transport path
-// guard uses. That guard only sees a request path, so an id the
-// command carries in a body -- --grant-policy-id, --owner-id, ... -- used to
-// preview as if it were an id and only fail once a real send interpolated it
-// into a URL; a multi-step create could apply its earlier steps first. Doing
-// it here, before any pre-read or send, makes --dry-run and a real send agree.
-// `c1i api` has no *-id flag and guards its own --path.
+// guard uses. That guard only sees a request path, so an id the command
+// carries in a body, or never sends, used to preview as if it were an id and
+// fail only once a real send interpolated it into a URL; a multi-step create
+// could apply its earlier steps first. Doing it here, before any credential
+// load, pre-read or send, makes --dry-run and a real send agree.
+// `c1i api` has no id flag and guards its own --path.
 func validateDotSegmentIDFlags(cmd *cobra.Command) error {
 	if isCompletionRequest(cmd) {
 		return nil
 	}
 	var err error
 	cmd.Flags().VisitAll(func(f *pflag.Flag) {
-		if err != nil || !f.Changed || !strings.HasSuffix(f.Name, "-id") {
+		if err != nil || !f.Changed || !isIDArgName(f.Name) {
 			return
 		}
 		switch f.Value.Type() {
@@ -368,7 +379,7 @@ func validateDotSegmentIDFlags(cmd *cobra.Command) error {
 			// blank value is refused by the command's own flag reader.
 			values, getErr := cmd.Flags().GetStringArray(f.Name)
 			if getErr != nil {
-				// Not user input: a *-id flag of any other type is a
+				// Not user input: an id flag of any other type is a
 				// programming bug, so surface it instead of skipping the flag
 				// (TestIDFlagsAreStringOrStringArray keeps it unreachable).
 				err = fmt.Errorf("--%s is not a repeatable string flag: %w", f.Name, getErr)
@@ -384,47 +395,37 @@ func validateDotSegmentIDFlags(cmd *cobra.Command) error {
 	return err
 }
 
-// bodyIDArgAnnotation marks a command whose positional id at the given
-// 0-based indexes is sent only in a request body, never in a path. The
-// transport guard inspects paths, so validateDotSegmentIDArgs has to apply the
-// same "."/".." rule to those arguments itself.
-const bodyIDArgAnnotation = "c1i/body-id-arg"
+// flagValueHintRe matches a bracketed flag example such as "[--filter
+// <pattern>]" in a Use string; its "<pattern>" is a flag value, not a positional.
+var flagValueHintRe = regexp.MustCompile(`\[--[\w-]+(?:\s+<[\w-]+>)?\]`)
 
-// markBodyIDArgs records that the given 0-based positionals are body-carried
-// ids (see bodyIDArgAnnotation). Calls append, so a command marked by two
-// helpers keeps both indexes.
-func markBodyIDArgs(c *cobra.Command, indexes ...int) {
-	if c.Annotations == nil {
-		c.Annotations = map[string]string{}
-	}
-	vals := []string{}
-	if existing := c.Annotations[bodyIDArgAnnotation]; existing != "" {
-		vals = append(vals, existing)
-	}
-	for _, idx := range indexes {
-		vals = append(vals, strconv.Itoa(idx))
-	}
-	c.Annotations[bodyIDArgAnnotation] = strings.Join(vals, ",")
-}
+// usePositionalRe matches each positional a Use string documents: "<name>",
+// "[<name>]" or "[name]", each optionally followed by "..." (repeatable).
+var usePositionalRe = regexp.MustCompile(`<([\w-]+)>(\.\.\.)?|\[([\w-]+)\]`)
 
-// validateDotSegmentIDArgs applies validateDotSegmentIDFlags' rule to the
-// positionals a command annotated with markBodyIDArgs. An argument past the
-// end is left alone: args validation belongs to cobra and the command.
+// validateDotSegmentIDArgs applies the dot rule to every positional that Use
+// documents as an id ("<thing-id>"), whether the command puts it in a path, a
+// body or only compares it. A repeatable "<id>..." covers every argument from
+// its slot on. An argument past the end is left alone: args validation
+// belongs to cobra and the command.
 func validateDotSegmentIDArgs(cmd *cobra.Command, args []string) error {
 	if isCompletionRequest(cmd) {
 		return nil
 	}
-	v, ok := cmd.Annotations[bodyIDArgAnnotation]
-	if !ok {
-		return nil
-	}
-	for _, part := range strings.Split(v, ",") {
-		idx, convErr := strconv.Atoi(part)
-		if convErr != nil || idx < 0 || idx >= len(args) {
+	_, rest, _ := strings.Cut(cmd.Use, " ")
+	rest = flagValueHintRe.ReplaceAllString(rest, "")
+	for i, m := range usePositionalRe.FindAllStringSubmatch(rest, -1) {
+		if m[1] == "" || !isIDArgName(m[1]) || i >= len(args) {
 			continue
 		}
-		if err := dotSegmentIDValueError("argument", args[idx]); err != nil {
-			return err
+		end := i + 1
+		if m[2] != "" {
+			end = len(args)
+		}
+		for _, a := range args[i:end] {
+			if err := dotSegmentIDValueError("argument", a); err != nil {
+				return err
+			}
 		}
 	}
 	return nil

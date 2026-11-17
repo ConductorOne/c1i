@@ -7,7 +7,8 @@ import (
 
 // The server trims a path segment before resolving dots, so a padded dot
 // segment in a POSITIONAL reaches the collection just like an unpadded one.
-// The transport guard has to apply the same trim the body/flag rule does.
+// The central id rule and the transport guard (see the `api` cases in
+// path_dot_segment_test.go) apply the same trim.
 func TestPaddedDotSegmentPositionalRefused(t *testing.T) {
 	cases := []struct {
 		name string
@@ -24,8 +25,8 @@ func TestPaddedDotSegmentPositionalRefused(t *testing.T) {
 			if res.exit != exitUsage {
 				t.Fatalf("exit = %d, err = %v; want %d", res.exit, res.err, exitUsage)
 			}
-			if res.err == nil || !strings.Contains(displayError(res.err).Error(), "refusing to send") {
-				t.Errorf("err = %v, want the path-guard refusal", res.err)
+			if res.err == nil || !strings.Contains(displayError(res.err).Error(), "is not an id") {
+				t.Errorf("err = %v, want the id-rule refusal", res.err)
 			}
 			if got := srv.requests(); len(got) != 0 {
 				t.Errorf("requests sent: %v", got)

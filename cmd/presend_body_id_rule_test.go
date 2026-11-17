@@ -25,24 +25,14 @@ func TestDotSegmentFilterIDFlagRefused(t *testing.T) {
 	}
 }
 
-// markBodyIDArgs appends: a command marked twice keeps both indexes.
-func TestMarkBodyIDArgsAppends(t *testing.T) {
-	c := &cobra.Command{Use: "x"}
-	markBodyIDArgs(c, 1)
-	markBodyIDArgs(c, 2)
-	if got, want := c.Annotations[bodyIDArgAnnotation], "1,2"; got != want {
-		t.Errorf("annotation = %q, want %q", got, want)
-	}
-}
-
-// Every *-id flag is a plain string or a repeatable string array, so the root
+// Every id flag is a plain string or a repeatable string array, so the root
 // pre-run's dot-segment rule always sees its value: a future StringSlice (or an
 // int) would otherwise escape the validator silently.
 func TestIDFlagsAreStringOrStringArray(t *testing.T) {
 	checked := 0
 	walkCommandTree(func(c *cobra.Command) {
 		c.Flags().VisitAll(func(f *pflag.Flag) {
-			if !strings.HasSuffix(f.Name, "-id") {
+			if !isIDArgName(f.Name) {
 				return
 			}
 			checked++
