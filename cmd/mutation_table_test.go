@@ -153,6 +153,8 @@ var mutationTable = []mutationRow{
 	{cmd: "findings transformation-rules create", args: []string{"--body-file", "@{}"}, body: `{"transformationRule":{"id":"x1"}}`, want: `{"id":"x1"}`, ids: idPath},
 	{cmd: "findings transformation-rules update", args: []string{"x1", "--body-file", "@{}"}, body: `{"transformationRule":{"id":"x1","displayName":"n"}}`, want: `{"id":"x1","displayName":"n"}`, ids: idPath},
 	{cmd: "findings transformation-rules delete", args: []string{"x1"}, body: `{}`},
+	// grants
+	{cmd: "grants add", args: cat(ent, []string{"--user-id", "u1"}), body: `{"failedUsersErrorMap":{},"bulkActionId":"b1"}`, ids: []string{".bulkActionId"}, method: "POST", path: "/api/v1/apps/app-1/entitlements/ent-1/add-manual-user", reads: 1},
 	// mcp
 	{cmd: "mcp bindings create", args: cat(mcpScope, []string{"--toolset-id=ts1", "--tool-id=t1"}), body: `{"bindings":[{"mcpToolId":"t1"}]}`, ids: []string{".bindings[].mcpToolId"}},
 	{cmd: "mcp bindings delete", args: cat(mcpScope, []string{"--toolset-id=ts1", "--tool-id=t1"}), body: `{}`},

@@ -621,11 +621,21 @@ resource with `--resource-id` likewise means you drop
 - `requests create grant --duration` likewise takes `24h` or `86400s`; the
   server refuses `0s` with `value must be greater than 0s`. The value lands at
   that same `.type.grant.grantDuration` path.
+- `grants add --app-id --entitlement-id --user-id ... [--wait]` grants a
+  manually managed entitlement directly, **bypassing grant policy and
+  approval**; prefer `requests create grant` unless that is what you want. One
+  request for every user id; `--wait` blocks until each shows in `grants list`.
+  There is no `grants remove`: `remove-membership` fails on a manual entitlement
+  with `entitlement is not an SSO application sign-in entitlement`, so remove
+  via `requests create revoke` (on a manual entitlement its task waits on a
+  provisioning step; the grant stays until it is completed). A non-empty
+  `failedUsersErrorMap` in the response (users the server could not add) exits 1
+  after printing it; `--wait` waits only for the others.
 - A user id on a write is looked up before anything is sent, so an unknown one
   exits 4 with no write (`--dry-run` refuses it too; the lookup needs user
   read, else exit 3): `accounts set-owner`, `apps add-owner|set-owners`,
-  `entitlements add-owner|set-owners|create --owner-id`, `requests create grant|revoke
-  --user-id`, `mcp servers register --user-id`, `tasks reassign --to-user-id`.
+  `entitlements add-owner|set-owners|create --owner-id`, `grants add --user-id`,
+  `requests create grant|revoke --user-id`, `mcp servers register --user-id`, `tasks reassign --to-user-id`.
   `remove-owner` never pre-checks (the server decides; a `--dry-run` preview
   can pass an id the real run 404s). Only flag values are checked: user ids
   inside a `--*-file`/`--body-file`, or sent via `api`, go as-is. A filter (`grants list`/`requests list
