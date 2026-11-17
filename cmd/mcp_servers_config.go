@@ -42,11 +42,17 @@ func addAuthFlags(cmd *cobra.Command) {
 func authArmFromFlags(cmd *cobra.Command) (map[string]any, error) {
 	auth := mustGetString(cmd, "auth")
 	if auth == "" {
+		if err := rejectDroppedAuthFlags(cmd, ""); err != nil {
+			return nil, err
+		}
 		return nil, nil
 	}
 	arm, err := authFlag.parse(auth)
 	if err != nil {
 		return nil, &usageError{fmt.Errorf("unsupported --auth %q: use %s (OAuth2/AWS/Google go via --hosted-config-file / --external-config-file)", auth, authFlag.usage())}
+	}
+	if err := rejectDroppedAuthFlags(cmd, arm); err != nil {
+		return nil, err
 	}
 	if err := requireAuthArmValues(cmd, arm); err != nil {
 		return nil, err
@@ -65,6 +71,41 @@ func authArmFromFlags(cmd *cobra.Command) (map[string]any, error) {
 		return map[string]any{arm: map[string]any{"username": user, keyPassword: pass}}, nil
 	default: // none
 		return map[string]any{arm: map[string]any{}}, nil
+	}
+}
+
+// rejectDroppedAuthFlags refuses a convenience auth flag the chosen method
+// would silently drop. The body carries exactly one arm, so a companion of
+// another method (or any companion with --auth unset or "none") can only be a
+// mistake, and dropping it would register or update credentials that differ
+// from what the caller asked for.
+func rejectDroppedAuthFlags(cmd *cobra.Command, auth string) error {
+	allowed := map[string]bool{}
+	if rule, ok := authArmRules[auth]; ok {
+		for _, f := range rule.fields {
+			allowed[f.flag] = true
+		}
+	}
+	var stray []string
+	for _, rule := range authArmRules {
+		for _, f := range rule.fields {
+			if allowed[f.flag] || !flagGiven(cmd, f.flag) {
+				continue
+			}
+			stray = append(stray, "--"+f.flag)
+		}
+	}
+	if len(stray) == 0 {
+		return nil
+	}
+	slices.Sort(stray)
+	switch auth {
+	case "":
+		return &usageError{fmt.Errorf("%s requires --auth (with the method it belongs to), or a --hosted-config-file/--external-config-file", strings.Join(stray, ", "))}
+	case "none":
+		return &usageError{fmt.Errorf("--auth none takes no credential flags: drop %s", strings.Join(stray, ", "))}
+	default:
+		return &usageError{fmt.Errorf("--auth %s does not take %s", authArmRules[auth].name, strings.Join(stray, ", "))}
 	}
 }
 
@@ -385,4 +426,20 @@ func buildExternalConfig(cmd *cobra.Command) (map[string]any, error) {
 		return nil, err
 	}
 	return cfg, nil
+}
+
+// rejectOtherTypeConfigFile refuses the config file belonging to the other
+// server type: only the selected type's config is read, so the other file
+// would be dropped without a word.
+func rejectOtherTypeConfigFile(cmd *cobra.Command, typ string) error {
+	if typ == "MCP_SERVER_TYPE_EXTERNAL" {
+		if flagGiven(cmd, "hosted-config-file") {
+			return &usageError{fmt.Errorf("--hosted-config-file is for --type hosted; use --external-config-file for --type external")}
+		}
+		return nil
+	}
+	if flagGiven(cmd, "external-config-file") {
+		return &usageError{fmt.Errorf("--external-config-file is for --type external; use --hosted-config-file for --type hosted")}
+	}
+	return nil
 }
