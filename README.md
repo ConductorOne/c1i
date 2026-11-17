@@ -1433,6 +1433,22 @@ c1i findings audits search [--body-file <file|->] [--page-size N] [--page-token 
 c1i findings shadow-mcp-occurrences search --body-file <file|-> [--page-size N] [--page-token TOKEN] [--limit N]
 ```
 
+A `--body-file` key that the command itself sets must be absent: any value,
+including `null`, exits 2 before any request, and the error lists every
+offending key. The one exception is a key set from a positional id, which may
+be present when it equals that positional exactly (a string), so a saved `get`
+round-trips into `update`; any other value is refused with the key, its value
+and the positional named. For `findings search`, `findings audits search` and
+`findings shadow-mcp-occurrences search` those are `pageToken`, `pageSize` and
+their snake_case spellings `page_token` and `page_size`; use `--page-token` (it
+fetches that one page) and `--page-size`; paging keys have no exception. The
+equality rule covers the ids a positional sets: `findingId`/`finding_id` on
+`findings state` and `assignee`, and `id` on `findings routing-rules update`
+and `transformation-rules update`. (Also `id` on `automations update`, `access-reviews update`, `policies update`,
+`mcp classifiers update` and `mcp classifiers tool-gates update`, and
+`templateId`/`template_id` on `mcp classifiers templates add-rule` and
+`instantiate`.)
+
 The rule-list endpoints do not currently expose public filtering or paging; use
 `--limit` only to cap local output. The upstream mapping gap is tracked in
 [#131](https://github.com/ConductorOne/c1i/issues/131). Use JSON files for oneof actions, custom
@@ -1477,6 +1493,16 @@ c1i role-mining custom-analysis trigger --body-file <file|->
 c1i role-mining custom-analysis evaluate <analysis-id> --body-file <file|->
 c1i role-mining access-profiles create --body-file <file|->
 ```
+
+A `--body-file` key that the command itself sets must be absent: any value,
+including `null`, exits 2 before any request, and the error lists every
+offending key. On `role-mining suggestions search` and
+`role-mining suggestions users` those are `pageToken`, `pageSize` and their
+snake_case spellings `page_token` and `page_size`; use `--page-token` (it
+fetches that one page) and `--page-size`. `users` also refuses
+`suggestionId`/`suggestion_id` unless the value equals the `<suggestion-id>`
+argument exactly; any other value is refused naming the key, its value and the
+argument. Paging keys have no such exception.
 
 `trigger` queues an organization analysis and returns an enqueue acknowledgement;
 inspect `runs latest` for its eventual result. `custom-analysis trigger` returns
@@ -1812,7 +1838,7 @@ violation is a usage error (exit 2) that names the flag or JSON path and never
 echoes the text. A control character in a `--config-field` key or in a path flag
 (`-o/--output`, `--out-dir`, `--*-file`) is also exit 2.
 
-With `--paginate`, each page's first array-valued field is unwrapped and each
+With `--paginate`, a `pageToken` in the body (or `page_token` in `--query`) is the first page's cursor and later pages replace it; `pageSize` is sent as given. Each page's first array-valued field is unwrapped and each
 item is emitted as a single line of NDJSON, the same format list commands use.
 This covers both the canonical `list` key and typed keys like
 `automationExecutions`; use `--list-key <field>` to force a specific field

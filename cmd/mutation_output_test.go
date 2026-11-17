@@ -54,12 +54,11 @@ var readOnlyPOST = map[string]string{
 	"cmd/policies_search.go:policiesSearchCmd":                        "POST /search/policies",
 	"cmd/policies_validate_cel.go:policiesValidateCelCmd":             "POST validate-cel",
 	"cmd/requests_list.go:requestsListCmd":                            "POST /search/tasks",
-	"cmd/role_mining.go:postRoleMiningList":                           "POST role-mining list",
 	"cmd/service_principals_bindings.go:spBindingsListCmd":            "POST bindings list",
 	"cmd/tasks_list.go:tasksListCmd":                                  "POST /search/tasks",
 	"cmd/users_list.go:usersListCmd":                                  "POST /search/users",
 	"cmd/auth_status.go:authStatusCmd":                                "POST /search/users credential probe",
-	"cmd/findings.go:postFindingsList":                                "POST findings and audit searches",
+	"cmd/findings.go:postBodyList":                                    "POST list/search whose filter is a --body-file (findings, role-mining)",
 }
 
 // outOfScopeSelectors lists single calls ("file:decl selector") that are not

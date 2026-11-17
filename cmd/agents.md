@@ -365,6 +365,24 @@ variable would otherwise silently truncate the list. The exceptions send one req
 `findings routing-rules|transformation-rules list` print a stderr
 `partial result` warning if the server reports more pages, and `mcp bindings by-tools`
 and `mcp toolsets requestable-connectors` are not paginated.
+A `--body-file` key that the command itself sets must be absent: any value,
+including `null`, exits 2 before any request, listing every offending key. A
+key set from a positional id is the one exception: it may be present when it
+equals that positional exactly (a string), so `get` output round-trips into
+`update --body-file`; any other value is refused naming the key, its value and
+the positional. Paging keys have no exception. `findings search`, `findings audits search`, `findings
+shadow-mcp-occurrences search`, `role-mining suggestions search` and
+`role-mining suggestions users` refuse `pageToken`, `pageSize`, `page_token` and
+`page_size`; use `--page-token` (one page) and `--page-size`. The positional-id
+keys are: `findingId`/`finding_id` (`findings state|assignee`),
+`suggestionId`/`suggestion_id` (`role-mining suggestions users`),
+`templateId`/`template_id` (`mcp classifiers templates add-rule|instantiate`),
+and `id` (`findings routing-rules|transformation-rules update`,
+`automations|access-reviews|policies update`, `mcp classifiers update`,
+`mcp classifiers tool-gates update`).
+With `api --paginate`, a `pageToken` in the body (or `page_token` in `--query`)
+is the first page's cursor, and later pages replace it; `pageSize` is sent as
+given.
 Don't write your own pagination loop.
 
 

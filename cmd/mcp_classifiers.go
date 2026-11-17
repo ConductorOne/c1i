@@ -565,6 +565,10 @@ func init() {
 	} {
 		command.Flags().String("body-file", "", "JSON object file (or \"-\" for stdin)")
 	}
+	ownBodyKeys(mcpClassifiersUpdateCmd, "body-file", argBodyKeys(0, "<classifier-id>", "id"))
+	ownBodyKeys(mcpClassifierToolGatesUpdateCmd, "body-file", argBodyKeys(0, "<tool-gate-id>", "id"))
+	ownBodyKeys(mcpClassifierTemplatesInstantiateCmd, "body-file", argBodyKeys(0, "<template-id>", "templateId", "template_id"))
+	ownBodyKeys(mcpClassifierTemplatesAddRuleCmd, "body-file", argBodyKeys(1, "<template-id>", "templateId", "template_id"))
 	for _, command := range []*cobra.Command{mcpClassifiersCreateCmd, mcpClassifiersUpdateCmd, mcpClassifierBindingsCreateCmd, mcpClassifierPolicyUpdateCmd, mcpClassifierToolGatesCreateCmd, mcpClassifierToolGatesUpdateCmd} {
 		annotateRequired(command, "body-file")
 	}

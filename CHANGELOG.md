@@ -38,6 +38,34 @@ A `--wait-*` flag (`--wait-timeout`, `grants list --wait-stable`/`--wait-min`)
 given without `--wait` was ignored; it now exits 2. Drop it, or add `--wait`;
 an explicit `--wait=false` alongside it is still accepted.
 
+A `--body-file` key that the command itself sets must now be absent, with any
+value including `null`: exit 2 before any request, the error listing every
+offending key. The exception is a key set from a positional id, which may be
+present when it equals that positional exactly (a string) and is then sent
+once, under its camelCase spelling, so a file saved from `get` still works with
+`update`; any other value is refused, and the error names the key, the file's
+value and the positional.
+Before:
+- On `findings search`, `findings audits search`, `findings
+  shadow-mcp-occurrences search`, `role-mining suggestions search` and
+  `role-mining suggestions users`, a camelCase `pageSize` in the file was
+  silently overridden (exit 0); a snake_case `page_size` got a server 400
+  (exit 2) because it duplicated c1i's own `pageSize`; and a
+  `pageToken`/`page_token` was sent on the first request, so a valid one
+  started the listing mid-stream with auto-pagination still on. Now all of
+  `pageToken`, `pageSize`, `page_token` and `page_size` exit 2 with any value;
+  remove them and use `--page-token` (fetches that one page) or `--page-size`.
+- A key the command overwrote from its positional was silently replaced, even
+  with a different value: `findingId` on `findings state`/`assignee`,
+  `templateId` on `mcp classifiers templates add-rule`, and `id` on `findings
+  routing-rules|transformation-rules update`, `automations update`,
+  `access-reviews update`, `policies update`, `mcp classifiers update` and
+  `mcp classifiers tool-gates update`. A different value, `null` or a non-string
+  now exits 2, as do the snake_case spellings (`finding_id`, `template_id`)
+  unless equal, and `suggestionId`/`suggestion_id` on `role-mining suggestions
+  users` and `templateId`/`template_id` on `mcp classifiers templates
+  instantiate`, which the path already carries.
+
 `--dry-run` now runs the same pre-send reads a real run does (checking that a
 user or policy id exists, or looking up a policy's type), so a preview that
 names such an id needs credentials that can read it. A preview with no such id
@@ -69,6 +97,11 @@ on 5 and 6.
   Whitespace-only is refused on those too.
 
 ### Fixed
+
+- A `--body-file` key that a command sets itself no longer silently bypasses the
+  pagination contract or is overridden: a `pageToken`/`pageSize` in the file of
+  the findings and role-mining search commands, and a positional id key whose
+  value differs from the positional, are refused (see Upgrading).
 
 - `--help` now marks "(required)" on `--body-file`, `--refs-file` and
   `--entitlement-id` of every command that demands them at run time, such as

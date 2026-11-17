@@ -249,6 +249,7 @@ func init() {
 	accessReviewsCreateCmd.Flags().String("body-file", "", "Full CreateAccessReview request JSON object (file or \"-\" for stdin)")
 	annotateRequired(accessReviewsCreateCmd, "body-file")
 	accessReviewsUpdateCmd.Flags().String("body-file", "", "Partial AccessReview JSON object (file or \"-\" for stdin)")
+	ownBodyKeys(accessReviewsUpdateCmd, "body-file", argBodyKeys(0, "<campaign-id>", "id"))
 	annotateRequired(accessReviewsUpdateCmd, "body-file")
 	accessReviewsUpdateCmd.Flags().String("update-mask", "", "Comma-separated campaign fields to update")
 	setBlankHint(accessReviewsUpdateCmd, "update-mask", updateMaskBlankHint)

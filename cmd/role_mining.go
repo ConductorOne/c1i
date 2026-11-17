@@ -49,7 +49,7 @@ var roleMiningSuggestionsSearchCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		return postRoleMiningList(cmd, "/api/v1/search/role-mining/suggestions", body, roleMiningSuggestionRow)
+		return postBodyList(cmd, "/api/v1/search/role-mining/suggestions", body, roleMiningSuggestionRow, "id")
 	},
 }
 var roleMiningSuggestionsGetCmd = &cobra.Command{
@@ -81,7 +81,7 @@ var roleMiningSuggestionsUsersCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		return postRoleMiningList(cmd, client.Path("/api/v1/role-mining/suggestions/%s/users", args[0]), body, roleMiningUserRow)
+		return postBodyList(cmd, client.Path("/api/v1/role-mining/suggestions/%s/users", args[0]), body, roleMiningUserRow, "id")
 	},
 }
 
@@ -189,17 +189,6 @@ var roleMiningAccessProfilesCreateCmd = &cobra.Command{
 	},
 }
 
-func postRoleMiningList(cmd *cobra.Command, path string, request map[string]any, row listRowFn) error {
-	return listJSONPages(cmd, "POST "+path, []string{"id"}, row, func(c *client.Client, size int, token string) ([]byte, error) {
-		body := cloneJSONObject(request)
-		body["pageSize"] = size
-		if token != "" {
-			body["pageToken"] = token
-		}
-		return c.Post(cmd.Context(), path, body)
-	})
-}
-
 func getRoleMiningResource(cmd *cobra.Command, path, key string) error {
 	return getRoleMining(cmd, path, func(data []byte) error { return writeResource(cmd, data, key) })
 }
@@ -256,6 +245,8 @@ func init() {
 	for _, command := range []*cobra.Command{roleMiningTriggerCmd, roleMiningSuggestionsStateCmd, roleMiningConfigUpdateCmd, roleMiningCustomAnalysisTriggerCmd, roleMiningCustomAnalysisEvaluateCmd, roleMiningAccessProfilesCreateCmd} {
 		markMutating(command)
 	}
+	ownBodyKeys(roleMiningSuggestionsSearchCmd, "body-file", pagingBodyKeys)
+	ownBodyKeys(roleMiningSuggestionsUsersCmd, "body-file", pagingBodyKeys, argBodyKeys(0, "<suggestion-id>", "suggestionId", "suggestion_id"))
 	addPaginationFlags(roleMiningSuggestionsSearchCmd)
 	addPaginationFlags(roleMiningSuggestionsUsersCmd)
 	addLimitFlag(roleMiningSuggestionsListCmd)

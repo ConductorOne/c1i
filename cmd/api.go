@@ -40,8 +40,10 @@ var apiCmd = &cobra.Command{
 	Long: `Use this raw escape hatch only when no first-class command covers the endpoint.
 First-class list commands auto-paginate; api returns one response unless
 --paginate is set. A nextPageToken without --paginate is a partial-result
-warning on stderr. You supply the request method and body; use --dry-run before
-an intended non-GET REST write.`,
+warning on stderr. With --paginate, a pageToken in the body (or page_token in
+--query) is the first page's cursor, and later pages replace it; pageSize is
+sent as given. You supply the request method and body; use --dry-run before an
+intended non-GET REST write.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 
 		baseURL, err := GetBaseURL()

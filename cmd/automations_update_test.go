@@ -100,9 +100,38 @@ func TestAutomationsUpdateBodyFileSendsVerbatimWithMask(t *testing.T) {
 	stubCatalogClient(t, srv)
 	withCatalogDryRun(t, false)
 	t.Setenv("C1I_URL", "https://example.invalid")
-	path := writeTempJSON(t, "auto.json", `{"id":"other","triggers":[{"userCreated":{"condition":"false"}}]}`)
+	path := writeTempJSON(t, "auto.json", `{"triggers":[{"userCreated":{"condition":"false"}}]}`)
 	_ = automationsUpdateCmd.Flags().Set("body-file", path)
 	_ = automationsUpdateCmd.Flags().Set("update-mask", "triggers")
+
+	if _, err := runAutomationsUpdate(t, "a1"); err != nil {
+		t.Fatalf("RunE: %v", err)
+	}
+	want := map[string]any{
+		"automation": map[string]any{
+			"id":       "a1",
+			"triggers": []any{map[string]any{"userCreated": map[string]any{"condition": "false"}}},
+		},
+		"updateMask": "triggers",
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("body = %#v\nwant %#v", got, want)
+	}
+}
+
+func TestAutomationsUpdateBodyFileAcceptsIdEqualToPositional(t *testing.T) {
+	var got map[string]any
+	srv := automationsUpdateServer(t, "/api/v1/automations/a1", &got)
+
+	resetCmdFlags(t, automationsUpdateCmd)
+	stubCatalogClient(t, srv)
+	withCatalogDryRun(t, false)
+	t.Setenv("C1I_URL", "https://example.invalid")
+	path := writeTempJSON(t, "auto.json", `{"id":"a1","triggers":[{"userCreated":{"condition":"false"}}]}`)
+	_ = automationsUpdateCmd.Flags().Set("body-file", path)
+	_ = automationsUpdateCmd.Flags().Set("update-mask", "triggers")
+	// RunE called directly: record the positional the way cobra does.
+	_ = automationsUpdateCmd.Flags().Parse([]string{"a1"})
 
 	if _, err := runAutomationsUpdate(t, "a1"); err != nil {
 		t.Fatalf("RunE: %v", err)
