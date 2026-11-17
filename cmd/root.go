@@ -347,8 +347,12 @@ func parseMaxRetries(s string) error {
 // the dot rule, so a new id argument is covered by its name alone.
 var idArgSuffixes = []string{"-id", "-ids", "-uid", "-uids"}
 
+// idArgNames are id-valued flags whose name carries no id suffix. `functions
+// source --commit` is a commit id interpolated into the request path.
+var idArgNames = map[string]bool{"commit": true}
+
 func isIDArgName(name string) bool {
-	return slices.ContainsFunc(idArgSuffixes, func(s string) bool { return strings.HasSuffix(name, s) })
+	return idArgNames[name] || slices.ContainsFunc(idArgSuffixes, func(s string) bool { return strings.HasSuffix(name, s) })
 }
 
 // validateDotSegmentIDFlags rejects a set id flag (or one occurrence of a
