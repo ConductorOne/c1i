@@ -566,8 +566,8 @@ with that name. Always run step 4 first. After any failed promote, inspect
     RT_ID=$(c1i apps resource-types list --app-id "$CONN_APP_ID" | jq -er 'select(.display_name=="app") | .id') || { echo "no resource type named app on $CONN_APP_ID"; exit 1; }
 
 On the connector app checked, the discovered apps were the resource type named
-"app". "resource-types list" and "managed-state list" exit 0 with no rows for a wrong app id or
-resource type id, so an empty list can mean either of those.
+"app". "resource-types list" and "managed-state list" exit 0 with no rows for a well-formed
+but wrong app id or resource type id, so an empty list can mean either of those.
 
 ### 2. Find the discovered app
 
@@ -575,7 +575,7 @@ resource type id, so an empty list can mean either of those.
     RES_ID=<resource_id of the app to promote>
 
 A resource's binding "appId" is the connector app; the managed app is
-.state.managed.appId. Names are not unique: one connector listed several discovered apps with the
+.state.managed.appId ("managed_app_id" in list rows). Names are not unique: one connector listed several discovered apps with the
 same name, so choose by resource_id, not by name.
 
 ### 3. Inspect its managed state
@@ -621,9 +621,15 @@ Without --user-id the new app's owners were the connector app's owners. Pass
 ## Undoing a promotion
 
 "apps delete" on "$NEW_APP_ID" deletes the app, and it also soft-deletes the
-binding: the discovered app leaves "managed-state list", "managed-state get"
-still answers (with deletedAt set and the old app id), and promote exits 4. The
-binding reappeared about 8 minutes later in the run checked (presumably the
+binding, but not at once. In the run checked, "managed-state get" still showed
+the deleted app as managed for several seconds, and a promote in that window
+exited 0 and created another app with the same name. Do not promote until the
+binding reads deletedAt set:
+
+    c1i apps managed-state get "$RES_ID" --app-id "$CONN_APP_ID" --resource-type-id "$RT_ID" | jq .deletedAt
+
+After that the discovered app leaves "managed-state list" and promote exits 4.
+The binding reappeared about 8 minutes later in the run checked (presumably the
 connector's next sync), unmanaged, under the same resource_id, and then reads
 like any other unmanaged binding, so a promote would create a new app.
 
@@ -632,6 +638,8 @@ like any other unmanaged binding, so a promote would create a new app.
 - exit 4 on promote: an unknown app, resource type, resource id or user, or a
   binding whose managed app was deleted (until it reappears, about 8 minutes
   in the run checked). A --dry-run catches all but the last.
+- exit 0 and a second app right after "apps delete": the binding's soft-delete
+  had not landed yet; see "Undoing a promotion".
 `
 
 // guideRequestAccess walks the requester side of a grant/revoke access

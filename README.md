@@ -851,8 +851,10 @@ made two apps with that name. Promoting an already-managed binding exits `0` and
 returns the existing app, not a second one. Without `--user-id` the new app's
 owners were the connector app's owners; `--user-id` sets them instead (looked up
 first; an unknown one exits `4`, nothing sent). Deleting the managed app
-soft-deletes the binding: it leaves `list`, `get` still answers with `deletedAt`
-set, and `promote` exits `4`; the binding reappeared about 8 minutes later in
+soft-deletes the binding, but not at once: in the run checked, `get` still showed
+the deleted app as managed for several seconds and a `promote` in that window
+created another app, so wait until `get` shows `deletedAt` set. After that it
+leaves `list` and `promote` exits `4`; the binding reappeared about 8 minutes later in
 the run checked (presumably the connector's next sync), unmanaged, under the
 same `resource_id`, and then reads like any other unmanaged binding, so a
 `promote` would create a new app. A binding's top-level `appId` is the connector

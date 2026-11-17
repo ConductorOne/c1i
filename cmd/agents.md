@@ -518,7 +518,9 @@ resource with `--resource-id` likewise means you drop
   an app and nothing checks for an existing one of the same name, so run `apps
   list` first and, after any failure, inspect before retrying. Promoting an
   already-managed binding exits 0 and returns the existing app; deleting the
-  managed app soft-deletes the binding (`promote` exits 4; it reappeared about
+  managed app soft-deletes the binding a few seconds later (a promote before
+  `get` shows `deletedAt` created another app in the run checked; after it,
+  `promote` exits 4; it reappeared about
   8 minutes later in the run checked, presumably the connector's next sync,
   unmanaged under the same `resource_id`, and then reads like any other
   unmanaged binding, so a promote would create a new app). The managed app is `.state.managed.appId`

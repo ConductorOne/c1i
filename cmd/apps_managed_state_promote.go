@@ -30,9 +30,11 @@ Without --user-id the new app's owners were the connector app's owners; pass
 --user-id to set the new app's owners instead. Owner changes are applied asynchronously, so
 "apps owners <app-id>" can lag.
 
-Deleting the managed app afterwards soft-deletes the binding: it leaves
-"managed-state list", "managed-state get" still answers with deletedAt set, and
-promote exits 4. The binding reappeared about 8 minutes later in the run checked
+Deleting the managed app afterwards soft-deletes the binding, but not at once:
+in the run checked, "managed-state get" still showed the deleted app as managed
+for several seconds, and a promote in that window exited 0 and created another
+app. Wait until "managed-state get" shows deletedAt set; promote then exits 4
+and the binding leaves "managed-state list". The binding reappeared about 8 minutes later in the run checked
 (presumably the connector's next sync), unmanaged, under the same resource_id,
 and then reads like any other unmanaged binding, so a promote would create a
 new app.
