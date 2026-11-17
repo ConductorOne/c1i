@@ -2,7 +2,6 @@ package cmd
 
 import (
 	"fmt"
-	"strconv"
 
 	"github.com/ConductorOne/c1i/internal/client"
 	"github.com/spf13/cobra"
@@ -29,13 +28,7 @@ var rolesListCmd = &cobra.Command{
 	Use:   "list",
 	Short: "List IAM roles (NDJSON output)",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		return listJSONPages(cmd, "GET /api/v1/iam/roles", []string{"id"}, roleRow, func(c *client.Client, size int, token string) ([]byte, error) {
-			params := map[string]string{"page_size": strconv.Itoa(size)}
-			if token != "" {
-				params["page_token"] = token
-			}
-			return c.Get(cmd.Context(), "/api/v1/iam/roles", params)
-		})
+		return listMapPages(cmd, "GET /api/v1/iam/roles", "list", []string{"id"}, roleRow, getPage(cmd, "/api/v1/iam/roles", nil))
 	},
 }
 

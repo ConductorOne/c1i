@@ -45,8 +45,6 @@ var readOnlyPOST = map[string]string{
 	"cmd/grants_list.go:grantsListCmd":                                "POST /search/grants",
 	"cmd/grants_list.go:fetchAllGrants":                               "POST /search/grants, polled by --wait",
 	"cmd/mcp_bindings_by_tools.go:mcpBindingsByToolsCmd":              "POST bindings by-tools lookup",
-	"cmd/mcp_classifiers.go:mcpClassifierTemplatesListCmd":            "POST /classifier_templates/list",
-	"cmd/mcp_classifiers.go:mcpClassifierToolGatesSearchCmd":          "POST /search/tool_gates",
 	"cmd/mcp_servers_discover_oidc.go:mcpServersDiscoverOIDCCmd":      "POST discover-oidc probe",
 	"cmd/mcp_servers_search.go:mcpServersSearchCmd":                   "POST /search/mcp_servers",
 	"cmd/mcp_servers_test_connection.go:mcpServersTestConnectionCmd":  "POST test-connection probe",
@@ -58,7 +56,7 @@ var readOnlyPOST = map[string]string{
 	"cmd/tasks_list.go:tasksListCmd":                                  "POST /search/tasks",
 	"cmd/users_list.go:usersListCmd":                                  "POST /search/users",
 	"cmd/auth_status.go:authStatusCmd":                                "POST /search/users credential probe",
-	"cmd/findings.go:postBodyList":                                    "POST list/search whose filter is a --body-file (findings, role-mining)",
+	"cmd/paginate.go:postPageBody":                                    "POST list/search whose filter rides in the body (every paged POST list)",
 }
 
 // outOfScopeSelectors lists single calls ("file:decl selector") that are not

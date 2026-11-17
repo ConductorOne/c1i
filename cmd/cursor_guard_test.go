@@ -32,7 +32,8 @@ func stalePageItems(format string) string {
 var cursorGuardExemptions = map[string]string{
 	"api.go:extractListAndToken": "parser: returns the cursor to a guarded caller",
 	"api.go:nextPageTokenOf":     "parser: feeds the non-paginate partial-result warning",
-	"findings.go:getFixedList":   "fetches one page and warns if the server reports more; never follows the cursor",
+	"paginate.go:getFixedList":   "fetches one page and warns if the server reports more; never follows the cursor",
+	"paginate.go:mapPages":       "parser: returns the cursor to paginate, which guards it",
 }
 
 // cursorReadFuncs are calls that surface a next-page cursor from a response.
@@ -230,8 +231,8 @@ func TestCompositeGuardIDsUseCompositeGuard(t *testing.T) {
 			t.Errorf("%s keys its cursor guard on a composite id without withCompositeIDs()", s.name)
 		}
 	}
-	if checked < 5 {
-		t.Fatalf("checked only %d guarded loops with composite ids, want at least 5", checked)
+	if checked < 4 {
+		t.Fatalf("checked only %d guarded loops with composite ids, want at least 4", checked)
 	}
 }
 
