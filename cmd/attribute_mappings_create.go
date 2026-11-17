@@ -35,9 +35,9 @@ a built-in type ("builtin attributes cannot be bound to profile types"). No
 profile type existed to test a successful binding.
 
 The mapping's display_name is set by the server (the type's name, or
---custom-key for Custom, as seen in one live run); there is no flag for it. A second create for the
-same app and type is not refused: it makes a second mapping with its own id,
-so list before creating in a script. A real run with an unknown --app-id
+--custom-key for Custom, as seen in one live run); there is no flag for it.
+A second create for the same app and type is not refused: it makes a second
+mapping with its own id, so list before creating in a script. A real run with an unknown --app-id
 exits 4 (the server's answer); --dry-run looks the type up but not the app, so
 it previews such a request.
 
@@ -83,10 +83,9 @@ type attributeMappingCreate struct {
 var attributeMappingCreateFlagNames = []string{"app-id", "type", "key", "custom-key", "fallbacks-file", "profile-type-id"}
 
 func readAttributeMappingCreateFlags(cmd *cobra.Command) (*attributeMappingCreate, error) {
-	f := cmd.Flags()
-	if f.Changed("body-file") {
+	if flagGiven(cmd, "body-file") {
 		for _, n := range attributeMappingCreateFlagNames {
-			if f.Changed(n) {
+			if flagGiven(cmd, n) {
 				return nil, &usageError{fmt.Errorf("--body-file is mutually exclusive with --%s", n)}
 			}
 		}
@@ -105,7 +104,7 @@ func readAttributeMappingCreateFlags(cmd *cobra.Command) (*attributeMappingCreat
 		key:       mustGetString(cmd, "key"),
 		customKey: mustGetString(cmd, "custom-key"),
 	}
-	if f.Changed("fallbacks-file") {
+	if flagGiven(cmd, "fallbacks-file") {
 		fb, err := readJSONFile[[]any](cmd, "fallbacks-file", mustGetString(cmd, "fallbacks-file"))
 		if err != nil {
 			return nil, err

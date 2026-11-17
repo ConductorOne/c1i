@@ -3,7 +3,6 @@ package cmd
 import (
 	"encoding/json"
 	"fmt"
-	"strconv"
 
 	"github.com/ConductorOne/c1i/internal/client"
 	"github.com/spf13/cobra"
@@ -74,61 +73,56 @@ for an app-level type such as Manager Email.
 --app-id keeps only that app's mappings. The endpoint has no app filter, so it
 is applied after each page is read and every page is still fetched.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
+		c, err := listClientFor(cmd)
+		if err != nil {
+			return err
+		}
 		appID, _ := cmd.Flags().GetString("app-id")
-		pageSize := pageSizeFlag(cmd)
-		return listJSONPages(cmd, "GET "+attributeMappingsPath, []string{"id"}, attributeMappingRow,
-			func(c *client.Client, size int, token string) ([]byte, error) {
-				// With a filter a page can shrink to nothing, so the page size
-				// must not follow --limit down.
-				if appID != "" {
-					size = pageSize
-				}
-				params := map[string]string{"page_size": strconv.Itoa(size)}
-				if token != "" {
-					params["page_token"] = token
-				}
-				data, err := c.Get(cmd.Context(), attributeMappingsPath, params)
+		return listPages(cmd, c, pageSpec[map[string]any]{
+			Route: "GET " + attributeMappingsPath,
+			Fetch: getPage(cmd.Context(), attributeMappingsPath, nil),
+			Parse: func(data []byte) ([]map[string]any, string, error) {
+				items, next, err := parseList[map[string]any](data)
 				if err != nil || appID == "" {
-					return data, err
+					return items, next, err
 				}
-				return keepMappingsOfApp(data, appID)
-			})
+				items, err = keepMappingsOfApp(items, appID)
+				return items, next, err
+			},
+			ID:   func(item map[string]any) string { return optStr(attributeMappingOf(item), "id") },
+			Rows: rowFn(attributeMappingRow),
+			// A filtered page can shrink to nothing, so the page size must not
+			// follow --limit down.
+			FixedSize: appID != "",
+		})
 	},
 }
 
-// keepMappingsOfApp drops the list items of other apps from one page, leaving
-// every other key (nextPageToken, expanded) as the server sent it.
-func keepMappingsOfApp(data []byte, appID string) ([]byte, error) {
-	var page map[string]json.RawMessage
-	if err := json.Unmarshal(data, &page); err != nil {
-		return nil, &nonJSONResponseError{err}
-	}
-	var items []json.RawMessage
-	if raw, ok := page["list"]; ok {
-		if err := json.Unmarshal(raw, &items); err != nil {
-			return nil, &nonJSONResponseError{err}
-		}
-	}
-	kept := make([]json.RawMessage, 0, len(items))
-	for _, raw := range items {
-		var item struct {
-			Mapping struct {
-				AppID string `json:"appId"`
-			} `json:"userAttributeMapping"`
-		}
-		if err := json.Unmarshal(raw, &item); err != nil {
-			return nil, &nonJSONResponseError{err}
-		}
-		// A shape change must not read as "no mapping of that app".
-		if item.Mapping.AppID == "" {
+func attributeMappingOf(item map[string]any) map[string]any {
+	m, _ := item["userAttributeMapping"].(map[string]any)
+	return m
+}
+
+func optStr(m map[string]any, key string) string {
+	s, _ := m[key].(string)
+	return s
+}
+
+// keepMappingsOfApp drops the items of other apps from one page. An item with
+// no appId is a shape change, not "another app's": it fails rather than
+// reading as an empty result.
+func keepMappingsOfApp(items []map[string]any, appID string) ([]map[string]any, error) {
+	kept := make([]map[string]any, 0, len(items))
+	for _, item := range items {
+		got := optStr(attributeMappingOf(item), "appId")
+		if got == "" {
 			return nil, &nonJSONResponseError{fmt.Errorf("a list item has no userAttributeMapping.appId, so --app-id cannot be applied")}
 		}
-		if item.Mapping.AppID == appID {
-			kept = append(kept, raw)
+		if got == appID {
+			kept = append(kept, item)
 		}
 	}
-	page["list"], _ = json.Marshal(kept)
-	return json.Marshal(page)
+	return kept, nil
 }
 
 var attributeMappingsGetCmd = &cobra.Command{

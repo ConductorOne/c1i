@@ -2,7 +2,6 @@ package cmd
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"strings"
 
@@ -54,7 +53,8 @@ var attributeTypesListCmd = &cobra.Command{
 config_kind: "app" (a type read from the app itself, e.g. Manager Email),
 "app_user_profile" (read from one profile key of the app's users),
 "custom_app_user_profile" (Custom: also names the custom user attribute), or
-"cel_expression" (create refuses it; use --body-file). It is null when none is set.
+"cel_expression" (create refuses it; use --body-file). It is null when none is
+set.
 
 Type ids are specific to a tenant: look a type up by display name, as
 "attribute-mappings create --type" does. The endpoint takes no page_size or
@@ -69,37 +69,32 @@ type attributeType struct {
 	ID, DisplayName, APIKey, Kind string
 }
 
-// fetchAttributeTypes reads the whole type set. A cursor on the answer is a
-// truncated set, never accepted: a name that is only on page 2 would read as
-// unknown.
+// fetchAttributeTypes reads the whole type set. The endpoint takes no paging
+// parameters, so none are sent: a cursor in the answer repeats until the
+// engine's guard calls it stuck (exit 6) rather than passing as complete.
 func fetchAttributeTypes(ctx context.Context, c *client.Client) ([]attributeType, error) {
-	data, err := c.Get(ctx, attributeTypesPath, nil)
+	items, err := collectPages(c, pageSpec[map[string]any]{
+		Route: "GET " + attributeTypesPath,
+		Fetch: func(c *client.Client, _ int, _ string) ([]byte, error) {
+			data, err := c.Get(ctx, attributeTypesPath, nil)
+			if err != nil {
+				return nil, fmt.Errorf("listing attribute types: %w", err)
+			}
+			return data, nil
+		},
+		Parse: parseList[map[string]any],
+		ID:    func(item map[string]any) string { return optStr(item, "id") },
+	})
 	if err != nil {
-		return nil, fmt.Errorf("listing attribute types: %w", err)
+		return nil, err
 	}
-	items, next, err := extractListAndToken(data, "list")
-	if err != nil {
-		return nil, &nonJSONResponseError{fmt.Errorf("listing attribute types: %w", err)}
-	}
-	if next != "" {
-		return nil, &stuckPaginationCursorError{route: "GET " + attributeTypesPath, reason: "the server reported more pages of a list that has none"}
-	}
-	var out []attributeType
-	for _, raw := range items {
-		var item map[string]any
-		if err := json.Unmarshal(raw, &item); err != nil {
-			return nil, &nonJSONResponseError{fmt.Errorf("listing attribute types: %w", err)}
-		}
-		t := attributeType{ID: strField(item, "id"), DisplayName: strField(item, "displayName")}
+	out := make([]attributeType, 0, len(items))
+	for _, item := range items {
+		t := attributeType{ID: optStr(item, "id"), DisplayName: optStr(item, "displayName")}
 		t.APIKey, t.Kind = attrConfigKind(item)
 		out = append(out, t)
 	}
 	return out, nil
-}
-
-func strField(m map[string]any, key string) string {
-	s, _ := m[key].(string)
-	return s
 }
 
 // resolveAttributeType finds want among types by exact id, else by exact

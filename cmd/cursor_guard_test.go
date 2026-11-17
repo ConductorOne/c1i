@@ -30,13 +30,12 @@ func stalePageItems(format string) string {
 // cursorGuardExemptions lists functions ("file:func") that read a pagination
 // cursor without following it, so they need no paginationCursorGuard.
 var cursorGuardExemptions = map[string]string{
-	"api.go:extractListAndToken":             "parser: returns the cursor to a guarded caller",
-	"api.go:nextPageTokenOf":                 "parser: feeds the non-paginate partial-result warning",
-	"paginate.go:getFixedList":               "fetches one page and warns if the server reports more; never follows the cursor",
-	"paginate.go:mapPages":                   "parser: returns the cursor to runPages, which guards it",
-	"api.go:apiPageParser":                   "parser: returns the cursor to runPages, which guards it",
-	"api.go:warnPartialResult":               "feeds the non-paginate partial-result warning",
-	"attribute_types.go:fetchAttributeTypes": "fetches the one page of an unpaginated list and fails if the server reports more; never follows the cursor",
+	"api.go:extractListAndToken": "parser: returns the cursor to a guarded caller",
+	"api.go:nextPageTokenOf":     "parser: feeds the non-paginate partial-result warning",
+	"paginate.go:getFixedList":   "fetches one page and warns if the server reports more; never follows the cursor",
+	"paginate.go:mapPages":       "parser: returns the cursor to runPages, which guards it",
+	"api.go:apiPageParser":       "parser: returns the cursor to runPages, which guards it",
+	"api.go:warnPartialResult":   "feeds the non-paginate partial-result warning",
 }
 
 // cursorReadFuncs are calls that surface a next-page cursor from a response.

@@ -331,12 +331,12 @@ tracked root file outside its allowlist. Stage explicit paths rather than `-A`.
   scope, never as an https→http downgrade — a followed hop is
   re-authenticated, so an unrestricted follow would leak the bearer token),
   and `client.RedirectLoopError` (a same-path chain that never settles in 5
-  hops); `internal/mcpgateway` adds `TransportError`
-  for an unreachable gateway and `PaginationError` for a `tools/list` cursor
-  that never ends. `cmd/errors.go` maps them — plus its own
-  `usageError`, `toolExecutionError`, `nonJSONResponseError`,
-  `stuckPaginationCursorError` (a list's cursor stopped advancing), `refNotFoundError` (a referenced id or name is unknown: exit 4; with no request behind it, no status),
-  and `upstreamError` wrappers, for failures with no natural
+  hops); `internal/mcpgateway` adds `TransportError` for an unreachable
+  gateway and `PaginationError` for a `tools/list` cursor that never ends.
+  `cmd/errors.go` maps them — plus its own `usageError`,
+  `toolExecutionError`, `nonJSONResponseError`, `stuckPaginationCursorError`
+  (a list's cursor stopped advancing), `refNotFoundError` (an unknown id or
+  name: 4) and `upstreamError` wrappers, for failures with no natural
   client-level type, `helperLeftError` (a login's leftover credential, always
   1), and `mutationError` (`applied`, from `AttemptError`) — to exit codes:
 

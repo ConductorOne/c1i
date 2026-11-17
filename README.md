@@ -1869,8 +1869,8 @@ Traps:
   mapping with its own id. List before creating in a script.
 - An unknown `--app-id` exits `4` on a real run only: `--dry-run` looks up the
   type, not the app.
-- The server sets `display_name` (the type's name, or `--custom-key`); there is
-  no flag for it.
+- The server sets `display_name` (the type's name, or `--custom-key`, as seen
+  in one live run); there is no flag for it.
 - `update` can change `--key`, `--custom-key` and `--fallbacks-file`, not the
   type or the app. The server's PUT replaces the whole mapping and ignores
   `updateMask`, so c1i reads the mapping first and sends back its current

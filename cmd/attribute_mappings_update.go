@@ -21,9 +21,10 @@ updateMask (any path is accepted, none narrows the write). So c1i first reads
 the mapping and sends back its current attributeType, fallbacks and
 profileTypeIds with only your flags changed, and still sends the mask it
 builds (attributeType, fallbacks) as the API documents. --dry-run does the
-read too. The read and the write are not atomic: an edit to the fallbacks or profile
-types made between them is overwritten. The type itself and the app cannot be changed; the type's config
-kind decides which key flags apply (--key on an app-level type exits 2).
+read too. The read and the write are not atomic: an edit to the fallbacks or
+profile types made between them is overwritten. The type itself and the app
+cannot be changed; the type's config kind decides which key flags apply (--key
+on an app-level type exits 2).
 
 --fallbacks-file is a JSON array replacing the fallbacks; "[]" clears them.
 A changed --key reached the mapped users within a minute in the run measured.
@@ -33,7 +34,7 @@ Prints the mapping unwrapped like "attribute-mappings get": the id is .id.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		id := args[0]
 		var fallbacks []any
-		if cmd.Flags().Changed("fallbacks-file") {
+		if flagGiven(cmd, "fallbacks-file") {
 			fb, err := readJSONFile[[]any](cmd, "fallbacks-file", mustGetString(cmd, "fallbacks-file"))
 			if err != nil {
 				return err
@@ -43,7 +44,7 @@ Prints the mapping unwrapped like "attribute-mappings get": the id is .id.`,
 		spec := attributeMappingUpdateSpecFor(fallbacks)
 		changed := false
 		for _, n := range spec.flagNames() {
-			changed = changed || cmd.Flags().Changed(n)
+			changed = changed || flagGiven(cmd, n)
 		}
 		if !changed {
 			return spec.nothingToUpdate()
@@ -69,29 +70,29 @@ var attributeMappingUpdateSpec = attributeMappingUpdateSpecFor(nil)
 func attributeMappingUpdateSpecFor(fallbacks []any) *updateSpec {
 	return &updateSpec{fields: []updateField{
 		hookUpdate([]string{"key", "custom-key"}, func(cmd *cobra.Command, obj map[string]any) ([]string, error) {
-			if !cmd.Flags().Changed("key") && !cmd.Flags().Changed("custom-key") {
+			if !flagGiven(cmd, "key") && !flagGiven(cmd, "custom-key") {
 				return nil, nil
 			}
 			at, _ := obj["attributeType"].(map[string]any)
 			apiKey, kind := attrConfigKind(at)
 			name, _ := at["displayName"].(string)
 			cfg, _ := at[apiKey].(map[string]any)
-			if cmd.Flags().Changed("custom-key") && kind != "custom_app_user_profile" {
+			if flagGiven(cmd, "custom-key") && kind != "custom_app_user_profile" {
 				return nil, &usageError{fmt.Errorf("--custom-key applies only to a custom_app_user_profile mapping; %q is %q", name, kind)}
 			}
-			if cmd.Flags().Changed("key") {
+			if flagGiven(cmd, "key") {
 				if kind != "app_user_profile" && kind != "custom_app_user_profile" {
 					return nil, &usageError{fmt.Errorf("%q is an app-level attribute (config kind %q): it has no --key to change", name, kind)}
 				}
 				cfg["appUserProfileAttributeKey"] = mustGetString(cmd, "key")
 			}
-			if cmd.Flags().Changed("custom-key") {
+			if flagGiven(cmd, "custom-key") {
 				cfg["userProfileAttributeKey"] = mustGetString(cmd, "custom-key")
 			}
 			return []string{"attributeType"}, nil
 		}),
 		hookUpdate([]string{"fallbacks-file"}, func(cmd *cobra.Command, obj map[string]any) ([]string, error) {
-			if !cmd.Flags().Changed("fallbacks-file") {
+			if !flagGiven(cmd, "fallbacks-file") {
 				return nil, nil
 			}
 			obj["fallbacks"] = fallbacks
