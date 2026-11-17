@@ -174,8 +174,9 @@ covers its camelCase key for the coverage check but is sent as given.
   a pinned matrix of flag combinations per command, and a live dry-run
   comparison against the previous build, matched exactly.
 - **`export events` and `role-mining suggestions users` now retry a transient
-  5xx**, like every other read-only POST: both routes only read (the spec's
-  `ListEvents` and `SearchCohortUsers`).
+  5xx or a connection failure**, like every other read-only POST, including
+  `c1i api --method POST` on those two paths: both routes only read (the
+  spec's `ListEvents` and `SearchCohortUsers`).
 - **`upgrade --dry-run` prints the same JSON preview as every other
   `--dry-run`**, through the shared preview writer, on every path instead of
   text lines; `upgrade --fields` outside `--check` is now a usage error. See

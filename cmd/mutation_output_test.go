@@ -41,7 +41,7 @@ var readOnlyPOST = map[string]string{
 	"cmd/mcp_servers_test_connection.go:mcpServersTestConnectionCmd": "POST test-connection probe",
 	"cmd/policies_validate_cel.go:policiesValidateCelCmd":            "POST validate-cel",
 	"cmd/auth_status.go:authStatusCmd":                               "POST /search/users credential probe",
-	"cmd/paginate.go:postPageBody":                                   "POST list/search whose filter rides in the body (every paged POST list)",
+	"cmd/paginate.go:postPageBody":                                   "every paged POST list; a runtime transport.ReadOnlyPOST check refuses non-read paths before sending",
 }
 
 // outOfScopeSelectors lists single calls ("file:decl selector") that are not
