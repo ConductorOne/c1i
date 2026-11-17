@@ -74,8 +74,8 @@ Exits 8 when the server is unreachable; the JSON is still printed.`,
 
 		// External config is required in create mode; in edit mode it carries
 		// only the changed fields (named by --update-mask) and may be omitted.
-		hasConfigInput := cmd.Flags().Changed("server-url") || cmd.Flags().Changed("transport") ||
-			cmd.Flags().Changed("auth") || cmd.Flags().Changed("external-config-file")
+		hasConfigInput := flagGiven(cmd, "server-url") || flagGiven(cmd, "transport") ||
+			flagGiven(cmd, "auth") || flagGiven(cmd, "external-config-file")
 		if hasConfigInput || !editMode {
 			ext, err := buildExternalConfig(cmd)
 			if err != nil {

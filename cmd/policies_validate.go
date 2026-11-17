@@ -3,7 +3,6 @@ package cmd
 import (
 	"encoding/json"
 	"fmt"
-	"strings"
 )
 
 // This file holds the client-side guards for `policies create`/`update`:
@@ -285,7 +284,7 @@ func validateRuleStepKeys(rules []map[string]any, policySteps map[string]any) er
 func validateRuleConditions(rules []map[string]any) error {
 	for i, rule := range rules {
 		cond, _ := rule["condition"].(string)
-		if strings.TrimSpace(cond) == "" {
+		if !hasVisibleRune(cond) {
 			return &usageError{fmt.Errorf(`rules[%d].condition is empty: the server 400s with a length-bounds error that doesn't explain this — a baseline/catch-all rule needs the literal condition "true", not an empty string`, i)}
 		}
 	}

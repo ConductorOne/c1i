@@ -61,7 +61,7 @@ last_executed_at, args.`,
 		}
 
 		if emitted == 0 {
-			if cmd.Flags().Changed("page-token") {
+			if pageTokenGiven(cmd) {
 				notice(cmd, noticeInfo, fmt.Sprintf("no automations on this page call function %s (--page-token scans one page only)", functionID), nil)
 			} else {
 				notice(cmd, noticeInfo, fmt.Sprintf("no automations call function %s", functionID), nil)

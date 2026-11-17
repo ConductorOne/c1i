@@ -212,6 +212,23 @@ func allowEmpty(cmd *cobra.Command, reason string, names ...string) {
 	}
 }
 
+// flagGiven reports whether the user passed a flag meaning something: Changed,
+// except that an exact "" on an emptyIsOmitted flag is the same as omitting it,
+// as --help promises. Use it for mode and exclusivity checks, not Changed.
+func flagGiven(cmd *cobra.Command, name string) bool {
+	f := cmd.Flags().Lookup(name)
+	if f == nil {
+		f = cmd.PersistentFlags().Lookup(name)
+	}
+	if f == nil || !f.Changed {
+		return false
+	}
+	if r := f.Annotations[emptyAllowedAnnotation]; len(r) == 1 && r[0] == emptyIsOmitted && f.Value.String() == "" {
+		return false
+	}
+	return true
+}
+
 // annotateRequired appends "(required)" to each named flag's usage WITHOUT
 // enabling cobra's pre-run required-flag validation. Use it when the command,
 // not cobra, enforces presence in RunE (via requireNonEmpty or its own check),

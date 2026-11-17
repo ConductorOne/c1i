@@ -449,6 +449,12 @@ func listClientVia(cmd *cobra.Command, build func(*cobra.Command, string) (*clie
 	return c, nil
 }
 
+// pageTokenGiven reports whether --page-token was passed, which selects manual
+// paging. A blank value is refused centrally, so presence equals a real token.
+func pageTokenGiven(cmd *cobra.Command) bool {
+	return cmd.Flags().Changed("page-token")
+}
+
 // listPages runs s with the standard list flags (--page-size, --page-token,
 // --limit) and the NDJSON emitter.
 func listPages[T any](cmd *cobra.Command, c *client.Client, s pageSpec[T]) error {
@@ -456,7 +462,7 @@ func listPages[T any](cmd *cobra.Command, c *client.Client, s pageSpec[T]) error
 	s.Limit = getIntFlag(cmd, "limit")
 	s.PageSize = pageSizeFlag(cmd)
 	s.Token, _ = cmd.Flags().GetString("page-token")
-	s.Manual = cmd.Flags().Changed("page-token")
+	s.Manual = pageTokenGiven(cmd)
 	return runPages(cmd, c, s)
 }
 

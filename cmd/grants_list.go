@@ -160,7 +160,7 @@ set that keeps changing, --wait times out rather than printing anything.`,
 			if minGrants < 0 {
 				return &usageError{fmt.Errorf("--wait-min cannot be negative")}
 			}
-			if cmd.Flags().Changed("page-token") {
+			if pageTokenGiven(cmd) {
 				// --page-token pins one page of a cursor the server is free to
 				// re-issue as the set changes; "the same page twice" would not
 				// mean the set settled.

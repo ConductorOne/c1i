@@ -106,6 +106,15 @@ func TestValidateRuleConditions_FiresOnWhitespaceOnly(t *testing.T) {
 	requireUsageError(t, validateRuleConditions(rules))
 }
 
+// An invisible-only condition (zero-width space, BOM) is blank like "" is;
+// TrimSpace alone lets it through to the server's length-bounds 400.
+func TestValidateRuleConditions_FiresOnInvisibleOnly(t *testing.T) {
+	for _, cond := range []string{"\u200b", "\ufeff", " \u200b "} {
+		rules := []map[string]any{{"condition": cond, "stepKey": "grant"}}
+		requireUsageError(t, validateRuleConditions(rules))
+	}
+}
+
 func TestValidateRuleConditions_NotFiresOnLiteralTrue(t *testing.T) {
 	rules := []map[string]any{{"condition": "true", "stepKey": "grant"}}
 	if err := validateRuleConditions(rules); err != nil {

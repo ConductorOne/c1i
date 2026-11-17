@@ -26,7 +26,7 @@ cannot safely preview or suppress a tool's side effects.
 		}
 
 		var raw json.RawMessage
-		if argsJSON, _ := cmd.Flags().GetString("args"); strings.TrimSpace(argsJSON) != "" {
+		if argsJSON, _ := cmd.Flags().GetString("args"); argsJSON != "" {
 			// MCP tool arguments must be a JSON object. json.Valid would also
 			// accept an array/string/number/null, which the gateway would then
 			// reject with a confusing server-side error — enforce object-ness

@@ -88,11 +88,11 @@ two exit 2 before reading.`,
 // unit tests exercise the same body-building path the live request uses.
 func buildCreatePolicyBody(cmd *cobra.Command) (map[string]any, error) {
 	bodyFile, _ := cmd.Flags().GetString("body-file")
-	usingFlags := cmd.Flags().Changed("display-name") || cmd.Flags().Changed("description") ||
-		cmd.Flags().Changed("policy-type") || cmd.Flags().Changed("steps-file") || cmd.Flags().Changed("rules-file")
+	usingFlags := flagGiven(cmd, "display-name") || flagGiven(cmd, "description") ||
+		flagGiven(cmd, "policy-type") || flagGiven(cmd, "steps-file") || flagGiven(cmd, "rules-file")
 
-	// Changed, not != "": --body-file "" is a read error, not "no body file".
-	if cmd.Flags().Changed("body-file") {
+	// --body-file is not emptyIsOmitted, so "" counts as given and is a read error.
+	if flagGiven(cmd, "body-file") {
 		if usingFlags {
 			return nil, &usageError{fmt.Errorf("--body-file is mutually exclusive with --display-name/--description/--policy-type/--steps-file/--rules-file")}
 		}

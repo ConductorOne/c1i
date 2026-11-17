@@ -136,7 +136,7 @@ func buildRegisterBody(cmd *cobra.Command) (map[string]any, error) {
 		if err != nil {
 			return nil, err
 		}
-		if !cmd.Flags().Changed("hosted-config-file") {
+		if !flagGiven(cmd, "hosted-config-file") {
 			if _, ok := cfg["mcpServerCatalogId"]; !ok {
 				return nil, fmt.Errorf("--catalog-id is required for --type hosted (or pass --hosted-config-file)")
 			}
@@ -147,7 +147,7 @@ func buildRegisterBody(cmd *cobra.Command) (map[string]any, error) {
 		if err != nil {
 			return nil, err
 		}
-		if !cmd.Flags().Changed("external-config-file") {
+		if !flagGiven(cmd, "external-config-file") {
 			if _, ok := cfg["url"]; !ok {
 				return nil, fmt.Errorf("--server-url is required for --type external (or pass --external-config-file)")
 			}
