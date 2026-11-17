@@ -101,6 +101,9 @@ For a hosted server without --catalog-id, c1i first looks the catalog id up
 		if err != nil {
 			return err
 		}
+		if err := rejectOtherTypeConfigFile(cmd, typ); err != nil {
+			return err
+		}
 		switch typ {
 		case "MCP_SERVER_TYPE_HOSTED":
 			cfg, err = buildHostedConfig(cmd)

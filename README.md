@@ -1436,6 +1436,14 @@ classifier. A tool gate's `filter` must select either `builtInPattern` or
   sharing is not readable back, so repeat `--token-sharing per-user` on
   `update-credentials` / `test-connection` when the stored server is per-user
   and you are not supplying the secret.
+- On `register` and `update-credentials`, a flag the selected `--type` /
+  `--auth` would drop is now a usage error (exit `2`, nothing sent): the other
+  type's config file
+  (`--hosted-config-file` with `--type external`, `--external-config-file`
+  with `--type hosted`), a credential flag with `--auth` unset or
+  `--auth none`, and a companion of another method (`--header-name` with
+  `--auth bearer-token`). The request body carries one config arm, so a
+  dropped value registered a server that differed from what was asked for.
 - `test-connection --dry-run` previews the probe and sends nothing.
 - Secrets are sealed server-side; reads only ever return `*_configured`
   booleans, never the values. A read-back can legitimately differ from what you

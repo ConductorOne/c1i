@@ -191,7 +191,11 @@ func buildRegisterBody(cmd *cobra.Command) (map[string]any, error) {
 		body["userIds"] = ids
 	}
 
-	// serverTypeFlag rejects unknowns, so typ is HOSTED or EXTERNAL.
+	// serverTypeFlag rejects unknowns, so typ is HOSTED or EXTERNAL. The other
+	// type's config file would be silently dropped, so refuse it.
+	if err := rejectOtherTypeConfigFile(cmd, typ); err != nil {
+		return nil, err
+	}
 	switch typ {
 	case "MCP_SERVER_TYPE_HOSTED":
 		cfg, err := buildHostedConfig(cmd)
