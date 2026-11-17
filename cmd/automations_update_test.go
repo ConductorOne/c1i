@@ -239,7 +239,7 @@ func TestAutomationsUpdateUsageErrors(t *testing.T) {
 	}{
 		{"empty display name", map[string]string{"display-name": ""}, "display_name is required"},
 		{"whitespace-only mask", map[string]string{"body-file": path, "update-mask": "  "}, "--update-mask requires a non-empty value; name the changed field paths"},
-		{"empty mask path", map[string]string{"body-file": path, "update-mask": "displayName,,description"}, "empty path"},
+		{"empty mask path", map[string]string{"body-file": path, "update-mask": "displayName,,description"}, "path 2 is empty"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			resetCmdFlags(t, automationsUpdateCmd)

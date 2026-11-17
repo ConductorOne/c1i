@@ -99,6 +99,27 @@ there now exits 4 (was 3), a `408` exits 1 (was 3), and a `200` that is not a
 token exits 6. A script that treated exit 3 as "re-authenticate" should retry
 on 5 and 6.
 
+Every `--update-mask` now goes through one rule, and these exit `2` (on a real
+run and on `--dry-run`, before any request) where they used to be sent or
+silently ignored:
+
+- an empty path (`,`, `a,,b`) or an empty dot-segment (`a..b`, `.a`, `a.`,
+  `basicAuth..password`), now on all eight commands that take the flag. The
+  message names the position (`path 2 is empty`, `path 1, segment 2 is empty`);
+  the wording changed on `policies update`, `automations update`,
+  `access-reviews update` and the three `mcp classifiers` updates too;
+- `mcp servers test-connection --update-mask <non-empty>` in create mode
+  (no `<connector-id>`/`--app-id`), which was ignored; `""` still means omitted;
+- `mcp servers update-credentials` or `test-connection` with an explicit mask
+  that leaves out a config key the command sends (for example
+  `--server-url https://x --update-mask a,b`): the URL was silently not
+  applied. Name the key, or drop it;
+- `update-credentials --auth bearer-token` with no token plus a malformed mask,
+  which slipped past the credential check and sent an empty token.
+
+A padded mask (`" a , b "`) is now sent as `a,b`. A snake_case path still
+covers its camelCase key for the coverage check but is sent as given.
+
 ### Changed
 
 - **A blank value on any flag is now a usage error (exit 2)**, checked before
@@ -128,6 +149,10 @@ on 5 and 6.
   unknown user), `requests create grant|revoke --user-id` and `mcp servers
   register --user-id` no longer pass an unknown id to the API. A test fails on
   any new user-id flag that is neither checked nor exempted with a reason.
+- `--update-mask` validation and normalisation is one helper
+  (`normalizeUpdateMask`) shared by all eight commands that take it;
+  `update-credentials` and `test-connection` no longer send it raw or skip
+  "nothing to update" on a malformed mask.
 
 - `--help` now marks "(required)" on `--body-file`, `--refs-file` and
   `--entitlement-id` of every command that demands them at run time, such as

@@ -176,6 +176,9 @@ lifecycle calls, and reports, and `mcp classifiers` for AI-governance
 classifiers, bindings, templates, the singleton agent policy, and tool gates.
 Classifier creates and updates take JSON because their nested, ordered rules
 must be preserved; read first and use the explicit `--update-mask` for updates.
+`--update-mask` paths are camelCase, sent as given; an empty path or dot-segment
+exits 2, and on `mcp servers update-credentials`/`test-connection` an explicit
+mask must name every config key the command sends (see README "Update masks").
 
 Role ids for `service-principals credentials create --scoped-role` and
 `auth login --scoped-role` come from `c1i roles list` (NDJSON; README lists the

@@ -22,12 +22,30 @@ import (
 // silently dropped every credential change.) Mirrors the admin UI, which masks
 // exactly the fields the user edited.
 func deriveCredentialUpdateMask(cfg map[string]any) string {
+	return strings.Join(sortedConfigKeys(cfg), ",")
+}
+
+func sortedConfigKeys(cfg map[string]any) []string {
 	keys := make([]string, 0, len(cfg))
 	for k := range cfg {
 		keys = append(keys, k)
 	}
 	sort.Strings(keys)
-	return strings.Join(keys, ",")
+	return keys
+}
+
+// checkDerivedMaskKeys refuses a config key that would become an empty or
+// malformed --update-mask path, naming the key.
+func checkDerivedMaskKeys(cfg map[string]any) error {
+	for i, k := range sortedConfigKeys(cfg) {
+		if !hasVisibleRune(k) {
+			return &usageError{fmt.Errorf("config key %d is empty; it would become an empty --update-mask path", i+1)}
+		}
+		if _, bad := splitPathSegments(k); bad != 0 {
+			return &usageError{fmt.Errorf("config key %q has an empty dot-segment (segment %d); it would become an invalid --update-mask path", k, bad)}
+		}
+	}
+	return nil
 }
 
 // addAuthFlags registers the convenience auth flags shared by register,
@@ -168,7 +186,7 @@ func requireAuthArmValues(cmd *cobra.Command, arm string) error {
 
 	required := rule.fields
 	if mask, explicit := explicitUpdateMask(cmd); explicit {
-		paths := maskPaths(mask)
+		paths := strings.Split(mask, ",")
 		if !maskNamesAny(paths, rule.coarse) {
 			required = nil
 			for _, f := range rule.fields {
@@ -198,17 +216,16 @@ func requireAuthArmValues(cmd *cobra.Command, arm string) error {
 	return &usageError{fmt.Errorf("--auth %s requires %s", rule.name, requiredText)}
 }
 
-// explicitUpdateMask returns the caller's non-empty --update-mask when the
-// command will actually send it. An empty mask means "derive it from the
-// flags", i.e. the supplied arm is a full replacement. test-connection sends
-// the mask only in edit mode (which requires --app-id); a create-mode probe
-// ignores it, so it must not relax the full-arm requirement.
+// explicitUpdateMask returns the caller's normalized --update-mask when the
+// command will send it; "" means derive it (or send none), so the supplied arm
+// is a full replacement. test-connection sends it only in edit mode.
 func explicitUpdateMask(cmd *cobra.Command) (string, bool) {
 	if cmd.Flags().Lookup("update-mask") == nil {
 		return "", false
 	}
-	mask, _ := cmd.Flags().GetString("update-mask")
-	if mask == "" {
+	// The commands validate the mask first, so an error here means none.
+	mask, err := optionalUpdateMask(cmd)
+	if err != nil || mask == "" {
 		return "", false
 	}
 	// update-credentials (which has --type) always sends the mask;
@@ -222,21 +239,12 @@ func explicitUpdateMask(cmd *cobra.Command) (string, bool) {
 	return mask, true
 }
 
-// maskPaths splits a comma-separated update mask, dropping blanks.
-func maskPaths(mask string) []string {
-	var paths []string
-	for _, p := range strings.Split(mask, ",") {
-		if p = strings.TrimSpace(p); p != "" {
-			paths = append(paths, p)
-		}
-	}
-	return paths
-}
-
 func maskNamesAny(paths, names []string) bool {
 	for _, p := range paths {
-		if slices.Contains(names, p) {
-			return true
+		for _, n := range names {
+			if foldMaskName(p) == foldMaskName(n) {
+				return true
+			}
 		}
 	}
 	return false

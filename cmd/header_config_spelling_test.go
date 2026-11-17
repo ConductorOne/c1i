@@ -12,7 +12,7 @@ func TestConfigFieldKeysAreNotHeaderNames(t *testing.T) {
 	t.Setenv("C1I_URL", mutTestURL)
 	cmds := map[string][]string{
 		"register":           {"mcp", "servers", "register", "--app-id", "a", "--type", "hosted", "--display-name", "d", "--catalog-id", "cat1"},
-		"update-credentials": {"mcp", "servers", "update-credentials", "conn-1", "--app-id", "a", "--type", "hosted", "--catalog-id", "cat1", "--update-mask", "hostedConfig"},
+		"update-credentials": {"mcp", "servers", "update-credentials", "conn-1", "--app-id", "a", "--type", "hosted", "--catalog-id", "cat1", "--update-mask", "configFields"},
 	}
 	for name, base := range cmds {
 		for _, key := range []string{"a b", "a/b", "a:b", "ключ"} {

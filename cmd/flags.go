@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"regexp"
 	"slices"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -848,12 +849,75 @@ func bodyFileMask(cmd *cobra.Command, exclusive ...string) (mask string, usingBo
 	if !f.Changed("update-mask") {
 		return "", true, &usageError{fmt.Errorf("--update-mask is required together with --body-file")}
 	}
+	mask, err = normalizeUpdateMask(mask)
+	return mask, true, err
+}
+
+// normalizeUpdateMask trims each comma-separated path (the server rejects
+// " description" as an invalid path) and refuses an empty path or an empty
+// dot-segment, naming the position; spaces inside a segment go to the server
+// as given. It is the one check every --update-mask
+// value goes through. Unlike --fields, a doubled or trailing comma is an error:
+// a mask scopes a write. Names are sent as given; the server judges them.
+func normalizeUpdateMask(mask string) (string, error) {
 	paths := strings.Split(mask, ",")
 	for i, p := range paths {
-		paths[i] = strings.TrimSpace(p)
-		if !hasVisibleRune(paths[i]) {
-			return "", true, &usageError{fmt.Errorf("--update-mask %q has an empty path", mask)}
+		p = strings.TrimSpace(p)
+		if !hasVisibleRune(p) {
+			return "", &usageError{fmt.Errorf("--update-mask %q: path %d is empty (paths are comma-separated, e.g. a,b)", mask, i+1)}
+		}
+		if _, bad := splitPathSegments(p); bad != 0 {
+			return "", &usageError{fmt.Errorf("--update-mask %q: path %d, segment %d is empty (segments are dot-separated, e.g. a.b)", mask, i+1, bad)}
+		}
+		paths[i] = p
+	}
+	return strings.Join(paths, ","), nil
+}
+
+// requireMaskCoversConfig refuses an explicit mask that leaves out a top-level
+// key of the config c1i is sending, which the server would silently not apply.
+// A path covers a key when it is the key or nested under it, compared without
+// case or underscores so camelCase and snake_case spellings match (the mask
+// itself is sent as given). The catalog id is required by the API but never a
+// field being changed.
+func requireMaskCoversConfig(mask string, cfg map[string]any) error {
+	var uncovered []string
+	for key := range cfg {
+		if key == "mcpServerCatalogId" {
+			continue
+		}
+		if !hasVisibleRune(key) {
+			return &usageError{fmt.Errorf("a config key is empty; it cannot be named in --update-mask")}
+		}
+		covered := false
+		for _, p := range strings.Split(mask, ",") {
+			p, k := foldMaskName(p), foldMaskName(key)
+			if p == k || strings.HasPrefix(p, k+".") {
+				covered = true
+				break
+			}
+		}
+		if !covered {
+			uncovered = append(uncovered, key)
 		}
 	}
-	return strings.Join(paths, ","), true, nil
+	if len(uncovered) == 0 {
+		return nil
+	}
+	sort.Strings(uncovered)
+	return &usageError{fmt.Errorf("--update-mask %q does not name %s, which this command would send and the server would not apply; add it to the mask or drop it", mask, strings.Join(uncovered, ", "))}
+}
+
+func foldMaskName(s string) string {
+	return strings.ToLower(strings.ReplaceAll(s, "_", ""))
+}
+
+// optionalUpdateMask reads an --update-mask that may be left out ("" means
+// omitted), normalized by normalizeUpdateMask.
+func optionalUpdateMask(cmd *cobra.Command) (string, error) {
+	mask, _ := cmd.Flags().GetString("update-mask")
+	if mask == "" {
+		return "", nil
+	}
+	return normalizeUpdateMask(mask)
 }
