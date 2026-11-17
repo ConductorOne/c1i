@@ -95,7 +95,7 @@ const (
 type mutationOpts struct {
 	preReads    []preRead
 	afterWrite  func(data []byte) error
-	wait        func(c *client.Client) waitOp[[]string]
+	wait        func(c *client.Client, resp []byte) waitOp[[]string]
 	waitEnabled bool
 	secret      secretKind
 	batchVerb   string
@@ -117,6 +117,12 @@ func withAfterWrite(f func(data []byte) error) mutationOpt {
 // withWait polls build's op after a successful write when enabled; an op with
 // no Poll is skipped.
 func withWait(build func(c *client.Client) waitOp[[]string], enabled bool) mutationOpt {
+	return withWaitOnResponse(func(c *client.Client, _ []byte) waitOp[[]string] { return build(c) }, enabled)
+}
+
+// withWaitOnResponse is withWait for a wait that needs the write's raw
+// response, e.g. the id a create just minted.
+func withWaitOnResponse(build func(c *client.Client, resp []byte) waitOp[[]string], enabled bool) mutationOpt {
 	return func(o *mutationOpts) { o.wait, o.waitEnabled = build, enabled }
 }
 
@@ -182,7 +188,7 @@ func sendMutation(cmd *cobra.Command, m mutation, opts ...mutationOpt) error {
 	}
 	if o.waitEnabled && o.wait != nil {
 		// A builder that returns an op with no Poll has nothing left to wait for.
-		if op := o.wait(c); op.Poll != nil {
+		if op := o.wait(c, data); op.Poll != nil {
 			if _, err := runWait(cmd, op); err != nil {
 				err = fmt.Errorf("%s %s was applied; waiting for %s failed: %w", m.Method, redact.URL(m.Path), op.Subject, err)
 				return &mutationError{err: errors.Join(err, partial), applied: appliedTrue}

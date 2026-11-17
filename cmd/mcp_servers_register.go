@@ -1,8 +1,12 @@
 package cmd
 
 import (
+	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
+	"strconv"
+	"time"
 
 	"github.com/ConductorOne/c1i/internal/client"
 	"github.com/spf13/cobra"
@@ -59,11 +63,19 @@ id is .connectorId (there is no .id). --fields is a usage error on a mutation;
 extract with jq -er, which fails on a --dry-run preview where jq -r exits 0
 with null.
 
+--wait polls "mcp servers list --app-id" until the new server appears in it
+(--wait-timeout bounds the wait). A list read right after register can omit the
+server for up to about a second while "mcp servers get" already returns it.
+
 NOTE: registering under app_id="" (new managed app) or via an
 app_managed_state_binding_ref is not reachable over REST — this command
 requires --app-id. Approve discovered tools afterward with
 "c1i mcp tools approve".`,
 	RunE: func(cmd *cobra.Command, args []string) error {
+		wait, waitTimeout, err := waitFlagValues(cmd)
+		if err != nil {
+			return err
+		}
 		if printTemplate, _ := cmd.Flags().GetBool("print-config-template"); printTemplate {
 			return printConfigTemplate(cmd)
 		}
@@ -90,8 +102,81 @@ requires --app-id. Approve discovered tools afterward with
 		if owners, _ := repeatableStringFlag(cmd, "user-id"); len(owners) > 0 {
 			opts = append(opts, withPreRead(existingUsersCheck("user-id", owners)))
 		}
+		opts = append(opts, withWaitOnResponse(func(c *client.Client, resp []byte) waitOp[[]string] {
+			return serverListedWaitOp(c, appID, unwrapServerID(resp), waitTimeout)
+		}, wait))
 		return sendMutation(cmd, mutation{Method: http.MethodPost, Path: path, Body: body, Unwrap: byID("connectorId")}, opts...)
 	},
+}
+
+// mcpServerWaitInterval is how often register --wait re-lists. A var so a test
+// can poll fast.
+var mcpServerWaitInterval = time.Second
+
+// unwrapServerID reads .connectorId from a register response, which wraps the
+// server ("" if absent).
+func unwrapServerID(resp []byte) string {
+	var r struct {
+		ConnectorID string `json:"connectorId"`
+	}
+	_ = json.Unmarshal(unwrapEnvelope(resp, "connectorId"), &r)
+	return r.ConnectorID
+}
+
+// listServerIDs pages GET .../mcp_servers to completion: the new server can
+// sit past page one.
+func listServerIDs(ctx context.Context, c *client.Client, appID string) ([]string, error) {
+	route := "GET " + client.Path("/api/v1/apps/%s/mcp_servers", appID)
+	var all []string
+	pageToken := ""
+	guard := newPaginationCursorGuard()
+	for {
+		if guard.tokenAlreadyUsed(pageToken) {
+			return nil, guard.stuckError(route)
+		}
+		params := map[string]string{"page_size": strconv.Itoa(100)}
+		if pageToken != "" {
+			params["page_token"] = pageToken
+		}
+		data, err := c.Get(ctx, client.Path("/api/v1/apps/%s/mcp_servers", appID), params)
+		if err != nil {
+			return nil, fmt.Errorf("API error: %w", err)
+		}
+		var resp struct {
+			List          []serverView `json:"list"`
+			NextPageToken string       `json:"nextPageToken"`
+		}
+		if err := json.Unmarshal(data, &resp); err != nil {
+			return nil, fmt.Errorf("failed to parse response: %w", err)
+		}
+		ids := make([]string, len(resp.List))
+		for i, it := range resp.List {
+			ids[i] = it.ConnectorID
+		}
+		keep, err := guard.checkPage(nil, route, ids)
+		if err != nil {
+			return nil, err
+		}
+		all = append(all, keepRows(ids, keep)...)
+		if resp.NextPageToken == "" {
+			return all, nil
+		}
+		guard.markTokenUsed(pageToken)
+		pageToken = resp.NextPageToken
+	}
+}
+
+func serverListedWaitOp(c *client.Client, appID, connectorID string, timeout time.Duration) waitOp[[]string] {
+	return waitOp[[]string]{
+		Poll:     func(ctx context.Context) ([]string, error) { return listServerIDs(ctx, c, appID) },
+		Done:     untilPresent([]string{connectorID}),
+		Interval: mcpServerWaitInterval,
+		Timeout:  timeout,
+		Subject:  "MCP server " + connectorID + " to appear in the app's server list",
+		Success:  "MCP server " + connectorID + " is listed",
+		Slow:     "the list can trail a register by a few seconds",
+		Recheck:  "c1i mcp servers list --app-id " + appID,
+	}
 }
 
 // buildRegisterBody assembles the RegisterRequest body from flags. Pure (no
@@ -180,6 +265,7 @@ func init() {
 	mcpServersRegisterCmd.Flags().Bool("print-config-template", false, "Print a ready-to-edit config skeleton for the --auth method (use with --auth and --type) instead of registering")
 	// Shared auth
 	addAuthFlags(mcpServersRegisterCmd)
+	addWaitFlags(mcpServersRegisterCmd, "GET .../mcp_servers until the new server is listed", time.Minute)
 	// annotate-only (not cobra-required) so --print-config-template works
 	// without --app-id/--type/--display-name; RunE enforces them otherwise.
 	annotateRequired(mcpServersRegisterCmd, "app-id", "type", "display-name")
