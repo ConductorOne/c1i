@@ -174,7 +174,7 @@ func serverListedWaitOp(c *client.Client, appID, connectorID string, timeout tim
 		Timeout:  timeout,
 		Subject:  "MCP server " + connectorID + " to appear in the app's server list",
 		Success:  "MCP server " + connectorID + " is listed",
-		Slow:     "the list can trail a register by a few seconds",
+		Slow:     "the list can trail a register by about a second",
 		Recheck:  "c1i mcp servers list --app-id " + appID,
 	}
 }

@@ -833,8 +833,10 @@ toolset lists.
 
     c1i grants list --app-id "$APP_ID" --entitlement-id "$ENTITLEMENT_ID"
 
-Each row is one grant (one user holding one entitlement). Record them: after
-the delete they are gone and this is the only list of who lost access.
+Each row is one grant (one user holding one entitlement). Record
+identity_user_id from each row: it is the C1 user id that --user-id takes in
+step 3 (app_user_id is the app account and is not accepted there). After the
+delete the grants are gone and this is the only list of who lost access.
 
 ## 2. Know what the delete does
 
@@ -852,6 +854,16 @@ through the approval workflow (see "c1i docs guide request-access"):
 
     c1i requests create revoke --app-id "$APP_ID" --entitlement-id "$ENTITLEMENT_ID" \
       --user-id "$USER_ID" --description "MCP server being retired"
+
+This files one task per user and entitlement; its id is .id. The grant stays
+until that task's policy and provisioning steps finish: re-read the task with
+"c1i requests get <task-id>" and then "c1i grants list" (grants lag; re-read
+before concluding). Observed on an auto-approving entitlement: the task read
+TASK_STATE_OPEN at creation and TASK_STATE_CLOSED within seconds, and the grant
+was gone from "grants list" by then. A policy that needs an approver keeps the
+task open and the grant in place until someone acts ("c1i docs guide
+inspect-and-approve-task"). Run "grants list" again before step 4 to confirm
+what is still held.
 
 ## 4. Delete the server
 
