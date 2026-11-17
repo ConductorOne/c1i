@@ -563,7 +563,7 @@ with that name. Always run step 4 first. After any failed promote, inspect
 
     c1i apps list
     CONN_APP_ID=<id of the identity provider's connector app>
-    RT_ID=$(c1i apps resource-types list --app-id "$CONN_APP_ID" | jq -er 'select(.display_name=="app") | .id') || echo "no resource type named app on $CONN_APP_ID"
+    RT_ID=$(c1i apps resource-types list --app-id "$CONN_APP_ID" | jq -er 'select(.display_name=="app") | .id') || { echo "no resource type named app on $CONN_APP_ID"; exit 1; }
 
 On the connector app checked, the discovered apps were the resource type named
 "app". "resource-types list" and "managed-state list" exit 0 with no rows for a wrong app id or
@@ -600,7 +600,7 @@ you want before promoting; a promote adds another one beside it.
     NEW_APP_ID=$(c1i apps managed-state promote "$RES_ID" --app-id "$CONN_APP_ID" --resource-type-id "$RT_ID" | jq -er .state.managed.appId)
 
 Without --user-id the new app's owners were the connector app's owners. Pass
---user-id (repeatable) to give it exactly those users instead:
+--user-id (repeatable) to set the new app's owners instead:
 
     c1i apps managed-state promote "$RES_ID" --app-id "$CONN_APP_ID" --resource-type-id "$RT_ID" --user-id <user-id>
 
@@ -616,22 +616,22 @@ Without --user-id the new app's owners were the connector app's owners. Pass
   (compare with "apps get" on "$CONN_APP_ID"); entitlements and accounts were
   not checked, so look with "entitlements list --app-id" on "$NEW_APP_ID".
 - ` + ownerAsyncNote + `
-  Owners appeared within about two minutes in the runs checked; "apps owners"
-  reading empty right after the promote is not a failure.
+  "apps owners" reading empty right after the promote is not a failure.
 
 ## Undoing a promotion
 
 "apps delete" on "$NEW_APP_ID" deletes the app, and it also soft-deletes the
-binding until the connector's next sync: the discovered app leaves
-"managed-state list", "managed-state get" still answers (with deletedAt set and
-the old app id), and promote exits 4. After the sync the binding was back,
-unmanaged, under the same resource_id; promoting it again creates a second app.
+binding: the discovered app leaves "managed-state list", "managed-state get"
+still answers (with deletedAt set and the old app id), and promote exits 4. The
+binding reappeared about 8 minutes later (presumably the connector's next
+sync), unmanaged, under the same resource_id; promote then no longer exits 4,
+and promoting it creates a new app.
 
 ## Common failures
 
 - exit 4 on promote: an unknown app, resource type, resource id or user, or a
-  binding whose managed app was deleted (until the connector's next sync).
-  A --dry-run catches all but the last.
+  binding whose managed app was deleted (until it reappears, about 8 minutes
+  in the run checked). A --dry-run catches all but the last.
 `
 
 // guideRequestAccess walks the requester side of a grant/revoke access

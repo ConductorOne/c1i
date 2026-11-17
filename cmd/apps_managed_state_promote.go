@@ -26,15 +26,15 @@ failure, inspect with "managed-state get" and "apps list" before retrying.
 Promoting an already-managed binding exits 0 and prints the binding with the
 existing app id; it created no second app.
 
-Without --user-id the new app's owners were the connector app's owners; with
-it, exactly the --user-id users. Owner changes are applied asynchronously, so
+Without --user-id the new app's owners were the connector app's owners; pass
+--user-id to set the new app's owners instead. Owner changes are applied asynchronously, so
 "apps owners <app-id>" can lag.
 
-Deleting the managed app afterwards soft-deletes the binding until the
-connector's next sync: it leaves "managed-state list", "managed-state get"
-still answers with deletedAt set, and promote exits 4. After the sync the
-binding was back, unmanaged, under the same resource_id, and can be promoted
-again, which makes a second app.
+Deleting the managed app afterwards soft-deletes the binding: it leaves
+"managed-state list", "managed-state get" still answers with deletedAt set, and
+promote exits 4. The binding reappeared about 8 minutes later (presumably the
+connector's next sync), unmanaged, under the same resource_id; promote then no
+longer exits 4, and promoting it creates a new app.
 
 An unknown app, resource type, resource id or user exits 4, --dry-run included
 (the binding is read first; a binding whose app was deleted still reads, so a
