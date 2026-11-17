@@ -16,8 +16,9 @@ var accessProfilesBundleAutomationCmd = &cobra.Command{
 Create and set take a JSON object through --body-file (or "-" for stdin). The
 supported fields are createTasks, disableCircuitBreaker, enabled, and
 entitlements, containing entitlementRefs (an array of objects with exactly
-appId and id). Run optionally takes --refs-file with the entitlement reference
-array.`,
+appId and id). entitlements is required: the server refuses a body without
+conditions, so pass an empty entitlementRefs list to disable the automation.
+Run optionally takes --refs-file with the entitlement reference array.`,
 }
 
 var accessProfilesBundleAutomationGetCmd = &cobra.Command{
@@ -163,6 +164,9 @@ func validateBundleAutomationBody(body map[string]any) error {
 		default:
 			return &usageError{fmt.Errorf("unsupported bundle automation field %q", key)}
 		}
+	}
+	if v, ok := body["entitlements"]; !ok || v == nil {
+		return &usageError{fmt.Errorf("entitlements is required: it carries the automation's conditions, which the server demands even to disable it (pass {\"entitlementRefs\":[]} for none)")}
 	}
 	return nil
 }
