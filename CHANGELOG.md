@@ -201,7 +201,12 @@ covers its camelCase key for the coverage check but is sent as given.
 
 - `policies create|update` now refuses a rule whose `condition` is invisible-only
   (zero-width space, BOM) with exit 2, as it already did for an empty or
-  whitespace-only one, instead of sending it for the server's length-bounds 400.
+  whitespace-only one, instead of sending it to the server.
+
+- A flag that `--help` says is the same as omitted when `""` (for example
+  `policies create --description ""`, `mcp servers register --bearer-token ""`)
+  no longer trips the exclusivity check against `--body-file` or
+  `--external-config-file`: `""` now counts as not given there, as documented.
 
 - `--help` now says what an empty value does on every flag that sends `""`:
   it clears `policies`, `apps` and `access-profiles update --description`;

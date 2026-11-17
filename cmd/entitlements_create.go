@@ -271,7 +271,7 @@ func rejectFlagsForReusedObject(cmd *cobra.Command, reusedID, reusedFlag string,
 func changedFlags(cmd *cobra.Command, names ...string) []string {
 	var passed []string
 	for _, n := range names {
-		if cmd.Flags().Changed(n) {
+		if flagGiven(cmd, n) {
 			passed = append(passed, "--"+n)
 		}
 	}

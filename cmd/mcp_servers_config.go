@@ -248,7 +248,7 @@ func applySharedAuthFields(cmd *cobra.Command, cfg map[string]any) error {
 	} else if ts != "" {
 		cfg["tokenSharing"] = ts
 	}
-	if cmd.Flags().Changed("require-tool-approval") {
+	if flagGiven(cmd, "require-tool-approval") {
 		on, _ := cmd.Flags().GetBool("require-tool-approval")
 		cfg["requireToolApproval"] = optionalBool(on)
 	}
@@ -261,7 +261,7 @@ func applySharedAuthFields(cmd *cobra.Command, cfg map[string]any) error {
 // reject that combination instead of quietly discarding the values.
 func sharedAuthFlagsChanged(cmd *cobra.Command) bool {
 	for _, n := range sharedAuthFlagNames {
-		if cmd.Flags().Changed(n) {
+		if flagGiven(cmd, n) {
 			return true
 		}
 	}
@@ -317,8 +317,8 @@ func checkConfigHeaders(wrapper string, cfg map[string]any) error {
 // The two are mutually exclusive.
 func buildHostedConfig(cmd *cobra.Command) (map[string]any, error) {
 	file, _ := cmd.Flags().GetString("hosted-config-file")
-	usingFlags := cmd.Flags().Changed("catalog-id") || cmd.Flags().Changed("config-field") ||
-		cmd.Flags().Changed("source-app-id") || sharedAuthFlagsChanged(cmd)
+	usingFlags := flagGiven(cmd, "catalog-id") || flagGiven(cmd, "config-field") ||
+		flagGiven(cmd, "source-app-id") || sharedAuthFlagsChanged(cmd)
 	if file != "" {
 		if usingFlags {
 			return nil, &usageError{fmt.Errorf("--hosted-config-file is mutually exclusive with --catalog-id/--source-app-id/--config-field and the auth flags (--auth/--bearer-token/--token-sharing/…)")}
@@ -359,7 +359,7 @@ func buildHostedConfig(cmd *cobra.Command) (map[string]any, error) {
 // --transport, auth). The two are mutually exclusive.
 func buildExternalConfig(cmd *cobra.Command) (map[string]any, error) {
 	file, _ := cmd.Flags().GetString("external-config-file")
-	usingFlags := cmd.Flags().Changed("server-url") || cmd.Flags().Changed("transport") ||
+	usingFlags := flagGiven(cmd, "server-url") || flagGiven(cmd, "transport") ||
 		sharedAuthFlagsChanged(cmd)
 	if file != "" {
 		if usingFlags {

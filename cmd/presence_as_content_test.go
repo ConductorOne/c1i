@@ -26,30 +26,35 @@ var changedFlagAllowlist = map[string]string{
 
 // changedAllowlist maps "file:decl" to why presence, not content, is the signal.
 var changedAllowlist = map[string]string{
-	"apps_create.go:buildAppCreateBody":                          "sends identityMatching only when passed; a blank value is refused centrally and the enum parser rejects the rest",
-	"apps_update.go:appUpdateSpec":                               "update-field hook: presence of --app-user-mapper-file is mask membership",
-	"auth_login_roles.go:loginScopeFromFlags":                    "a bool: --choose-roles=false must differ from absent; a bool has no blank value",
-	"docs_openapi.go:openAPIRetries":                             "who set the retry count (flag vs default) decides precedence; the count's value is not inspected",
-	"entitlements_create.go:changedFlags":                        "reports which flags were passed, for mutual-exclusion messages; blank values are refused centrally",
-	"entitlements_update.go:entitlementUpdateSpec":               "update-field hooks: a bool and a set/unset flag pair, where passing the flag is the signal",
-	"flags.go:requireNonEmpty":                                   "content is judged by hasVisibleRune first; Changed only picks the unset vs blank message",
-	"flags.go:bodyFileMask":                                      "was --body-file/--update-mask passed (even as an empty path); the mask content is checked by normalizeUpdateMask",
-	"mcp_servers_config.go:applySharedAuthFields":                "a bool: --require-tool-approval=false must differ from absent",
-	"mcp_servers_config.go:sharedAuthFlagsChanged":               "mode selection: were any auth flags passed; blank values are refused centrally",
-	"mcp_servers_config.go:buildHostedConfig":                    "mode selection (flags vs --*-file): which input style was used; blank values are refused centrally",
-	"mcp_servers_config.go:buildExternalConfig":                  "mode selection (flags vs --*-file): which input style was used; blank values are refused centrally",
-	"mcp_servers_register.go:buildRegisterBody":                  "was a --*-config-file passed (an empty path is refused centrally); presence picks the config source",
-	"mcp_servers_test_connection.go:mcpServersTestConnectionCmd": "mode selection: inline config flags vs a stored server id; blank values are refused centrally",
-	"policies_create.go:buildCreatePolicyBody":                   "mode selection (flags vs --body-file): which input style was used; blank values are refused centrally",
-	"policies_update.go:readPolicyUpdateInputs":                  "was a --*-file passed (an empty path is refused centrally); presence picks the input source",
-	"policies_update.go:policyUpdateSpec":                        "update-field hooks: presence of --steps-file/--rules-file is mask membership",
-	"policy_binding.go:policyIDFlag":                             "an unset flag means leave the binding alone; a blank id is refused centrally before this runs",
-	"policy_binding.go:withPolicyBindingsCheck":                  "only validate bindings when a policy-id flag was passed; blank ids are refused centrally",
-	"update_fields.go:strUpdate":                                 "the update-field builder: presence of a flag is mask membership",
-	"update_fields.go:boolUpdate":                                "the update-field builder: presence of a flag is mask membership",
-	"update_fields.go:optionalBoolUpdate":                        "the update-field builder: presence of a flag is mask membership",
-	"update_fields.go:enumUpdate":                                "the update-field builder: presence of a flag is mask membership",
-	"wait.go:waitFlagValues":                                     "--wait is a bool: passed (even =false) vs defaulted decides whether --wait-* companions are stray",
+	"apps_create.go:buildAppCreateBody":                                "sends identityMatching only when passed; a blank value is refused centrally and the enum parser rejects the rest",
+	"apps_update.go:appUpdateSpec":                                     "update-field hook: presence of --app-user-mapper-file is mask membership",
+	"auth_login_roles.go:loginScopeFromFlags":                          "a bool: --choose-roles=false must differ from absent; a bool has no blank value",
+	"docs_openapi.go:openAPIRetries":                                   "who set the retry count (flag vs default) decides precedence; the count's value is not inspected",
+	"entitlements_update.go:entitlementUpdateSpec":                     "update-field hooks: a bool and a set/unset flag pair, where passing the flag is the signal",
+	"flags.go:flagGiven":                                               "the one presence helper: Changed, minus an exact \"\" on an emptyIsOmitted flag",
+	"flags.go:validateHeaderFlags":                                     "walks flags the user set to validate each value's content; Changed only skips unset ones",
+	"flags.go:validatePathFlags":                                       "walks flags the user set to validate each value's content; Changed only skips unset ones",
+	"flags.go:validateCountFlags":                                      "range-checks a count only if passed; the default is valid by construction",
+	"flags.go:repeatableStringFlag":                                    "an unset repeatable flag is nil, not [\"\"]; each passed occurrence is content-checked",
+	"flags.go:protoDurationFlag":                                       "an unset duration is omitted; a passed one is parsed and range-checked",
+	"root.go:validateFlagsUTF8":                                        "validates the content of every flag the user set; Changed only skips unset ones",
+	"root.go:validateBlankFlags":                                       "the central blank guard: walks set flags and judges their content itself",
+	"root.go:validateGlobalSettings":                                   "which source (flag vs env/config) supplied a global setting, for the error wording",
+	"root.go:validateDotSegmentIDFlags":                                "the central id guard: walks set flags and judges their content itself",
+	"root.go:GetBaseURLWithSource":                                     "--url precedence: a passed flag outranks env/config; the value is validated elsewhere",
+	"mutation.go:refuseMutationFields":                                 "--fields is refused on a mutation if passed at all, whatever its value",
+	"access_profiles_entitlements.go:buildRequestableEntitlementsBody": "a bool: --create-requests=false must differ from absent",
+	"flags.go:requireNonEmpty":                                         "content is judged by hasVisibleRune first; Changed only picks the unset vs blank message",
+	"flags.go:bodyFileMask":                                            "was --body-file/--update-mask passed (even as an empty path); the mask content is checked by normalizeUpdateMask",
+	"policies_update.go:readPolicyUpdateInputs":                        "was a --*-file passed (an empty path is refused centrally); presence picks the input source",
+	"policies_update.go:policyUpdateSpecFor":                           "update-field hooks: presence of --steps-file/--rules-file is mask membership",
+	"policy_binding.go:policyIDFlag":                                   "an unset flag means leave the binding alone; a blank id is refused centrally before this runs",
+	"policy_binding.go:withPolicyBindingsCheck":                        "only validate bindings when a policy-id flag was passed; blank ids are refused centrally",
+	"update_fields.go:strUpdate":                                       "the update-field builder: presence of a flag is mask membership",
+	"update_fields.go:boolUpdate":                                      "the update-field builder: presence of a flag is mask membership",
+	"update_fields.go:optionalBoolUpdate":                              "the update-field builder: presence of a flag is mask membership",
+	"update_fields.go:enumUpdate":                                      "the update-field builder: presence of a flag is mask membership",
+	"wait.go:waitFlagValues":                                           "--wait is a bool: passed (even =false) vs defaulted decides whether --wait-* companions are stray",
 }
 
 // presenceScan reports every violation in file; path is the base file name.
@@ -68,10 +73,17 @@ func presenceScan(fset *token.FileSet, file *ast.File, path string) []presenceVi
 			}
 		}
 		key := path + ":" + name
+		calls := map[*ast.SelectorExpr]bool{}
 		ast.Inspect(decl, func(n ast.Node) bool {
 			switch n := n.(type) {
+			case *ast.SelectorExpr:
+				// The field form (Lookup(x).Changed) reads presence too.
+				if n.Sel.Name == "Changed" && !calls[n] {
+					out = append(out, presenceViolation{key: key, line: fset.Position(n.Pos()).Line, rule: "changed"})
+				}
 			case *ast.CallExpr:
 				if sel, ok := n.Fun.(*ast.SelectorExpr); ok && sel.Sel.Name == "Changed" {
+					calls[sel] = true
 					v := presenceViolation{key: key, line: fset.Position(n.Pos()).Line, rule: "changed"}
 					if len(n.Args) == 1 {
 						if lit, ok := n.Args[0].(*ast.BasicLit); ok && lit.Kind == token.STRING {
@@ -114,7 +126,7 @@ func isTrimSpaceEmptiness(b *ast.BinaryExpr) bool {
 	}
 	for _, pair := range [][2]ast.Expr{{b.X, b.Y}, {b.Y, b.X}} {
 		if isStringsTrimSpace(pair[0]) {
-			if lit, ok := pair[1].(*ast.BasicLit); ok && lit.Kind == token.STRING && lit.Value == `""` {
+			if lit, ok := pair[1].(*ast.BasicLit); ok && lit.Kind == token.STRING && (lit.Value == `""` || lit.Value == "``") {
 				return true
 			}
 		}
@@ -215,6 +227,8 @@ func TestPresenceScanCatchesPlantedViolations(t *testing.T) {
 		{"len gt zero", `func f(s string) bool { return len(strings.TrimSpace(s)) > 0 }`, "trimspace", 1},
 		{"changed in closure", `var c = func(cmd *cobra.Command) bool { return cmd.Flags().Changed("x") }`, "changed", 1},
 		{"changed computed", `func f(f *pflag.FlagSet, n string) bool { return f.Changed(n) }`, "changed", 1},
+		{"trimspace raw string", "func f(s string) bool { return strings.TrimSpace(s) == `` }", "trimspace", 1},
+		{"changed field", `func f(fl *pflag.FlagSet) bool { return fl.Lookup("x").Changed }`, "changed", 1},
 		{"clean", `func f(s string) bool { return hasVisibleRune(s) && strings.TrimSpace(s) == s }`, "", 0},
 	}
 	for _, c := range cases {
