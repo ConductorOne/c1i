@@ -88,10 +88,11 @@ func isSecretField(k string) bool {
 
 // URL masks a URL's userinfo (the password and the username, which may be a
 // PAT as in `https://<token>@host` or `https://<token>:x-oauth-basic@host`;
-// the conventional non-secret "git" user is kept) and the value of every secret-named query,
-// fragment or `;` parameter, leaving the rest as sent. A string that does not
-// parse as a URL with a host goes through urlText instead, so a
-// malformed or scheme-less one fails closed.
+// the conventional non-secret "git" user is kept) and the value of every
+// secret-named query, fragment or `;` parameter, encoded values included (a
+// secret inside a percent-encoded nested URL), leaving the rest as sent. A
+// string that does not parse as a URL with a host goes through urlText instead,
+// so a malformed or scheme-less one fails closed.
 func URL(s string) string {
 	u, err := url.Parse(s)
 	if err != nil || u.Host == "" {
@@ -106,7 +107,7 @@ func URL(s string) string {
 		}
 		s = strings.ReplaceAll(u.String(), "%5Bredacted%5D", Placeholder)
 	}
-	return maskSecretPairs(s)
+	return maskEncodedValues(maskSecretPairs(s), maxEscapeLevels)
 }
 
 const gitUser = "git"
@@ -124,8 +125,20 @@ var (
 	urlUsernameRE  = regexp.MustCompile(`(//)([^/?#:@]+)@`)
 	bareUserinfoRE = regexp.MustCompile(`^([^/@\s:]+):[^/@\s]*@`)
 	bareTokenRE    = regexp.MustCompile(`^([^/@\s:]+)@([^/@\s]*\.[^/@\s]*)`)
-	pathParamRE    = regexp.MustCompile(`(?i)(;|%3B)([^=;/?#\s]+)=([^;/?#\s]*)`)
+	pathParamRE    = regexp.MustCompile(`(?i)(;|%3B)([^=;/?#\s]+)(?:=|%3D)([^;/?#\s]*)`)
 )
+
+// indexEncodedEqual returns the byte index of the first "%3d" or "%3D" in s,
+// or -1. It scans bytes: strings.ToUpper can change a string's length (ı -> I),
+// which would shift the index off the separator.
+func indexEncodedEqual(s string) int {
+	for i := 0; i+2 < len(s); i++ {
+		if s[i] == '%' && s[i+1] == '3' && (s[i+2] == 'd' || s[i+2] == 'D') {
+			return i
+		}
+	}
+	return -1
+}
 
 // urlText is URL's fail-closed fallback for text url.Parse cannot
 // use: it masks userinfo (a bare "TOKEN@host.tld/..." too, which also hits an
@@ -144,7 +157,7 @@ func urlText(s string) string {
 		user, host, _ := strings.Cut(m, "@")
 		return maskedUser(user) + "@" + host
 	})
-	return maskSecretPairs(s)
+	return maskEncodedValues(maskSecretPairs(s), maxEscapeLevels)
 }
 
 // maskSecretPairs masks secret-named parameters. In a query only "&" ends a
@@ -163,14 +176,25 @@ func maskPairsDepth(s string, depth int) string {
 		head, tail = s[:end], s[end:]
 	}
 	head = pathParamRE.ReplaceAllStringFunc(head, func(m string) string {
-		sep, rest := m[:1], m[1:]
+		sepLen := 1
 		if m[0] == '%' {
-			sep, rest = m[:3], m[3:]
+			sepLen = 3
 		}
-		if k, _, _ := strings.Cut(rest, "="); secretParamName(k) {
-			return sep + k + "=" + Placeholder
+		rest := m[sepLen:]
+		iEq := strings.IndexByte(rest, '=')
+		iEnc := indexEncodedEqual(rest)
+		nameEnd, sepEnd := -1, 0
+		switch {
+		case iEq >= 0 && (iEnc < 0 || iEq < iEnc):
+			nameEnd, sepEnd = iEq, iEq+1
+		case iEnc >= 0:
+			nameEnd, sepEnd = iEnc, iEnc+3
 		}
-		return m
+		if nameEnd < 0 || !secretParamName(rest[:nameEnd]) {
+			return m
+		}
+		// Keep the separator as sent; only the value is replaced.
+		return m[:sepLen+sepEnd] + Placeholder
 	})
 	if tail == "" {
 		return head
@@ -263,8 +287,8 @@ func isHex(c byte) bool {
 }
 
 // Path masks the secret-named ";k=v" parameters of a request path (as
-// URL.Path or EscapedPath), the same rule as URL's.
-func Path(s string) string { return maskSecretPairs(s) }
+// URL.Path or EscapedPath), the same rule as URL's, encoded values included.
+func Path(s string) string { return maskEncodedValues(maskSecretPairs(s), maxEscapeLevels) }
 
 // ErrorURL masks the request URL inside a *url.Error in place, so its text no
 // longer carries a secret; the type and wrap chain are unchanged. Call it only
