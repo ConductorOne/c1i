@@ -72,9 +72,11 @@ c1i docs endpoints --filter task
 
 > **Upgrading from 0.9.x?** 0.10.1 changes mutation output (unwrapped JSON, like
 > `get`) and several exit codes. Read "Upgrading from 0.9.2" in
-> [CHANGELOG.md](CHANGELOG.md) before updating scripts. Upgrading past 0.10.1?
-> Read the unreleased "Upgrading from 0.10.1" there too: `.`/`..` ids exit `2`
-> everywhere, an unknown referenced id exits `4`, and error text masks secrets.
+> [CHANGELOG.md](CHANGELOG.md) before updating scripts.
+>
+> **Upgrading from 0.10.1?** Read "Upgrading from 0.10.1" there too: `.`/`..`
+> ids exit `2` everywhere, unknown referenced ids exit `4`, error text masks
+> secrets, and `tasks skip-step` refuses a provision step.
 
 ## Authentication
 
@@ -1513,21 +1515,23 @@ explicit one is looked up first (an unknown user exits `4`, nothing is sent,
 `--dry-run` included). `--app-user-id` names one application account instead,
 which is how a user with several accounts in the app is targeted; it is looked
 up under `--app-id` first (an unknown account exits `4`). Either flag alone
-identifies the recipient, and with both the account must belong to the user.
+identifies the recipient, and with both the server requires the account to
+belong to the user (a mismatch is a 400).
 `requests create grant --duration` follows the [Durations](#durations) rule
 (`24h`, `86400s`); the server refuses `0s` with `value must be greater than
 0s`.
 
-`requests create grant --wait` blocks until the grant it files shows up in
-`grants list` and the matching set stops changing — the same poll
+`requests create grant --wait` blocks until a new grant for the request shows
+up in `grants list` and the matching set stops changing — the same poll
 `grants list --wait` runs. The task is printed as soon as it is created
 (stdout), while progress goes to stderr. A timeout exits `1` even though the
 request was accepted: provisioning takes time, and a request that still needs
 approval will not produce the grant until someone approves it. The wait reads
 the matching grant set before sending and settles only on a grant that was not
 already there, so a recipient who already holds the entitlement waits to the
-timeout (the request may still be pending). `--wait-min`
-defaults to `1` (unlike `grants list`, where an empty set is a valid answer);
+timeout (the request may still be pending). `--wait-min` defaults to `1` (unlike
+`grants list`, where an empty set is a valid answer), and a new grant is always
+required, so `0` cannot settle on an empty set;
 `--wait-stable` (default `3`) and `--wait-timeout` (default `4m`) match
 `grants list`. `--dry-run` never polls.
 
@@ -2102,7 +2106,7 @@ c1i docs changelog
 # Search documentation
 c1i docs search "access reviews"
 
-# Fetch a documentation page
+# Fetch a documentation page (a leading slash or the full docs URL also works)
 c1i docs page product/admin/campaigns
 
 # List API endpoints (filtered)

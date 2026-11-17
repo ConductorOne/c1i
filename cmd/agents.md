@@ -229,7 +229,7 @@ authenticating. Which one depends on what you are after:
   public docs page a human can open). The `content` is a snippet of the page —
   usually short, though an API-reference hit can run to tens of thousands of
   characters — so read the authoritative full page with `docs page <path>` on
-  the best hit. `docs search` is semantic with
+  the best hit (a leading slash or the full docs URL is also accepted). `docs search` is semantic with
   no true no-match (see "Global flags" above), so judge each hit by its snippet
   rather than trusting that a result exists.
 - **Whether an API endpoint exists, or its request/response shape**: `docs
@@ -643,9 +643,10 @@ resource with `--resource-id` likewise means you drop
 - `requests create grant|revoke --app-user-id` targets one application account
   instead of a C1 user; the account is looked up under `--app-id` first (an
   unknown one exits 4). Either `--user-id` or `--app-user-id` identifies the
-  recipient, and with both the account must belong to the user.
-- `requests create grant --wait` blocks until the created grant appears in
-  `grants list` and the set settles; the task is printed immediately and
+  recipient; with both, the server requires the account to belong to the user
+  (a mismatch is a 400).
+- `requests create grant --wait` blocks until a new grant for the request
+  appears in `grants list` and the set settles; the task is printed immediately and
   progress goes to stderr. `--wait-min` defaults to 1, `--wait-stable` to 3,
   `--wait-timeout` to 4m; a timeout exits 1 although the request was accepted.
   A request that still needs approval does not produce the grant until it is
