@@ -28,6 +28,16 @@ with a non-JSON body exits `6`. `remove-owner` never
 pre-checks: the server decides, so a preview can pass an id the real run 404s.
 Only flag values are checked; ids inside a `--body-file`/`--*-file`, or sent via
 `api`, go as-is.
+An API error that echoed a secret now prints it masked: the error text and the
+JSON error `body` hold `[redacted]` in place of a secret-named URL parameter or
+JSON field the server reflected. A `body` that is whole JSON with something
+masked is re-encoded compactly (key order kept); anything else with a mask
+keeps every other byte as sent, and a body with nothing to mask is unchanged.
+A script matching on a reflected secret value, or on the exact bytes of a
+masked body, must match `[redacted]` instead.
+When a masked secret cannot be placed in the original bytes (for example it
+is escaped five or more levels deep), the whole output falls back to the
+decoded text with every secret masked.
 
 A list row's string field that is absent in the API response is now `null`
 instead of `""` on every list and search row c1i builds, so `jq 'select(.field)'`
@@ -190,6 +200,28 @@ covers its camelCase key for the coverage check but is sent as given.
   reached the API (then `unknown`); `auth login` polling treats a `429` like
   `slow_down` (backs off, keeps polling); and a device-flow `200` that is not a
   usable token exits 6.
+- An API error body that echoed the request URL (`/x?token=...`,
+  `https://host/p;token=...`, `token=...&a=1`, a URL nested in a query value,
+  or a percent-encoded or JSON-escaped form of those) was printed verbatim in
+  the error text and the JSON `body`. A secret-named parameter in such a body,
+  and the value of a secret-named JSON field (`client_secret`, `access_token`,
+  `"token":12345`), is now masked; other text and parameters stay. In text
+  that is not whole JSON, each secret value found is replaced by `[redacted]`
+  where it sits in a value position (after `=`, `:` or `//`, before `&`, a
+  quote, `,` or the end; raw, JSON-escaped or percent-encoded), so another
+  value equal to it is masked too, and every other byte is as sent.
+  A whole-JSON `body` with something masked is re-encoded compactly (key order
+  kept); one with nothing masked is printed as sent. If a secret cannot be placed in the
+  original bytes, the output falls back to the decoded text with every secret
+  masked. This also covers `docs
+  search`/`docs page` error bodies, `mcp gateway` error text, the device flow's
+  `error_description` and the URLs `upgrade` prints. `client_assertion` and
+  `device_code` are now secret names, which also masks them in `--dry-run`
+  previews. A `code` JSON field stays visible (gRPC `"code":5`); `code` is still
+  masked as a URL parameter and in previews. Bracketed names (`a[token]=`, a
+  body field `a[token]` in a `--dry-run` preview) now count as secret too, and
+  so does `key[0]=`; `sort[key]=` stays visible. A lone `token=x` in prose is
+  not masked.
 - `--debug` traces, transport, redirect, API and path-guard errors, partial-result
   and `INCOMPLETE` notices, and the unbuildable-request, `--path`, `--url` and
   `--destination-url` errors printed the request URL or path verbatim, so a

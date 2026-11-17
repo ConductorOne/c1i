@@ -104,7 +104,7 @@ type HTTPError struct {
 
 func (e *HTTPError) Error() string {
 	if e.Body != "" {
-		return fmt.Sprintf("gateway %s request returned %d: %s", e.RPCMethod, e.StatusCode, e.Body)
+		return fmt.Sprintf("gateway %s request returned %d: %s", e.RPCMethod, e.StatusCode, redact.Body(e.Body))
 	}
 	return fmt.Sprintf("gateway %s request returned %d", e.RPCMethod, e.StatusCode)
 }
@@ -169,9 +169,9 @@ func (e *rpcError) Error() string {
 		code = strconv.Itoa(*e.Code)
 	}
 	if len(e.Data) > 0 {
-		return fmt.Sprintf("MCP error %s: %s (%s)", code, e.Message, string(e.Data))
+		return fmt.Sprintf("MCP error %s: %s (%s)", code, redact.Text(e.Message), redact.Body(string(e.Data)))
 	}
-	return fmt.Sprintf("MCP error %s: %s", code, e.Message)
+	return fmt.Sprintf("MCP error %s: %s", code, redact.Text(e.Message))
 }
 
 // RPCErrorCode returns the JSON-RPC error code carried by err, if err is (or
@@ -403,7 +403,7 @@ func decodeMessage(body []byte) (*rpcResponse, error) {
 	}
 	var msg rpcResponse
 	if err := json.Unmarshal(trimmed, &msg); err != nil {
-		return nil, fmt.Errorf("parsing gateway response: %w (body: %s)", err, truncate(trimmed, 200))
+		return nil, fmt.Errorf("parsing gateway response: %w (body: %s)", err, truncate([]byte(redact.Text(string(trimmed))), 200))
 	}
 	return &msg, nil
 }
