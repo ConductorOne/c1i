@@ -32,9 +32,10 @@ Without --user-id the new app's owners were the connector app's owners; pass
 
 Deleting the managed app afterwards soft-deletes the binding: it leaves
 "managed-state list", "managed-state get" still answers with deletedAt set, and
-promote exits 4. The binding reappeared about 8 minutes later (presumably the
-connector's next sync), unmanaged, under the same resource_id; promote then no
-longer exits 4, and promoting it creates a new app.
+promote exits 4. The binding reappeared about 8 minutes later in the run checked
+(presumably the connector's next sync), unmanaged, under the same resource_id,
+and then reads like any other unmanaged binding, so a promote would create a
+new app.
 
 An unknown app, resource type, resource id or user exits 4, --dry-run included
 (the binding is read first; a binding whose app was deleted still reads, so a

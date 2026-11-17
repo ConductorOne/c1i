@@ -623,9 +623,9 @@ Without --user-id the new app's owners were the connector app's owners. Pass
 "apps delete" on "$NEW_APP_ID" deletes the app, and it also soft-deletes the
 binding: the discovered app leaves "managed-state list", "managed-state get"
 still answers (with deletedAt set and the old app id), and promote exits 4. The
-binding reappeared about 8 minutes later (presumably the connector's next
-sync), unmanaged, under the same resource_id; promote then no longer exits 4,
-and promoting it creates a new app.
+binding reappeared about 8 minutes later in the run checked (presumably the
+connector's next sync), unmanaged, under the same resource_id, and then reads
+like any other unmanaged binding, so a promote would create a new app.
 
 ## Common failures
 
