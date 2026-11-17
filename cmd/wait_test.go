@@ -417,6 +417,7 @@ var wantWaitTimeoutDefaults = map[string]time.Duration{
 	"c1i grants add":              4 * time.Minute,
 	"c1i grants list":             4 * time.Minute,
 	"c1i mcp servers register":    time.Minute,
+	"c1i requests create grant":   4 * time.Minute,
 }
 
 // TestWaitFlagsAreRegisteredIdentically walks the whole command tree and

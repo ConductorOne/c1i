@@ -177,6 +177,13 @@ Inputs now refused (exit 2):
 
 ### Added
 
+- `requests create grant --wait` blocks until the created grant appears in
+  `grants list` and the matching set settles, using the same poll as
+  `grants list --wait`. `--wait-min` defaults to `1` (a create expects a
+  grant; `grants list` keeps `0` because an empty set is a valid answer),
+  `--wait-stable` defaults to `3` and `--wait-timeout` to `4m`. The task is
+  printed as soon as it is created, progress goes to stderr, and a timeout
+  exits `1` although the request was accepted. `--dry-run` never polls.
 - `grants add --app-id --entitlement-id --user-id ...` grants users a manually
   managed entitlement directly (`POST .../add-manual-user`), skipping request
   policy and approval. It sends one request carrying every `--user-id` (a

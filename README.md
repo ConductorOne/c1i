@@ -1495,7 +1495,7 @@ first and reports it on stderr as `Resolved catalog id: …`, also under
 ### Access Requests
 
 ```sh
-c1i requests create grant --app-id <id> --entitlement-id <eid> [--user-id <uid>] [--description <text>] [--duration <duration>] [--emergency]
+c1i requests create grant --app-id <id> --entitlement-id <eid> [--user-id <uid>] [--description <text>] [--duration <duration>] [--emergency] [--wait [--wait-min N] [--wait-stable N] [--wait-timeout D]]
 c1i requests create revoke --app-id <id> --entitlement-id <eid> [--user-id <uid>] [--description <text>]
 c1i requests list [--user-id <id> | --all] [--app-id <id>] [--entitlement-id <id>] [--state open|closed] [--type grant|revoke] [--page-size N] [--page-token TOKEN] [--limit N]
 c1i requests get <request-id>
@@ -1507,6 +1507,16 @@ explicit one is looked up first (an unknown user exits `4`, nothing is sent,
 `requests create grant --duration` follows the [Durations](#durations) rule
 (`24h`, `86400s`); the server refuses `0s` with `value must be greater than
 0s`.
+
+`requests create grant --wait` blocks until the grant it files shows up in
+`grants list` and the matching set stops changing — the same poll
+`grants list --wait` runs. The task is printed as soon as it is created
+(stdout), while progress goes to stderr. A timeout exits `1` even though the
+request was accepted: provisioning takes time, and a request that still needs
+approval will not produce the grant until someone approves it. `--wait-min`
+defaults to `1` (unlike `grants list`, where an empty set is a valid answer);
+`--wait-stable` (default `3`) and `--wait-timeout` (default `4m`) match
+`grants list`. `--dry-run` never polls.
 
 `requests list` is the requester lens on access requests (the grant/revoke tasks
 you file): by default it shows requests you opened or are the subject of —

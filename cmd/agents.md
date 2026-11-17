@@ -636,6 +636,12 @@ resource with `--resource-id` likewise means you drop
 - `requests create grant --duration` likewise takes `24h` or `86400s`; the
   server refuses `0s` with `value must be greater than 0s`. The value lands at
   that same `.type.grant.grantDuration` path.
+- `requests create grant --wait` blocks until the created grant appears in
+  `grants list` and the set settles; the task is printed immediately and
+  progress goes to stderr. `--wait-min` defaults to 1, `--wait-stable` to 3,
+  `--wait-timeout` to 4m; a timeout exits 1 although the request was accepted.
+  A request that still needs approval does not produce the grant until it is
+  approved, so it waits until the timeout. `--dry-run` never polls.
 - `grants add --app-id --entitlement-id --user-id ... [--wait]` grants a
   manually managed entitlement directly, **bypassing grant policy and
   approval**; prefer `requests create grant` unless that is what you want. One
