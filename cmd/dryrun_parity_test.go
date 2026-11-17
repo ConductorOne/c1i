@@ -64,16 +64,7 @@ func withIDArg(t *testing.T, tail []string, id idArg, v string) []string {
 		out[id.pos] = v
 		return out
 	}
-	var out []string
-	for i := 0; i < len(tail); i++ {
-		if flagArgName(tail[i]) == id.flag {
-			if !strings.Contains(tail[i], "=") {
-				i++
-			}
-			continue
-		}
-		out = append(out, tail[i])
-	}
+	out := dropFlag(tail, id.flag)
 	return append(out, "--"+id.flag, v)
 }
 
@@ -184,6 +175,50 @@ func TestDryRunParityBadIDs(t *testing.T) {
 	}
 }
 
+// unknownIDExemptions names an unset id flag no invocation can run with, keyed
+// "<command> --flag", with the reason. None exists; an entry is a deliberate edit.
+var unknownIDExemptions = map[string]string{}
+
+// dropFlag returns tail without any occurrence of --name.
+func dropFlag(tail []string, name string) []string {
+	var out []string
+	for i := 0; i < len(tail); i++ {
+		if flagArgName(tail[i]) == name {
+			if !strings.Contains(tail[i], "=") {
+				i++
+			}
+			continue
+		}
+		out = append(out, tail[i])
+	}
+	return out
+}
+
+// uncheckedIDFlags names each unset id flag that no case ran, unless exempt
+// with a reason: a silently skipped flag is an untested one.
+func uncheckedIDFlags(cmd string, unset []idArg, checked map[string]bool, exempt map[string]string) []string {
+	var out []string
+	for _, id := range unset {
+		if !checked[id.flag] && exempt[cmd+" --"+id.flag] == "" {
+			out = append(out, fmt.Sprintf("%s --%s ran in no unknown-id case; make it runnable or exempt it with a reason", cmd, id.flag))
+		}
+	}
+	return out
+}
+
+func TestUncheckedIDFlagsGuardSelfTest(t *testing.T) {
+	unset := []idArg{{flag: "a", pos: -1}, {flag: "b", pos: -1}}
+	if got := uncheckedIDFlags("c", unset, map[string]bool{"a": true}, nil); len(got) != 1 || !strings.Contains(got[0], "--b") {
+		t.Errorf("got %v, want only --b reported", got)
+	}
+	if got := uncheckedIDFlags("c", unset, nil, map[string]string{"c --a": "why", "c --b": "why"}); len(got) != 0 {
+		t.Errorf("exempt flags reported: %v", got)
+	}
+	if got := uncheckedIDFlags("c", unset, nil, map[string]string{"c --a": ""}); len(got) != 2 {
+		t.Errorf("an exemption without a reason counted: %v", got)
+	}
+}
+
 // TestDryRunParityUnknownID: every id the invocation sets, and then each id
 // flag it leaves unset (alone, or paired with another when alone is a usage
 // error), is replaced by an id that does not exist against a server that 404s
@@ -252,27 +287,47 @@ func TestDryRunParityUnknownID(t *testing.T) {
 				}
 				base++
 			}
-			// Id flags the row leaves unset: each alone, then all together.
+			// Id flags the row leaves unset: each alone; one that is a usage
+			// error alone belongs to a group, so it is paired with each other
+			// unset id flag, also with each flag the row sets dropped in turn
+			// (a subject group refuses a second subject).
 			original := full[n:]
-			var unset []idArg
+			var unset, rowSet []idArg
 			for _, id := range mutatingIDArgs(leaf) {
-				if id.pos >= 0 || slices.ContainsFunc(original, func(a string) bool { return flagArgName(a) == id.flag }) {
+				if id.pos >= 0 {
 					continue
 				}
-				unset = append(unset, id)
+				if slices.ContainsFunc(original, func(a string) bool { return flagArgName(a) == id.flag }) {
+					rowSet = append(rowSet, id)
+				} else {
+					unset = append(unset, id)
+				}
 			}
-			// A flag that is a usage error alone belongs to a group: try it
-			// with each other unset id flag, and check the pairs that run.
-			for i, id := range unset {
+			variants := [][]string{tail}
+			for _, id := range rowSet {
+				variants = append(variants, dropFlag(tail, id.flag))
+			}
+			checked := map[string]bool{}
+			for _, id := range unset {
 				optional++
-				alone := withIDArg(t, tail, id, unknownID)
-				if check(t, append(slices.Clone(head), alone...), nil) {
+				if check(t, append(slices.Clone(head), withIDArg(t, tail, id, unknownID)...), nil) {
+					checked[id.flag] = true
 					continue
 				}
-				for _, other := range unset[i+1:] {
-					pair := withIDArg(t, alone, other, unknownID)
-					check(t, append(slices.Clone(head), pair...), nil)
+				for _, v := range variants {
+					for _, other := range unset {
+						if other.flag == id.flag {
+							continue
+						}
+						pair := withIDArg(t, withIDArg(t, v, id, unknownID), other, unknownID)
+						if check(t, append(slices.Clone(head), pair...), nil) {
+							checked[id.flag], checked[other.flag] = true, true
+						}
+					}
 				}
+			}
+			for _, msg := range uncheckedIDFlags(row.cmd, unset, checked, unknownIDExemptions) {
+				t.Error(msg)
 			}
 		})
 	}
