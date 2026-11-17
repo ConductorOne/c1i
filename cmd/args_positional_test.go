@@ -80,13 +80,7 @@ type positionalSpec struct {
 }
 
 var (
-	// flagValueHintRe matches a bracketed flag-usage example such as
-	// "[--filter <pattern>]" (see `docs endpoints`'s Use string) so it can be
-	// stripped before counting positional placeholders - otherwise the
-	// "<pattern>" inside it would be misread as an optional positional
-	// argument, which it is not: it's documentation for --filter's value.
-	flagValueHintRe = regexp.MustCompile(`\[--[\w-]+(?:\s+<[\w-]+>)?\]`)
-	optionalPosRe   = regexp.MustCompile(`\[<[\w-]+>\]`)
+	optionalPosRe = regexp.MustCompile(`\[<[\w-]+>\]`)
 	// optionalBareRe matches the ordinary Unix "[name]" convention (no inner
 	// "<...>"), e.g. `docs guide`'s "guide [name]" - a real Use string this
 	// package ships that optionalPosRe alone does not match, and previously

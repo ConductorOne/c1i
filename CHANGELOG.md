@@ -8,6 +8,12 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Upgrading from 0.10.1
 
+**A `.` or `..` id now exits `2` before anything is sent, on every id
+argument.** Every flag ending `-id`, `-ids`, `-uid` or `-uids` (new: `export
+events --since-event-uid`) and every positional documented `<…-id>` is refused,
+reads and writes alike, `--dry-run` included, before credentials are loaded. A
+read with no credentials used to exit `3` for such an id.
+
 **An unknown referenced id now exits `4`, not `2`.** These commands already
 looked the id up before sending and exited `2` on a miss; they now exit `4`
 (nothing sent, `--dry-run` included): `apps set-owners`, `entitlements
@@ -172,6 +178,10 @@ covers its camelCase key for the coverage check but is sent as given.
   `entitlements update --description ""` is sent but the server keeps the
   existing description; elsewhere it is sent as an empty value. Help for
   `entitlements`, `automations` and `webhooks update` used to claim it clears.
+- `findings create-task --policy-id` looks the policy up first, like every other
+  policy binding: an unknown id exits `4`, a deleted one `2`, nothing sent,
+  `--dry-run` included; it needs policy read (else `3`). The policy's type is
+  not checked.
 - A `--body-file` key that a command sets itself no longer silently bypasses the
   pagination contract or is overridden: a `pageToken`/`pageSize` in the file of
   the findings and role-mining search commands, and a positional id key whose

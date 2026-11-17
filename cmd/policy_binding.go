@@ -34,6 +34,10 @@ var appPolicyKinds = []policyKind{
 var entitlementPolicyKinds = append(append([]policyKind(nil), appPolicyKinds...),
 	newPolicyKind("emergency-grant", "emergencyGrantPolicyId", "POLICY_TYPE_GRANT"))
 
+// policyRefHelp is the help sentence of a command that binds a referenced policy
+// by looking it up first, for commands with no per-kind wording of their own.
+const policyRefHelp = "Looks up the referenced policy first: an unknown id exits 4 and a deleted one exits 2, before anything is sent, and the credential needs policy read (else exit 3), --dry-run included."
+
 func registerPolicyIDFlags(cmd *cobra.Command, kinds []policyKind, suffix string) {
 	for _, k := range kinds {
 		typ := strings.ToLower(strings.TrimPrefix(k.wantType, "POLICY_TYPE_"))

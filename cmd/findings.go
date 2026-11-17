@@ -1,9 +1,11 @@
 package cmd
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strings"
 
 	"github.com/ConductorOne/c1i/internal/client"
 	"github.com/ConductorOne/c1i/internal/redact"
@@ -87,13 +89,20 @@ var findingsAssigneeCmd = &cobra.Command{
 
 var findingsCreateTaskCmd = &cobra.Command{
 	Use: "create-task <finding-id>", Short: "Create a remediation task for a finding (pretty JSON)", Args: cobra.ExactArgs(1),
+	Long: "Create a remediation task for a finding (pretty JSON). --policy-id is optional; C1.ai otherwise selects the app policy or the built-in Finding Review policy.\n\n" + policyRefHelp,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		body := map[string]any{"findingId": args[0]}
-		policyID, _ := cmd.Flags().GetString("policy-id")
-		if policyID != "" {
+		var opts []mutationOpt
+		if policyID, _ := cmd.Flags().GetString("policy-id"); policyID != "" {
+			policyID = strings.TrimSpace(policyID)
 			body["policyId"] = policyID
+			// The policy type a remediation task needs is unverified: existence only.
+			opts = append(opts, withPreRead(preRead{Run: func(ctx context.Context, c *client.Client, _ *mutation) ([]resolvedID, error) {
+				_, err := fetchBoundPolicyType(ctx, c, "policy-id", policyID)
+				return nil, err
+			}}))
 		}
-		return sendMutation(cmd, mutation{Method: http.MethodPost, Path: client.Path("/api/v1/findings/%s/task", args[0]), Body: body, Unwrap: raw()})
+		return sendMutation(cmd, mutation{Method: http.MethodPost, Path: client.Path("/api/v1/findings/%s/task", args[0]), Body: body, Unwrap: raw()}, opts...)
 	},
 }
 
