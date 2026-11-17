@@ -40,6 +40,10 @@ Exit codes:
   `404` there now exits 4 (was 3), a `408` exits 1 (was 3), and a `200` that is
   not a token exits 6. A script that treated exit 3 as "re-authenticate" should
   retry on 5 and 6.
+- **`--dry-run` runs the same pre-send reads a real run does** (checking that a
+  user or policy id exists, or looking up a policy's type): an unknown id exits
+  `4` under `--dry-run` too, and such a preview needs credentials that can read
+  it. A preview with no such id still needs none.
 
 Output shape:
 
@@ -116,10 +120,6 @@ Inputs now refused (exit 2):
     `template_id`) unless equal, and `suggestionId`/`suggestion_id` on
     `role-mining suggestions users` and `templateId`/`template_id` on `mcp
     classifiers templates instantiate`, which the path already carries.
-- **`--dry-run` runs the same pre-send reads a real run does** (checking that a
-  user or policy id exists, or looking up a policy's type), so a preview that
-  names such an id needs credentials that can read it. A preview with no such
-  id still needs none.
 - **Every `--update-mask` goes through one rule.** These exit `2` (on a real run
   and on `--dry-run`, before any request) where they used to be sent or
   silently ignored:
@@ -143,8 +143,9 @@ Inputs now refused (exit 2):
 ### Security
 
 - Secrets are masked as `[redacted]` in more places. `--debug` traces, transport,
-  redirect, API and path-guard errors, partial-result notices, `--dry-run`
-  previews and the URLs `upgrade` prints mask a secret-named query, fragment or
+  redirect, API and path-guard errors, partial-result and `INCOMPLETE` notices,
+  the unbuildable-request, `--path`, `--url` and `--destination-url` errors,
+  `--dry-run` previews and the URLs `upgrade` prints mask a secret-named query, fragment or
   `;` path parameter (also percent-encoded or bracketed, such as `a[token]=`)
   and a URL's username (except `git`). API error bodies (including `docs
   search`/`docs page`), `mcp gateway` error text and the device flow's
@@ -163,6 +164,12 @@ Inputs now refused (exit 2):
 - A malformed `key=value` (`api --header`/`--query`, `--config-field`) no longer
   echoes the whole input in its error, which could expose a token missing its
   `=`; the error names the flag only.
+- Masking details: an encoded secret name (`;%74oken=`, `%3Btoken=`) or a value
+  that decodes into a separator is masked; `key[0]=` and a `--dry-run` body
+  field `a[token]` count as secret, `sort[key]=` does not; a numeric value
+  (`"token":12345`) is masked, and so is any other body value equal to a masked
+  one; `code` stays masked as a URL parameter and in previews; a lone `token=x`
+  in prose is not masked.
 
 ### Added
 

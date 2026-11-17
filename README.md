@@ -72,8 +72,8 @@ c1i docs endpoints --filter task
 
 > **Upgrading from 0.9.x?** 0.10.1 changes mutation output (unwrapped JSON, like
 > `get`) and several exit codes. Read "Upgrading from 0.9.2" in
-> [CHANGELOG.md](CHANGELOG.md) before updating scripts. Upgrading from 0.10.1
-> (unreleased)? Read "Upgrading from 0.10.1" there too: `.`/`..` ids exit `2`
+> [CHANGELOG.md](CHANGELOG.md) before updating scripts. Upgrading past 0.10.1?
+> Read the unreleased "Upgrading from 0.10.1" there too: `.`/`..` ids exit `2`
 > everywhere, an unknown referenced id exits `4`, and error text masks secrets.
 
 ## Authentication
@@ -1320,7 +1320,7 @@ use `list`/`search` for them.
 
 Drive the MCP admin surface (servers, tools, toolsets, and bindings). Most commands take `--app-id`; `mcp servers` commands take the server's `<connector-id>` positionally, while tool/toolset/binding commands scope to a server with `--connector-id`.
 
-Every paginated list below also takes `--page-token`.
+Every paginated list below except `mcp gateway list-tools` also takes `--page-token`.
 
 ```sh
 # Servers (register, configure, and inspect MCP servers)

@@ -501,9 +501,9 @@ resource with `--resource-id` likewise means you drop
   with the first failure's code while earlier ids stay applied: under
   `--error-format json` check each per-id error's `applied` and the summary's
   `notAttempted`.
-- Other `mcp` mutations print the response unwrapped (ids are listed under
-  Mutations above). Deletes, `resync-tools` and `mcp bindings delete` print
-  `{}`; capture ids with `jq -er`, which fails on a `--dry-run` preview.
+- Other `mcp` mutations print the response unwrapped (for ids see the
+  Mutations bullet under Reading output). Deletes, `resync-tools` and `mcp
+  bindings delete` print `{}`; capture ids with `jq -er`, which fails on a `--dry-run` preview.
   `update-credentials` without `--catalog-id` resolves it first and reports
   `Resolved catalog id: …` on stderr. `mcp servers register --wait
   [--wait-timeout 1m]` polls `mcp servers list` until the new server is listed
@@ -666,9 +666,10 @@ resource with `--resource-id` likewise means you drop
   `--duration-grant` (`8h`) as well as `3600s`, like every duration flag that
   goes to the API. `--emergency-grant-policy-id`
   takes a grant policy, checked client-side (the server checks only when the
-  same call enables emergency grants). `--emergency-grant-enabled` needs
+  same call enables emergency grants). `--emergency-grant-enabled=true` needs
   `--emergency-grant-policy-id` in the same call even when one is already
-  stored; `--unbind-policy emergency-grant` alone leaves an entitlement that
+  stored; to unbind and disable together pass `--emergency-grant-enabled=false`
+  with `--unbind-policy emergency-grant`; `--unbind-policy emergency-grant` alone leaves an entitlement that
   has emergency grants enabled still enabled, with no policy.
 - `mcp servers test-connection` returns `toolCount` as a JSON string, not a
   number. The `tool_count` in NDJSON list rows is a real number. It exits `8`
