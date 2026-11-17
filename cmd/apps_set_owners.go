@@ -48,9 +48,11 @@ var appsSetOwnersCmd = &cobra.Command{
 any existing owners. Provide one or more --user-id (C1 user IDs, 27 chars each).
 
 ` + setOwnersLookupNote + `
-The API itself accepts an unknown id (exit 0) and stores it: GET .../ownerids
-lists it but "apps owners" does not, so a set naming only such ids leaves the
-app with no real owners.
+The API itself accepts an unknown user id (exit 0) and stores it: GET
+.../ownerids lists it but "apps owners" does not, so a set naming only such ids
+leaves the app with no real owners. An unknown but well-formed app id is also
+answered 200 {} (measured), while "apps get"/"apps add-owner" 404 on the same
+id; confirm with "apps get" first.
 
 ` + ownerAsyncWaitNote + `
 Verify with "c1i apps owners <app-id>". Don't check ownership via the

@@ -484,9 +484,11 @@ A blank value (empty, whitespace or invisible-only) on any flag or positional
 is a usage error (exit 2), rejected before any request, so `--state "$STATE"`
 with `STATE` unset cannot silently list everything. A few flags take an exact
 `""` because it means something: an update's `--description ""` is sent as
-given, clearing the field where `--help` says so, and `mcp servers update
---tool-prefix`/`--data-sensitivity` and the `access-profiles` behavior flags
-also send `""`; `--fields ""` and `--error-format ""` override `C1I_FIELDS`
+given, with the effect that command's `--help` documents (a clear on `apps`,
+a restore-of-create-time-value on `entitlements`); `mcp servers update
+--tool-prefix`/`--data-sensitivity` also send `""`, while the `access-profiles`
+behavior flags send `""` and the server rejects it as an invalid enum (omit
+them); `--fields ""` and `--error-format ""` override `C1I_FIELDS`
 and `C1I_ERROR_FORMAT`; and optional flags such as `--comment`, `-o` or
 `--gateway-url` read it as not given (a create's `--description ""` is sent
 by `access-profiles create` and `webhooks create`, omitted by the others). Whitespace-only
@@ -836,7 +838,9 @@ API's response, `{}`; exit `0` is the success signal.
 
 `apps set-owners` replaces the whole list with exactly the ids you pass, so an
 owner added between your read and your write is silently removed. It prints the
-API's JSON response and returns as soon as the `PUT` is accepted.
+API's JSON response and returns as soon as the `PUT` is accepted. An unknown
+but well-formed app id is answered `200 {}` too (measured; `apps get` and
+`apps add-owner` 404 on the same id), so confirm the app first.
 
 `apps owners` is the read that reflects what `apps add-owner`,
 `apps remove-owner` and `apps set-owners` write. It returns zero rows at exit 0
@@ -947,10 +951,14 @@ c1i entitlements update <entitlement-id> --app-id <id> \
 
 `entitlements delete` is a soft delete (see [Soft delete](#soft-delete)) and
 prints `{}`. `apps delete` does not delete an app's entitlements, so remove
-them with this first.
+them with this first. The server answers `200 {}` for an unknown entitlement id
+or a `--app-id` the entitlement does not belong to (measured), so confirm with
+`entitlements get` rather than trusting exit 0.
 
 `entitlements update` builds the update mask from exactly the flags you pass.
-`--description ""` clears the description (the same as on `apps update`).
+`--description ""` is sent, and the server restores the description the
+entitlement was created with (empty when it had none) — not a general clear,
+and not the same as `apps update`, which does clear.
 Each policy id is checked before anything is sent: it must exist, not be
 deleted, and be of the slot's type: an unknown policy exits `4`, a deleted or
 wrong-type one `2`.
@@ -1152,9 +1160,10 @@ reach them through `c1i api`.
 `approve`/`deny`/`reassign`/`restart`/`skip-step` target a specific policy step, fetched
 when `--policy-step-id` is omitted. `approve`, `skip-step` and `reassign`
 require a resolvable step: a task with no current step exits `2` and tells you
-to re-read it with `tasks get` (`--policy-step-id` cannot supply one), while
-`deny` and `restart` proceed without the field when the task has no current
-step. Because each of them reads the task first, an unknown task id exits `4`
+to re-read it with `tasks get` (`--policy-step-id` cannot supply one). `deny` is
+refused by the server in the same window (exit `2`; its message varies, e.g. a
+missing-step validation error or `already approved`), so retry once the task
+shows a step; `restart` resolves the step the same way. Because each of them reads the task first, an unknown task id exits `4`
 before any action is sent. A failed step lookup (any error reading the task,
 such as a `5xx`) fails the action and nothing is sent.
 
@@ -1550,6 +1559,8 @@ and the positional named. On `findings search`, `findings audits search` and
 `findings shadow-mcp-occurrences search` the keys are `pageToken`, `pageSize`
 and their snake_case spellings `page_token` and `page_size`; use `--page-token`
 (it fetches that one page) and `--page-size`. Paging keys have no exception.
+That command's body must also carry a 27-character `findingId`; a body without
+one exits 2 with the server's regex error.
 The equality rule covers the id a positional sets: `findingId`/`finding_id` on
 `findings state` and `assignee`; `id` on `findings routing-rules update`,
 `transformation-rules update`, `automations update`, `access-reviews update`,
@@ -1727,7 +1738,14 @@ profile members when adding entries.
 require a catalog that is published but not visible to everyone. The API returns
 `catalog must be published to add an access entitlement` for an unpublished
 catalog and `catalog is visible to everyone, cannot add access entitlements`
-when `--visible-to-everyone` is set.
+when `--visible-to-everyone` is set. Measured caveat: in one run both a
+requestable and a visibility add on an unpublished catalog returned `200 {}` and
+the binding was stored (it is not effective until the catalog is published);
+publish first and verify with `access-profiles get`.
+`--enrollment-behavior unspecified` resets to the server default (measured:
+ENFORCE becomes BYPASS), and `--unenrollment-behavior unspecified` resets to
+LEAVE_ACCESS_AS_IS; the reset value for
+`--unenrollment-entitlement-behavior` was not measured.
 
 `bundle-automation` drives automatic bundled-entitlement grants. `create` and
 `set` take a JSON object via `--body-file` (or `-` for stdin). The CLI validates
@@ -1970,7 +1988,10 @@ c1i export events --since-event-uid <last-uid>                    # incremental 
 
 `--sort` defaults to `asc` (chronological), which pairs with `--since-event-uid`
 for incremental sync. `--fields` works on events too (e.g. `--fields
-activity_name,actor.user.email_addr,time`).
+activity_name,actor.user.email_addr,time`). Both timestamps must sit within
+about one year of now: the server rejects a future `--until` or a `--since`
+older than ~365 days with a `400` (`value must be less than now within
+8761h6m40s`).
 
 ### Raw API
 

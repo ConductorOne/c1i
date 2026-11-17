@@ -60,6 +60,13 @@ func init() {
 	f.String("unenrollment-entitlement-behavior", "", "Unenrollment entitlement revoke-policy behavior: "+catalogUnenrollmentEntitlementFlag.usage()+` (omit to leave unchanged; "" is sent and the server rejects it as an invalid enum)`)
 	allowEmpty(accessProfilesUpdateCmd, emptyIsSent, "enrollment-behavior", "unenrollment-behavior", "unenrollment-entitlement-behavior")
 	registerUpdateSpec(accessProfilesUpdateCmd, catalogFields)
+	accessProfilesUpdateCmd.Long += `
+
+--enrollment-behavior unspecified is accepted by the server and resets the
+setting to its default (measured: ENFORCE becomes BYPASS), so it can change the
+current value; --unenrollment-behavior unspecified resets to
+LEAVE_ACCESS_AS_IS. The reset value for --unenrollment-entitlement-behavior was
+not measured.`
 	markMutating(accessProfilesUpdateCmd)
 	accessProfilesCmd.AddCommand(accessProfilesUpdateCmd)
 }

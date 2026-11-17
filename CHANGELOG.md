@@ -248,6 +248,16 @@ Inputs now refused (exit 2):
 
 ### Fixed
 
+- Documented measured API bounds and deviations: an entitlement added to an
+  unpublished access profile returned `200 {}` with the binding stored (the
+  documented `400` did not fire); `--enrollment-behavior unspecified` resets
+  to the server default (measured: ENFORCE becomes BYPASS), as does
+  `--unenrollment-behavior` to LEAVE_ACCESS_AS_IS (the third flag not measured);
+  `export events` accepts only timestamps
+  within about one year of now; the shadow-MCP occurrence search requires a
+  27-character `findingId` in its body; and `entitlements delete` (wrong or
+  unknown `--app-id`) and `apps set-owners` (unknown app) answer `200 {}`
+  without doing anything — confirm with the matching `get`.
 - `auth logout` refuses `--dry-run` (exit `2`, before any read, delete or
   token-cache clear) instead of deleting the stored credential and its cached
   token at exit `0`; a preview cannot be honored for a delete. `C1I_DRY_RUN`
@@ -295,10 +305,10 @@ Inputs now refused (exit 2):
   (zero-width space, BOM) with exit 2, as it already did for an empty or
   whitespace-only one, instead of sending it to the server.
 - `--help` says what an empty value does on every flag that sends `""`: it
-  clears `policies`, `apps`, `entitlements` and `access-profiles update
-  --description`; elsewhere it is sent as an empty value. (It said
-  `entitlements update --description ""` kept the existing description; the
-  server clears it, measured on a manual entitlement.)
+  clears `policies`, `apps` and `access-profiles update --description`;
+  `entitlements update --description ""` is sent and the server restores the
+  description the entitlement was created with (empty when it had none), which
+  is not a general clear; elsewhere it is sent as an empty value.
 - `findings create-task --policy-id` looks the policy up first, like every other
   policy binding: an unknown id exits `4`, a deleted one `2`, nothing sent,
   `--dry-run` included; it needs policy read (else `3`). The policy's type is

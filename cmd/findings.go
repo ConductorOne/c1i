@@ -192,13 +192,19 @@ var findingsAuditsSearchCmd = &cobra.Command{Use: "search", Short: "Search findi
 }}
 
 var findingsShadowMCPOccurrencesCmd = &cobra.Command{Use: "shadow-mcp-occurrences", Short: "Search occurrences behind shadow MCP findings"}
-var findingsShadowMCPOccurrencesSearchCmd = &cobra.Command{Use: "search", Short: "Search shadow MCP occurrences (NDJSON output)", RunE: func(cmd *cobra.Command, _ []string) error {
-	body, err := readRequiredJSONObject(cmd, "body-file")
-	if err != nil {
-		return err
-	}
-	return postBodyList(cmd, "/api/v1/search/shadow_mcp_occurrences", body, shadowMCPOccurrenceRow)
-}}
+var findingsShadowMCPOccurrencesSearchCmd = &cobra.Command{Use: "search", Short: "Search shadow MCP occurrences (NDJSON output)",
+	Long: `Search the occurrences behind a shadow MCP finding from a required JSON body.
+
+The body must carry the finding's 27-character findingId (the server rejects a
+body without it with a 400, "value does not match regex pattern
+^[a-zA-Z0-9]{27}$"). Paging belongs to --page-size and --page-token; a pageToken
+or pageSize in the body is refused (exit 2).`, RunE: func(cmd *cobra.Command, _ []string) error {
+		body, err := readRequiredJSONObject(cmd, "body-file")
+		if err != nil {
+			return err
+		}
+		return postBodyList(cmd, "/api/v1/search/shadow_mcp_occurrences", body, shadowMCPOccurrenceRow)
+	}}
 
 func getFindingResource(cmd *cobra.Command, path, idKey string) error {
 	baseURL, err := GetBaseURL()
