@@ -3,6 +3,7 @@ package cmd
 import (
 	"net/http"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -40,11 +41,13 @@ func TestMCPServersRegisterWait(t *testing.T) {
 		}
 	})
 	t.Run("follows list pages", func(t *testing.T) {
+		var page2 atomic.Bool
 		s := newMutServer(t, func(r *http.Request, _ int) mutReply {
 			if r.Method == http.MethodPost {
 				return mutReply{body: created}
 			}
 			if r.URL.Query().Get("page_token") == "p2" {
+				page2.Store(true)
 				return mutReply{body: `{"list":[{"connectorId":"conn-9"}]}`}
 			}
 			return mutReply{body: `{"list":[{"connectorId":"other"}],"nextPageToken":"p2"}`}
@@ -53,6 +56,9 @@ func TestMCPServersRegisterWait(t *testing.T) {
 		r := runMutationCLI(t, s.srv, 0, nil, registerWaitArgs("--wait")...)
 		if r.err != nil {
 			t.Errorf("err %v, want success once page 2 lists it", r.err)
+		}
+		if !page2.Load() {
+			t.Error("page 2 was never requested; the wait did not follow the cursor")
 		}
 	})
 	t.Run("timeout is applied:true and keeps the document", func(t *testing.T) {
