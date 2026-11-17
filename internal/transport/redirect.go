@@ -55,13 +55,14 @@ func (rt *redirectTripper) RoundTrip(req *http.Request) (*http.Response, error) 
 		loc := resp.Header.Get("Location")
 		_ = resp.Body.Close()
 
-		target, ok := resolveAllowedRedirect(req.URL, loc)
+		target, reason, ok := resolveAllowedRedirect(req.URL, loc)
 		if !ok {
 			return nil, &RedirectError{
 				Method:     req.Method,
 				URL:        redact.URL(req.URL.String()),
 				StatusCode: resp.StatusCode,
 				Location:   redact.URL(loc),
+				Reason:     reason,
 			}
 		}
 		if hop == maxRedirectHops-1 {
@@ -82,34 +83,40 @@ func (rt *redirectTripper) RoundTrip(req *http.Request) (*http.Response, error) 
 // resolveAllowedRedirect resolves location — a bare path, a path-relative
 // reference, or an absolute URL — against base per RFC 3986 (the same
 // resolution net/http's own redirect-following uses), and reports the
-// resolved target only when both hold: its escaped path is identical to
-// base's (EscapedPath, not the decoded Path, so a percent-encoded separator
-// like %2F isn't silently decoded into one — matching pathHasBadSegment
-// and Do()'s guard; a trailing-slash difference therefore counts as
-// changed, since that's the exact shape the id-normalizes-to-collection
-// bypass produces), and its host is in the same trust scope as base's (see
-// hostInScope). An empty Location, or one url.Parse rejects, never resolves.
-func resolveAllowedRedirect(base *url.URL, location string) (*url.URL, bool) {
+// resolved target only when all of these hold: its escaped path is identical
+// to base's (EscapedPath, not the decoded Path, so a percent-encoded
+// separator like %2F isn't silently decoded into one — matching
+// pathHasBadSegment and Do()'s guard; a trailing-slash difference therefore
+// counts as changed, since that's the exact shape the
+// id-normalizes-to-collection bypass produces), an https base is not
+// redirected to a non-https target, and its host is in the same trust scope
+// as base's (see hostInScope). An empty Location, or one url.Parse rejects,
+// never resolves.
+//
+// When it refuses, the returned reason names the rule that fired so
+// *RedirectError can say which one it was; it is RedirectReasonUnknown when
+// the target was allowed.
+func resolveAllowedRedirect(base *url.URL, location string) (*url.URL, RedirectReason, bool) {
 	if location == "" {
-		return nil, false
+		return nil, RedirectReasonEmptyLocation, false
 	}
 	target, err := base.Parse(location)
 	if err != nil {
-		return nil, false
+		return nil, RedirectReasonBadLocation, false
 	}
 	if target.EscapedPath() != base.EscapedPath() {
-		return nil, false
+		return nil, RedirectReasonPath, false
 	}
 	// Refuse a scheme downgrade: an https request must not be redirected to a
 	// plaintext http target, which would carry the caller's credentials over
 	// cleartext.
 	if strings.EqualFold(base.Scheme, "https") && !strings.EqualFold(target.Scheme, "https") {
-		return nil, false
+		return nil, RedirectReasonScheme, false
 	}
 	if !hostInScope(base, target) {
-		return nil, false
+		return nil, RedirectReasonHost, false
 	}
-	return target, true
+	return target, RedirectReasonUnknown, true
 }
 
 // hostInScope reports whether target's host may be trusted with base's

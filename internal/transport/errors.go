@@ -53,16 +53,64 @@ func (e *PathError) Error() string {
 // request's path, or keeps the path but points at a host outside the
 // request host's trust scope (see redirectTripper and hostInScope); the host
 // restriction keeps a same-path canonicalization hop from carrying the
-// caller's credentials to an unrelated host.
+// caller's credentials to an unrelated host. It also covers the remaining
+// refusals resolveAllowedRedirect makes: an https->http scheme downgrade, and
+// an empty or unparseable Location. Reason names which of those rules fired
+// so the message doesn't blame a path change that never happened.
 type RedirectError struct {
 	Method     string
 	URL        string
 	StatusCode int
 	Location   string
+	// Reason is the rule that refused the hop; the zero value means the
+	// caller didn't say (an error assembled from the structured fields
+	// alone), in which case Error() names every rule rather than guessing.
+	Reason RedirectReason
+}
+
+// RedirectReason identifies the rule in resolveAllowedRedirect that refused
+// a redirect hop.
+type RedirectReason uint8
+
+const (
+	// RedirectReasonUnknown is the zero value: no rule was recorded.
+	RedirectReasonUnknown RedirectReason = iota
+	// RedirectReasonPath: the target's escaped path differs from the
+	// request's (including a trailing-slash difference).
+	RedirectReasonPath
+	// RedirectReasonHost: the path is unchanged but the target host is
+	// outside the request host's trust scope.
+	RedirectReasonHost
+	// RedirectReasonScheme: the path and host would pass, but an https
+	// request would be redirected to a non-https target.
+	RedirectReasonScheme
+	// RedirectReasonEmptyLocation: the 3xx carried no Location.
+	RedirectReasonEmptyLocation
+	// RedirectReasonBadLocation: the Location could not be parsed or
+	// resolved against the request URL.
+	RedirectReasonBadLocation
+)
+
+// rule returns the sentence naming the rule r refused under.
+func (r RedirectReason) rule() string {
+	switch r {
+	case RedirectReasonPath:
+		return "a redirect that changes the request path is never followed"
+	case RedirectReasonHost:
+		return "a redirect that points at a host outside the request host's trust scope is never followed"
+	case RedirectReasonScheme:
+		return "a redirect that takes an https request to a non-https target is never followed"
+	case RedirectReasonEmptyLocation:
+		return "a redirect with an empty Location is never followed"
+	case RedirectReasonBadLocation:
+		return `a redirect whose Location cannot be parsed or resolved is never followed`
+	default:
+		return "a redirect that changes the request path, host or scheme is never followed"
+	}
 }
 
 func (e *RedirectError) Error() string {
-	return fmt.Sprintf("refusing to follow redirect: %s %s returned %d to %q (a redirect that changes the resource path is never followed)", e.Method, e.URL, e.StatusCode, e.Location)
+	return fmt.Sprintf("refusing to follow redirect: %s %s returned %d to %q (%s)", e.Method, e.URL, e.StatusCode, e.Location, e.Reason.rule())
 }
 
 // RedirectLoopError is returned when a chain of allowed (same-path,
