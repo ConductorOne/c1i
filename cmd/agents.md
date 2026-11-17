@@ -250,6 +250,7 @@ authenticating. Which one depends on what you are after:
   | Create a manually managed app | `configure-new-app` |
   | Request or approve access | `request-access` → `inspect-and-approve-task` |
   | Configure delegated provisioning | `delegate-entitlement-provisioning` |
+  | Promote an identity-provider app to a managed app | `promote-idp-app-to-managed` |
 - **The raw OpenAPI spec**: `docs openapi` (cached 24h locally).
 
 Rule of thumb: a product concept starts at `docs search` → `docs page`; a raw
@@ -510,6 +511,21 @@ resource with `--resource-id` likewise means you drop
   `jq -er`, which fails on a `--dry-run` preview. `update-credentials` without
   `--catalog-id` resolves it first and reports `Resolved catalog id: …` on
   stderr.
+- Promote a connector-discovered app to a managed one with `apps managed-state
+  list|get|promote` (`--app-id` the connector app, `--resource-type-id` its
+  resource type named `app`, from `apps resource-types list --app-id`;
+  `get`/`promote` take the row's `resource_id` positionally). `promote` creates
+  an app and nothing checks for an existing one of the same name, so run `apps
+  list` first and, after any failure, inspect before retrying. Promoting an
+  already-managed binding exits 0 and returns the existing app; deleting the
+  managed app soft-deletes the binding about 5 seconds later in one run (a
+  promote before `get` shows `deletedAt` created another app; after it,
+  `promote` exits 4). The binding later reappeared unmanaged under the same
+  `resource_id` (after about 8 minutes in one run, about 25 seconds in
+  another), and then a promote would create a new app. The managed app is `.state.managed.appId`
+  (top-level `appId` is the connector). Without
+  `--user-id` the new app's owners were the connector app's; `docs guide
+  promote-idp-app-to-managed` has the full flow.
 - Owner changes are applied asynchronously and can take several minutes to
   appear; pass --wait to block until they do. Grant provisioning is
   asynchronous too. A read immediately after a write can look like a no-op.

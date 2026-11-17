@@ -31,6 +31,8 @@ const (
 	tblReviewDoc  = `{"id":"ar1","expanded":[{"id":"p1"}],"createdByUserPath":"c","objectPermissions":{},"policyPath":""}`
 	tblApp        = `{"app":{"id":"app-1","displayName":"zz <x>","appOwners":[]}}`
 	tblAppDoc     = `{"id":"app-1","displayName":"zz <x>","appOwners":[]}`
+	tblBinding    = `{"appManagementState":{"appManagementStateBinding":{"resourceId":"res-1","displayName":"zz","state":{"managed":{"appId":"app-9"}}},"appPath":"","resourcePath":""},"expanded":[]}`
+	tblBindingDoc = `{"resourceId":"res-1","displayName":"zz","state":{"managed":{"appId":"app-9"}},"expanded":[],"appPath":"","resourcePath":""}`
 	tblEnt        = `{"appEntitlementView":{"appEntitlement":{"id":"e-1","appResourceTypeId":"rt-1","appResourceId":"r-1"},"appPath":"p","appResourcePath":"r","appResourceTypePath":"t","objectPermissions":{}},"expanded":[]}`
 	tblEntDoc     = `{"id":"e-1","appResourceTypeId":"rt-1","appResourceId":"r-1","expanded":[],"appPath":"p","appResourcePath":"r","appResourceTypePath":"t","objectPermissions":{}}`
 	tblProxy      = `{"appProxyEntitlementView":{"appProxyEntitlement":{"srcAppId":"sa","srcAppEntitlementId":"se","dstAppId":"da","dstAppEntitlementId":"de"},"dstAppEntitlementPath":"a","dstAppPath":"b","srcAppEntitlementPath":"c","srcAppPath":"d"},"expanded":[]}`
@@ -122,6 +124,9 @@ var mutationTable = []mutationRow{
 	{cmd: "apps add-owner", args: []string{"app-1", "--user-id", "u1"}, body: `{}`, reads: 1},
 	{cmd: "apps remove-owner", args: []string{"app-1", "--user-id", "u1"}, body: `{}`},
 	{cmd: "apps set-owners", args: []string{"app-1", "--user-id", "u1"}, body: `{}`, method: "PUT", path: "/api/v1/apps/app-1/owners", reads: 1},
+	{cmd: "apps managed-state promote", args: []string{"res-1", "--app-id", "app-1", "--resource-type-id", "rt-1"},
+		body: tblBinding, want: tblBindingDoc, ids: []string{".resourceId", ".state.managed.appId"}, method: "POST",
+		path: "/api/v1/apps/app-1/resource_types/rt-1/managed_state_bindings/res-1/promote", reads: 1},
 	// automations
 	{cmd: "automations update", args: []string{"a-1", "--enabled=false"},
 		body: `{"automation":{"id":"a-1","enabled":false},"webhookCapabilityUrl":"","webhookHmacSecret":""}`,

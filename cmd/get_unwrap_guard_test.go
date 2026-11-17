@@ -54,6 +54,16 @@ func getUnwrapCases() []getUnwrapCase {
 			wantKeys:    []string{"id", "displayName"},
 		},
 		{
+			name:        "apps managed-state get",
+			cmd:         appsManagedStateGetCmd,
+			args:        []string{"res-1"},
+			flags:       map[string]string{"app-id": "app-1", "resource-type-id": "rt-1"},
+			idKey:       "resourceId",
+			body:        `{"appManagementState":{"appManagementStateBinding":{"resourceId":"res-1","displayName":"Demo","state":{"unmanaged":{}}},"appPath":"","resourcePath":""},"expanded":[]}`,
+			payloadPath: []string{"appManagementState", "appManagementStateBinding"},
+			wantKeys:    []string{"resourceId", "displayName", "state", "appPath", "resourcePath", "expanded"},
+		},
+		{
 			name:        "policies get",
 			cmd:         policiesGetCmd,
 			args:        []string{"pol-1"},

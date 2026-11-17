@@ -533,6 +533,119 @@ Or see "c1i docs guide delegate-entitlement-provisioning" if access to this
 app should flow from another entitlement instead of a direct request.
 `
 
+// guidePromoteIdPAppToManaged promotes an app a connector discovered (an
+// identity provider's catalog entry) to a managed app. Derived from
+// cmd/apps_managed_state*.go and cmd/apps_resource_types.go; every claim was
+// observed on a live tenant.
+const guidePromoteIdPAppToManaged = `# Promote an identity-provider app to managed
+
+A connector for an identity provider (Okta, for example) discovers that
+provider's apps. Each one is "unmanaged" until you promote it, which creates a
+managed C1 app for it. Use this to bring a discovered app under C1 management.
+
+WARNING: promoting creates an app, and nothing checks for an existing app of
+the same name: promoting two discovered apps with the same name made two apps
+with that name. Always run step 4 first. After any failed promote, inspect
+(steps 3 and 4) before retrying; do not retry blind.
+
+## Prerequisites
+
+- Pointed at the tenant you intend to change, and authenticated. This guide
+  creates an app, so confirm the target first:
+
+      c1i auth whoami --fields tenant
+
+- A connector app for the identity provider, with its discovered apps synced.
+
+## Steps
+
+### 1. Find the connector app and its "app" resource type
+
+    c1i apps list
+    CONN_APP_ID=<id of the identity provider's connector app>
+    RT_ID=$(c1i apps resource-types list --app-id "$CONN_APP_ID" | jq -er 'select(.display_name=="app") | .id') || { echo "no resource type named app on $CONN_APP_ID"; exit 1; }
+
+On the connector app checked, the discovered apps were the resource type named
+"app". "resource-types list" and "managed-state list" exit 0 with no rows for a well-formed
+but wrong app id or resource type id, so an empty list can mean either of those.
+
+### 2. Find the discovered app
+
+    c1i apps managed-state list --app-id "$CONN_APP_ID" --resource-type-id "$RT_ID" | jq -c 'select(.state=="unmanaged")'
+    RES_ID=<resource_id of the app to promote>
+
+A resource's binding "appId" is the connector app; the managed app is
+.state.managed.appId ("managed_app_id" in list rows). Names are not unique: one connector listed several discovered apps with the
+same name, so choose by resource_id, not by name.
+
+### 3. Inspect its managed state
+
+    c1i apps managed-state get "$RES_ID" --app-id "$CONN_APP_ID" --resource-type-id "$RT_ID"
+
+An unmanaged app reads state {"unmanaged":{}}. If it reads
+{"managed":{"appId":"..."}} it is already managed and that is its app: stop
+here and read that app with "apps get <appId>". Promoting it again exits 0 and returns
+the same binding and app; it did not create a second one.
+
+### 4. Check for an existing app with the same name
+
+    c1i apps list | jq -c 'select(.display_name|ascii_downcase=="<the discovered app's display_name, lowercased>")'
+
+The match is case-insensitive. Any hit is an app that already carries the name. Decide whether it is the app
+you want before promoting; a promote adds another one beside it.
+
+### 5. Preview, then promote
+
+    c1i apps managed-state promote "$RES_ID" --app-id "$CONN_APP_ID" --resource-type-id "$RT_ID" --dry-run
+    NEW_APP_ID=$(c1i apps managed-state promote "$RES_ID" --app-id "$CONN_APP_ID" --resource-type-id "$RT_ID" | jq -er .state.managed.appId)
+
+Without --user-id the new app's owners were the connector app's owners. Pass
+--user-id (repeatable) to set the new app's owners instead:
+
+    c1i apps managed-state promote "$RES_ID" --app-id "$CONN_APP_ID" --resource-type-id "$RT_ID" --user-id <user-id>
+
+### 6. Verify the new app, its owners, and what it inherited
+
+    c1i apps managed-state get "$RES_ID" --app-id "$CONN_APP_ID" --resource-type-id "$RT_ID"
+    c1i apps get "$NEW_APP_ID"
+    c1i apps owners "$NEW_APP_ID"
+
+- The binding now reads {"managed":{"appId":"<NEW_APP_ID>"}}.
+- "apps get" shows parentAppId equal to the connector app's id. On the app
+  checked, grantPolicyId and revokePolicyId equalled the connector app's
+  (compare with "apps get" on "$CONN_APP_ID"); entitlements and accounts were
+  not checked, so look with "entitlements list --app-id" on "$NEW_APP_ID".
+- ` + ownerAsyncNote + `
+  "apps owners" reading empty right after the promote is not a failure.
+
+## Undoing a promotion
+
+"apps delete" on "$NEW_APP_ID" deletes the app, and it also soft-deletes the
+binding, but not at once. In one run, "managed-state get" right after the
+delete still showed the deleted app as managed, a promote then exited 0 and
+created another app with the same name, and the binding's deletedAt landed
+about 5 seconds after the delete. Do not promote until the binding reads
+deletedAt set:
+
+    c1i apps managed-state get "$RES_ID" --app-id "$CONN_APP_ID" --resource-type-id "$RT_ID" | jq .deletedAt
+
+After that the discovered app leaves "managed-state list" and promote exits 4.
+The binding later reappeared unmanaged under the same resource_id (after about
+8 minutes in one run and about 25 seconds in another, presumably the
+connector's sync), and then reads like any other unmanaged binding, so a
+promote would create a new app.
+
+## Common failures
+
+- exit 4 on promote: an unknown app, resource type, resource id or user, or a
+  binding whose managed app was deleted (until it reappears, which took from
+  about 25 seconds to 8 minutes in the runs checked). A --dry-run catches all
+  but the last.
+- exit 0 and a new app right after "apps delete": the binding's soft-delete had
+  not landed yet. Find the extra app with "apps list" and delete it, then see
+  "Undoing a promotion".
+`
+
 // guideRequestAccess walks the requester side of a grant/revoke access
 // request end to end: finding a real app/entitlement/user, previewing with
 // --dry-run, filing the request, and verifying the resulting grant.
@@ -903,6 +1016,7 @@ var guideSummaries = map[string]string{
 	"request-access":                    "Request, verify, and revoke access through the approval workflow",
 	"inspect-and-approve-task":          "Inspect a task's current policy step and resolve it safely",
 	"decommission-mcp-server":           "Inventory, warn about, and delete an MCP server and the access it carries",
+	"promote-idp-app-to-managed":        "Promote an app an identity provider's connector discovered to a managed app",
 }
 
 // docsGuides maps a guide name to its embedded content. Keep names stable —
@@ -917,6 +1031,7 @@ var docsGuides = map[string]string{
 	"request-access":                    guideRequestAccess,
 	"inspect-and-approve-task":          guideInspectAndApproveTask,
 	"decommission-mcp-server":           guideDecommissionMCPServer,
+	"promote-idp-app-to-managed":        guidePromoteIdPAppToManaged,
 }
 
 // guideNames returns the available guide names, sorted for stable output.
