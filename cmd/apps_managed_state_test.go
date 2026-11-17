@@ -122,6 +122,9 @@ func TestManagedStatePromoteUnknownBindingExits4(t *testing.T) {
 			if !strings.Contains(r.stderr, "no such discovered app") {
 				t.Errorf("stderr = %q, want the no-such-discovered-app line", r.stderr)
 			}
+			if !strings.Contains(r.stderr, `--app-id "app-1"`) {
+				t.Errorf("stderr = %q, want the unknown --app-id named", r.stderr)
+			}
 		})
 	}
 }

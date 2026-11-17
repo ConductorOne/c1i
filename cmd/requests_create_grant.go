@@ -106,8 +106,8 @@ and the server refuses it with "value must be greater than 0s".
 
 An omitted --user-id is the caller. --app-user-id names one application
 account instead, which is how a user with several accounts in the app is
-targeted; either flag alone identifies the recipient, and with both the
-account must belong to the user.
+targeted; either flag alone identifies the recipient, and with both the server
+requires the account to belong to the user (a mismatch is a 400).
 
 Prints the created task as pretty JSON, unwrapped like "requests get": the id
 is .id. Its .state is a snapshot from creation, not the outcome; re-read with
@@ -208,7 +208,7 @@ func init() {
 	allowEmpty(requestsCreateGrantCmd, emptyIsOmitted, "description")
 	requestsCreateGrantCmd.Flags().Bool("emergency", false, "Request emergency access")
 	addWaitFlags(requestsCreateGrantCmd, "GET /api/v1/search/grants until a new grant for this request appears and stops changing", 4*time.Minute)
-	requestsCreateGrantCmd.Flags().Int("wait-stable", 3, "Consecutive identical reads --wait requires before it settles (min 2)")
+	requestsCreateGrantCmd.Flags().Int("wait-stable", 3, "Consecutive identical reads --wait requires before it settles (min 2; reads are 5s apart)")
 	requestsCreateGrantCmd.Flags().Int("wait-min", 1, "Minimum matching grants --wait requires before it settles (default 1; a new grant is always required, so 0 cannot settle on an empty set)")
 	markRequired(requestsCreateGrantCmd, "app-id")
 	markRequired(requestsCreateGrantCmd, "entitlement-id")

@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -88,5 +89,32 @@ func TestDocsSiteFailureExitsUpstream(t *testing.T) {
 				}
 			})
 		}
+	}
+}
+
+// TestDocsPageAcceptsLeadingSlashAndFullURL: a path copied from a browser URL
+// works without the caller stripping the prefix by hand.
+func TestDocsPageAcceptsLeadingSlashAndFullURL(t *testing.T) {
+	cases := []struct{ arg, want string }{
+		{"product/admin/profiles", "product/admin/profiles"},
+		{"/product/admin/profiles", "product/admin/profiles"},
+		{docsBaseURL + "product/admin/profiles", "product/admin/profiles"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.arg, func(t *testing.T) {
+			var got map[string]string
+			_, _, err := runDocsCLI(t, func(w http.ResponseWriter, r *http.Request) {
+				if err := json.NewDecoder(r.Body).Decode(&got); err != nil {
+					t.Errorf("decoding page body: %v", err)
+				}
+				_, _ = w.Write([]byte(docsOKBody["page"]))
+			}, "page", tc.arg)
+			if err != nil {
+				t.Fatalf("err = %v", err)
+			}
+			if got["path"] != tc.want {
+				t.Errorf("path = %q, want %q", got["path"], tc.want)
+			}
+		})
 	}
 }

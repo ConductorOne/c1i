@@ -35,7 +35,7 @@ var requestsCreateRevokeCmd = &cobra.Command{
 
 An omitted --user-id is the caller. --app-user-id names one application
 account instead; either flag alone identifies the recipient, and with both the
-account must belong to the user.
+server requires the account to belong to the user (a mismatch is a 400).
 
 Prints the created task as pretty JSON, unwrapped like "requests get": the id
 is .id. Its .state is a snapshot from creation, not the outcome; re-read with

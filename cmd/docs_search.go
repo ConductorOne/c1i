@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strings"
 
 	"github.com/ConductorOne/c1i/internal/redact"
 	"github.com/ConductorOne/c1i/internal/transport"
@@ -112,9 +113,10 @@ var docsPageCmd = &cobra.Command{
 	Long: `Fetch a full C1 documentation page by its path. Output is the
 plain-text rendering of the page, suitable for grepping or piping.
 
-The path is the URL segment after https://conductorone.com/docs/, with
-no leading slash. Find paths via 'c1i docs search' (each result has a
-'path' field) or by browsing the docs site.
+The path is the URL segment after https://conductorone.com/docs/. A leading
+slash or the full https://conductorone.com/docs/ URL is accepted. Find paths
+via 'c1i docs search' (each result has a 'path' field) or by browsing the docs
+site.
 
 Examples:
   c1i docs page product/admin/campaigns
@@ -122,8 +124,13 @@ Examples:
   c1i docs search "access reviews" | jq -r '.path' | head -1 | xargs c1i docs page`,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
+		path := strings.TrimPrefix(args[0], docsBaseURL)
+		path = strings.TrimPrefix(path, "/")
+		if path == "" {
+			return &usageError{fmt.Errorf("docs page path is empty")}
+		}
 
-		body, err := postDocs(cmd, mintlifyPageURL, map[string]string{"path": args[0]}, "page")
+		body, err := postDocs(cmd, mintlifyPageURL, map[string]string{"path": path}, "page")
 		if err != nil {
 			return err
 		}
