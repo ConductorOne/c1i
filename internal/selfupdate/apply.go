@@ -21,6 +21,9 @@ import (
 // FetchBinary downloads asset, verifies its sha256, and returns the c1i
 // executable extracted from it.
 func (c *Client) FetchBinary(ctx context.Context, asset Asset) ([]byte, error) {
+	if err := asset.Check(); err != nil {
+		return nil, err
+	}
 	raw, err := c.download(ctx, asset.Href)
 	if err != nil {
 		return nil, err
@@ -43,9 +46,25 @@ func (c *Client) download(ctx context.Context, url string) ([]byte, error) {
 	return body, nil
 }
 
-func verifySHA256(data []byte, want string) error {
+// Check refuses an asset that could not be downloaded and verified. A dry run
+// calls it too, so a preview refuses what a real run refuses.
+func (a Asset) Check() error {
+	if a.Href == "" {
+		return fmt.Errorf("manifest asset has no href")
+	}
+	return checkSHA256Present(a.SHA256)
+}
+
+func checkSHA256Present(want string) error {
 	if want == "" {
 		return fmt.Errorf("manifest asset has no sha256; refusing to install unverified binary")
+	}
+	return nil
+}
+
+func verifySHA256(data []byte, want string) error {
+	if err := checkSHA256Present(want); err != nil {
+		return err
 	}
 	sum := sha256.Sum256(data)
 	got := hex.EncodeToString(sum[:])

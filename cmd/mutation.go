@@ -444,7 +444,7 @@ func runPreReadsWith(cmd *cobra.Command, baseURL string, m *mutation, o mutation
 // (a malformed one already failed in validateGlobalSettings).
 func refuseMutationFields(cmd *cobra.Command) error {
 	if f := cmd.Flags().Lookup("fields"); f != nil && f.Changed {
-		return &usageError{errors.New("--fields does not apply to mutation output, which is always the full response; drop --fields and extract with jq")}
+		return &usageError{errors.New("--fields does not apply to this output, which is never projected; drop --fields and extract with jq")}
 	}
 	return nil
 }
@@ -511,14 +511,30 @@ func marshalMutationBody(m mutation) ([]byte, error) {
 	return b, nil
 }
 
+// previewOutput is the --dry-run document. Upgrade is set only by `upgrade`.
+type previewOutput struct {
+	DryRun   bool             `json:"dryRun"`
+	Requests []previewRequest `json:"requests"`
+	Upgrade  *upgradeReport   `json:"upgrade,omitempty"`
+}
+
+const noticeNothingSent = "dry run: nothing was sent"
+
 // writeMutationPreview prints the --dry-run document and its stderr notice.
 func writeMutationPreview(cmd *cobra.Command, baseURL string, reqs []previewRequest) error {
 	_ = baseURL // reqs carry the full URL
-	reqs = redactPreviewBodies(reqs)
-	doc := struct {
-		DryRun   bool             `json:"dryRun"`
-		Requests []previewRequest `json:"requests"`
-	}{true, reqs}
+	return writePreviewDoc(cmd, previewOutput{DryRun: true, Requests: reqs}, noticeNothingSent)
+}
+
+// writePreviewDoc is the one preview writer and the one place a preview masks
+// secrets: every URL in doc is masked here, so no caller can skip it.
+func writePreviewDoc(cmd *cobra.Command, doc previewOutput, noticeText string) error {
+	doc.Requests = redactPreviewBodies(doc.Requests)
+	if doc.Upgrade != nil { // asset_url is the one URL; destination is a path, shown as is
+		u := *doc.Upgrade
+		u.AssetURL = redact.URL(u.AssetURL)
+		doc.Upgrade = &u
+	}
 	var buf bytes.Buffer
 	enc := json.NewEncoder(&buf)
 	enc.SetEscapeHTML(false) // bodies are shown as sent, apart from secrets
@@ -533,12 +549,12 @@ func writeMutationPreview(cmd *cobra.Command, baseURL string, reqs []previewRequ
 	if _, err := cmd.OutOrStdout().Write(pretty.Bytes()); err != nil {
 		return wrapOutputErr(err)
 	}
-	notice(cmd, noticeDryRun, "dry run: nothing was sent", nil)
+	notice(cmd, noticeDryRun, noticeText, nil)
 	return nil
 }
 
-// redactPreviewBodies is the one place a preview masks secrets: every preview
-// goes through writeMutationPreview. A body with no secret key keeps its bytes.
+// redactPreviewBodies masks the requests of a preview (called by
+// writePreviewDoc). A body with no secret key keeps its bytes.
 func redactPreviewBodies(reqs []previewRequest) []previewRequest {
 	out := make([]previewRequest, len(reqs))
 	copy(out, reqs)

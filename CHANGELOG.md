@@ -92,6 +92,19 @@ user or policy id exists, or looking up a policy's type), so a preview that
 names such an id needs credentials that can read it. A preview with no such id
 still needs none.
 
+`upgrade --dry-run` now prints one JSON object on stdout on every non-error
+path without `--check`, instead of `[dry-run]` text lines (or "is current" lines): the shared
+preview shape (`dryRun`, `requests`) plus an `upgrade` object holding the
+`upgrade --check` keys (`current`, `latest`, `channel`, `update_available`,
+`install_method`, and `upgrade_command` only for a Homebrew, `go install` or container install) and, when
+an update is due on a standalone install, `asset_url`, `sha256` and
+`destination`. `requests` is only the download `GET`, `[]` when nothing would
+download. A script that matched the `[dry-run]` text must read `.upgrade`
+instead; one that matched "is current" or "newer than" must read
+`.upgrade.update_available`. The stderr notice is now
+`dry run: nothing was installed`. `upgrade --fields` (without `--check`) now
+exits 2 instead of being ignored.
+
 A token-endpoint outage no longer reads as bad credentials: a persistent `429`
 or `5xx` from the token service now exits 5 or 6 (was 3), and a failure to
 reach it is no longer exit 3. Only a `400`/`401`/`403` there exits 3: a `404`
@@ -122,6 +135,10 @@ covers its camelCase key for the coverage check but is sent as given.
 
 ### Changed
 
+- **`upgrade --dry-run` prints the same JSON preview as every other
+  `--dry-run`**, through the shared preview writer, on every path instead of
+  text lines; `upgrade --fields` outside `--check` is now a usage error. See
+  Upgrading from 0.10.1.
 - **A blank value on any flag is now a usage error (exit 2)**, checked before
   any request. Only required and `*-id` flags were checked before, so
   `tasks list --state "$STATE"` with `STATE` unset listed every task at exit

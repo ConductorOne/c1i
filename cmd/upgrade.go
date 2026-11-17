@@ -34,7 +34,8 @@ manifest.
 Only a standalone binary is replaced in place. For a Homebrew, "go install", or
 container-image install, upgrade prints that method's upgrade command instead
 and exits 0. --check prints a JSON report and changes nothing; --dry-run
-verifies the release and prints what it would replace, installing nothing.
+verifies the release and prints a JSON preview of what it would do,
+installing nothing.
 
   c1i upgrade                       # upgrade to the latest stable release (asks first)
   c1i upgrade --check               # report whether a newer release is available
@@ -45,6 +46,11 @@ verifies the release and prints what it would replace, installing nothing.
 			return &usageError{fmt.Errorf("unknown --channel %q: expected stable, latest, or preview", channel)}
 		}
 		checkOnly, _ := cmd.Flags().GetBool("check")
+		if !checkOnly { // a run or preview prints no projectable object
+			if err := refuseMutationFields(cmd); err != nil {
+				return err
+			}
+		}
 		assumeYes, _ := cmd.Flags().GetBool("yes")
 		out := cmd.OutOrStdout()
 
@@ -72,6 +78,13 @@ verifies the release and prints what it would replace, installing nothing.
 		}
 		if checkOnly {
 			return writeUpgradeReport(cmd, current, target, channel, isReleaseVersion(current) && cmp < 0)
+		}
+		if dryRunActive() && (!isReleaseVersion(current) || cmp >= 0) {
+			report, err := newUpgradeReport(current, target, channel, false)
+			if err != nil {
+				return err
+			}
+			return writeUpgradePreview(cmd, report, nil)
 		}
 		switch {
 		case !isReleaseVersion(current):
@@ -104,6 +117,13 @@ verifies the release and prints what it would replace, installing nothing.
 			return fmt.Errorf("locating the running binary: %w", err)
 		}
 		if method, hint := selfupdate.Detect(execPath, runtime.GOOS); method != selfupdate.Standalone {
+			if dryRunActive() {
+				report, err := newUpgradeReport(current, target, channel, true)
+				if err != nil {
+					return err
+				}
+				return writeUpgradePreview(cmd, report, nil)
+			}
 			if _, err := fmt.Fprintf(out, "Not upgrading in place: %s\n", hint); err != nil {
 				return wrapOutputErr(err)
 			}
@@ -149,13 +169,15 @@ verifies the release and prints what it would replace, installing nothing.
 			return &upstreamError{fmt.Errorf("%s has no build for %s", target, selfupdate.PlatformKey())}
 		}
 		if dryRunActive() {
-			if _, err := fmt.Fprintf(out, "[dry-run] manifest signature verified; would download %s\n", asset.Href); err != nil {
-				return wrapOutputErr(err)
+			if err := asset.Check(); err != nil {
+				return externalServiceError(err, "downloading %s", target)
 			}
-			if _, err := fmt.Fprintf(out, "[dry-run] would verify sha256 %s and replace %s\n", asset.SHA256, execPath); err != nil {
-				return wrapOutputErr(err)
+			report, err := newUpgradeReport(current, target, channel, true)
+			if err != nil {
+				return err
 			}
-			return nil
+			report.AssetURL, report.SHA256, report.Destination = asset.Href, asset.SHA256, execPath
+			return writeUpgradePreview(cmd, report, []previewRequest{{Method: "GET", URL: asset.Href}})
 		}
 
 		unlock, err := selfupdate.LockExecutable(execPath)
@@ -226,27 +248,51 @@ func init() {
 	rootCmd.AddCommand(upgradeCmd)
 }
 
-func writeUpgradeReport(cmd *cobra.Command, current, target, channel string, available bool) error {
+// upgradeReport is the `upgrade --check` report and the `upgrade --dry-run`
+// preview's `.upgrade`: one struct, so they cannot drift. Fields are in key
+// order; the last three are set only when an update is available on a
+// standalone install.
+type upgradeReport struct {
+	Channel         string `json:"channel"`
+	Current         string `json:"current"`
+	InstallMethod   string `json:"install_method"`
+	Latest          string `json:"latest"`
+	UpdateAvailable bool   `json:"update_available"`
+	UpgradeCommand  string `json:"upgrade_command,omitempty"`
+	AssetURL        string `json:"asset_url,omitempty"`
+	Destination     string `json:"destination,omitempty"`
+	SHA256          string `json:"sha256,omitempty"`
+}
+
+func newUpgradeReport(current, target, channel string, available bool) (upgradeReport, error) {
 	execPath, err := upgradeExecutable()
 	if err != nil {
-		return fmt.Errorf("locating the running binary: %w", err)
+		return upgradeReport{}, fmt.Errorf("locating the running binary: %w", err)
 	}
 	method, _ := selfupdate.Detect(execPath, runtime.GOOS)
-	report := map[string]any{
-		"current":          current,
-		"latest":           target,
-		"channel":          channel,
-		"update_available": available,
-		"install_method":   method.String(),
-	}
-	if c := method.Command(); c != "" {
-		report["upgrade_command"] = c
+	return upgradeReport{
+		Channel: channel, Current: current, InstallMethod: method.String(), Latest: target,
+		UpdateAvailable: available, UpgradeCommand: method.Command(),
+	}, nil
+}
+
+func writeUpgradeReport(cmd *cobra.Command, current, target, channel string, available bool) error {
+	report, err := newUpgradeReport(current, target, channel, available)
+	if err != nil {
+		return err
 	}
 	data, err := json.Marshal(report)
 	if err != nil {
 		return err
 	}
 	return writeObject(cmd, data)
+}
+
+// writeUpgradePreview prints the --dry-run document for every non-error path.
+// requests lists the download a real run would add; the manifest and signature
+// fetches already happened during the preview.
+func writeUpgradePreview(cmd *cobra.Command, report upgradeReport, reqs []previewRequest) error {
+	return writePreviewDoc(cmd, previewOutput{DryRun: true, Requests: reqs, Upgrade: &report}, "dry run: nothing was installed")
 }
 
 // externalServiceError classifies a failure talking to a service beyond C1 (the
