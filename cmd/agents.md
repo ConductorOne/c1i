@@ -229,7 +229,8 @@ authenticating. Which one depends on what you are after:
   public docs page a human can open). The `content` is a snippet of the page —
   usually short, though an API-reference hit can run to tens of thousands of
   characters — so read the authoritative full page with `docs page <path>` on
-  the best hit (a leading slash or the full docs URL is also accepted). `docs search` is semantic with
+  the best hit (a leading slash or the full https://c1.ai/docs/ URL is also
+  accepted). `docs search` is semantic with
   no true no-match (see "Global flags" above), so judge each hit by its snippet
   rather than trusting that a result exists.
 - **Whether an API endpoint exists, or its request/response shape**: `docs

@@ -19,7 +19,11 @@ var (
 )
 
 const (
-	docsBaseURL = "https://conductorone.com/docs/"
+	docsBaseURL    = "https://c1.ai/docs/"
+	wwwDocsBaseURL = "https://www.c1.ai/docs/"
+	// legacyDocsBaseURL keeps full URLs copied before the c1.ai rebrand working.
+	legacyDocsBaseURL    = "https://conductorone.com/docs/"
+	legacyWWWDocsBaseURL = "https://www.conductorone.com/docs/"
 	// Mintlify assistant keys are public client-side keys.
 	mintlifyKey = "mint_dsc_UzPuRdxe4P9NF2x387upse"
 )
@@ -113,10 +117,9 @@ var docsPageCmd = &cobra.Command{
 	Long: `Fetch a full C1 documentation page by its path. Output is the
 plain-text rendering of the page, suitable for grepping or piping.
 
-The path is the URL segment after https://conductorone.com/docs/. A leading
-slash or the full https://conductorone.com/docs/ URL is accepted. Find paths
-via 'c1i docs search' (each result has a 'path' field) or by browsing the docs
-site.
+The path is the URL segment after https://c1.ai/docs/. A leading slash or the
+full https://c1.ai/docs/ URL is accepted. Find paths via 'c1i docs search'
+(each result has a 'path' field) or by browsing the docs site.
 
 Examples:
   c1i docs page product/admin/campaigns
@@ -125,6 +128,9 @@ Examples:
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		path := strings.TrimPrefix(args[0], docsBaseURL)
+		path = strings.TrimPrefix(path, wwwDocsBaseURL)
+		path = strings.TrimPrefix(path, legacyDocsBaseURL)
+		path = strings.TrimPrefix(path, legacyWWWDocsBaseURL)
 		path = strings.TrimPrefix(path, "/")
 		if path == "" {
 			return &usageError{fmt.Errorf("docs page path is empty")}

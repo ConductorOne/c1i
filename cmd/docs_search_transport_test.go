@@ -99,6 +99,9 @@ func TestDocsPageAcceptsLeadingSlashAndFullURL(t *testing.T) {
 		{"product/admin/profiles", "product/admin/profiles"},
 		{"/product/admin/profiles", "product/admin/profiles"},
 		{docsBaseURL + "product/admin/profiles", "product/admin/profiles"},
+		{wwwDocsBaseURL + "product/admin/profiles", "product/admin/profiles"},
+		{legacyDocsBaseURL + "product/admin/profiles", "product/admin/profiles"},
+		{legacyWWWDocsBaseURL + "product/admin/profiles", "product/admin/profiles"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.arg, func(t *testing.T) {

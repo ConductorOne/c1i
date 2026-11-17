@@ -413,9 +413,9 @@ Inputs now refused (exit 2):
 - README and the 0.10.1 changelog no longer point at a 0.10.0 section that was
   never published.
 - A malformed list response's decode error now names the list key.
-- `docs page` accepts a leading slash or the full
-  `https://conductorone.com/docs/` URL, so a path copied from a browser works;
-  an empty path is a usage error.
+- `docs page` accepts a leading slash or the full `https://c1.ai/docs/` URL,
+  so a path copied from a browser works (the old `conductorone.com/docs`
+  prefix is still accepted); an empty path is a usage error.
 - `apps managed-state promote` names the `--app-id` it used in its
   no-such-discovered-app error, so an unknown app is distinguishable from an
   unknown resource id.
