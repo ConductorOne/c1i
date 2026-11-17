@@ -208,54 +208,54 @@ func buildUpdatePolicyPatch(cmd *cobra.Command, in policyUpdateInputs, resolveFa
 	}
 
 	policy = map[string]any{}
-	mask, err = policyUpdateSpec.build(cmd, policy, &policyPatchEnv{in: in, typeOf: resolveFallbackPolicyType})
+	mask, err = policyUpdateSpecFor(in, resolveFallbackPolicyType).build(cmd, policy)
 	if err != nil {
 		return nil, "", err
 	}
 	return policy, mask, nil
 }
 
-// policyPatchEnv is the per-run state the steps and rules fields read.
-type policyPatchEnv struct {
-	in     policyUpdateInputs
-	typeOf func() (string, error)
-}
+// policyUpdateSpec is the table for flag names and registration; a run builds
+// from policyUpdateSpecFor, whose steps and rules fields close over its inputs.
+var policyUpdateSpec = policyUpdateSpecFor(policyUpdateInputs{}, nil)
 
-// policyUpdateSpec lists the Policy's updatable fields, in mask order.
-var policyUpdateSpec = &updateSpec{
-	fields: []updateField{
-		strUpdate("display-name", "displayName"),
-		strUpdate("description", "description"),
-		enumUpdate("policy-type", "policyType", &policyTypeFlag),
-		hookUpdate([]string{"steps-file"}, func(cmd *cobra.Command, policy map[string]any, env any) ([]string, error) {
-			if !cmd.Flags().Changed("steps-file") {
-				return nil, nil
-			}
-			e := env.(*policyPatchEnv)
-			policyType, _ := policy["policyType"].(string)
-			if policyType == "" {
-				var err error
-				if policyType, err = e.typeOf(); err != nil {
+// policyUpdateSpecFor lists the Policy's updatable fields, in mask order.
+// typeOf supplies the policy's type when --steps-file comes without one.
+func policyUpdateSpecFor(in policyUpdateInputs, typeOf func() (string, error)) *updateSpec {
+	return &updateSpec{
+		fields: []updateField{
+			strUpdate("display-name", "displayName"),
+			strUpdate("description", "description"),
+			enumUpdate("policy-type", "policyType", &policyTypeFlag),
+			hookUpdate([]string{"steps-file"}, func(cmd *cobra.Command, policy map[string]any) ([]string, error) {
+				if !cmd.Flags().Changed("steps-file") {
+					return nil, nil
+				}
+				policyType, _ := policy["policyType"].(string)
+				if policyType == "" {
+					var err error
+					if policyType, err = typeOf(); err != nil {
+						return nil, err
+					}
+				}
+				key, err := policyStepsKey(policyType)
+				if err != nil {
 					return nil, err
 				}
-			}
-			key, err := policyStepsKey(policyType)
-			if err != nil {
-				return nil, err
-			}
-			policy["policySteps"] = map[string]any{key: map[string]any{"steps": e.in.steps}}
-			return []string{"policySteps"}, nil
-		}),
-		hookUpdate([]string{"rules-file"}, func(cmd *cobra.Command, policy map[string]any, env any) ([]string, error) {
-			if !cmd.Flags().Changed("rules-file") {
-				return nil, nil
-			}
-			policy["rules"] = env.(*policyPatchEnv).in.rules
-			return []string{"rules"}, nil
-		}),
-	},
-	alt:   "--body-file with --update-mask",
-	scope: []string{"body-file", "update-mask", "allow-deny-all"},
+				policy["policySteps"] = map[string]any{key: map[string]any{"steps": in.steps}}
+				return []string{"policySteps"}, nil
+			}),
+			hookUpdate([]string{"rules-file"}, func(cmd *cobra.Command, policy map[string]any) ([]string, error) {
+				if !cmd.Flags().Changed("rules-file") {
+					return nil, nil
+				}
+				policy["rules"] = in.rules
+				return []string{"rules"}, nil
+			}),
+		},
+		alt:   "--body-file with --update-mask",
+		scope: []string{"body-file", "update-mask", "allow-deny-all"},
+	}
 }
 
 func init() {

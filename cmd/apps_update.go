@@ -103,7 +103,7 @@ var appUpdateSpec = &updateSpec{
 		strUpdate("description", "description"),
 		policyUpdate(appPolicyKinds),
 		enumUpdate("identity-matching", "identityMatching", &identityMatchingFlag),
-		hookUpdate([]string{"app-user-mapper-file"}, func(cmd *cobra.Command, obj map[string]any, _ any) ([]string, error) {
+		hookUpdate([]string{"app-user-mapper-file"}, func(cmd *cobra.Command, obj map[string]any) ([]string, error) {
 			if !cmd.Flags().Changed("app-user-mapper-file") {
 				return nil, nil
 			}
@@ -120,7 +120,7 @@ var appUpdateSpec = &updateSpec{
 // buildAppUpdateBody builds the Update request wrapper from changed flags.
 func buildAppUpdateBody(cmd *cobra.Command, id string) (map[string]any, error) {
 	app := map[string]any{"id": id}
-	mask, err := appUpdateSpec.build(cmd, app, nil)
+	mask, err := appUpdateSpec.build(cmd, app)
 	if err != nil {
 		return nil, err
 	}

@@ -81,7 +81,7 @@ var entitlementUpdateSpec = &updateSpec{
 		strUpdate("display-name", "displayName"),
 		strUpdate("description", "description"),
 		policyUpdate(entitlementPolicyKinds),
-		hookUpdate([]string{"emergency-grant-enabled"}, func(cmd *cobra.Command, ent map[string]any, _ any) ([]string, error) {
+		hookUpdate([]string{"emergency-grant-enabled"}, func(cmd *cobra.Command, ent map[string]any) ([]string, error) {
 			if !cmd.Flags().Changed("emergency-grant-enabled") {
 				return nil, nil
 			}
@@ -93,12 +93,12 @@ var entitlementUpdateSpec = &updateSpec{
 			ent["emergencyGrantEnabled"] = enabled
 			return []string{"emergencyGrantEnabled"}, nil
 		}),
-		hookUpdate([]string{"duration-grant", "duration-unset"}, func(cmd *cobra.Command, ent map[string]any, _ any) ([]string, error) {
+		hookUpdate([]string{"duration-grant", "duration-unset"}, func(cmd *cobra.Command, ent map[string]any) ([]string, error) {
 			f := cmd.Flags()
 			if f.Changed("duration-grant") && f.Changed("duration-unset") {
 				return nil, &usageError{fmt.Errorf("--duration-grant and --duration-unset are mutually exclusive: both set the entitlement's max_grant_duration")}
 			}
-			paths, err := durationUpdate("duration-grant", "durationGrant").apply(cmd, ent, nil)
+			paths, err := durationUpdate("duration-grant", "durationGrant").apply(cmd, ent)
 			if err != nil {
 				return nil, err
 			}
@@ -119,7 +119,7 @@ var entitlementUpdateSpec = &updateSpec{
 // Every error is a *usageError.
 func buildEntitlementUpdateBody(cmd *cobra.Command, appID, id string) (map[string]any, error) {
 	ent := map[string]any{"id": id, "appId": appID}
-	mask, err := entitlementUpdateSpec.build(cmd, ent, nil)
+	mask, err := entitlementUpdateSpec.build(cmd, ent)
 	if err != nil {
 		return nil, err
 	}

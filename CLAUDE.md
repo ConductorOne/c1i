@@ -289,10 +289,14 @@ tracked root file outside its allowlist. Stage explicit paths rather than `-A`.
   (`cmd/update_fields.go`: `strUpdate`, `boolUpdate`, `optionalBoolUpdate`,
   `enumUpdate`, `durationUpdate`, `hookUpdate`), registered with
   `registerUpdateSpec`; the "nothing to update" error comes from the same
-  table. Never append to a mask or write `"updateMask"` by hand (`wrapUpdate`
-  wraps a body-file's mask). `TestEveryUpdateCommandDeclaresItsFields` and
-  `TestUpdateCommandsDoNotBuildMasksByHand` enforce it;
-  `TestUpdateCommandsWireIsPinned` pins every request byte for byte.
+  table. `update-credentials` derives its mask from the config object it
+  builds (its table only names flags), and body-file-only updates pass the
+  caller's mask through `wrapUpdate`. Never append to a mask or write
+  `"updateMask"` by hand: `wrapUpdate`/`setUpdateMask` take a literal or a
+  `spec.build`/`bodyFileMask` result. `TestEveryUpdateCommandDeclaresItsFields`
+  and `TestUpdateCommandsDoNotBuildMasksByHand` enforce it;
+  `TestUpdateCommandsWireIsPinned` pins each update command's request across a
+  flag matrix.
 - **Output:** list rows go through the `newEmitter(...)`/`.Encode` emitter;
   single-object reads through `writeObject`; **mutations** through
   `sendMutation`/`sendMutationBatch`/`sendMutationSequence` (`cmd/mutation.go`),

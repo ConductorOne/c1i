@@ -42,7 +42,7 @@ Prints the updated server, unwrapped like "mcp servers get" (id: .connectorId).`
 			"appId":       appID,
 			"connectorId": connectorID,
 		}
-		mask, err := mcpServersUpdateSpec.build(cmd, server, nil)
+		mask, err := mcpServersUpdateSpec.build(cmd, server)
 		if err != nil {
 			return err
 		}

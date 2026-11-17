@@ -15,7 +15,7 @@ import (
 // update" message and the coverage test.
 type updateField struct {
 	flags []string
-	apply func(cmd *cobra.Command, obj map[string]any, env any) (paths []string, err error)
+	apply func(cmd *cobra.Command, obj map[string]any) (paths []string, err error)
 }
 
 // updateSpec is one update command's field table, in mask order. Only
@@ -41,7 +41,7 @@ func registerUpdateSpec(cmd *cobra.Command, s ...*updateSpec) { updateSpecs[cmd]
 // strUpdate sends a set string flag under key; validate may refuse a value.
 // "" is sent as is: whether that is allowed is allowEmpty's rule.
 func strUpdate(flag, key string, validate ...func(string) error) updateField {
-	return updateField{flags: []string{flag}, apply: func(cmd *cobra.Command, obj map[string]any, _ any) ([]string, error) {
+	return updateField{flags: []string{flag}, apply: func(cmd *cobra.Command, obj map[string]any) ([]string, error) {
 		if !cmd.Flags().Changed(flag) {
 			return nil, nil
 		}
@@ -58,7 +58,7 @@ func strUpdate(flag, key string, validate ...func(string) error) updateField {
 
 // boolUpdate sends a set bool flag; an explicit false is a change.
 func boolUpdate(flag, key string) updateField {
-	return updateField{flags: []string{flag}, apply: func(cmd *cobra.Command, obj map[string]any, _ any) ([]string, error) {
+	return updateField{flags: []string{flag}, apply: func(cmd *cobra.Command, obj map[string]any) ([]string, error) {
 		if !cmd.Flags().Changed(flag) {
 			return nil, nil
 		}
@@ -77,7 +77,7 @@ func optionalBool(on bool) string {
 
 // optionalBoolUpdate sends a set bool flag as an OPTIONAL_BOOL_* enum.
 func optionalBoolUpdate(flag, key string) updateField {
-	return updateField{flags: []string{flag}, apply: func(cmd *cobra.Command, obj map[string]any, _ any) ([]string, error) {
+	return updateField{flags: []string{flag}, apply: func(cmd *cobra.Command, obj map[string]any) ([]string, error) {
 		if !cmd.Flags().Changed(flag) {
 			return nil, nil
 		}
@@ -89,7 +89,7 @@ func optionalBoolUpdate(flag, key string) updateField {
 
 // enumUpdate sends a set string flag normalized through e.
 func enumUpdate(flag, key string, e *enumFlag) updateField {
-	return updateField{flags: []string{flag}, apply: func(cmd *cobra.Command, obj map[string]any, _ any) ([]string, error) {
+	return updateField{flags: []string{flag}, apply: func(cmd *cobra.Command, obj map[string]any) ([]string, error) {
 		if !cmd.Flags().Changed(flag) {
 			return nil, nil
 		}
@@ -104,7 +104,7 @@ func enumUpdate(flag, key string, e *enumFlag) updateField {
 
 // durationUpdate sends a set addProtoDurationFlag flag in protobuf form.
 func durationUpdate(flag, key string) updateField {
-	return updateField{flags: []string{flag}, apply: func(cmd *cobra.Command, obj map[string]any, _ any) ([]string, error) {
+	return updateField{flags: []string{flag}, apply: func(cmd *cobra.Command, obj map[string]any) ([]string, error) {
 		v, ok, err := protoDurationFlag(cmd, flag)
 		if err != nil || !ok {
 			return nil, err
@@ -115,19 +115,18 @@ func durationUpdate(flag, key string) updateField {
 }
 
 // hookUpdate is a field with its own logic over flags.
-func hookUpdate(flags []string, apply func(cmd *cobra.Command, obj map[string]any, env any) ([]string, error)) updateField {
+func hookUpdate(flags []string, apply func(cmd *cobra.Command, obj map[string]any) ([]string, error)) updateField {
 	return updateField{flags: flags, apply: apply}
 }
 
 // apply runs every field in order against obj and returns the mask paths.
-// env reaches the hooks that need per-run state.
-func (s *updateSpec) apply(cmd *cobra.Command, obj map[string]any, env any) ([]string, error) {
+func (s *updateSpec) apply(cmd *cobra.Command, obj map[string]any) ([]string, error) {
 	var paths []string
 	for _, f := range s.fields {
 		if f.apply == nil {
 			continue
 		}
-		p, err := f.apply(cmd, obj, env)
+		p, err := f.apply(cmd, obj)
 		if err != nil {
 			return nil, err
 		}
@@ -138,8 +137,8 @@ func (s *updateSpec) apply(cmd *cobra.Command, obj map[string]any, env any) ([]s
 
 // build is apply plus the mask string; no path at all is a usage error that
 // names every field flag of the table.
-func (s *updateSpec) build(cmd *cobra.Command, obj map[string]any, env any) (string, error) {
-	paths, err := s.apply(cmd, obj, env)
+func (s *updateSpec) build(cmd *cobra.Command, obj map[string]any) (string, error) {
+	paths, err := s.apply(cmd, obj)
 	if err != nil {
 		return "", err
 	}

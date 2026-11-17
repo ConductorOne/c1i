@@ -218,7 +218,7 @@ Prints the credential as pretty JSON, unwrapped like
 		spID, _ := cmd.Flags().GetString("service-principal-id")
 
 		cred := map[string]any{"id": args[0]}
-		mask, err := spCredentialsUpdateSpec.build(cmd, cred, nil)
+		mask, err := spCredentialsUpdateSpec.build(cmd, cred)
 		if err != nil {
 			return err
 		}

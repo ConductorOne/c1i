@@ -25,7 +25,7 @@ No secret is returned. Prints the webhook, unwrapped like "webhooks get": the
 id is .id. Honors --dry-run.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		body := map[string]any{}
-		if _, err := webhookFields.apply(cmd, body, nil); err != nil {
+		if _, err := webhookFields.apply(cmd, body); err != nil {
 			return err
 		}
 

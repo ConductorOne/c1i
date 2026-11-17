@@ -112,9 +112,100 @@ func TestNothingToUpdateNamesEveryFlag(t *testing.T) {
 	}
 }
 
-// A literal "updateMask" key, or strings.Join over a variable named like a
-// mask-path list, outside update_fields.go is a hand-built mask.
+// The mask reaches a request only through update_fields.go. Outside it, a
+// string folding to "updateMask", a strings.Join over a mask-path variable, or
+// a wrapUpdate/setUpdateMask argument that is not a string literal or a
+// variable assigned only from a maskSources call is a hand-built mask.
 var maskVarName = regexp.MustCompile(`(?i)^(paths|mask\w*|maskpaths)$`)
+
+// maskSources are the calls whose result may be passed on as a mask.
+var maskSources = map[string]bool{
+	"build": true, "bodyFileMask": true, "optionalUpdateMask": true,
+	"deriveCredentialUpdateMask": true, "buildUpdatePolicyPatch": true,
+}
+
+// maskAllowedFuncs ("file:func") may join mask paths themselves: the one
+// normalizer every --update-mask value goes through.
+var maskAllowedFuncs = map[string]bool{"flags.go:normalizeUpdateMask": true}
+
+func calleeName(e ast.Expr) string {
+	call, ok := e.(*ast.CallExpr)
+	if !ok {
+		return ""
+	}
+	switch fn := call.Fun.(type) {
+	case *ast.Ident:
+		return fn.Name
+	case *ast.SelectorExpr:
+		return fn.Sel.Name
+	}
+	return ""
+}
+
+// constString folds string literals joined by +.
+func constString(e ast.Expr) (string, bool) {
+	switch e := e.(type) {
+	case *ast.ParenExpr:
+		return constString(e.X)
+	case *ast.BasicLit:
+		if e.Kind != token.STRING {
+			return "", false
+		}
+		s, err := strconv.Unquote(e.Value)
+		return s, err == nil
+	case *ast.BinaryExpr:
+		if e.Op != token.ADD {
+			return "", false
+		}
+		l, lok := constString(e.X)
+		r, rok := constString(e.Y)
+		return l + r, lok && rok
+	}
+	return "", false
+}
+
+// maskAssignments records which identifiers in decl are assigned only from a
+// string literal or a maskSources call.
+func maskAssignments(decl ast.Node) (seen, bad map[string]bool) {
+	seen, bad = map[string]bool{}, map[string]bool{}
+	record := func(lhs []ast.Expr, rhs []ast.Expr, plain bool) {
+		for i, l := range lhs {
+			id, ok := l.(*ast.Ident)
+			if !ok {
+				continue
+			}
+			seen[id.Name] = true
+			good := plain
+			switch {
+			case len(rhs) == 1 && maskSources[calleeName(rhs[0])]:
+			case len(lhs) == len(rhs):
+				_, good2 := constString(rhs[i])
+				good = good && good2
+			default:
+				good = false
+			}
+			if !good {
+				bad[id.Name] = true
+			}
+		}
+	}
+	ast.Inspect(decl, func(n ast.Node) bool {
+		switch n := n.(type) {
+		case *ast.AssignStmt:
+			record(n.Lhs, n.Rhs, n.Tok == token.ASSIGN || n.Tok == token.DEFINE)
+		case *ast.ValueSpec:
+			if len(n.Values) > 0 {
+				var lhs []ast.Expr
+				for _, id := range n.Names {
+					lhs = append(lhs, id)
+				}
+				record(lhs, n.Values, true)
+			}
+		}
+		return true
+	})
+	return seen, bad
+}
 
 // handBuiltMasks returns the positions in src that build a mask by hand.
 func handBuiltMasks(t *testing.T, name, src string) []string {
@@ -124,39 +215,48 @@ func handBuiltMasks(t *testing.T, name, src string) []string {
 	if err != nil {
 		t.Fatal(err)
 	}
-	isMaskKey := func(e ast.Expr) bool {
-		lit, ok := e.(*ast.BasicLit)
-		if !ok || lit.Kind != token.STRING {
-			return false
-		}
-		s, _ := strconv.Unquote(lit.Value)
-		return s == "updateMask"
-	}
 	var out []string
-	ast.Inspect(f, func(n ast.Node) bool {
-		switch n := n.(type) {
-		case *ast.KeyValueExpr:
-			if isMaskKey(n.Key) {
-				out = append(out, fset.Position(n.Pos()).String()+": literal updateMask key")
-			}
-		case *ast.IndexExpr:
-			if isMaskKey(n.Index) {
-				out = append(out, fset.Position(n.Pos()).String()+": updateMask index")
-			}
-		case *ast.CallExpr:
-			sel, ok := n.Fun.(*ast.SelectorExpr)
-			if !ok || sel.Sel.Name != "Join" || len(n.Args) != 2 {
-				return true
-			}
-			if pkg, ok := sel.X.(*ast.Ident); !ok || pkg.Name != "strings" {
-				return true
-			}
-			if id, ok := n.Args[0].(*ast.Ident); ok && maskVarName.MatchString(id.Name) {
-				out = append(out, fset.Position(n.Pos()).String()+": strings.Join of "+id.Name)
-			}
+	report := func(p token.Pos, what string) {
+		out = append(out, fset.Position(p).String()+": "+what)
+	}
+	for _, decl := range f.Decls {
+		if fd, ok := decl.(*ast.FuncDecl); ok && maskAllowedFuncs[name+":"+fd.Name.Name] {
+			continue
 		}
-		return true
-	})
+		seen, bad := maskAssignments(decl)
+		ast.Inspect(decl, func(n ast.Node) bool {
+			if e, ok := n.(ast.Expr); ok {
+				if s, ok := constString(e); ok && s == "updateMask" {
+					report(e.Pos(), `string "updateMask"`)
+					return false
+				}
+			}
+			call, ok := n.(*ast.CallExpr)
+			if !ok {
+				return true
+			}
+			switch calleeName(call) {
+			case "Join":
+				if sel, ok := call.Fun.(*ast.SelectorExpr); ok && len(call.Args) == 2 {
+					if pkg, ok := sel.X.(*ast.Ident); ok && pkg.Name == "strings" {
+						if id, ok := call.Args[0].(*ast.Ident); ok && maskVarName.MatchString(id.Name) {
+							report(call.Pos(), "strings.Join of "+id.Name)
+						}
+					}
+				}
+			case "wrapUpdate", "setUpdateMask":
+				arg := call.Args[len(call.Args)-1]
+				if _, ok := constString(arg); ok {
+					return true
+				}
+				if id, ok := arg.(*ast.Ident); ok && seen[id.Name] && !bad[id.Name] {
+					return true
+				}
+				report(arg.Pos(), "mask passed to "+calleeName(call)+" is not a literal or a spec/bodyFileMask result")
+			}
+			return true
+		})
+	}
 	return out
 }
 
@@ -170,7 +270,7 @@ func TestUpdateCommandsDoNotBuildMasksByHand(t *testing.T) {
 	}
 	sort.Strings(files)
 	for _, f := range files {
-		if strings.HasSuffix(f, "_test.go") || f == "update_fields.go" || f == "flags.go" {
+		if strings.HasSuffix(f, "_test.go") || f == "update_fields.go" {
 			continue
 		}
 		src, err := os.ReadFile(f)
@@ -188,7 +288,11 @@ func TestUpdateCommandsDoNotBuildMasksByHand(t *testing.T) {
 		`package p; func f(paths []string) any { return map[string]any{"updateMask": strings.Join(paths, ",")} }`,
 		`package p; func f(b map[string]any) { b["updateMask"] = "x" }`,
 		`package p; func f(maskParts []string) string { return strings.Join(maskParts, ",") }`,
-		`package p; func f(mask []string) string { return strings.Join(mask, ",") }`,
+		`package p; func f(o map[string]any, fieldPaths []string) any { return wrapUpdate("k", o, strings.Join(fieldPaths, ",")) }`,
+		`package p; func f(b map[string]any, ps []string) { m := strings.Join(ps, ","); setUpdateMask(b, m) }`,
+		`package p; func f(b map[string]any, s *updateSpec) any { m, _ := s.build(nil, b); m += ",b"; return wrapUpdate("k", b, m) }`,
+		`package p; const k = "update" + "Mask"`,
+		`package p; func f(o map[string]any, m string) any { return wrapUpdate("k", o, m) }`,
 	}
 	for _, src := range planted {
 		if len(handBuiltMasks(t, "planted.go", src)) == 0 {
@@ -198,6 +302,8 @@ func TestUpdateCommandsDoNotBuildMasksByHand(t *testing.T) {
 	clean := []string{
 		`package p; func f(b map[string]any) any { return wrapUpdate("k", b, "m") }`,
 		`package p; func f(parts []string) string { return strings.Join(parts, ",") }`,
+		`package p; func f(b map[string]any, s *updateSpec) any { m, err := s.build(nil, b); _ = err; return wrapUpdate("k", b, m) }`,
+		`package p; func f(b map[string]any) any { m, _, _ := bodyFileMask(nil); return wrapUpdate("k", b, m) }`,
 	}
 	for _, src := range clean {
 		if got := handBuiltMasks(t, "clean.go", src); len(got) != 0 {

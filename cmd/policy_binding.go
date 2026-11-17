@@ -92,7 +92,7 @@ func policyUpdate(kinds []policyKind) updateField {
 	for _, k := range kinds {
 		flags = append(flags, k.flag)
 	}
-	return hookUpdate(append(flags, "unbind-policy"), func(cmd *cobra.Command, obj map[string]any, _ any) ([]string, error) {
+	return hookUpdate(append(flags, "unbind-policy"), func(cmd *cobra.Command, obj map[string]any) ([]string, error) {
 		return applyPolicyUpdates(cmd, kinds, obj)
 	})
 }

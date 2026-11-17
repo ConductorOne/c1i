@@ -76,7 +76,7 @@ var catalogUnenrollmentEntitlementFlag = enumFlag{flag: "unenrollment-entitlemen
 func buildAccessProfileCreateBody(cmd *cobra.Command) (map[string]any, error) {
 	displayName, _ := cmd.Flags().GetString("display-name")
 	body := map[string]any{"displayName": displayName}
-	if _, err := catalogFields.apply(cmd, body, nil); err != nil {
+	if _, err := catalogFields.apply(cmd, body); err != nil {
 		return nil, err
 	}
 	return body, nil
