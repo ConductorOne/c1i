@@ -171,7 +171,9 @@ Inputs now refused (exit 2):
   field `a[token]` count as secret, `sort[key]=` does not; a numeric value
   (`"token":12345`) is masked, and so is any other body value equal to a masked
   one; `code` stays masked as a URL parameter and in previews; a lone `token=x`
-  in prose is not masked.
+  in prose is not masked. An id holding a query (`x?token=v`, sent as
+  `x%3Ftoken=v`) has its secret-named pairs masked too; a doubly encoded one
+  (`x%253Ftoken=v`) is not.
 
 ### Added
 

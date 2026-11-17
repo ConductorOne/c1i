@@ -47,6 +47,14 @@ func TestURLMasksSecretsAndKeepsTheRest(t *testing.T) {
 		{"encoded key, malformed value escape", "https://h.example/x?%74oken=S4%zzleak&ok=1", []string{"S4%zzleak", "S4"}, []string{"ok=1"}},
 		{"encoded ; inside a path param key", "https://h.example/x;a%3Btoken=S6leak/y", []string{"S6leak"}, []string{"/y"}},
 		{"git@ is not a secret", "ssh://git@github.example/org/repo", nil, []string{"ssh://git@github.example/org/repo"}},
+		// An id holding "?k=v" is sent with its "?" encoded.
+		{"%3F query inside a path segment", "https://h.example/api/v1/apps/x%3Faccess_token=E1leak", []string{"E1leak"}, []string{"/apps/x%3Faccess_token="}},
+		{"%3f lower case, neighbours kept", "https://h.example/a/x%3fa=1&token=E2leak&b=2/y?ok=1", []string{"E2leak"}, []string{"x%3fa=1&", "&b=2/y?ok=1"}},
+		{"%26 separated pair after %3F", "https://h.example/a/x%3Fa=1%26token=E3leak%26b=2", []string{"E3leak"}, []string{"a=1%26", "%26b=2"}},
+		{"%3D separator after %3F", "https://h.example/a/x%3Ftoken%3DE4leak/y", []string{"E4leak"}, []string{"x%3Ftoken%3D", "/y"}},
+		{"%23 fragment inside a path segment", "https://h.example/a/x%23access_token=E5leak", []string{"E5leak"}, nil},
+		{"encoded key after %3F", "https://h.example/a/x%3F%74oken=E6leak", []string{"E6leak"}, nil},
+		{"non-secret %3F pair unchanged", "https://h.example/a/x%3Fa=1%26b=2/y", nil, []string{"https://h.example/a/x%3Fa=1%26b=2/y"}},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -77,6 +85,21 @@ func TestPathMasksParamsAndKeepsTheRest(t *testing.T) {
 	got := Path("/api/v1/x;token=SEKL4/y;ok=1")
 	if strings.Contains(got, "SEKL4") || !strings.Contains(got, ";ok=1") {
 		t.Errorf("Path = %q", got)
+	}
+	if got := Path("/api/v1/apps/x%3Faccess_token=SEKL5"); got != "/api/v1/apps/x%3Faccess_token="+Placeholder {
+		t.Errorf("Path = %q", got)
+	}
+}
+
+// A server error body that echoes a path whose id holds an encoded query.
+func TestTextMasksQueryEncodedInAPathSegment(t *testing.T) {
+	in := `{"message":"not found: /api/v1/apps/x%3Faccess_token=SEKT1"} and /a/b%3Ftoken%3DSEKT2.`
+	got := Text(in)
+	if strings.Contains(got, "SEKT") || !strings.Contains(got, "/apps/x%3Faccess_token=") || !strings.HasSuffix(got, ".") {
+		t.Errorf("Text(%q) = %q", in, got)
+	}
+	if in := "see /a/x%3Fa=1 for details"; Text(in) != in {
+		t.Errorf("Text(%q) = %q", in, Text(in))
 	}
 }
 
