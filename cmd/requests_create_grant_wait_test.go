@@ -9,9 +9,10 @@ import (
 
 const waitGrantRow = `{"list":[{"appEntitlementUserBinding":{"appId":"a1","appEntitlementId":"e1","appUserId":"au1","appUser":{"appUser":{"id":"au1","identityUserId":"u1"}}},"entitlement":{"appEntitlement":{"id":"e1","appId":"a1"}}}],"nextPageToken":""}`
 
-// grantWaitServer answers the pre-read, the create, and grants searches; the
-// first emptyPolls grant reads are empty, so the grant appears afterwards.
-func grantWaitServer(t *testing.T, emptyPolls int) (*mutServer, *int) {
+// grantWaitServer answers the pre-read, the create, and grants searches. The
+// first read is the pre-write baseline; when baselineGrant is false it is
+// empty, then emptyPolls polls are empty and the grant appears afterwards.
+func grantWaitServer(t *testing.T, baselineGrant bool, emptyPolls int) (*mutServer, *int) {
 	t.Helper()
 	reads := 0
 	srv := newMutServer(t, func(r *http.Request, _ int) mutReply {
@@ -22,7 +23,13 @@ func grantWaitServer(t *testing.T, emptyPolls int) (*mutServer, *int) {
 			return mutReply{status: http.StatusOK, body: `{"task":{"id":"t1","state":"TASK_STATE_OPEN"}}`}
 		case r.Method == http.MethodPost && r.URL.Path == "/api/v1/search/grants":
 			reads++
-			if reads <= emptyPolls {
+			if baselineGrant {
+				return mutReply{status: http.StatusOK, body: waitGrantRow}
+			}
+			if reads == 1 {
+				return mutReply{status: http.StatusOK, body: `{"list":[]}`}
+			}
+			if reads <= 1+emptyPolls {
 				return mutReply{status: http.StatusOK, body: `{"list":[]}`}
 			}
 			return mutReply{status: http.StatusOK, body: waitGrantRow}
@@ -45,7 +52,7 @@ func setFastGrantWait(t *testing.T) {
 func TestRequestsCreateGrantWaitBlocksUntilGrantAppears(t *testing.T) {
 	setFastGrantWait(t)
 	t.Setenv("C1I_URL", mutTestURL)
-	srv, reads := grantWaitServer(t, 2)
+	srv, reads := grantWaitServer(t, false, 2)
 	res := runMutationCLI(t, srv.srv, 0, nil,
 		"requests", "create", "grant", "--app-id", "a1", "--entitlement-id", "e1", "--user-id", "u1",
 		"--wait", "--wait-min", "1", "--wait-stable", "2", "--wait-timeout", "2s")
@@ -55,8 +62,8 @@ func TestRequestsCreateGrantWaitBlocksUntilGrantAppears(t *testing.T) {
 	if !strings.Contains(res.stdout, "t1") {
 		t.Errorf("stdout = %q, want the created task", res.stdout)
 	}
-	if *reads < 3 {
-		t.Errorf("grants reads = %d, want at least 3 (empty, empty, grant)", *reads)
+	if *reads < 4 {
+		t.Errorf("grants reads = %d, want at least 4 (baseline, empty, empty, grant)", *reads)
 	}
 	if !strings.Contains(res.stderr, "Grants settled") {
 		t.Errorf("stderr = %q, want the settled notice", res.stderr)
@@ -67,7 +74,7 @@ func TestRequestsCreateGrantWaitBlocksUntilGrantAppears(t *testing.T) {
 func TestRequestsCreateGrantWaitDefaultsToOneGrant(t *testing.T) {
 	setFastGrantWait(t)
 	t.Setenv("C1I_URL", mutTestURL)
-	srv, reads := grantWaitServer(t, 1<<30)
+	srv, reads := grantWaitServer(t, false, 1<<30)
 	res := runMutationCLI(t, srv.srv, 0, nil,
 		"requests", "create", "grant", "--app-id", "a1", "--entitlement-id", "e1", "--user-id", "u1",
 		"--wait", "--wait-stable", "2", "--wait-timeout", "200ms")
@@ -90,7 +97,7 @@ func TestRequestsCreateGrantWaitDefaultsToOneGrant(t *testing.T) {
 func TestRequestsCreateGrantWaitSkipsDryRun(t *testing.T) {
 	setFastGrantWait(t)
 	t.Setenv("C1I_URL", mutTestURL)
-	srv, reads := grantWaitServer(t, 0)
+	srv, reads := grantWaitServer(t, false, 0)
 	res := runMutationCLI(t, srv.srv, 0, nil,
 		"requests", "create", "grant", "--app-id", "a1", "--entitlement-id", "e1", "--user-id", "u1",
 		"--wait", "--dry-run")
@@ -102,6 +109,31 @@ func TestRequestsCreateGrantWaitSkipsDryRun(t *testing.T) {
 	}
 	if !strings.Contains(res.stdout, `"dryRun": true`) {
 		t.Errorf("stdout = %q, want a preview", res.stdout)
+	}
+}
+
+// A grant that already existed before the request must not settle the wait: the
+// recipient already had access, so exit 0 would falsely imply this request was
+// approved.
+func TestRequestsCreateGrantWaitRejectsPreExistingGrant(t *testing.T) {
+	setFastGrantWait(t)
+	t.Setenv("C1I_URL", mutTestURL)
+	srv, reads := grantWaitServer(t, true, 1<<30)
+	res := runMutationCLI(t, srv.srv, 0, nil,
+		"requests", "create", "grant", "--app-id", "a1", "--entitlement-id", "e1", "--user-id", "u1",
+		"--wait", "--wait-stable", "2", "--wait-timeout", "200ms")
+	if res.exit != 1 {
+		t.Fatalf("exit %d err %v stderr %q, want 1 (timeout)", res.exit, res.err, res.stderr)
+	}
+	if res.err == nil || !strings.Contains(res.err.Error(), "timed out") ||
+		!strings.Contains(res.err.Error(), "POST /api/v1/task/grant was applied") {
+		t.Errorf("err = %v, want the applied-write timeout", res.err)
+	}
+	if !strings.Contains(res.stdout, "t1") {
+		t.Errorf("stdout = %q, want the created task", res.stdout)
+	}
+	if *reads < 2 {
+		t.Errorf("grants reads = %d, want a baseline and at least one poll", *reads)
 	}
 }
 
@@ -136,7 +168,7 @@ func TestRequestsCreateGrantWaitFlagValidation(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			srv, reads := grantWaitServer(t, 0)
+			srv, reads := grantWaitServer(t, false, 0)
 			args := append([]string{"requests", "create", "grant", "--app-id", "a1", "--entitlement-id", "e1", "--user-id", "u1"}, tc.args...)
 			res := runMutationCLI(t, srv.srv, 0, nil, args...)
 			if res.exit != 2 {
