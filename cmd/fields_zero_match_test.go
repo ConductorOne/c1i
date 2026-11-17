@@ -86,8 +86,8 @@ func newTestListTree(rows []any, rowErr error) (*cobra.Command, *bytes.Buffer) {
 // A row that projects to "{}" carries no information, so it must be SKIPPED
 // rather than written: only row 2's projection reaches stdout.
 func TestFieldsListSparseDataDoesNotError(t *testing.T) {
+	clearViperOverrides(t, "fields")
 	viper.Set("fields", "id")
-	t.Cleanup(func() { viper.Set("fields", "") })
 
 	root, buf := newTestListTree([]any{
 		map[string]any{"name": "no id on this row"}, // projects to {}, skipped
@@ -108,8 +108,8 @@ func TestFieldsListSparseDataDoesNotError(t *testing.T) {
 // emitted at all, e.g. a search that matched nothing) must not error either
 // — there is nothing to judge a --fields match against.
 func TestFieldsListZeroRowsDoesNotError(t *testing.T) {
+	clearViperOverrides(t, "fields")
 	viper.Set("fields", "id")
-	t.Cleanup(func() { viper.Set("fields", "") })
 
 	root, buf := newTestListTree(nil, nil)
 	if err := root.ExecuteContext(context.Background()); err != nil {
@@ -129,8 +129,8 @@ func TestFieldsListZeroRowsDoesNotError(t *testing.T) {
 // fix targets: a consumer piping stdout without checking the exit code must
 // never see N lines of "{}" and mistake them for real (if empty) rows.
 func TestFieldsListAllRowsMissErrors(t *testing.T) {
+	clearViperOverrides(t, "fields")
 	viper.Set("fields", "totally.bogus.path")
-	t.Cleanup(func() { viper.Set("fields", "") })
 
 	root, buf := newTestListTree([]any{
 		map[string]any{"id": "1"},
@@ -159,8 +159,8 @@ func TestFieldsListAllRowsMissErrors(t *testing.T) {
 // must come back completely unchanged, verbatim, even though every row
 // emitted before the failure also missed --fields.
 func TestFieldsListPreExistingErrorNotMasked(t *testing.T) {
+	clearViperOverrides(t, "fields")
 	viper.Set("fields", "totally.bogus.path")
-	t.Cleanup(func() { viper.Set("fields", "") })
 
 	wantErr := errors.New("boom: upstream API failure")
 	root, buf := newTestListTree([]any{map[string]any{"id": "1"}}, wantErr)

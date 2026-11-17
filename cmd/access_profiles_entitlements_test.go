@@ -140,9 +140,8 @@ func TestCatalogEntitlementDeleteSendsJSONBodyAndEscapedProfileID(t *testing.T) 
 	stubAccessProfileEntitlementsClient(t, srv)
 	resetCmdFlags(t, accessProfilesRequestableEntitlementsRemoveCmd)
 	t.Setenv("C1I_URL", "https://example.invalid")
-	origDryRun := viper.GetBool("dry_run")
+	clearViperOverrides(t, "dry_run")
 	viper.Set("dry_run", false)
-	t.Cleanup(func() { viper.Set("dry_run", origDryRun) })
 	if err := accessProfilesRequestableEntitlementsRemoveCmd.Flags().Set("app-id", "app-1"); err != nil {
 		t.Fatal(err)
 	}

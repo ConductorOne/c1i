@@ -67,9 +67,8 @@ func TestAppsMutationPreviewRefusals(t *testing.T) {
 			withDryRun(t)
 			t.Setenv("C1I_URL", tc.url)
 			if tc.url == "" {
-				orig := viper.GetString("url")
+				clearViperOverrides(t, "url")
 				viper.Set("url", "")
-				t.Cleanup(func() { viper.Set("url", orig) })
 			}
 			r := runMutationCLI(t, nil, 0, nil, append(tc.args, "--error-format", "json")...)
 			if r.exit != exitUsage || r.stdout != "" {

@@ -2,7 +2,6 @@ package cmd
 
 import (
 	"bytes"
-	"context"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -169,7 +168,6 @@ func runCLI(t *testing.T, stub func(), out io.Writer, args ...string) mutResult 
 	for _, c := range []*cobra.Command{rootCmd, leaf} {
 		c.SetOut(out)
 		c.SetErr(&stderr)
-		c.SetContext(context.Background())
 	}
 	t.Cleanup(func() {
 		for _, c := range []*cobra.Command{rootCmd, leaf} {
@@ -178,7 +176,7 @@ func runCLI(t *testing.T, stub func(), out io.Writer, args ...string) mutResult 
 		}
 	})
 	rootCmd.SetArgs(args)
-	ran, err := rootCmd.ExecuteContextC(context.Background())
+	ran, err := executeRootC()
 	if err != nil {
 		format, _ := rootCmd.PersistentFlags().GetString("error-format")
 		writeError(&stderr, err, format, ran)

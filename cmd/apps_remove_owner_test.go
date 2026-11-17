@@ -35,9 +35,8 @@ func TestAppsRemoveOwnerDryRunPreviewsRequestWithoutSending(t *testing.T) {
 	resetCmdFlags(t, appsRemoveOwnerCmd)
 	t.Setenv("C1I_URL", "https://example.invalid")
 
-	orig := viper.GetBool("dry_run")
+	clearViperOverrides(t, "dry_run")
 	viper.Set("dry_run", true)
-	t.Cleanup(func() { viper.Set("dry_run", orig) })
 
 	_ = appsRemoveOwnerCmd.Flags().Set("user-id", "user1")
 

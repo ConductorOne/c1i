@@ -158,7 +158,7 @@ func runUpgrade(t *testing.T, args ...string) (string, error) {
 	t.Cleanup(func() { rootCmd.SetOut(nil); rootCmd.SetErr(nil); rootCmd.SetIn(nil) })
 	upgradeCmd.SetContext(t.Context()) // cobra keeps a subcommand's first context
 	rootCmd.SetArgs(append([]string{"upgrade"}, args...))
-	err := rootCmd.ExecuteContext(t.Context())
+	err := executeRoot()
 	return out.String(), err
 }
 
@@ -583,7 +583,7 @@ func TestUpgradeChannelCompletesChannels(t *testing.T) {
 		}
 	})
 	rootCmd.SetArgs([]string{cobra.ShellCompRequestCmd, "upgrade", "--channel", ""})
-	if err := rootCmd.ExecuteContext(t.Context()); err != nil {
+	if err := executeRoot(); err != nil {
 		t.Fatal(err)
 	}
 	want := "stable\nlatest\npreview\n:4\n" // 4 = ShellCompDirectiveNoFileComp
@@ -602,16 +602,14 @@ type upgradePreviewOut struct {
 // preview document.
 func runUpgradeDryRun(t *testing.T, args ...string) (upgradePreviewOut, string, string) {
 	t.Helper()
-	withDryRun(t) // a sibling test can leave viper's dry_run pinned off
 	resetCmds(t, upgradeCmd)
 	resetCmdFlags(t, rootCmd)
 	var stdout, stderr bytes.Buffer
 	rootCmd.SetOut(&stdout)
 	rootCmd.SetErr(&stderr)
 	t.Cleanup(func() { rootCmd.SetOut(nil); rootCmd.SetErr(nil) })
-	upgradeCmd.SetContext(t.Context())
 	rootCmd.SetArgs(append([]string{"upgrade", "--dry-run"}, args...))
-	if err := rootCmd.ExecuteContext(t.Context()); err != nil {
+	if err := executeRoot(); err != nil {
 		t.Fatalf("upgrade --dry-run: %v", err)
 	}
 	var got upgradePreviewOut
@@ -735,7 +733,7 @@ func TestUpgradeRefusesFieldsOutsideCheck(t *testing.T) {
 		t.Cleanup(func() { rootCmd.SetOut(nil); rootCmd.SetErr(nil) })
 		upgradeCmd.SetContext(t.Context())
 		rootCmd.SetArgs(append([]string{"upgrade"}, args...))
-		err := rootCmd.ExecuteContext(t.Context())
+		err := executeRoot()
 		if err == nil || exitCode(err) != exitUsage {
 			t.Errorf("upgrade %v: error %v (exit %d), want a usage error", args, err, exitCode(err))
 		}
@@ -751,9 +749,8 @@ func runUpgradeRaw(t *testing.T, args ...string) (stdout, stderr string, err err
 	rootCmd.SetOut(&o)
 	rootCmd.SetErr(&e)
 	t.Cleanup(func() { rootCmd.SetOut(nil); rootCmd.SetErr(nil) })
-	upgradeCmd.SetContext(t.Context())
 	rootCmd.SetArgs(append([]string{"upgrade"}, args...))
-	err = rootCmd.ExecuteContext(t.Context())
+	err = executeRoot()
 	return o.String(), e.String(), err
 }
 
@@ -784,8 +781,8 @@ func TestUpgradeCheckWinsOverDryRun(t *testing.T) {
 			if err := json.Unmarshal([]byte(out), &rep); err != nil || rep["update_available"] != true {
 				t.Errorf("stdout = %q (%v), want the --check report", out, err)
 			}
+			clearViperOverrides(t, "fields")
 			viper.Set("fields", "current") // as --fields / C1I_FIELDS resolve
-			t.Cleanup(func() { viper.Set("fields", "") })
 			out, _, err = runUpgradeRaw(t, args...)
 			if err != nil || strings.TrimSpace(out) != "{\n  \"current\": \"v0.5.0\"\n}" {
 				t.Errorf("--fields not honoured: %q (%v)", out, err)

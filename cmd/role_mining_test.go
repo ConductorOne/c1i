@@ -44,9 +44,8 @@ func TestRoleMiningMutationsDryRun(t *testing.T) {
 	for _, tt := range cases {
 		t.Run(tt.name, func(t *testing.T) {
 			resetCmdFlags(t, tt.cmd)
-			originalDryRun := viper.GetBool("dry_run")
+			clearViperOverrides(t, "dry_run")
 			viper.Set("dry_run", true)
-			t.Cleanup(func() { viper.Set("dry_run", originalDryRun) })
 			t.Setenv("C1I_URL", "https://example.invalid")
 			if tt.bodyFile != "" {
 				if err := tt.cmd.Flags().Set("body-file", tt.bodyFile); err != nil {

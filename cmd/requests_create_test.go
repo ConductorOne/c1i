@@ -131,9 +131,8 @@ func TestRequestsCreateGrantDefaultsUserIDToSelf(t *testing.T) {
 	stubNewGrantClient(t, srv)
 	t.Setenv("C1I_URL", "https://example.invalid")
 
-	origDryRun := viper.GetBool("dry_run")
+	clearViperOverrides(t, "dry_run")
 	viper.Set("dry_run", false)
-	t.Cleanup(func() { viper.Set("dry_run", origDryRun) })
 
 	_ = requestsCreateGrantCmd.Flags().Set("app-id", "app1")
 	_ = requestsCreateGrantCmd.Flags().Set("entitlement-id", "ent1")
@@ -187,9 +186,8 @@ func TestRequestsCreateGrantDurationConvertsGoForm(t *testing.T) {
 			resetCmdFlags(t, requestsCreateGrantCmd)
 			stubNewGrantClient(t, srv)
 			t.Setenv("C1I_URL", "https://example.invalid")
-			origDryRun := viper.GetBool("dry_run")
+			clearViperOverrides(t, "dry_run")
 			viper.Set("dry_run", false)
-			t.Cleanup(func() { viper.Set("dry_run", origDryRun) })
 
 			_ = requestsCreateGrantCmd.Flags().Set("app-id", "app1")
 			_ = requestsCreateGrantCmd.Flags().Set("entitlement-id", "ent1")
@@ -232,9 +230,8 @@ func TestRequestsCreateGrantDryRunPreviewsZeroDuration(t *testing.T) {
 	resetCmdFlags(t, requestsCreateGrantCmd)
 	stubNewGrantClient(t, srv)
 	t.Setenv("C1I_URL", "https://example.invalid")
-	origDryRun := viper.GetBool("dry_run")
+	clearViperOverrides(t, "dry_run")
 	viper.Set("dry_run", true)
-	t.Cleanup(func() { viper.Set("dry_run", origDryRun) })
 
 	_ = requestsCreateGrantCmd.Flags().Set("app-id", "app1")
 	_ = requestsCreateGrantCmd.Flags().Set("entitlement-id", "ent1")
@@ -285,9 +282,8 @@ func TestRequestsCreateGrantExplicitUserIDSkipsSelfResolution(t *testing.T) {
 	stubNewGrantClient(t, srv)
 	t.Setenv("C1I_URL", "https://example.invalid")
 
-	origDryRun := viper.GetBool("dry_run")
+	clearViperOverrides(t, "dry_run")
 	viper.Set("dry_run", false)
-	t.Cleanup(func() { viper.Set("dry_run", origDryRun) })
 
 	_ = requestsCreateGrantCmd.Flags().Set("app-id", "app1")
 	_ = requestsCreateGrantCmd.Flags().Set("entitlement-id", "ent1")
@@ -342,9 +338,8 @@ func TestRequestsCreateGrantDryRunPreviewsResolvedSelf(t *testing.T) {
 	stubNewGrantClient(t, srv)
 	t.Setenv("C1I_URL", "https://example.invalid")
 
-	origDryRun := viper.GetBool("dry_run")
+	clearViperOverrides(t, "dry_run")
 	viper.Set("dry_run", true)
-	t.Cleanup(func() { viper.Set("dry_run", origDryRun) })
 
 	_ = requestsCreateGrantCmd.Flags().Set("app-id", "app1")
 	_ = requestsCreateGrantCmd.Flags().Set("entitlement-id", "ent1")
@@ -396,9 +391,8 @@ func TestRequestsCreateGrantDryRunExplicitUserIDSkipsSelfResolution(t *testing.T
 	stubNewGrantClient(t, srv)
 	t.Setenv("C1I_URL", "https://example.invalid")
 
-	origDryRun := viper.GetBool("dry_run")
+	clearViperOverrides(t, "dry_run")
 	viper.Set("dry_run", true)
-	t.Cleanup(func() { viper.Set("dry_run", origDryRun) })
 
 	_ = requestsCreateGrantCmd.Flags().Set("app-id", "app1")
 	_ = requestsCreateGrantCmd.Flags().Set("entitlement-id", "ent1")
@@ -437,9 +431,8 @@ func TestRequestsCreateGrantDryRunUnauthenticatedFailsLegibly(t *testing.T) {
 
 	t.Setenv("C1I_URL", "https://example.invalid")
 
-	origDryRun := viper.GetBool("dry_run")
+	clearViperOverrides(t, "dry_run")
 	viper.Set("dry_run", true)
-	t.Cleanup(func() { viper.Set("dry_run", origDryRun) })
 
 	_ = requestsCreateGrantCmd.Flags().Set("app-id", "app1")
 	_ = requestsCreateGrantCmd.Flags().Set("entitlement-id", "ent1")
@@ -496,9 +489,8 @@ func TestRequestsCreateGrantDryRunIntrospectServerFailureClassifies(t *testing.T
 	t.Cleanup(func() { newClient = origNewGrantClient })
 	t.Setenv("C1I_URL", "https://example.invalid")
 
-	origDryRun := viper.GetBool("dry_run")
+	clearViperOverrides(t, "dry_run")
 	viper.Set("dry_run", true)
-	t.Cleanup(func() { viper.Set("dry_run", origDryRun) })
 
 	_ = requestsCreateGrantCmd.Flags().Set("app-id", "app1")
 	_ = requestsCreateGrantCmd.Flags().Set("entitlement-id", "ent1")
@@ -540,9 +532,8 @@ func TestRequestsCreateGrantDryRunIntrospectNetworkFailureExitsGenerically(t *te
 	t.Cleanup(func() { newClient = origNewGrantClient })
 	t.Setenv("C1I_URL", "https://example.invalid")
 
-	origDryRun := viper.GetBool("dry_run")
+	clearViperOverrides(t, "dry_run")
 	viper.Set("dry_run", true)
-	t.Cleanup(func() { viper.Set("dry_run", origDryRun) })
 
 	_ = requestsCreateGrantCmd.Flags().Set("app-id", "app1")
 	_ = requestsCreateGrantCmd.Flags().Set("entitlement-id", "ent1")
@@ -659,9 +650,8 @@ func TestRequestsCreateRevokeDefaultsUserIDToSelf(t *testing.T) {
 	stubNewRevokeClient(t, srv)
 	t.Setenv("C1I_URL", "https://example.invalid")
 
-	origDryRun := viper.GetBool("dry_run")
+	clearViperOverrides(t, "dry_run")
 	viper.Set("dry_run", false)
-	t.Cleanup(func() { viper.Set("dry_run", origDryRun) })
 
 	_ = requestsCreateRevokeCmd.Flags().Set("app-id", "app1")
 	_ = requestsCreateRevokeCmd.Flags().Set("entitlement-id", "ent1")
@@ -716,9 +706,8 @@ func TestRequestsCreateRevokeExplicitUserIDSkipsSelfResolution(t *testing.T) {
 	stubNewRevokeClient(t, srv)
 	t.Setenv("C1I_URL", "https://example.invalid")
 
-	origDryRun := viper.GetBool("dry_run")
+	clearViperOverrides(t, "dry_run")
 	viper.Set("dry_run", false)
-	t.Cleanup(func() { viper.Set("dry_run", origDryRun) })
 
 	_ = requestsCreateRevokeCmd.Flags().Set("app-id", "app1")
 	_ = requestsCreateRevokeCmd.Flags().Set("entitlement-id", "ent1")
@@ -766,9 +755,8 @@ func TestRequestsCreateRevokeDryRunPreviewsResolvedSelf(t *testing.T) {
 	stubNewRevokeClient(t, srv)
 	t.Setenv("C1I_URL", "https://example.invalid")
 
-	origDryRun := viper.GetBool("dry_run")
+	clearViperOverrides(t, "dry_run")
 	viper.Set("dry_run", true)
-	t.Cleanup(func() { viper.Set("dry_run", origDryRun) })
 
 	_ = requestsCreateRevokeCmd.Flags().Set("app-id", "app1")
 	_ = requestsCreateRevokeCmd.Flags().Set("entitlement-id", "ent1")
@@ -818,9 +806,8 @@ func TestRequestsCreateRevokeDryRunExplicitUserIDSkipsSelfResolution(t *testing.
 	stubNewRevokeClient(t, srv)
 	t.Setenv("C1I_URL", "https://example.invalid")
 
-	origDryRun := viper.GetBool("dry_run")
+	clearViperOverrides(t, "dry_run")
 	viper.Set("dry_run", true)
-	t.Cleanup(func() { viper.Set("dry_run", origDryRun) })
 
 	_ = requestsCreateRevokeCmd.Flags().Set("app-id", "app1")
 	_ = requestsCreateRevokeCmd.Flags().Set("entitlement-id", "ent1")
@@ -855,9 +842,8 @@ func TestRequestsCreateRevokeDryRunUnauthenticatedFailsLegibly(t *testing.T) {
 
 	t.Setenv("C1I_URL", "https://example.invalid")
 
-	origDryRun := viper.GetBool("dry_run")
+	clearViperOverrides(t, "dry_run")
 	viper.Set("dry_run", true)
-	t.Cleanup(func() { viper.Set("dry_run", origDryRun) })
 
 	_ = requestsCreateRevokeCmd.Flags().Set("app-id", "app1")
 	_ = requestsCreateRevokeCmd.Flags().Set("entitlement-id", "ent1")
@@ -904,9 +890,8 @@ func TestRequestsCreateRevokeDryRunIntrospectServerFailureClassifies(t *testing.
 	t.Cleanup(func() { newClient = origNewRevokeClient })
 	t.Setenv("C1I_URL", "https://example.invalid")
 
-	origDryRun := viper.GetBool("dry_run")
+	clearViperOverrides(t, "dry_run")
 	viper.Set("dry_run", true)
-	t.Cleanup(func() { viper.Set("dry_run", origDryRun) })
 
 	_ = requestsCreateRevokeCmd.Flags().Set("app-id", "app1")
 	_ = requestsCreateRevokeCmd.Flags().Set("entitlement-id", "ent1")
@@ -941,9 +926,8 @@ func TestRequestsCreateRevokeDryRunIntrospectNetworkFailureExitsGenerically(t *t
 	t.Cleanup(func() { newClient = origNewRevokeClient })
 	t.Setenv("C1I_URL", "https://example.invalid")
 
-	origDryRun := viper.GetBool("dry_run")
+	clearViperOverrides(t, "dry_run")
 	viper.Set("dry_run", true)
-	t.Cleanup(func() { viper.Set("dry_run", origDryRun) })
 
 	_ = requestsCreateRevokeCmd.Flags().Set("app-id", "app1")
 	_ = requestsCreateRevokeCmd.Flags().Set("entitlement-id", "ent1")

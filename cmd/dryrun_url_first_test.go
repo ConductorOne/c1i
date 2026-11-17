@@ -29,9 +29,8 @@ func TestDryRunCommandsNeedURL(t *testing.T) {
 				t.Fatalf("with a URL: exit %d stdout %q stderr %q; want a preview", r.exit, r.stdout, r.stderr)
 			}
 			t.Setenv("C1I_URL", "")
-			orig := viper.GetString("url")
+			clearViperOverrides(t, "url")
 			viper.Set("url", "")
-			t.Cleanup(func() { viper.Set("url", orig) })
 			r := runMutationCLI(t, nil, 0, nil, argv...)
 			if r.exit != exitUsage || r.stdout != "" || !strings.Contains(r.stderr, "url is required") {
 				t.Errorf("exit %d stdout %q stderr %q; want exit 2, no preview, the URL error", r.exit, r.stdout, r.stderr)

@@ -181,8 +181,8 @@ func TestUserRefChecksRefuseUnknownUsers(t *testing.T) {
 		t.Helper()
 		t.Setenv("C1I_URL", mutTestURL)
 		// Another test's viper override would beat the --dry-run flag.
+		clearViperOverrides(t, "dry_run")
 		viper.Set("dry_run", dry)
-		t.Cleanup(func() { viper.Set("dry_run", nil) })
 		s := newMutServer(t, func(r *http.Request, _ int) mutReply {
 			if r.Method == http.MethodGet && strings.HasPrefix(r.URL.Path, "/api/v1/users/") {
 				if userStatus == http.StatusNotFound {

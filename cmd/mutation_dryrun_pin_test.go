@@ -164,7 +164,6 @@ func TestDryRunPreviewSetMatchesRuleB(t *testing.T) {
 			})
 			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 			defer cancel()
-			l.cmd.SetContext(ctx)
 			args := strings.Fields(strings.TrimPrefix(l.path, "c1i "))
 			for _, a := range stubArgs(l.cmd) {
 				if flag, body, ok := strings.Cut(a, "=@"); ok {
@@ -177,7 +176,7 @@ func TestDryRunPreviewSetMatchesRuleB(t *testing.T) {
 				args = append(args, a)
 			}
 			rootCmd.SetArgs(args)
-			_, err := rootCmd.ExecuteContextC(ctx)
+			_, err := executeRootCtx(ctx)
 			var doc map[string]json.RawMessage
 			preview := json.Unmarshal(out.Bytes(), &doc) == nil && string(doc["dryRun"]) == "true"
 			switch {

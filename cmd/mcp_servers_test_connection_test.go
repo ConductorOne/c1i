@@ -40,7 +40,7 @@ func runTestConnection(t *testing.T, status int, body string) (stdout, errJSON s
 	t.Cleanup(func() { rootCmd.SetOut(nil); rootCmd.SetErr(nil) })
 	mcpServersTestConnectionCmd.SetContext(t.Context())
 	rootCmd.SetArgs([]string{"mcp", "servers", "test-connection", "--server-url", "https://mcp.example.invalid"})
-	err = rootCmd.ExecuteContext(t.Context())
+	err = executeRoot()
 	if err != nil {
 		var eb bytes.Buffer
 		writeError(&eb, err, "json", mcpServersTestConnectionCmd)

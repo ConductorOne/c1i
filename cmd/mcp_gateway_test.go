@@ -364,9 +364,8 @@ func TestGatewayTransportFailureExitsUpstream(t *testing.T) {
 }
 
 func TestGatewayCallRejectsDryRun(t *testing.T) {
-	original := viper.GetBool("dry_run")
+	clearViperOverrides(t, "dry_run")
 	viper.Set("dry_run", true)
-	t.Cleanup(func() { viper.Set("dry_run", original) })
 
 	err := mcpGatewayCallCmd.RunE(&cobra.Command{}, []string{"some-tool"})
 	if err == nil {

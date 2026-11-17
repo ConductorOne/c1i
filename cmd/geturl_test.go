@@ -20,17 +20,34 @@ func runRootWithArgs(t *testing.T, args []string) error {
 	rootCmd.SetOut(&out)
 	rootCmd.SetErr(&out)
 	rootCmd.SetArgs(args)
-	freshContexts(rootCmd)
-	return rootCmd.ExecuteContext(context.Background())
+	return executeRoot()
 }
 
-// freshContexts gives every command in the tree a live context. Cobra keeps a
-// subcommand's first context, so one pinned by an earlier test's
-// ExecuteContext(t.Context()) is cancelled by the time a later test runs it.
-func freshContexts(c *cobra.Command) {
-	c.SetContext(context.Background())
+// executeRoot, executeRootC and executeRootCtx are the only sanctioned ways for a test to run
+// rootCmd (TestNoDirectRootExecuteInTests); each resets every command's
+// context first.
+func executeRoot() error {
+	_, err := executeRootC()
+	return err
+}
+
+func executeRootC() (*cobra.Command, error) {
+	return executeRootCtx(context.Background())
+}
+
+// executeRootCtx runs rootCmd with ctx on every command in the tree.
+func executeRootCtx(ctx context.Context) (*cobra.Command, error) {
+	setContexts(rootCmd, ctx)
+	return rootCmd.ExecuteContextC(ctx)
+}
+
+// setContexts gives every command in the tree ctx. Cobra keeps a subcommand's
+// first context, so one cancelled by an earlier test is still pinned on the
+// leaf a later test runs.
+func setContexts(c *cobra.Command, ctx context.Context) {
+	c.SetContext(ctx)
 	for _, sub := range c.Commands() {
-		freshContexts(sub)
+		setContexts(sub, ctx)
 	}
 }
 
@@ -81,9 +98,8 @@ func TestGetBaseURLBareTokenFromEnvNamesEnvVar(t *testing.T) {
 func TestGetBaseURLBareTokenFromConfigNamesConfigFile(t *testing.T) {
 	resetCmdFlags(t, rootCmd)
 	t.Setenv("C1I_URL", "")
-	orig := viper.GetString("url")
+	clearViperOverrides(t, "url")
 	viper.Set("url", "acme")
-	t.Cleanup(func() { viper.Set("url", orig) })
 
 	err := runRootWithArgs(t, []string{"users", "get", "someid"})
 	if err == nil {
@@ -104,9 +120,8 @@ func TestGetBaseURLBareTokenFromConfigNamesConfigFile(t *testing.T) {
 func TestGetBaseURLNoSourceIsUsageError(t *testing.T) {
 	resetCmdFlags(t, rootCmd)
 	t.Setenv("C1I_URL", "")
-	orig := viper.GetString("url")
+	clearViperOverrides(t, "url")
 	viper.Set("url", "")
-	t.Cleanup(func() { viper.Set("url", orig) })
 
 	err := runRootWithArgs(t, []string{"users", "get", "someid"})
 	if err == nil {
@@ -311,8 +326,8 @@ func TestGetBaseURLDropsDefaultHTTPSPort(t *testing.T) {
 		t.Run("config "+tc.raw, func(t *testing.T) {
 			resetCmdFlags(t, rootCmd)
 			t.Setenv("C1I_URL", "")
+			clearViperOverrides(t, "url")
 			viper.Set("url", tc.raw)
-			t.Cleanup(func() { viper.Set("url", nil) })
 			if got, err := GetBaseURL(); err != nil || got != tc.want {
 				t.Errorf("GetBaseURL() = %q, %v; want %q", got, err, tc.want)
 			}

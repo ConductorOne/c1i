@@ -103,8 +103,8 @@ func TestGetCommandsFailOnOutputWriteError(t *testing.T) {
 				resetCmdFlags(t, c.cmd)
 				stubGetClient(t, srv)
 				t.Setenv("C1I_URL", "https://example.invalid")
+				clearViperOverrides(t, "fields")
 				viper.Set("fields", fields)
-				t.Cleanup(func() { viper.Set("fields", "") })
 				for name, val := range c.flags {
 					if err := c.cmd.Flags().Set(name, val); err != nil {
 						t.Fatalf("set --%s: %v", name, err)
@@ -189,7 +189,7 @@ func TestTextOutputFailsOnOutputWriteError(t *testing.T) {
 			leaf.SetContext(context.Background())
 			t.Cleanup(func() { leaf.SetOut(nil) })
 			rootCmd.SetArgs(tc.args)
-			err := rootCmd.ExecuteContext(context.Background())
+			err := executeRoot()
 			switch {
 			case tc.summary != "":
 				if err == nil || exitCode(err) != exitError || !strings.HasPrefix(err.Error(), tc.summary) {
@@ -220,7 +220,7 @@ func runUpgradeToDeadStdout(t *testing.T, args ...string) error {
 	t.Cleanup(func() { rootCmd.SetOut(nil); rootCmd.SetErr(nil); upgradeCmd.SetOut(nil) })
 	upgradeCmd.SetContext(context.Background())
 	rootCmd.SetArgs(append([]string{"upgrade"}, args...))
-	return rootCmd.ExecuteContext(context.Background())
+	return executeRoot()
 }
 
 // `upgrade --yes` is scriptable, so its result lines must not exit 0 unseen.
@@ -285,7 +285,7 @@ func TestMcpToolsApproveOutputFailureKeepsSummary(t *testing.T) {
 	mcpToolsApproveCmd.SetContext(context.Background())
 	t.Cleanup(func() { rootCmd.SetOut(nil); rootCmd.SetErr(nil); mcpToolsApproveCmd.SetOut(nil) })
 	rootCmd.SetArgs([]string{"mcp", "tools", "approve", "tool-a", "tool-b", "tool-c", "--app-id", "app-x", "--connector-id", "conn-y"})
-	err := rootCmd.ExecuteContext(context.Background())
+	err := executeRoot()
 	if err == nil {
 		t.Fatal("approve returned nil although stdout failed")
 	}

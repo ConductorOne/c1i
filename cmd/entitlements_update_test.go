@@ -22,9 +22,8 @@ func runEntitlementsUpdate(t *testing.T, srv *httptest.Server, dryRun bool, id s
 	t.Helper()
 	resetCmdFlags(t, entitlementsUpdateCmd)
 	stubNewClient(t, srv)
-	orig := viper.GetBool("dry_run")
+	clearViperOverrides(t, "dry_run")
 	viper.Set("dry_run", dryRun)
-	t.Cleanup(func() { viper.Set("dry_run", orig) })
 	t.Setenv("C1I_URL", "https://example.invalid")
 	for k, v := range flags {
 		if err := entitlementsUpdateCmd.Flags().Set(k, v); err != nil {
@@ -224,9 +223,8 @@ func TestEntitlementsUpdatePrintsUnprojectedResponse(t *testing.T) {
 	var path string
 	var body map[string]any
 	srv := captureServer(t, &path, &body)
-	orig := viper.GetString("fields")
+	clearViperOverrides(t, "fields")
 	viper.Set("fields", "nomatch")
-	t.Cleanup(func() { viper.Set("fields", orig) })
 	out, err := runEntitlementsUpdate(t, srv, false, "ent-1", withAppID(map[string]string{"description": "d"}))
 	if err != nil {
 		t.Fatalf("RunE: %v", err)
