@@ -12,6 +12,7 @@ import (
 
 	"github.com/ConductorOne/c1i/internal/client"
 	"github.com/ConductorOne/c1i/internal/redact"
+	"github.com/ConductorOne/c1i/internal/timing"
 	"github.com/ConductorOne/c1i/internal/tokensource"
 	"github.com/ConductorOne/c1i/internal/transport"
 )
@@ -89,6 +90,9 @@ func StartDeviceFlow(ctx context.Context, baseURL string, opts ...transport.Opti
 	return &code, nil
 }
 
+// pollWait sleeps one poll interval; tests replace it to record intervals.
+var pollWait = timing.Sleep
+
 // PollForToken polls the token endpoint until the user approves or the code
 // expires, and returns the approved access token. Each poll goes through the
 // shared transport (timeout, user-agent, debug tracing, path/redirect guards)
@@ -114,13 +118,11 @@ func PollForToken(ctx context.Context, baseURL string, code *DeviceCode, opts ..
 	deadline := time.Now().Add(time.Duration(code.ExpiresIn) * time.Second)
 
 	for {
-		select {
-		case <-time.After(time.Duration(interval) * time.Second):
-			if time.Now().After(deadline) {
-				return "", fmt.Errorf("device code expired")
-			}
-		case <-ctx.Done():
-			return "", ctx.Err()
+		if err := pollWait(ctx, time.Duration(interval)*time.Second); err != nil {
+			return "", err
+		}
+		if time.Now().After(deadline) {
+			return "", fmt.Errorf("device code expired")
 		}
 
 		req, err := http.NewRequestWithContext(ctx, http.MethodPost, tokenURL, strings.NewReader(vals.Encode()))

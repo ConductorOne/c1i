@@ -130,6 +130,7 @@ func TestDryRunParityGuardSelfTest(t *testing.T) {
 func TestDryRunParityBadIDs(t *testing.T) {
 	t.Setenv("C1I_URL", mutTestURL)
 	checked := 0
+	var ln refusalListener
 	for _, row := range mutationTable {
 		leaf, _, err := rootCmd.Find(strings.Fields(row.cmd))
 		if err != nil || !isMutating(leaf) {
@@ -147,8 +148,8 @@ func TestDryRunParityBadIDs(t *testing.T) {
 						if dry {
 							args = append(args, "--dry-run")
 						}
-						s := newMutServer(t, tableRoute(row.body))
-						r := runMutationCLI(t, s.srv, 0, nil, args...)
+						srv, requests := ln.next(t, tableRoute(row.body))
+						r := runMutationCLI(t, srv, 0, nil, args...)
 						if r.exit != exitUsage {
 							t.Fatalf("args %v: exit %d (%v), want %d", args, r.exit, r.err, exitUsage)
 						}
@@ -162,7 +163,7 @@ func TestDryRunParityBadIDs(t *testing.T) {
 						if !strings.Contains(r.stderr, want) {
 							t.Errorf("stderr %q does not name %s", r.stderr, want)
 						}
-						if got := s.requests(); len(got) != 0 {
+						if got := requests(); len(got) != 0 {
 							t.Errorf("args %v: requests sent: %v", args, got)
 						}
 					})

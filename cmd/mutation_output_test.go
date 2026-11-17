@@ -12,6 +12,7 @@ import (
 	"runtime"
 	"sort"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/spf13/cobra"
@@ -85,6 +86,9 @@ type srcIndex struct {
 	byLine   map[string]map[int][]ast.Node
 	fileOf   map[ast.Node]string
 	mutating map[string]bool // mutating selector names (mutatingMethods)
+
+	stdoutOnce sync.Once
+	stdoutSet  map[string]bool
 }
 
 func loadSrcIndex(t *testing.T, extra map[string]string) *srcIndex {
@@ -578,6 +582,11 @@ func writerHolder(e ast.Expr) string {
 // stdoutFields are the fields assigned a stdout writer anywhere in cmd
 // outside the helper; a method can write through one set elsewhere.
 func (ix *srcIndex) stdoutFields() map[string]bool {
+	ix.stdoutOnce.Do(func() { ix.stdoutSet = ix.computeStdoutFields() })
+	return ix.stdoutSet
+}
+
+func (ix *srcIndex) computeStdoutFields() map[string]bool {
 	out := map[string]bool{}
 	for path, f := range ix.files {
 		if !strings.HasPrefix(path, "cmd/") || path == "cmd/mutation.go" {

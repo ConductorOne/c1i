@@ -113,9 +113,17 @@ func (r mutResult) errorObject(t *testing.T) map[string]any {
 // the real one does, instead of a fixed count.
 const retriesFromConfig = -1
 
+// stubReporter is the part of testing.TB the client stub uses, so a test can
+// hand it a recording fake.
+type stubReporter interface {
+	Helper()
+	Error(args ...any)
+	Cleanup(func())
+}
+
 // stubMutationClient points newClient at srv for the test; srv nil fails the
 // test if a client is built.
-func stubMutationClient(t *testing.T, srv *httptest.Server, retries int) {
+func stubMutationClient(t stubReporter, srv *httptest.Server, retries int) {
 	t.Helper()
 	orig := newClient
 	newClient = func(_ *cobra.Command, _ string) (*client.Client, error) {

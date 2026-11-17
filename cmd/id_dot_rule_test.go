@@ -46,6 +46,7 @@ func idPositionalIndexes(use string) []int {
 func TestEveryIDArgumentRefusesDotBeforeAnyRequest(t *testing.T) {
 	t.Setenv("C1I_URL", mutTestURL)
 	checked := 0
+	var ln refusalListener
 	for _, c := range blankCheckCommands() {
 		targets := mutatingIDArgs(c)
 		for _, tg := range targets {
@@ -75,8 +76,8 @@ func TestEveryIDArgumentRefusesDotBeforeAnyRequest(t *testing.T) {
 						if dry {
 							args = append(args, "--dry-run")
 						}
-						srv := newMutServer(t, fixedReply(200, "{}"))
-						res := runMutationCLI(t, srv.srv, 0, nil, args...)
+						srv, requests := ln.next(t, fixedReply(200, "{}"))
+						res := runMutationCLI(t, srv, 0, nil, args...)
 						if res.exit != exitUsage {
 							t.Fatalf("args %v: exit = %d (err %v), want %d", args, res.exit, res.err, exitUsage)
 						}
@@ -85,7 +86,7 @@ func TestEveryIDArgumentRefusesDotBeforeAnyRequest(t *testing.T) {
 						if res.err == nil || !strings.Contains(res.err.Error(), "is not an id") {
 							t.Errorf("args %v: err = %v, want a dot-segment id refusal", args, res.err)
 						}
-						if got := srv.requests(); len(got) != 0 {
+						if got := requests(); len(got) != 0 {
 							t.Errorf("args %v: requests sent: %v", args, got)
 						}
 					})

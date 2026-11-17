@@ -1,7 +1,6 @@
 package transport
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -15,6 +14,7 @@ import (
 	"time"
 
 	"github.com/ConductorOne/c1i/internal/redact"
+	"github.com/ConductorOne/c1i/internal/timing"
 )
 
 const (
@@ -44,19 +44,7 @@ const (
 // sleepFn and jitterFn are indirected so tests can make backoff deterministic
 // and instant. Production uses a context-aware sleep and full jitter.
 var (
-	sleepFn = func(ctx context.Context, d time.Duration) error {
-		if d <= 0 {
-			return ctx.Err()
-		}
-		t := time.NewTimer(d)
-		defer t.Stop()
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case <-t.C:
-			return nil
-		}
-	}
+	sleepFn = timing.Sleep
 	// jitterFn spreads retries across [d/2, d] ("full jitter", lower half
 	// clamped) so many clients retrying together don't thundering-herd.
 	jitterFn = func(d time.Duration) time.Duration {

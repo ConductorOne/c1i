@@ -85,6 +85,7 @@ func blankArgs(t *testing.T, c *cobra.Command, blankFlag, value string) []string
 func TestBlankStringFlagsExitUsage(t *testing.T) {
 	t.Setenv("C1I_URL", mutTestURL)
 	checked := 0
+	var ln refusalListener
 	for _, c := range blankCheckCommands() {
 		visitStringFlagsWithGlobals(c, func(f *pflag.Flag) {
 			values := blankValues
@@ -95,15 +96,15 @@ func TestBlankStringFlagsExitUsage(t *testing.T) {
 				checked++
 				name := fmt.Sprintf("%s --%s %q", c.CommandPath(), f.Name, v)
 				t.Run(name, func(t *testing.T) {
-					srv := newMutServer(t, fixedReply(200, "{}"))
-					res := runMutationCLI(t, srv.srv, 0, nil, blankArgs(t, c, f.Name, v)...)
+					srv, requests := ln.next(t, fixedReply(200, "{}"))
+					res := runMutationCLI(t, srv, 0, nil, blankArgs(t, c, f.Name, v)...)
 					if res.exit != exitUsage {
 						t.Fatalf("exit = %d (err %v), want %d", res.exit, res.err, exitUsage)
 					}
 					if res.err == nil || !strings.Contains(res.err.Error(), "--"+f.Name) || !strings.Contains(res.err.Error(), "requires a non-empty value") {
 						t.Errorf("err = %v, want the blank-value error for --%s", res.err, f.Name)
 					}
-					if got := srv.requests(); len(got) != 0 {
+					if got := requests(); len(got) != 0 {
 						t.Errorf("requests sent: %v", got)
 					}
 				})
@@ -259,6 +260,7 @@ func TestAllowedBlankFlagIsSent(t *testing.T) {
 func TestBlankPositionalsExitUsage(t *testing.T) {
 	t.Setenv("C1I_URL", mutTestURL)
 	checked := 0
+	var ln refusalListener
 	for _, c := range blankCheckCommands() {
 		if spec, _ := parseUsePositionals(c.Use); spec.required == 0 {
 			continue
@@ -266,12 +268,12 @@ func TestBlankPositionalsExitUsage(t *testing.T) {
 		for _, v := range blankValues {
 			checked++
 			t.Run(fmt.Sprintf("%s %q", c.CommandPath(), v), func(t *testing.T) {
-				srv := newMutServer(t, fixedReply(200, "{}"))
-				res := runMutationCLI(t, srv.srv, 0, nil, blankArgs(t, c, "", v)...)
+				srv, requests := ln.next(t, fixedReply(200, "{}"))
+				res := runMutationCLI(t, srv, 0, nil, blankArgs(t, c, "", v)...)
 				if res.exit != exitUsage || res.err == nil || !strings.Contains(res.err.Error(), "is blank") {
 					t.Fatalf("exit = %d, err = %v, want a blank-argument usage error", res.exit, res.err)
 				}
-				if got := srv.requests(); len(got) != 0 {
+				if got := requests(); len(got) != 0 {
 					t.Errorf("requests sent: %v", got)
 				}
 			})
@@ -317,13 +319,14 @@ func TestBlankPolicyIDFlagsExitUsageWithHint(t *testing.T) {
 		{[]string{"entitlements", "create", "--app-id", "a", "--display-name", "x"}, entitlementPolicyKinds, false},
 		{[]string{"entitlements", "update", "abc", "--app-id", "a"}, entitlementPolicyKinds, true},
 	}
+	var ln refusalListener
 	for _, tc := range cases {
 		for _, k := range tc.kinds {
 			for _, v := range blankValues {
 				t.Run(fmt.Sprintf("%s --%s %q", strings.Join(tc.args[:2], " "), k.flag, v), func(t *testing.T) {
-					srv := newMutServer(t, fixedReply(200, "{}"))
+					srv, requests := ln.next(t, fixedReply(200, "{}"))
 					args := append(append([]string(nil), tc.args...), "--"+k.flag, v)
-					res := runMutationCLI(t, srv.srv, 0, nil, args...)
+					res := runMutationCLI(t, srv, 0, nil, args...)
 					want := "flag --" + k.flag + " requires a non-empty value"
 					if res.exit != exitUsage || res.err == nil || !strings.Contains(res.err.Error(), want) {
 						t.Fatalf("exit = %d, err = %v, want exit 2 containing %q", res.exit, res.err, want)
@@ -331,7 +334,7 @@ func TestBlankPolicyIDFlagsExitUsageWithHint(t *testing.T) {
 					if got := strings.Contains(res.err.Error(), "--unbind-policy "+k.kind); got != tc.hint {
 						t.Errorf("unbind hint present = %v, want %v: %v", got, tc.hint, res.err)
 					}
-					if got := srv.requests(); len(got) != 0 {
+					if got := requests(); len(got) != 0 {
 						t.Errorf("requests sent: %v", got)
 					}
 				})
