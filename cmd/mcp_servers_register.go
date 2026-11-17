@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"strconv"
 	"time"
 
 	"github.com/ConductorOne/c1i/internal/client"
@@ -102,8 +101,12 @@ requires --app-id. Approve discovered tools afterward with
 		if owners, _ := repeatableStringFlag(cmd, "user-id"); len(owners) > 0 {
 			opts = append(opts, withPreRead(existingUsersCheck("user-id", owners)))
 		}
-		opts = append(opts, withWaitOnResponse(func(c *client.Client, resp []byte) waitOp[[]string] {
-			return serverListedWaitOp(c, appID, unwrapServerID(resp), waitTimeout)
+		opts = append(opts, withResponse(func(c *client.Client, resp []byte) writeOutcome {
+			id := unwrapServerID(resp)
+			if id == "" {
+				return writeOutcome{Err: &nonJSONResponseError{fmt.Errorf("the register response has no connectorId; the server was probably created, find it with: c1i mcp servers list --app-id %s", appID)}}
+			}
+			return writeOutcome{Wait: serverListedWaitOp(c, appID, id, waitTimeout)}
 		}, wait))
 		return sendMutation(cmd, mutation{Method: http.MethodPost, Path: path, Body: body, Unwrap: byID("connectorId")}, opts...)
 	},
@@ -123,47 +126,20 @@ func unwrapServerID(resp []byte) string {
 	return r.ConnectorID
 }
 
-// listServerIDs pages GET .../mcp_servers to completion: the new server can
+// listServerIDs reads every page of the app's server list: the new server can
 // sit past page one.
 func listServerIDs(ctx context.Context, c *client.Client, appID string) ([]string, error) {
-	route := "GET " + client.Path("/api/v1/apps/%s/mcp_servers", appID)
-	var all []string
-	pageToken := ""
-	guard := newPaginationCursorGuard()
-	for {
-		if guard.tokenAlreadyUsed(pageToken) {
-			return nil, guard.stuckError(route)
-		}
-		params := map[string]string{"page_size": strconv.Itoa(100)}
-		if pageToken != "" {
-			params["page_token"] = pageToken
-		}
-		data, err := c.Get(ctx, client.Path("/api/v1/apps/%s/mcp_servers", appID), params)
-		if err != nil {
-			return nil, fmt.Errorf("API error: %w", err)
-		}
-		var resp struct {
-			List          []serverView `json:"list"`
-			NextPageToken string       `json:"nextPageToken"`
-		}
-		if err := json.Unmarshal(data, &resp); err != nil {
-			return nil, fmt.Errorf("failed to parse response: %w", err)
-		}
-		ids := make([]string, len(resp.List))
-		for i, it := range resp.List {
-			ids[i] = it.ConnectorID
-		}
-		keep, err := guard.checkPage(nil, route, ids)
-		if err != nil {
-			return nil, err
-		}
-		all = append(all, keepRows(ids, keep)...)
-		if resp.NextPageToken == "" {
-			return all, nil
-		}
-		guard.markTokenUsed(pageToken)
-		pageToken = resp.NextPageToken
+	s := serverListSpec(ctx, appID)
+	s.PageSize = defaultPageSize
+	items, err := collectPages(c, s)
+	if err != nil {
+		return nil, err
 	}
+	ids := make([]string, len(items))
+	for i, it := range items {
+		ids[i] = it.ConnectorID
+	}
+	return ids, nil
 }
 
 func serverListedWaitOp(c *client.Client, appID, connectorID string, timeout time.Duration) waitOp[[]string] {

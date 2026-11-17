@@ -61,12 +61,15 @@ polls).`,
 			return err
 		}
 		path := client.Path("/api/v1/apps/%s/entitlements/%s/add-manual-user", appID, entitlementID)
-		rejected := map[string]string{}
 		return sendMutation(cmd, mutation{Method: http.MethodPost, Path: path, Body: map[string]any{"userIds": userIDs}},
 			withPreRead(existingUsersCheck("user-id", userIDs)),
-			withAfterWrite(func(data []byte) error { return rejectedUsersError(data, rejected) }),
-			withWait(func(c *client.Client) waitOp[[]string] {
-				return grantHoldersWaitOp(c, appID, entitlementID, withoutKeys(userIDs, rejected), waitTimeout)
+			withResponse(func(c *client.Client, resp []byte) writeOutcome {
+				rejected := map[string]string{}
+				err := rejectedUsersError(resp, rejected)
+				return writeOutcome{
+					Wait: grantHoldersWaitOp(c, appID, entitlementID, withoutKeys(userIDs, rejected), waitTimeout),
+					Err:  err,
+				}
 			}, wait))
 	},
 }

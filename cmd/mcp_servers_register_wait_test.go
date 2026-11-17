@@ -72,6 +72,17 @@ func TestMCPServersRegisterWait(t *testing.T) {
 			t.Errorf("error object = %v", obj)
 		}
 	})
+	t.Run("response without connectorId exits 6, applied, and polls nothing", func(t *testing.T) {
+		s := newMutServer(t, fixedReply(200, `{"mcpServer":{"appId":"app-1"}}`))
+		t.Setenv("C1I_URL", mutTestURL)
+		r := runMutationCLI(t, s.srv, 0, nil, registerWaitArgs("--wait", "--error-format", "json")...)
+		if r.exit != exitServer || r.errorObject(t)["applied"] != true {
+			t.Errorf("exit %d stderr %s, want 6 and applied:true", r.exit, r.stderr)
+		}
+		if got := s.requests(); len(got) != 1 {
+			t.Errorf("requests = %+v, want only the POST", got)
+		}
+	})
 	t.Run("dry-run sends and polls nothing", func(t *testing.T) {
 		withDryRun(t)
 		s := newMutServer(t, fixedReply(200, created))

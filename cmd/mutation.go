@@ -94,8 +94,7 @@ const (
 
 type mutationOpts struct {
 	preReads    []preRead
-	afterWrite  func(data []byte) error
-	wait        func(c *client.Client, resp []byte) waitOp[[]string]
+	respond     func(c *client.Client, resp []byte) writeOutcome
 	waitEnabled bool
 	secret      secretKind
 	batchVerb   string
@@ -108,22 +107,25 @@ func withPreRead(p preRead) mutationOpt {
 	return func(o *mutationOpts) { o.preReads = append(o.preReads, p) }
 }
 
-// withAfterWrite inspects a successful write's response once it is printed; an
-// error is a partial failure (applied), returned after --wait has run.
-func withAfterWrite(f func(data []byte) error) mutationOpt {
-	return func(o *mutationOpts) { o.afterWrite = f }
+// writeOutcome is what a command makes of a successful write's response.
+type writeOutcome struct {
+	// Wait is polled when --wait is on; a zero Poll means nothing to wait for.
+	Wait waitOp[[]string]
+	// Err is a partial failure of a write that was applied. It is reported
+	// after the wait, whether or not --wait was given.
+	Err error
+}
+
+// withResponse reads the write's raw response once it is printed. waitEnabled
+// says whether Wait is polled.
+func withResponse(f func(c *client.Client, resp []byte) writeOutcome, waitEnabled bool) mutationOpt {
+	return func(o *mutationOpts) { o.respond, o.waitEnabled = f, waitEnabled }
 }
 
 // withWait polls build's op after a successful write when enabled; an op with
 // no Poll is skipped.
 func withWait(build func(c *client.Client) waitOp[[]string], enabled bool) mutationOpt {
-	return withWaitOnResponse(func(c *client.Client, _ []byte) waitOp[[]string] { return build(c) }, enabled)
-}
-
-// withWaitOnResponse is withWait for a wait that needs the write's raw
-// response, e.g. the id a create just minted.
-func withWaitOnResponse(build func(c *client.Client, resp []byte) waitOp[[]string], enabled bool) mutationOpt {
-	return func(o *mutationOpts) { o.wait, o.waitEnabled = build, enabled }
+	return withResponse(func(c *client.Client, _ []byte) writeOutcome { return writeOutcome{Wait: build(c)} }, enabled)
 }
 
 // secretBearing adds the R22 wording to a failed stdout write.
@@ -182,21 +184,18 @@ func sendMutation(cmd *cobra.Command, m mutation, opts ...mutationOpt) error {
 	if err := writeMutationResult(cmd, m, data, o.secret, false); err != nil {
 		return err
 	}
-	partial := error(nil)
-	if o.afterWrite != nil {
-		partial = o.afterWrite(data)
+	if o.respond == nil {
+		return nil
 	}
-	if o.waitEnabled && o.wait != nil {
-		// A builder that returns an op with no Poll has nothing left to wait for.
-		if op := o.wait(c, data); op.Poll != nil {
-			if _, err := runWait(cmd, op); err != nil {
-				err = fmt.Errorf("%s %s was applied; waiting for %s failed: %w", m.Method, redact.URL(m.Path), op.Subject, err)
-				return &mutationError{err: errors.Join(err, partial), applied: appliedTrue}
-			}
+	out := o.respond(c, data)
+	var waitErr error
+	if o.waitEnabled && out.Wait.Poll != nil {
+		if _, err := runWait(cmd, out.Wait); err != nil {
+			waitErr = fmt.Errorf("%s %s was applied; waiting for %s failed: %w", m.Method, redact.URL(m.Path), out.Wait.Subject, err)
 		}
 	}
-	if partial != nil {
-		return &mutationError{err: partial, applied: appliedTrue}
+	if err := errors.Join(waitErr, out.Err); err != nil {
+		return &mutationError{err: err, applied: appliedTrue}
 	}
 	return nil
 }
