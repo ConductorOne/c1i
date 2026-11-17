@@ -39,6 +39,9 @@ var accountsListCmd = &cobra.Command{
 			Fetch: postPage(cmd.Context(), "/api/v1/search/app_users", body),
 			Parse: parseList[appUserSearchItem],
 			ID:    func(it appUserSearchItem) string { return it.AppUser.ID },
+			// --unmapped-only filters client-side, so a fetched row is not
+			// necessarily written: don't tighten the page toward --limit.
+			FixedSize: unmappedOnly,
 			Rows: func(it appUserSearchItem) []any {
 				a := it.AppUser
 				if unmappedOnly && a.IdentityUserID != "" {
