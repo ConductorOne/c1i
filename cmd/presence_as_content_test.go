@@ -19,13 +19,9 @@ type presenceViolation struct {
 	flag string // literal flag name of a Changed call, "" if computed
 }
 
-// changedFlagAllowlist exempts a flag by name wherever it is read.
-var changedFlagAllowlist = map[string]string{
-	"page-token": "presence selects manual paging; a blank value is refused centrally (validateBlankFlags), so presence equals a non-blank token",
-}
-
 // changedAllowlist maps "file:decl" to why presence, not content, is the signal.
 var changedAllowlist = map[string]string{
+	"paginate.go:pageTokenGiven":                                       "presence of --page-token selects manual paging; a blank value is refused centrally (validateBlankFlags), so presence equals a real token",
 	"apps_create.go:buildAppCreateBody":                                "sends identityMatching only when passed; a blank value is refused centrally and the enum parser rejects the rest",
 	"apps_update.go:appUpdateSpec":                                     "update-field hook: presence of --app-user-mapper-file is mask membership",
 	"auth_login_roles.go:loginScopeFromFlags":                          "a bool: --choose-roles=false must differ from absent; a bool has no blank value",
@@ -167,10 +163,6 @@ func TestNoPresenceAsContent(t *testing.T) {
 				t.Errorf("%s:%d: strings.TrimSpace emptiness check; use hasVisibleRune or the central blank guards", v.key, v.line)
 			case "changed":
 				changedSeen++
-				if _, ok := changedFlagAllowlist[v.flag]; ok && v.flag != "" {
-					seen["flag "+v.flag] = true
-					continue
-				}
 				if _, ok := changedAllowlist[v.key]; ok {
 					seen[v.key] = true
 					continue
@@ -189,14 +181,6 @@ func TestNoPresenceAsContent(t *testing.T) {
 		}
 		if !seen[k] {
 			stale = append(stale, k)
-		}
-	}
-	for k, reason := range changedFlagAllowlist {
-		if reason == "" {
-			t.Errorf("changedFlagAllowlist[%q] has no reason", k)
-		}
-		if !seen["flag "+k] {
-			stale = append(stale, "flag "+k)
 		}
 	}
 	sort.Strings(stale)
