@@ -114,7 +114,8 @@ func withAfterWrite(f func(data []byte) error) mutationOpt {
 	return func(o *mutationOpts) { o.afterWrite = f }
 }
 
-// withWait polls build's op after a successful write when enabled.
+// withWait polls build's op after a successful write when enabled; an op with
+// no Poll is skipped.
 func withWait(build func(c *client.Client) waitOp[[]string], enabled bool) mutationOpt {
 	return func(o *mutationOpts) { o.wait, o.waitEnabled = build, enabled }
 }
@@ -175,22 +176,23 @@ func sendMutation(cmd *cobra.Command, m mutation, opts ...mutationOpt) error {
 	if err := writeMutationResult(cmd, m, data, o.secret, false); err != nil {
 		return err
 	}
-	var partial error
+	partial := error(nil)
 	if o.afterWrite != nil {
-		if err := o.afterWrite(data); err != nil {
-			partial = &mutationError{err: err, applied: appliedTrue}
-		}
+		partial = o.afterWrite(data)
 	}
 	if o.waitEnabled && o.wait != nil {
-		op := o.wait(c)
-		if _, err := runWait(cmd, op); err != nil {
-			return &mutationError{
-				err:     fmt.Errorf("%s %s was applied; waiting for %s failed: %w", m.Method, redact.URL(m.Path), op.Subject, err),
-				applied: appliedTrue,
+		// A builder that returns an op with no Poll has nothing left to wait for.
+		if op := o.wait(c); op.Poll != nil {
+			if _, err := runWait(cmd, op); err != nil {
+				err = fmt.Errorf("%s %s was applied; waiting for %s failed: %w", m.Method, redact.URL(m.Path), op.Subject, err)
+				return &mutationError{err: errors.Join(err, partial), applied: appliedTrue}
 			}
 		}
 	}
-	return partial
+	if partial != nil {
+		return &mutationError{err: partial, applied: appliedTrue}
+	}
+	return nil
 }
 
 // mutationStep is one request of a sequence. Build receives the ids earlier

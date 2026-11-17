@@ -172,3 +172,40 @@ func TestGrantsAddWaitSkipsRejectedUsers(t *testing.T) {
 		t.Errorf("wait did not complete for u1: %q", r.stderr)
 	}
 }
+
+// With every user rejected there is nothing to wait for: no grants poll and
+// no false "Grants appeared" line, and the exit is still 1.
+func TestGrantsAddWaitSkippedWhenAllRejected(t *testing.T) {
+	t.Setenv("C1I_URL", mutTestURL)
+	s := newMutServer(t, func(r *http.Request, n int) mutReply {
+		if strings.HasSuffix(r.URL.Path, "/add-manual-user") {
+			return mutReply{body: `{"failedUsersErrorMap":{"u1":"cannot add"},"bulkActionId":"b1"}`}
+		}
+		return grantsAddRoute(nil)(r, n)
+	})
+	r := runMutationCLI(t, s.srv, 0, nil, "grants", "add", "--app-id", "app-1", "--entitlement-id", "ent-1",
+		"--user-id", "u1", "--wait", "--wait-timeout", "5s")
+	if r.exit != 1 || r.err == nil || !strings.Contains(r.err.Error(), "u1: cannot add") {
+		t.Fatalf("exit = %d, err = %v; want exit 1 naming u1", r.exit, r.err)
+	}
+	if n := countPath(s, "/search/grants"); n != 0 {
+		t.Errorf("polled grants %d time(s), want none", n)
+	}
+	if strings.Contains(r.stderr, "Grants appeared") {
+		t.Errorf("false success line: %q", r.stderr)
+	}
+}
+
+// A wait failure does not hide the rejected users: the error names both.
+func TestGrantsAddWaitFailureStillNamesRejected(t *testing.T) {
+	orig := grantsWaitPollInterval
+	grantsWaitPollInterval = 5 * time.Millisecond
+	t.Cleanup(func() { grantsWaitPollInterval = orig })
+	t.Setenv("C1I_URL", mutTestURL)
+	s := newMutServer(t, withRejected(grantsAddRoute([]string{grantsPage()})))
+	r := runMutationCLI(t, s.srv, 0, nil, "grants", "add", "--app-id", "app-1", "--entitlement-id", "ent-1",
+		"--user-id", "u1", "--user-id", "u2", "--wait", "--wait-timeout", "50ms")
+	if r.exit != 1 || r.err == nil || !strings.Contains(r.err.Error(), "timed out") || !strings.Contains(r.err.Error(), "u2: cannot add") {
+		t.Fatalf("exit = %d, err = %v; want exit 1 naming the timeout and u2", r.exit, r.err)
+	}
+}

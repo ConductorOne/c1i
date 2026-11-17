@@ -22,11 +22,12 @@ request for all ids. A repeated --user-id is sent once; adding a user who
 already holds the entitlement exits 0.
 
 This is a direct grant: it skips the entitlement's grant policy, so there is no
-approval step and no access request task. For a grant that goes through policy and approval use
-"c1i requests create grant".
+approval step and no access request task. For a grant that goes through policy
+and approval use "c1i requests create grant".
 
 The server accepts an unknown user id with 200 and does nothing, so the ids are
-looked up first. An unknown entitlement or app exits 4.
+looked up first. An unknown entitlement or app exits 4 on a real run;
+--dry-run does not look them up.
 
 The grant is applied asynchronously: it was visible to "c1i grants list" within
 seconds in testing, but reads can lag. Pass --wait to block until every user
@@ -35,7 +36,7 @@ shows as a grant on the entitlement, or --wait-timeout elapses (a timeout exits
 progress lines go to stderr. If its failedUsersErrorMap (per the OpenAPI schema,
 users the server could not add) is not empty, the response is still printed,
 each rejected user and its message is reported, and the command exits 1; --wait
-then waits only for the users that were not rejected.
+then waits only for the users that were not rejected (none left: no wait).
 
 There is no "grants remove". The only direct removal, DELETE
 .../remove-membership, takes one app user id and rejects a manual entitlement
@@ -65,7 +66,7 @@ polls).`,
 			withPreRead(existingUsersCheck("user-id", userIDs)),
 			withAfterWrite(func(data []byte) error { return rejectedUsersError(data, rejected) }),
 			withWait(func(c *client.Client) waitOp[[]string] {
-				return grantHoldersWaitOp(c, appID, entitlementID, untilPresent(withoutKeys(userIDs, rejected)), waitTimeout)
+				return grantHoldersWaitOp(c, appID, entitlementID, withoutKeys(userIDs, rejected), waitTimeout)
 			}, wait))
 	},
 }
@@ -93,9 +94,13 @@ func rejectedUsersError(data []byte, rejected map[string]string) error {
 	return fmt.Errorf("the server did not add %d user(s): %s", len(ids), strings.Join(parts, "; "))
 }
 
-// grantHoldersWaitOp polls an entitlement's grants until done accepts the C1
-// user ids that hold it.
-func grantHoldersWaitOp(c *client.Client, appID, entitlementID string, done func([]string) bool, timeout time.Duration) waitOp[[]string] {
+// grantHoldersWaitOp polls an entitlement's grants until every want id holds
+// it; an empty want returns an op with no Poll, which sendMutation skips.
+func grantHoldersWaitOp(c *client.Client, appID, entitlementID string, want []string, timeout time.Duration) waitOp[[]string] {
+	if len(want) == 0 {
+		return waitOp[[]string]{}
+	}
+	done := untilPresent(want)
 	q := grantsQuery{appID: appID, entitlementID: entitlementID}
 	return waitOp[[]string]{
 		Poll: func(ctx context.Context) ([]string, error) {
