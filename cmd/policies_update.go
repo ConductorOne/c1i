@@ -258,7 +258,7 @@ func buildUpdatePolicyPatch(cmd *cobra.Command, in policyUpdateInputs, resolveFa
 
 func init() {
 	policiesUpdateCmd.Flags().String("display-name", "", "New display name (omit to leave unchanged; "+displayNameRule+")")
-	policiesUpdateCmd.Flags().String("description", "", "New description")
+	policiesUpdateCmd.Flags().String("description", "", `New description; "" clears it`)
 	allowEmpty(policiesUpdateCmd, emptyIsSent, "description")
 	policiesUpdateCmd.Flags().String("policy-type", "", "New policy type: "+policyTypeFlag.usage()+" (rarely changed)")
 	policiesUpdateCmd.Flags().String("steps-file", "", "JSON array: replaces the baseline policySteps.steps content (file, or \"-\" for stdin)")

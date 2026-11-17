@@ -213,6 +213,34 @@ func TestBlankAllowedFlagsAreJustified(t *testing.T) {
 	}
 }
 
+// An emptyIsSent flag's help must say what "" does, so a reader need not
+// guess whether it clears or is refused.
+func TestEmptyIsSentFlagsSayWhatEmptyDoes(t *testing.T) {
+	n := 0
+	for _, c := range blankCheckCommands() {
+		visitStringFlagsWithGlobals(c, func(f *pflag.Flag) {
+			if r := f.Annotations[emptyAllowedAnnotation]; len(r) == 1 && r[0] == emptyIsSent {
+				n++
+				if !strings.Contains(f.Usage, `""`) {
+					t.Errorf("%s --%s: usage must say what \"\" does, got %q", c.CommandPath(), f.Name, f.Usage)
+				}
+				// The command's help must not claim more than the usage does.
+				if !strings.Contains(strings.ToLower(f.Usage), "clear") {
+					help := strings.ReplaceAll(c.Short+". "+c.Long+". "+c.Example, "\n", " ")
+					for _, sentence := range strings.Split(help, ". ") {
+						if strings.Contains(sentence, "--"+f.Name) && strings.Contains(strings.ToLower(sentence), "clear") {
+							t.Errorf("%s: help says %q, but --%s's usage does not say \"\" clears it", c.CommandPath(), strings.TrimSpace(sentence), f.Name)
+						}
+					}
+				}
+			}
+		})
+	}
+	if n == 0 {
+		t.Error("no emptyIsSent flag found; the tree walk has gone vacuous")
+	}
+}
+
 // An opted-out flag sends its empty value instead of being refused.
 func TestAllowedBlankFlagIsSent(t *testing.T) {
 	t.Setenv("C1I_URL", mutTestURL)

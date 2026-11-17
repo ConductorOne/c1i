@@ -19,17 +19,19 @@ The product is branded **C1.ai**. Rules:
 ## Build & Test
 
 Run the full check before pushing — CI enforces gofmt via golangci-lint, so
-`go build`/`go test` alone is not enough:
+`go build`/`go test` alone is not enough. Tools run at CI's pinned versions
+(`.github/workflows/ci.yaml`; `TestCIToolVersionsMatchClaudeMd` keeps them in
+step): whatever is on PATH drifts and once missed a gosec finding CI caught.
 
 ```sh
 go build ./...
 go vet ./...
 go test ./...
-golangci-lint run --timeout=3m ./...   # includes gofmt formatting; CI gates on this
+go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.15.0 run --timeout=3m ./...   # includes gofmt; CI gates on this
 go mod tidy && git diff --exit-code go.mod go.sum   # CI gates on this
-gosec -quiet ./...                     # CI gates on this
-govulncheck ./...                      # CI gates on this, per GOOS
-gitleaks detect --source . --no-banner # CI gates on this; scans history,
+go run github.com/securego/gosec/v2/cmd/gosec@v2.30.0 -quiet -nosec-require-rules -nosec-require-justification ./...   # CI gates on this
+GOBIN="$PWD/dev/bin" go install golang.org/x/vuln/cmd/govulncheck@v1.9.0   # once; run per GOOS, see Dependency scan
+go run github.com/zricethezav/gitleaks/v8@v8.30.1 detect --source . --no-banner   # CI gates on this; scans history,
                                        # so a fingerprint pins to the commit
 go test -count=1 -shuffle=on ./...     # CI gates on this; catches tests that
                                        # leak package-level command state
@@ -81,7 +83,8 @@ Dependabot is not enabled on this repo, so do its job by hand: run this before
 opening any PR, and act on what it reports.
 
 ```sh
-rc=0; for goos in linux darwin windows; do GOOS=$goos govulncheck -show verbose ./... || rc=$?; done; test $rc -eq 0
+# govulncheck: build it for the host once (Build & Test); `GOOS=x go run` would build a binary that cannot execute.
+rc=0; for goos in linux darwin windows; do GOOS=$goos dev/bin/govulncheck -show verbose ./... || rc=$?; done; test $rc -eq 0
 go list -m -u -f '{{if and (not .Indirect) (not .Main) .Update}}{{.Path}} {{.Version}} -> {{.Update.Version}}{{end}}' all
 ```
 

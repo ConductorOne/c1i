@@ -50,7 +50,8 @@ error.
 
 A blank --display-name (empty, whitespace or invisible-only) exits 2,
 nothing sent. Sent as is, the server accepts "" but restores the
-entitlement's original name instead of failing. --description "" clears it.
+entitlement's original name instead of failing. --description "" is sent,
+but the server keeps the existing description.
 
 Prints the updated entitlement as pretty JSON, unwrapped like "entitlements
 get": the id is .id. --fields is a usage error on a mutation.
@@ -134,7 +135,7 @@ func init() {
 	f := entitlementsUpdateCmd.Flags()
 	f.String("app-id", "", "Application ID the entitlement belongs to")
 	f.String("display-name", "", "New display name (omit to leave unchanged; "+displayNameRule+")")
-	f.String("description", "", "New description; an empty value clears it (omit to leave unchanged)")
+	f.String("description", "", `New description; "" is sent, but the server keeps the existing description (omit to leave unchanged)`)
 	allowEmpty(entitlementsUpdateCmd, emptyIsSent, "description")
 	registerPolicyIDFlags(entitlementsUpdateCmd, entitlementPolicyKinds, " (omit to leave unchanged)")
 	registerUnbindPolicyFlag(entitlementsUpdateCmd, entitlementPolicyKinds)

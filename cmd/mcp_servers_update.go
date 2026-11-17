@@ -85,10 +85,10 @@ Prints the updated server, unwrapped like "mcp servers get" (id: .connectorId).`
 func init() {
 	mcpServersUpdateCmd.Flags().String("app-id", "", "Application ID")
 	mcpServersUpdateCmd.Flags().String("display-name", "", "New display name (omit to leave unchanged; "+displayNameRule+")")
-	mcpServersUpdateCmd.Flags().String("description", "", "New description")
+	mcpServersUpdateCmd.Flags().String("description", "", `New description; "" is sent as an empty value`)
 	allowEmpty(mcpServersUpdateCmd, emptyIsSent, "description")
-	mcpServersUpdateCmd.Flags().String("data-sensitivity", "", "New data sensitivity: "+dataSensitivityFlag.usage())
-	mcpServersUpdateCmd.Flags().String("tool-prefix", "", "New tool-name prefix")
+	mcpServersUpdateCmd.Flags().String("data-sensitivity", "", "New data sensitivity: "+dataSensitivityFlag.usage()+`; "" is sent as an empty value`)
+	mcpServersUpdateCmd.Flags().String("tool-prefix", "", `New tool-name prefix; "" is sent as an empty value`)
 	allowEmpty(mcpServersUpdateCmd, emptyIsSent, "data-sensitivity", "tool-prefix")
 	mcpServersUpdateCmd.Flags().Bool("require-tool-approval", false, "Per-server override for tool auto-approval")
 	markRequired(mcpServersUpdateCmd, "app-id")

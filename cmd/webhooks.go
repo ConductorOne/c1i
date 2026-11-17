@@ -51,9 +51,9 @@ func webhookFieldFlags(cmd *cobra.Command, update bool) {
 	}
 	cmd.Flags().String("display-name", "", verb+" display name ("+keep+webhookDisplayNameRule+")")
 	cmd.Flags().String("destination-url", "", verb+" destination URL ("+keep+"https only, with a host; an IPv6 literal host is refused; else exit 2)")
-	descUsage := "Webhook description"
+	descUsage := `Webhook description; "" is sent as an empty value`
 	if update {
-		descUsage = "New description (omit to leave unchanged; an empty value clears it)"
+		descUsage = `New description (omit to leave unchanged; "" is sent as an empty value)`
 	}
 	cmd.Flags().String("description", "", descUsage)
 	allowEmpty(cmd, emptyIsSent, "description")

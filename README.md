@@ -915,6 +915,7 @@ prints `{}`. `apps delete` does not delete an app's entitlements, so remove
 them with this first.
 
 `entitlements update` builds the update mask from exactly the flags you pass.
+`--description ""` is sent, but the server keeps the existing description.
 Each policy id is checked before anything is sent: it must exist, not be
 deleted, and be of the slot's type: an unknown policy exits `4`, a deleted or
 wrong-type one `2`.
@@ -1790,7 +1791,7 @@ A blank `--display-name` exits `2` on create and update, as described under
 and 30 days`.
 
 `update` sends only the flags you pass and masks exactly those, and with no
-field flag it exits `2`; an empty `--description` clears it. Updating a
+field flag it exits `2`; an empty `--description` is sent as an empty value. Updating a
 soft-deleted webhook exits `0` and changes it, and it stays deleted. A webhook
 has no signing secret, so create returns nothing that can't be read again with
 `get`.

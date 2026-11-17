@@ -213,7 +213,7 @@ func TestWebhooksUsageErrorsSendNothing(t *testing.T) {
 	}
 }
 
-// Every changed flag is masked, an empty --description included (it clears).
+// Every changed flag is masked, an empty --description included.
 func TestWebhooksUpdateMaskFromChangedFlags(t *testing.T) {
 	withCatalogDryRun(t, false)
 	const id = "wh/1 ?#"
