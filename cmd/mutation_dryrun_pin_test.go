@@ -26,8 +26,8 @@ var dryRunPinSkips = []string{"c1i auth", "c1i docs", "c1i upgrade", "c1i mcp ga
 // value per <positional> and required flag) does not reach its preview. A
 // "--flag=@<json>" value becomes a temp file holding <json>.
 var dryRunStubs = map[string][]string{
-	"c1i access-profiles bundle-automation create":        {"x1", "--body-file=@{}"},
-	"c1i access-profiles bundle-automation set":           {"x1", "--body-file=@{}"},
+	"c1i access-profiles bundle-automation create":        {"x1", `--body-file=@{"enabled":true,"entitlements":{"entitlementRefs":[]}}`},
+	"c1i access-profiles bundle-automation set":           {"x1", `--body-file=@{"enabled":true,"entitlements":{"entitlementRefs":[]}}`},
 	"c1i access-profiles requestable-entitlements add":    {"x1", "--app-id=x1", "--entitlement-id=x1"},
 	"c1i access-profiles requestable-entitlements remove": {"x1", "--app-id=x1", "--entitlement-id=x1"},
 	"c1i access-profiles requestable-entitlements set":    {"x1", `--refs-file=@[{"appId":"x1","id":"x1"}]`},
