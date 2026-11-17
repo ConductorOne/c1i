@@ -74,7 +74,11 @@ them to an external system.
   c1i export events --since 2026-07-01T00:00:00Z --until 2026-07-08T00:00:00Z
 
   # Incremental sync: resume after the last event you already stored
-  c1i export events --since-event-uid <last-event-uid>`,
+  c1i export events --since-event-uid <last-event-uid>
+
+Both timestamps must sit within about one year of now: the server rejects a
+future --until or a --since older than roughly 365 days with a 400 ("value must
+be less than now within 8761h6m40s").`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		since, _ := cmd.Flags().GetString("since")
 		until, _ := cmd.Flags().GetString("until")

@@ -48,9 +48,11 @@ the two as one choice and refuses both together, so passing both is a usage
 error.
 
 A blank --display-name (empty, whitespace or invisible-only) exits 2,
-nothing sent. A body-file with displayName "" is accepted by the server, which
-restores the entitlement's original name instead of failing. --description ""
-is sent and clears the description, as it does on "apps update".
+nothing sent. The server restores the entitlement's original name for an empty
+value, but this command cannot send one (it has no --body-file; use "c1i api"
+if you need it). --description "" is sent, and the server restores the
+description the entitlement was created with (empty when it had none) — it is
+not a general clear.
 
 Prints the updated entitlement as pretty JSON, unwrapped like "entitlements
 get": the id is .id. --fields is a usage error on a mutation.
@@ -130,7 +132,7 @@ func init() {
 	f := entitlementsUpdateCmd.Flags()
 	f.String("app-id", "", "Application ID the entitlement belongs to")
 	f.String("display-name", "", "New display name (omit to leave unchanged; "+displayNameRule+")")
-	f.String("description", "", `New description; "" clears it (omit to leave unchanged)`)
+	f.String("description", "", `New description; "" restores the create-time description (so it does not clear one the entitlement was created with; omit to leave unchanged)`)
 	allowEmpty(entitlementsUpdateCmd, emptyIsSent, "description")
 	registerPolicyIDFlags(entitlementsUpdateCmd, entitlementPolicyKinds, " (omit to leave unchanged)")
 	registerUnbindPolicyFlag(entitlementsUpdateCmd, entitlementPolicyKinds)

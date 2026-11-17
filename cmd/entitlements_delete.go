@@ -15,7 +15,9 @@ var entitlementsDeleteCmd = &cobra.Command{
 
 The delete is soft: "entitlements get" still returns the entitlement at exit
 0 with deletedAt set. "apps delete" leaves an app's entitlements live, so
-delete them with this first.
+delete them with this first. The server also answers 200 {} for an unknown
+entitlement id or a --app-id the entitlement does not belong to (measured), so
+confirm with "entitlements get" rather than trusting exit 0.
 
 Prints the API's response, which is {}; exit 0 is the success signal.
 

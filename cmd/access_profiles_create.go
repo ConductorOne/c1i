@@ -23,7 +23,11 @@ where jq -r exits 0 with null.
 profile can be created already published. Ordering matters for the visibility
 bindings on a profile published but not visible to everyone — adding an access
 entitlement to an unpublished profile is refused with a 400, "catalog must be
-published to add an access entitlement", so publish first.
+published to add an access entitlement", so publish first. Measured caveat: in
+one run both a requestable and a visibility add on an unpublished profile
+returned 200 {} and the binding was stored, so treat publishing first as
+required for the binding to take effect, not as an enforced guard; verify with
+"access-profiles get".
 
 Example:
   CAT_ID=$(c1i access-profiles create --display-name "Engineering" --published | jq -er .id)

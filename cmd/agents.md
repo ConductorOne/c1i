@@ -692,6 +692,13 @@ resource with `--resource-id` likewise means you drop
   created with `--visible-to-everyone` it is a `400`,
   `catalog is visible to everyone, cannot add access entitlements`. A
   catalog published but not visible to everyone accepts them immediately.
+  Measured caveat: one run got `200 {}` (and a stored binding) from both a
+  requestable and a visibility add on an unpublished catalog; the binding is
+  not effective until publication, so publish first and verify with
+  `access-profiles get` rather than relying on the refusal.
+  `--enrollment-behavior unspecified` resets to the server default (measured:
+  ENFORCE becomes BYPASS); `--unenrollment-behavior unspecified` resets to
+  LEAVE_ACCESS_AS_IS, and the third flag's reset value was not measured.
 - `access-profiles delete <access-profile-id>` is a soft delete: the catalog
   leaves `access-profiles list`, while `access-profiles get` still returns it at
   exit `0` with `deletedAt` set. So a `deleted_at` in an `access-profiles list`
