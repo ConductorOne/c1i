@@ -1,12 +1,12 @@
 package cmd
 
 import (
-	"fmt"
 	"net/http"
-	"strings"
 
 	"github.com/spf13/cobra"
 )
+
+var servicePrincipalsUpdateSpec = &updateSpec{fields: []updateField{strUpdate("display-name", "displayName")}}
 
 var servicePrincipalsUpdateCmd = &cobra.Command{
 	Use:   "update <sp-id>",
@@ -23,26 +23,17 @@ Prints the service principal as pretty JSON, unwrapped like
 	RunE: func(cmd *cobra.Command, args []string) error {
 		id := args[0]
 		sp := map[string]any{"id": id}
-		var paths []string
-		if cmd.Flags().Changed("display-name") {
-			v, _ := cmd.Flags().GetString("display-name")
-			sp["displayName"] = v
-			paths = append(paths, "displayName")
+		mask, err := servicePrincipalsUpdateSpec.build(cmd, sp, nil)
+		if err != nil {
+			return err
 		}
-		if len(paths) == 0 {
-			return &usageError{fmt.Errorf("nothing to update: pass --display-name")}
-		}
-
-		body := map[string]any{
-			"servicePrincipal": sp,
-			"updateMask":       strings.Join(paths, ","),
-		}
-		return sendMutation(cmd, mutation{Method: http.MethodPatch, Path: spPath(id), Body: body})
+		return sendMutation(cmd, mutation{Method: http.MethodPatch, Path: spPath(id), Body: wrapUpdate("servicePrincipal", sp, mask)})
 	},
 }
 
 func init() {
 	servicePrincipalsUpdateCmd.Flags().String("display-name", "", "New display name (omit to leave unchanged; "+displayNameRule+")")
+	registerUpdateSpec(servicePrincipalsUpdateCmd, servicePrincipalsUpdateSpec)
 	markMutating(servicePrincipalsUpdateCmd)
 	servicePrincipalsCmd.AddCommand(servicePrincipalsUpdateCmd)
 }

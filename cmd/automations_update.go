@@ -1,9 +1,7 @@
 package cmd
 
 import (
-	"fmt"
 	"net/http"
-	"strings"
 
 	"github.com/ConductorOne/c1i/internal/client"
 	"github.com/spf13/cobra"
@@ -50,9 +48,19 @@ top-level siblings.`,
 	},
 }
 
+var automationUpdateSpec = &updateSpec{
+	fields: []updateField{
+		strUpdate("display-name", "displayName"),
+		strUpdate("description", "description"),
+		boolUpdate("enabled", "enabled"),
+	},
+	alt:   "--body-file with --update-mask",
+	scope: []string{"body-file", "update-mask"},
+}
+
 func buildAutomationUpdateBody(cmd *cobra.Command, id string) (map[string]any, error) {
 	f := cmd.Flags()
-	mask, usingBody, err := bodyFileMask(cmd, "display-name", "description", "enabled")
+	mask, usingBody, err := bodyFileMask(cmd, automationUpdateSpec.flagNames()...)
 	if err != nil {
 		return nil, err
 	}
@@ -66,30 +74,13 @@ func buildAutomationUpdateBody(cmd *cobra.Command, id string) (map[string]any, e
 		}
 	} else {
 		automation = map[string]any{}
-		var paths []string
-		if f.Changed("display-name") {
-			v, _ := f.GetString("display-name")
-			automation["displayName"] = v
-			paths = append(paths, "displayName")
+		if mask, err = automationUpdateSpec.build(cmd, automation, nil); err != nil {
+			return nil, err
 		}
-		if f.Changed("description") {
-			v, _ := f.GetString("description")
-			automation["description"] = v
-			paths = append(paths, "description")
-		}
-		if f.Changed("enabled") {
-			v, _ := f.GetBool("enabled")
-			automation["enabled"] = v
-			paths = append(paths, "enabled")
-		}
-		if len(paths) == 0 {
-			return nil, fmt.Errorf("nothing to update: pass --display-name, --description, --enabled, or --body-file with --update-mask")
-		}
-		mask = strings.Join(paths, ",")
 	}
 
 	automation["id"] = id
-	return map[string]any{"automation": automation, "updateMask": mask}, nil
+	return wrapUpdate("automation", automation, mask), nil
 }
 
 func init() {
@@ -104,6 +95,7 @@ func init() {
 	f.String("update-mask", "", bodyFileMaskUsage)
 	setBlankHint(automationsUpdateCmd, "update-mask", updateMaskBlankHint)
 	ownBodyKeys(automationsUpdateCmd, "body-file", argBodyKeys(0, "<automation-id>", "id"))
+	registerUpdateSpec(automationsUpdateCmd, automationUpdateSpec)
 	markMutating(automationsUpdateCmd)
 	automationsCmd.AddCommand(automationsUpdateCmd)
 }

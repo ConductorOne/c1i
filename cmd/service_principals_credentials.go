@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
-	"strings"
 
 	"github.com/spf13/cobra"
 )
@@ -202,6 +201,11 @@ func buildSPCredentialCreateBody(cmd *cobra.Command) (map[string]any, error) {
 	return body, nil
 }
 
+var spCredentialsUpdateSpec = &updateSpec{
+	fields: []updateField{strUpdate("display-name", "displayName")},
+	scope:  []string{"service-principal-id"},
+}
+
 var spCredentialsUpdateCmd = &cobra.Command{
 	Use:   "update <credential-id>",
 	Short: "Update a client credential's display name",
@@ -214,21 +218,11 @@ Prints the credential as pretty JSON, unwrapped like
 		spID, _ := cmd.Flags().GetString("service-principal-id")
 
 		cred := map[string]any{"id": args[0]}
-		var paths []string
-		if cmd.Flags().Changed("display-name") {
-			v, _ := cmd.Flags().GetString("display-name")
-			cred["displayName"] = v
-			paths = append(paths, "displayName")
+		mask, err := spCredentialsUpdateSpec.build(cmd, cred, nil)
+		if err != nil {
+			return err
 		}
-		if len(paths) == 0 {
-			return &usageError{fmt.Errorf("nothing to update: pass --display-name")}
-		}
-
-		body := map[string]any{
-			"credential": cred,
-			"updateMask": strings.Join(paths, ","),
-		}
-		return sendMutation(cmd, mutation{Method: http.MethodPatch, Path: spCredentialPath(spID, args[0]), Body: body})
+		return sendMutation(cmd, mutation{Method: http.MethodPatch, Path: spCredentialPath(spID, args[0]), Body: wrapUpdate("credential", cred, mask)})
 	},
 }
 
@@ -265,6 +259,7 @@ func init() {
 
 	spCredentialsUpdateCmd.Flags().String("display-name", "", "New display name ("+displayNameRule+")")
 
+	registerUpdateSpec(spCredentialsUpdateCmd, spCredentialsUpdateSpec)
 	for _, c := range []*cobra.Command{spCredentialsCreateCmd, spCredentialsUpdateCmd, spCredentialsRevokeCmd} {
 		markMutating(c)
 	}

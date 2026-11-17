@@ -57,15 +57,12 @@ classification, visibility).`,
 			ms[i] = mutation{
 				Method: http.MethodPost,
 				Path:   client.Path("/api/v1/apps/%s/connectors/%s/mcp_tools/%s", appID, connectorID, id),
-				Body: map[string]any{
-					"tool": map[string]any{
-						"id":          id,
-						"appId":       appID,
-						"connectorId": connectorID,
-						"state":       state,
-					},
-					"updateMask": "state",
-				},
+				Body: wrapUpdate("tool", map[string]any{
+					"id":          id,
+					"appId":       appID,
+					"connectorId": connectorID,
+					"state":       state,
+				}, "state"),
 			}
 		}
 		return sendMutationBatch(cmd, ms, "id", func(i int) string { return args[i] }, withBatchWording("approved", "tool"))

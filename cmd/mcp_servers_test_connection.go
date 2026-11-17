@@ -68,7 +68,7 @@ Exits 8 when the server is unreachable; the JSON is still printed.`,
 			body["appId"] = appID
 			body["connectorId"] = connectorID
 			if mask != "" {
-				body["updateMask"] = mask
+				setUpdateMask(body, mask)
 			}
 		}
 

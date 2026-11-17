@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"strings"
 
 	"github.com/ConductorOne/c1i/internal/client"
 	"github.com/spf13/cobra"
@@ -88,7 +87,7 @@ Prints the updated policy unwrapped like "policies get" (id is .id).`,
 var errPolicyTypeNeeded = errors.New("policy type lookup needed")
 
 // policyBodyExclusive are the flags --body-file cannot be combined with.
-var policyBodyExclusive = []string{"display-name", "description", "policy-type", "steps-file", "rules-file"}
+var policyBodyExclusive = policyUpdateSpec.flagNames()
 
 // policyUpdateInputs holds the --*-file contents, read once per run.
 type policyUpdateInputs struct {
@@ -158,7 +157,7 @@ func buildPolicyUpdateBody(cmd *cobra.Command, id string, in policyUpdateInputs,
 	}
 
 	policy["id"] = id
-	return map[string]any{"policy": policy, "updateMask": mask}, nil
+	return wrapUpdate("policy", policy, mask), nil
 }
 
 // policyTypeResolver memoizes a policy's current type, failure included, so a
@@ -209,51 +208,54 @@ func buildUpdatePolicyPatch(cmd *cobra.Command, in policyUpdateInputs, resolveFa
 	}
 
 	policy = map[string]any{}
-	var paths []string
+	mask, err = policyUpdateSpec.build(cmd, policy, &policyPatchEnv{in: in, typeOf: resolveFallbackPolicyType})
+	if err != nil {
+		return nil, "", err
+	}
+	return policy, mask, nil
+}
 
-	if cmd.Flags().Changed("display-name") {
-		v, _ := cmd.Flags().GetString("display-name")
-		policy["displayName"] = v
-		paths = append(paths, "displayName")
-	}
-	if cmd.Flags().Changed("description") {
-		v, _ := cmd.Flags().GetString("description")
-		policy["description"] = v
-		paths = append(paths, "description")
-	}
-	if cmd.Flags().Changed("policy-type") {
-		v, err := policyTypeFlag.parse(mustGetString(cmd, "policy-type"))
-		if err != nil {
-			return nil, "", err
-		}
-		policy["policyType"] = v
-		paths = append(paths, "policyType")
-	}
-	if cmd.Flags().Changed("steps-file") {
-		steps := in.steps
-		policyType, _ := policy["policyType"].(string)
-		if policyType == "" {
-			policyType, err = resolveFallbackPolicyType()
-			if err != nil {
-				return nil, "", err
+// policyPatchEnv is the per-run state the steps and rules fields read.
+type policyPatchEnv struct {
+	in     policyUpdateInputs
+	typeOf func() (string, error)
+}
+
+// policyUpdateSpec lists the Policy's updatable fields, in mask order.
+var policyUpdateSpec = &updateSpec{
+	fields: []updateField{
+		strUpdate("display-name", "displayName"),
+		strUpdate("description", "description"),
+		enumUpdate("policy-type", "policyType", &policyTypeFlag),
+		hookUpdate([]string{"steps-file"}, func(cmd *cobra.Command, policy map[string]any, env any) ([]string, error) {
+			if !cmd.Flags().Changed("steps-file") {
+				return nil, nil
 			}
-		}
-		key, keyErr := policyStepsKey(policyType)
-		if keyErr != nil {
-			return nil, "", keyErr
-		}
-		policy["policySteps"] = map[string]any{key: map[string]any{"steps": steps}}
-		paths = append(paths, "policySteps")
-	}
-	if cmd.Flags().Changed("rules-file") {
-		policy["rules"] = in.rules
-		paths = append(paths, "rules")
-	}
-	if len(paths) == 0 {
-		return nil, "", fmt.Errorf("nothing to update: pass --display-name, --description, --policy-type, --steps-file, --rules-file, or --body-file with --update-mask")
-	}
-
-	return policy, strings.Join(paths, ","), nil
+			e := env.(*policyPatchEnv)
+			policyType, _ := policy["policyType"].(string)
+			if policyType == "" {
+				var err error
+				if policyType, err = e.typeOf(); err != nil {
+					return nil, err
+				}
+			}
+			key, err := policyStepsKey(policyType)
+			if err != nil {
+				return nil, err
+			}
+			policy["policySteps"] = map[string]any{key: map[string]any{"steps": e.in.steps}}
+			return []string{"policySteps"}, nil
+		}),
+		hookUpdate([]string{"rules-file"}, func(cmd *cobra.Command, policy map[string]any, env any) ([]string, error) {
+			if !cmd.Flags().Changed("rules-file") {
+				return nil, nil
+			}
+			policy["rules"] = env.(*policyPatchEnv).in.rules
+			return []string{"rules"}, nil
+		}),
+	},
+	alt:   "--body-file with --update-mask",
+	scope: []string{"body-file", "update-mask", "allow-deny-all"},
 }
 
 func init() {
@@ -268,6 +270,7 @@ func init() {
 	policiesUpdateCmd.Flags().String("update-mask", "", bodyFileMaskUsage)
 	setBlankHint(policiesUpdateCmd, "update-mask", updateMaskBlankHint)
 	policiesUpdateCmd.Flags().Bool("allow-deny-all", false, "Allow leaving/setting a policy with no steps — bypasses the empty-steps guard on purpose")
+	registerUpdateSpec(policiesUpdateCmd, policyUpdateSpec)
 	markMutating(policiesUpdateCmd)
 	policiesCmd.AddCommand(policiesUpdateCmd)
 }

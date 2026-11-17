@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"strings"
 
 	"github.com/ConductorOne/c1i/internal/client"
 	"github.com/spf13/cobra"
@@ -57,13 +56,6 @@ offers no way to remove a mapper.`,
 	},
 }
 
-// appStringFields are the plain string App fields shared by create and update,
-// in mask order.
-var appStringFields = []struct{ flag, key string }{
-	{"display-name", "displayName"},
-	{"description", "description"},
-}
-
 // UNSPECIFIED is deliberately absent: an update to it exits 0 but leaves the
 // current value in place. That is also why unknowns are rejected.
 var identityMatchingFlag = enumFlag{flag: "identity-matching", prefix: "APP_USER_IDENTITY_MATCHING_", unknown: enumReject, values: []enumValue{
@@ -104,44 +96,35 @@ func readAppUserMapperFile(cmd *cobra.Command, path string) (map[string]any, err
 	return mapper, nil
 }
 
+// appUpdateSpec lists the App's updatable fields, in mask order.
+var appUpdateSpec = &updateSpec{
+	fields: []updateField{
+		strUpdate("display-name", "displayName"),
+		strUpdate("description", "description"),
+		policyUpdate(appPolicyKinds),
+		enumUpdate("identity-matching", "identityMatching", &identityMatchingFlag),
+		hookUpdate([]string{"app-user-mapper-file"}, func(cmd *cobra.Command, obj map[string]any, _ any) ([]string, error) {
+			if !cmd.Flags().Changed("app-user-mapper-file") {
+				return nil, nil
+			}
+			mapper, err := readAppUserMapperFile(cmd, mustGetString(cmd, "app-user-mapper-file"))
+			if err != nil {
+				return nil, err
+			}
+			obj["appUserMapper"] = mapper
+			return []string{"appUserMapper"}, nil
+		}),
+	},
+}
+
 // buildAppUpdateBody builds the Update request wrapper from changed flags.
 func buildAppUpdateBody(cmd *cobra.Command, id string) (map[string]any, error) {
 	app := map[string]any{"id": id}
-	var paths []string
-	for _, sf := range appStringFields {
-		if cmd.Flags().Changed(sf.flag) {
-			v, _ := cmd.Flags().GetString(sf.flag)
-			app[sf.key] = v
-			paths = append(paths, sf.key)
-		}
-	}
-	policyPaths, err := applyPolicyUpdates(cmd, appPolicyKinds, app)
+	mask, err := appUpdateSpec.build(cmd, app, nil)
 	if err != nil {
 		return nil, err
 	}
-	paths = append(paths, policyPaths...)
-	if cmd.Flags().Changed("identity-matching") {
-		api, err := identityMatchingFlag.parse(mustGetString(cmd, "identity-matching"))
-		if err != nil {
-			return nil, err
-		}
-		app["identityMatching"] = api
-		paths = append(paths, "identityMatching")
-	}
-	if cmd.Flags().Changed("app-user-mapper-file") {
-		mapperFile, _ := cmd.Flags().GetString("app-user-mapper-file")
-		mapper, err := readAppUserMapperFile(cmd, mapperFile)
-		if err != nil {
-			return nil, err
-		}
-		app["appUserMapper"] = mapper
-		paths = append(paths, "appUserMapper")
-	}
-
-	if len(paths) == 0 {
-		return nil, fmt.Errorf("nothing to update: pass --display-name, --description, --grant-policy-id, --revoke-policy-id, --certify-policy-id, --identity-matching, or --app-user-mapper-file")
-	}
-	return map[string]any{"app": app, "updateMask": strings.Join(paths, ",")}, nil
+	return wrapUpdate("app", app, mask), nil
 }
 
 func init() {
@@ -151,6 +134,7 @@ func init() {
 	allowEmpty(appsUpdateCmd, emptyIsSent, "description")
 	registerPolicyIDFlags(appsUpdateCmd, appPolicyKinds, " (omit to leave unchanged)")
 	registerUnbindPolicyFlag(appsUpdateCmd, appPolicyKinds)
+	registerUpdateSpec(appsUpdateCmd, appUpdateSpec)
 	markMutating(appsUpdateCmd)
 	f.String("identity-matching", "", "How app users are matched to C1.ai users: "+identityMatchingFlag.usage()+" (omit to leave unchanged)")
 	f.String("app-user-mapper-file", "", `JSON object {"mappingCases":[{"userKeyCel":...,"appUserKeyCel":...}]} that replaces the whole app user mapper (file, or "-" for stdin)`)

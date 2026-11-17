@@ -1,9 +1,7 @@
 package cmd
 
 import (
-	"fmt"
 	"net/http"
-	"strings"
 
 	"github.com/spf13/cobra"
 )
@@ -31,25 +29,21 @@ Prints the webhook, unwrapped like "webhooks get": the id is .id. Honors
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		id := args[0]
-		fields, paths, err := webhookFields(cmd)
+		fields := map[string]any{}
+		mask, err := webhookFields.build(cmd, fields, nil)
 		if err != nil {
 			return err
 		}
-		if len(paths) == 0 {
-			return &usageError{fmt.Errorf("nothing to update: pass --display-name, --destination-url, --description or --callback-timeout")}
-		}
 		fields["id"] = id
 
-		body := map[string]any{
-			"webhook":    fields,
-			"updateMask": strings.Join(paths, ","),
-		}
+		body := wrapUpdate("webhook", fields, mask)
 		return sendMutation(cmd, mutation{Method: http.MethodPost, Path: webhookPath(id), Body: body})
 	},
 }
 
 func init() {
 	webhookFieldFlags(webhooksUpdateCmd, true)
+	registerUpdateSpec(webhooksUpdateCmd, webhookFields)
 	markMutating(webhooksUpdateCmd)
 	webhooksCmd.AddCommand(webhooksUpdateCmd)
 }

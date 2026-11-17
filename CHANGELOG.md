@@ -163,6 +163,13 @@ covers its camelCase key for the coverage check but is sent as given.
 
 ### Changed
 
+- **Every update command builds its body and `updateMask` from one field
+  table**, and its "nothing to update" error (still exit `2`) is generated from
+  that table, so it names every field flag (`apps update` used to omit
+  `--unbind-policy`; `entitlements update` named none; `mcp servers
+  update-credentials` lists the flags of the chosen `--type`). The wording is now
+  "nothing to update: pass --a, --b, or --c" everywhere.
+  Requests are byte-identical for every flag combination.
 - **`upgrade --dry-run` prints the same JSON preview as every other
   `--dry-run`**, through the shared preview writer, on every path instead of
   text lines; `upgrade --fields` outside `--check` is now a usage error. See

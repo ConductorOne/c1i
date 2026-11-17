@@ -480,7 +480,7 @@ func readMaskedClassifierObject(cmd *cobra.Command, field, id string) (map[strin
 	if id != "" {
 		object["id"] = id
 	}
-	return map[string]any{field: object, "updateMask": mask}, nil
+	return wrapUpdate(field, object, mask), nil
 }
 
 func classifierRow(item map[string]any) map[string]any {

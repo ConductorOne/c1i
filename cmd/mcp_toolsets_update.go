@@ -1,13 +1,16 @@
 package cmd
 
 import (
-	"fmt"
 	"net/http"
-	"strings"
 
 	"github.com/ConductorOne/c1i/internal/client"
 	"github.com/spf13/cobra"
 )
+
+var mcpToolsetsUpdateSpec = &updateSpec{
+	fields: []updateField{strUpdate("display-name", "displayName"), strUpdate("description", "description")},
+	scope:  []string{"app-id", "connector-id"},
+}
 
 var mcpToolsetsUpdateCmd = &cobra.Command{
 	Use:   "update <toolset-id>",
@@ -36,30 +39,13 @@ Prints the updated toolset, unwrapped like "mcp toolsets get".`,
 			"appId":       appID,
 			"connectorId": connectorID,
 		}
-		var paths []string
-		if cmd.Flags().Changed("display-name") {
-			v, _ := cmd.Flags().GetString("display-name")
-			profile["displayName"] = v
-			// FieldMask paths use the proto3-JSON (camelCase) field name, matching
-			// the body key and the convention in accounts set-owner ("identityUserId").
-			paths = append(paths, "displayName")
-		}
-		if cmd.Flags().Changed("description") {
-			v, _ := cmd.Flags().GetString("description")
-			profile["description"] = v
-			paths = append(paths, "description")
-		}
-		if len(paths) == 0 {
-			return &usageError{fmt.Errorf("nothing to update: pass --display-name and/or --description")}
-		}
-
-		body := map[string]any{
-			"profile":    profile,
-			"updateMask": strings.Join(paths, ","),
+		mask, err := mcpToolsetsUpdateSpec.build(cmd, profile, nil)
+		if err != nil {
+			return err
 		}
 
 		path := client.Path("/api/v1/apps/%s/connectors/%s/mcp_toolsets/%s", appID, connectorID, id)
-		return sendMutation(cmd, mutation{Method: http.MethodPost, Path: path, Body: body})
+		return sendMutation(cmd, mutation{Method: http.MethodPost, Path: path, Body: wrapUpdate("profile", profile, mask)})
 	},
 }
 
@@ -70,6 +56,7 @@ func init() {
 	mcpToolsetsUpdateCmd.Flags().String("description", "", `New description; "" is sent as an empty value (pass --display-name too; the server requires it)`)
 	allowEmpty(mcpToolsetsUpdateCmd, emptyIsSent, "description")
 	markRequired(mcpToolsetsUpdateCmd, "app-id", "connector-id")
+	registerUpdateSpec(mcpToolsetsUpdateCmd, mcpToolsetsUpdateSpec)
 	markMutating(mcpToolsetsUpdateCmd)
 	mcpToolsetsCmd.AddCommand(mcpToolsetsUpdateCmd)
 }

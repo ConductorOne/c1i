@@ -1,9 +1,7 @@
 package cmd
 
 import (
-	"fmt"
 	"net/http"
-	"strings"
 
 	"github.com/ConductorOne/c1i/internal/client"
 	"github.com/spf13/cobra"
@@ -42,17 +40,11 @@ get" (the id is .id). --fields is a usage error on a mutation.`,
 // exactly one supplied catalog field.
 func buildAccessProfileUpdateBody(cmd *cobra.Command, id string) (map[string]any, error) {
 	catalog := map[string]any{"id": id}
-	paths, err := addCatalogChangedFields(cmd, catalog)
+	mask, err := catalogFields.build(cmd, catalog, nil)
 	if err != nil {
 		return nil, err
 	}
-	if len(paths) == 0 {
-		return nil, fmt.Errorf("nothing to update: pass a writable access-profile field")
-	}
-	return map[string]any{
-		"catalog":    catalog,
-		"updateMask": strings.Join(paths, ","),
-	}, nil
+	return wrapUpdate("catalog", catalog, mask), nil
 }
 
 func init() {
@@ -67,6 +59,7 @@ func init() {
 	f.String("unenrollment-behavior", "", "Unenrollment behavior: "+catalogUnenrollmentFlag.usage()+` ("" is sent as an empty value; omit to leave unchanged)`)
 	f.String("unenrollment-entitlement-behavior", "", "Unenrollment entitlement revoke-policy behavior: "+catalogUnenrollmentEntitlementFlag.usage()+` ("" is sent as an empty value; omit to leave unchanged)`)
 	allowEmpty(accessProfilesUpdateCmd, emptyIsSent, "enrollment-behavior", "unenrollment-behavior", "unenrollment-entitlement-behavior")
+	registerUpdateSpec(accessProfilesUpdateCmd, catalogFields)
 	markMutating(accessProfilesUpdateCmd)
 	accessProfilesCmd.AddCommand(accessProfilesUpdateCmd)
 }
