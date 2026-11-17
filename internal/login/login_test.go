@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -285,9 +286,14 @@ func TestDeviceFlowSendsUserAgent(t *testing.T) {
 	}
 }
 
+var errWaitBudget = errors.New("wait budget spent")
+
 // pollOutcome polls a token endpoint answering every request with status and
-// body for up to d, returning the request count and the error.
-func pollOutcome(t *testing.T, status int, body string, d time.Duration) (int, error) {
+// body, allowing maxWaits poll intervals and refusing the next one. It returns
+// the request count, the intervals requested (the refused one included), and
+// the error. Intervals are asserted as counts of requested durations, never as
+// elapsed time.
+func pollOutcome(t *testing.T, status int, body string, maxWaits int) (int, []time.Duration, error) {
 	t.Helper()
 	var requests int
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -296,43 +302,68 @@ func pollOutcome(t *testing.T, status int, body string, d time.Duration) (int, e
 		_, _ = w.Write([]byte(body))
 	}))
 	defer srv.Close()
-	ctx, cancel := context.WithTimeout(context.Background(), d)
-	defer cancel()
-	_, err := PollForToken(ctx, srv.URL, &DeviceCode{DeviceCode: "dc", Interval: 1, ExpiresIn: 30})
-	return requests, err
+	var waits []time.Duration
+	orig := pollWait
+	pollWait = func(ctx context.Context, d time.Duration) error {
+		waits = append(waits, d)
+		if len(waits) > maxWaits {
+			return errWaitBudget
+		}
+		return nil
+	}
+	t.Cleanup(func() { pollWait = orig })
+	_, err := PollForToken(context.Background(), srv.URL, &DeviceCode{DeviceCode: "dc", Interval: 1, ExpiresIn: 30})
+	return requests, waits, err
 }
 
 // A 429 (with or without an OAuth body) is handled like slow_down: the poll
-// backs off and continues instead of aborting the login. After the first
-// request the interval is 6s, so exactly one request fits in the window.
+// backs off and continues instead of aborting the login. The interval grows
+// 1s -> 6s -> 11s, one request per completed wait.
 func TestPollForTokenTooManyRequestsSlowsDownAndKeepsPolling(t *testing.T) {
+	want := []time.Duration{time.Second, 6 * time.Second, 11 * time.Second}
 	for _, body := range []string{``, `{"error":"access_denied"}`} {
-		n, err := pollOutcome(t, http.StatusTooManyRequests, body, 2*time.Second)
-		if !errors.Is(err, context.DeadlineExceeded) || n != 1 {
-			t.Errorf("body %q: requests=%d err=%v, want 1 request then the context deadline", body, n, err)
+		n, waits, err := pollOutcome(t, http.StatusTooManyRequests, body, 2)
+		if !errors.Is(err, errWaitBudget) || n != 2 || !slices.Equal(waits, want) {
+			t.Errorf("body %q: requests=%d waits=%v err=%v, want 2 requests and waits %v", body, n, waits, err, want)
 		}
 	}
 }
 
 // 400 authorization_pending keeps polling at the unchanged interval.
 func TestPollForTokenPendingKeepsPolling(t *testing.T) {
-	n, err := pollOutcome(t, http.StatusBadRequest, `{"error":"authorization_pending"}`, 2500*time.Millisecond)
-	if !errors.Is(err, context.DeadlineExceeded) || n < 2 {
-		t.Errorf("requests=%d err=%v, want >=2 requests then the context deadline", n, err)
+	n, waits, err := pollOutcome(t, http.StatusBadRequest, `{"error":"authorization_pending"}`, 3)
+	want := []time.Duration{time.Second, time.Second, time.Second, time.Second}
+	if !errors.Is(err, errWaitBudget) || n != 3 || !slices.Equal(waits, want) {
+		t.Errorf("requests=%d waits=%v err=%v, want 3 requests at a constant 1s interval", n, waits, err)
+	}
+}
+
+// The production wait honors the test divisor: a 30s interval returns at once.
+// With the hook ignored this would run into the 10s context.
+func TestPollWaitHonorsTimingDivisor(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`{"access_token":"tok"}`))
+	}))
+	defer srv.Close()
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	tok, err := PollForToken(ctx, srv.URL, &DeviceCode{DeviceCode: "dc", Interval: 30, ExpiresIn: 60})
+	if err != nil || tok != "tok" {
+		t.Fatalf("token=%q err=%v", tok, err)
 	}
 }
 
 // A 200 with no access token is an unusable response (exit 6), not an empty
 // token returned as success.
 func TestPollForTokenEmptyAccessTokenIsBadResponse(t *testing.T) {
-	_, err := pollOutcome(t, http.StatusOK, `{"access_token":""}`, 5*time.Second)
+	_, _, err := pollOutcome(t, http.StatusOK, `{"access_token":""}`, 5)
 	if !errors.Is(err, tokensource.ErrBadTokenResponse) {
 		t.Errorf("error = %v, want one wrapping tokensource.ErrBadTokenResponse", err)
 	}
 }
 
 func TestPollForTokenNonJSONOKIsBadResponse(t *testing.T) {
-	_, err := pollOutcome(t, http.StatusOK, `<html>gateway</html>`, 5*time.Second)
+	_, _, err := pollOutcome(t, http.StatusOK, `<html>gateway</html>`, 5)
 	if !errors.Is(err, tokensource.ErrBadTokenResponse) {
 		t.Errorf("error = %v, want one wrapping tokensource.ErrBadTokenResponse", err)
 	}

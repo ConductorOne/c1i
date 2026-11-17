@@ -11,6 +11,8 @@ import (
 	"testing"
 
 	"github.com/zalando/go-keyring"
+
+	"github.com/ConductorOne/c1i/internal/timing"
 )
 
 // DeadURL refuses connections. Port 1 is never handed out from the ephemeral
@@ -65,6 +67,10 @@ func pinGoDirs() {
 	}
 }
 
+// WaitDivisor shrinks login's poll interval and the retry backoff in tests
+// (500ms becomes 0.5ms); tests assert counts and computed delays, not seconds.
+const WaitDivisor = 1000
+
 // Run is a TestMain body: isolate, swap in go-keyring's in-memory mock (global
 // and irreversible, so it is set once here), run the tests, clean up. Use as
 // os.Exit(testenv.Run(m)).
@@ -72,5 +78,6 @@ func Run(m *testing.M) int {
 	cleanup := Isolate()
 	defer cleanup()
 	keyring.MockInit()
+	timing.Divisor = WaitDivisor
 	return m.Run()
 }
