@@ -851,8 +851,11 @@ made two apps with that name. Promoting an already-managed binding exits `0` and
 returns the existing app, not a second one. Without `--user-id` the new app's
 owners were the connector app's owners; with it, exactly those users (looked up
 first; an unknown one exits `4`, nothing sent). Deleting the managed app
-soft-deletes the binding: it leaves `list`, `get` still answers with `deletedAt`
-set, and `promote` exits `4`. `c1i docs guide promote-idp-app-to-managed` walks
+soft-deletes the binding until the connector's next sync: it leaves `list`,
+`get` still answers with `deletedAt` set, and `promote` exits `4`; after the
+sync the binding was back, unmanaged, under the same `resource_id`, so promoting
+it again makes a second app. A binding's top-level `appId` is the connector
+app; the managed app is `.state.managed.appId`. `c1i docs guide promote-idp-app-to-managed` walks
 the whole workflow.
 
 **Owner commands (apps and entitlements).** Owner changes are applied

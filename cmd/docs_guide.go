@@ -563,10 +563,10 @@ with that name. Always run step 4 first. After any failed promote, inspect
 
     c1i apps list
     CONN_APP_ID=<id of the identity provider's connector app>
-    RT_ID=$(c1i apps resource-types list --app-id "$CONN_APP_ID" | jq -er 'select(.display_name=="app") | .id')
+    RT_ID=$(c1i apps resource-types list --app-id "$CONN_APP_ID" | jq -er 'select(.display_name=="app") | .id') || echo "no resource type named app on $CONN_APP_ID"
 
 On the connector app checked, the discovered apps were the resource type named
-"app". "managed-state list" exits 0 with no rows for a wrong app id or
+"app". "resource-types list" and "managed-state list" exit 0 with no rows for a wrong app id or
 resource type id, so an empty list can mean either of those.
 
 ### 2. Find the discovered app
@@ -574,7 +574,8 @@ resource type id, so an empty list can mean either of those.
     c1i apps managed-state list --app-id "$CONN_APP_ID" --resource-type-id "$RT_ID" | jq -c 'select(.state=="unmanaged")'
     RES_ID=<resource_id of the app to promote>
 
-Names are not unique: one connector listed several discovered apps with the
+A resource's binding "appId" is the connector app; the managed app is
+.state.managed.appId. Names are not unique: one connector listed several discovered apps with the
 same name, so choose by resource_id, not by name.
 
 ### 3. Inspect its managed state
@@ -588,9 +589,9 @@ the same binding and app; it did not create a second one.
 
 ### 4. Check for an existing app with the same name
 
-    c1i apps list | jq -c 'select(.display_name=="<the discovered app's display_name>")'
+    c1i apps list | jq -c 'select(.display_name|ascii_downcase=="<the discovered app's display_name, lowercased>")'
 
-Any hit is an app that already carries the name. Decide whether it is the app
+The match is case-insensitive. Any hit is an app that already carries the name. Decide whether it is the app
 you want before promoting; a promote adds another one beside it.
 
 ### 5. Preview, then promote
@@ -621,14 +622,16 @@ Without --user-id the new app's owners were the connector app's owners. Pass
 ## Undoing a promotion
 
 "apps delete" on "$NEW_APP_ID" deletes the app, and it also soft-deletes the
-binding: the discovered app leaves "managed-state list", "managed-state get"
-still answers (with deletedAt set and the old app id), and promote exits 4. It
-is not a way to try again.
+binding until the connector's next sync: the discovered app leaves
+"managed-state list", "managed-state get" still answers (with deletedAt set and
+the old app id), and promote exits 4. After the sync the binding was back,
+unmanaged, under the same resource_id; promoting it again creates a second app.
 
 ## Common failures
 
 - exit 4 on promote: an unknown app, resource type, resource id or user, or a
-  binding whose managed app was deleted. A --dry-run catches all but the last.
+  binding whose managed app was deleted (until the connector's next sync).
+  A --dry-run catches all but the last.
 `
 
 // guideRequestAccess walks the requester side of a grant/revoke access

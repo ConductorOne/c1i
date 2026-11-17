@@ -27,6 +27,11 @@ func managedStateBindingsPath(cmd *cobra.Command) string {
 	return client.Path("/api/v1/apps/%s/resource_types/%s/managed_state_bindings", appID, resourceTypeID)
 }
 
+// managedStateBindingPath addresses one binding by its resource id.
+func managedStateBindingPath(cmd *cobra.Command, resourceID string) string {
+	return managedStateBindingsPath(cmd) + client.Path("/%s", resourceID)
+}
+
 // addManagedStateScopeFlags registers the parent-scope flags every
 // managed-state subcommand shares.
 func addManagedStateScopeFlags(cmd *cobra.Command) {

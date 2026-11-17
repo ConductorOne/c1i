@@ -3,7 +3,6 @@ package cmd
 import (
 	"fmt"
 
-	"github.com/ConductorOne/c1i/internal/client"
 	"github.com/spf13/cobra"
 )
 
@@ -13,7 +12,8 @@ var appsManagedStateGetCmd = &cobra.Command{
 	Long: `Get the managed state of one discovered app (pretty JSON). <resource-id> is the
 resource_id of a "managed-state list" row. The binding's own keys are at the top
 level, with its state under "state": {"unmanaged":{}} or
-{"managed":{"appId":"<managed-app-id>"}}.
+{"managed":{"appId":"<managed-app-id>"}}. The top-level appId is the connector
+app; the managed app is .state.managed.appId.
 
 An unknown app, resource type or resource id exits 4.`,
 	Args: cobra.ExactArgs(1),
@@ -35,13 +35,6 @@ An unknown app, resource type or resource id exits 4.`,
 
 		return writeResource(cmd, data, "resourceId")
 	},
-}
-
-// managedStateBindingPath addresses one binding by its resource id.
-func managedStateBindingPath(cmd *cobra.Command, resourceID string) string {
-	appID, _ := cmd.Flags().GetString("app-id")
-	resourceTypeID, _ := cmd.Flags().GetString("resource-type-id")
-	return client.Path("/api/v1/apps/%s/resource_types/%s/managed_state_bindings/%s", appID, resourceTypeID, resourceID)
 }
 
 func init() {

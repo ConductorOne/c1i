@@ -518,7 +518,10 @@ resource with `--resource-id` likewise means you drop
   an app and nothing checks for an existing one of the same name, so run `apps
   list` first and, after any failure, inspect before retrying. Promoting an
   already-managed binding exits 0 and returns the existing app; deleting the
-  managed app soft-deletes the binding and `promote` then exits 4. Without
+  managed app soft-deletes the binding until the connector's next sync (`promote`
+  exits 4 meanwhile; afterwards it is back, unmanaged, same `resource_id`, and
+  promotable again as a second app). The managed app is `.state.managed.appId`
+  (top-level `appId` is the connector). Without
   `--user-id` the new app's owners were the connector app's; `docs guide
   promote-idp-app-to-managed` has the full flow.
 - Owner changes are applied asynchronously and can take several minutes to

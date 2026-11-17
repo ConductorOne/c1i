@@ -15,8 +15,8 @@ var appsManagedStatePromoteCmd = &cobra.Command{
 	Short: "Promote a discovered app to a managed app",
 	Long: `Promote a discovered app to a managed app via POST .../promote: C1 creates a new
 app for <resource-id> (a "managed-state list" row's resource_id) and prints the
-binding as JSON, unwrapped like "managed-state get"; its state is then
-{"managed":{"appId":"<new-app-id>"}}.
+binding as JSON, unwrapped like "managed-state get"; its top-level appId is the
+connector app, and the new app is .state.managed.appId.
 
 WARNING: a promote creates an app, and nothing checks for an existing app of the
 same name: promoting two discovered apps with the same name made two apps with
@@ -30,9 +30,11 @@ Without --user-id the new app's owners were the connector app's owners; with
 it, exactly the --user-id users. Owner changes are applied asynchronously, so
 "apps owners <app-id>" can lag.
 
-Deleting the managed app afterwards soft-deletes the binding: it leaves
-"managed-state list", "managed-state get" still answers with deletedAt set, and
-promote exits 4.
+Deleting the managed app afterwards soft-deletes the binding until the
+connector's next sync: it leaves "managed-state list", "managed-state get"
+still answers with deletedAt set, and promote exits 4. After the sync the
+binding was back, unmanaged, under the same resource_id, and can be promoted
+again, which makes a second app.
 
 An unknown app, resource type, resource id or user exits 4, --dry-run included
 (the binding is read first; a binding whose app was deleted still reads, so a

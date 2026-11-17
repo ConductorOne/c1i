@@ -43,7 +43,9 @@ var appsResourceTypesListCmd = &cobra.Command{
 	Short: "List an app's resource types (NDJSON output)",
 	Long: `List the resource types of an app (NDJSON output): the id to pass as
 --resource-type-id to "apps managed-state". A connector app's discovered apps
-are in its resource type named "app".`,
+are in its resource type named "app".
+
+A well-formed but unknown app returns zero rows and exit 0.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		baseURL, err := GetBaseURL()
 		if err != nil {
