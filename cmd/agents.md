@@ -28,14 +28,11 @@ or control character, or a stray scheme like `://host`) are all usage errors
 (exit `2`) before any request is sent.
 Every command that resolves a C1 tenant URL prints a `Warning: no --url flag
 given; targeting <url> (from ~/.c1i.yaml)` line to stderr when the URL came from
-the config file —
-`--url` and `C1I_URL` print nothing, since both are an explicit choice for
-that invocation. Don't rely on catching it: pass `--url` explicitly on every
-invocation instead of an exported `C1I_URL`. A fresh shell per call is
-common, and an env var that gets lost between calls falls through to the
-config file's tenant silently on stdout — the stderr warning only appears on
-the call that already fell through, and a result piped straight into the
-next step won't show it at all if you aren't reading stderr.
+the config file; `--url` and `C1I_URL` print nothing, since both are an explicit
+choice for that invocation. Don't rely on seeing it: pass `--url` explicitly on
+every invocation, because an exported `C1I_URL` can be lost between calls (a
+fresh shell per call is common) and the result then falls through to the config
+file's tenant silently on stdout.
 
 `--url` means the tenant on every command, including the `mcp servers`
 subcommands that also take an external server's address — that one is
@@ -504,28 +501,29 @@ resource with `--resource-id` likewise means you drop
   with the first failure's code while earlier ids stay applied: under
   `--error-format json` check each per-id error's `applied` and the summary's
   `notAttempted`.
-- Other `mcp` mutations print the response unwrapped like the matching `get`:
-  a server's id is `.connectorId` (`register`, `update`, `update-credentials`),
-  a toolset's, classifier's, binding's and tool gate's is `.id`. Deletes,
-  `resync-tools` and `mcp bindings delete` print `{}`; capture ids with
-  `jq -er`, which fails on a `--dry-run` preview. `update-credentials` without
-  `--catalog-id` resolves it first and reports `Resolved catalog id: …` on
-  stderr.
+- Other `mcp` mutations print the response unwrapped (ids are listed under
+  Mutations above). Deletes, `resync-tools` and `mcp bindings delete` print
+  `{}`; capture ids with `jq -er`, which fails on a `--dry-run` preview.
+  `update-credentials` without `--catalog-id` resolves it first and reports
+  `Resolved catalog id: …` on stderr. `mcp servers register --wait
+  [--wait-timeout 1m]` polls `mcp servers list` until the new server is listed
+  (a list read right after register can omit it for a second or two; a timeout
+  exits 1). A register response with no server id exits 6, with or without
+  `--wait`.
 - Promote a connector-discovered app to a managed one with `apps managed-state
   list|get|promote` (`--app-id` the connector app, `--resource-type-id` its
   resource type named `app`, from `apps resource-types list --app-id`;
   `get`/`promote` take the row's `resource_id` positionally). `promote` creates
   an app and nothing checks for an existing one of the same name, so run `apps
   list` first and, after any failure, inspect before retrying. Promoting an
-  already-managed binding exits 0 and returns the existing app; deleting the
-  managed app soft-deletes the binding about 5 seconds later in one run (a
-  promote before `get` shows `deletedAt` created another app; after it,
-  `promote` exits 4). The binding later reappeared unmanaged under the same
-  `resource_id` (after about 8 minutes in one run, about 25 seconds in
-  another), and then a promote would create a new app. The managed app is `.state.managed.appId`
-  (top-level `appId` is the connector). Without
+  already-managed binding exits 0 and returns the existing app. After `apps
+  delete` of the promoted app the binding's soft-delete lags a few seconds, and
+  a promote in that window creates another app, so wait until `managed-state
+  get` shows `deletedAt` (then `promote` exits 4). The binding later reappears
+  unmanaged, after which a promote creates a new app. The managed app is
+  `.state.managed.appId` (top-level `appId` is the connector). Without
   `--user-id` the new app's owners were the connector app's; `docs guide
-  promote-idp-app-to-managed` has the full flow.
+  promote-idp-app-to-managed` has the timings and the full flow.
 - Owner changes are applied asynchronously and can take several minutes to
   appear; pass --wait to block until they do. Grant provisioning is
   asynchronous too. A read immediately after a write can look like a no-op.
