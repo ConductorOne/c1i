@@ -127,21 +127,38 @@ func init() {
 // The approve/deny endpoints require this ID to indicate which step of a
 // multi-step policy the action applies to.
 func parseCurrentPolicyStepID(data []byte) (string, error) {
+	id, _, err := parseCurrentPolicyStep(data)
+	return id, err
+}
+
+// parseCurrentPolicyStep returns the current step's id and kind ("approval",
+// "provision" or "other"), so an action can refuse a step it must not skip.
+func parseCurrentPolicyStep(data []byte) (id, kind string, err error) {
 	var resp struct {
 		TaskView struct {
 			Task struct {
 				Policy struct {
 					Current struct {
-						ID string `json:"id"`
+						ID        string          `json:"id"`
+						Approval  json.RawMessage `json:"approval"`
+						Provision json.RawMessage `json:"provision"`
 					} `json:"current"`
 				} `json:"policy"`
 			} `json:"task"`
 		} `json:"taskView"`
 	}
 	if err := json.Unmarshal(data, &resp); err != nil {
-		return "", fmt.Errorf("failed to parse task: %w", err)
+		return "", "", fmt.Errorf("failed to parse task: %w", err)
 	}
-	return resp.TaskView.Task.Policy.Current.ID, nil
+	cur := resp.TaskView.Task.Policy.Current
+	switch {
+	case len(cur.Approval) > 0 && string(cur.Approval) != "null":
+		return cur.ID, "approval", nil
+	case len(cur.Provision) > 0 && string(cur.Provision) != "null":
+		return cur.ID, "provision", nil
+	default:
+		return cur.ID, "other", nil
+	}
 }
 
 // resolvePolicyStepID returns the policy step id an action should target:
@@ -159,16 +176,24 @@ func resolvePolicyStepID(ctx context.Context, c *client.Client, taskID, explicit
 	if explicit != "" {
 		return explicit, nil
 	}
+	stepID, _, err := fetchCurrentPolicyStep(ctx, c, taskID, required)
+	return stepID, err
+}
+
+// fetchCurrentPolicyStep GETs the task and returns the current policy step id
+// and the task body, so a caller that must inspect the step does not fetch it
+// twice.
+func fetchCurrentPolicyStep(ctx context.Context, c *client.Client, taskID string, required bool) (string, []byte, error) {
 	data, err := c.Get(ctx, client.Path("/api/v1/tasks/%s", taskID), nil)
 	if err != nil {
-		return "", fmt.Errorf("failed to fetch task to determine current policy step: %w", err)
+		return "", nil, fmt.Errorf("failed to fetch task to determine current policy step: %w", err)
 	}
 	stepID, err := parseCurrentPolicyStepID(data)
 	if err != nil {
-		return "", err
+		return "", nil, err
 	}
 	if stepID == "" && required {
-		return "", &usageError{fmt.Errorf("task %s has no current policy step to target; re-read it with \"c1i tasks get %s\" (pass --policy-step-id only if you already know the step)", taskID, taskID)}
+		return "", nil, &usageError{fmt.Errorf("task %s has no current policy step to target; re-read it with \"c1i tasks get %s\" (pass --policy-step-id only if you already know the step)", taskID, taskID)}
 	}
-	return stepID, nil
+	return stepID, data, nil
 }

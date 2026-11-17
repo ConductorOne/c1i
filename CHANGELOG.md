@@ -10,6 +10,10 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 Exit codes:
 
+- **`tasks skip-step` refuses a current provision step** (exit `2`, nothing
+  sent). Skipping one abandons provisioning and can strand or close the task;
+  name the step with `--policy-step-id` only if you intend that.
+
 - **A `.` or `..` id exits `2` before anything is sent, on every id
   argument.** Every flag ending `-id`, `-ids`, `-uid` or `-uids` (new: `export
   events --since-event-uid`) and every positional documented `<…-id>` is

@@ -28,15 +28,27 @@ type taskActionRecorder struct {
 	bodies []map[string]any
 }
 
-func newTaskActionRecorder(t *testing.T, state, currentStepID string) *taskActionRecorder {
+func newTaskActionRecorder(t *testing.T, state, currentStepID string, stepKind ...string) *taskActionRecorder {
 	t.Helper()
+	kind := "approval"
+	if len(stepKind) > 0 {
+		kind = stepKind[0]
+	}
+	step := `{"id":"` + currentStepID + `"`
+	switch kind {
+	case "approval":
+		step += `,"approval":{}`
+	case "provision":
+		step += `,"provision":{}`
+	}
+	step += `}`
 	r := &taskActionRecorder{}
 	r.srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		// A GET is the policy-step lookup resolvePolicyStepID performs.
 		if req.Method == http.MethodGet {
 			_, _ = w.Write([]byte(`{"taskView":{"task":{"id":"` + actionTestTaskID +
-				`","state":"` + state + `","policy":{"current":{"id":"` + currentStepID + `"}}}}}`))
+				`","state":"` + state + `","policy":{"current":` + step + `}}}}`))
 			return
 		}
 		raw, _ := io.ReadAll(req.Body)
@@ -133,6 +145,42 @@ func TestEveryTaskActionPostsItsOwnVerbAndStep(t *testing.T) {
 				t.Errorf("%s sent policyStepId=%v to an endpoint that takes none", name, got)
 			}
 		})
+	}
+}
+
+// TestSkipStepRefusesAProvisionStep: the default form must not abandon
+// provisioning just because the current step is the one the server offers.
+func TestSkipStepRefusesAProvisionStep(t *testing.T) {
+	cmd := findTasksSubcommand(t, "skip-step")
+	resetCmds(t, cmd)
+	r := newTaskActionRecorder(t, "TASK_STATE_OPEN", "zz-step-1111111111111111111", "provision")
+	_, err := runTaskActionCmd(t, cmd, r.srv, actionTestTaskID)
+	if err == nil || !strings.Contains(err.Error(), "is not on an approval step") {
+		t.Fatalf("err = %v, want the approval-step refusal", err)
+	}
+	var usage *usageError
+	if !errors.As(err, &usage) {
+		t.Errorf("err %v is not a usage error; it must exit 2", err)
+	}
+	if len(r.paths) != 0 {
+		t.Errorf("posted %d action(s), want none: %v", len(r.paths), r.paths)
+	}
+}
+
+// An explicitly named step is the escape hatch and is sent as given.
+func TestSkipStepExplicitStepSkipsTheGuard(t *testing.T) {
+	cmd := findTasksSubcommand(t, "skip-step")
+	resetCmds(t, cmd)
+	_ = cmd.Flags().Set("policy-step-id", "zz-step-2222222222222222222")
+	r := newTaskActionRecorder(t, "TASK_STATE_OPEN", "zz-step-1111111111111111111", "provision")
+	if _, err := runTaskActionCmd(t, cmd, r.srv, actionTestTaskID); err != nil {
+		t.Fatalf("skip-step with explicit step: %v", err)
+	}
+	if len(r.paths) != 1 {
+		t.Fatalf("posted %d action(s), want 1", len(r.paths))
+	}
+	if got := r.bodies[0]["policyStepId"]; got != "zz-step-2222222222222222222" {
+		t.Errorf("policyStepId = %v, want the explicit step", got)
 	}
 }
 
@@ -357,7 +405,7 @@ func TestTaskActionsDryRunNeverSends(t *testing.T) {
 				}
 				// The GET is the policy-step lookup, which a preview may make.
 				_, _ = w.Write([]byte(`{"taskView":{"task":{"id":"` + actionTestTaskID +
-					`","state":"TASK_STATE_OPEN","policy":{"current":{"id":"zz-step-1111111111111111111"}}}}}`))
+					`","state":"TASK_STATE_OPEN","policy":{"current":{"id":"zz-step-1111111111111111111","approval":{}}}}}}`))
 			}))
 			t.Cleanup(srv.Close)
 
