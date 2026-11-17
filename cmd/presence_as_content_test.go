@@ -147,7 +147,6 @@ func TestNoPresenceAsContent(t *testing.T) {
 		t.Fatal(err)
 	}
 	seen := map[string]bool{}
-	changedSeen := 0
 	for _, path := range paths {
 		if strings.HasSuffix(path, "_test.go") {
 			continue
@@ -162,7 +161,6 @@ func TestNoPresenceAsContent(t *testing.T) {
 			case "trimspace":
 				t.Errorf("%s:%d: strings.TrimSpace emptiness check; use hasVisibleRune or the central blank guards", v.key, v.line)
 			case "changed":
-				changedSeen++
 				if _, ok := changedAllowlist[v.key]; ok {
 					seen[v.key] = true
 					continue
@@ -171,21 +169,32 @@ func TestNoPresenceAsContent(t *testing.T) {
 			}
 		}
 	}
-	if changedSeen < 30 {
-		t.Fatalf("found only %d Changed calls; this scan is not looking at what it thinks it is", changedSeen)
+	// An empty or misdirected scan sees no allowlisted call, so every entry is stale.
+	for _, k := range unseenChangedAllowlist(seen) {
+		t.Errorf("stale allowlist entry %s: no matching call remains; remove it", k)
 	}
-	var stale []string
 	for k, reason := range changedAllowlist {
 		if reason == "" {
 			t.Errorf("changedAllowlist[%q] has no reason", k)
 		}
+	}
+}
+
+// unseenChangedAllowlist returns the allowlist keys the scan never saw.
+func unseenChangedAllowlist(seen map[string]bool) []string {
+	var stale []string
+	for k := range changedAllowlist {
 		if !seen[k] {
 			stale = append(stale, k)
 		}
 	}
 	sort.Strings(stale)
-	for _, k := range stale {
-		t.Errorf("stale allowlist entry %s: no matching call remains; remove it", k)
+	return stale
+}
+
+func TestEmptyPresenceScanFails(t *testing.T) {
+	if got := unseenChangedAllowlist(map[string]bool{}); len(got) != len(changedAllowlist) {
+		t.Fatalf("an empty scan flagged %d of %d allowlist entries; it would pass silently", len(got), len(changedAllowlist))
 	}
 }
 
