@@ -37,19 +37,28 @@ go test -count=1 -shuffle=on ./...     # CI gates on this; catches tests that
                                        # leak package-level command state
 ```
 
-One shuffled run proves only its own seed. Before pushing, sweep many seeds in
-a clean environment (no `C1I_*` variables, an empty HOME), as CI runs. Each
-`./cmd` run is serial (~35s: its tests share global command state), so run
-seeds side by side; 8 at a time takes about 2.5 minutes instead of 15:
+One shuffled run proves only its own seed. Before pushing, sweep seeds in a
+clean environment (no `C1I_*` variables, an empty HOME), as CI runs. Build the
+`./cmd` test binary once and run each seed from `cmd/` against it; each run is
+serial (its tests share global command state), so run seeds side by side, 8 at a
+time. Use 8 seeds by default and 25 when test files, `cmd/root.go` or
+`cmd/mutation.go` change:
 
 ```sh
+go test -c -o dev/cmd.test ./cmd
 export GC="$(go env GOCACHE)" GM="$(go env GOMODCACHE)"
-seq 25 | xargs -P 8 -I{} sh -c 'env -i PATH="$PATH" HOME="$(mktemp -d)" \
-  GOCACHE="$GC" GOMODCACHE="$GM" go test -count=1 -shuffle=on ./cmd \
-  > dev/sweep-{}.log 2>&1 || { grep -m3 -E "shuffle|--- FAIL" dev/sweep-{}.log; exit 255; }'
+(cd cmd && seq 8 | xargs -P 8 -I{} sh -c 'env -i PATH="$PATH" HOME="$(mktemp -d)" \
+  GOCACHE="$GC" GOMODCACHE="$GM" ../dev/cmd.test -test.count=1 -test.shuffle=on -test.timeout=5m \
+  > ../dev/sweep-{}.log 2>&1 || { grep -m3 -E "shuffle|--- FAIL" ../dev/sweep-{}.log; exit 255; }')
 ```
 
-Don't edit the tree while it runs: every seed compiles the working copy.
+Don't edit the tree while it runs. On a shared host, run tests under resource
+limits (a cgroup or `systemd-run --scope` capping tasks, memory and CPU) and
+never run an unbounded sweep; a runaway run once forced a host reboot. A test
+must never exec the test binary (`os.Args[0]`, `os.Executable()`) or spawn
+`go test`; run the code in-process instead (`TestNoTestExecsTheTestBinary`).
+Test-only waits (login poll, retry backoff) shrink through `internal/timing`,
+set by `internal/testenv`; production is unscaled and pinned by a test.
 
 Don't set `GOTOOLCHAIN=local` for this unless `go version` matches `go.mod`;
 it runs whatever Go is on PATH instead of the version CI uses.
