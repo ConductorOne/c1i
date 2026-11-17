@@ -51,6 +51,7 @@ var wantEmptyAllowed = map[string]string{
 	"c1i automations update --description":                      emptyIsSent,
 	"c1i docs agents --output":                                  emptyIsOmitted,
 	"c1i docs changelog --output":                               emptyIsOmitted,
+	"c1i docs map --output":                                     emptyIsOmitted,
 	"c1i docs readme --output":                                  emptyIsOmitted,
 	"c1i entitlements create --alias":                           emptyIsOmitted,
 	"c1i entitlements create --description":                     emptyIsOmitted,

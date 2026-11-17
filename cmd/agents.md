@@ -249,6 +249,9 @@ authenticating. Which one depends on what you are after:
   | Request or approve access | `request-access` → `inspect-and-approve-task` |
   | Configure delegated provisioning | `delegate-entitlement-provisioning` |
   | Promote an identity-provider app to a managed app | `promote-idp-app-to-managed` |
+- **The command tree this build accepts**: `docs map` prints an indented
+  outline; `docs map --json` adds full paths, aliases, and counts for scripts or
+  docs checks. No auth or network.
 - **The raw OpenAPI spec**: `docs openapi` (cached 24h locally).
 
 Rule of thumb: a product concept starts at `docs search` → `docs page`; a raw

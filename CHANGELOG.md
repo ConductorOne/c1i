@@ -6,6 +6,14 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- `docs map [--json]` prints the command tree this binary accepts, generated
+  from the live Cobra tree. The default output is an indented outline with each
+  command's one-line description; `--json` adds full paths, aliases, version,
+  and family/command/leaf counts for scripts and docs verification. It needs no
+  credentials or network.
+
 ## [0.11.0] - 2026-11-17
 
 ### Upgrading from 0.10.1

@@ -2121,7 +2121,17 @@ c1i docs openapi
 # Print an embedded, task-oriented runbook (list names if omitted)
 c1i docs guide
 c1i docs guide register-mcp-server
+
+# Print the command tree this binary accepts (no auth). --json adds full
+# paths, aliases, counts, and the nested tree for verification scripts.
+c1i docs map
+c1i docs map --json
 ```
+
+`docs map` is generated from the binary's own command tree, so it matches the
+commands the running build accepts. Use it to check a README, guide, or public
+docs page against the installed version; `--json` includes the version and
+family/command/leaf counts.
 
 `docs openapi`, `docs endpoints`, and `docs endpoint` use the current public API contract at `https://www.c1.ai/api/openapi.yaml`, including MCP server, tool, and toolset operations. The spec is cached for 24 hours at `~/.c1i/cache/api-openapi.yaml`; fetch failures fall back to that cache, however old, with a one-line warning on stderr naming its age. A response over 32 MiB counts as a failed fetch. With a cache to fall back on, a fetch makes one attempt unless you set `--max-retries` or `C1I_MAX_RETRIES`. With no cache, a failed fetch exits `4` for a `404`, `5` for a `429`, `6` for a `5xx`, and `8` for anything else, such as an unreachable host, a refused redirect or a redirect loop.
 
