@@ -3,7 +3,6 @@ package cmd
 import (
 	"fmt"
 	"net/http"
-	"strings"
 
 	"github.com/ConductorOne/c1i/internal/client"
 	"github.com/spf13/cobra"
@@ -75,60 +74,56 @@ Example:
 	},
 }
 
+// entitlementUpdateSpec lists the entitlement's updatable fields, in mask
+// order; the emergency and duration hooks depend on the fields before them.
+var entitlementUpdateSpec = &updateSpec{
+	fields: []updateField{
+		strUpdate("display-name", "displayName"),
+		strUpdate("description", "description"),
+		policyUpdate(entitlementPolicyKinds),
+		hookUpdate([]string{"emergency-grant-enabled"}, func(cmd *cobra.Command, ent map[string]any) ([]string, error) {
+			if !cmd.Flags().Changed("emergency-grant-enabled") {
+				return nil, nil
+			}
+			enabled, _ := cmd.Flags().GetBool("emergency-grant-enabled")
+			// Unset or unbound in this call; a stored policy does not satisfy the server.
+			if v, _ := ent["emergencyGrantPolicyId"].(string); enabled && v == "" {
+				return nil, &usageError{fmt.Errorf("--emergency-grant-enabled needs --emergency-grant-policy-id in the same call; the server refuses it alone with %q", emergencyPolicyRequiredMsg)}
+			}
+			ent["emergencyGrantEnabled"] = enabled
+			return []string{"emergencyGrantEnabled"}, nil
+		}),
+		hookUpdate([]string{"duration-grant", "duration-unset"}, func(cmd *cobra.Command, ent map[string]any) ([]string, error) {
+			f := cmd.Flags()
+			if f.Changed("duration-grant") && f.Changed("duration-unset") {
+				return nil, &usageError{fmt.Errorf("--duration-grant and --duration-unset are mutually exclusive: both set the entitlement's max_grant_duration")}
+			}
+			paths, err := durationUpdate("duration-grant", "durationGrant").apply(cmd, ent)
+			if err != nil {
+				return nil, err
+			}
+			if f.Changed("duration-unset") {
+				if v, _ := f.GetBool("duration-unset"); !v {
+					return nil, &usageError{fmt.Errorf("--duration-unset=false is not a change; pass --duration-grant to set a limit")}
+				}
+				ent["durationUnset"] = map[string]any{}
+				paths = append(paths, "durationUnset")
+			}
+			return paths, nil
+		}),
+	},
+	scope: []string{"app-id"},
+}
+
 // buildEntitlementUpdateBody builds the wrapped request from changed flags.
 // Every error is a *usageError.
 func buildEntitlementUpdateBody(cmd *cobra.Command, appID, id string) (map[string]any, error) {
-	f := cmd.Flags()
-
 	ent := map[string]any{"id": id, "appId": appID}
-	var paths []string
-	for _, s := range []struct{ flag, key string }{{"display-name", "displayName"}, {"description", "description"}} {
-		if f.Changed(s.flag) {
-			v, _ := f.GetString(s.flag)
-			ent[s.key] = v
-			paths = append(paths, s.key)
-		}
-	}
-	policyPaths, err := applyPolicyUpdates(cmd, entitlementPolicyKinds, ent)
+	mask, err := entitlementUpdateSpec.build(cmd, ent)
 	if err != nil {
 		return nil, err
 	}
-	paths = append(paths, policyPaths...)
-
-	if f.Changed("emergency-grant-enabled") {
-		enabled, _ := f.GetBool("emergency-grant-enabled")
-		// Unset or unbound in this call; a stored policy does not satisfy the server.
-		if v, _ := ent["emergencyGrantPolicyId"].(string); enabled && v == "" {
-			return nil, &usageError{fmt.Errorf("--emergency-grant-enabled needs --emergency-grant-policy-id in the same call; the server refuses it alone with %q", emergencyPolicyRequiredMsg)}
-		}
-		ent["emergencyGrantEnabled"] = enabled
-		paths = append(paths, "emergencyGrantEnabled")
-	}
-
-	if f.Changed("duration-grant") && f.Changed("duration-unset") {
-		return nil, &usageError{fmt.Errorf("--duration-grant and --duration-unset are mutually exclusive: both set the entitlement's max_grant_duration")}
-	}
-	if v, ok, err := protoDurationFlag(cmd, "duration-grant"); err != nil {
-		return nil, err
-	} else if ok {
-		ent["durationGrant"] = v
-		paths = append(paths, "durationGrant")
-	}
-	if f.Changed("duration-unset") {
-		if v, _ := f.GetBool("duration-unset"); !v {
-			return nil, &usageError{fmt.Errorf("--duration-unset=false is not a change; pass --duration-grant to set a limit")}
-		}
-		ent["durationUnset"] = map[string]any{}
-		paths = append(paths, "durationUnset")
-	}
-
-	if len(paths) == 0 {
-		return nil, &usageError{fmt.Errorf("nothing to update: pass at least one field flag (see --help)")}
-	}
-	return map[string]any{
-		"entitlement": ent,
-		"updateMask":  strings.Join(paths, ","),
-	}, nil
+	return wrapUpdate("entitlement", ent, mask), nil
 }
 
 func init() {
@@ -143,6 +138,7 @@ func init() {
 	addProtoDurationFlag(entitlementsUpdateCmd, "duration-grant", "Maximum grant duration as a protobuf duration, e.g. 3600s; a Go duration such as 8h is converted to seconds; a sign or decimal (-1h, 1.5h) exits 2")
 	f.Bool("duration-unset", false, "Remove the maximum grant duration (standing access) instead of setting one (a protobuf duration like 3600s or a Go duration like 8h); excludes --duration-grant")
 	markRequired(entitlementsUpdateCmd, "app-id")
+	registerUpdateSpec(entitlementsUpdateCmd, entitlementUpdateSpec)
 	markMutating(entitlementsUpdateCmd)
 	entitlementsCmd.AddCommand(entitlementsUpdateCmd)
 }

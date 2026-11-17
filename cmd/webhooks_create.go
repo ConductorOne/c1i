@@ -24,8 +24,8 @@ The server also refuses a --display-name outside 3-100 characters with a 400
 No secret is returned. Prints the webhook, unwrapped like "webhooks get": the
 id is .id. Honors --dry-run.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		body, _, err := webhookFields(cmd)
-		if err != nil {
+		body := map[string]any{}
+		if _, err := webhookFields.apply(cmd, body); err != nil {
 			return err
 		}
 

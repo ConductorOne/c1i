@@ -38,54 +38,18 @@ Example:
 	},
 }
 
-// catalogStringFlags maps the string-valued RequestCatalog fields exposed as
-// flags to their protojson keys and normalizes the behavior enum shortcuts.
-// The same fields are valid on both create and update.
-var catalogStringFlags = []struct {
-	flag, key string
-	enum      *enumFlag
-}{
-	{"display-name", "displayName", nil},
-	{"description", "description", nil},
-	{"enrollment-behavior", "enrollmentBehavior", &catalogEnrollmentFlag},
-	{"unenrollment-behavior", "unenrollmentBehavior", &catalogUnenrollmentFlag},
-	{"unenrollment-entitlement-behavior", "unenrollmentEntitlementBehavior", &catalogUnenrollmentEntitlementFlag},
-}
-
-// catalogBoolFlags maps the boolean RequestCatalog fields exposed as flags to
-// their protojson keys. Changed, rather than true, preserves an explicit false.
-var catalogBoolFlags = []struct{ flag, key string }{
-	{"published", "published"},
-	{"visible-to-everyone", "visibleToEveryone"},
-	{"request-bundle", "requestBundle"},
-}
-
-// addCatalogChangedFields applies every explicitly supplied writable scalar
-// field to catalog and returns the corresponding FieldMask paths in flag order.
-func addCatalogChangedFields(cmd *cobra.Command, catalog map[string]any) ([]string, error) {
-	var paths []string
-	for _, sf := range catalogStringFlags {
-		if cmd.Flags().Changed(sf.flag) {
-			v := mustGetString(cmd, sf.flag)
-			if sf.enum != nil {
-				var err error
-				if v, err = sf.enum.parse(v); err != nil {
-					return nil, err
-				}
-			}
-			catalog[sf.key] = v
-			paths = append(paths, sf.key)
-		}
-	}
-	for _, bf := range catalogBoolFlags {
-		if cmd.Flags().Changed(bf.flag) {
-			v, _ := cmd.Flags().GetBool(bf.flag)
-			catalog[bf.key] = v
-			paths = append(paths, bf.key)
-		}
-	}
-	return paths, nil
-}
+// catalogFields are the writable scalar RequestCatalog fields, valid on both
+// create and update, in mask order. A set bool keeps an explicit false.
+var catalogFields = &updateSpec{fields: []updateField{
+	strUpdate("display-name", "displayName"),
+	strUpdate("description", "description"),
+	enumUpdate("enrollment-behavior", "enrollmentBehavior", &catalogEnrollmentFlag),
+	enumUpdate("unenrollment-behavior", "unenrollmentBehavior", &catalogUnenrollmentFlag),
+	enumUpdate("unenrollment-entitlement-behavior", "unenrollmentEntitlementBehavior", &catalogUnenrollmentEntitlementFlag),
+	boolUpdate("published", "published"),
+	boolUpdate("visible-to-everyone", "visibleToEveryone"),
+	boolUpdate("request-bundle", "requestBundle"),
+}}
 
 var catalogEnrollmentFlag = enumFlag{flag: "enrollment-behavior", prefix: "REQUEST_CATALOG_ENROLLMENT_BEHAVIOR_", unknown: enumPassPrefixed, values: []enumValue{
 	{name: "bypass", api: "REQUEST_CATALOG_ENROLLMENT_BEHAVIOR_BYPASS_ENTITLEMENT_REQUEST_POLICY", aliases: []string{"REQUEST_CATALOG_ENROLLMENT_BEHAVIOR_BYPASS"}},
@@ -112,7 +76,7 @@ var catalogUnenrollmentEntitlementFlag = enumFlag{flag: "unenrollment-entitlemen
 func buildAccessProfileCreateBody(cmd *cobra.Command) (map[string]any, error) {
 	displayName, _ := cmd.Flags().GetString("display-name")
 	body := map[string]any{"displayName": displayName}
-	if _, err := addCatalogChangedFields(cmd, body); err != nil {
+	if _, err := catalogFields.apply(cmd, body); err != nil {
 		return nil, err
 	}
 	return body, nil

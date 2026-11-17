@@ -1,13 +1,22 @@
 package cmd
 
 import (
-	"fmt"
 	"net/http"
-	"strings"
 
 	"github.com/ConductorOne/c1i/internal/client"
 	"github.com/spf13/cobra"
 )
+
+var mcpServersUpdateSpec = &updateSpec{
+	fields: []updateField{
+		strUpdate("display-name", "displayName"),
+		strUpdate("description", "description"),
+		enumUpdate("data-sensitivity", "dataSensitivity", &dataSensitivityFlag),
+		strUpdate("tool-prefix", "toolPrefix"),
+		optionalBoolUpdate("require-tool-approval", "requireToolApproval"),
+	},
+	scope: []string{"app-id"},
+}
 
 var mcpServersUpdateCmd = &cobra.Command{
 	Use:   "update <connector-id>",
@@ -33,49 +42,14 @@ Prints the updated server, unwrapped like "mcp servers get" (id: .connectorId).`
 			"appId":       appID,
 			"connectorId": connectorID,
 		}
-		var paths []string
-		if cmd.Flags().Changed("display-name") {
-			v, _ := cmd.Flags().GetString("display-name")
-			server["displayName"] = v
-			paths = append(paths, "displayName")
-		}
-		if cmd.Flags().Changed("description") {
-			v, _ := cmd.Flags().GetString("description")
-			server["description"] = v
-			paths = append(paths, "description")
-		}
-		if cmd.Flags().Changed("data-sensitivity") {
-			v, err := dataSensitivityFlag.parse(mustGetString(cmd, "data-sensitivity"))
-			if err != nil {
-				return err
-			}
-			server["dataSensitivity"] = v
-			paths = append(paths, "dataSensitivity")
-		}
-		if cmd.Flags().Changed("tool-prefix") {
-			v, _ := cmd.Flags().GetString("tool-prefix")
-			server["toolPrefix"] = v
-			paths = append(paths, "toolPrefix")
-		}
-		if cmd.Flags().Changed("require-tool-approval") {
-			on, _ := cmd.Flags().GetBool("require-tool-approval")
-			if on {
-				server["requireToolApproval"] = "OPTIONAL_BOOL_TRUE"
-			} else {
-				server["requireToolApproval"] = "OPTIONAL_BOOL_FALSE"
-			}
-			paths = append(paths, "requireToolApproval")
-		}
-		if len(paths) == 0 {
-			return &usageError{fmt.Errorf("nothing to update: pass at least one of --display-name, --description, --data-sensitivity, --tool-prefix, --require-tool-approval")}
+		mask, err := mcpServersUpdateSpec.build(cmd, server)
+		if err != nil {
+			return err
 		}
 
-		body := map[string]any{
-			"appId":       appID,
-			"connectorId": connectorID,
-			"mcpServer":   server,
-			"updateMask":  strings.Join(paths, ","),
-		}
+		body := wrapUpdate("mcpServer", server, mask)
+		body["appId"] = appID
+		body["connectorId"] = connectorID
 
 		path := client.Path("/api/v1/apps/%s/mcp_servers/%s", appID, connectorID)
 		return sendMutation(cmd, mutation{Method: http.MethodPost, Path: path, Body: body, Unwrap: byID("connectorId")})
@@ -92,6 +66,7 @@ func init() {
 	allowEmpty(mcpServersUpdateCmd, emptyIsSent, "data-sensitivity", "tool-prefix")
 	mcpServersUpdateCmd.Flags().Bool("require-tool-approval", false, "Per-server override for tool auto-approval")
 	markRequired(mcpServersUpdateCmd, "app-id")
+	registerUpdateSpec(mcpServersUpdateCmd, mcpServersUpdateSpec)
 	markMutating(mcpServersUpdateCmd)
 	mcpServersCmd.AddCommand(mcpServersUpdateCmd)
 }

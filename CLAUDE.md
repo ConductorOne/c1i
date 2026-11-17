@@ -284,6 +284,19 @@ tracked root file outside its allowlist. Stage explicit paths rather than `-A`.
   break is that `--flag a,b` is one value, not two. `TestNoCommandUsesStringSlice`
   and `TestRepeatableStringFlagsGoThroughSharedRegistrar` fail on a
   hand-registration.
+- **Update commands declare their fields once (enforced convention):** an
+  `update` command builds its body and `updateMask` from an `updateSpec`
+  (`cmd/update_fields.go`: `strUpdate`, `boolUpdate`, `optionalBoolUpdate`,
+  `enumUpdate`, `durationUpdate`, `hookUpdate`), registered with
+  `registerUpdateSpec`; the "nothing to update" error comes from the same
+  table. `update-credentials` derives its mask from the config object it
+  builds (its table only names flags), and body-file-only updates pass the
+  caller's mask through `wrapUpdate`. Never append to a mask or write
+  `"updateMask"` by hand: `wrapUpdate`/`setUpdateMask` take a literal or a
+  `spec.build`/`bodyFileMask` result. `TestEveryUpdateCommandDeclaresItsFields`
+  and `TestUpdateCommandsDoNotBuildMasksByHand` enforce it;
+  `TestUpdateCommandsWireIsPinned` pins each update command's request across a
+  flag matrix.
 - **Output:** list rows go through the `newEmitter(...)`/`.Encode` emitter;
   single-object reads through `writeObject`; **mutations** through
   `sendMutation`/`sendMutationBatch`/`sendMutationSequence` (`cmd/mutation.go`),

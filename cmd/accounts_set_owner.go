@@ -21,12 +21,7 @@ mutation. Honors --dry-run.`,
 		userID, _ := cmd.Flags().GetString("user-id")
 
 		path := client.Path("/api/v1/apps/%s/app_users/%s", appID, args[0])
-		body := map[string]any{
-			"appUser": map[string]any{
-				"identityUserId": userID,
-			},
-			"updateMask": "identityUserId",
-		}
+		body := wrapUpdate("appUser", map[string]any{"identityUserId": userID}, "identityUserId")
 		return sendMutation(cmd, mutation{Method: http.MethodPost, Path: path, Body: body},
 			withPreRead(existingUsersCheck("user-id", []string{userID})))
 	},

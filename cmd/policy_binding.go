@@ -85,8 +85,18 @@ func applyPolicyIDs(cmd *cobra.Command, kinds []policyKind, obj map[string]any) 
 	return nil
 }
 
-// applyPolicyUpdates sets or unbinds each policy slot on obj and returns the
-// mask paths, in kind order.
+// policyUpdate is the update field for kinds: it sets or unbinds each policy
+// slot on obj, in kind order.
+func policyUpdate(kinds []policyKind) updateField {
+	var flags []string
+	for _, k := range kinds {
+		flags = append(flags, k.flag)
+	}
+	return hookUpdate(append(flags, "unbind-policy"), func(cmd *cobra.Command, obj map[string]any) ([]string, error) {
+		return applyPolicyUpdates(cmd, kinds, obj)
+	})
+}
+
 func applyPolicyUpdates(cmd *cobra.Command, kinds []policyKind, obj map[string]any) ([]string, error) {
 	raw, err := parseRepeatableEnum(cmd, unbindPolicyFlag(kinds))
 	if err != nil {

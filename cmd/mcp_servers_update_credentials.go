@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"strings"
 
 	"github.com/ConductorOne/c1i/internal/client"
 	"github.com/spf13/cobra"
@@ -33,6 +32,25 @@ func resolveMCPServerCatalogID(ctx context.Context, c *client.Client, appID, con
 	}
 	return resp.MCPServer.McpServerCatalogID, nil
 }
+
+// The specs name the flags that feed each config shape. The mask is the
+// config object's own keys (deriveCredentialUpdateMask), so no field applies.
+var (
+	hostedCredentialsSpec = &updateSpec{
+		fields: []updateField{
+			{flags: sharedAuthFlagNames},
+			{flags: []string{"catalog-id", "source-app-id", "config-field", "hosted-config-file"}},
+		},
+		scope: []string{"app-id", "type", "update-mask"},
+	}
+	externalCredentialsSpec = &updateSpec{
+		fields: []updateField{
+			{flags: sharedAuthFlagNames},
+			{flags: []string{"server-url", "transport", "external-config-file"}},
+		},
+		scope: []string{"app-id", "type", "update-mask"},
+	}
+)
 
 var mcpServersUpdateCredentialsCmd = &cobra.Command{
 	Use:   "update-credentials <connector-id>",
@@ -76,13 +94,9 @@ For a hosted server without --catalog-id, c1i first looks the catalog id up
 		connectorID := args[0]
 		typ, _ := cmd.Flags().GetString("type")
 
-		body := map[string]any{
-			"appId":       appID,
-			"connectorId": connectorID,
-		}
-
 		var cfg map[string]any
 		var wrapperKey string
+		var spec *updateSpec
 		typ, err = serverTypeFlag.parse(typ)
 		if err != nil {
 			return err
@@ -90,10 +104,10 @@ For a hosted server without --catalog-id, c1i first looks the catalog id up
 		switch typ {
 		case "MCP_SERVER_TYPE_HOSTED":
 			cfg, err = buildHostedConfig(cmd)
-			wrapperKey = "hostedConfig"
+			wrapperKey, spec = "hostedConfig", hostedCredentialsSpec
 		case "MCP_SERVER_TYPE_EXTERNAL":
 			cfg, err = buildExternalConfig(cmd)
-			wrapperKey = "externalConfig"
+			wrapperKey, spec = "externalConfig", externalCredentialsSpec
 		default:
 			return &usageError{fmt.Errorf("invalid --type %q: use hosted or external", typ)}
 		}
@@ -105,7 +119,7 @@ For a hosted server without --catalog-id, c1i first looks the catalog id up
 		// the backend nothing to apply. Require the caller to supply what to set.
 		// An explicit --update-mask is trusted as intent.
 		if len(cfg) == 0 && mask == "" {
-			return &usageError{fmt.Errorf("nothing to update: supply the new config via the auth flags (--auth/--bearer-token/…), --config-field, --server-url, or --%s-config-file", strings.TrimSuffix(wrapperKey, "Config"))}
+			return spec.nothingToUpdate()
 		}
 		if mask != "" {
 			if err := requireMaskCoversConfig(mask, cfg); err != nil {
@@ -141,8 +155,9 @@ For a hosted server without --catalog-id, c1i first looks the catalog id up
 			}
 		}
 
-		body[wrapperKey] = cfg
-		body["updateMask"] = mask
+		body := wrapUpdate(wrapperKey, cfg, mask)
+		body["appId"] = appID
+		body["connectorId"] = connectorID
 
 		path := client.Path("/api/v1/apps/%s/mcp_servers/%s/credentials", appID, connectorID)
 		return sendMutation(cmd, mutation{Method: http.MethodPost, Path: path, Body: body, Unwrap: byID("connectorId")}, opts...)
@@ -167,6 +182,7 @@ func init() {
 	allowEmpty(mcpServersUpdateCredentialsCmd, emptyIsOmitted, "hosted-config-file", "server-url", "transport", "external-config-file", "update-mask")
 	setBlankHint(mcpServersUpdateCredentialsCmd, "update-mask", updateMaskBlankHint)
 	markRequired(mcpServersUpdateCredentialsCmd, "app-id", "type")
+	registerUpdateSpec(mcpServersUpdateCredentialsCmd, hostedCredentialsSpec, externalCredentialsSpec)
 	markMutating(mcpServersUpdateCredentialsCmd)
 	mcpServersCmd.AddCommand(mcpServersUpdateCredentialsCmd)
 }

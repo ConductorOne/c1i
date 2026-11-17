@@ -3,49 +3,15 @@ package cmd
 import (
 	"fmt"
 	"slices"
-	"sort"
 	"strings"
 
 	"github.com/spf13/cobra"
 )
 
-// deriveCredentialUpdateMask returns the update_mask for an UpdateCredentials
-// request built from the convenience flags: the sorted set of top-level field
-// paths present in cfg.
-//
-// The backend applies a credential/config change only when the mask names that
-// field by its proto path — for the auth oneof that is the *case name* (e.g.
-// "bearerToken", "none", "customHeader", "basicAuth", "oauth2"), NOT the
-// wrapping "hostedConfig"/"externalConfig". The config builders already key the
-// object by those exact paths, so the mask is simply cfg's keys. (Sending the
-// wrapper name — the previous behavior — matched no path, so the backend
-// silently dropped every credential change.) Mirrors the admin UI, which masks
-// exactly the fields the user edited.
-func deriveCredentialUpdateMask(cfg map[string]any) string {
-	return strings.Join(sortedConfigKeys(cfg), ",")
-}
-
-func sortedConfigKeys(cfg map[string]any) []string {
-	keys := make([]string, 0, len(cfg))
-	for k := range cfg {
-		keys = append(keys, k)
-	}
-	sort.Strings(keys)
-	return keys
-}
-
-// checkDerivedMaskKeys refuses a config key that would become an empty or
-// malformed --update-mask path, naming the key.
-func checkDerivedMaskKeys(cfg map[string]any) error {
-	for i, k := range sortedConfigKeys(cfg) {
-		if !hasVisibleRune(k) {
-			return &usageError{fmt.Errorf("config key %d is empty; it would become an empty --update-mask path", i+1)}
-		}
-		if _, bad := splitPathSegments(k); bad != 0 {
-			return &usageError{fmt.Errorf("config key %q has an empty dot-segment (segment %d); it would become an invalid --update-mask path", k, bad)}
-		}
-	}
-	return nil
+// sharedAuthFlagNames are the flags addAuthFlags registers.
+var sharedAuthFlagNames = []string{
+	"auth", "bearer-token", "header-name", "header-value",
+	"basic-auth-username", "basic-auth-password", "token-sharing", "require-tool-approval",
 }
 
 // addAuthFlags registers the convenience auth flags shared by register,
@@ -284,11 +250,7 @@ func applySharedAuthFields(cmd *cobra.Command, cfg map[string]any) error {
 	}
 	if cmd.Flags().Changed("require-tool-approval") {
 		on, _ := cmd.Flags().GetBool("require-tool-approval")
-		if on {
-			cfg["requireToolApproval"] = "OPTIONAL_BOOL_TRUE"
-		} else {
-			cfg["requireToolApproval"] = "OPTIONAL_BOOL_FALSE"
-		}
+		cfg["requireToolApproval"] = optionalBool(on)
 	}
 	return nil
 }
@@ -298,10 +260,7 @@ func applySharedAuthFields(cmd *cobra.Command, cfg map[string]any) error {
 // these flags would be silently dropped alongside it — this lets the builders
 // reject that combination instead of quietly discarding the values.
 func sharedAuthFlagsChanged(cmd *cobra.Command) bool {
-	for _, n := range []string{
-		"auth", "bearer-token", "header-name", "header-value",
-		"basic-auth-username", "basic-auth-password", "token-sharing", "require-tool-approval",
-	} {
+	for _, n := range sharedAuthFlagNames {
 		if cmd.Flags().Changed(n) {
 			return true
 		}

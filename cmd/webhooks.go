@@ -60,37 +60,14 @@ func webhookFieldFlags(cmd *cobra.Command, update bool) {
 	addProtoDurationFlag(cmd, "callback-timeout", verb+` time to wait for an asynchronous callback, as a protobuf duration (600s) or a Go duration (10m), sent in seconds (`+keep+`0 to 720h; a sign or decimal (-1h, 1.5h) exits 2 before sending; over 720h, update returns "callback_timeout must be between 0 and 30 days" and create "value must be inside range [0s, 720h0m0s]")`)
 }
 
-// webhookFields reads the changed field flags into a Webhook body and the
-// matching camelCase update-mask paths, in a fixed order.
-func webhookFields(cmd *cobra.Command) (map[string]any, []string, error) {
-	fields := map[string]any{}
-	var paths []string
-	if cmd.Flags().Changed("display-name") {
-		v, _ := cmd.Flags().GetString("display-name")
-		fields["displayName"] = v
-		paths = append(paths, "displayName")
-	}
-	if cmd.Flags().Changed("description") {
-		v, _ := cmd.Flags().GetString("description")
-		fields["description"] = v
-		paths = append(paths, "description")
-	}
-	if cmd.Flags().Changed("destination-url") {
-		v, _ := cmd.Flags().GetString("destination-url")
-		if err := validateWebhookURL(v); err != nil {
-			return nil, nil, err
-		}
-		fields["url"] = v
-		paths = append(paths, "url")
-	}
-	if v, ok, err := protoDurationFlag(cmd, "callback-timeout"); err != nil {
-		return nil, nil, err
-	} else if ok {
-		fields["callbackTimeout"] = v
-		paths = append(paths, "callbackTimeout")
-	}
-	return fields, paths, nil
-}
+// webhookFields are the writable Webhook fields, in mask order; create and
+// update both build from them.
+var webhookFields = &updateSpec{fields: []updateField{
+	strUpdate("display-name", "displayName"),
+	strUpdate("description", "description"),
+	strUpdate("destination-url", "url", validateWebhookURL),
+	durationUpdate("callback-timeout", "callbackTimeout"),
+}}
 
 // validateWebhookURL refuses anything but an absolute https URL. Create
 // rewrites any other scheme (or none) to https and stores an unparseable value
