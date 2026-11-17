@@ -565,8 +565,11 @@ always exit `4`:
   rows carry `deleted_at`,
   `null` on a live policy, so `jq 'select(.deleted_at)'` selects only the
   deleted ones.
-- `automations delete`: the automation leaves `automations list`, but
-  `automations get` still returns it.
+- `automations delete`: the API's own list stops returning the automation,
+  but c1i's `automations list` reads the search index (the route c1i uses to
+  page past the GET's first page), which can keep returning it with no deleted
+  marker; `automations get` still returns it at exit `0` with no field marking
+  it deleted.
 - `access-profiles delete`: the profile leaves `access-profiles list`, while
   `access-profiles get` still returns it with `deletedAt` populated.
 - `webhooks delete`: the webhook leaves `webhooks list`, but `webhooks get`
@@ -672,13 +675,13 @@ branch on without parsing text:
 |------|---------|
 | `0` | success |
 | `1` | generic / unclassified error |
-| `2` | usage error (bad flags or arguments, an empty, `.` or `..` id, a blank flag or positional, a missing, malformed, `null` or wrong-shape `--*-file` input, a non-object element in an array `--*-file` or `--body-file`, a referenced id that exists but is soft-deleted or of the wrong kind (a deleted or wrong-type policy), a control character in a path flag, header or `--config-field` key (see [Raw API](#raw-api)), a refused redirect (but `upgrade` and the `docs` commands exit `8`), or the API returned any `4xx` other than `401`/`403`/`404`/`408`/`429`/`499`) |
+| `2` | usage error (bad flags or arguments, an empty, `.` or `..` id, a blank flag or positional, a missing, malformed, `null` or wrong-shape `--*-file` input, a non-object element in an array `--*-file` or `--body-file`, a referenced id that exists but is soft-deleted or of the wrong kind (a deleted or wrong-type policy), a control character in a path flag, header or `--config-field` key (see [Raw API](#raw-api)), a refused redirect (but `upgrade` and the `docs` commands exit `8`), `mcp gateway call`'s request was rejected with JSON-RPC `-32602` (invalid params, e.g. an unknown tool), or the API returned any `4xx` other than `401`/`403`/`404`/`408`/`429`/`499`) |
 | `3` | not authenticated, or API returned `401`/`403` (including a `400`/`401`/`403` from the token endpoint; any other token-endpoint failure is classified like an API response: `404` exits 4, `429` 5, `5xx` or a `200` that is not a token 6) |
 | `4` | API returned `404` (not found), or a referenced id (`--user-id`, a policy id) that does not exist, whether the server or a c1i pre-check catches it |
 | `5` | API returned `429` (rate limited — back off and retry) |
 | `6` | C1 failed: the API returned `5xx`, a redirect chain never settled, it answered `200` with a body that isn't JSON or a usable token, a list command's pagination cursor stopped advancing, or a list page in a shape the command doesn't recognize |
 | `7` | `mcp gateway call` completed, but the tool itself reported an error (`isError: true` in its result) |
-| `8` | a system beyond C1, or the MCP protocol layer, failed — an upstream connector was unreachable or errored, the gateway itself was unreachable (DNS failure, refused connection), `mcp servers test-connection` reported an EXTERNAL server unreachable (its JSON is still printed), or the gateway returned a protocol-level JSON-RPC error |
+| `8` | a system beyond C1, or the MCP protocol layer, failed — an upstream connector was unreachable or errored, the gateway itself was unreachable (DNS failure, refused connection), `mcp servers test-connection` reported an EXTERNAL server unreachable (its JSON is still printed), or the gateway returned another protocol-level JSON-RPC error (`invalid params`, `-32602`, is exit `2`) |
 
 Exit `1` with `writing output:` means stdout failed (e.g. a full disk). On a
 mutation the message is `<METHOD> <path> succeeded but writing its response
@@ -690,9 +693,10 @@ there is nothing to fix at your end. `8` means C1 answered fine and something
 past it did not, so the same call will usually fail the same way: if a connector
 is at fault, inspect it (`c1i mcp servers get <connector-id> --app-id <id>`, and
 `mcp servers test-connection` for an EXTERNAL server) — it may be unreachable or
-its credentials may have expired; if it's a protocol-level JSON-RPC error, that
+its credentials may have expired; another protocol-level JSON-RPC error
 indicates a version mismatch or a bug in c1i, worth reporting rather than
-working around.
+working around (`invalid params`, `-32602`, is exit `2`: an unknown tool or bad
+arguments, not a remote failure).
 
 An **empty id argument** is a usage error, not a lookup: `c1i policies get ""`
 exits `2` and sends nothing, because an empty id would render a trailing empty
@@ -945,7 +949,7 @@ prints `{}`. `apps delete` does not delete an app's entitlements, so remove
 them with this first.
 
 `entitlements update` builds the update mask from exactly the flags you pass.
-`--description ""` is sent, but the server keeps the existing description.
+`--description ""` clears the description (the same as on `apps update`).
 Each policy id is checked before anything is sent: it must exist, not be
 deleted, and be of the slot's type: an unknown policy exits `4`, a deleted or
 wrong-type one `2`.
@@ -1066,10 +1070,11 @@ and cannot express a ceiling.
 regardless of `--limit`; `--limit` only truncates what is printed. Filter
 narrowly. `--wait` and `--page-token` are mutually exclusive.
 
-A grant outlives the entitlement or account it points at, so rows also carry
-`entitlement_deleted_at` and `app_user_deleted_at`: `jq
-'select(.entitlement_deleted_at)'` finds grants whose backing object is gone.
-Absent timestamps are `null`, never `""`.
+A grant row is not durable: in one run the grant search kept returning it with
+`entitlement_deleted_at: null` immediately after its entitlement's delete, then
+omitted it about 15 seconds later, so record `identity_user_id` before deleting
+an entitlement if you need the inventory. Rows carry `entitlement_deleted_at`
+and `app_user_deleted_at`; absent timestamps are `null`, never `""`.
 
 #### Granting directly
 

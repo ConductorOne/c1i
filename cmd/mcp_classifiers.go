@@ -71,7 +71,8 @@ var mcpClassifiersUpdateCmd = &cobra.Command{
 	Short: "Update selected classifier fields from JSON (pretty JSON)",
 	Long: `Update a classifier with a complete Classifier JSON object and an explicit
 --update-mask. C1 requires displayName even when it is not in the mask. The
-positional id overrides any id in the file. Use camelCase proto field paths;
+positional id is the classifier's id: a file "id" must be absent or equal it
+(a different, null or non-string id exits 2). Use camelCase proto field paths;
 for example, --update-mask description,defaultOutcome.
 
 Including rules in --update-mask replaces every rule in evaluation order. Read
