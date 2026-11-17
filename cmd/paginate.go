@@ -390,7 +390,7 @@ func runPages[T any](cmd *cobra.Command, c *client.Client, s pageSpec[T]) error 
 		}
 		items, next, err := s.Parse(data)
 		if err != nil {
-			return fail(err)
+			return fail(unreadablePage(err))
 		}
 		if s.ID == nil {
 			if err := guard.checkIDlessPage(cmd, s.Route, len(items)); err != nil {
@@ -532,6 +532,17 @@ func pagedBody(base map[string]any, size int, token string) map[string]any {
 	return body
 }
 
+// unreadablePage classifies a parse failure of a 2xx page as C1 misbehaving
+// (exit 6). An already-typed error (a parser's usage error) keeps its class.
+func unreadablePage(err error) error {
+	var nj *nonJSONResponseError
+	var ue *usageError
+	if errors.As(err, &nj) || errors.As(err, &ue) {
+		return err
+	}
+	return &nonJSONResponseError{err}
+}
+
 // parseKeyed decodes {"<key>": [...], "nextPageToken": "..."} into typed
 // items. With several keys the first non-empty array wins.
 func parseKeyed[T any](keys ...string) func([]byte) ([]T, string, error) {
@@ -642,14 +653,14 @@ func getFixedList(cmd *cobra.Command, path string, row listRowFn) error {
 	}
 	items, next, err := extractListAndToken(data, "list")
 	if err != nil {
-		return fmt.Errorf("failed to parse response: %w", err)
+		return unreadablePage(fmt.Errorf("failed to parse response: %w", err))
 	}
 	enc := newEmitter(cmd)
 	limit := getIntFlag(cmd, "limit")
 	for _, raw := range items {
 		var item map[string]any
 		if err := json.Unmarshal(raw, &item); err != nil {
-			return fmt.Errorf("failed to parse response item: %w", err)
+			return unreadablePage(fmt.Errorf("failed to parse response item: %w", err))
 		}
 		if err := enc.Encode(row(item)); err != nil {
 			return err

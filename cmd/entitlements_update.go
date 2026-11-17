@@ -119,7 +119,7 @@ var entitlementUpdateSpec = &updateSpec{
 // Every error is a *usageError.
 func buildEntitlementUpdateBody(cmd *cobra.Command, appID, id string) (map[string]any, error) {
 	ent := map[string]any{"id": id, "appId": appID}
-	mask, err := entitlementUpdateSpec.build(cmd, ent)
+	mask, err := entitlementUpdateSpec.buildUpdateMask(cmd, ent)
 	if err != nil {
 		return nil, err
 	}

@@ -23,7 +23,7 @@ Prints the service principal as pretty JSON, unwrapped like
 	RunE: func(cmd *cobra.Command, args []string) error {
 		id := args[0]
 		sp := map[string]any{"id": id}
-		mask, err := servicePrincipalsUpdateSpec.build(cmd, sp)
+		mask, err := servicePrincipalsUpdateSpec.buildUpdateMask(cmd, sp)
 		if err != nil {
 			return err
 		}

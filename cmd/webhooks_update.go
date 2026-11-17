@@ -30,7 +30,7 @@ Prints the webhook, unwrapped like "webhooks get": the id is .id. Honors
 	RunE: func(cmd *cobra.Command, args []string) error {
 		id := args[0]
 		fields := map[string]any{}
-		mask, err := webhookFields.build(cmd, fields)
+		mask, err := webhookFields.buildUpdateMask(cmd, fields)
 		if err != nil {
 			return err
 		}

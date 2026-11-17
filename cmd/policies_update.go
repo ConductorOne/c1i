@@ -208,7 +208,7 @@ func buildUpdatePolicyPatch(cmd *cobra.Command, in policyUpdateInputs, resolveFa
 	}
 
 	policy = map[string]any{}
-	mask, err = policyUpdateSpecFor(in, resolveFallbackPolicyType).build(cmd, policy)
+	mask, err = policyUpdateSpecFor(in, resolveFallbackPolicyType).buildUpdateMask(cmd, policy)
 	if err != nil {
 		return nil, "", err
 	}

@@ -244,6 +244,9 @@ Inputs now refused (exit 2):
 
 ### Fixed
 
+- List commands, including the fixed-route ones (`attribute-types`, `findings`,
+  `role-mining`), now exit 6 (C1 failed) instead of 1 when a 200 page is not
+  JSON or not in the shape the command reads.
 - `policies create|update` refuses a rule whose `condition` is invisible-only
   (zero-width space, BOM) with exit 2, as it already did for an empty or
   whitespace-only one, instead of sending it to the server.

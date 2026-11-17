@@ -70,8 +70,8 @@ type attributeType struct {
 }
 
 // fetchAttributeTypes reads the whole type set. The endpoint takes no paging
-// parameters, so none are sent: a cursor in the answer repeats until the
-// engine's guard calls it stuck (exit 6) rather than passing as complete.
+// parameters, so none are sent: a cursor in the answer fails on the first
+// page (exit 6) rather than passing as complete.
 func fetchAttributeTypes(ctx context.Context, c *client.Client) ([]attributeType, error) {
 	items, err := collectPages(c, pageSpec[map[string]any]{
 		Route: "GET " + attributeTypesPath,
