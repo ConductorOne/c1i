@@ -835,7 +835,7 @@ toolset lists.
 
 Each row is one grant (one user holding one entitlement). Record
 identity_user_id from each row: it is the C1 user id that --user-id takes in
-step 3 (app_user_id is the app account and is not accepted there). After the
+step 3 (app_user_id is the app account, not the C1 user). After the
 delete the grants are gone and this is the only list of who lost access.
 
 ## 2. Know what the delete does
