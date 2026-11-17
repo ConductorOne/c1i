@@ -2,7 +2,10 @@ package cmd
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
 	"net/http"
+	"sort"
 	"strings"
 	"time"
 
@@ -19,8 +22,7 @@ request for all ids. A repeated --user-id is sent once; adding a user who
 already holds the entitlement exits 0.
 
 This is a direct grant: it skips the entitlement's grant policy, so there is no
-approval step and no access request task. It needs a role that may manage the
-entitlement's app. For a grant that goes through policy and approval use
+approval step and no access request task. For a grant that goes through policy and approval use
 "c1i requests create grant".
 
 The server accepts an unknown user id with 200 and does nothing, so the ids are
@@ -29,9 +31,11 @@ looked up first. An unknown entitlement or app exits 4.
 The grant is applied asynchronously: it was visible to "c1i grants list" within
 seconds in testing, but reads can lag. Pass --wait to block until every user
 shows as a grant on the entitlement, or --wait-timeout elapses (a timeout exits
-1, though the write was accepted). Prints the API's JSON response, whose
-failedUsersErrorMap lists users the server could not add (per the OpenAPI
-schema); --wait's progress lines go to stderr.
+1, though the write was accepted). Prints the API's JSON response; --wait's
+progress lines go to stderr. If its failedUsersErrorMap (per the OpenAPI schema,
+users the server could not add) is not empty, the response is still printed,
+each rejected user and its message is reported, and the command exits 1; --wait
+then waits only for the users that were not rejected.
 
 There is no "grants remove". The only direct removal, DELETE
 .../remove-membership, takes one app user id and rejects a manual entitlement
@@ -56,12 +60,37 @@ polls).`,
 			return err
 		}
 		path := client.Path("/api/v1/apps/%s/entitlements/%s/add-manual-user", appID, entitlementID)
+		rejected := map[string]string{}
 		return sendMutation(cmd, mutation{Method: http.MethodPost, Path: path, Body: map[string]any{"userIds": userIDs}},
 			withPreRead(existingUsersCheck("user-id", userIDs)),
+			withAfterWrite(func(data []byte) error { return rejectedUsersError(data, rejected) }),
 			withWait(func(c *client.Client) waitOp[[]string] {
-				return grantHoldersWaitOp(c, appID, entitlementID, untilPresent(userIDs), waitTimeout)
+				return grantHoldersWaitOp(c, appID, entitlementID, untilPresent(withoutKeys(userIDs, rejected)), waitTimeout)
 			}, wait))
 	},
+}
+
+// rejectedUsersError reports the users the server refused in a 200 response's
+// failedUsersErrorMap, or nil when there are none. The ids and messages are
+// copied into rejected.
+func rejectedUsersError(data []byte, rejected map[string]string) error {
+	var resp struct {
+		Failed map[string]string `json:"failedUsersErrorMap"`
+	}
+	if json.Unmarshal(data, &resp) != nil || len(resp.Failed) == 0 {
+		return nil
+	}
+	ids := make([]string, 0, len(resp.Failed))
+	for id, msg := range resp.Failed {
+		rejected[id] = msg
+		ids = append(ids, id)
+	}
+	sort.Strings(ids)
+	parts := make([]string, len(ids))
+	for i, id := range ids {
+		parts[i] = fmt.Sprintf("%s: %s", id, resp.Failed[id])
+	}
+	return fmt.Errorf("the server did not add %d user(s): %s", len(ids), strings.Join(parts, "; "))
 }
 
 // grantHoldersWaitOp polls an entitlement's grants until done accepts the C1
@@ -99,4 +128,15 @@ func init() {
 	markMutating(grantsAddCmd)
 	markUserRefChecked(grantsAddCmd, "user-id")
 	grantsCmd.AddCommand(grantsAddCmd)
+}
+
+// withoutKeys returns ids minus those that are keys of drop.
+func withoutKeys(ids []string, drop map[string]string) []string {
+	var out []string
+	for _, id := range ids {
+		if _, ok := drop[id]; !ok {
+			out = append(out, id)
+		}
+	}
+	return out
 }

@@ -1054,13 +1054,15 @@ c1i grants add --app-id <id> --entitlement-id <eid> --user-id <uid> [--user-id <
 
 `grants add` makes each user a manually managed member of the entitlement in
 one request (`POST .../add-manual-user`). It **bypasses the grant policy**:
-there is no approval step and no request task, and it needs a role that may
-manage the app. For a grant that goes through policy use `requests create
+there is no approval step and no request task. For a grant that goes through policy use `requests create
 grant`. A repeated `--user-id` is sent once. Each user is looked up first, so
 an unknown user exits `4` with nothing sent (`--dry-run` included; the lookup
 needs user read, else exit `3`); the server itself answers an unknown user with
-`200` and does nothing. An unknown entitlement or app exits `4`. The response
-(`bulkActionId`, `failedUsersErrorMap`) is printed as JSON.
+`200` and does nothing. An unknown entitlement or app exits `4` on a real run; `--dry-run` does not
+look them up. The response (`bulkActionId`, `failedUsersErrorMap`) is printed as
+JSON. If `failedUsersErrorMap` is not empty, the response is still printed, each
+rejected user and its message is reported, and the exit is `1`; `--wait` then
+waits only for the users that were not rejected.
 
 The grant lands asynchronously (seconds in testing, but reads can lag). `--wait`
 polls the entitlement's grants until every user appears, or `--wait-timeout`

@@ -628,8 +628,9 @@ resource with `--resource-id` likewise means you drop
   There is no `grants remove`: `remove-membership` fails on a manual entitlement
   with `entitlement is not an SSO application sign-in entitlement`, so remove
   via `requests create revoke` (on a manual entitlement its task waits on a
-  provisioning step; the grant stays until it is completed). The response's
-  `failedUsersErrorMap` lists users the server could not add.
+  provisioning step; the grant stays until it is completed). A non-empty
+  `failedUsersErrorMap` in the response (users the server could not add) exits 1
+  after printing it; `--wait` waits only for the others.
 - A user id on a write is looked up before anything is sent, so an unknown one
   exits 4 with no write (`--dry-run` refuses it too; the lookup needs user
   read, else exit 3): `accounts set-owner`, `apps add-owner|set-owners`,

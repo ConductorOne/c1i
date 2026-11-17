@@ -94,6 +94,7 @@ const (
 
 type mutationOpts struct {
 	preReads    []preRead
+	afterWrite  func(data []byte) error
 	wait        func(c *client.Client) waitOp[[]string]
 	waitEnabled bool
 	secret      secretKind
@@ -105,6 +106,12 @@ type mutationOpt func(*mutationOpts)
 
 func withPreRead(p preRead) mutationOpt {
 	return func(o *mutationOpts) { o.preReads = append(o.preReads, p) }
+}
+
+// withAfterWrite inspects a successful write's response once it is printed; an
+// error is a partial failure (applied), returned after --wait has run.
+func withAfterWrite(f func(data []byte) error) mutationOpt {
+	return func(o *mutationOpts) { o.afterWrite = f }
 }
 
 // withWait polls build's op after a successful write when enabled.
@@ -168,6 +175,12 @@ func sendMutation(cmd *cobra.Command, m mutation, opts ...mutationOpt) error {
 	if err := writeMutationResult(cmd, m, data, o.secret, false); err != nil {
 		return err
 	}
+	var partial error
+	if o.afterWrite != nil {
+		if err := o.afterWrite(data); err != nil {
+			partial = &mutationError{err: err, applied: appliedTrue}
+		}
+	}
 	if o.waitEnabled && o.wait != nil {
 		op := o.wait(c)
 		if _, err := runWait(cmd, op); err != nil {
@@ -177,7 +190,7 @@ func sendMutation(cmd *cobra.Command, m mutation, opts ...mutationOpt) error {
 			}
 		}
 	}
-	return nil
+	return partial
 }
 
 // mutationStep is one request of a sequence. Build receives the ids earlier

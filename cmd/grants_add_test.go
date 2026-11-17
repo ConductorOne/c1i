@@ -129,3 +129,46 @@ func TestGrantsAddWaitTimeoutExits1(t *testing.T) {
 		t.Fatalf("exit = %d, err = %v; want exit 1 naming the applied write", r.exit, r.err)
 	}
 }
+
+// withRejected answers the write with u2 in failedUsersErrorMap.
+func withRejected(route func(*http.Request, int) mutReply) func(*http.Request, int) mutReply {
+	return func(r *http.Request, n int) mutReply {
+		if strings.HasSuffix(r.URL.Path, "/add-manual-user") {
+			return mutReply{body: `{"failedUsersErrorMap":{"u2":"cannot add"},"bulkActionId":"b1"}`}
+		}
+		return route(r, n)
+	}
+}
+
+// A user in failedUsersErrorMap is a partial failure: the response prints,
+// the error names the user and its message, and the exit is 1.
+func TestGrantsAddRejectedUserExits1(t *testing.T) {
+	t.Setenv("C1I_URL", mutTestURL)
+	s := newMutServer(t, withRejected(grantsAddRoute(nil)))
+	r := runMutationCLI(t, s.srv, 0, nil, "grants", "add", "--app-id", "app-1", "--entitlement-id", "ent-1",
+		"--user-id", "u1", "--user-id", "u2")
+	if r.exit != 1 || r.err == nil || !strings.Contains(r.err.Error(), "u2: cannot add") {
+		t.Fatalf("exit = %d, err = %v; want exit 1 naming u2 and its message", r.exit, r.err)
+	}
+	if !strings.Contains(r.stdout, "failedUsersErrorMap") {
+		t.Errorf("response not printed: %q", r.stdout)
+	}
+}
+
+// --wait waits only for the users the server did not reject, then still
+// exits 1; it must not poll to a timeout for u2.
+func TestGrantsAddWaitSkipsRejectedUsers(t *testing.T) {
+	orig := grantsWaitPollInterval
+	grantsWaitPollInterval = 5 * time.Millisecond
+	t.Cleanup(func() { grantsWaitPollInterval = orig })
+	t.Setenv("C1I_URL", mutTestURL)
+	s := newMutServer(t, withRejected(grantsAddRoute([]string{grantsPage("u1")})))
+	r := runMutationCLI(t, s.srv, 0, nil, "grants", "add", "--app-id", "app-1", "--entitlement-id", "ent-1",
+		"--user-id", "u1", "--user-id", "u2", "--wait", "--wait-timeout", "5s")
+	if r.exit != 1 || r.err == nil || !strings.Contains(r.err.Error(), "u2: cannot add") || strings.Contains(r.err.Error(), "timed out") {
+		t.Fatalf("exit = %d, err = %v; want exit 1 from the rejection, not a timeout", r.exit, r.err)
+	}
+	if !strings.Contains(r.stderr, "Grants appeared") {
+		t.Errorf("wait did not complete for u1: %q", r.stderr)
+	}
+}
