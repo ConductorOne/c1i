@@ -390,6 +390,11 @@ func runPages[T any](cmd *cobra.Command, c *client.Client, s pageSpec[T]) error 
 		}
 		items, next, err := s.Parse(data)
 		if err != nil {
+			// A 2xx page this command cannot read is C1 misbehaving (exit 6).
+			var nj *nonJSONResponseError
+			if !errors.As(err, &nj) {
+				err = &nonJSONResponseError{err}
+			}
 			return fail(err)
 		}
 		if s.ID == nil {
