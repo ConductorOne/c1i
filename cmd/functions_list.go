@@ -1,9 +1,7 @@
 package cmd
 
 import (
-	"encoding/json"
 	"fmt"
-	"strconv"
 
 	"github.com/spf13/cobra"
 )
@@ -47,100 +45,31 @@ var functionsListCmd = &cobra.Command{
 	Use:   "list",
 	Short: "List C1 functions (NDJSON output)",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		baseURL, err := GetBaseURL()
+		c, err := listClientFor(cmd)
 		if err != nil {
 			return err
 		}
-
-		c, err := newListClient(cmd, baseURL)
-		if err != nil {
-			return fmt.Errorf("authentication failed: %w", err)
-		}
-
 		publishedOnly, _ := cmd.Flags().GetBool("published-only")
 		draftOnly, _ := cmd.Flags().GetBool("draft-only")
 		if publishedOnly && draftOnly {
 			return &usageError{fmt.Errorf("--published-only and --draft-only are mutually exclusive")}
 		}
-
-		requestedPageSize := pageSizeFlag(cmd)
-		pageToken, _ := cmd.Flags().GetString("page-token")
-		manualPaging := cmd.Flags().Changed("page-token")
-		limit := getIntFlag(cmd, "limit")
-
-		// --published-only/--draft-only filter client-side, so a fetched row
-		// is not necessarily written. --fields can also drop a fetched row (see
-		// emitter.Filtered). Either way, effectivePageSize must not shrink the
-		// per-call page toward the written count while paging past rows that
-		// never get written (request amplification); only tighten when neither
-		// is active.
-		clientFilter := publishedOnly || draftOnly
-
-		enc := newEmitter(cmd)
-		guard := newPaginationCursorGuard()
-		for !limitReached(enc.Written(), limit) {
-			if guard.tokenAlreadyUsed(pageToken) {
-				return guard.warnStuck(cmd, "GET /api/v1/functions")
-			}
-
-			pageSize := requestedPageSize
-			if !clientFilter && !enc.Filtered() {
-				pageSize = effectivePageSize(requestedPageSize, limit, enc.Written())
-			}
-			params := map[string]string{
-				"page_size": strconv.Itoa(pageSize),
-			}
-			if pageToken != "" {
-				params["page_token"] = pageToken
-			}
-
-			data, err := c.Get(cmd.Context(), "/api/v1/functions", params)
-			if err != nil {
-				return fmt.Errorf("API error: %w", err)
-			}
-
-			var resp struct {
-				List          []functionListItem `json:"list"`
-				NextPageToken string             `json:"nextPageToken"`
-			}
-			if err := json.Unmarshal(data, &resp); err != nil {
-				return fmt.Errorf("failed to parse response: %w", err)
-			}
-
-			ids := make([]string, len(resp.List))
-			for i, f := range resp.List {
-				ids[i] = f.ID
-			}
-			keep, err := guard.checkPage(cmd, "GET /api/v1/functions", ids)
-			if err != nil {
-				return err
-			}
-			resp.List = keepRows(resp.List, keep)
-
-			for _, f := range resp.List {
+		return listPages(cmd, c, pageSpec[functionListItem]{
+			Route: "GET /api/v1/functions",
+			Fetch: getPage(cmd.Context(), "/api/v1/functions", nil),
+			Parse: parseList[functionListItem],
+			ID:    func(f functionListItem) string { return f.ID },
+			// --published-only/--draft-only filter client-side, so a fetched row is
+			// not necessarily written: don't tighten the page toward --limit.
+			FixedSize: publishedOnly || draftOnly,
+			Rows: func(f functionListItem) []any {
 				published := functionIsPublished(f)
-				if publishedOnly && !published {
-					continue
-				}
-				if draftOnly && published {
-					continue
-				}
-				if err := enc.Encode(functionRow(f)); err != nil {
-					return err
-				}
-				if limitReached(enc.Written(), limit) {
+				if (publishedOnly && !published) || (draftOnly && published) {
 					return nil
 				}
-			}
-
-			if resp.NextPageToken == "" || manualPaging {
-				break
-			}
-			guard.markTokenUsed(pageToken)
-			pageToken = resp.NextPageToken
-		}
-
-		return nil
+				return []any{functionRow(f)}
+			},
+		})
 	},
 }
 

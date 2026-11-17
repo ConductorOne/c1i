@@ -2,13 +2,11 @@ package cmd
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"net/http"
 	"strings"
 
 	"github.com/ConductorOne/c1i/internal/client"
-	"github.com/ConductorOne/c1i/internal/redact"
 	"github.com/spf13/cobra"
 )
 
@@ -201,148 +199,6 @@ var findingsShadowMCPOccurrencesSearchCmd = &cobra.Command{Use: "search", Short:
 	}
 	return postBodyList(cmd, "/api/v1/search/shadow_mcp_occurrences", body, shadowMCPOccurrenceRow)
 }}
-
-type listRowFn func(map[string]any) map[string]any
-
-// postBodyList pages a POST list/search whose filter comes from --body-file;
-// the paging keys are the flags' (see ownBodyKeys).
-func postBodyList(cmd *cobra.Command, path string, request map[string]any, row listRowFn, idKeys ...string) error {
-	return listJSONPages(cmd, "POST "+path, idKeys, row, func(c *client.Client, size int, token string) ([]byte, error) {
-		body := cloneJSONObject(request)
-		body["pageSize"] = size
-		if token != "" {
-			body["pageToken"] = token
-		}
-		return c.Post(cmd.Context(), path, body)
-	})
-}
-
-func getFixedList(cmd *cobra.Command, path string, row listRowFn) error {
-	baseURL, err := GetBaseURL()
-	if err != nil {
-		return err
-	}
-	c, err := newClient(cmd, baseURL)
-	if err != nil {
-		return fmt.Errorf("authentication failed: %w", err)
-	}
-	data, err := c.Get(cmd.Context(), path, nil)
-	if err != nil {
-		return fmt.Errorf("API error: %w", err)
-	}
-	items, next, err := extractListAndToken(data, "list")
-	if err != nil {
-		return fmt.Errorf("failed to parse response: %w", err)
-	}
-	enc := newEmitter(cmd)
-	limit := getIntFlag(cmd, "limit")
-	for _, raw := range items {
-		var item map[string]any
-		if err := json.Unmarshal(raw, &item); err != nil {
-			return fmt.Errorf("failed to parse response item: %w", err)
-		}
-		if err := enc.Encode(row(item)); err != nil {
-			return err
-		}
-		if limitReached(enc.Written(), limit) {
-			return nil
-		}
-	}
-	// These routes don't paginate today, so a cursor isn't followed; it still
-	// must not pass as a complete result.
-	if next != "" {
-		notice(cmd, noticeInfo, fmt.Sprintf(
-			"Warning: GET %s returned a partial result — the server reported more pages, which c1i does not fetch for this command.", redact.URL(path)), nil)
-	}
-	return nil
-}
-
-// listJSONPages auto-paginates fetch. idKeys name the output row fields that
-// together identify it for the stuck-cursor guard; none when rows have no id.
-func listJSONPages(cmd *cobra.Command, route string, idKeys []string, row listRowFn, fetch func(*client.Client, int, string) ([]byte, error)) error {
-	baseURL, err := GetBaseURL()
-	if err != nil {
-		return err
-	}
-	c, err := newListClient(cmd, baseURL)
-	if err != nil {
-		return fmt.Errorf("authentication failed: %w", err)
-	}
-	token, _ := cmd.Flags().GetString("page-token")
-	manual := cmd.Flags().Changed("page-token")
-	requested := pageSizeFlag(cmd)
-	limit := getIntFlag(cmd, "limit")
-	enc := newEmitter(cmd)
-	guard := newPaginationCursorGuard()
-	if len(idKeys) > 1 {
-		guard.withCompositeIDs()
-	}
-	for !limitReached(enc.Written(), limit) {
-		if guard.tokenAlreadyUsed(token) {
-			return guard.warnStuck(cmd, route)
-		}
-		size := requested
-		if !enc.Filtered() {
-			size = effectivePageSize(requested, limit, enc.Written())
-		}
-		data, err := fetch(c, size, token)
-		if err != nil {
-			return fmt.Errorf("API error: %w", err)
-		}
-		items, next, err := extractListAndToken(data, "list")
-		if err != nil {
-			return fmt.Errorf("failed to parse response: %w", err)
-		}
-		rows := make([]map[string]any, len(items))
-		ids := make([]string, len(items))
-		for i, raw := range items {
-			var item map[string]any
-			if err := json.Unmarshal(raw, &item); err != nil {
-				return fmt.Errorf("failed to parse response item: %w", err)
-			}
-			rows[i] = row(item)
-			ids[i] = rowGuardID(rows[i], idKeys)
-		}
-		if len(idKeys) == 0 {
-			if err := guard.checkIDlessPage(cmd, route, len(rows)); err != nil {
-				return err
-			}
-		} else {
-			keep, err := guard.checkPage(cmd, route, ids)
-			if err != nil {
-				return err
-			}
-			rows = keepRows(rows, keep)
-		}
-		for _, r := range rows {
-			if err := enc.Encode(r); err != nil {
-				return err
-			}
-			if limitReached(enc.Written(), limit) {
-				return nil
-			}
-		}
-		if next == "" || manual {
-			return nil
-		}
-		guard.markTokenUsed(token)
-		token = next
-	}
-	return nil
-}
-
-// rowGuardID joins a row's idKeys values with scopedRowID; "" if any is
-// missing or there are none.
-func rowGuardID(row map[string]any, idKeys []string) string {
-	if len(idKeys) == 0 {
-		return ""
-	}
-	parts := make([]string, len(idKeys))
-	for i, k := range idKeys {
-		parts[i], _ = row[k].(string)
-	}
-	return scopedRowID(parts...)
-}
 
 func getFindingResource(cmd *cobra.Command, path, idKey string) error {
 	baseURL, err := GetBaseURL()

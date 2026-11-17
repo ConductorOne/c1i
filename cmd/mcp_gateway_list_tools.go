@@ -34,20 +34,13 @@ all).`,
 // tools/list has no page-size parameter, so the cap applies after the
 // gateway's pages are fetched.
 func emitGatewayTools(cmd *cobra.Command, tools []mcpgateway.Tool, full bool, limit int) error {
-	enc := newEmitter(cmd)
-	for _, t := range tools {
-		if limitReached(enc.Written(), limit) {
-			break
-		}
+	return emitRows(newEmitter(cmd), limit, tools, rowFn(func(t mcpgateway.Tool) map[string]any {
 		row := map[string]any{"name": nilIfEmpty(t.Name), "description": nilIfEmpty(t.Description)}
 		if full && len(t.InputSchema) > 0 {
 			row["input_schema"] = json.RawMessage(t.InputSchema)
 		}
-		if err := enc.Encode(row); err != nil {
-			return err
-		}
-	}
-	return nil
+		return row
+	}))
 }
 
 func init() {

@@ -1,10 +1,6 @@
 package cmd
 
 import (
-	"encoding/json"
-	"fmt"
-	"strconv"
-
 	"github.com/ConductorOne/c1i/internal/client"
 	"github.com/spf13/cobra"
 )
@@ -67,78 +63,17 @@ same id exit 4 and can tell you which.`,
 // listOwners streams GET path (an app's or an entitlement's .../owners) as
 // NDJSON owner rows, auto-paginating with the stuck-cursor guard.
 func listOwners(cmd *cobra.Command, path string) error {
-	baseURL, err := GetBaseURL()
+	c, err := listClientFor(cmd)
 	if err != nil {
 		return err
 	}
-
-	c, err := newListClient(cmd, baseURL)
-	if err != nil {
-		return fmt.Errorf("authentication failed: %w", err)
-	}
-
-	requestedPageSize := pageSizeFlag(cmd)
-	pageToken, _ := cmd.Flags().GetString("page-token")
-	manualPaging := cmd.Flags().Changed("page-token")
-	limit := getIntFlag(cmd, "limit")
-
-	enc := newEmitter(cmd)
-	guard := newPaginationCursorGuard()
-	route := "GET " + path
-	for !limitReached(enc.Written(), limit) {
-		if guard.tokenAlreadyUsed(pageToken) {
-			return guard.warnStuck(cmd, route)
-		}
-		pageSize := requestedPageSize
-		if !enc.Filtered() {
-			pageSize = effectivePageSize(requestedPageSize, limit, enc.Written())
-		}
-		params := map[string]string{
-			"page_size": strconv.Itoa(pageSize),
-		}
-		if pageToken != "" {
-			params["page_token"] = pageToken
-		}
-
-		data, err := c.Get(cmd.Context(), path, params)
-		if err != nil {
-			return fmt.Errorf("API error: %w", err)
-		}
-
-		var resp struct {
-			List          []appOwner `json:"list"`
-			NextPageToken string     `json:"nextPageToken"`
-		}
-		if err := json.Unmarshal(data, &resp); err != nil {
-			return fmt.Errorf("failed to parse response: %w", err)
-		}
-
-		ids := make([]string, len(resp.List))
-		for i, it := range resp.List {
-			ids[i] = it.ID
-		}
-		keep, err := guard.checkPage(cmd, route, ids)
-		if err != nil {
-			return err
-		}
-		resp.List = keepRows(resp.List, keep)
-		for _, o := range resp.List {
-			if err := enc.Encode(appOwnerRow(o)); err != nil {
-				return err
-			}
-			if limitReached(enc.Written(), limit) {
-				return nil
-			}
-		}
-
-		if resp.NextPageToken == "" || manualPaging {
-			break
-		}
-		guard.markTokenUsed(pageToken)
-		pageToken = resp.NextPageToken
-	}
-
-	return nil
+	return listPages(cmd, c, pageSpec[appOwner]{
+		Route: "GET " + path,
+		Fetch: getPage(cmd.Context(), path, nil),
+		Parse: parseList[appOwner],
+		ID:    func(o appOwner) string { return o.ID },
+		Rows:  rowFn(appOwnerRow),
+	})
 }
 
 func init() {

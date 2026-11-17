@@ -1,10 +1,6 @@
 package cmd
 
 import (
-	"encoding/json"
-	"fmt"
-	"strconv"
-
 	"github.com/ConductorOne/c1i/internal/client"
 	"github.com/spf13/cobra"
 )
@@ -15,93 +11,36 @@ var functionsCommitsCmd = &cobra.Command{
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		functionID := args[0]
-		baseURL, err := GetBaseURL()
+		c, err := listClientFor(cmd)
 		if err != nil {
 			return err
 		}
-
-		c, err := newListClient(cmd, baseURL)
-		if err != nil {
-			return fmt.Errorf("authentication failed: %w", err)
-		}
-
-		requestedPageSize := pageSizeFlag(cmd)
-		pageToken, _ := cmd.Flags().GetString("page-token")
-		manualPaging := cmd.Flags().Changed("page-token")
-		limit := getIntFlag(cmd, "limit")
-
-		enc := newEmitter(cmd)
-		guard := newPaginationCursorGuard()
-		route := fmt.Sprintf("GET /api/v1/functions/%s/commits", functionID)
-		for !limitReached(enc.Written(), limit) {
-			if guard.tokenAlreadyUsed(pageToken) {
-				return guard.warnStuck(cmd, route)
-			}
-
-			pageSize := requestedPageSize
-			if !enc.Filtered() {
-				pageSize = effectivePageSize(requestedPageSize, limit, enc.Written())
-			}
-			params := map[string]string{
-				"page_size": strconv.Itoa(pageSize),
-			}
-			if pageToken != "" {
-				params["page_token"] = pageToken
-			}
-
-			data, err := c.Get(cmd.Context(), client.Path("/api/v1/functions/%s/commits", functionID), params)
-			if err != nil {
-				return fmt.Errorf("API error: %w", err)
-			}
-
-			var resp struct {
-				List []struct {
-					ID         string `json:"id"`
-					FunctionID string `json:"functionId"`
-					Author     string `json:"author"`
-					Message    string `json:"message"`
-					CreatedAt  string `json:"createdAt"`
-				} `json:"list"`
-				NextPageToken string `json:"nextPageToken"`
-			}
-			if err := json.Unmarshal(data, &resp); err != nil {
-				return fmt.Errorf("failed to parse response: %w", err)
-			}
-
-			ids := make([]string, len(resp.List))
-			for i, item := range resp.List {
-				ids[i] = item.ID
-			}
-			keep, err := guard.checkPage(cmd, route, ids)
-			if err != nil {
-				return err
-			}
-			resp.List = keepRows(resp.List, keep)
-
-			for _, c := range resp.List {
-				if err := enc.Encode(map[string]any{
+		path := client.Path("/api/v1/functions/%s/commits", functionID)
+		return listPages(cmd, c, pageSpec[functionCommit]{
+			Route: "GET " + path,
+			Fetch: getPage(cmd.Context(), path, nil),
+			Parse: parseList[functionCommit],
+			ID:    func(it functionCommit) string { return it.ID },
+			Rows: rowFn(func(c functionCommit) map[string]any {
+				return map[string]any{
 					"id":          nilIfEmpty(c.ID),
 					"function_id": nilIfEmpty(c.FunctionID),
 					"author":      nilIfEmpty(c.Author),
 					"message":     nilIfEmpty(c.Message),
 					"created_at":  nilIfEmpty(c.CreatedAt),
-				}); err != nil {
-					return err
 				}
-				if limitReached(enc.Written(), limit) {
-					return nil
-				}
-			}
-
-			if resp.NextPageToken == "" || manualPaging {
-				break
-			}
-			guard.markTokenUsed(pageToken)
-			pageToken = resp.NextPageToken
-		}
-
-		return nil
+			}),
+		})
 	},
+}
+
+// functionCommit is the subset of a commit that functions commits prints.
+type functionCommit struct {
+	ID         string `json:"id"`
+	FunctionID string `json:"functionId"`
+	Author     string `json:"author"`
+	Message    string `json:"message"`
+	CreatedAt  string `json:"createdAt"`
 }
 
 func init() {

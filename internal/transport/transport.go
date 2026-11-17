@@ -397,18 +397,33 @@ func isIdempotent(method string) bool {
 }
 
 // retrySafe reports whether re-sending a request after an ambiguous failure is
-// safe: an idempotent method, or a POST to a read-only search/list route. Every
-// such route in the C1 API spec (/api/v1/search/*, .../search, .../list) is a
-// Search/List/Count/Get RPC; POST there only carries the filter body.
+// safe: an idempotent method, or a POST to a read-only route (ReadOnlyPOST).
 func retrySafe(method, path string) bool {
 	if isIdempotent(method) {
 		return true
 	}
-	if method != http.MethodPost || !strings.HasPrefix(path, "/api/v1/") {
+	return method == http.MethodPost && ReadOnlyPOST(path)
+}
+
+// ReadOnlyPOST reports whether a POST to path only reads: every route in the
+// C1 API spec at /api/v1/search/*, .../search or .../list is a
+// Search/List/Count/Get RPC whose POST just carries the filter body. Also
+// read-only, per the spec: SystemLogService.ListEvents (systemlog/events) and
+// RoleMiningManagementService.SearchCohortUsers
+// (role-mining/suggestions/{id}/users).
+func ReadOnlyPOST(path string) bool {
+	if !strings.HasPrefix(path, "/api/v1/") {
 		return false
 	}
 	last := path[strings.LastIndex(path, "/")+1:]
-	return strings.HasPrefix(path, "/api/v1/search/") || last == "search" || last == "list"
+	if strings.HasPrefix(path, "/api/v1/search/") || last == "search" || last == "list" || path == "/api/v1/systemlog/events" {
+		return true
+	}
+	if rest, ok := strings.CutPrefix(path, "/api/v1/role-mining/suggestions/"); ok {
+		id, tail, _ := strings.Cut(rest, "/")
+		return id != "" && tail == "users"
+	}
+	return false
 }
 
 // isRetryableStatus reports whether a response status warrants a retry for the

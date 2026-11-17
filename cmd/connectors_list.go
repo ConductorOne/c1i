@@ -1,10 +1,6 @@
 package cmd
 
 import (
-	"encoding/json"
-	"fmt"
-	"strconv"
-
 	"github.com/ConductorOne/c1i/internal/client"
 	"github.com/spf13/cobra"
 )
@@ -40,80 +36,19 @@ var connectorsListCmd = &cobra.Command{
 	Short: "List connectors for an application (NDJSON output)",
 	RunE: func(cmd *cobra.Command, args []string) error {
 
-		baseURL, err := GetBaseURL()
+		c, err := listClientFor(cmd)
 		if err != nil {
 			return err
 		}
-
-		c, err := newListClient(cmd, baseURL)
-		if err != nil {
-			return fmt.Errorf("authentication failed: %w", err)
-		}
-
 		appID, _ := cmd.Flags().GetString("app-id")
-		requestedPageSize := pageSizeFlag(cmd)
-		pageToken, _ := cmd.Flags().GetString("page-token")
-		manualPaging := cmd.Flags().Changed("page-token")
-		limit := getIntFlag(cmd, "limit")
-
-		enc := newEmitter(cmd)
-		guard := newPaginationCursorGuard()
-		route := "GET " + client.Path("/api/v1/apps/%s/connectors", appID)
-		for !limitReached(enc.Written(), limit) {
-			if guard.tokenAlreadyUsed(pageToken) {
-				return guard.warnStuck(cmd, route)
-			}
-			pageSize := requestedPageSize
-			if !enc.Filtered() {
-				pageSize = effectivePageSize(requestedPageSize, limit, enc.Written())
-			}
-			params := map[string]string{
-				"page_size": strconv.Itoa(pageSize),
-			}
-			if pageToken != "" {
-				params["page_token"] = pageToken
-			}
-
-			path := client.Path("/api/v1/apps/%s/connectors", appID)
-			data, err := c.Get(cmd.Context(), path, params)
-			if err != nil {
-				return fmt.Errorf("API error: %w", err)
-			}
-
-			var resp struct {
-				List          []connectorListItem `json:"list"`
-				NextPageToken string              `json:"nextPageToken"`
-			}
-			if err := json.Unmarshal(data, &resp); err != nil {
-				return fmt.Errorf("failed to parse response: %w", err)
-			}
-
-			ids := make([]string, len(resp.List))
-			for i, it := range resp.List {
-				ids[i] = it.Connector.ID
-			}
-			keep, err := guard.checkPage(cmd, route, ids)
-			if err != nil {
-				return err
-			}
-			resp.List = keepRows(resp.List, keep)
-			for _, item := range resp.List {
-				if err := enc.Encode(connectorRow(item)); err != nil {
-					return err
-				}
-				if limitReached(enc.Written(), limit) {
-					return nil
-				}
-			}
-
-			if resp.NextPageToken == "" || manualPaging {
-				break
-			}
-			guard.markTokenUsed(pageToken)
-			pageToken = resp.NextPageToken
-		}
-
-		return nil
+		path := client.Path("/api/v1/apps/%s/connectors", appID)
+		return listPages(cmd, c, pageSpec[connectorListItem]{
+			Route: "GET " + path,
+			Fetch: getPage(cmd.Context(), path, nil),
+			Parse: parseList[connectorListItem],
+			ID:    func(it connectorListItem) string { return it.Connector.ID },
+			Rows:  rowFn(connectorRow),
+		})
 	},
 }
 

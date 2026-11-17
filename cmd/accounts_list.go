@@ -1,9 +1,6 @@
 package cmd
 
 import (
-	"encoding/json"
-	"fmt"
-
 	"github.com/spf13/cobra"
 )
 
@@ -12,16 +9,10 @@ var accountsListCmd = &cobra.Command{
 	Short: "Search and list accounts (app users) for an application (NDJSON output)",
 	RunE: func(cmd *cobra.Command, args []string) error {
 
-		baseURL, err := GetBaseURL()
+		c, err := listClientFor(cmd)
 		if err != nil {
 			return err
 		}
-
-		c, err := newListClient(cmd, baseURL)
-		if err != nil {
-			return fmt.Errorf("authentication failed: %w", err)
-		}
-
 		appID, _ := cmd.Flags().GetString("app-id")
 		status, err := appUserStatusFlag.parse(mustGetString(cmd, "status"))
 		if err != nil {
@@ -33,80 +24,27 @@ var accountsListCmd = &cobra.Command{
 		}
 		unmappedOnly, _ := cmd.Flags().GetBool("unmapped-only")
 		query, _ := cmd.Flags().GetString("query")
-		requestedPageSize := pageSizeFlag(cmd)
-		pageToken, _ := cmd.Flags().GetString("page-token")
-		manualPaging := cmd.Flags().Changed("page-token")
-		limit := getIntFlag(cmd, "limit")
-
-		enc := newEmitter(cmd)
-		guard := newPaginationCursorGuard()
-		route := "POST /api/v1/search/app_users"
-		for !limitReached(enc.Written(), limit) {
-			if guard.tokenAlreadyUsed(pageToken) {
-				return guard.warnStuck(cmd, route)
-			}
-			pageSize := requestedPageSize
-			if !enc.Filtered() {
-				pageSize = effectivePageSize(requestedPageSize, limit, enc.Written())
-			}
-			body := map[string]any{
-				"appId":    appID,
-				"pageSize": pageSize,
-			}
-			if pageToken != "" {
-				body["pageToken"] = pageToken
-			}
-			if query != "" {
-				body["query"] = query
-			}
-			if status != "" {
-				body["appUserStatuses"] = []string{status}
-			}
-			if appUserType != "" {
-				body["appUserTypes"] = []string{appUserType}
-			}
-
-			data, err := c.Post(cmd.Context(), "/api/v1/search/app_users", body)
-			if err != nil {
-				return fmt.Errorf("API error: %w", err)
-			}
-
-			var resp struct {
-				List []struct {
-					AppUser struct {
-						ID             string `json:"id"`
-						AppID          string `json:"appId"`
-						DisplayName    string `json:"displayName"`
-						Email          string `json:"email"`
-						Username       string `json:"username"`
-						IdentityUserID string `json:"identityUserId"`
-						AppUserType    string `json:"appUserType"`
-						Status         struct {
-							Status string `json:"status"`
-						} `json:"status"`
-					} `json:"appUser"`
-				} `json:"list"`
-				NextPageToken string `json:"nextPageToken"`
-			}
-			if err := json.Unmarshal(data, &resp); err != nil {
-				return fmt.Errorf("failed to parse response: %w", err)
-			}
-
-			ids := make([]string, len(resp.List))
-			for i, it := range resp.List {
-				ids[i] = it.AppUser.ID
-			}
-			keep, err := guard.checkPage(cmd, route, ids)
-			if err != nil {
-				return err
-			}
-			resp.List = keepRows(resp.List, keep)
-			for _, item := range resp.List {
-				a := item.AppUser
+		body := map[string]any{"appId": appID}
+		if query != "" {
+			body["query"] = query
+		}
+		if status != "" {
+			body["appUserStatuses"] = []string{status}
+		}
+		if appUserType != "" {
+			body["appUserTypes"] = []string{appUserType}
+		}
+		return listPages(cmd, c, pageSpec[appUserSearchItem]{
+			Route: "POST /api/v1/search/app_users",
+			Fetch: postPage(cmd.Context(), "/api/v1/search/app_users", body),
+			Parse: parseList[appUserSearchItem],
+			ID:    func(it appUserSearchItem) string { return it.AppUser.ID },
+			Rows: func(it appUserSearchItem) []any {
+				a := it.AppUser
 				if unmappedOnly && a.IdentityUserID != "" {
-					continue
+					return nil
 				}
-				if err := enc.Encode(map[string]any{
+				return []any{map[string]any{
 					"id":               nilIfEmpty(a.ID),
 					"app_id":           nilIfEmpty(a.AppID),
 					"display_name":     nilIfEmpty(a.DisplayName),
@@ -115,23 +53,26 @@ var accountsListCmd = &cobra.Command{
 					"identity_user_id": nilIfEmpty(a.IdentityUserID),
 					"app_user_type":    nilIfEmpty(a.AppUserType),
 					"status":           nilIfEmpty(a.Status.Status),
-				}); err != nil {
-					return err
-				}
-				if limitReached(enc.Written(), limit) {
-					return nil
-				}
-			}
-
-			if resp.NextPageToken == "" || manualPaging {
-				break
-			}
-			guard.markTokenUsed(pageToken)
-			pageToken = resp.NextPageToken
-		}
-
-		return nil
+				}}
+			},
+		})
 	},
+}
+
+// appUserSearchItem is one row of the search/app_users response.
+type appUserSearchItem struct {
+	AppUser struct {
+		ID             string `json:"id"`
+		AppID          string `json:"appId"`
+		DisplayName    string `json:"displayName"`
+		Email          string `json:"email"`
+		Username       string `json:"username"`
+		IdentityUserID string `json:"identityUserId"`
+		AppUserType    string `json:"appUserType"`
+		Status         struct {
+			Status string `json:"status"`
+		} `json:"status"`
+	} `json:"appUser"`
 }
 
 func init() {

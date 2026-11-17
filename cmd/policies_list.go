@@ -1,10 +1,6 @@
 package cmd
 
 import (
-	"encoding/json"
-	"fmt"
-	"strconv"
-
 	"github.com/spf13/cobra"
 )
 
@@ -50,86 +46,20 @@ Not "policies get": that is a verbatim passthrough of the API object, so it
 carries policySteps and baselinePolicyId and neither of the derived keys the
 recipe above reads.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		baseURL, err := GetBaseURL()
+		c, err := listClientVia(cmd, newPoliciesClient)
 		if err != nil {
 			return err
 		}
-
-		c, err := newPoliciesClient(cmd, baseURL)
-		if err != nil {
-			return fmt.Errorf("authentication failed: %w", err)
-		}
-
-		requestedPageSize := pageSizeFlag(cmd)
-		pageToken, _ := cmd.Flags().GetString("page-token")
-		manualPaging := cmd.Flags().Changed("page-token")
-		limit := getIntFlag(cmd, "limit")
-
-		enc := newEmitter(cmd)
-		guard := newPaginationCursorGuard()
-		route := "GET /api/v1/policies"
-		for !limitReached(enc.Written(), limit) {
-			if guard.tokenAlreadyUsed(pageToken) {
-				return guard.warnStuck(cmd, route)
-			}
-			pageSize := requestedPageSize
-			if !enc.Filtered() {
-				pageSize = effectivePageSize(requestedPageSize, limit, enc.Written())
-			}
-			// GET /api/v1/policies takes snake_case query params
-			// (page_size/page_token), unlike the search/create bodies below
-			// it (which are ordinary camelCase protojson) — verified against
-			// the API gateway's generated decoder.
-			params := map[string]string{
-				"page_size": strconv.Itoa(pageSize),
-			}
-			if pageToken != "" {
-				params["page_token"] = pageToken
-			}
-
-			data, err := c.Get(cmd.Context(), "/api/v1/policies", params)
-			if err != nil {
-				return fmt.Errorf("API error: %w", err)
-			}
-
-			var resp struct {
-				List          []policyListItem `json:"list"`
-				NextPageToken string           `json:"nextPageToken"`
-			}
-			if err := json.Unmarshal(data, &resp); err != nil {
-				return fmt.Errorf("failed to parse response: %w", err)
-			}
-
-			ids := make([]string, len(resp.List))
-			for i, it := range resp.List {
-				ids[i] = it.ID
-			}
-			keep, err := guard.checkPage(cmd, route, ids)
-			if err != nil {
-				return err
-			}
-			resp.List = keepRows(resp.List, keep)
-			for _, p := range resp.List {
-				if err := enc.Encode(policyRow(p)); err != nil {
-					return err
-				}
-				if limitReached(enc.Written(), limit) {
-					return nil
-				}
-			}
-
-			// A page can come back short (even empty) while nextPageToken is
-			// still set — server-side scope filtering happens after the page
-			// is fetched from storage. Keep paging on the token, not on
-			// whether this page had rows.
-			if resp.NextPageToken == "" || manualPaging {
-				break
-			}
-			guard.markTokenUsed(pageToken)
-			pageToken = resp.NextPageToken
-		}
-
-		return nil
+		// A page can come back short (even empty) while nextPageToken is still set:
+		// scope filtering happens after the page is read from storage. Paging follows
+		// the token, not whether the page had rows.
+		return listPages(cmd, c, pageSpec[policyListItem]{
+			Route: "GET /api/v1/policies",
+			Fetch: getPage(cmd.Context(), "/api/v1/policies", nil),
+			Parse: parseList[policyListItem],
+			ID:    func(it policyListItem) string { return it.ID },
+			Rows:  rowFn(policyRow),
+		})
 	},
 }
 

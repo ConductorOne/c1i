@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"strconv"
 
 	"github.com/ConductorOne/c1i/internal/client"
 	"github.com/spf13/cobra"
@@ -141,74 +140,26 @@ func newAccessReviewListCmd(use, short, pathTemplate string, requiresID bool) *c
 			return cobra.NoArgs(cmd, args)
 		},
 		RunE: func(cmd *cobra.Command, args []string) error {
-			baseURL, err := GetBaseURL()
+			c, err := listClientFor(cmd)
 			if err != nil {
 				return err
 			}
-			c, err := newListClient(cmd, baseURL)
-			if err != nil {
-				return fmt.Errorf("authentication failed: %w", err)
-			}
-			requestedPageSize := pageSizeFlag(cmd)
-			pageToken, _ := cmd.Flags().GetString("page-token")
-			manualPaging := cmd.Flags().Changed("page-token")
-			limit := getIntFlag(cmd, "limit")
-			enc := newEmitter(cmd)
 			path := pathTemplate
 			if len(args) == 1 {
 				path = client.Path(pathTemplate, args[0])
 			}
-			guard := newPaginationCursorGuard()
-			route := "GET " + path
-			for !limitReached(enc.Written(), limit) {
-				if guard.tokenAlreadyUsed(pageToken) {
-					return guard.warnStuck(cmd, route)
-				}
-				pageSize := requestedPageSize
-				if !enc.Filtered() {
-					pageSize = effectivePageSize(requestedPageSize, limit, enc.Written())
-				}
-				params := map[string]string{"page_size": strconv.Itoa(pageSize)}
-				if pageToken != "" {
-					params["page_token"] = pageToken
-				}
-				data, err := c.Get(cmd.Context(), path, params)
-				if err != nil {
-					return fmt.Errorf("API error: %w", err)
-				}
-				var response struct {
-					List          []json.RawMessage `json:"list"`
-					NextPageToken string            `json:"nextPageToken"`
-				}
-				if err := json.Unmarshal(data, &response); err != nil {
-					return fmt.Errorf("failed to parse response: %w", err)
-				}
-				rows := make([]json.RawMessage, len(response.List))
-				ids := make([]string, len(response.List))
-				for i, item := range response.List {
-					rows[i] = unwrapEnvelope(item, "id")
-					ids[i] = rawItemID(rows[i])
-				}
-				keep, err := guard.checkPage(cmd, route, ids)
-				if err != nil {
-					return err
-				}
-				rows = keepRows(rows, keep)
-				for _, row := range rows {
-					if err := enc.Encode(row); err != nil {
-						return err
+			return listPages(cmd, c, pageSpec[json.RawMessage]{
+				Route: "GET " + path,
+				Fetch: getPage(cmd.Context(), path, nil),
+				Parse: func(data []byte) ([]json.RawMessage, string, error) {
+					items, next, err := parseList[json.RawMessage](data)
+					for i, item := range items {
+						items[i] = unwrapEnvelope(item, "id")
 					}
-					if limitReached(enc.Written(), limit) {
-						return nil
-					}
-				}
-				if response.NextPageToken == "" || manualPaging {
-					break
-				}
-				guard.markTokenUsed(pageToken)
-				pageToken = response.NextPageToken
-			}
-			return nil
+					return items, next, err
+				},
+				ID: func(r json.RawMessage) string { return rawItemID(r) },
+			})
 		},
 	}
 	addPaginationFlags(cmd)

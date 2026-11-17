@@ -36,29 +36,12 @@ var chokepointFiles = []string{"cmd/mutation.go", "internal/client/", "internal/
 // readOnlyPOST lists declarations (file:decl) whose POSTs only read: searches
 // and lists that carry their filter in the body.
 var readOnlyPOST = map[string]string{
-	"cmd/accounts_list.go:accountsListCmd":                            "POST /search/app_users",
-	"cmd/automations_executions_list.go:automationsExecutionsListCmd": "POST /search/automation_executions",
-	"cmd/automations_list.go:automationsListCmd":                      "POST /search/automations",
-	"cmd/entitlements_list.go:entitlementsListCmd":                    "POST /search/entitlements",
-	"cmd/export_events.go:exportEventsCmd":                            "POST /systemlog/events",
-	"cmd/functions_usage.go:functionsUsageCmd":                        "POST /search/automations",
-	"cmd/grants_list.go:grantsListCmd":                                "POST /search/grants",
-	"cmd/grants_list.go:fetchAllGrants":                               "POST /search/grants, polled by --wait",
-	"cmd/mcp_bindings_by_tools.go:mcpBindingsByToolsCmd":              "POST bindings by-tools lookup",
-	"cmd/mcp_classifiers.go:mcpClassifierTemplatesListCmd":            "POST /classifier_templates/list",
-	"cmd/mcp_classifiers.go:mcpClassifierToolGatesSearchCmd":          "POST /search/tool_gates",
-	"cmd/mcp_servers_discover_oidc.go:mcpServersDiscoverOIDCCmd":      "POST discover-oidc probe",
-	"cmd/mcp_servers_search.go:mcpServersSearchCmd":                   "POST /search/mcp_servers",
-	"cmd/mcp_servers_test_connection.go:mcpServersTestConnectionCmd":  "POST test-connection probe",
-	"cmd/mcp_tools_search.go:mcpToolsSearchCmd":                       "POST /search/mcp_tools",
-	"cmd/policies_search.go:policiesSearchCmd":                        "POST /search/policies",
-	"cmd/policies_validate_cel.go:policiesValidateCelCmd":             "POST validate-cel",
-	"cmd/requests_list.go:requestsListCmd":                            "POST /search/tasks",
-	"cmd/service_principals_bindings.go:spBindingsListCmd":            "POST bindings list",
-	"cmd/tasks_list.go:tasksListCmd":                                  "POST /search/tasks",
-	"cmd/users_list.go:usersListCmd":                                  "POST /search/users",
-	"cmd/auth_status.go:authStatusCmd":                                "POST /search/users credential probe",
-	"cmd/findings.go:postBodyList":                                    "POST list/search whose filter is a --body-file (findings, role-mining)",
+	"cmd/mcp_bindings_by_tools.go:mcpBindingsByToolsCmd":             "POST bindings by-tools lookup",
+	"cmd/mcp_servers_discover_oidc.go:mcpServersDiscoverOIDCCmd":     "POST discover-oidc probe",
+	"cmd/mcp_servers_test_connection.go:mcpServersTestConnectionCmd": "POST test-connection probe",
+	"cmd/policies_validate_cel.go:policiesValidateCelCmd":            "POST validate-cel",
+	"cmd/auth_status.go:authStatusCmd":                               "POST /search/users credential probe",
+	"cmd/paginate.go:postPageBody":                                   "every paged POST list; a runtime transport.ReadOnlyPOST check refuses non-read paths before sending",
 }
 
 // outOfScopeSelectors lists single calls ("file:decl selector") that are not

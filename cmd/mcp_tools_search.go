@@ -1,9 +1,6 @@
 package cmd
 
 import (
-	"encoding/json"
-	"fmt"
-
 	"github.com/ConductorOne/c1i/internal/client"
 	"github.com/spf13/cobra"
 )
@@ -21,101 +18,34 @@ var mcpToolsSearchCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		baseURL, err := GetBaseURL()
+		c, err := listClientFor(cmd)
 		if err != nil {
 			return err
 		}
-
-		c, err := newListClient(cmd, baseURL)
-		if err != nil {
-			return fmt.Errorf("authentication failed: %w", err)
-		}
-
 		appID, _ := cmd.Flags().GetString("app-id")
 		connectorID, _ := cmd.Flags().GetString("connector-id")
 		query, _ := cmd.Flags().GetString("query")
-		requestedPageSize := pageSizeFlag(cmd)
-		pageToken, _ := cmd.Flags().GetString("page-token")
-		manualPaging := cmd.Flags().Changed("page-token")
-		limit := getIntFlag(cmd, "limit")
-
-		enc := newEmitter(cmd)
-		guard := newPaginationCursorGuard()
-		route := "POST " + client.Path("/api/v1/apps/%s/connectors/%s/mcp_tools/search", appID, connectorID)
-		for !limitReached(enc.Written(), limit) {
-			if guard.tokenAlreadyUsed(pageToken) {
-				return guard.warnStuck(cmd, route)
-			}
-			pageSize := requestedPageSize
-			if !enc.Filtered() {
-				pageSize = effectivePageSize(requestedPageSize, limit, enc.Written())
-			}
-			body := map[string]any{
-				"appId":       appID,
-				"connectorId": connectorID,
-				"pageSize":    pageSize,
-			}
-			if pageToken != "" {
-				body["pageToken"] = pageToken
-			}
-			if query != "" {
-				body["query"] = query
-			}
-			if len(states) > 0 {
-				body["stateFilter"] = states
-			}
-			if len(classes) > 0 {
-				body["classificationFilter"] = classes
-			}
-
-			path := client.Path("/api/v1/apps/%s/connectors/%s/mcp_tools/search", appID, connectorID)
-			data, err := c.Post(cmd.Context(), path, body)
-			if err != nil {
-				return fmt.Errorf("API error: %w", err)
-			}
-
-			// SearchTools may key its results under "tools" (like ListTools)
-			// or the generic "list"; accept either so a wrong guess doesn't
-			// make search silently return nothing.
-			var resp struct {
-				Tools         []toolView `json:"tools"`
-				List          []toolView `json:"list"`
-				NextPageToken string     `json:"nextPageToken"`
-			}
-			if err := json.Unmarshal(data, &resp); err != nil {
-				return fmt.Errorf("failed to parse response: %w", err)
-			}
-			items := resp.Tools
-			if len(items) == 0 {
-				items = resp.List
-			}
-
-			ids := make([]string, len(items))
-			for i, it := range items {
-				ids[i] = it.ID
-			}
-			keep, err := guard.checkPage(cmd, route, ids)
-			if err != nil {
-				return err
-			}
-			items = keepRows(items, keep)
-			for _, t := range items {
-				if err := enc.Encode(toolRow(t)); err != nil {
-					return err
-				}
-				if limitReached(enc.Written(), limit) {
-					return nil
-				}
-			}
-
-			if resp.NextPageToken == "" || manualPaging {
-				break
-			}
-			guard.markTokenUsed(pageToken)
-			pageToken = resp.NextPageToken
+		body := map[string]any{"appId": appID, "connectorId": connectorID}
+		if query != "" {
+			body["query"] = query
 		}
-
-		return nil
+		if len(states) > 0 {
+			body["stateFilter"] = states
+		}
+		if len(classes) > 0 {
+			body["classificationFilter"] = classes
+		}
+		path := client.Path("/api/v1/apps/%s/connectors/%s/mcp_tools/search", appID, connectorID)
+		return listPages(cmd, c, pageSpec[toolView]{
+			Route: "POST " + path,
+			Fetch: postPage(cmd.Context(), path, body),
+			// SearchTools may key its results under "tools" (like ListTools) or the
+			// generic "list"; accept either so a wrong guess doesn't make search
+			// silently return nothing.
+			Parse: parseKeyed[toolView]("tools", "list"),
+			ID:    func(it toolView) string { return it.ID },
+			Rows:  rowFn(toolRow),
+		})
 	},
 }
 

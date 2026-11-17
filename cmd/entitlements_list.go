@@ -1,9 +1,6 @@
 package cmd
 
 import (
-	"encoding/json"
-	"fmt"
-
 	"github.com/spf13/cobra"
 )
 
@@ -42,87 +39,33 @@ var entitlementsListCmd = &cobra.Command{
 	Use:   "list",
 	Short: "Search and list application entitlements (NDJSON output)",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		baseURL, err := GetBaseURL()
+		c, err := listClientFor(cmd)
 		if err != nil {
 			return err
 		}
-
-		c, err := newListClient(cmd, baseURL)
-		if err != nil {
-			return fmt.Errorf("authentication failed: %w", err)
-		}
-
 		appID, _ := cmd.Flags().GetString("app-id")
 		query, _ := cmd.Flags().GetString("query")
-		requestedPageSize := pageSizeFlag(cmd)
-		pageToken, _ := cmd.Flags().GetString("page-token")
-		manualPaging := cmd.Flags().Changed("page-token")
-		limit := getIntFlag(cmd, "limit")
-
-		enc := newEmitter(cmd)
-		guard := newPaginationCursorGuard().withCompositeIDs()
-		route := "POST /api/v1/search/entitlements"
-		for !limitReached(enc.Written(), limit) {
-			if guard.tokenAlreadyUsed(pageToken) {
-				return guard.warnStuck(cmd, route)
-			}
-			pageSize := requestedPageSize
-			if !enc.Filtered() {
-				pageSize = effectivePageSize(requestedPageSize, limit, enc.Written())
-			}
-			body := map[string]any{
-				"pageSize": pageSize,
-			}
-			if pageToken != "" {
-				body["pageToken"] = pageToken
-			}
-			if appID != "" {
-				body["appIds"] = []string{appID}
-			}
-			if query != "" {
-				body["query"] = query
-			}
-
-			data, err := c.Post(cmd.Context(), "/api/v1/search/entitlements", body)
-			if err != nil {
-				return fmt.Errorf("API error: %w", err)
-			}
-
-			var resp struct {
-				List          []entitlementListItem `json:"list"`
-				NextPageToken string                `json:"nextPageToken"`
-			}
-			if err := json.Unmarshal(data, &resp); err != nil {
-				return fmt.Errorf("failed to parse response: %w", err)
-			}
-
-			ids := make([]string, len(resp.List))
-			for i, it := range resp.List {
-				ids[i] = scopedRowID(it.AppEntitlement.AppID, it.AppEntitlement.ID) // an entitlement id repeats across apps
-			}
-			keep, err := guard.checkPage(cmd, route, ids)
-			if err != nil {
-				return err
-			}
-			resp.List = keepRows(resp.List, keep)
-			for _, item := range resp.List {
-				if err := enc.Encode(entitlementRow(item)); err != nil {
-					return err
-				}
-				if limitReached(enc.Written(), limit) {
-					return nil
-				}
-			}
-
-			if resp.NextPageToken == "" || manualPaging {
-				break
-			}
-			guard.markTokenUsed(pageToken)
-			pageToken = resp.NextPageToken
+		body := map[string]any{}
+		if appID != "" {
+			body["appIds"] = []string{appID}
 		}
-
-		return nil
+		if query != "" {
+			body["query"] = query
+		}
+		return listPages(cmd, c, pageSpec[entitlementListItem]{
+			Route:     "POST /api/v1/search/entitlements",
+			Fetch:     postPage(cmd.Context(), "/api/v1/search/entitlements", body),
+			Parse:     parseList[entitlementListItem],
+			ID:        entitlementGuardID,
+			Rows:      rowFn(entitlementRow),
+			Composite: true,
+		})
 	},
+}
+
+// entitlementGuardID keys an entitlement on app and id: an id repeats across apps.
+func entitlementGuardID(it entitlementListItem) string {
+	return scopedRowID(it.AppEntitlement.AppID, it.AppEntitlement.ID)
 }
 
 func init() {

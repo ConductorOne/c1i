@@ -1,8 +1,6 @@
 package cmd
 
 import (
-	"encoding/json"
-	"fmt"
 	"net/http"
 
 	"github.com/spf13/cobra"
@@ -74,71 +72,17 @@ var spBindingsListCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		baseURL, err := GetBaseURL()
+		c, err := listClientFor(cmd)
 		if err != nil {
 			return err
 		}
-
-		c, err := newListClient(cmd, baseURL)
-		if err != nil {
-			return fmt.Errorf("authentication failed: %w", err)
-		}
-
-		requestedPageSize := pageSizeFlag(cmd)
-		pageToken, _ := cmd.Flags().GetString("page-token")
-		manualPaging := cmd.Flags().Changed("page-token")
-		limit := getIntFlag(cmd, "limit")
-
-		enc := newEmitter(cmd)
 		// Rows carry no id of their own, so only the token and idle-page checks apply.
-		guard := newPaginationCursorGuard()
-		route := "POST " + spBindingsListPath
-		for !limitReached(enc.Written(), limit) {
-			if guard.tokenAlreadyUsed(pageToken) {
-				return guard.warnStuck(cmd, route)
-			}
-			pageSize := requestedPageSize
-			if !enc.Filtered() {
-				pageSize = effectivePageSize(requestedPageSize, limit, enc.Written())
-			}
-			body := map[string]any{"subject": subject, "pageSize": pageSize}
-			if pageToken != "" {
-				body["pageToken"] = pageToken
-			}
-
-			data, err := c.Post(cmd.Context(), spBindingsListPath, body)
-			if err != nil {
-				return fmt.Errorf("API error: %w", err)
-			}
-
-			var resp struct {
-				Bindings      []spBinding `json:"bindings"`
-				NextPageToken string      `json:"nextPageToken"`
-			}
-			if err := json.Unmarshal(data, &resp); err != nil {
-				return fmt.Errorf("failed to parse response: %w", err)
-			}
-			if err := guard.checkIDlessPage(cmd, route, len(resp.Bindings)); err != nil {
-				return err
-			}
-
-			for _, b := range resp.Bindings {
-				if err := enc.Encode(spBindingRow(b)); err != nil {
-					return err
-				}
-				if limitReached(enc.Written(), limit) {
-					return nil
-				}
-			}
-
-			if resp.NextPageToken == "" || manualPaging {
-				break
-			}
-			guard.markTokenUsed(pageToken)
-			pageToken = resp.NextPageToken
-		}
-
-		return nil
+		return listPages(cmd, c, pageSpec[spBinding]{
+			Route: "POST " + spBindingsListPath,
+			Fetch: postPage(cmd.Context(), spBindingsListPath, map[string]any{"subject": subject}),
+			Parse: parseKeyed[spBinding]("bindings"),
+			Rows:  rowFn(spBindingRow),
+		})
 	},
 }
 

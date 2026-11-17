@@ -14,27 +14,28 @@ var tasksCmd = &cobra.Command{
 	Short: "Manage access request tasks",
 }
 
-// taskSearchList is the /api/v1/search/tasks response envelope, shared by
+// taskSearchItem is one /api/v1/search/tasks row, shared by
 // `tasks list` (approver lens) and `requests list` (requester lens).
-type taskSearchList struct {
-	List          []taskSearchItem `json:"list"`
-	NextPageToken string           `json:"nextPageToken"`
-}
-
 type taskSearchItem struct {
 	Task *taskSummary `json:"task"`
 }
 
-// ids gives "" for an item with no task wrapper, so a page of only those reads
-// as an unrecognized shape rather than an empty page.
-func (l taskSearchList) ids() []string {
-	ids := make([]string, len(l.List))
-	for i, it := range l.List {
-		if it.Task != nil {
-			ids[i] = it.Task.ID
-		}
+// taskItemID gives "" for an item with no task wrapper, so a page of only
+// those reads as an unrecognized shape rather than an empty page.
+func taskItemID(it taskSearchItem) string {
+	if it.Task == nil {
+		return ""
 	}
-	return ids
+	return it.Task.ID
+}
+
+// taskItemRows skips an item with no task wrapper rather than emitting an
+// all-"" row.
+func taskItemRows(it taskSearchItem) []any {
+	if it.Task == nil {
+		return nil
+	}
+	return []any{taskRow(*it.Task)}
 }
 
 // taskSummary is the subset of task fields both list views emit.

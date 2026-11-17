@@ -1,7 +1,6 @@
 package cmd
 
 import (
-	"encoding/json"
 	"fmt"
 
 	"github.com/spf13/cobra"
@@ -21,86 +20,22 @@ last_executed_at, args.`,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		functionID := args[0]
-		baseURL, err := GetBaseURL()
+		c, err := listClientFor(cmd)
 		if err != nil {
 			return err
 		}
-
-		c, err := newListClient(cmd, baseURL)
-		if err != nil {
-			return fmt.Errorf("authentication failed: %w", err)
-		}
-
-		// Page size tracks --page-size alone, unlike the effectivePageSize
-		// shrink other list commands apply toward --limit. That shrink
-		// assumes rows fetched and rows written are 1:1; this command
-		// filters automations client-side by callFunction.functionId (and a
-		// --fields projection can drop a row too), so a fetched row here is
-		// not necessarily written. Feeding that into effectivePageSize would
-		// send page_size=1 for every automation scanned until a match turns
-		// up — one HTTP round trip per automation instead of a handful of
-		// batched pages. Any list command that filters after the fetch
-		// inherits this same trap (see emitter.Filtered).
-		pageSize := pageSizeFlag(cmd)
-		pageToken, _ := cmd.Flags().GetString("page-token")
-		manualPaging := cmd.Flags().Changed("page-token")
-		limit := getIntFlag(cmd, "limit")
-
-		enc := newEmitter(cmd)
-		// emitted counts automations that call functionID (the client-side
-		// filter above), used only for the "no automations call function"
-		// message below. The stop condition uses enc.Written() instead: a
-		// --fields projection can also drop a fetched-and-filter-matched row
-		// (see emitter.Filtered), so emitted alone would overcount rows
-		// actually written to stdout.
+		// emitted counts the rows this command found, for the no-match notice below.
 		emitted := 0
-		guard := newPaginationCursorGuard()
-		for !limitReached(enc.Written(), limit) {
-			if guard.tokenAlreadyUsed(pageToken) {
-				return guard.warnStuck(cmd, "POST /api/v1/search/automations")
-			}
-
-			body := map[string]any{"pageSize": pageSize}
-			if pageToken != "" {
-				body["pageToken"] = pageToken
-			}
-
-			data, err := c.Post(cmd.Context(), "/api/v1/search/automations", body)
-			if err != nil {
-				return fmt.Errorf("API error: %w", err)
-			}
-
-			var resp struct {
-				List []struct {
-					ID              string `json:"id"`
-					DisplayName     string `json:"displayName"`
-					Enabled         bool   `json:"enabled"`
-					LastExecutedAt  string `json:"lastExecutedAt"`
-					AutomationSteps []struct {
-						StepName     string `json:"stepName"`
-						CallFunction *struct {
-							FunctionID string         `json:"functionId"`
-							Args       map[string]any `json:"args"`
-						} `json:"callFunction"`
-					} `json:"automationSteps"`
-				} `json:"list"`
-				NextPageToken string `json:"nextPageToken"`
-			}
-			if err := json.Unmarshal(data, &resp); err != nil {
-				return fmt.Errorf("failed to parse response: %w", err)
-			}
-
-			ids := make([]string, len(resp.List))
-			for i, a := range resp.List {
-				ids[i] = a.ID
-			}
-			keep, err := guard.checkPage(cmd, "POST /api/v1/search/automations", ids)
-			if err != nil {
-				return err
-			}
-			resp.List = keepRows(resp.List, keep)
-
-			for _, a := range resp.List {
+		if err := listPages(cmd, c, pageSpec[usageAutomation]{
+			Route: "POST /api/v1/search/automations",
+			Fetch: postPage(cmd.Context(), "/api/v1/search/automations", map[string]any{}),
+			Parse: parseList[usageAutomation],
+			ID:    func(a usageAutomation) string { return a.ID },
+			// Page size tracks --page-size alone: rows are filtered client-side, so
+			// fetched is not written and tightening toward --limit would amplify requests.
+			FixedSize: true,
+			Rows: func(a usageAutomation) []any {
+				var rows []any
 				for _, step := range a.AutomationSteps {
 					if step.CallFunction == nil || step.CallFunction.FunctionID != functionID {
 						continue
@@ -109,32 +44,24 @@ last_executed_at, args.`,
 					for k := range step.CallFunction.Args {
 						argKeys = append(argKeys, k)
 					}
-					if err := enc.Encode(map[string]any{
+					emitted++
+					rows = append(rows, map[string]any{
 						"automation_id":    nilIfEmpty(a.ID),
 						"automation_name":  nilIfEmpty(a.DisplayName),
 						"step_name":        nilIfEmpty(step.StepName),
 						"enabled":          a.Enabled,
 						"last_executed_at": nilIfEmpty(a.LastExecutedAt),
 						"args":             argKeys,
-					}); err != nil {
-						return err
-					}
-					emitted++
-					if limitReached(enc.Written(), limit) {
-						return nil
-					}
+					})
 				}
-			}
-
-			if resp.NextPageToken == "" || manualPaging {
-				break
-			}
-			guard.markTokenUsed(pageToken)
-			pageToken = resp.NextPageToken
+				return rows
+			},
+		}); err != nil {
+			return err
 		}
 
 		if emitted == 0 {
-			if manualPaging {
+			if cmd.Flags().Changed("page-token") {
 				notice(cmd, noticeInfo, fmt.Sprintf("no automations on this page call function %s (--page-token scans one page only)", functionID), nil)
 			} else {
 				notice(cmd, noticeInfo, fmt.Sprintf("no automations call function %s", functionID), nil)
@@ -142,6 +69,21 @@ last_executed_at, args.`,
 		}
 		return nil
 	},
+}
+
+// usageAutomation is the subset of an automation that functions usage reads.
+type usageAutomation struct {
+	ID              string `json:"id"`
+	DisplayName     string `json:"displayName"`
+	Enabled         bool   `json:"enabled"`
+	LastExecutedAt  string `json:"lastExecutedAt"`
+	AutomationSteps []struct {
+		StepName     string `json:"stepName"`
+		CallFunction *struct {
+			FunctionID string         `json:"functionId"`
+			Args       map[string]any `json:"args"`
+		} `json:"callFunction"`
+	} `json:"automationSteps"`
 }
 
 func init() {

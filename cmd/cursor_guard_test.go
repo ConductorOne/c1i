@@ -32,7 +32,10 @@ func stalePageItems(format string) string {
 var cursorGuardExemptions = map[string]string{
 	"api.go:extractListAndToken": "parser: returns the cursor to a guarded caller",
 	"api.go:nextPageTokenOf":     "parser: feeds the non-paginate partial-result warning",
-	"findings.go:getFixedList":   "fetches one page and warns if the server reports more; never follows the cursor",
+	"paginate.go:getFixedList":   "fetches one page and warns if the server reports more; never follows the cursor",
+	"paginate.go:mapPages":       "parser: returns the cursor to runPages, which guards it",
+	"api.go:apiPageParser":       "parser: returns the cursor to runPages, which guards it",
+	"api.go:warnPartialResult":   "feeds the non-paginate partial-result warning",
 }
 
 // cursorReadFuncs are calls that surface a next-page cursor from a response.
@@ -132,7 +135,9 @@ func TestEveryCursorLoopIsGuarded(t *testing.T) {
 				s.key, s.line, s.guard, s.check, s.paged, s.marked)
 		}
 	}
-	if reads < 30 {
+	// Only parsers read a cursor outside runPages now (TestNoPaginationLoopOutsideHelper
+	// bans the loop primitives elsewhere); every exemption must still be found.
+	if reads < len(cursorGuardExemptions) {
 		t.Fatalf("found only %d functions reading a cursor; this scan is not looking at what it thinks it is", reads)
 	}
 	for key := range cursorGuardExemptions {
@@ -146,10 +151,10 @@ func TestEveryCursorLoopIsGuarded(t *testing.T) {
 	}
 }
 
-// TestCompositeGuardIDsUseCompositeGuard fails when a guarded loop keys rows
-// on a multi-part id (scopedRowID with several parts, or a helper that builds
-// one) without withCompositeIDs, which would turn a row missing one part
-// into a false unrecognized-shape exit 6.
+// TestCompositeGuardIDsUseCompositeGuard fails when a pageSpec keys rows on a
+// multi-part id (scopedRowID with several parts, or a helper that builds one)
+// without Composite: true, which would turn a row missing one part into a
+// false unrecognized-shape exit 6.
 func TestCompositeGuardIDsUseCompositeGuard(t *testing.T) {
 	paths, err := filepath.Glob("*.go")
 	if err != nil {
@@ -159,13 +164,8 @@ func TestCompositeGuardIDsUseCompositeGuard(t *testing.T) {
 		id, ok := c.Fun.(*ast.Ident)
 		return ok && id.Name == "scopedRowID" && (len(c.Args) > 1 || c.Ellipsis.IsValid())
 	}
-	type scope struct {
-		name                     string
-		guard, composite, marked bool
-		calls                    map[string]bool
-	}
+	var files []*ast.File
 	producers := map[string]bool{}
-	var scopes []*scope
 	for _, path := range paths {
 		if strings.HasSuffix(path, "_test.go") {
 			continue
@@ -174,64 +174,67 @@ func TestCompositeGuardIDsUseCompositeGuard(t *testing.T) {
 		if err != nil {
 			t.Fatalf("parsing %s: %v", path, err)
 		}
-		ast.Inspect(file, func(n ast.Node) bool {
-			var body *ast.BlockStmt
-			name := path
-			switch f := n.(type) {
-			case *ast.FuncDecl:
-				body, name = f.Body, path+":"+f.Name.Name
-			case *ast.FuncLit:
-				body = f.Body
+		files = append(files, file)
+		for _, decl := range file.Decls {
+			fd, ok := decl.(*ast.FuncDecl)
+			if !ok || fd.Recv != nil || fd.Body == nil {
+				continue
 			}
-			if body == nil {
-				return true
-			}
-			s := &scope{name: name, calls: map[string]bool{}}
-			scopes = append(scopes, s)
-			ast.Inspect(body, func(m ast.Node) bool {
-				if _, ok := m.(*ast.FuncLit); ok {
-					return false
-				}
-				c, ok := m.(*ast.CallExpr)
-				if !ok {
-					return true
-				}
-				s.composite = s.composite || isComposite(c)
-				switch fn := c.Fun.(type) {
-				case *ast.Ident:
-					s.calls[fn.Name] = true
-					s.guard = s.guard || fn.Name == "newPaginationCursorGuard"
-				case *ast.SelectorExpr:
-					s.marked = s.marked || fn.Sel.Name == "withCompositeIDs"
+			ast.Inspect(fd.Body, func(n ast.Node) bool {
+				if c, ok := n.(*ast.CallExpr); ok && isComposite(c) {
+					producers[fd.Name.Name] = true
 				}
 				return true
 			})
-			if fd, ok := n.(*ast.FuncDecl); ok && s.composite && fd.Recv == nil {
-				producers[fd.Name.Name] = true
+		}
+	}
+	delete(producers, "scopedRowID")
+	if !producers["grantGuardID"] || !producers["entitlementGuardID"] {
+		t.Fatalf("composite id producers = %v, want grantGuardID and entitlementGuardID among them", producers)
+	}
+	isSpec := func(lit *ast.CompositeLit) bool {
+		ix, ok := lit.Type.(*ast.IndexExpr)
+		if !ok {
+			return false
+		}
+		id, ok := ix.X.(*ast.Ident)
+		return ok && id.Name == "pageSpec"
+	}
+	var checked int
+	for _, file := range files {
+		ast.Inspect(file, func(n ast.Node) bool {
+			lit, ok := n.(*ast.CompositeLit)
+			if !ok || !isSpec(lit) {
+				return true
+			}
+			var uses, marked bool
+			ast.Inspect(lit, func(m ast.Node) bool {
+				switch m := m.(type) {
+				case *ast.CallExpr:
+					uses = uses || isComposite(m)
+					if id, ok := m.Fun.(*ast.Ident); ok {
+						uses = uses || producers[id.Name]
+					}
+				case *ast.Ident:
+					uses = uses || producers[m.Name]
+				case *ast.KeyValueExpr:
+					if id, ok := m.Key.(*ast.Ident); ok && id.Name == "Composite" {
+						marked = true
+					}
+				}
+				return true
+			})
+			if uses {
+				checked++
+				if !marked {
+					t.Errorf("a pageSpec keys its guard on a composite id without Composite: true")
+				}
 			}
 			return true
 		})
 	}
-	delete(producers, "scopedRowID")
-	if !producers["grantGuardID"] || !producers["rowGuardID"] {
-		t.Fatalf("composite id producers = %v, want grantGuardID and rowGuardID among them", producers)
-	}
-	var checked int
-	for _, s := range scopes {
-		uses := s.composite
-		for p := range producers {
-			uses = uses || s.calls[p]
-		}
-		if !uses || !s.guard {
-			continue
-		}
-		checked++
-		if !s.marked {
-			t.Errorf("%s keys its cursor guard on a composite id without withCompositeIDs()", s.name)
-		}
-	}
-	if checked < 5 {
-		t.Fatalf("checked only %d guarded loops with composite ids, want at least 5", checked)
+	if checked < 3 {
+		t.Fatalf("checked only %d pageSpecs with composite ids, want at least 3", checked)
 	}
 }
 

@@ -12,6 +12,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/ConductorOne/c1i/internal/client"
 	"github.com/ConductorOne/c1i/internal/redact"
 	"github.com/spf13/cobra"
 )
@@ -180,159 +181,88 @@ intended non-GET REST write.`,
 			return fmt.Errorf("authentication failed: %w", err)
 		}
 
-		enc := newEmitter(cmd)
-		guard := newPaginationCursorGuard()
-		var held []json.RawMessage
-		pageToken := ""
-		route := method + " " + redact.URL(path)
-		listKeySeen := listKey == ""
-		// failWith prints held rows before a failure that isn't the guard's:
-		// they were deferred only until the run proved it wasn't stuck.
-		failWith := func(err error) error {
-			for _, item := range held {
-				if limitReached(enc.Written(), limit) {
-					break
+		var bodyObj map[string]any
+		var rawBody []byte
+		switch method {
+		case "GET":
+		case "DELETE":
+			// Reaching here with body != "" means --allow-delete-body was set;
+			// the guard above already rejected the combination otherwise. Send
+			// the caller's exact bytes (validated as JSON, not re-marshaled):
+			// DELETE pagination, like GET's, rides the query string.
+			if body != "" {
+				var discard any
+				if err := json.Unmarshal([]byte(body), &discard); err != nil {
+					return &usageError{fmt.Errorf("invalid JSON body: %w", err)}
 				}
-				if wErr := enc.Encode(item); wErr != nil {
-					return errors.Join(err, wErr)
+				rawBody = []byte(body)
+			}
+		case "POST", "PUT", "PATCH":
+			bodyObj = map[string]any{}
+			if body != "" {
+				if err := json.Unmarshal([]byte(body), &bodyObj); err != nil {
+					return &usageError{fmt.Errorf("invalid JSON body: %w", err)}
+				}
+				if bodyObj == nil {
+					return errNullBody
 				}
 			}
-			return err
+		default:
+			return fmt.Errorf("unsupported method: %s (use GET, POST, PUT, PATCH, or DELETE)", method)
 		}
 
-		for !limitReached(enc.Written(), limit) {
-			if guard.tokenAlreadyUsed(pageToken) {
-				return guard.warnStuck(cmd, route)
+		// fetch sends the request for the page at token (through c, which may be a test fake, not the engine's client); paging rides the query
+		// string for GET/DELETE and the body for POST/PUT/PATCH.
+		fetch := func(_ *client.Client, _ int, token string) ([]byte, error) {
+			reqPath, bodyBytes := path, rawBody
+			if paginate && token != "" && bodyObj == nil {
+				reqPath = setQueryParam(reqPath, "page_token", token)
 			}
-			reqPath := path
-			var bodyBytes []byte
-			switch method {
-			case "GET":
-				if paginate && pageToken != "" {
-					reqPath = setQueryParam(reqPath, "page_token", pageToken)
+			if bodyObj != nil {
+				obj := bodyObj
+				if paginate && token != "" {
+					obj = cloneJSONObject(bodyObj)
+					obj["pageToken"] = token
 				}
-			case "DELETE":
-				if paginate && pageToken != "" {
-					reqPath = setQueryParam(reqPath, "page_token", pageToken)
-				}
-				// Reaching here with body != "" means --allow-delete-body was
-				// set; the guard above already rejected the combination
-				// otherwise. Send the caller's exact bytes (validated as JSON,
-				// but not re-marshaled) rather than routing through the
-				// map[string]any round-trip POST/PUT/PATCH use below, which
-				// exists to splice in pageToken for pagination — not needed
-				// here since DELETE pagination (like GET's) rides the query
-				// string, not the body.
-				if body != "" {
-					var discard any
-					if err := json.Unmarshal([]byte(body), &discard); err != nil {
-						return &usageError{fmt.Errorf("invalid JSON body: %w", err)}
-					}
-					bodyBytes = []byte(body)
-				}
-			case "POST", "PUT", "PATCH":
-				var bodyObj map[string]any
-				if body != "" {
-					if err := json.Unmarshal([]byte(body), &bodyObj); err != nil {
-						return &usageError{fmt.Errorf("invalid JSON body: %w", err)}
-					}
-					if bodyObj == nil {
-						return errNullBody
-					}
-				} else {
-					bodyObj = map[string]any{}
-				}
-				if paginate && pageToken != "" {
-					bodyObj["pageToken"] = pageToken
-				}
-				b, mErr := json.Marshal(bodyObj)
-				if mErr != nil {
-					return fmt.Errorf("encoding request body: %w", mErr)
+				b, err := json.Marshal(obj)
+				if err != nil {
+					return nil, fmt.Errorf("encoding request body: %w", err)
 				}
 				bodyBytes = b
-			default:
-				return fmt.Errorf("unsupported method: %s (use GET, POST, PUT, PATCH, or DELETE)", method)
 			}
-
-			data, reqErr := c.Request(cmd.Context(), method, reqPath, bodyBytes, headers)
-			if reqErr != nil {
-				if method == "GET" && looksLikePOSTOnly(reqErr.Error(), reqPath) {
-					return failWith(fmt.Errorf("API error: %w\n\nHint: this looks like a POST-only endpoint (e.g. /search/* paths). Try '--body \"{}\"' (which switches to POST) or '--method=POST'", reqErr))
-				}
-				return failWith(fmt.Errorf("API error: %w", reqErr))
-			}
-
-			if !paginate {
-				// A non-empty nextPageToken means more results exist and we
-				// are about to discard the cursor to them. Silent otherwise:
-				// one page, exit 0, indistinguishable from a complete result.
-				// Every first-class list command auto-paginates, so callers
-				// reaching for raw `api` most need telling.
-				//
-				// Deliberately says "partial" rather than "the first page":
-				// --query page_token=X makes this page N. And --paginate is
-				// offered, not promised — on an endpoint whose cursor never
-				// advances it aborts (see paginationCursorGuard), which is
-				// still a clear failure rather than this silent one.
-				if tok := nextPageTokenOf(data); tok != "" {
-					notice(cmd, noticeInfo, fmt.Sprintf(
-						"Warning: %s returned a partial result — more pages exist and c1i is discarding the cursor to them. Pass --paginate to fetch the rest (which emits NDJSON rows rather than a single JSON object).", redact.URL(path)), nil)
-				}
-				return writeObject(cmd, data)
-			}
-
-			items, nextToken, err := extractListAndToken(data, listKey)
-			if notArray := (*listKeyNotArrayError)(nil); errors.As(err, &notArray) {
-				return failWith(&usageError{fmt.Errorf("--list-key %q is not an array in the response: %w", listKey, notArray.err)})
-			}
+			data, err := c.Request(cmd.Context(), method, reqPath, bodyBytes, headers)
 			if err != nil {
-				return failWith(&nonJSONResponseError{fmt.Errorf("failed to parse response: %w", err)})
-			}
-			if !listKeySeen {
-				if listKeySeen, err = checkListKeyPresent(data, listKey); err != nil {
-					return failWith(err)
+				if method == "GET" && looksLikePOSTOnly(err.Error(), reqPath) {
+					return nil, fmt.Errorf("API error: %w\n\nHint: this looks like a POST-only endpoint (e.g. /search/* paths). Try '--body \"{}\"' (which switches to POST) or '--method=POST'", err)
 				}
+				return nil, fmt.Errorf("API error: %w", err)
 			}
-
-			ids := make([]string, len(items))
-			for i, item := range items {
-				ids[i] = itemIdentity(item)
-			}
-			// Every item has an identity, so a page is either kept whole or
-			// stale. A stale page is held, not dropped: a raw passthrough prints
-			// an isolated repeat once a later page brings something new or the
-			// list ends, while a stuck run errors out before either.
-			if _, err := guard.checkPage(cmd, route, ids); err != nil {
-				return err
-			}
-			if guard.inStaleRun() && nextToken != "" {
-				held = append(held, items...)
-				items = nil
-			} else {
-				items, held = append(held, items...), nil
-			}
-
-			for _, item := range items {
-				// Encode the raw item, not a decoded any: decoding to any turns
-				// JSON numbers into float64 and corrupts large integer IDs. The
-				// emitter handles json.RawMessage directly (and projects it with
-				// UseNumber when --fields is set), preserving precision.
-				if err := enc.Encode(item); err != nil {
-					return err
-				}
-				if limitReached(enc.Written(), limit) {
-					return nil
-				}
-			}
-
-			if nextToken == "" {
-				break
-			}
-			guard.markTokenUsed(pageToken)
-			pageToken = nextToken
+			return data, nil
 		}
 
-		return nil
+		if !paginate {
+			data, err := fetch(nil, 0, "")
+			if err != nil {
+				return err
+			}
+			warnPartialResult(cmd, data, path)
+			return writeObject(cmd, data)
+		}
+		return runPages(cmd, nil, pageSpec[json.RawMessage]{
+			Route: method + " " + redact.URL(path),
+			Fetch: fetch,
+			Parse: apiPageParser(listKey),
+			// Every item has an identity, so a page is either kept whole or
+			// stale; a stale page is held, not dropped (see HoldStale).
+			ID:        itemIdentity,
+			HoldStale: true,
+			// Encode the raw item, not a decoded any: decoding to any turns
+			// JSON numbers into float64 and corrupts large integer IDs. The
+			// emitter handles json.RawMessage directly (and projects it with
+			// UseNumber when --fields is set), preserving precision.
+			Enc:   newEmitter(cmd),
+			Limit: limit,
+		})
 	},
 }
 
@@ -350,6 +280,39 @@ func init() {
 	markRequired(apiCmd, "path")
 	addLimitFlag(apiCmd)
 	rootCmd.AddCommand(apiCmd)
+}
+
+// warnPartialResult warns when a one-page read discards a next-page cursor.
+// A non-empty nextPageToken means more results exist; staying silent would
+// leave one page at exit 0 indistinguishable from a complete result. It says
+// "partial", not "the first page": --query page_token=X makes this page N.
+// --paginate is offered, not promised: on an endpoint whose cursor never
+// advances it aborts, still a clear failure rather than this silent one.
+func warnPartialResult(cmd *cobra.Command, data []byte, path string) {
+	if tok := nextPageTokenOf(data); tok != "" {
+		notice(cmd, noticeInfo, fmt.Sprintf(
+			"Warning: %s returned a partial result — more pages exist and c1i is discarding the cursor to them. Pass --paginate to fetch the rest (which emits NDJSON rows rather than a single JSON object).", redact.URL(path)), nil)
+	}
+}
+
+// apiPageParser decodes one --paginate page into its raw items and cursor.
+func apiPageParser(listKey string) func([]byte) ([]json.RawMessage, string, error) {
+	listKeySeen := listKey == ""
+	return func(data []byte) ([]json.RawMessage, string, error) {
+		items, next, err := extractListAndToken(data, listKey)
+		if notArray := (*listKeyNotArrayError)(nil); errors.As(err, &notArray) {
+			return nil, "", &usageError{fmt.Errorf("--list-key %q is not an array in the response: %w", listKey, notArray.err)}
+		}
+		if err != nil {
+			return nil, "", &nonJSONResponseError{fmt.Errorf("failed to parse response: %w", err)}
+		}
+		if !listKeySeen {
+			if listKeySeen, err = checkListKeyPresent(data, listKey); err != nil {
+				return nil, "", err
+			}
+		}
+		return items, next, nil
+	}
 }
 
 // looksLikePOSTOnly returns true when a GET error and path together suggest

@@ -1,7 +1,6 @@
 package cmd
 
 import (
-	"encoding/json"
 	"fmt"
 	"strings"
 
@@ -12,27 +11,16 @@ var tasksListCmd = &cobra.Command{
 	Use:   "list",
 	Short: "Search and list access request tasks (NDJSON output)",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		baseURL, err := GetBaseURL()
+		c, err := listClientFor(cmd)
 		if err != nil {
 			return err
 		}
-
-		c, err := newListClient(cmd, baseURL)
-		if err != nil {
-			return fmt.Errorf("authentication failed: %w", err)
-		}
-
 		query, _ := cmd.Flags().GetString("query")
 		state, err := parseTaskState(cmd)
 		if err != nil {
 			return err
 		}
 		assignedToMe, _ := cmd.Flags().GetBool("assigned-to-me")
-		requestedPageSize := pageSizeFlag(cmd)
-		pageToken, _ := cmd.Flags().GetString("page-token")
-		manualPaging := cmd.Flags().Changed("page-token")
-		limit := getIntFlag(cmd, "limit")
-
 		var myUserID string
 		if assignedToMe {
 			myUserID, err = currentUserID(cmd.Context(), c)
@@ -45,68 +33,23 @@ var tasksListCmd = &cobra.Command{
 				return &usageError{fmt.Errorf("could not determine the current user for --assigned-to-me")}
 			}
 		}
-
-		enc := newEmitter(cmd)
-		guard := newPaginationCursorGuard()
-		route := "POST /api/v1/search/tasks"
-		for !limitReached(enc.Written(), limit) {
-			if guard.tokenAlreadyUsed(pageToken) {
-				return guard.warnStuck(cmd, route)
-			}
-			pageSize := requestedPageSize
-			if !enc.Filtered() {
-				pageSize = effectivePageSize(requestedPageSize, limit, enc.Written())
-			}
-			body := map[string]any{
-				"pageSize": pageSize,
-			}
-			if pageToken != "" {
-				body["pageToken"] = pageToken
-			}
-			if query != "" {
-				body["query"] = query
-			}
-			if state != "" {
-				body["taskStates"] = []string{state}
-			}
-			if myUserID != "" {
-				body["myWorkUserIds"] = []string{myUserID}
-			}
-
-			data, err := c.Post(cmd.Context(), "/api/v1/search/tasks", body)
-			if err != nil {
-				return fmt.Errorf("API error: %w", err)
-			}
-
-			var resp taskSearchList
-			if err := json.Unmarshal(data, &resp); err != nil {
-				return fmt.Errorf("failed to parse response: %w", err)
-			}
-
-			keep, err := guard.checkPage(cmd, route, resp.ids())
-			if err != nil {
-				return err
-			}
-			for _, item := range keepRows(resp.List, keep) {
-				if item.Task == nil {
-					continue // skipped rather than emitted as an all-"" row
-				}
-				if err := enc.Encode(taskRow(*item.Task)); err != nil {
-					return err
-				}
-				if limitReached(enc.Written(), limit) {
-					return nil
-				}
-			}
-
-			if resp.NextPageToken == "" || manualPaging {
-				break
-			}
-			guard.markTokenUsed(pageToken)
-			pageToken = resp.NextPageToken
+		body := map[string]any{}
+		if query != "" {
+			body["query"] = query
 		}
-
-		return nil
+		if state != "" {
+			body["taskStates"] = []string{state}
+		}
+		if myUserID != "" {
+			body["myWorkUserIds"] = []string{myUserID}
+		}
+		return listPages(cmd, c, pageSpec[taskSearchItem]{
+			Route: "POST /api/v1/search/tasks",
+			Fetch: postPage(cmd.Context(), "/api/v1/search/tasks", body),
+			Parse: parseList[taskSearchItem],
+			ID:    taskItemID,
+			Rows:  taskItemRows,
+		})
 	},
 }
 

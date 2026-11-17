@@ -1,10 +1,6 @@
 package cmd
 
 import (
-	"encoding/json"
-	"fmt"
-	"strconv"
-
 	"github.com/spf13/cobra"
 )
 
@@ -22,82 +18,22 @@ REST API) can be told apart without a round trip to "get". They also include
 required_scope_count/optional_scope_count, a summary of that entry's OAuth
 scope tiering (see "catalog get" for details and caveats).`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		baseURL, err := GetBaseURL()
+		c, err := listClientFor(cmd)
 		if err != nil {
 			return err
 		}
-
-		c, err := newListClient(cmd, baseURL)
-		if err != nil {
-			return fmt.Errorf("authentication failed: %w", err)
-		}
-
 		query, _ := cmd.Flags().GetString("query")
-		requestedPageSize := pageSizeFlag(cmd)
-		pageToken, _ := cmd.Flags().GetString("page-token")
-		manualPaging := cmd.Flags().Changed("page-token")
-		limit := getIntFlag(cmd, "limit")
-
-		enc := newEmitter(cmd)
-		guard := newPaginationCursorGuard()
-		route := "GET /api/v1/mcp_server_catalog"
-		for !limitReached(enc.Written(), limit) {
-			if guard.tokenAlreadyUsed(pageToken) {
-				return guard.warnStuck(cmd, route)
-			}
-			pageSize := requestedPageSize
-			if !enc.Filtered() {
-				pageSize = effectivePageSize(requestedPageSize, limit, enc.Written())
-			}
-			params := map[string]string{
-				"page_size": strconv.Itoa(pageSize),
-			}
-			if pageToken != "" {
-				params["page_token"] = pageToken
-			}
-			if query != "" {
-				params["query"] = query
-			}
-
-			data, err := c.Get(cmd.Context(), "/api/v1/mcp_server_catalog", params)
-			if err != nil {
-				return fmt.Errorf("API error: %w", err)
-			}
-
-			var resp struct {
-				List          []catalogEntryView `json:"list"`
-				NextPageToken string             `json:"nextPageToken"`
-			}
-			if err := json.Unmarshal(data, &resp); err != nil {
-				return fmt.Errorf("failed to parse response: %w", err)
-			}
-
-			ids := make([]string, len(resp.List))
-			for i, it := range resp.List {
-				ids[i] = it.ID
-			}
-			keep, err := guard.checkPage(cmd, route, ids)
-			if err != nil {
-				return err
-			}
-			resp.List = keepRows(resp.List, keep)
-			for _, e := range resp.List {
-				if err := enc.Encode(catalogEntryRow(e)); err != nil {
-					return err
-				}
-				if limitReached(enc.Written(), limit) {
-					return nil
-				}
-			}
-
-			if resp.NextPageToken == "" || manualPaging {
-				break
-			}
-			guard.markTokenUsed(pageToken)
-			pageToken = resp.NextPageToken
+		extra := map[string]string{}
+		if query != "" {
+			extra["query"] = query
 		}
-
-		return nil
+		return listPages(cmd, c, pageSpec[catalogEntryView]{
+			Route: "GET /api/v1/mcp_server_catalog",
+			Fetch: getPage(cmd.Context(), "/api/v1/mcp_server_catalog", extra),
+			Parse: parseList[catalogEntryView],
+			ID:    func(it catalogEntryView) string { return it.ID },
+			Rows:  rowFn(catalogEntryRow),
+		})
 	},
 }
 

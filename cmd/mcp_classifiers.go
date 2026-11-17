@@ -1,10 +1,8 @@
 package cmd
 
 import (
-	"encoding/json"
 	"fmt"
 	"net/http"
-	"strconv"
 
 	"github.com/ConductorOne/c1i/internal/client"
 	"github.com/spf13/cobra"
@@ -34,10 +32,7 @@ var mcpClassifiersListCmd = &cobra.Command{
 	Use:   "list",
 	Short: "List classifiers (NDJSON output)",
 	RunE: func(cmd *cobra.Command, _ []string) error {
-		return listClassifierPages(cmd, "GET /api/v1/classifiers", "classifiers", "id", classifierRow, func(c *client.Client, pageSize int, pageToken string) ([]byte, error) {
-			params := pageParams(pageSize, pageToken)
-			return c.Get(cmd.Context(), "/api/v1/classifiers", params)
-		})
+		return listMapPages(cmd, "GET /api/v1/classifiers", "classifiers", []string{"id"}, classifierRow, getPage(cmd.Context(), "/api/v1/classifiers", nil))
 	},
 }
 
@@ -112,9 +107,7 @@ var mcpClassifierBindingsListCmd = &cobra.Command{
 	Use:   "list",
 	Short: "List classifier bindings (NDJSON output)",
 	RunE: func(cmd *cobra.Command, _ []string) error {
-		return listClassifierPages(cmd, "GET /api/v1/classifier_bindings", "bindings", "id", classifierBindingRow, func(c *client.Client, pageSize int, pageToken string) ([]byte, error) {
-			return c.Get(cmd.Context(), "/api/v1/classifier_bindings", pageParams(pageSize, pageToken))
-		})
+		return listMapPages(cmd, "GET /api/v1/classifier_bindings", "bindings", []string{"id"}, classifierBindingRow, getPage(cmd.Context(), "/api/v1/classifier_bindings", nil))
 	},
 }
 
@@ -159,16 +152,12 @@ var mcpClassifierTemplatesListCmd = &cobra.Command{
 	Short: "List classifier templates (NDJSON output)",
 	RunE: func(cmd *cobra.Command, _ []string) error {
 		latestOnly, _ := cmd.Flags().GetBool("latest-only")
-		return listClassifierPages(cmd, "POST /api/v1/classifier_templates/list", "templates", "", classifierTemplateRow, func(c *client.Client, pageSize int, pageToken string) ([]byte, error) {
-			body := map[string]any{"pageSize": pageSize}
-			if pageToken != "" {
-				body["pageToken"] = pageToken
-			}
-			if latestOnly {
-				body["latestOnly"] = true
-			}
-			return c.Post(cmd.Context(), "/api/v1/classifier_templates/list", body)
-		})
+		body := map[string]any{}
+		if latestOnly {
+			body["latestOnly"] = true
+		}
+		// No id: a template id can repeat across revisions (see --latest-only).
+		return listMapPages(cmd, "POST /api/v1/classifier_templates/list", "templates", nil, classifierTemplateRow, postPage(cmd.Context(), "/api/v1/classifier_templates/list", body))
 	},
 }
 
@@ -271,9 +260,7 @@ var mcpClassifierToolGatesListCmd = &cobra.Command{
 	Use:   "list",
 	Short: "List tool gates (NDJSON output)",
 	RunE: func(cmd *cobra.Command, _ []string) error {
-		return listClassifierPages(cmd, "GET /api/v1/tool_gates", "list", "id", toolGateRow, func(c *client.Client, pageSize int, pageToken string) ([]byte, error) {
-			return c.Get(cmd.Context(), "/api/v1/tool_gates", pageParams(pageSize, pageToken))
-		})
+		return listMapPages(cmd, "GET /api/v1/tool_gates", "list", []string{"id"}, toolGateRow, getPage(cmd.Context(), "/api/v1/tool_gates", nil))
 	},
 }
 
@@ -282,13 +269,7 @@ var mcpClassifierToolGatesSearchCmd = &cobra.Command{
 	Short: "Search tool gates (NDJSON output)",
 	RunE: func(cmd *cobra.Command, _ []string) error {
 		query, _ := cmd.Flags().GetString("query")
-		return listClassifierPages(cmd, "POST /api/v1/search/tool_gates", "list", "id", toolGateRow, func(c *client.Client, pageSize int, pageToken string) ([]byte, error) {
-			body := map[string]any{"query": query, "pageSize": pageSize}
-			if pageToken != "" {
-				body["pageToken"] = pageToken
-			}
-			return c.Post(cmd.Context(), "/api/v1/search/tool_gates", body)
-		})
+		return listMapPages(cmd, "POST /api/v1/search/tool_gates", "list", []string{"id"}, toolGateRow, postPage(cmd.Context(), "/api/v1/search/tool_gates", map[string]any{"query": query}))
 	},
 }
 
@@ -342,90 +323,6 @@ var mcpClassifierToolGatesDeleteCmd = &cobra.Command{
 	RunE: func(cmd *cobra.Command, args []string) error {
 		return sendMutation(cmd, mutation{Method: http.MethodPost, Path: client.Path("/api/v1/tool_gates/%s/delete", args[0]), Body: map[string]any{}, Unwrap: byID("id")})
 	},
-}
-
-type classifierPageFetcher func(c *client.Client, pageSize int, pageToken string) ([]byte, error)
-type classifierRowFn func(item map[string]any) map[string]any
-
-// listClassifierPages auto-paginates fetch. idKey names the output row's own
-// id for the stuck-cursor guard; "" when it isn't unique per row (a template
-// id can repeat across revisions; see --latest-only).
-func listClassifierPages(cmd *cobra.Command, route, listKey, idKey string, row classifierRowFn, fetch classifierPageFetcher) error {
-	baseURL, err := GetBaseURL()
-	if err != nil {
-		return err
-	}
-	c, err := newListClient(cmd, baseURL)
-	if err != nil {
-		return fmt.Errorf("authentication failed: %w", err)
-	}
-
-	pageToken, _ := cmd.Flags().GetString("page-token")
-	manualPaging := cmd.Flags().Changed("page-token")
-	requestedPageSize := pageSizeFlag(cmd)
-	limit := getIntFlag(cmd, "limit")
-	enc := newEmitter(cmd)
-	guard := newPaginationCursorGuard()
-	for !limitReached(enc.Written(), limit) {
-		if guard.tokenAlreadyUsed(pageToken) {
-			return guard.warnStuck(cmd, route)
-		}
-		pageSize := requestedPageSize
-		if !enc.Filtered() {
-			pageSize = effectivePageSize(requestedPageSize, limit, enc.Written())
-		}
-		data, err := fetch(c, pageSize, pageToken)
-		if err != nil {
-			return fmt.Errorf("API error: %w", err)
-		}
-		items, nextPageToken, err := extractListAndToken(data, listKey)
-		if err != nil {
-			return fmt.Errorf("failed to parse response: %w", err)
-		}
-		rows := make([]map[string]any, len(items))
-		ids := make([]string, len(items))
-		for i, raw := range items {
-			var item map[string]any
-			if err := json.Unmarshal(raw, &item); err != nil {
-				return fmt.Errorf("failed to parse response item: %w", err)
-			}
-			rows[i] = row(item)
-			ids[i], _ = rows[i][idKey].(string)
-		}
-		if idKey == "" {
-			if err := guard.checkIDlessPage(cmd, route, len(rows)); err != nil {
-				return err
-			}
-		} else {
-			keep, err := guard.checkPage(cmd, route, ids)
-			if err != nil {
-				return err
-			}
-			rows = keepRows(rows, keep)
-		}
-		for _, r := range rows {
-			if err := enc.Encode(r); err != nil {
-				return err
-			}
-			if limitReached(enc.Written(), limit) {
-				return nil
-			}
-		}
-		if nextPageToken == "" || manualPaging {
-			return nil
-		}
-		guard.markTokenUsed(pageToken)
-		pageToken = nextPageToken
-	}
-	return nil
-}
-
-func pageParams(pageSize int, pageToken string) map[string]string {
-	params := map[string]string{"page_size": strconv.Itoa(pageSize)}
-	if pageToken != "" {
-		params["page_token"] = pageToken
-	}
-	return params
 }
 
 func getClassifierResource(cmd *cobra.Command, path, key string) error {

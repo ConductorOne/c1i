@@ -296,6 +296,8 @@ func TestRetrySafe(t *testing.T) {
 		{http.MethodPost, "/api/v1/findings/search"},
 		{http.MethodPost, "/api/v1/apps/a1/connectors/c1/mcp_tools/search"},
 		{http.MethodPost, "/api/v1/classifier_templates/list"},
+		{http.MethodPost, "/api/v1/systemlog/events"},
+		{http.MethodPost, "/api/v1/role-mining/suggestions/s1/users"},
 	}
 	for _, c := range safe {
 		if !retrySafe(c.method, c.path) {
@@ -304,6 +306,10 @@ func TestRetrySafe(t *testing.T) {
 	}
 	unsafe := []struct{ method, path string }{
 		{http.MethodPost, "/api/v1/apps"},
+		{http.MethodPost, "/api/v1/systemlog/exports"},
+		{http.MethodPost, "/api/v1/role-mining/suggestions/s1/state"},
+		{http.MethodPost, "/api/v1/role-mining/suggestions//users"},
+		{http.MethodPost, "/api/v1/role-mining/suggestions/a/b/users"},
 		{http.MethodPost, "/api/v1/searchx/users"},
 		{http.MethodPost, "/api/v1/apps/a1/search/x"},
 		{http.MethodPost, "/mcp/search"},
