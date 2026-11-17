@@ -1322,6 +1322,8 @@ that compiles.
 
 A soft-deleted policy disappears from `list` and the default `search`; only
 `search --include-deleted` finds it there (see [Soft delete](#soft-delete)).
+An update to a soft-deleted policy is still accepted (exit `0`); the row stays
+deleted but carries the new values.
 
 `list`/`search` rows also carry `step_kinds` (the policy's baseline sequence in
 run order, e.g. `["accept"]`) and `baseline_policy_id` — the portable way to

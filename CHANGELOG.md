@@ -21,9 +21,10 @@ Exit codes:
   loaded. A read with no credentials used to exit `3` for such an id.
 - **An unknown referenced id exits `4`, not `2`.** These commands already
   looked the id up before sending and exited `2` on a miss; they now exit `4`
-  (nothing sent, `--dry-run` included): `apps set-owners`, `entitlements
-  set-owners`, `entitlements create --owner-id`, `tasks reassign --to-user-id`,
-  and the `--grant-policy-id`, `--revoke-policy-id`, `--certify-policy-id` and
+  (nothing sent, `--dry-run` included): `apps set-owners` (its `--user-id`;
+  an unknown *app* id is not pre-checked), `entitlements set-owners`,
+  `entitlements create --owner-id`, `tasks reassign --to-user-id`, and the
+  `--grant-policy-id`, `--revoke-policy-id`, `--certify-policy-id` and
   `--emergency-grant-policy-id` checks on `apps create|update` and
   `entitlements create|update`. A policy that exists but is deleted or of the
   wrong type is still `2`.

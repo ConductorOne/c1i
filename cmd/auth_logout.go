@@ -20,7 +20,7 @@ Environment variables (C1I_CLIENT_ID, C1I_CLIENT_SECRET) are not affected.
 the stored credential.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		if dryRunActive() {
-			return &usageError{fmt.Errorf("--dry-run is unsupported for auth logout: it cannot preview or suppress deleting a stored credential")}
+			return &usageError{fmt.Errorf("--dry-run is unsupported for auth logout (including via C1I_DRY_RUN): it cannot preview or suppress deleting a stored credential")}
 		}
 		baseURL, err := GetBaseURL()
 		if err != nil {

@@ -55,6 +55,7 @@ Honors --dry-run.`,
 		if len(userIDs) > 0 {
 			body["userIds"] = userIDs
 		}
+		appID, _ := cmd.Flags().GetString("app-id")
 		bindingPath := managedStateBindingPath(cmd, args[0])
 		return sendMutation(cmd, mutation{
 			Method: http.MethodPost,
@@ -62,19 +63,19 @@ Honors --dry-run.`,
 			Body:   body,
 			Unwrap: byID("resourceId"),
 		},
-			withPreRead(bindingExistsCheck(bindingPath, args[0])),
+			withPreRead(bindingExistsCheck(bindingPath, args[0], appID)),
 			withPreRead(existingUsersCheck("user-id", userIDs)))
 	},
 }
 
 // bindingExistsCheck is the promote's pre-send read of the binding, so a
 // --dry-run refuses an unknown binding as a real run does (exit 4).
-func bindingExistsCheck(path, resourceID string) preRead {
+func bindingExistsCheck(path, resourceID, appID string) preRead {
 	return preRead{Run: func(ctx context.Context, c *client.Client, _ *mutation) ([]resolvedID, error) {
 		if _, err := c.Get(ctx, path, nil); err != nil {
 			var apiErr *client.APIError
 			if errors.As(err, &apiErr) && apiErr.StatusCode == http.StatusNotFound {
-				return nil, &refNotFoundError{fmt.Sprintf("<resource-id> %q: no such discovered app under that --app-id and --resource-type-id", resourceID), apiErr}
+				return nil, &refNotFoundError{fmt.Sprintf("<resource-id> %q: no such discovered app under --app-id %q and that --resource-type-id", resourceID, appID), apiErr}
 			}
 			return nil, fmt.Errorf("checking <resource-id> %q: %w", resourceID, err)
 		}

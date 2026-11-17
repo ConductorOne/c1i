@@ -670,8 +670,10 @@ resource with `--resource-id` likewise means you drop
   `requests create grant|revoke --user-id`, `mcp servers register --user-id`, `tasks reassign --to-user-id`.
   `remove-owner` never pre-checks (the server decides; a `--dry-run` preview
   can pass an id the real run 404s). Only flag values are checked: user ids
-  inside a `--*-file`/`--body-file`, or sent via `api`, go as-is. A filter (`grants list`/`requests list
-  --user-id`) is not checked: an unknown one returns no rows.
+  inside a `--*-file`/`--body-file`, or sent via `api`, go as-is. A
+  `requests list --user-id` filter is not checked: an unknown one returns no
+  rows. `grants list --user-id` is sent to the search API, whose unknown-user
+  404 exits `4`.
 - Entitlement ids are unique only within an app — some system-builtin
   entitlements reuse the same id across every app that has one. Always key
   on `(app_id, id)` together, never `id` alone.
