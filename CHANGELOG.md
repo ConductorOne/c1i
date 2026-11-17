@@ -8,146 +8,161 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Upgrading from 0.10.1
 
-**A `.` or `..` id now exits `2` before anything is sent, on every id
-argument.** Every flag ending `-id`, `-ids`, `-uid` or `-uids` (new: `export
-events --since-event-uid`) and every positional documented `<…-id>` is refused,
-reads and writes alike, `--dry-run` included, before credentials are loaded. A
-read with no credentials used to exit `3` for such an id.
+Exit codes:
 
-**An unknown referenced id now exits `4`, not `2`.** These commands already
-looked the id up before sending and exited `2` on a miss; they now exit `4`
-(nothing sent, `--dry-run` included): `apps set-owners`, `entitlements
-set-owners`, `entitlements create --owner-id`, `tasks reassign --to-user-id`,
-and the `--grant-policy-id`, `--revoke-policy-id`, `--certify-policy-id` and
-`--emergency-grant-policy-id` checks on `apps create|update` and `entitlements
-create|update`. A policy that exists but is deleted or of the wrong type is
-still `2`.
+- **A `.` or `..` id exits `2` before anything is sent, on every id
+  argument.** Every flag ending `-id`, `-ids`, `-uid` or `-uids` (new: `export
+  events --since-event-uid`) and every positional documented `<…-id>` is
+  refused, reads and writes alike, `--dry-run` included, before credentials are
+  loaded. A read with no credentials used to exit `3` for such an id.
+- **An unknown referenced id exits `4`, not `2`.** These commands already
+  looked the id up before sending and exited `2` on a miss; they now exit `4`
+  (nothing sent, `--dry-run` included): `apps set-owners`, `entitlements
+  set-owners`, `entitlements create --owner-id`, `tasks reassign --to-user-id`,
+  and the `--grant-policy-id`, `--revoke-policy-id`, `--certify-policy-id` and
+  `--emergency-grant-policy-id` checks on `apps create|update` and
+  `entitlements create|update`. A policy that exists but is deleted or of the
+  wrong type is still `2`.
+- **Newly pre-checked user ids:** `accounts set-owner`, `apps add-owner`,
+  `entitlements add-owner`, `requests create grant|revoke` (an explicit
+  `--user-id`) and `mcp servers register --user-id`. Previously an unknown user
+  reached the server and the result was the server's (`apps`/`entitlements
+  add-owner`: 404, exit `4`); now it exits `4` before sending, and `--dry-run`
+  (which used to exit `0`) refuses it the same way. Each now needs user read,
+  previews included (else exit `3`). A user's status is not checked, only that
+  the id resolves; a lookup answered 200 with a non-JSON body exits `6`.
+  `remove-owner` never pre-checks: the server decides, so a preview can pass an
+  id the real run 404s. Only flag values are checked; ids inside a
+  `--body-file`/`--*-file`, or sent via `api`, go as-is.
+- **A token-endpoint outage no longer reads as bad credentials.** A persistent
+  `429` or `5xx` from the token service now exits 5 or 6 (was 3), and a failure
+  to reach it is no longer exit 3. Only a `400`/`401`/`403` there exits 3: a
+  `404` there now exits 4 (was 3), a `408` exits 1 (was 3), and a `200` that is
+  not a token exits 6. A script that treated exit 3 as "re-authenticate" should
+  retry on 5 and 6.
 
-Newly checked: `accounts set-owner`, `apps add-owner`, `entitlements add-owner`,
-`requests create grant|revoke` (an explicit `--user-id`) and `mcp servers
-register --user-id`. Previously an unknown user reached the server and the
-result was the server's (`apps`/`entitlements add-owner`: 404, exit `4`); now it
-exits `4` before sending, and `--dry-run` (which used to exit `0`) refuses it
-the same way. Each now needs user read, previews included (else exit `3`). A
-user's status is not checked, only that the id resolves; a lookup answered 200
-with a non-JSON body exits `6`. `remove-owner` never
-pre-checks: the server decides, so a preview can pass an id the real run 404s.
-Only flag values are checked; ids inside a `--body-file`/`--*-file`, or sent via
-`api`, go as-is.
-An API error that echoed a secret now prints it masked: the error text and the
-JSON error `body` hold `[redacted]` in place of a secret-named URL parameter or
-JSON field the server reflected. A `body` that is whole JSON with something
-masked is re-encoded compactly (key order kept); anything else with a mask
-keeps every other byte as sent, and a body with nothing to mask is unchanged.
-A script matching on a reflected secret value, or on the exact bytes of a
-masked body, must match `[redacted]` instead.
-When a masked secret cannot be placed in the original bytes (for example it
-is escaped five or more levels deep), the whole output falls back to the
-decoded text with every secret masked.
+Output shape:
 
-A list row's string field that is absent in the API response is now `null`
-instead of `""` on every list and search row c1i builds, so `jq 'select(.field)'`
-no longer matches every row. Use `select(.field != null)`, or `.field // empty`;
-a script that compared a field to `""` should test for `null` instead. This
-covers, among others, `findings` `task_id`, `ticket_id` and
-`assignee_identity_user_id`; `role-mining` `error_message` (it was `""` on
-every successful run); `mcp classifiers` `grant_policy_id` and `description`;
-and the `description`, `display_name`, `email`, `department`, `job_title` and
-timestamp fields of `users`, `accounts`, `apps`, `tasks`, `requests`,
-`entitlements`, `functions`, `mcp` and `service-principals` rows, plus
-`docs search` `title`/`path`/`content` and `docs endpoints`
-`summary`/`operation_id`, and `mcp gateway list-tools` `name`/`description`.
-A real value, and every boolean and number, is unchanged. Commands that print
-the API's own objects (`access-reviews list`, `export events`, the `history`
-commands, `api`) are unchanged. Some keys are still
-omitted rather than null, as before: `origin` on `users list`, `outcome` on
-`tasks`/`requests` rows, `type`/`app_id`/`app_entitlement_id` on a `tasks`/`requests` row
-whose task type does not carry them, and `tool_count`/`last_called_at` on
-`mcp servers search` without `--tool-state` / `--include-last-called-at`
-(`last_called_at` also when the server was never called).
+- **A list row's string field that is absent in the API response is `null`,
+  not `""`,** on every list and search row c1i builds, so `jq
+  'select(.field)'` no longer matches every row. Use `select(.field != null)`
+  or `.field // empty`; a script that compared a field to `""` should test for
+  `null`. This covers, among others, `findings` `task_id`, `ticket_id` and
+  `assignee_identity_user_id`; `role-mining` `error_message` (it was `""` on
+  every successful run); `mcp classifiers` `grant_policy_id` and `description`;
+  and the `description`, `display_name`, `email`, `department`, `job_title` and
+  timestamp fields of `users`, `accounts`, `apps`, `tasks`, `requests`,
+  `entitlements`, `functions`, `mcp` and `service-principals` rows, plus `docs
+  search` `title`/`path`/`content`, `docs endpoints` `summary`/`operation_id`,
+  and `mcp gateway list-tools` `name`/`description`. A real value, and every
+  boolean and number, is unchanged. Commands that print the API's own objects
+  (`access-reviews list`, `export events`, the `history` commands, `api`) are
+  unchanged. Some keys are still omitted rather than null: `origin` on `users
+  list`, `outcome` on `tasks`/`requests` rows, `type`/`app_id`/
+  `app_entitlement_id` on a `tasks`/`requests` row whose task type does not
+  carry them, and `tool_count`/`last_called_at` on `mcp servers search` without
+  `--tool-state` / `--include-last-called-at` (`last_called_at` also when the
+  server was never called).
+- **`upgrade --dry-run` prints one JSON object on stdout** on every non-error
+  path without `--check`, instead of `[dry-run]` text lines (or "is current"
+  lines): the shared preview shape (`dryRun`, `requests`) plus an `upgrade`
+  object holding the `upgrade --check` keys (`current`, `latest`, `channel`,
+  `update_available`, `install_method`, and `upgrade_command` only for a
+  Homebrew, `go install` or container install) and, when an update is due on a
+  standalone install, `asset_url`, `sha256` and `destination`. `requests` is
+  only the download `GET`, `[]` when nothing would download. A script that
+  matched the `[dry-run]` text must read `.upgrade` instead; one that matched
+  "is current" or "newer than" must read `.upgrade.update_available`. The
+  stderr notice is now `dry run: nothing was installed`. `upgrade --fields`
+  (without `--check`) exits 2 instead of being ignored.
+- **API error text and the JSON error `body` mask secrets:** `[redacted]`
+  replaces a secret-named URL parameter or JSON field the server reflected. A
+  script matching on a reflected secret value, or on the exact bytes of a
+  masked body, must match `[redacted]` instead (see Security).
 
-A script that passes a possibly-empty variable to a filter
-(`--state "$STATE"`) now exits 2 when it is empty instead of returning an
-unfiltered list. Omit the flag when the variable is empty, for example
-`${STATE:+--state "$STATE"}`.
+Inputs now refused (exit 2):
 
-A `--wait-*` flag (`--wait-timeout`, `grants list --wait-stable`/`--wait-min`)
-given without `--wait` was ignored; it now exits 2. Drop it, or add `--wait`;
-an explicit `--wait=false` alongside it is still accepted.
+- **A blank value on any flag** (see Changed). A script that passes a
+  possibly-empty variable to a filter (`--state "$STATE"`) used to get an
+  unfiltered list; omit the flag when the variable is empty, for example
+  `${STATE:+--state "$STATE"}`.
+- **A `--wait-*` flag** (`--wait-timeout`, `grants list`
+  `--wait-stable`/`--wait-min`) given without `--wait` was ignored. Drop it, or
+  add `--wait`; an explicit `--wait=false` alongside it is still accepted.
+- **A `--body-file` key that the command itself sets** must be absent, with any
+  value including `null`: exit 2 before any request, the error listing every
+  offending key. The exception is a key set from a positional id, which may be
+  present when it equals that positional exactly (a string) and is then sent
+  once, under its camelCase spelling, so a file saved from `get` still works
+  with `update`; any other value is refused, and the error names the key, the
+  file's value and the positional. Before:
+  - On `findings search`, `findings audits search`, `findings
+    shadow-mcp-occurrences search`, `role-mining suggestions search` and
+    `role-mining suggestions users`, a camelCase `pageSize` in the file was
+    silently overridden (exit 0); a snake_case `page_size` got a server 400
+    (exit 2) because it duplicated c1i's own `pageSize`; and a
+    `pageToken`/`page_token` was sent on the first request, so a valid one
+    started the listing mid-stream with auto-pagination still on. Now all of
+    `pageToken`, `pageSize`, `page_token` and `page_size` exit 2 with any
+    value; remove them and use `--page-token` (fetches that one page) or
+    `--page-size`.
+  - A key the command overwrote from its positional was silently replaced, even
+    with a different value: `findingId` on `findings state`/`assignee`,
+    `templateId` on `mcp classifiers templates add-rule`, and `id` on `findings
+    routing-rules|transformation-rules update`, `automations update`,
+    `access-reviews update`, `policies update`, `mcp classifiers update` and
+    `mcp classifiers tool-gates update`. A different value, `null` or a
+    non-string now exits 2, as do the snake_case spellings (`finding_id`,
+    `template_id`) unless equal, and `suggestionId`/`suggestion_id` on
+    `role-mining suggestions users` and `templateId`/`template_id` on `mcp
+    classifiers templates instantiate`, which the path already carries.
+- **`--dry-run` runs the same pre-send reads a real run does** (checking that a
+  user or policy id exists, or looking up a policy's type), so a preview that
+  names such an id needs credentials that can read it. A preview with no such
+  id still needs none.
+- **Every `--update-mask` goes through one rule.** These exit `2` (on a real run
+  and on `--dry-run`, before any request) where they used to be sent or
+  silently ignored:
+  - an empty path (`,`, `a,,b`) or an empty dot-segment (`a..b`, `.a`, `a.`,
+    `basicAuth..password`), now on all eight commands that take the flag. The
+    message names the position (`path 2 is empty`, `path 1, segment 2 is
+    empty`); the wording changed on `policies update`, `automations update`,
+    `access-reviews update` and the three `mcp classifiers` updates too;
+  - `mcp servers test-connection --update-mask <non-empty>` in create mode (no
+    `<connector-id>`/`--app-id`), which was ignored; `""` still means omitted;
+  - `mcp servers update-credentials` or `test-connection` with an explicit mask
+    that leaves out a config key the command sends (for example `--server-url
+    https://x --update-mask a,b`): the URL was silently not applied. Name the
+    key, or drop it;
+  - `update-credentials --auth bearer-token` with no token plus a malformed
+    mask, which slipped past the credential check and sent an empty token.
 
-A `--body-file` key that the command itself sets must now be absent, with any
-value including `null`: exit 2 before any request, the error listing every
-offending key. The exception is a key set from a positional id, which may be
-present when it equals that positional exactly (a string) and is then sent
-once, under its camelCase spelling, so a file saved from `get` still works with
-`update`; any other value is refused, and the error names the key, the file's
-value and the positional.
-Before:
-- On `findings search`, `findings audits search`, `findings
-  shadow-mcp-occurrences search`, `role-mining suggestions search` and
-  `role-mining suggestions users`, a camelCase `pageSize` in the file was
-  silently overridden (exit 0); a snake_case `page_size` got a server 400
-  (exit 2) because it duplicated c1i's own `pageSize`; and a
-  `pageToken`/`page_token` was sent on the first request, so a valid one
-  started the listing mid-stream with auto-pagination still on. Now all of
-  `pageToken`, `pageSize`, `page_token` and `page_size` exit 2 with any value;
-  remove them and use `--page-token` (fetches that one page) or `--page-size`.
-- A key the command overwrote from its positional was silently replaced, even
-  with a different value: `findingId` on `findings state`/`assignee`,
-  `templateId` on `mcp classifiers templates add-rule`, and `id` on `findings
-  routing-rules|transformation-rules update`, `automations update`,
-  `access-reviews update`, `policies update`, `mcp classifiers update` and
-  `mcp classifiers tool-gates update`. A different value, `null` or a non-string
-  now exits 2, as do the snake_case spellings (`finding_id`, `template_id`)
-  unless equal, and `suggestionId`/`suggestion_id` on `role-mining suggestions
-  users` and `templateId`/`template_id` on `mcp classifiers templates
-  instantiate`, which the path already carries.
+  A padded mask (`" a , b "`) is sent as `a,b`. A snake_case path still covers
+  its camelCase key for the coverage check but is sent as given.
 
-`--dry-run` now runs the same pre-send reads a real run does (checking that a
-user or policy id exists, or looking up a policy's type), so a preview that
-names such an id needs credentials that can read it. A preview with no such id
-still needs none.
+### Security
 
-`upgrade --dry-run` now prints one JSON object on stdout on every non-error
-path without `--check`, instead of `[dry-run]` text lines (or "is current" lines): the shared
-preview shape (`dryRun`, `requests`) plus an `upgrade` object holding the
-`upgrade --check` keys (`current`, `latest`, `channel`, `update_available`,
-`install_method`, and `upgrade_command` only for a Homebrew, `go install` or container install) and, when
-an update is due on a standalone install, `asset_url`, `sha256` and
-`destination`. `requests` is only the download `GET`, `[]` when nothing would
-download. A script that matched the `[dry-run]` text must read `.upgrade`
-instead; one that matched "is current" or "newer than" must read
-`.upgrade.update_available`. The stderr notice is now
-`dry run: nothing was installed`. `upgrade --fields` (without `--check`) now
-exits 2 instead of being ignored.
-
-A token-endpoint outage no longer reads as bad credentials: a persistent `429`
-or `5xx` from the token service now exits 5 or 6 (was 3), and a failure to
-reach it is no longer exit 3. Only a `400`/`401`/`403` there exits 3: a `404`
-there now exits 4 (was 3), a `408` exits 1 (was 3), and a `200` that is not a
-token exits 6. A script that treated exit 3 as "re-authenticate" should retry
-on 5 and 6.
-
-Every `--update-mask` now goes through one rule, and these exit `2` (on a real
-run and on `--dry-run`, before any request) where they used to be sent or
-silently ignored:
-
-- an empty path (`,`, `a,,b`) or an empty dot-segment (`a..b`, `.a`, `a.`,
-  `basicAuth..password`), now on all eight commands that take the flag. The
-  message names the position (`path 2 is empty`, `path 1, segment 2 is empty`);
-  the wording changed on `policies update`, `automations update`,
-  `access-reviews update` and the three `mcp classifiers` updates too;
-- `mcp servers test-connection --update-mask <non-empty>` in create mode
-  (no `<connector-id>`/`--app-id`), which was ignored; `""` still means omitted;
-- `mcp servers update-credentials` or `test-connection` with an explicit mask
-  that leaves out a config key the command sends (for example
-  `--server-url https://x --update-mask a,b`): the URL was silently not
-  applied. Name the key, or drop it;
-- `update-credentials --auth bearer-token` with no token plus a malformed mask,
-  which slipped past the credential check and sent an empty token.
-
-A padded mask (`" a , b "`) is now sent as `a,b`. A snake_case path still
-covers its camelCase key for the coverage check but is sent as given.
+- Secrets are masked as `[redacted]` in more places. `--debug` traces, transport,
+  redirect, API and path-guard errors, partial-result notices, `--dry-run`
+  previews and the URLs `upgrade` prints mask a secret-named query, fragment or
+  `;` path parameter (also percent-encoded or bracketed, such as `a[token]=`)
+  and a URL's username (except `git`). API error bodies (including `docs
+  search`/`docs page`), `mcp gateway` error text and the device flow's
+  `error_description` mask a secret-named URL parameter or JSON field the server
+  echoed back. `client_assertion` and `device_code` are now secret names, and
+  names ending in `token` (pagination cursors such as `page_token`) print as
+  `[redacted]`; a `code` JSON field stays visible.
+- A whole-JSON error body with something masked is re-encoded compactly (key
+  order kept); anything else keeps every other byte as sent, and a body with
+  nothing to mask is unchanged. When a masked secret cannot be placed in the
+  original bytes, the output falls back to the decoded text with every secret
+  masked.
+- Error messages, the JSON error's `path` and `--debug` response lines show the
+  path as sent (escaped), so an id that needed escaping prints encoded, for
+  example `h%C3%A9llo`.
+- A malformed `key=value` (`api --header`/`--query`, `--config-field`) no longer
+  echoes the whole input in its error, which could expose a token missing its
+  `=`; the error names the flag only.
 
 ### Added
 
@@ -155,11 +170,13 @@ covers its camelCase key for the coverage check but is sent as given.
   managed entitlement directly (`POST .../add-manual-user`), skipping request
   policy and approval. It sends one request for every `--user-id` (a repeated id
   once), looks up each user first (unknown exits `4`, nothing sent, `--dry-run`
-  included), and `--wait` blocks until every user shows in `grants list`.
-  There is no `grants remove`: the only direct removal, `remove-membership`,
-  rejects a manual entitlement (`entitlement is not an SSO application sign-in
-  entitlement`); use `requests create revoke`, whose task waits on a
-  provisioning step on a manual entitlement.
+  included), and `--wait` blocks until every user shows in `grants list`. If the
+  server reports users it could not add (`failedUsersErrorMap`), the response is
+  printed, each rejected user is named, and the exit is `1`; `--wait` then waits
+  only for the accepted users. There is no `grants remove`: the only direct
+  removal, `remove-membership`, rejects a manual entitlement (`entitlement is
+  not an SSO application sign-in entitlement`); use `requests create revoke`,
+  whose task waits on a provisioning step on a manual entitlement.
 - `mcp servers register --wait [--wait-timeout 1m]` polls `mcp servers list
   --app-id` until the new server is listed. In the runs checked, a list read
   right after register omitted the server for a second or two while `mcp
@@ -173,56 +190,56 @@ covers its camelCase key for the coverage check but is sent as given.
   raw `api`. `promote` creates an app and nothing checks for an existing one of
   the same name; promoting an already-managed binding exits `0` and returns the
   existing app. New guide `docs guide promote-idp-app-to-managed`.
+- `attribute-types list` and `attribute-mappings list|get|create|update|delete`
+  manage user-attribute mappings, which copy an app's profile keys into
+  structured user fields (employment type, department, job title, manager).
+  `create --type` takes a display name or id and builds the request from the
+  type's config kind; a `--key` the kind does not take exits `2` (the server
+  answers `500`), an unknown type exits `4` and an ambiguous name exits `2`,
+  nothing sent. `update` reads the mapping and re-sends its attribute type,
+  fallbacks and profile types, because the server's PUT replaces them and
+  ignores `updateMask`.
 
 ### Changed
 
-- **The update commands with field flags build their body and `updateMask`
-  from one field table**, and the "nothing to update" error (still exit `2`) is
-  generated from that table, so it names every field flag (`apps update` used to
-  omit `--unbind-policy`; `entitlements update` named none; `mcp servers
-  update-credentials` lists the flags of the chosen `--type`). The wording is now
-  "nothing to update: pass --a, --b, or --c" everywhere. `update-credentials`
-  still derives its mask from the config it builds, and body-file-only updates
-  pass the caller's mask through the shared wrapper. The requests are unchanged:
-  a pinned matrix of flag combinations per command, and a live dry-run
-  comparison against the previous build, matched exactly.
-- **`export events` and `role-mining suggestions users` now retry a transient
-  5xx or a connection failure**, like every other read-only POST, including
-  `c1i api --method POST` on those two paths: both routes only read (the
-  spec's `ListEvents` and `SearchCohortUsers`).
+- **The update commands with field flags build their body and `updateMask` from
+  one field table**, and the "nothing to update" error (still exit `2`) names
+  every field flag, as "nothing to update: pass --a, --b, or --c" (`apps update`
+  used to omit `--unbind-policy`; `entitlements update` named none; `mcp servers
+  update-credentials` lists the flags of the chosen `--type`). Requests are
+  unchanged.
+- **`export events` and `role-mining suggestions users` retry a transient 5xx or
+  a connection failure**, like every other read-only POST, including `c1i api
+  --method POST` on those two paths: both routes only read (the spec's
+  `ListEvents` and `SearchCohortUsers`).
 - **`upgrade --dry-run` prints the same JSON preview as every other
-  `--dry-run`**, through the shared preview writer, on every path instead of
-  text lines; `upgrade --fields` outside `--check` is now a usage error. See
-  Upgrading from 0.10.1.
-- **A blank value on any flag is now a usage error (exit 2)**, checked before
-  any request. Only required and `*-id` flags were checked before, so
-  `tasks list --state "$STATE"` with `STATE` unset listed every task at exit
-  0, and a whitespace-only value on an optional flag was often sent verbatim.
-  This applies to every filter (`--state`, `--status`, `--type`, `--query`,
+  `--dry-run`**, on every path instead of text lines; `upgrade --fields` outside
+  `--check` is a usage error. See Upgrading from 0.10.1.
+- **A blank value on any flag is a usage error (exit 2)**, checked before any
+  request. Only required and `*-id` flags were checked before, so `tasks list
+  --state "$STATE"` with `STATE` unset listed every task at exit 0, and a
+  whitespace-only value on an optional flag was often sent verbatim. This
+  applies to every filter (`--state`, `--status`, `--type`, `--query`,
   `--email`, `--calls-function`, `policies search --display-name`, `docs
   endpoints --filter`, `export events --since`/`--until`/`--since-event-uid`,
-  and `--body-file` on the `search` commands that take one). Flags whose empty value
-  means something still take an exact `""`: an update's `--description`
-  is sent (`--help` says what it does), `--fields ""` and `--error-format ""` override `C1I_FIELDS` and
-  `C1I_ERROR_FORMAT`, a create's `--description ""` is sent or omitted as
-  before, and optional flags such as `--comment`, `-o`, `--gateway-url`,
-  `export events --sort` and `mcp servers search --tool-state` read it as not
-  given.
-  Whitespace-only is refused on those too.
+  and `--body-file` on the `search` commands that take one). Flags whose empty
+  value means something still take an exact `""`: an update's `--description` is
+  sent (`--help` says what it does), `--fields ""` and `--error-format ""`
+  override `C1I_FIELDS` and `C1I_ERROR_FORMAT`, a create's `--description ""` is
+  sent or omitted as before, and optional flags such as `--comment`, `-o`,
+  `--gateway-url`, `export events --sort` and `mcp servers search --tool-state`
+  read it as not given. Whitespace-only is refused on those too. `""` on a flag
+  documented as omitted-when-empty (for example `policies create --description
+  ""`, `mcp servers register --bearer-token ""`) no longer trips the
+  `--body-file` / `--external-config-file` exclusivity check.
 
 ### Fixed
 
-- `policies create|update` now refuses a rule whose `condition` is invisible-only
+- `policies create|update` refuses a rule whose `condition` is invisible-only
   (zero-width space, BOM) with exit 2, as it already did for an empty or
   whitespace-only one, instead of sending it to the server.
-
-- A flag that `--help` says is the same as omitted when `""` (for example
-  `policies create --description ""`, `mcp servers register --bearer-token ""`)
-  no longer trips the exclusivity check against `--body-file` or
-  `--external-config-file`: `""` now counts as not given there, as documented.
-
-- `--help` now says what an empty value does on every flag that sends `""`:
-  it clears `policies`, `apps` and `access-profiles update --description`;
+- `--help` says what an empty value does on every flag that sends `""`: it
+  clears `policies`, `apps` and `access-profiles update --description`;
   `entitlements update --description ""` is sent but the server keeps the
   existing description; elsewhere it is sent as an empty value. Help for
   `entitlements`, `automations` and `webhooks update` used to claim it clears.
@@ -231,91 +248,43 @@ covers its camelCase key for the coverage check but is sent as given.
   `--dry-run` included; it needs policy read (else `3`). The policy's type is
   not checked.
 - A `--body-file` key that a command sets itself no longer silently bypasses the
-  pagination contract or is overridden: a `pageToken`/`pageSize` in the file of
-  the findings and role-mining search commands, and a positional id key whose
-  value differs from the positional, are refused (see Upgrading).
-- A user id on a write is now checked before it is sent: `accounts set-owner`,
-  `apps add-owner`, `entitlements add-owner` (its `--dry-run` previewed an
-  unknown user), `requests create grant|revoke --user-id` and `mcp servers
-  register --user-id` no longer pass an unknown id to the API. A test fails on
-  any new user-id flag that is neither checked nor exempted with a reason.
-- `--update-mask` validation and normalisation is one helper
-  (`normalizeUpdateMask`) shared by all eight commands that take it;
+  pagination contract or is overridden (see Upgrading).
+- `--update-mask` validation is shared by all eight commands that take it;
   `update-credentials` and `test-connection` no longer send it raw or skip
   "nothing to update" on a malformed mask.
-
-- `--help` now marks "(required)" on `--body-file`, `--refs-file` and
+- `--help` marks "(required)" on `--body-file`, `--refs-file` and
   `--entitlement-id` of every command that demands them at run time, such as
   `findings create`, `role-mining config update`, `mcp classifiers create`,
   `access-reviews create` and `access-profiles requestable-entitlements add`.
   `policies create` no longer claims `--display-name` and `--policy-type` are
   plain "(required)"; they are "(required unless --body-file)". Behavior is
   unchanged.
-- List rows emitted `""` for a string field with nothing to report, which jq
-  treats as truthy (`select(.task_id)` matched every finding). Absent fields
-  are now `null`; see "Upgrading from 0.10.1".
+- Absent string fields in list rows are `null`, not `""` (see Upgrading).
 - **A token-service `429`, `5xx` or network failure no longer reports "not
   authenticated" (exit 3).** The token request is retried like other requests
   (it skipped 5xx and network failures), then exits 5, 6 or the usual
-  transport-failure code; a `200` that is not a token exits 6, and only a
-  `400`/`401`/`403` there is exit 3. Each retry signs a fresh assertion; a token
-  failure on a mutation reports `applied: false` unless an earlier attempt
-  reached the API (then `unknown`); `auth login` polling treats a `429` like
-  `slow_down` (backs off, keeps polling); and a device-flow `200` that is not a
-  usable token exits 6.
-- An API error body that echoed the request URL (`/x?token=...`,
-  `https://host/p;token=...`, `token=...&a=1`, a URL nested in a query value,
-  or a percent-encoded or JSON-escaped form of those) was printed verbatim in
-  the error text and the JSON `body`. A secret-named parameter in such a body,
-  and the value of a secret-named JSON field (`client_secret`, `access_token`,
-  `"token":12345`), is now masked; other text and parameters stay. In text
-  that is not whole JSON, each secret value found is replaced by `[redacted]`
-  where it sits in a value position (after `=`, `:` or `//`, before `&`, a
-  quote, `,` or the end; raw, JSON-escaped or percent-encoded), so another
-  value equal to it is masked too, and every other byte is as sent.
-  A whole-JSON `body` with something masked is re-encoded compactly (key order
-  kept); one with nothing masked is printed as sent. If a secret cannot be placed in the
-  original bytes, the output falls back to the decoded text with every secret
-  masked. This also covers `docs
-  search`/`docs page` error bodies, `mcp gateway` error text, the device flow's
-  `error_description` and the URLs `upgrade` prints. `client_assertion` and
-  `device_code` are now secret names, which also masks them in `--dry-run`
-  previews. A `code` JSON field stays visible (gRPC `"code":5`); `code` is still
-  masked as a URL parameter and in previews. Bracketed names (`a[token]=`, a
-  body field `a[token]` in a `--dry-run` preview) now count as secret too, and
-  so does `key[0]=`; `sort[key]=` stays visible. A lone `token=x` in prose is
-  not masked.
-- `--debug` traces, transport, redirect, API and path-guard errors, partial-result
-  and `INCOMPLETE` notices, and the unbuildable-request, `--path`, `--url` and
-  `--destination-url` errors printed the request URL or path verbatim, so a
-  secret query, fragment or `;` path parameter value (also percent-encoded) or
-  URL userinfo reached stderr and CI logs. They now mask them with the same
-  rule as `--dry-run` previews (shared `internal/redact`); non-secret parameters
-  stay visible. Encoded secret names (`;%74oken=`, `%3Btoken=`, `?%74oken=`)
-  and values that decode into a separator are now masked, in previews too.
-  Names ending in `token`, including pagination cursors such as
-  `page_token`, print as `[redacted]`. A URL's username is now masked too
-  (except `git`), so `https://<token>:x-oauth-basic@host` no longer prints the
-  token, in previews as well. Error messages, the JSON error's `path` and
-  `--debug` response lines now show the path as sent (escaped), so an id that
-  needed escaping prints encoded, for example `h%C3%A9llo` or `with%20space`.
-- A `--fields` value that names no field path (`,`, `.`, or `"$A,$B"` with
-  both variables unset) or has an empty segment (`id.`, `a..b`) printed full,
+  transport-failure code. Each retry signs a fresh assertion; a token failure on
+  a mutation reports `applied: false` unless an earlier attempt reached the API
+  (then `unknown`); `auth login` polling treats a `429` like `slow_down` (backs
+  off, keeps polling); and a device-flow `200` that is not a usable token exits
+  6.
+- A `--fields` value that names no field path (`,`, `.`, or `"$A,$B"` with both
+  variables unset) or has an empty segment (`id.`, `a..b`) printed full,
   unprojected rows at exit 0. It is now a usage error (exit 2), and so is the
   same value in `C1I_FIELDS` or `fields:` in `~/.c1i.yaml`, which were not
   validated at all. A trailing comma (`id,`) still works, and `--fields ""`
-  still turns off a session-wide `C1I_FIELDS`. Like the other `C1I_*`
-  settings, an invalid `C1I_FIELDS` now fails every command except shell
-  completion, mutations included.
+  still turns off a session-wide `C1I_FIELDS`. Like the other `C1I_*` settings,
+  an invalid `C1I_FIELDS` now fails every command except shell completion,
+  mutations included.
 - A YAML list or map for any setting in `~/.c1i.yaml` (`fields: [id, email]`,
   `dry_run: [true]`, `url: [...]`) read as empty, so the setting was silently
   ignored; it is now a usage error (exit 2). Write `fields: "id,email"`.
 - `--dry-run` skipped the existence checks a real run makes, so it previewed
   success for an unknown user or policy id that the real run refuses. It now
   refuses the same way (a `.`/`..` id is refused before any read, in both
-  modes), and `policies update --dry-run` on a steps change no
-  longer needs `--policy-type`: it looks up the policy's type for its checks,
-  as a real run does.
+  modes), and `policies update --dry-run` on a steps change no longer needs
+  `--policy-type`: it looks up the policy's type for its checks, as a real run
+  does.
 - `--url https://<tenant>:443` (also `C1I_URL` and `url:` in `~/.c1i.yaml`)
   failed with exit 3, "no credentials found", because credentials are stored
   per host and `:443` counted as a different one. The default HTTPS port
@@ -324,46 +293,41 @@ covers its camelCase key for the coverage check but is sent as given.
   found and moved on first use, with every older copy removed. `auth logout`
   now removes every key a tenant's credentials may be stored under (the plain
   host, `:443`, and the legacy short name for `*.conductor.one`), so a
-  leftover copy no longer logs you back in, and keeps removing the other
-  keys if one delete fails (the first error is still returned). `auth status`
-  and the `auth login` role prompt now see a credential stored under an
-  older key (`:443` or legacy). Any path, query or fragment in `--url` is
-  ignored, as before.
+  leftover copy no longer logs you back in, and keeps removing the other keys
+  if one delete fails (the first error is still returned). `auth status` and
+  the `auth login` role prompt now see a credential stored under an older key
+  (`:443` or legacy). Any path, query or fragment in `--url` is ignored, as
+  before.
 - A control character (newline, CR, NUL, ...) in a file-path flag (`-o`,
   `--out-dir`, every `--*-file`) or a header (`api --header`, `mcp servers`
   `--header-name`/`--header-value`/`--bearer-token`, and the same fields, plus
   `awsSigv4.sessionToken`/`accessKeyId`, in a
   `--hosted-config-file`/`--external-config-file` under either JSON spelling)
   is now a usage error (exit 2) before anything is read, written or sent.
-  `docs readme -o $'a\nb'` wrote a file named with a newline, and a CR/LF in a header failed only inside the
-  HTTP library. A header name must also be a valid HTTP token, so
-  `api --header "Authorization: Bearer x=="` (a name containing a space and a
-  colon) is refused instead of reaching the HTTP library, which printed it.
-  The error names the flag (or JSON field) and the character's position; it
-  never prints a header value, or a header name that is itself invalid. Tab is
-  still allowed in header values. `--config-field` keys refuse only control
-  characters (they are JSON keys, not header names), and its values may still
-  span lines.
-- A malformed `key=value` (`api --header`/`--query`, `--config-field`) echoed
-  the whole input in its error, which could expose a token missing its `=`; the
-  error now names the flag only.
+  `docs readme -o $'a\nb'` wrote a file named with a newline, and a CR/LF in a
+  header failed only inside the HTTP library. A header name must also be a
+  valid HTTP token, so `api --header "Authorization: Bearer x=="` (a name
+  containing a space and a colon) is refused instead of reaching the HTTP
+  library, which printed it. The error names the flag (or JSON field) and the
+  character's position; it never prints a header value, or a header name that
+  is itself invalid. Tab is still allowed in header values. `--config-field`
+  keys refuse only control characters (they are JSON keys, not header names),
+  and its values may still span lines.
 - A required flag that was not given said "requires a non-empty value", as if
   it had been given empty; it now says `required flag(s) "app-id" not set`,
   like the flags cobra checks.
-- `mcp servers register --hosted-config-file ""` (or
-  `--external-config-file ""`) registered a server with an empty config at
-  exit 0; it now exits 2.
+- `mcp servers register --hosted-config-file ""` (or `--external-config-file
+  ""`) registered a server with an empty config at exit 0; it now exits 2.
 - `docs agents|readme|changelog -o "  "` wrote a file named with spaces; it now
   exits 2.
-- README and the 0.10.1 changelog no longer point at a 0.10.0 section that
-  was never published.
+- README no longer points at a 0.10.0 section that was never published.
 
 ## [0.10.1] - 2026-11-12
 
 0.10.0 was tagged, but its release failed in preflight: first a bug in the
 shared release workflow (ConductorOne/github-workflows#174), then GO-2026-6859
 in that workflow's locked Go 1.27.3 toolchain. No 0.10.0 binaries were
-published. This release contains every change listed below; if you are
+published. This release contains the changes listed under 0.10.0; if you are
 upgrading from 0.9.2, read "Upgrading from 0.9.2" below.
 
 ### Security
@@ -666,14 +630,6 @@ non-empty value` when blank).
 
 ### Added
 
-- `attribute-types list` and `attribute-mappings list|get|create|update|delete`
-  manage user-attribute mappings, which copy an app's profile keys into
-  structured user fields (employment type, department, job title, manager).
-  `create --type` takes a display name or id and builds the request from the
-  type's config kind; a `--key` the kind does not take exits `2` (the server
-  answers `500`) and an unknown type exits `4`, nothing sent. `update` reads the
-  mapping and re-sends its attribute type, fallbacks and profile types, because
-  the server's PUT replaces them and ignores `updateMask`.
 - `docs readme` and `docs changelog` print the README and CHANGELOG embedded
   in the binary (no network or credentials; `--output FILE` writes to a file),
   for installs from a release archive, which ships only the binary. Stderr
