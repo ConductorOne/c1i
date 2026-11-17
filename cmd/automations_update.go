@@ -97,7 +97,7 @@ func init() {
 	f.String("display-name", "", "New display name (omit to leave unchanged; "+displayNameRule+")")
 	// The server answers an empty name with a 500.
 	setBlankHint(automationsUpdateCmd, "display-name", `the server rejects it with "display_name is required"`)
-	f.String("description", "", "New description; pass an empty value to clear it (omit to leave unchanged)")
+	f.String("description", "", `New description; "" is sent as an empty value (omit to leave unchanged)`)
 	allowEmpty(automationsUpdateCmd, emptyIsSent, "description")
 	f.Bool("enabled", false, "Enable (--enabled) or disable (--enabled=false) the automation (omit to leave unchanged)")
 	f.String("body-file", "", "Automation JSON object, sent verbatim (file, or \"-\" for stdin); requires --update-mask; mutually exclusive with the flags above")

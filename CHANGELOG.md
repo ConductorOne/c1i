@@ -158,7 +158,7 @@ covers its camelCase key for the coverage check but is sent as given.
   endpoints --filter`, `export events --since`/`--until`/`--since-event-uid`,
   and `--body-file` on the `search` commands that take one). Flags whose empty value
   means something still take an exact `""`: an update's `--description`
-  clears it, `--fields ""` and `--error-format ""` override `C1I_FIELDS` and
+  is sent (`--help` says what it does), `--fields ""` and `--error-format ""` override `C1I_FIELDS` and
   `C1I_ERROR_FORMAT`, a create's `--description ""` is sent or omitted as
   before, and optional flags such as `--comment`, `-o`, `--gateway-url`,
   `export events --sort` and `mcp servers search --tool-state` read it as not
@@ -167,6 +167,11 @@ covers its camelCase key for the coverage check but is sent as given.
 
 ### Fixed
 
+- `--help` now says what an empty value does on every flag that sends `""`:
+  it clears `policies`, `apps` and `access-profiles update --description`;
+  `entitlements update --description ""` is sent but the server keeps the
+  existing description; elsewhere it is sent as an empty value. Help for
+  `entitlements`, `automations` and `webhooks update` used to claim it clears.
 - A `--body-file` key that a command sets itself no longer silently bypasses the
   pagination contract or is overridden: a `pageToken`/`pageSize` in the file of
   the findings and role-mining search commands, and a positional id key whose

@@ -12,7 +12,7 @@ var webhooksUpdateCmd = &cobra.Command{
 	Use:   "update <webhook-id>",
 	Short: "Update a webhook's display name, URL, description or callback timeout",
 	Long: `Update a webhook. Only the flags you pass are sent, and each is named in the
-update mask; an empty --description clears it.
+update mask; an empty --description is sent as an empty value.
 
 Refused with exit 2 before a request is sent:
   - no field flag at all
