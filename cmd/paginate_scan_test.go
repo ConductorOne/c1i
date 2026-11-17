@@ -1,143 +1,61 @@
 package cmd
 
 import (
+	"context"
+	"errors"
 	"go/ast"
 	"go/parser"
 	"go/token"
+	"net/http"
+	"net/http/httptest"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/ConductorOne/c1i/internal/client"
+	"github.com/ConductorOne/c1i/internal/transport"
 )
 
-// pagedPostAllowlist lists paths a postPage/postPageBody call may send that
-// are not search- or list-shaped, one reason each. postPageBody is the one
-// allowlisted POST selector in the mutation chokepoint test, so this keeps a
-// mutating path from riding it.
-var pagedPostAllowlist = map[string]string{
-	"/api/v1/systemlog/events": "the audit-log export reads with a body filter",
-}
-
-// pagedPostIdents allows a path passed as a parameter the scan cannot
-// resolve, keyed "file:ident".
-var pagedPostIdents = map[string]string{
-	"paginate.go:path": "adapter parameter; its callers are scanned at their own call sites",
-	"service_principals_bindings.go:spBindingsListPath": "const /api/v1/service_principals/bindings/list, declared in another file",
-}
-
-func readShapedPath(p string) bool {
-	return strings.Contains(p, "/search/") || strings.HasSuffix(p, "/search") || strings.HasSuffix(p, "/list") || pagedPostAllowlist[p] != ""
-}
-
-// firstStringLit returns the first string literal inside n.
-func firstStringLit(n ast.Node) string {
-	var out string
-	ast.Inspect(n, func(m ast.Node) bool {
-		if lit, ok := m.(*ast.BasicLit); ok && lit.Kind == token.STRING && out == "" {
-			out = strings.Trim(lit.Value, "\"`")
-		}
-		return out == ""
-	})
-	return out
-}
-
-func isPagedPost(call *ast.CallExpr) bool {
-	id, ok := call.Fun.(*ast.Ident)
-	return ok && len(call.Args) >= 2 && (id.Name == "postPage" || id.Name == "postPageBody")
-}
-
-// badPagedPostPaths names postPage/postPageBody calls in file whose path is
-// neither read-shaped nor allowlisted.
-func badPagedPostPaths(fset *token.FileSet, file *ast.File, name string) []string {
-	// An identifier resolves to the first string literal assigned to it.
-	assigned := map[string]string{}
-	ast.Inspect(file, func(n ast.Node) bool {
-		switch x := n.(type) {
-		case *ast.AssignStmt:
-			for i, l := range x.Lhs {
-				if id, ok := l.(*ast.Ident); ok && i < len(x.Rhs) && assigned[id.Name] == "" {
-					assigned[id.Name] = firstStringLit(x.Rhs[i])
-				}
-			}
-		case *ast.ValueSpec:
-			for i, id := range x.Names {
-				if i < len(x.Values) && assigned[id.Name] == "" {
-					assigned[id.Name] = firstStringLit(x.Values[i])
-				}
-			}
-		}
-		return true
-	})
-	var out []string
-	ast.Inspect(file, func(n ast.Node) bool {
-		call, ok := n.(*ast.CallExpr)
-		if !ok || !isPagedPost(call) {
-			return true
-		}
-		arg := call.Args[1]
-		path := firstStringLit(arg)
-		if id, ok := arg.(*ast.Ident); ok {
-			if pagedPostIdents[name+":"+id.Name] != "" {
-				return true
-			}
-			path = assigned[id.Name]
-		}
-		if !readShapedPath(path) {
-			out = append(out, fset.Position(call.Pos()).String()+" "+path)
-		}
-		return true
-	})
-	return out
-}
-
-// TestPagedPostsOnlyReachReadPaths fails when postPage/postPageBody, which the
-// mutation chokepoint test allowlists as read-only, is given a path that is
-// not a search or list.
-func TestPagedPostsOnlyReachReadPaths(t *testing.T) {
-	paths, err := filepath.Glob("*.go")
-	if err != nil {
-		t.Fatal(err)
+// Every paged POST goes through postPageBody, which refuses a route the
+// transport does not classify as a read; this checks the routes the list
+// commands use, then the refusal itself.
+func TestListCommandPostPathsAreReadOnly(t *testing.T) {
+	paths := []string{
+		client.Path("/api/v1/role-mining/suggestions/%s/users", "s1"),
+		"/api/v1/search/role-mining/suggestions",
+		spBindingsListPath,
 	}
-	var calls int
-	for _, path := range paths {
-		if strings.HasSuffix(path, "_test.go") {
-			continue
-		}
-		fset := token.NewFileSet()
-		file, err := parser.ParseFile(fset, path, nil, 0)
-		if err != nil {
-			t.Fatal(err)
-		}
-		ast.Inspect(file, func(n ast.Node) bool {
-			if c, ok := n.(*ast.CallExpr); ok && isPagedPost(c) {
-				calls++
-			}
-			return true
-		})
-		for _, bad := range badPagedPostPaths(fset, file, path) {
-			t.Errorf("%s: paged POST to a path that is not a search or list; send mutations through sendMutation", bad)
+	for _, tc := range listPaginationCases() {
+		if tc.method == http.MethodPost {
+			paths = append(paths, tc.wantPath)
 		}
 	}
-	if calls < 15 {
-		t.Fatalf("saw only %d paged POST calls; this scan is not looking at what it thinks it is", calls)
+	for _, p := range paths {
+		if !transport.ReadOnlyPOST(p) {
+			t.Errorf("paged POST %s is not classified read-only by the transport", p)
+		}
+	}
+	if len(paths) < 20 {
+		t.Fatalf("checked only %d paths; the case table shrank", len(paths))
 	}
 }
 
-func TestPagedPostGuardCatchesMutatingPath(t *testing.T) {
-	const planted = `package cmd
-
-func f() {
-	_ = postPage(ctx, "/api/v1/apps/x/delete", nil)
-	_ = postPage(ctx, "/api/v1/search/apps", nil)
-}
-`
-	fset := token.NewFileSet()
-	file, err := parser.ParseFile(fset, "planted.go", planted, 0)
-	if err != nil {
-		t.Fatal(err)
+func TestPagedPostRefusesNonReadPathBeforeSending(t *testing.T) {
+	var requests int
+	srv := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) { requests++ }))
+	defer srv.Close()
+	c := client.NewForTesting(srv.URL, srv.Client())
+	fetch := postPage(context.Background(), "/api/v1/apps/x/delete", map[string]any{})
+	_, err := fetch(c, 10, "")
+	var werr *pagedWriteError
+	if !errors.As(err, &werr) || !strings.Contains(err.Error(), "/api/v1/apps/x/delete") {
+		t.Fatalf("err = %v, want a pagedWriteError naming the path", err)
 	}
-	got := badPagedPostPaths(fset, file, "planted.go")
-	if len(got) != 1 || !strings.Contains(got[0], "/delete") {
-		t.Errorf("planted mutating path: got %v, want exactly the /delete call", got)
+	if requests != 0 {
+		t.Errorf("%d request(s) sent; a refused path must send none", requests)
+	}
+	if got := exitCode(err); got != 1 {
+		t.Errorf("exit code = %d, want 1", got)
 	}
 }
 

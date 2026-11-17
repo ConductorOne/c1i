@@ -9,6 +9,7 @@ import (
 
 	"github.com/ConductorOne/c1i/internal/client"
 	"github.com/ConductorOne/c1i/internal/redact"
+	"github.com/ConductorOne/c1i/internal/transport"
 	"github.com/spf13/cobra"
 )
 
@@ -491,15 +492,28 @@ func postPage(ctx context.Context, path string, base map[string]any) pageFetch {
 	})
 }
 
-// postPageBody is postPage for a request whose body the command builds.
+// postPageBody is postPage for a request whose body the command builds. It
+// refuses, before sending, a path the transport does not treat as a read: a
+// paged POST must never carry a write.
 func postPageBody(ctx context.Context, path string, body func(size int, token string) map[string]any) pageFetch {
 	return func(c *client.Client, size int, token string) ([]byte, error) {
+		if !transport.ReadOnlyPOST(path) {
+			return nil, &pagedWriteError{path: path}
+		}
 		data, err := c.Post(ctx, path, body(size, token))
 		if err != nil {
 			return nil, fmt.Errorf("API error: %w", err)
 		}
 		return data, nil
 	}
+}
+
+// pagedWriteError is a c1i bug, not a user error: a list was built on a POST
+// route that is not a search or list (exit 1).
+type pagedWriteError struct{ path string }
+
+func (e *pagedWriteError) Error() string {
+	return fmt.Sprintf("internal error: paged POST %s is not a read-only route; send writes through sendMutation", redact.URL(e.path))
 }
 
 // pagedBody copies base and sets its paging keys.
