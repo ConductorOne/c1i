@@ -43,7 +43,9 @@ Exit codes:
 - **`--dry-run` runs the same pre-send reads a real run does** (checking that a
   user or policy id exists, or looking up a policy's type): an unknown id exits
   `4` under `--dry-run` too, and such a preview needs credentials that can read
-  it. A preview with no such id still needs none.
+  it. A preview with no such id still needs none, except a command that
+  resolves the caller: `requests create grant|revoke` without `--user-id`
+  reads your own id, so its preview needs credentials too.
 
 Output shape:
 
@@ -175,9 +177,10 @@ Inputs now refused (exit 2):
 
 - `grants add --app-id --entitlement-id --user-id ...` grants users a manually
   managed entitlement directly (`POST .../add-manual-user`), skipping request
-  policy and approval. It sends one request for every `--user-id` (a repeated id
-  once), looks up each user first (unknown exits `4`, nothing sent, `--dry-run`
-  included), and `--wait` blocks until every user shows in `grants list`. If the
+  policy and approval. It sends one request carrying every `--user-id` (a
+  repeated id once), looks up each user first (unknown exits `4`, nothing sent,
+  `--dry-run` included), and `--wait` blocks until every user shows in
+  `grants list`. If the
   server reports users it could not add (`failedUsersErrorMap`), the response is
   printed, each rejected user is named, and the exit is `1`; `--wait` then waits
   only for the accepted users. There is no `grants remove`: the only direct
@@ -234,7 +237,8 @@ Inputs now refused (exit 2):
   and `--body-file` on the `search` commands that take one). Flags whose empty
   value means something still take an exact `""`: an update's `--description` is
   sent (`--help` says what it does), `--fields ""` and `--error-format ""`
-  override `C1I_FIELDS` and `C1I_ERROR_FORMAT`, a create's `--description ""` is
+  override `C1I_FIELDS` and `C1I_ERROR_FORMAT` (on a read; a mutation rejects
+  `--fields`, empty or not), a create's `--description ""` is
   sent or omitted as before, and optional flags such as `--comment`, `-o`,
   `--gateway-url`, `export events --sort` and `mcp servers search --tool-state`
   read it as not given. Whitespace-only is refused on those too. `""` on a flag
@@ -244,6 +248,46 @@ Inputs now refused (exit 2):
 
 ### Fixed
 
+- `auth logout` refuses `--dry-run` (exit `2`, before any read, delete or
+  token-cache clear) instead of deleting the stored credential and its cached
+  token at exit `0`; a preview cannot be honored for a delete. `C1I_DRY_RUN`
+  is refused the same way, and the global flag's help names it.
+- `mcp servers register` / `update-credentials` no longer drop a flag they
+  cannot send: the other type's config file (`--hosted-config-file` with
+  `--type external` or `--external-config-file` with `--type hosted`), a
+  credential flag with `--auth` unset or `--auth none`, and a companion of a
+  different method (`--header-name` with `--auth bearer-token`) now exit `2`
+  before anything is sent. Previously the mismatched file was ignored: a
+  hosted config passed with `--type external` reached the server as an
+  auth-less external server (the POST fails with `bearer_token.token must not
+  be empty`), while an external OAuth2 config passed with `--type hosted`
+  registered with that whole auth arm absent at exit `0` — and a stray
+  credential was silently discarded.
+- `access-profiles bundle-automation create|set` refuse a body with no
+  `entitlements` (exit `2`, before any request): the server requires conditions
+  even to disable an automation, and the obvious body (`{"enabled":false}`)
+  failed with an opaque `400` — `conditions are required` on `create`,
+  `invalid SetBundleAutomationRequest.Conditions: value is required` on `set`.
+  Pass `{"entitlementRefs":[]}` for no conditions.
+- `functions source --commit` is held to the id dot rule like every other id
+  argument: a `.` or `..` (also with whitespace or a `;params` suffix) exits
+  `2` before credentials are loaded, instead of reaching request building.
+- `findings transformation-rules list` rows no longer carry a `priority`
+  column that was always `null`: transformation rules have no priority (they
+  order themselves by `evaluationOrder`), so `--fields priority` now matches
+  nothing there instead of projecting a fabricated key. Routing rows keep
+  their real `priority`.
+- A refused redirect now names the rule that refused it — a changed path, a
+  host outside the request host's trust scope, an https downgrade, or an empty
+  or unparseable `Location` — instead of always blaming a changed resource path.
+- The grants section no longer claims a grant outlives the entitlement it
+  points at: the grant search stops returning the row about 15 seconds after
+  the entitlement's delete (measured), so record the holders first.
+- `automations delete` help and the soft-delete notes no longer claim the
+  automation leaves `automations list`: c1i lists via
+  `POST /api/v1/search/automations` (the GET serves page 1 forever past ~60
+  rows), and that index can keep returning the deleted automation with no
+  deleted marker. The API's own `GET /api/v1/automations` does drop it.
 - List commands, including the fixed-route ones (`attribute-types`, `findings`,
   `role-mining`), now exit 6 (C1 failed) instead of 1 when a 200 page is not
   JSON or not in the shape the command reads.
@@ -251,10 +295,10 @@ Inputs now refused (exit 2):
   (zero-width space, BOM) with exit 2, as it already did for an empty or
   whitespace-only one, instead of sending it to the server.
 - `--help` says what an empty value does on every flag that sends `""`: it
-  clears `policies`, `apps` and `access-profiles update --description`;
-  `entitlements update --description ""` is sent but the server keeps the
-  existing description; elsewhere it is sent as an empty value. Help for
-  `entitlements`, `automations` and `webhooks update` used to claim it clears.
+  clears `policies`, `apps`, `entitlements` and `access-profiles update
+  --description`; elsewhere it is sent as an empty value. (It said
+  `entitlements update --description ""` kept the existing description; the
+  server clears it, measured on a manual entitlement.)
 - `findings create-task --policy-id` looks the policy up first, like every other
   policy binding: an unknown id exits `4`, a deleted one `2`, nothing sent,
   `--dry-run` included; it needs policy read (else `3`). The policy's type is
@@ -301,15 +345,15 @@ Inputs now refused (exit 2):
   failed with exit 3, "no credentials found", because credentials are stored
   per host and `:443` counted as a different one. The default HTTPS port
   (`:443`, `:0443`, or an empty `:`; a malformed port such as `+443` is still
-  refused) is now dropped, and a credential saved under the `:443` name is
-  found and moved on first use, with every older copy removed. `auth logout`
-  now removes every key a tenant's credentials may be stored under (the plain
-  host, `:443`, and the legacy short name for `*.conductor.one`), so a
-  leftover copy no longer logs you back in, and keeps removing the other keys
-  if one delete fails (the first error is still returned). `auth status` and
-  the `auth login` role prompt now see a credential stored under an older key
-  (`:443` or legacy). Any path, query or fragment in `--url` is ignored, as
-  before.
+  refused) is now dropped, and a credential saved under the `:443`, `:0443`
+  or `:` name is found and moved on first use, with every older copy removed.
+  `auth logout` now removes every key a tenant's credentials may be stored
+  under (the plain host, each default-port spelling, and the legacy short name
+  for `*.conductor.one`), so a leftover copy no longer logs you back in, and
+  keeps removing the other keys if one delete fails (the first error is still
+  returned). `auth status` and the `auth login` role prompt now see a
+  credential stored under an older key (`:443`, `:0443`, `:` or legacy). Any
+  path, query or fragment in `--url` is ignored, as before.
 - A control character (newline, CR, NUL, ...) in a file-path flag (`-o`,
   `--out-dir`, every `--*-file`) or a header (`api --header`, `mcp servers`
   `--header-name`/`--header-value`/`--bearer-token`, and the same fields, plus

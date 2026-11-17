@@ -60,7 +60,7 @@ var accessProfilesRequestableEntitlementIDsListCmd = &cobra.Command{
 
 var accessProfilesRequestableEntitlementsAddCmd = &cobra.Command{
 	Use:   "add <access-profile-id>",
-	Short: "Add requestable entitlements to an access profile (pretty JSON)",
+	Short: "Add requestable entitlements to an access profile (prints {})",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		refs, err := catalogEntitlementReferences(cmd, true)
@@ -75,7 +75,7 @@ var accessProfilesRequestableEntitlementsAddCmd = &cobra.Command{
 
 var accessProfilesRequestableEntitlementsRemoveCmd = &cobra.Command{
 	Use:   "remove <access-profile-id>",
-	Short: "Remove requestable entitlements from an access profile (pretty JSON)",
+	Short: "Remove requestable entitlements from an access profile (prints {})",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		refs, err := catalogEntitlementReferences(cmd, true)
@@ -89,7 +89,7 @@ var accessProfilesRequestableEntitlementsRemoveCmd = &cobra.Command{
 
 var accessProfilesRequestableEntitlementsSetCmd = &cobra.Command{
 	Use:   "set <access-profile-id>",
-	Short: "Replace all requestable entitlements (pretty JSON)",
+	Short: "Replace all requestable entitlements (prints {})",
 	Long: `Replace the full requestable-entitlement set in an access profile.
 
 Pass --refs-file with a JSON array of {"appId":"…","id":"…"} objects. Every
@@ -111,7 +111,7 @@ Prints the API's response, which is {}; exit 0 is the success signal.`,
 
 var accessProfilesVisibilityEntitlementsAddCmd = &cobra.Command{
 	Use:   "add <access-profile-id>",
-	Short: "Add visibility entitlements to an access profile (pretty JSON)",
+	Short: "Add visibility entitlements to an access profile (prints {})",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		refs, err := catalogEntitlementReferences(cmd, true)
@@ -125,7 +125,7 @@ var accessProfilesVisibilityEntitlementsAddCmd = &cobra.Command{
 
 var accessProfilesVisibilityEntitlementsRemoveCmd = &cobra.Command{
 	Use:   "remove <access-profile-id>",
-	Short: "Remove visibility entitlements from an access profile (pretty JSON)",
+	Short: "Remove visibility entitlements from an access profile (prints {})",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		refs, err := catalogEntitlementReferences(cmd, true)

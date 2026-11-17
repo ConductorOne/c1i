@@ -639,7 +639,7 @@ resource with `--resource-id` likewise means you drop
 - `grants add --app-id --entitlement-id --user-id ... [--wait]` grants a
   manually managed entitlement directly, **bypassing grant policy and
   approval**; prefer `requests create grant` unless that is what you want. One
-  request for every user id; `--wait` blocks until each shows in `grants list`.
+  request carrying every user id; `--wait` blocks until each shows in `grants list`.
   There is no `grants remove`: `remove-membership` fails on a manual entitlement
   with `entitlement is not an SSO application sign-in entitlement`, so remove
   via `requests create revoke` (on a manual entitlement its task waits on a
@@ -751,9 +751,10 @@ resource with `--resource-id` likewise means you drop
   (`apps get` shows it), and `apps list` omits deleted apps.
 - `entitlements delete <entitlement-id>` is soft: `entitlements get` still
   returns it, with `deletedAt` set.
-- `automations delete <automation-id>` is soft: the automation leaves
-  `automations list`, but `automations get` still returns it at exit `0` with
-  no field marking it deleted.
+- `automations delete <automation-id>` is soft: the API's own list drops the
+  automation, but `automations list` reads the search index, which can keep
+  returning it with no deleted marker; `automations get` still returns it at
+  exit `0` with no field marking it deleted.
 - `policies delete <policy-id>` is soft: the policy leaves `policies list` and
   the default `search`, but `policies get` still returns it at exit `0` with
   `deletedAt` set (`search --include-deleted` also finds it).

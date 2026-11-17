@@ -29,8 +29,7 @@ require_tool_approval. Auth config and URL are NOT updatable here — use
 "c1i mcp servers update-credentials" for those.
 
 A blank --display-name (empty, whitespace or invisible-only) exits 2,
-nothing sent. Sent as is, the server stores "" as an empty name and keeps
-"  " verbatim.
+nothing sent; there is no way to set a blank name through this command.
 
 Prints the updated server, unwrapped like "mcp servers get" (id: .connectorId).`,
 	Args: cobra.ExactArgs(1),

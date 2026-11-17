@@ -10,10 +10,15 @@ import (
 var automationsDeleteCmd = &cobra.Command{
 	Use:   "delete <automation-id>",
 	Short: "Soft-delete an automation",
-	Long: `Soft-delete an automation by ID. It leaves "automations list", but
-"automations get" still returns it at exit 0, with no field marking it
-deleted, and deleting it again exits 0 again. Prints the API's response, which is {};
-exit 0 is the success signal. Honors --dry-run.`,
+	Long: `Soft-delete an automation by ID. The API's own list
+(GET /api/v1/automations) stops returning it, but "automations list" reads
+POST /api/v1/search/automations — the route c1i uses to page past the GET's
+first page — and that
+index can still return the deleted automation with no deleted marker, so the
+row may stay listed here after the delete. "automations get" still returns it
+at exit 0, with no field marking it deleted, and deleting it again exits 0
+again. Prints the API's response, which is {}; exit 0 is the success signal.
+Honors --dry-run.`,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		return sendMutation(cmd, mutation{Method: http.MethodDelete, Path: client.Path("/api/v1/automations/%s", args[0])})

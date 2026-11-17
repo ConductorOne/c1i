@@ -662,15 +662,16 @@ confirm who holds it, and take it away again — the only granting path
 guaranteed to have a working undo.
 
 Before you request anything: this guide covers access requested through
-"requests create grant" / "requests create revoke" only. C1 also supports
-binding a user to an entitlement directly, bypassing the request workflow
-entirely; c1i has no command for that, and if you reach for it anyway via a
-raw API call, know this: the matching direct-removal endpoint only works on
-an SSO application's own sign-in entitlement, or on a catalog/group/
-profile-type entitlement on the built-in C1 app. For an ordinary role or
-custom entitlement on a connector app it refuses outright, and there is no
-other undo path. Don't create access that way unless you already know how
-you'd take it back.
+"requests create grant" / "requests create revoke". C1 also supports binding a
+user to a manually managed entitlement directly, bypassing the request
+workflow: that is "c1i grants add" (see "c1i grants add --help"). Know how you
+would take it back first: the matching direct-removal endpoint
+(remove-membership) only works on an SSO application's own sign-in entitlement,
+or on a catalog/group/profile-type entitlement on the built-in C1 app. For an
+ordinary manual, role or custom entitlement it refuses with "entitlement is not
+an SSO application sign-in entitlement", and the policy-respecting undo is
+"requests create revoke", whose task waits on a provisioning step. Don't create
+access that way unless you already know how you'd take it back.
 
 ## Prerequisites
 
@@ -713,8 +714,9 @@ you'd take it back.
 ## Steps
 
 1. Preview the request before sending it (no task is created). "--user-id"
-   defaults to the caller if omitted; "--dry-run" authenticates only when
-   "--user-id" is omitted, to resolve self:
+   defaults to the caller if omitted. "--dry-run" needs credentials either
+   way: it looks an explicit "--user-id" up first, and resolves self when the
+   flag is omitted:
 
        c1i requests create grant --app-id "$APP_ID" --entitlement-id "$ENTITLEMENT_ID" --user-id "$USER_ID" --description "<why>" --dry-run
 
@@ -799,8 +801,8 @@ step for resolving the task you just opened.
 // guideInspectAndApproveTask is the single source for approver-side task
 // mechanics: reading the task's embedded policy (current/next step,
 // stepApproverIds, actions), commenting (unlike approve/deny, not gated by
-// actions), and the approve/deny step-resolution asymmetry (approve requires
-// a resolvable current step; deny proceeds without one). Derived from
+// actions), and the approve/deny step-resolution asymmetry (both resolve the
+// current step; a task with none is refused by the server). Derived from
 // cmd/tasks_list.go, cmd/requests_get.go, cmd/tasks_comment.go,
 // cmd/tasks_approve.go, cmd/tasks_deny.go, and cmd/tasks.go
 // (resolvePolicyStepID).
@@ -870,10 +872,9 @@ output of "c1i requests create grant"/"revoke".
    --policy-step-id to the current step automatically (step
    2's policy.current.id), reporting "Resolved policy step: <id>" on stderr
    — pass it explicitly only if that lookup fails or
-   you deliberately want a non-current step. tasks approve errors if no
-   current step can be resolved (approve requires one); tasks deny
-   proceeds without one when it can't be derived — denying a task in an
-   odd state can succeed where approving the same task fails.
+   you deliberately want a non-current step. A task with no current step (for
+   a moment right after creation) is refused by the server for both actions
+   (exit 2), so retry once the task shows a step.
 
 ## Verify
 
@@ -903,10 +904,10 @@ checking once immediately.
   confirmed ahead of time by actions in step 2 omitting
   TASK_ACTION_TYPE_APPROVE/_DENY.
 - task ... has no current policy step to target; re-read it with "c1i
-  tasks get ...", on tasks approve (exit 2) — the task has no current step, so
-  --policy-step-id cannot supply one. tasks deny never fails this way on the
-  same task; it just proceeds without a step. Fails only when you pass a step
-  no longer current, where the server rejects it.
+  tasks get ..." (exit 2) — the task has no current step yet, so
+  --policy-step-id cannot supply one. This affects approve and deny alike;
+  deny can also fail with "already approved" in the same window. Retry once a
+  step appears, and note a step that is no longer current is rejected too.
 - failed to fetch task to determine current policy step: ... (exit 4 for an
   unknown task id) — every task action that resolves a step reads the task
   first, deny and restart included, so a bad id fails before any action is
@@ -934,9 +935,11 @@ DELETING THE SERVER IS A CASCADE: it is not just the connector that goes.
     c1i mcp toolsets list --app-id "$APP_ID" --connector-id "$CONNECTOR_ID"
 
 Every toolset row carries app_entitlement_id (its toolset entitlement), and so
-does each approved tool's row (it is null until the tool is approved). The list
-includes the toolsets C1 creates for each server itself (for example "All
-approved tools - <server>"), not only yours. For each toolset, see which tools
+does each tool's row once discovery has assigned one — the tool has its
+entitlement while still PENDING_REVIEW, and in one run every row's id appeared
+within about 90 seconds of discovery. The list includes the toolsets C1 creates
+for each server itself (for example "All approved tools - <server>"), not only
+yours. For each toolset, see which tools
 it bundles:
 
     c1i mcp bindings list --app-id "$APP_ID" --connector-id "$CONNECTOR_ID" --toolset-id "$TOOLSET_ID"
@@ -990,10 +993,11 @@ Prints {}; exit 0 means the delete was accepted.
     c1i mcp toolsets list --app-id "$APP_ID" --connector-id "$CONNECTOR_ID"
     c1i grants list --app-id "$APP_ID" --entitlement-id "$ENTITLEMENT_ID"
 
-The server itself is gone at once ("mcp servers get" exits 4, the list omits
-it). The cascade lands a few seconds later, so a read in the first moments can
-still show the toolsets and grants; re-read before concluding anything. Once it
-has landed:
+The server itself stops answering at once ("mcp servers get" exits 4), but the
+cascade is asynchronous and slower than "a few seconds": in one run the
+connector stayed in "mcp servers list" for about 40 seconds and its tools stayed
+listed (no deletedAt; PENDING_REVIEW in the run checked) for one to two minutes. Re-read until
+every signal below holds before concluding anything. Once it has landed:
 
 - "mcp toolsets list" and "mcp tools list" return nothing for the connector;
   "mcp toolsets get" and "mcp tools get" by id still answer, with deletedAt set.
