@@ -82,8 +82,16 @@ func fetchAttributeTypes(ctx context.Context, c *client.Client) ([]attributeType
 			}
 			return data, nil
 		},
-		Parse: parseList[map[string]any],
-		ID:    func(item map[string]any) string { return optStr(item, "id") },
+		// The route takes no paging params: a cursor means the list is
+		// truncated, and a missing type would read as "unknown" (exit 4).
+		Parse: func(data []byte) ([]map[string]any, string, error) {
+			items, next, err := parseList[map[string]any](data)
+			if err == nil && next != "" {
+				err = &nonJSONResponseError{fmt.Errorf("results from GET %s are INCOMPLETE: the server returned a page cursor this route does not take", attributeTypesPath)}
+			}
+			return items, "", err
+		},
+		ID: func(item map[string]any) string { return optStr(item, "id") },
 	})
 	if err != nil {
 		return nil, err

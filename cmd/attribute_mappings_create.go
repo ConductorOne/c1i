@@ -37,9 +37,9 @@ profile type existed to test a successful binding.
 The mapping's display_name is set by the server (the type's name, or
 --custom-key for Custom, as seen in one live run); there is no flag for it.
 A second create for the same app and type is not refused: it makes a second
-mapping with its own id, so list before creating in a script. A real run with an unknown --app-id
-exits 4 (the server's answer); --dry-run looks the type up but not the app, so
-it previews such a request.
+mapping with its own id, so list before creating in a script. A real run with
+an unknown --app-id exits 4 (the server's answer); --dry-run looks the type up
+but not the app, so it previews such a request.
 
 --body-file sends a full CreateRequest verbatim (attributeType with its
 config, appId, ...), mutually exclusive with every other flag; nothing is

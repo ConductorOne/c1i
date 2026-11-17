@@ -100,7 +100,7 @@ func TestAttributeMappingCreateRefusesBeforeSending(t *testing.T) {
 		{"custom without --custom-key", []string{"--type", "Custom", "--key", "k"}, amTypes, exitUsage, "--custom-key", 1},
 		{"unknown type", []string{"--type", "Nope", "--key", "k"}, amTypes, exitNotFound, `no such attribute type`, 1},
 		{"ambiguous name", []string{"--type", "Twin", "--key", "k"}, amTypes, exitUsage, "ty-dup-1, ty-dup-2", 1},
-		{"types answer with a cursor", []string{"--type", "Department", "--key", "k"}, `{"list":[],"nextPageToken":"more"}`, exitServer, "INCOMPLETE", 2},
+		{"types answer with a cursor", []string{"--type", "Department", "--key", "k"}, `{"list":[],"nextPageToken":"more"}`, exitServer, "INCOMPLETE", 1},
 		{"no --type", []string{"--key", "k"}, amTypes, exitUsage, `"type" not set`, 0},
 		{"--body-file with a flag", []string{"--type", "Department", "--body-file", writeTempJSON(t, "b.json", `{}`)}, amTypes, exitUsage, "mutually exclusive with --app-id", 0},
 		{"fallbacks not an array", []string{"--type", "Department", "--key", "k", "--fallbacks-file", writeTempJSON(t, "f.json", `{}`)}, amTypes, exitUsage, "--fallbacks-file", 0},
