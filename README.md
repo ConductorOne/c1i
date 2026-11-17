@@ -72,7 +72,9 @@ c1i docs endpoints --filter task
 
 > **Upgrading from 0.9.x?** 0.10.1 changes mutation output (unwrapped JSON, like
 > `get`) and several exit codes. Read "Upgrading from 0.9.2" in
-> [CHANGELOG.md](CHANGELOG.md) before updating scripts.
+> [CHANGELOG.md](CHANGELOG.md) before updating scripts. Upgrading past 0.10.1?
+> Read the unreleased "Upgrading from 0.10.1" there too: `.`/`..` ids exit `2`
+> everywhere, an unknown referenced id exits `4`, and error text masks secrets.
 
 ## Authentication
 
@@ -138,8 +140,9 @@ Enter keeps all of your roles, and `--choose-roles=false` skips the question.
   in C1.ai.
 
 `c1i auth token` prints just the access token, newline-terminated, so it
-composes into `curl -H "Authorization: Bearer $(c1i auth token)" ...`. It is
-never written to disk — a new one is minted per invocation.
+composes into `curl -H "Authorization: Bearer $(c1i auth token)" ...`. `auth
+token` and `mcp gateway` mint a new token per invocation and never write it to
+disk.
 
 ### Credential sources
 
@@ -268,8 +271,9 @@ retried depends on the request, to avoid duplicating side effects:
   rejected before the server processes it, so a retry is always safe).
 - **Transient `5xx` (500, 502, 503, 504) and network errors** — retried only for
   idempotent reads and updates (GET/PUT/DELETE) and for the read-only search and
-  list `POST`s behind list commands (`/api/v1/search/*`, and any `/api/v1/` path
-  ending in `/search` or `/list`). Other `POST` mutations
+  list `POST`s behind list commands (`/api/v1/search/*`, any `/api/v1/` path
+  ending in `/search` or `/list`, `/api/v1/systemlog/events` for `export
+  events`, and `role-mining suggestions users`). Other `POST` mutations
   (e.g. `requests create`, `tasks approve`) are **not** retried on these, since
   the server may have already applied the change before the failure.
   Non-transient 5xx (501 Not Implemented, 505, 511) are never retried.
@@ -651,14 +655,9 @@ APP_ID=$(c1i apps create --display-name "Example" | jq -er .id)
     to `jq` (`c1i ... | jq ...`), remember `$?` reads the pipe's last command,
     not `c1i`'s — the stderr message is the durable signal here, not the exit
     code you'd read from a naive `$?` after the pipe.
-  - **Worst case: a `--fields` spec that matches nothing at all, paired with
-    `--limit`, scans the collection to completion before erroring** — "nothing
-    ever matched" can't be known short of exhausting every page, and a typo is
-    the ordinary way to hit this: on a large tenant that is minutes of requests
-    before the exit `2`. `accounts list --unmapped-only` and `functions usage`
-    behave the same way for their client-side filtering: a filter applied after
-    the fetch can't bound the work when nothing matches, whatever `--limit`
-    says.
+  - **Worst case:** a spec that matches nothing, with or without `--limit`,
+    scans every page before exiting `2`. `accounts list --unmapped-only` and
+    `functions usage` do the same, since their filters run after the fetch.
 - Missing fields are silently omitted, so requesting a superset is safe.
 - Also settable via `C1I_FIELDS`. Applies to read output — list commands, `api`,
   and single-object `get` commands. Mutation output is never projected, so a
@@ -673,7 +672,7 @@ branch on without parsing text:
 |------|---------|
 | `0` | success |
 | `1` | generic / unclassified error |
-| `2` | usage error (bad flags or arguments, an empty, `.` or `..` id, a blank flag or positional, a missing, malformed, `null` or wrong-shape `--*-file` input, a non-object element in an array `--*-file` or `--body-file`, a referenced id that exists but is soft-deleted or of the wrong kind (a deleted or wrong-type policy), a refused redirect (but `upgrade` and the `docs` commands exit `8`), or the API returned any `4xx` other than `401`/`403`/`404`/`408`/`429`/`499`) |
+| `2` | usage error (bad flags or arguments, an empty, `.` or `..` id, a blank flag or positional, a missing, malformed, `null` or wrong-shape `--*-file` input, a non-object element in an array `--*-file` or `--body-file`, a referenced id that exists but is soft-deleted or of the wrong kind (a deleted or wrong-type policy), a control character in a path flag, header or `--config-field` key (see [Raw API](#raw-api)), a refused redirect (but `upgrade` and the `docs` commands exit `8`), or the API returned any `4xx` other than `401`/`403`/`404`/`408`/`429`/`499`) |
 | `3` | not authenticated, or API returned `401`/`403` (including a `400`/`401`/`403` from the token endpoint; any other token-endpoint failure is classified like an API response: `404` exits 4, `429` 5, `5xx` or a `200` that is not a token 6) |
 | `4` | API returned `404` (not found), or a referenced id (`--user-id`, a policy id) that does not exist, whether the server or a c1i pre-check catches it |
 | `5` | API returned `429` (rate limited — back off and retry) |
@@ -700,7 +699,9 @@ exits `2` and sends nothing, because an empty id would render a trailing empty
 path segment that the API redirects to the collection endpoint. An id of `.` or
 `..` is refused the same way, as is one with a `;` suffix (`..;x`), which the
 API treats as `..`. The same check applies to a raw `api --path` ending in `/`
-or containing such a segment, percent-encoded (`%2E`) or not.
+or containing such a segment, percent-encoded (`%2E`) or not. Every positional
+id and every flag ending `-id`, `-ids`, `-uid` or `-uids` refuses `.` and `..`
+the same way, before credentials are loaded and under `--dry-run`.
 
 The REST client is **selective about HTTP redirects**. It follows one only when
 the target path is identical to what was requested (a trailing-slash difference
@@ -736,6 +737,9 @@ $ c1i api --path /api/v1/apps/<nonexistent-id> --error-format json
 ```
 
 The `body` is embedded as JSON when the API returned JSON, otherwise as a string.
+A secret-named URL parameter or JSON field the server echoed back prints as
+`[redacted]` in the error text and `body`; a JSON body with something masked is
+re-encoded compactly, key order kept.
 
 In JSON mode **stderr is NDJSON**: every line is one object. Errors carry
 `"error"` (select them with `jq 'select(.error)'`), warnings and other notices
@@ -848,20 +852,16 @@ app or resource type lists zero rows at exit `0`, while `get` exits `4`.
 `promote` creates a managed app for `<resource-id>`, prints the binding
 unwrapped like `get` (read the new app's id with `jq -er .state.managed.appId`),
 and honors `--dry-run`. **Promote creates an app and nothing checks for an
-existing one of the same name**: promoting two discovered apps with the same name
-made two apps with that name. Promoting an already-managed binding exits `0` and
-returns the existing app, not a second one. Without `--user-id` the new app's
-owners were the connector app's owners; `--user-id` sets them instead (looked up
-first; an unknown one exits `4`, nothing sent). Deleting the managed app
-soft-deletes the binding, but not at once: in one run `get` right after the
-delete still showed the deleted app as managed, a `promote` then created another
-app, and the binding's `deletedAt` landed about 5 seconds after the delete. Wait
-until `get` shows `deletedAt` set; `promote` then exits `4`. The binding later
-reappeared unmanaged under the same `resource_id` (after about 8 minutes in one
-run and about 25 seconds in another, presumably the connector's sync), and then
-reads like any other unmanaged binding, so a `promote` would create a new app. A binding's top-level `appId` is the connector
-app; the managed app is `.state.managed.appId`. `c1i docs guide promote-idp-app-to-managed` walks
-the whole workflow.
+existing one of the same name.** Promoting an already-managed binding exits `0`
+and returns the existing app, not a second one. Without `--user-id` the new
+app's owners were the connector app's owners; `--user-id` sets them instead
+(looked up first; an unknown one exits `4`, nothing sent). After `apps delete`
+of the promoted app the binding's soft-delete lags a few seconds, and a promote
+in that window creates another app, so wait until `get` shows `deletedAt` set
+(`promote` then exits `4`). The binding later reappears unmanaged, after which a
+promote creates a new app. A binding's top-level `appId` is the connector app;
+the managed app is `.state.managed.appId`. `c1i docs guide
+promote-idp-app-to-managed` walks the whole workflow and has the timings.
 
 **Owner commands (apps and entitlements).** Owner changes are applied
 asynchronously and can take several minutes to appear; pass --wait to block
@@ -953,11 +953,12 @@ wrong-type one `2`.
 only when the same call enables emergency grants (`emergency policy id must
 reference a grant policy`) and otherwise stores any id. An empty policy id is
 exit `2`; unbind with the repeatable `--unbind-policy`.
-`--emergency-grant-enabled` needs `--emergency-grant-policy-id` in the same
+`--emergency-grant-enabled=true` needs `--emergency-grant-policy-id` in the same
 call even when one is already stored (the server's `emergency grant policy id
-must be set if emergency grant is enabled`), so it is refused at exit `2`
-without one, or alongside `--unbind-policy emergency-grant`. Unbinding the
-emergency policy while emergency grants stay enabled is accepted by the server.
+must be set if emergency grant is enabled`), so it exits `2` without one or
+alongside `--unbind-policy emergency-grant`. To unbind and disable together,
+pass `--emergency-grant-enabled=false` with the unbind. Unbinding the emergency
+policy while emergency grants stay enabled is accepted by the server.
 `--duration-grant` follows the [Durations](#durations) rule; `--duration-unset`
 removes the limit, and the two are mutually exclusive. A blank `--display-name`
 is refused: the server would accept "" and restore the entitlement's original
@@ -1055,17 +1056,11 @@ and is not a flag; `--wait-stable` must fit inside `--wait-timeout` (default
 `4m`), and a combination that cannot fit is rejected as a usage error rather
 than left to time out. A timeout exits `1` and prints no rows.
 
-**An empty result is stable.** A filter matching nothing settles at the first
-opportunity -- about 10s at the defaults -- and exits `0` with zero rows.
-Waiting on a grant you just made, that reads as "it did not happen" when the
-truth is "not yet". Pass `--wait-min 1` (or the count you expect) to hold out
-for that many grants and time out instead; exit `1` then means "did not
-converge in time", not "absent". The default of `0` is deliberate:
-empty-and-stable is the correct answer when you are waiting for a revoke --
-and in that direction there is no flag that helps, since `--wait-min` is a
-floor and cannot express a ceiling. `--wait` settles on whatever is steady, so
-exit `0` still listing the row means "not yet, re-run", not "the revoke
-failed".
+**An empty result is stable** and settles in about 10s with exit `0`. After a
+write, pass `--wait-min 1` (or the count you expect) so exit `1` means "did not
+converge in time", not "absent". After a revoke, exit `0` that still lists the
+row means "not yet, re-run"; no flag helps there, since `--wait-min` is a floor
+and cannot express a ceiling.
 
 `--wait` settles on the whole matching set, fetching every page on every poll
 regardless of `--limit`; `--limit` only truncates what is printed. Filter
@@ -1148,7 +1143,7 @@ value lands at `.type.grant.grantDuration` (there is no top-level
 `escalate`, `update-request-data` and `approve-with-step-up` are not wrapped;
 reach them through `c1i api`.
 
-`approve`/`deny`/`reassign`/`skip-step` target a specific policy step, fetched
+`approve`/`deny`/`reassign`/`restart`/`skip-step` target a specific policy step, fetched
 when `--policy-step-id` is omitted. `approve`, `skip-step` and `reassign`
 require a resolvable step: a task with no current step exits `2` and tells you
 to re-read it with `tasks get` (`--policy-step-id` cannot supply one), while
@@ -1325,12 +1320,14 @@ use `list`/`search` for them.
 
 Drive the MCP admin surface (servers, tools, toolsets, and bindings). Most commands take `--app-id`; `mcp servers` commands take the server's `<connector-id>` positionally, while tool/toolset/binding commands scope to a server with `--connector-id`.
 
+Every paginated list below except `mcp gateway list-tools` also takes `--page-token`.
+
 ```sh
 # Servers (register, configure, and inspect MCP servers)
 c1i mcp servers list               --app-id <id> [--page-size N] [--limit N]
 c1i mcp servers get                <connector-id> --app-id <id>
 c1i mcp servers search             --app-id <id> [--query <text>] [--tool-state approved|pending|disabled|removed] [--include-last-called-at] [--limit N]
-c1i mcp servers register           --app-id <id> --type hosted   --display-name <name> --catalog-id <cid> [--source-app-id <id>] [--auth ... ] [--config-field k=v ...] [--user-id <id> ...]
+c1i mcp servers register           --app-id <id> --type hosted   --display-name <name> --catalog-id <cid> [--source-app-id <id>] [--auth ... ] [--config-field k=v ...] [--user-id <id> ...] [--wait] [--wait-timeout 1m]
 c1i mcp servers register           --app-id <id> --type external --display-name <name> --server-url <url> [--transport streamable-http|sse] [--auth ...] [--user-id <id> ...] [--wait] [--wait-timeout 1m]
 # --user-id (integration owner) is looked up before sending: an unknown user exits 4, nothing registered
 # --wait polls `mcp servers list` until the new server is listed (observed trailing register by a second or two)
@@ -1535,20 +1532,19 @@ including `null`, exits 2 before any request, and the error lists every
 offending key. The one exception is a key set from a positional id, which may
 be present when it equals that positional exactly (a string), so a saved `get`
 round-trips into `update`; any other value is refused with the key, its value
-and the positional named. For `findings search`, `findings audits search` and
-`findings shadow-mcp-occurrences search` those are `pageToken`, `pageSize` and
-their snake_case spellings `page_token` and `page_size`; use `--page-token` (it
-fetches that one page) and `--page-size`; paging keys have no exception. The
-equality rule covers the ids a positional sets: `findingId`/`finding_id` on
-`findings state` and `assignee`, and `id` on `findings routing-rules update`
-and `transformation-rules update`. (Also `id` on `automations update`, `access-reviews update`, `policies update`,
-`mcp classifiers update` and `mcp classifiers tool-gates update`, and
-`templateId`/`template_id` on `mcp classifiers templates add-rule` and
-`instantiate`.)
+and the positional named. On `findings search`, `findings audits search` and
+`findings shadow-mcp-occurrences search` the keys are `pageToken`, `pageSize`
+and their snake_case spellings `page_token` and `page_size`; use `--page-token`
+(it fetches that one page) and `--page-size`. Paging keys have no exception.
+The equality rule covers the id a positional sets: `findingId`/`finding_id` on
+`findings state` and `assignee`; `id` on `findings routing-rules update`,
+`transformation-rules update`, `automations update`, `access-reviews update`,
+`policies update`, `mcp classifiers update` and `mcp classifiers tool-gates
+update`; and `templateId`/`template_id` on `mcp classifiers templates add-rule`
+and `instantiate`.
 
 The rule-list endpoints do not currently expose public filtering or paging; use
-`--limit` only to cap local output. The upstream mapping gap is tracked in
-[#131](https://github.com/ConductorOne/c1i/issues/131). Use JSON files for oneof actions, custom
+`--limit` only to cap local output. Use JSON files for oneof actions, custom
 finding targets, and nested rules; the commands insert positional IDs into the
 request. `findings create-task` accepts an optional `--policy-id`, looked up first (no
 type check): unknown exits `4`, deleted `2`, and the credential needs policy
@@ -1567,7 +1563,7 @@ the API's shape: `bulk-state`/`bulk-create-tasks` print `{"bulkActionId"}`,
 
 The public API intentionally excludes its internal summary, app-NHI, and
 shadow-MCP notification RPCs. `FindingSearchService.GetSearchTerms` is also not
-routed through public REST; it is tracked in [#130](https://github.com/ConductorOne/c1i/issues/130).
+routed through public REST.
 
 ### Role mining
 
@@ -1593,15 +1589,11 @@ c1i role-mining custom-analysis evaluate <analysis-id> --body-file <file|->
 c1i role-mining access-profiles create --body-file <file|->
 ```
 
-A `--body-file` key that the command itself sets must be absent: any value,
-including `null`, exits 2 before any request, and the error lists every
-offending key. On `role-mining suggestions search` and
-`role-mining suggestions users` those are `pageToken`, `pageSize` and their
-snake_case spellings `page_token` and `page_size`; use `--page-token` (it
-fetches that one page) and `--page-size`. `users` also refuses
-`suggestionId`/`suggestion_id` unless the value equals the `<suggestion-id>`
-argument exactly; any other value is refused naming the key, its value and the
-argument. Paging keys have no such exception.
+The `--body-file` owned-key rule under [Findings](#findings) applies here too. On
+`role-mining suggestions search` and `role-mining suggestions users` the keys
+are `pageToken`, `pageSize`, `page_token` and `page_size`; use `--page-token`
+and `--page-size`. `users` also refuses `suggestionId`/`suggestion_id` unless
+the value equals the `<suggestion-id>` argument exactly.
 
 `trigger` queues an organization analysis and returns an enqueue acknowledgement;
 inspect `runs latest` for its eventual result. `custom-analysis trigger` returns
@@ -1618,8 +1610,7 @@ submitting it.
 
 The suggestions, runs, and custom-analysis list routes do not accept paging or
 state filters through public REST, despite returning a continuation token.
-`--limit` only caps local output; the upstream mapping gap is tracked in
-[#133](https://github.com/ConductorOne/c1i/issues/133). Organization overview,
+`--limit` only caps local output. Organization overview,
 legacy cohort analysis, coverage streaming, and the core MCP role-mining
 service are not public REST routes.
 
@@ -1751,7 +1742,7 @@ digits; a malformed one is rejected with `value does not match regex pattern
 
 ### Service principals
 
-A service principal (SPC) is a tenant-owned non-human identity. The principal is
+A service principal (alias `sp`) is a tenant-owned non-human identity. The principal is
 just an identity; a **client credential** on it is what a caller authenticates
 with (a `client_id`/secret pair), and a **binding** lets another subject — a
 function, SSO application, AuthZEN server, or edge — act as the principal.
@@ -1819,7 +1810,8 @@ c1i service-principals bindings delete --service-principal-id <sp-id> --function
 ```
 
 `bindings list` is by subject — it returns the principals a subject is bound to.
-`add` and `delete` are idempotent.
+`add` and `delete` are idempotent. `bindings list` and `delete` take the same
+subject flags as `add` (exactly one subject).
 
 ### User attribute mappings
 
@@ -1845,7 +1837,9 @@ user attribute that receives the value. `create` looks `--type` up by display
 name or id (type ids are specific to a tenant), picks the request body from the
 config kind, and refuses a wrong `--key` (exit `2`, where the server answers
 `500`) or an unknown type (exit `4`) before sending anything; `--dry-run`
-makes the same lookup. `create` prints the mapping unwrapped: `jq -er .id`.
+makes the same lookup. A `--type` display name shared by several types exits
+`2` listing their ids. A `cel_expression` type is refused by flags; use
+`--body-file`. `create` prints the mapping unwrapped: `jq -er .id`.
 Rows of `attribute-mappings list` are `id`, `app_id`, `key` (null for an `app`
 type), `display_name`, `attribute_type_id`, `attribute_type_name`,
 `config_kind`, `priority`, `count` and `evaluation_error_count`; `--app-id`
@@ -1876,7 +1870,8 @@ Traps:
   `updateMask`, so c1i reads the mapping first and sends back its current
   attribute type, fallbacks and profile types with only your flags changed
   (`--dry-run` reads too), so an edit made between the read and the write is
-  overwritten. `--fallbacks-file '[]'` clears the fallbacks.
+  overwritten. A `--fallbacks-file` holding `[]` (for example `echo '[]' | c1i
+  attribute-mappings update <id> --fallbacks-file -`) clears the fallbacks.
 - `--profile-type-id` binds profile types; the server refuses it on a built-in
   type (`builtin attributes cannot be bound to profile types`). Profile types
   have no create command here.
@@ -1982,6 +1977,9 @@ c1i api --path /api/v1/apps --query page_size=5 --header X-Request-Id=abc123
 
 # Auto-paginate through all results (NDJSON output, one item per line)
 c1i api --path /api/v1/apps --paginate
+
+# --limit caps the total and needs --paginate (exit 2 without)
+c1i api --path /api/v1/apps --paginate --limit 20
 
 # Force the array field to drain when auto-detection picks the wrong one
 c1i api --path /api/v1/automation_executions --paginate --list-key automationExecutions

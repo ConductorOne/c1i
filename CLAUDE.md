@@ -121,6 +121,16 @@ tracked root file outside its allowlist. Stage explicit paths rather than `-A`.
 - `internal/mcpgateway/` — JSON-RPC/streamable-HTTP client for the MCP
   gateway (backs `mcp gateway call`/`list-tools`)
 - `internal/tokensource/` — OAuth2 token source
+- `internal/transport/` — shared HTTP layer: timeout, retries, `--debug`
+  tracing, the empty-path and redirect guards
+- `internal/redact/` — the one credential-masking rule behind `--dry-run`
+  previews and `--debug`/error output (`redact.IsSecretKey`)
+- `internal/envbool/` — the one boolean parser for env vars, config values and
+  flags
+- `internal/selfupdate/` — resolves and applies `upgrade` releases from the
+  distribution center (index, signed manifest, sha256)
+- `internal/testenv/` — isolates a test binary from the real home, config and
+  `C1I_*` settings; import it only from `_test.go` files
 
 ## Conventions
 
@@ -250,6 +260,10 @@ tracked root file outside its allowlist. Stage explicit paths rather than `-A`.
   lacks the annotation. Never use `Changed()` or
   `TrimSpace(v) == ""` as the signal when a value's content matters:
   `--page-token ""` once disabled auto-pagination and returned page 1 at exit 0.
+  Use `flagGiven` for mode/exclusivity checks (an exact `""` on an
+  `emptyIsOmitted` flag counts as not given) and `pageTokenGiven` for
+  `--page-token`; `TestNoPresenceAsContent` fails on `.Changed` or
+  `TrimSpace(x) == ""` outside its reasoned allowlist.
 - **A guard covers every channel and sink, not a name.** Validate a value on
   every channel it can arrive by (flag, `C1I_*` env var, `--body-file`) and
   wherever it is used (path, body, query); `--dry-run` must refuse exactly what
@@ -297,14 +311,28 @@ tracked root file outside its allowlist. Stage explicit paths rather than `-A`.
   and `TestUpdateCommandsDoNotBuildMasksByHand` enforce it;
   `TestUpdateCommandsWireIsPinned` pins each update command's request across a
   flag matrix.
+- **List commands run on one pagination engine (enforced convention):**
+  `cmd/paginate.go` (`runPages`, driven by a `pageSpec`) owns the loop, token
+  reuse, page-size tightening, `--limit` and the stuck-cursor and shape guards.
+  Never hand-roll a page loop or read `nextPageToken` outside it and the `api`
+  parsers (`TestNoPaginationLoopOutsideHelper`). A paged POST must pass
+  `transport.ReadOnlyPOST`.
+- **Test state (enforced convention):** pair every `viper.Set` with
+  `clearViperOverrides` in the same test, and run the root only through
+  `executeRoot*`/`runRootWithArgs` (`TestEveryViperSetIsClearedInItsTest`,
+  `TestNoDirectRootExecuteInTests`). A new mutating command needs a
+  `mutationTable` row, which the dry-run parity walk
+  (`TestDryRunParityCoversEveryMutatingCommand`) reads.
 - **Output:** list rows go through the `newEmitter(...)`/`.Encode` emitter;
   single-object reads through `writeObject`; **mutations** through
   `sendMutation`/`sendMutationBatch`/`sendMutationSequence` (`cmd/mutation.go`),
   which own the send, pre-send reads, `--wait`, the `--dry-run` preview
   (`writeMutationPreview` masks credentials on every path; extend the one name
-  rule, `isSecretKey`, never a second list), and the
+  rule, `redact.IsSecretKey`, never a second list), and the
   output: the response unwrapped like the family's read, never projected (an
   explicit `--fields` is exit 2). Call `markMutating` in the command's `init`.
+  A command that derives a wait target or partial failure from the write's
+  response uses the `withResponse` hook, not its own post-send code.
   `TestMutationsWriteOnlyThroughHelper` enforces this. Every stderr line goes
   through `cmd/stderr.go` (`notice`, `progress`) or `cmd/errors.go`, so
   `--error-format json` makes stderr NDJSON. A `--fields` that matches
@@ -356,8 +384,8 @@ tracked root file outside its allowlist. Stage explicit paths rather than `-A`.
   client errors with `%w` so `errors.As` can classify them, and wrap a bad
   flag/arg combination in `&usageError{}` so it exits 2 — a bare `fmt.Errorf`
   silently becomes exit 1.
-- Retries (429/5xx + transport, idempotent-aware; read-only search/list POSTs
-  count as idempotent, see `retrySafe`) live in
+- Retries (429/5xx + transport, idempotent-aware; `retrySafe` defers to
+  `transport.ReadOnlyPOST` for POSTs) live in
   `internal/transport/transport.go`; `internal/client` only forwards the
   options through. Commands get them for free via `newClient`.
 - **Help text is a claim about the server.** Don't state a default, scope, or
