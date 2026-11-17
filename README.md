@@ -1303,7 +1303,7 @@ c1i mcp servers search             --app-id <id> [--query <text>] [--tool-state 
 c1i mcp servers register           --app-id <id> --type hosted   --display-name <name> --catalog-id <cid> [--source-app-id <id>] [--auth ... ] [--config-field k=v ...] [--user-id <id> ...]
 c1i mcp servers register           --app-id <id> --type external --display-name <name> --server-url <url> [--transport streamable-http|sse] [--auth ...] [--user-id <id> ...] [--wait] [--wait-timeout 1m]
 # --user-id (integration owner) is looked up before sending: an unknown user exits 4, nothing registered
-# --wait polls `mcp servers list` until the new server is listed (list can trail register by ~1s)
+# --wait polls `mcp servers list` until the new server is listed (observed trailing register by a second or two)
 c1i mcp servers update             <connector-id> --app-id <id> [--display-name <name>] [--description <text>] [--data-sensitivity ...] [--tool-prefix <p>] [--require-tool-approval]
 c1i mcp servers update-credentials <connector-id> --app-id <id> --type hosted|external [--auth ...] [--update-mask <paths>]
 c1i mcp servers delete             <connector-id> --app-id <id>
