@@ -199,6 +199,10 @@ covers its camelCase key for the coverage check but is sent as given.
 
 ### Fixed
 
+- `policies create|update` now refuses a rule whose `condition` is invisible-only
+  (zero-width space, BOM) with exit 2, as it already did for an empty or
+  whitespace-only one, instead of sending it for the server's length-bounds 400.
+
 - `--help` now says what an empty value does on every flag that sends `""`:
   it clears `policies`, `apps` and `access-profiles update --description`;
   `entitlements update --description ""` is sent but the server keeps the
