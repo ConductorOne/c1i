@@ -187,23 +187,35 @@ func KeychainService(baseURL string) string {
 	return "c1i/" + strings.ToLower(baseURL)
 }
 
+// DefaultPortKeychainServices returns the keys a credential may live under
+// when --url carried a default https port in a spelling canonicalHost drops:
+// ":443", ":0443" and ":". Empty when baseURL names a real port itself.
+func DefaultPortKeychainServices(baseURL string) []string {
+	u, err := url.Parse(baseURL)
+	if err != nil || u.Host == "" || u.Port() != "" {
+		return nil
+	}
+	base := KeychainService(baseURL)
+	return []string{base + ":443", base + ":0443", base + ":"}
+}
+
 // ExplicitPortKeychainService returns the key a credential was stored under
 // when --url carried an explicit :443, before ParseURL dropped the default
 // port, or "" if baseURL names a port itself.
 func ExplicitPortKeychainService(baseURL string) string {
-	u, err := url.Parse(baseURL)
-	if err != nil || u.Host == "" || u.Port() != "" {
+	keys := DefaultPortKeychainServices(baseURL)
+	if len(keys) == 0 {
 		return ""
 	}
-	return KeychainService(baseURL) + ":443"
+	return keys[0]
 }
 
 // KeychainServices returns every key baseURL's credentials may live under: the
-// current one first, then the explicit-port and legacy keys. Load falls back
-// through them in order and logout deletes them all.
+// current one first, then the default-port spellings and the legacy key. Load
+// falls back through them in order and logout deletes them all.
 func KeychainServices(baseURL string) []string {
 	keys := []string{KeychainService(baseURL)}
-	for _, k := range []string{ExplicitPortKeychainService(baseURL), LegacyKeychainService(baseURL)} {
+	for _, k := range append(DefaultPortKeychainServices(baseURL), LegacyKeychainService(baseURL)) {
 		if k != "" && !slices.Contains(keys, k) {
 			keys = append(keys, k)
 		}

@@ -156,3 +156,40 @@ func TestStatusAndRolesSeeAnOlderKeyCredential(t *testing.T) {
 		t.Errorf("status: err %v stdout %q, want %q", r.err, r.stdout, want)
 	}
 }
+
+// A credential saved under the :0443 or ":" spelling of the default https
+// port is found, migrated on first use, and removed by logout, just like the
+// :443 one.
+func TestDefaultPortSpellingsAreFoundAndRemoved(t *testing.T) {
+	keyring.MockInitWithError(keyring.ErrUnsupportedPlatform)
+	t.Cleanup(keyring.MockInit)
+	t.Setenv("C1I_CLIENT_ID", "")
+	t.Setenv("C1I_CLIENT_SECRET", "")
+	t.Setenv("C1I_URL", "https://acme.example")
+	base := "https://acme.example"
+	for _, suffix := range []string{":0443", ":"} {
+		t.Run(suffix, func(t *testing.T) {
+			dir := t.TempDir()
+			t.Setenv("XDG_CONFIG_HOME", dir)
+			t.Setenv("HOME", dir)
+			t.Setenv("AppData", dir)
+
+			old := config.KeychainService(base) + suffix
+			if _, err := keychain.Store(old, "cid-"+suffix, "secret"); err != nil {
+				t.Fatal(err)
+			}
+			if got := storedClientID(base); got != "cid-"+suffix {
+				t.Errorf("storedClientID = %q, want the credential under %q", got, old)
+			}
+
+			// The client-level migration for each spelling is covered by
+			// TestLoadCredentialsFindsEveryDefaultPortSpelling.
+			if r := runCLI(t, nil, nil, "auth", "logout"); r.err != nil {
+				t.Fatalf("logout: %v", r.err)
+			}
+			if _, _, _, err := keychain.Load(old); err == nil {
+				t.Errorf("%q survived logout", old)
+			}
+		})
+	}
+}

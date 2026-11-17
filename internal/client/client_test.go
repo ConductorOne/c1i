@@ -400,3 +400,46 @@ func TestLoadCredentialsMigrationClearsEveryOlderKey(t *testing.T) {
 		}
 	}
 }
+
+// Every spelling of the default https port canonicalHost collapses must find
+// the stored credential and migrate it to the primary key.
+func TestLoadCredentialsFindsEveryDefaultPortSpelling(t *testing.T) {
+	keyring.MockInitWithError(keyring.ErrUnsupportedPlatform)
+	t.Cleanup(keyring.MockInit)
+	t.Setenv("C1I_CLIENT_ID", "")
+	t.Setenv("C1I_CLIENT_SECRET", "")
+	_ = os.Unsetenv("C1I_CLIENT_ID")
+	_ = os.Unsetenv("C1I_CLIENT_SECRET")
+	base := "https://example.test"
+	primary := config.KeychainService(base)
+	for _, suffix := range []string{":443", ":0443", ":"} {
+		t.Run(suffix, func(t *testing.T) {
+			dir := t.TempDir()
+			switch runtime.GOOS {
+			case "windows":
+				t.Setenv("AppData", dir)
+			case "darwin":
+				t.Setenv("HOME", dir)
+			default:
+				t.Setenv("XDG_CONFIG_HOME", dir)
+			}
+			old := primary + suffix
+			if _, err := keychain.Store(old, "id"+suffix, "secret"+suffix); err != nil {
+				t.Fatal(err)
+			}
+			id, secret, err := loadCredentials(base)
+			if err != nil {
+				t.Fatalf("loadCredentials: %v", err)
+			}
+			if id != "id"+suffix || secret != "secret"+suffix {
+				t.Errorf("got (%q, %q), want the credential stored under %q", id, secret, old)
+			}
+			if gotID, gotSecret, _, err := keychain.Load(primary); err != nil || gotID != id || gotSecret != secret {
+				t.Errorf("primary key after migration = (%q, %q, %v), want (%q, %q)", gotID, gotSecret, err, id, secret)
+			}
+			if _, _, _, err := keychain.Load(old); err == nil {
+				t.Errorf("%q survived the migrating load", old)
+			}
+		})
+	}
+}

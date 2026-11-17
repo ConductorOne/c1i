@@ -1,6 +1,7 @@
 package config
 
 import (
+	"slices"
 	"strings"
 	"testing"
 )
@@ -451,5 +452,23 @@ func TestMalformedPortIsNotTheDefault(t *testing.T) {
 		if got, _, err := ParseURL("acme.example:" + port); err == nil && got == "https://acme.example" {
 			t.Errorf("ParseURL(port %q) = %q, want it refused or kept", port, got)
 		}
+	}
+}
+
+// A credential saved under any spelling of the default https port must be
+// found and removed; canonicalHost treats them as one endpoint.
+func TestKeychainServicesCoversEveryDefaultPortSpelling(t *testing.T) {
+	got := KeychainServices("https://acme.example")
+	want := []string{
+		"c1i/acme.example",
+		"c1i/acme.example:443",
+		"c1i/acme.example:0443",
+		"c1i/acme.example:",
+	}
+	if !slices.Equal(got, want) {
+		t.Errorf("KeychainServices = %v, want %v", got, want)
+	}
+	if got := KeychainServices("https://acme.example:8443"); slices.Contains(got, "c1i/acme.example:") {
+		t.Errorf("KeychainServices for a real port = %v, want no default-port keys", got)
 	}
 }
