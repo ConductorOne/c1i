@@ -160,6 +160,14 @@ covers its camelCase key for the coverage check but is sent as given.
   rejects a manual entitlement (`entitlement is not an SSO application sign-in
   entitlement`); use `requests create revoke`, whose task waits on a
   provisioning step on a manual entitlement.
+- `mcp servers register --wait [--wait-timeout 1m]` polls `mcp servers list
+  --app-id` until the new server is listed. In the runs checked, a list read
+  right after register omitted the server for a second or two while `mcp
+  servers get` already returned it. `--dry-run` still only previews the POST.
+  A register response that carries no server id now exits 6, with or without
+  `--wait`.
+- `docs guide decommission-mcp-server`: inventory what depends on an MCP
+  server, what deleting it takes with it, and how to verify it is gone.
 
 ### Changed
 

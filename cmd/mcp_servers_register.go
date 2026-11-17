@@ -1,8 +1,11 @@
 package cmd
 
 import (
+	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
+	"time"
 
 	"github.com/ConductorOne/c1i/internal/client"
 	"github.com/spf13/cobra"
@@ -59,11 +62,20 @@ id is .connectorId (there is no .id). --fields is a usage error on a mutation;
 extract with jq -er, which fails on a --dry-run preview where jq -r exits 0
 with null.
 
+--wait polls "mcp servers list --app-id" until the new server appears in it
+(--wait-timeout bounds the wait). In the runs checked, a list read right after
+register omitted the server for a second or two while "mcp servers get" already
+returned it.
+
 NOTE: registering under app_id="" (new managed app) or via an
 app_managed_state_binding_ref is not reachable over REST — this command
 requires --app-id. Approve discovered tools afterward with
 "c1i mcp tools approve".`,
 	RunE: func(cmd *cobra.Command, args []string) error {
+		wait, waitTimeout, err := waitFlagValues(cmd)
+		if err != nil {
+			return err
+		}
 		if printTemplate, _ := cmd.Flags().GetBool("print-config-template"); printTemplate {
 			return printConfigTemplate(cmd)
 		}
@@ -90,8 +102,58 @@ requires --app-id. Approve discovered tools afterward with
 		if owners, _ := repeatableStringFlag(cmd, "user-id"); len(owners) > 0 {
 			opts = append(opts, withPreRead(existingUsersCheck("user-id", owners)))
 		}
+		opts = append(opts, withResponse(func(c *client.Client, resp []byte) writeOutcome {
+			id := unwrapServerID(resp)
+			if id == "" {
+				return writeOutcome{Err: &nonJSONResponseError{fmt.Errorf("the register response has no connectorId; the server was probably created, find it with: c1i mcp servers list --app-id %s", appID)}}
+			}
+			return writeOutcome{Wait: serverListedWaitOp(c, appID, id, waitTimeout)}
+		}, wait))
 		return sendMutation(cmd, mutation{Method: http.MethodPost, Path: path, Body: body, Unwrap: byID("connectorId")}, opts...)
 	},
+}
+
+// mcpServerWaitInterval is how often register --wait re-lists. A var so a test
+// can poll fast.
+var mcpServerWaitInterval = time.Second
+
+// unwrapServerID reads .connectorId from a register response, which wraps the
+// server ("" if absent).
+func unwrapServerID(resp []byte) string {
+	var r struct {
+		ConnectorID string `json:"connectorId"`
+	}
+	_ = json.Unmarshal(unwrapEnvelope(resp, "connectorId"), &r)
+	return r.ConnectorID
+}
+
+// listServerIDs reads every page of the app's server list: the new server can
+// sit past page one.
+func listServerIDs(ctx context.Context, c *client.Client, appID string) ([]string, error) {
+	s := serverListSpec(ctx, appID)
+	s.PageSize = defaultPageSize
+	items, err := collectPages(c, s)
+	if err != nil {
+		return nil, err
+	}
+	ids := make([]string, len(items))
+	for i, it := range items {
+		ids[i] = it.ConnectorID
+	}
+	return ids, nil
+}
+
+func serverListedWaitOp(c *client.Client, appID, connectorID string, timeout time.Duration) waitOp[[]string] {
+	return waitOp[[]string]{
+		Poll:     func(ctx context.Context) ([]string, error) { return listServerIDs(ctx, c, appID) },
+		Done:     untilPresent([]string{connectorID}),
+		Interval: mcpServerWaitInterval,
+		Timeout:  timeout,
+		Subject:  "MCP server " + connectorID + " to appear in the app's server list",
+		Success:  "MCP server " + connectorID + " is listed",
+		Slow:     "the list can trail a register by a second or two",
+		Recheck:  "c1i mcp servers list --app-id " + appID,
+	}
 }
 
 // buildRegisterBody assembles the RegisterRequest body from flags. Pure (no
@@ -180,6 +242,7 @@ func init() {
 	mcpServersRegisterCmd.Flags().Bool("print-config-template", false, "Print a ready-to-edit config skeleton for the --auth method (use with --auth and --type) instead of registering")
 	// Shared auth
 	addAuthFlags(mcpServersRegisterCmd)
+	addWaitFlags(mcpServersRegisterCmd, "GET .../mcp_servers until the new server is listed", time.Minute)
 	// annotate-only (not cobra-required) so --print-config-template works
 	// without --app-id/--type/--display-name; RunE enforces them otherwise.
 	annotateRequired(mcpServersRegisterCmd, "app-id", "type", "display-name")

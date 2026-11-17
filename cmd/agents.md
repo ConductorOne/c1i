@@ -246,6 +246,7 @@ authenticating. Which one depends on what you are after:
   | Goal | Guide |
   |---|---|
   | Register, distribute, or test MCP tools | `register-mcp-server` → `assign-toolset-everyone` → `test-mcp-gateway` |
+  | Retire an MCP server | `decommission-mcp-server` |
   | Create a manually managed app | `configure-new-app` |
   | Request or approve access | `request-access` → `inspect-and-approve-task` |
   | Configure delegated provisioning | `delegate-entitlement-provisioning` |

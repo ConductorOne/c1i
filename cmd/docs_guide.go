@@ -804,6 +804,94 @@ checking once immediately.
   what's actually governing a given task.
 `
 
+// guideDecommissionMCPServer walks through retiring an MCP server without
+// surprising the people who hold access through it. Derived from
+// cmd/mcp_servers_get.go, cmd/mcp_tools_list.go, cmd/mcp_toolsets_list.go,
+// cmd/mcp_bindings_list.go, cmd/grants_list.go, cmd/requests_create_revoke.go,
+// and cmd/mcp_servers_delete.go.
+const guideDecommissionMCPServer = `# Decommission an MCP server
+
+Retire a registered MCP server and see exactly what disappears with it.
+DELETING THE SERVER IS A CASCADE: it is not just the connector that goes.
+
+## 1. Inventory what depends on the server
+
+    c1i mcp servers get "$CONNECTOR_ID" --app-id "$APP_ID"
+    c1i mcp tools list --app-id "$APP_ID" --connector-id "$CONNECTOR_ID"
+    c1i mcp toolsets list --app-id "$APP_ID" --connector-id "$CONNECTOR_ID"
+
+Every toolset row carries app_entitlement_id (its toolset entitlement), and so
+does each approved tool's row (it is null until the tool is approved). The list
+includes the toolsets C1 creates for each server itself (for example "All
+approved tools - <server>"), not only yours. For each toolset, see which tools
+it bundles:
+
+    c1i mcp bindings list --app-id "$APP_ID" --connector-id "$CONNECTOR_ID" --toolset-id "$TOOLSET_ID"
+
+Then see who holds access: run this for every entitlement id from the tool and
+toolset lists.
+
+    c1i grants list --app-id "$APP_ID" --entitlement-id "$ENTITLEMENT_ID"
+
+Each row is one grant (one user holding one entitlement). Record
+identity_user_id from each row: it is the C1 user id that --user-id takes in
+step 3 (app_user_id is the app account, not the C1 user). After the
+delete the grants are gone and this is the only list of who lost access.
+
+## 2. Know what the delete does
+
+WARNING: "mcp servers delete" soft-deletes the server's tools, its toolsets
+(the ones C1 maintains included) and the entitlement behind each of them, and
+the grants those entitlements carried disappear with them. Everyone whose
+access came through the server loses it. An existing grant does not block the
+delete, and c1i has no undelete.
+
+## 3. Tell people, or revoke deliberately
+
+Letting the delete cascade is the quick path and removes every grant at once.
+To give people notice, or to leave an audit trail per user, revoke first
+through the approval workflow (see "c1i docs guide request-access"):
+
+    c1i requests create revoke --app-id "$APP_ID" --entitlement-id "$ENTITLEMENT_ID" \
+      --user-id "$USER_ID" --description "MCP server being retired"
+
+This files one task per user and entitlement; its id is .id. The grant stays
+until that task's policy and provisioning steps finish: re-read the task with
+"c1i requests get <task-id>" and then "c1i grants list" (grants lag; re-read
+before concluding). Observed on an auto-approving entitlement: the task read
+TASK_STATE_OPEN at creation and TASK_STATE_CLOSED within seconds, and the grant
+was gone from "grants list" by then. A policy that needs an approver keeps the
+task open and the grant in place until someone acts ("c1i docs guide
+inspect-and-approve-task"). Run "grants list" again before step 4 to confirm
+what is still held.
+
+## 4. Delete the server
+
+    c1i mcp servers delete "$CONNECTOR_ID" --app-id "$APP_ID"
+
+Prints {}; exit 0 means the delete was accepted.
+
+## 5. Verify it is gone
+
+    c1i mcp servers list --app-id "$APP_ID"
+    c1i mcp toolsets list --app-id "$APP_ID" --connector-id "$CONNECTOR_ID"
+    c1i grants list --app-id "$APP_ID" --entitlement-id "$ENTITLEMENT_ID"
+
+The server itself is gone at once ("mcp servers get" exits 4, the list omits
+it). The cascade lands a few seconds later, so a read in the first moments can
+still show the toolsets and grants; re-read before concluding anything. Once it
+has landed:
+
+- "mcp toolsets list" and "mcp tools list" return nothing for the connector;
+  "mcp toolsets get" and "mcp tools get" by id still answer, with deletedAt set.
+- "entitlements get" on a tool or toolset entitlement still answers, with
+  deletedAt set; "entitlements list" no longer shows it.
+- "grants list --entitlement-id" and "grants list --user-id" show none of the
+  grants those entitlements carried.
+- The app and its own entitlements are untouched; delete the app too if it
+  existed only for this server ("c1i apps delete <app-id>").
+`
+
 // guideSummaries makes the no-argument guide listing useful for discovering
 // the right workflow without loading every runbook.
 var guideSummaries = map[string]string{
@@ -814,6 +902,7 @@ var guideSummaries = map[string]string{
 	"configure-new-app":                 "Create a manually managed app, ownership, and a custom entitlement",
 	"request-access":                    "Request, verify, and revoke access through the approval workflow",
 	"inspect-and-approve-task":          "Inspect a task's current policy step and resolve it safely",
+	"decommission-mcp-server":           "Inventory, warn about, and delete an MCP server and the access it carries",
 }
 
 // docsGuides maps a guide name to its embedded content. Keep names stable —
@@ -827,6 +916,7 @@ var docsGuides = map[string]string{
 	"configure-new-app":                 guideConfigureNewApp,
 	"request-access":                    guideRequestAccess,
 	"inspect-and-approve-task":          guideInspectAndApproveTask,
+	"decommission-mcp-server":           guideDecommissionMCPServer,
 }
 
 // guideNames returns the available guide names, sorted for stable output.
