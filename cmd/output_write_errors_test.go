@@ -61,7 +61,7 @@ func assertOutputWriteFailure(t *testing.T, err error) {
 	}
 }
 
-// Every auto-paginating list (typed rows, listJSONPages-backed, export events)
+// Every auto-paginating list (typed rows, generic rows, export events)
 // must fail on the first failed write and not fetch another page.
 func TestListCommandsStopOnOutputWriteError(t *testing.T) {
 	for _, tc := range listPaginationCases() {

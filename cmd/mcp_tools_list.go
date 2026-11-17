@@ -1,10 +1,6 @@
 package cmd
 
 import (
-	"encoding/json"
-	"fmt"
-	"strconv"
-
 	"github.com/ConductorOne/c1i/internal/client"
 	"github.com/spf13/cobra"
 )
@@ -14,81 +10,20 @@ var mcpToolsListCmd = &cobra.Command{
 	Short: "List MCP tools discovered for a connector (NDJSON output)",
 	RunE: func(cmd *cobra.Command, args []string) error {
 
-		baseURL, err := GetBaseURL()
+		c, err := listClientFor(cmd)
 		if err != nil {
 			return err
 		}
-
-		c, err := newListClient(cmd, baseURL)
-		if err != nil {
-			return fmt.Errorf("authentication failed: %w", err)
-		}
-
 		appID, _ := cmd.Flags().GetString("app-id")
 		connectorID, _ := cmd.Flags().GetString("connector-id")
-		requestedPageSize := pageSizeFlag(cmd)
-		pageToken, _ := cmd.Flags().GetString("page-token")
-		manualPaging := cmd.Flags().Changed("page-token")
-		limit := getIntFlag(cmd, "limit")
-
-		enc := newEmitter(cmd)
-		guard := newPaginationCursorGuard()
-		route := "GET " + client.Path("/api/v1/apps/%s/connectors/%s/mcp_tools", appID, connectorID)
-		for !limitReached(enc.Written(), limit) {
-			if guard.tokenAlreadyUsed(pageToken) {
-				return guard.warnStuck(cmd, route)
-			}
-			pageSize := requestedPageSize
-			if !enc.Filtered() {
-				pageSize = effectivePageSize(requestedPageSize, limit, enc.Written())
-			}
-			params := map[string]string{
-				"page_size": strconv.Itoa(pageSize),
-			}
-			if pageToken != "" {
-				params["page_token"] = pageToken
-			}
-
-			path := client.Path("/api/v1/apps/%s/connectors/%s/mcp_tools", appID, connectorID)
-			data, err := c.Get(cmd.Context(), path, params)
-			if err != nil {
-				return fmt.Errorf("API error: %w", err)
-			}
-
-			var resp struct {
-				Tools         []toolView `json:"tools"`
-				NextPageToken string     `json:"nextPageToken"`
-			}
-			if err := json.Unmarshal(data, &resp); err != nil {
-				return fmt.Errorf("failed to parse response: %w", err)
-			}
-
-			ids := make([]string, len(resp.Tools))
-			for i, it := range resp.Tools {
-				ids[i] = it.ID
-			}
-			keep, err := guard.checkPage(cmd, route, ids)
-			if err != nil {
-				return err
-			}
-			resp.Tools = keepRows(resp.Tools, keep)
-			for _, t := range resp.Tools {
-				if err := enc.Encode(toolRow(t)); err != nil {
-					return err
-				}
-				if limitReached(enc.Written(), limit) {
-					return nil
-				}
-			}
-
-			if resp.NextPageToken == "" || manualPaging {
-				break
-			}
-			guard.markTokenUsed(pageToken)
-			pageToken = resp.NextPageToken
-		}
-
-		return nil
+		path := client.Path("/api/v1/apps/%s/connectors/%s/mcp_tools", appID, connectorID)
+		return listPages(cmd, c, pageSpec[toolView]{
+			Route: "GET " + path,
+			Fetch: getPage(cmd.Context(), path, nil),
+			Parse: parseKeyed[toolView]("tools"),
+			ID:    func(it toolView) string { return it.ID },
+			Rows:  rowFn(toolRow),
+		})
 	},
 }
 

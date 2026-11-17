@@ -28,7 +28,7 @@ var rolesListCmd = &cobra.Command{
 	Use:   "list",
 	Short: "List IAM roles (NDJSON output)",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		return listMapPages(cmd, "GET /api/v1/iam/roles", "list", []string{"id"}, roleRow, getPage(cmd, "/api/v1/iam/roles", nil))
+		return listMapPages(cmd, "GET /api/v1/iam/roles", "list", []string{"id"}, roleRow, getPage(cmd.Context(), "/api/v1/iam/roles", nil))
 	},
 }
 

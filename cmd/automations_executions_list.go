@@ -1,9 +1,6 @@
 package cmd
 
 import (
-	"encoding/json"
-	"fmt"
-
 	"github.com/spf13/cobra"
 )
 
@@ -42,16 +39,10 @@ Filters --state and --template-id are applied client-side after fetching
 each page, so a narrow filter still scans every page the server returns.
 Combine with --limit to bound the work.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		baseURL, err := GetBaseURL()
+		c, err := listClientFor(cmd)
 		if err != nil {
 			return err
 		}
-
-		c, err := newListClient(cmd, baseURL)
-		if err != nil {
-			return fmt.Errorf("authentication failed: %w", err)
-		}
-
 		// Empty means no filter; whitespace-only reaches the parser, which
 		// rejects a blank key rather than silently dropping the filter.
 		stateFilter, err := executionStateFlag.parse(mustGetString(cmd, "state"))
@@ -59,94 +50,32 @@ Combine with --limit to bound the work.`,
 			return err
 		}
 		templateID, _ := cmd.Flags().GetString("template-id")
-		requestedPageSize := pageSizeFlag(cmd)
-		pageToken, _ := cmd.Flags().GetString("page-token")
-		manualPaging := cmd.Flags().Changed("page-token")
-		limit := getIntFlag(cmd, "limit")
-
-		// --state/--template-id filter client-side, so a fetched row is not
-		// necessarily written. --fields can also drop a fetched row (see
-		// emitter.Filtered). Either way, effectivePageSize must not shrink the
-		// per-call page toward the written count while paging past rows that
-		// never get written (request amplification); only tighten when neither
-		// is active.
-		clientFilter := stateFilter != "" || templateID != ""
-
-		enc := newEmitter(cmd)
-		guard := newPaginationCursorGuard().withCompositeIDs() // the wrapper may be null
-		for !limitReached(enc.Written(), limit) {
-			if guard.tokenAlreadyUsed(pageToken) {
-				return guard.warnStuck(cmd, "POST /api/v1/search/automation_executions")
-			}
-
-			pageSize := requestedPageSize
-			if !clientFilter && !enc.Filtered() {
-				pageSize = effectivePageSize(requestedPageSize, limit, enc.Written())
-			}
-			body := map[string]any{"pageSize": pageSize}
-			if pageToken != "" {
-				body["pageToken"] = pageToken
-			}
-
+		return listPages(cmd, c, pageSpec[executionSearchItem]{
+			Route: "POST /api/v1/search/automation_executions",
 			// The search route, not GET /api/v1/automation_executions: the GET
 			// ignores page_size/page_token and serves page 1 forever.
-			data, err := c.Post(cmd.Context(), "/api/v1/search/automation_executions", body)
-			if err != nil {
-				return fmt.Errorf("API error: %w", err)
-			}
-
-			var page struct {
-				List []struct {
-					AutomationExecution *executionListItem `json:"automationExecution"`
-				} `json:"list"`
-				NextPageToken string `json:"nextPageToken"`
-			}
-			if err := json.Unmarshal(data, &page); err != nil {
-				return fmt.Errorf("failed to parse response: %w", err)
-			}
-			// The spec allows a null wrapper; such an item is an id-less row to
-			// the guard and is skipped below.
-			ids := make([]string, len(page.List))
-			for i, item := range page.List {
-				if item.AutomationExecution != nil {
-					ids[i] = item.AutomationExecution.ID
+			Fetch: postPage(cmd.Context(), "/api/v1/search/automation_executions", map[string]any{}),
+			Parse: parseList[executionSearchItem],
+			// The spec allows a null wrapper; such an item is an id-less row to the
+			// guard and is skipped rather than emitted as an all-"" row.
+			ID: func(it executionSearchItem) string {
+				if it.AutomationExecution == nil {
+					return ""
 				}
-			}
-			keep, err := guard.checkPage(cmd, "POST /api/v1/search/automation_executions", ids)
-			if err != nil {
-				return err
-			}
-			// A missing wrapper is skipped rather than emitted as an all-"" row.
-			execs := make([]executionListItem, 0, len(page.List))
-			for _, item := range keepRows(page.List, keep) {
-				if item.AutomationExecution != nil {
-					execs = append(execs, *item.AutomationExecution)
-				}
-			}
-
-			for _, e := range execs {
-				if stateFilter != "" && e.State != stateFilter {
-					continue
-				}
-				if templateID != "" && e.AutomationTemplateID != templateID {
-					continue
-				}
-				if err := enc.Encode(executionRow(e)); err != nil {
-					return err
-				}
-				if limitReached(enc.Written(), limit) {
+				return it.AutomationExecution.ID
+			},
+			Composite: true,
+			// --state/--template-id filter client-side, so a fetched row is not
+			// necessarily written: don't tighten the page toward --limit.
+			FixedSize: stateFilter != "" || templateID != "",
+			Rows: func(it executionSearchItem) []any {
+				e := it.AutomationExecution
+				if e == nil || (stateFilter != "" && e.State != stateFilter) || (templateID != "" && e.AutomationTemplateID != templateID) {
 					return nil
 				}
-			}
-
-			if page.NextPageToken == "" || manualPaging {
-				break
-			}
-			guard.markTokenUsed(pageToken)
-			pageToken = page.NextPageToken
-		}
-
-		return nil
+				return []any{executionRow(*e)}
+			},
+		})
 	},
 }
 
@@ -161,6 +90,11 @@ var executionStateFlag = enumFlag{flag: "state", prefix: "AUTOMATION_EXECUTION_S
 	{name: "waiting", api: "AUTOMATION_EXECUTION_STATE_WAITING"},
 	{name: "terminate", api: "AUTOMATION_EXECUTION_STATE_TERMINATE", aliases: []string{"terminated"}},
 }}
+
+// executionSearchItem is one row of the search response; the wrapper may be null.
+type executionSearchItem struct {
+	AutomationExecution *executionListItem `json:"automationExecution"`
+}
 
 func init() {
 	automationsExecutionsListCmd.Flags().String("state", "", "Filter by execution state: "+executionStateFlag.usage())

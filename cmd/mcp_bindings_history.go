@@ -3,7 +3,6 @@ package cmd
 import (
 	"encoding/json"
 	"fmt"
-	"strconv"
 
 	"github.com/ConductorOne/c1i/internal/client"
 	"github.com/spf13/cobra"
@@ -28,82 +27,24 @@ transaction.`,
 			return &usageError{fmt.Errorf("exactly one of --toolset-id or --tool-id is required")}
 		}
 
-		baseURL, err := GetBaseURL()
+		c, err := listClientFor(cmd)
 		if err != nil {
 			return err
 		}
-
-		c, err := newListClient(cmd, baseURL)
-		if err != nil {
-			return fmt.Errorf("authentication failed: %w", err)
-		}
-
 		appID, _ := cmd.Flags().GetString("app-id")
 		connectorID, _ := cmd.Flags().GetString("connector-id")
-		requestedPageSize := pageSizeFlag(cmd)
-		pageToken, _ := cmd.Flags().GetString("page-token")
-		manualPaging := cmd.Flags().Changed("page-token")
-		limit := getIntFlag(cmd, "limit")
-
 		var basePath string
 		if toolsetID != "" {
 			basePath = client.Path("/api/v1/apps/%s/connectors/%s/mcp_toolsets/%s/tool_bindings/history", appID, connectorID, toolsetID)
 		} else {
 			basePath = client.Path("/api/v1/apps/%s/connectors/%s/tool_bindings/by_tool/%s/history", appID, connectorID, toolID)
 		}
-
-		enc := newEmitter(cmd)
 		// Rows carry no id of their own, so only the token and idle-page checks apply.
-		guard := newPaginationCursorGuard()
-		route := "GET " + basePath
-		for !limitReached(enc.Written(), limit) {
-			if guard.tokenAlreadyUsed(pageToken) {
-				return guard.warnStuck(cmd, route)
-			}
-			pageSize := requestedPageSize
-			if !enc.Filtered() {
-				pageSize = effectivePageSize(requestedPageSize, limit, enc.Written())
-			}
-			params := map[string]string{
-				"page_size": strconv.Itoa(pageSize),
-			}
-			if pageToken != "" {
-				params["page_token"] = pageToken
-			}
-
-			data, err := c.Get(cmd.Context(), basePath, params)
-			if err != nil {
-				return fmt.Errorf("API error: %w", err)
-			}
-
-			var resp struct {
-				List          []json.RawMessage `json:"list"`
-				NextPageToken string            `json:"nextPageToken"`
-			}
-			if err := json.Unmarshal(data, &resp); err != nil {
-				return fmt.Errorf("failed to parse response: %w", err)
-			}
-			if err := guard.checkIDlessPage(cmd, route, len(resp.List)); err != nil {
-				return err
-			}
-
-			for _, entry := range resp.List {
-				if err := enc.Encode(json.RawMessage(entry)); err != nil {
-					return err
-				}
-				if limitReached(enc.Written(), limit) {
-					return nil
-				}
-			}
-
-			if resp.NextPageToken == "" || manualPaging {
-				break
-			}
-			guard.markTokenUsed(pageToken)
-			pageToken = resp.NextPageToken
-		}
-
-		return nil
+		return listPages(cmd, c, pageSpec[json.RawMessage]{
+			Route: "GET " + basePath,
+			Fetch: getPage(cmd.Context(), basePath, nil),
+			Parse: parseList[json.RawMessage],
+		})
 	},
 }
 

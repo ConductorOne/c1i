@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -260,13 +261,13 @@ func (g *paginationCursorGuard) warnStuck(cmd *cobra.Command, route string) erro
 }
 
 // pageSpec describes one auto-paginated listing whose page items decode to T.
-// paginate is the only pagination loop; every list command, and the paged
+// runPages is the only pagination loop; every list command, and the paged
 // reads in api and auth login, express their request and row shape here.
 type pageSpec[T any] struct {
 	// Route names the request in warnings, e.g. "GET /api/v1/apps".
 	Route string
 	// Fetch requests one page of up to size items from token ("" = first).
-	// It wraps its own errors; paginate returns them as given.
+	// It wraps its own errors; runPages returns them as given.
 	Fetch pageFetch
 	// Parse decodes a page into its items and next-page token, wrapping its
 	// own errors.
@@ -297,9 +298,52 @@ type pageSpec[T any] struct {
 // pageFetch requests one page of up to size items.
 type pageFetch func(c *client.Client, size int, token string) ([]byte, error)
 
-// paginate runs spec to completion: fetch, parse, guard, emit, and follow the
+// emitItems writes the rows of items to sink until limit rows have been
+// written to enc, and reports whether it has. A nil enc means no limit; nil
+// rows emits each item as is.
+func emitItems[T any](enc *emitter, limit int, sink func(any) error, rows func(T) []any, items []T) (bool, error) {
+	for _, item := range items {
+		out := []any{item}
+		if rows != nil {
+			out = rows(item)
+		}
+		for _, row := range out {
+			if err := sink(row); err != nil {
+				return false, err
+			}
+			if enc != nil && limitReached(enc.Written(), limit) {
+				return true, nil
+			}
+		}
+	}
+	return false, nil
+}
+
+// emitRows prints items through enc, stopping at limit rows.
+func emitRows[T any](enc *emitter, limit int, items []T, rows func(T) []any) error {
+	_, err := emitItems(enc, limit, enc.Encode, rows, items)
+	return err
+}
+
+// collectPages runs s to completion and returns every kept item: no output,
+// no --limit, and no stderr warning, for a read another command builds on.
+// Rows is ignored: the items themselves are returned.
+func collectPages[T any](c *client.Client, s pageSpec[T]) ([]T, error) {
+	var all []T
+	s.Rows = nil
+	s.Sink = func(row any) error {
+		all = append(all, row.(T))
+		return nil
+	}
+	if err := runPages(nil, c, s); err != nil {
+		return nil, err
+	}
+	return all, nil
+}
+
+// runPages runs spec to completion: fetch, parse, guard, emit, and follow the
 // cursor until it ends, --limit is met, or the guard calls the cursor stuck.
-func paginate[T any](cmd *cobra.Command, c *client.Client, s pageSpec[T]) error {
+func runPages[T any](cmd *cobra.Command, c *client.Client, s pageSpec[T]) error {
 	var guard *paginationCursorGuard
 	if s.Uncapped {
 		guard = newUncappedPaginationCursorGuard()
@@ -319,24 +363,7 @@ func paginate[T any](cmd *cobra.Command, c *client.Client, s pageSpec[T]) error 
 	if sink == nil {
 		sink = s.Enc.Encode
 	}
-	// emit writes items and reports whether --limit has been met.
-	emit := func(items []T) (bool, error) {
-		for _, item := range items {
-			rows := []any{item}
-			if s.Rows != nil {
-				rows = s.Rows(item)
-			}
-			for _, row := range rows {
-				if err := sink(row); err != nil {
-					return false, err
-				}
-				if s.Enc != nil && limitReached(written(), s.Limit) {
-					return true, nil
-				}
-			}
-		}
-		return false, nil
-	}
+	emit := func(items []T) (bool, error) { return emitItems(s.Enc, s.Limit, sink, s.Rows, items) }
 	var held []T
 	// fail prints rows held back before an error that isn't the guard's: they
 	// were deferred only until the run proved it wasn't stuck.
@@ -404,11 +431,17 @@ func paginate[T any](cmd *cobra.Command, c *client.Client, s pageSpec[T]) error 
 // listClientFor builds cmd's list client; call it before reading the
 // command's own flags so an auth failure keeps its place in the error order.
 func listClientFor(cmd *cobra.Command) (*client.Client, error) {
+	return listClientVia(cmd, newListClient)
+}
+
+// listClientVia is listClientFor with the command family's own constructor
+// (newPoliciesClient), so a test seam on it keeps working.
+func listClientVia(cmd *cobra.Command, build func(*cobra.Command, string) (*client.Client, error)) (*client.Client, error) {
 	baseURL, err := GetBaseURL()
 	if err != nil {
 		return nil, err
 	}
-	c, err := newListClient(cmd, baseURL)
+	c, err := build(cmd, baseURL)
 	if err != nil {
 		return nil, fmt.Errorf("authentication failed: %w", err)
 	}
@@ -423,21 +456,14 @@ func listPages[T any](cmd *cobra.Command, c *client.Client, s pageSpec[T]) error
 	s.PageSize = pageSizeFlag(cmd)
 	s.Token, _ = cmd.Flags().GetString("page-token")
 	s.Manual = cmd.Flags().Changed("page-token")
-	return paginate(cmd, c, s)
+	return runPages(cmd, c, s)
 }
 
 // getPage fetches a page with GET, paging by the snake_case query params
 // page_size/page_token alongside extra.
-func getPage(cmd *cobra.Command, path string, extra map[string]string) pageFetch {
+func getPage(ctx context.Context, path string, extra map[string]string) pageFetch {
 	return func(c *client.Client, size int, token string) ([]byte, error) {
-		params := map[string]string{"page_size": strconv.Itoa(size)}
-		if token != "" {
-			params["page_token"] = token
-		}
-		for k, v := range extra {
-			params[k] = v
-		}
-		data, err := c.Get(cmd.Context(), path, params)
+		data, err := c.Get(ctx, path, pageParams(size, token, extra))
 		if err != nil {
 			return nil, fmt.Errorf("API error: %w", err)
 		}
@@ -445,18 +471,30 @@ func getPage(cmd *cobra.Command, path string, extra map[string]string) pageFetch
 	}
 }
 
+// pageParams are the snake_case query params that page a GET list.
+func pageParams(size int, token string, extra map[string]string) map[string]string {
+	params := map[string]string{"page_size": strconv.Itoa(size)}
+	if token != "" {
+		params["page_token"] = token
+	}
+	for k, v := range extra {
+		params[k] = v
+	}
+	return params
+}
+
 // postPage fetches a page with POST, paging by pageSize/pageToken in a copy
 // of base.
-func postPage(cmd *cobra.Command, path string, base map[string]any) pageFetch {
-	return postPageBody(cmd, path, func(size int, token string) map[string]any {
+func postPage(ctx context.Context, path string, base map[string]any) pageFetch {
+	return postPageBody(ctx, path, func(size int, token string) map[string]any {
 		return pagedBody(base, size, token)
 	})
 }
 
 // postPageBody is postPage for a request whose body the command builds.
-func postPageBody(cmd *cobra.Command, path string, body func(size int, token string) map[string]any) pageFetch {
+func postPageBody(ctx context.Context, path string, body func(size int, token string) map[string]any) pageFetch {
 	return func(c *client.Client, size int, token string) ([]byte, error) {
-		data, err := c.Post(cmd.Context(), path, body(size, token))
+		data, err := c.Post(ctx, path, body(size, token))
 		if err != nil {
 			return nil, fmt.Errorf("API error: %w", err)
 		}
@@ -474,17 +512,26 @@ func pagedBody(base map[string]any, size int, token string) map[string]any {
 	return body
 }
 
-// parseKeyed decodes {"<key>": [...], "nextPageToken": "..."} into typed items.
-func parseKeyed[T any](key string) func([]byte) ([]T, string, error) {
+// parseKeyed decodes {"<key>": [...], "nextPageToken": "..."} into typed
+// items. With several keys the first non-empty array wins.
+func parseKeyed[T any](keys ...string) func([]byte) ([]T, string, error) {
 	return func(data []byte) ([]T, string, error) {
 		var page map[string]json.RawMessage
 		if err := json.Unmarshal(data, &page); err != nil {
 			return nil, "", fmt.Errorf("failed to parse response: %w", err)
 		}
 		var items []T
-		if v, ok := page[key]; ok {
-			if err := json.Unmarshal(v, &items); err != nil {
+		for _, key := range keys {
+			v, ok := page[key]
+			if !ok {
+				continue
+			}
+			var got []T
+			if err := json.Unmarshal(v, &got); err != nil {
 				return nil, "", fmt.Errorf("failed to parse response: %w", err)
+			}
+			if len(items) == 0 {
+				items = got
 			}
 		}
 		var next string
@@ -544,7 +591,7 @@ func listMapPages(cmd *cobra.Command, route, listKey string, idKeys []string, ro
 // postBodyList pages a POST list/search whose filter comes from --body-file;
 // the paging keys are the flags' (see ownBodyKeys).
 func postBodyList(cmd *cobra.Command, path string, request map[string]any, row listRowFn, idKeys ...string) error {
-	return listMapPages(cmd, "POST "+path, "list", idKeys, row, postPage(cmd, path, request))
+	return listMapPages(cmd, "POST "+path, "list", idKeys, row, postPage(cmd.Context(), path, request))
 }
 
 // rowGuardID joins a row's idKeys values with scopedRowID; "" if any is
@@ -598,4 +645,9 @@ func getFixedList(cmd *cobra.Command, path string, row listRowFn) error {
 			"Warning: GET %s returned a partial result — the server reported more pages, which c1i does not fetch for this command.", redact.URL(path)), nil)
 	}
 	return nil
+}
+
+// rowFn adapts a one-row-per-item builder to pageSpec.Rows.
+func rowFn[T, R any](build func(T) R) func(T) []any {
+	return func(item T) []any { return []any{build(item)} }
 }

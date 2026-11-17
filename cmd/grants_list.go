@@ -179,92 +179,22 @@ set that keeps changing, --wait times out rather than printing anything.`,
 			}
 		}
 
-		baseURL, err := GetBaseURL()
+		c, err := listClientFor(cmd)
 		if err != nil {
 			return err
 		}
 
-		c, err := newListClient(cmd, baseURL)
-		if err != nil {
-			return fmt.Errorf("authentication failed: %w", err)
-		}
-
-		requestedPageSize := pageSizeFlag(cmd)
-		pageToken, _ := cmd.Flags().GetString("page-token")
-		manualPaging := cmd.Flags().Changed("page-token")
-		limit := getIntFlag(cmd, "limit")
-
 		q := grantsQuery{appID: appID, userID: userID, appUserID: appUserID, entitlementID: entitlementID}
 
 		if wait {
-			settled, err := waitForGrants(cmd, c, q, requestedPageSize, stableReads, minGrants, waitTimeout)
+			settled, err := waitForGrants(cmd, c, q, pageSizeFlag(cmd), stableReads, minGrants, waitTimeout)
 			if err != nil {
 				return err
 			}
-			enc := newEmitter(cmd)
-			for _, item := range settled {
-				if err := enc.Encode(grantRow(item)); err != nil {
-					return err
-				}
-				if limitReached(enc.Written(), limit) {
-					break
-				}
-			}
-			return nil
+			return emitRows(newEmitter(cmd), getIntFlag(cmd, "limit"), settled, rowFn(grantRow))
 		}
 
-		enc := newEmitter(cmd)
-		guard := newPaginationCursorGuard().withCompositeIDs()
-		route := "POST /api/v1/search/grants"
-		for !limitReached(enc.Written(), limit) {
-			if guard.tokenAlreadyUsed(pageToken) {
-				return guard.warnStuck(cmd, route)
-			}
-			pageSize := requestedPageSize
-			if !enc.Filtered() {
-				pageSize = effectivePageSize(requestedPageSize, limit, enc.Written())
-			}
-			body := q.searchBody(pageSize, pageToken)
-
-			data, err := c.Post(cmd.Context(), "/api/v1/search/grants", body)
-			if err != nil {
-				return fmt.Errorf("API error: %w", err)
-			}
-
-			var resp struct {
-				List          []grantListItem `json:"list"`
-				NextPageToken string          `json:"nextPageToken"`
-			}
-			if err := json.Unmarshal(data, &resp); err != nil {
-				return fmt.Errorf("failed to parse response: %w", err)
-			}
-
-			ids := make([]string, len(resp.List))
-			for i, it := range resp.List {
-				ids[i] = grantGuardID(it)
-			}
-			keep, err := guard.checkPage(cmd, route, ids)
-			if err != nil {
-				return err
-			}
-			resp.List = keepRows(resp.List, keep)
-			for _, item := range resp.List {
-				if err := enc.Encode(grantRow(item)); err != nil {
-					return err
-				}
-				if limitReached(enc.Written(), limit) {
-					return nil
-				}
-			}
-
-			if resp.NextPageToken == "" || manualPaging {
-				break
-			}
-			guard.markTokenUsed(pageToken)
-			pageToken = resp.NextPageToken
-		}
-
-		return nil
+		return listPages(cmd, c, grantSpec(cmd.Context(), q))
 	},
 }
 
@@ -322,46 +252,29 @@ func grantSetFingerprint(items []grantListItem) string {
 	return strconv.Itoa(len(keys)) + "\x01" + strings.Join(keys, "\x02")
 }
 
-// fetchAllGrants pages POST /api/v1/search/grants to completion. --wait
-// fingerprints the whole set, so a first-page-only read would call a set
-// settled while later pages were still moving.
-func fetchAllGrants(ctx context.Context, c *client.Client, q grantsQuery, pageSize int) ([]grantListItem, error) {
-	const route = "POST /api/v1/search/grants"
-	var all []grantListItem
-	pageToken := ""
-	// A stuck cursor would otherwise turn each poll into a request storm
-	// bounded only by --wait-timeout, then blame provisioning for it.
-	guard := newPaginationCursorGuard().withCompositeIDs()
-	for {
-		if guard.tokenAlreadyUsed(pageToken) {
-			return nil, guard.stuckError(route)
-		}
-		data, err := c.Post(ctx, "/api/v1/search/grants", q.searchBody(pageSize, pageToken))
-		if err != nil {
-			return nil, fmt.Errorf("API error: %w", err)
-		}
-		var resp struct {
-			List          []grantListItem `json:"list"`
-			NextPageToken string          `json:"nextPageToken"`
-		}
-		if err := json.Unmarshal(data, &resp); err != nil {
-			return nil, fmt.Errorf("failed to parse response: %w", err)
-		}
-		ids := make([]string, len(resp.List))
-		for i, it := range resp.List {
-			ids[i] = grantGuardID(it)
-		}
-		keep, err := guard.checkPage(nil, route, ids)
-		if err != nil {
-			return nil, err
-		}
-		all = append(all, keepRows(resp.List, keep)...)
-		if resp.NextPageToken == "" {
-			return all, nil
-		}
-		guard.markTokenUsed(pageToken)
-		pageToken = resp.NextPageToken
+// grantSpec pages POST /api/v1/search/grants, keying the stuck-cursor guard
+// on (app, entitlement, account).
+func grantSpec(ctx context.Context, q grantsQuery) pageSpec[grantListItem] {
+	return pageSpec[grantListItem]{
+		Route: "POST /api/v1/search/grants",
+		Fetch: postPageBody(ctx, "/api/v1/search/grants", func(size int, token string) map[string]any {
+			return q.searchBody(size, token)
+		}),
+		Parse:     parseList[grantListItem],
+		ID:        grantGuardID,
+		Rows:      rowFn(grantRow),
+		Composite: true,
 	}
+}
+
+// fetchAllGrants pages the search to completion. --wait fingerprints the
+// whole set, so a first-page-only read would call a set settled while later
+// pages were still moving. The stuck-cursor guard also stops a bad cursor
+// from turning each poll into a request storm bounded only by --wait-timeout.
+func fetchAllGrants(ctx context.Context, c *client.Client, q grantsQuery, pageSize int) ([]grantListItem, error) {
+	s := grantSpec(ctx, q)
+	s.PageSize = pageSize
+	return collectPages(c, s)
 }
 
 // waitForGrants blocks until the matching grant set comes back identical

@@ -32,7 +32,7 @@ var mcpClassifiersListCmd = &cobra.Command{
 	Use:   "list",
 	Short: "List classifiers (NDJSON output)",
 	RunE: func(cmd *cobra.Command, _ []string) error {
-		return listMapPages(cmd, "GET /api/v1/classifiers", "classifiers", []string{"id"}, classifierRow, getPage(cmd, "/api/v1/classifiers", nil))
+		return listMapPages(cmd, "GET /api/v1/classifiers", "classifiers", []string{"id"}, classifierRow, getPage(cmd.Context(), "/api/v1/classifiers", nil))
 	},
 }
 
@@ -107,7 +107,7 @@ var mcpClassifierBindingsListCmd = &cobra.Command{
 	Use:   "list",
 	Short: "List classifier bindings (NDJSON output)",
 	RunE: func(cmd *cobra.Command, _ []string) error {
-		return listMapPages(cmd, "GET /api/v1/classifier_bindings", "bindings", []string{"id"}, classifierBindingRow, getPage(cmd, "/api/v1/classifier_bindings", nil))
+		return listMapPages(cmd, "GET /api/v1/classifier_bindings", "bindings", []string{"id"}, classifierBindingRow, getPage(cmd.Context(), "/api/v1/classifier_bindings", nil))
 	},
 }
 
@@ -157,7 +157,7 @@ var mcpClassifierTemplatesListCmd = &cobra.Command{
 			body["latestOnly"] = true
 		}
 		// No id: a template id can repeat across revisions (see --latest-only).
-		return listMapPages(cmd, "POST /api/v1/classifier_templates/list", "templates", nil, classifierTemplateRow, postPage(cmd, "/api/v1/classifier_templates/list", body))
+		return listMapPages(cmd, "POST /api/v1/classifier_templates/list", "templates", nil, classifierTemplateRow, postPage(cmd.Context(), "/api/v1/classifier_templates/list", body))
 	},
 }
 
@@ -260,7 +260,7 @@ var mcpClassifierToolGatesListCmd = &cobra.Command{
 	Use:   "list",
 	Short: "List tool gates (NDJSON output)",
 	RunE: func(cmd *cobra.Command, _ []string) error {
-		return listMapPages(cmd, "GET /api/v1/tool_gates", "list", []string{"id"}, toolGateRow, getPage(cmd, "/api/v1/tool_gates", nil))
+		return listMapPages(cmd, "GET /api/v1/tool_gates", "list", []string{"id"}, toolGateRow, getPage(cmd.Context(), "/api/v1/tool_gates", nil))
 	},
 }
 
@@ -269,7 +269,7 @@ var mcpClassifierToolGatesSearchCmd = &cobra.Command{
 	Short: "Search tool gates (NDJSON output)",
 	RunE: func(cmd *cobra.Command, _ []string) error {
 		query, _ := cmd.Flags().GetString("query")
-		return listMapPages(cmd, "POST /api/v1/search/tool_gates", "list", []string{"id"}, toolGateRow, postPage(cmd, "/api/v1/search/tool_gates", map[string]any{"query": query}))
+		return listMapPages(cmd, "POST /api/v1/search/tool_gates", "list", []string{"id"}, toolGateRow, postPage(cmd.Context(), "/api/v1/search/tool_gates", map[string]any{"query": query}))
 	},
 }
 

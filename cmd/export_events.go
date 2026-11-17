@@ -92,77 +92,20 @@ them to an external system.
 			return err
 		}
 
-		baseURL, err := GetBaseURL()
+		c, err := listClientFor(cmd)
 		if err != nil {
 			return err
 		}
-
-		c, err := newListClient(cmd, baseURL)
-		if err != nil {
-			return fmt.Errorf("authentication failed: %w", err)
-		}
-
-		requestedPageSize := pageSizeFlag(cmd)
-		pageToken, _ := cmd.Flags().GetString("page-token")
-		manualPaging := cmd.Flags().Changed("page-token")
-		limit := getIntFlag(cmd, "limit")
-
-		enc := newEmitter(cmd)
-		// Rows carry no id of their own, so only the repeated-token check
-		// applies: the audit log is unbounded, so --limit bounds it, not a cap.
-		guard := newUncappedPaginationCursorGuard()
-		route := "POST /api/v1/systemlog/events"
-		for !limitReached(enc.Written(), limit) {
-			if guard.tokenAlreadyUsed(pageToken) {
-				return guard.warnStuck(cmd, route)
-			}
-			pageSize := requestedPageSize
-			if !enc.Filtered() {
-				pageSize = effectivePageSize(requestedPageSize, limit, enc.Written())
-			}
-			body := exportEventsBody(
-				pageSize,
-				pageToken, since, until, sinceEventUID, sortDirection,
-			)
-
-			data, err := c.Post(cmd.Context(), "/api/v1/systemlog/events", body)
-			if err != nil {
-				return fmt.Errorf("API error: %w", err)
-			}
-
-			var resp struct {
-				List          []json.RawMessage `json:"list"`
-				NextPageToken string            `json:"nextPageToken"`
-			}
-			if err := json.Unmarshal(data, &resp); err != nil {
-				return fmt.Errorf("failed to parse response: %w", err)
-			}
-			if err := guard.checkIDlessPage(cmd, route, len(resp.List)); err != nil {
-				return err
-			}
-
-			for _, event := range resp.List {
-				// Emit each OCSF event as one NDJSON line. Like every list
-				// command this goes through the shared emitter, so --fields
-				// projection applies and values are re-encoded with Go's
-				// standard JSON encoding (which \u-escapes <, >, and & — valid
-				// JSON that any parser reads back identically).
-				if err := enc.Encode(event); err != nil {
-					return err
-				}
-				if limitReached(enc.Written(), limit) {
-					return nil
-				}
-			}
-
-			if resp.NextPageToken == "" || manualPaging {
-				break
-			}
-			guard.markTokenUsed(pageToken)
-			pageToken = resp.NextPageToken
-		}
-
-		return nil
+		// An audit-log row carries no id, and a quiet stretch can page through many
+		// empty results, so the guard is uncapped.
+		return listPages(cmd, c, pageSpec[json.RawMessage]{
+			Route:    "POST /api/v1/systemlog/events",
+			Uncapped: true,
+			Fetch: postPageBody(cmd.Context(), "/api/v1/systemlog/events", func(size int, token string) map[string]any {
+				return exportEventsBody(size, token, since, until, sinceEventUID, sortDirection)
+			}),
+			Parse: parseList[json.RawMessage],
+		})
 	},
 }
 

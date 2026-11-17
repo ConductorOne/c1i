@@ -247,39 +247,23 @@ func readRoles(ctx context.Context, c *client.Client) ([]menuRole, error) {
 		held[id] = true
 	}
 
-	const route = "GET /api/v1/iam/roles"
-	var catalog []roleListItem
-	params := map[string]string{"page_size": "100"}
-	guard := newPaginationCursorGuard()
-	for {
-		if guard.tokenAlreadyUsed(params["page_token"]) {
-			return nil, guard.stuckError(route)
-		}
-		data, err := c.Get(ctx, "/api/v1/iam/roles", params)
-		if err != nil {
-			return nil, err
-		}
-		var page struct {
-			List          []roleListItem `json:"list"`
-			NextPageToken string         `json:"nextPageToken"`
-		}
-		if err := json.Unmarshal(data, &page); err != nil {
-			return nil, &nonJSONResponseError{fmt.Errorf("parsing roles response: %w", err)}
-		}
-		ids := make([]string, len(page.List))
-		for i, r := range page.List {
-			ids[i] = r.ID
-		}
-		keep, err := guard.checkPage(nil, route, ids)
-		if err != nil {
-			return nil, err
-		}
-		catalog = append(catalog, keepRows(page.List, keep)...)
-		if page.NextPageToken == "" {
-			break
-		}
-		guard.markTokenUsed(params["page_token"])
-		params["page_token"] = page.NextPageToken
+	catalog, err := collectPages(c, pageSpec[roleListItem]{
+		Route:    "GET /api/v1/iam/roles",
+		PageSize: 100,
+		Fetch: func(c *client.Client, size int, token string) ([]byte, error) {
+			return c.Get(ctx, "/api/v1/iam/roles", pageParams(size, token, nil))
+		},
+		Parse: func(data []byte) ([]roleListItem, string, error) {
+			items, next, err := parseList[roleListItem](data)
+			if err != nil {
+				return nil, "", &nonJSONResponseError{fmt.Errorf("parsing roles response: %w", err)}
+			}
+			return items, next, nil
+		},
+		ID: func(r roleListItem) string { return r.ID },
+	})
+	if err != nil {
+		return nil, err
 	}
 	return filterDelegable(catalog, held), nil
 }

@@ -1,9 +1,6 @@
 package cmd
 
 import (
-	"encoding/json"
-	"fmt"
-
 	"github.com/ConductorOne/c1i/internal/client"
 	"github.com/spf13/cobra"
 )
@@ -24,16 +21,10 @@ other states still returns 0 for a filterless search).
 TSDB read each) so you can spot idle servers.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 
-		baseURL, err := GetBaseURL()
+		c, err := listClientFor(cmd)
 		if err != nil {
 			return err
 		}
-
-		c, err := newListClient(cmd, baseURL)
-		if err != nil {
-			return fmt.Errorf("authentication failed: %w", err)
-		}
-
 		appID, _ := cmd.Flags().GetString("app-id")
 		query, _ := cmd.Flags().GetString("query")
 		toolState, err := toolStateFlag.as("tool-state").parse(mustGetString(cmd, "tool-state"))
@@ -41,88 +32,38 @@ TSDB read each) so you can spot idle servers.`,
 			return err
 		}
 		includeLastCalled, _ := cmd.Flags().GetBool("include-last-called-at")
-		requestedPageSize := pageSizeFlag(cmd)
-		pageToken, _ := cmd.Flags().GetString("page-token")
-		manualPaging := cmd.Flags().Changed("page-token")
-		limit := getIntFlag(cmd, "limit")
-
-		enc := newEmitter(cmd)
-		guard := newPaginationCursorGuard()
-		route := "POST " + client.Path("/api/v1/apps/%s/mcp_servers/search", appID)
-		for !limitReached(enc.Written(), limit) {
-			if guard.tokenAlreadyUsed(pageToken) {
-				return guard.warnStuck(cmd, route)
-			}
-			pageSize := requestedPageSize
-			if !enc.Filtered() {
-				pageSize = effectivePageSize(requestedPageSize, limit, enc.Written())
-			}
-			body := map[string]any{
-				"appId":    appID,
-				"pageSize": pageSize,
-			}
-			if pageToken != "" {
-				body["pageToken"] = pageToken
-			}
-			if query != "" {
-				body["query"] = query
-			}
-			if toolState != "" {
-				body["toolState"] = toolState
-			}
-			if includeLastCalled {
-				body["includeLastCalledAt"] = true
-			}
-
-			path := client.Path("/api/v1/apps/%s/mcp_servers/search", appID)
-			data, err := c.Post(cmd.Context(), path, body)
-			if err != nil {
-				return fmt.Errorf("API error: %w", err)
-			}
-
-			var resp struct {
-				List []struct {
-					MCPServer serverView `json:"mcpServer"`
-					ToolCount flexInt64  `json:"toolCount"`
-				} `json:"list"`
-				NextPageToken string `json:"nextPageToken"`
-			}
-			if err := json.Unmarshal(data, &resp); err != nil {
-				return fmt.Errorf("failed to parse response: %w", err)
-			}
-
-			ids := make([]string, len(resp.List))
-			for i, it := range resp.List {
-				ids[i] = it.MCPServer.ConnectorID
-			}
-			keep, err := guard.checkPage(cmd, route, ids)
-			if err != nil {
-				return err
-			}
-			resp.List = keepRows(resp.List, keep)
-			for _, r := range resp.List {
+		body := map[string]any{"appId": appID}
+		if query != "" {
+			body["query"] = query
+		}
+		if toolState != "" {
+			body["toolState"] = toolState
+		}
+		if includeLastCalled {
+			body["includeLastCalledAt"] = true
+		}
+		path := client.Path("/api/v1/apps/%s/mcp_servers/search", appID)
+		return listPages(cmd, c, pageSpec[serverSearchHit]{
+			Route: "POST " + path,
+			Fetch: postPage(cmd.Context(), path, body),
+			Parse: parseList[serverSearchHit],
+			ID:    func(it serverSearchHit) string { return it.MCPServer.ConnectorID },
+			Rows: rowFn(func(r serverSearchHit) map[string]any {
 				var toolCount *int64
 				if toolState != "" {
 					tc := int64(r.ToolCount)
 					toolCount = &tc
 				}
-				if err := enc.Encode(serverCountRow(r.MCPServer, toolCount)); err != nil {
-					return err
-				}
-				if limitReached(enc.Written(), limit) {
-					return nil
-				}
-			}
-
-			if resp.NextPageToken == "" || manualPaging {
-				break
-			}
-			guard.markTokenUsed(pageToken)
-			pageToken = resp.NextPageToken
-		}
-
-		return nil
+				return serverCountRow(r.MCPServer, toolCount)
+			}),
+		})
 	},
+}
+
+// serverSearchHit is one row of the mcp_servers/search response.
+type serverSearchHit struct {
+	MCPServer serverView `json:"mcpServer"`
+	ToolCount flexInt64  `json:"toolCount"`
 }
 
 func init() {

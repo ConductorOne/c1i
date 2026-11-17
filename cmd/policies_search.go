@@ -1,9 +1,6 @@
 package cmd
 
 import (
-	"encoding/json"
-	"fmt"
-
 	"github.com/spf13/cobra"
 )
 
@@ -38,96 +35,36 @@ it only ignores case, and the names differ by more than that between tenants
 		if err != nil {
 			return err
 		}
-		baseURL, err := GetBaseURL()
+		c, err := listClientVia(cmd, newPoliciesClient)
 		if err != nil {
 			return err
 		}
-
-		c, err := newPoliciesClient(cmd, baseURL)
-		if err != nil {
-			return fmt.Errorf("authentication failed: %w", err)
-		}
-
 		query, _ := cmd.Flags().GetString("query")
 		displayName, _ := cmd.Flags().GetString("display-name")
 		includeDeleted, _ := cmd.Flags().GetBool("include-deleted")
-		requestedPageSize := pageSizeFlag(cmd)
-		pageToken, _ := cmd.Flags().GetString("page-token")
-		manualPaging := cmd.Flags().Changed("page-token")
-		limit := getIntFlag(cmd, "limit")
-
-		enc := newEmitter(cmd)
-		guard := newPaginationCursorGuard()
-		route := "POST /api/v1/search/policies"
-		for !limitReached(enc.Written(), limit) {
-			if guard.tokenAlreadyUsed(pageToken) {
-				return guard.warnStuck(cmd, route)
-			}
-			pageSize := requestedPageSize
-			if !enc.Filtered() {
-				pageSize = effectivePageSize(requestedPageSize, limit, enc.Written())
-			}
-			body := map[string]any{
-				"pageSize": pageSize,
-			}
-			if pageToken != "" {
-				body["pageToken"] = pageToken
-			}
-			if query != "" {
-				body["query"] = query
-			}
-			if displayName != "" {
-				body["displayName"] = displayName
-			}
-			if includeDeleted {
-				body["includeDeleted"] = true
-			}
-			if len(policyTypes) > 0 {
-				body["policyTypes"] = policyTypes
-			}
-			if len(excludeIDs) > 0 {
-				body["excludePolicyIds"] = excludeIDs
-			}
-
-			data, err := c.Post(cmd.Context(), "/api/v1/search/policies", body)
-			if err != nil {
-				return fmt.Errorf("API error: %w", err)
-			}
-
-			var resp struct {
-				List          []policyListItem `json:"list"`
-				NextPageToken string           `json:"nextPageToken"`
-			}
-			if err := json.Unmarshal(data, &resp); err != nil {
-				return fmt.Errorf("failed to parse response: %w", err)
-			}
-
-			ids := make([]string, len(resp.List))
-			for i, it := range resp.List {
-				ids[i] = it.ID
-			}
-			keep, err := guard.checkPage(cmd, route, ids)
-			if err != nil {
-				return err
-			}
-			resp.List = keepRows(resp.List, keep)
-			for _, p := range resp.List {
-				if err := enc.Encode(policyRow(p)); err != nil {
-					return err
-				}
-				if limitReached(enc.Written(), limit) {
-					return nil
-				}
-			}
-
-			if resp.NextPageToken == "" || manualPaging {
-				break
-			}
-			guard.markTokenUsed(pageToken)
-			pageToken = resp.NextPageToken
+		body := map[string]any{}
+		if query != "" {
+			body["query"] = query
 		}
-
-		return nil
+		if displayName != "" {
+			body["displayName"] = displayName
+		}
+		if includeDeleted {
+			body["includeDeleted"] = true
+		}
+		if len(policyTypes) > 0 {
+			body["policyTypes"] = policyTypes
+		}
+		if len(excludeIDs) > 0 {
+			body["excludePolicyIds"] = excludeIDs
+		}
+		return listPages(cmd, c, pageSpec[policyListItem]{
+			Route: "POST /api/v1/search/policies",
+			Fetch: postPage(cmd.Context(), "/api/v1/search/policies", body),
+			Parse: parseList[policyListItem],
+			ID:    func(it policyListItem) string { return it.ID },
+			Rows:  rowFn(policyRow),
+		})
 	},
 }
 

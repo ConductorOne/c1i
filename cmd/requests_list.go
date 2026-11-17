@@ -1,7 +1,6 @@
 package cmd
 
 import (
-	"encoding/json"
 	"fmt"
 
 	"github.com/spf13/cobra"
@@ -96,14 +95,9 @@ tenant.
 			return &usageError{fmt.Errorf("--entitlement-id requires --app-id (entitlements are scoped to an app)")}
 		}
 
-		baseURL, err := GetBaseURL()
+		c, err := listClientFor(cmd)
 		if err != nil {
 			return err
-		}
-
-		c, err := newListClient(cmd, baseURL)
-		if err != nil {
-			return fmt.Errorf("authentication failed: %w", err)
 		}
 
 		// Resolve the requester scope. Default is "me" (opener or subject); --all
@@ -121,66 +115,23 @@ tenant.
 			}
 		}
 
-		requestedPageSize := pageSizeFlag(cmd)
-		pageToken, _ := cmd.Flags().GetString("page-token")
-		manualPaging := cmd.Flags().Changed("page-token")
-		limit := getIntFlag(cmd, "limit")
-
-		enc := newEmitter(cmd)
-		guard := newPaginationCursorGuard()
-		route := "POST /api/v1/search/tasks"
-		for !limitReached(enc.Written(), limit) {
-			if guard.tokenAlreadyUsed(pageToken) {
-				return guard.warnStuck(cmd, route)
-			}
-			pageSize := requestedPageSize
-			if !enc.Filtered() {
-				pageSize = effectivePageSize(requestedPageSize, limit, enc.Written())
-			}
-			body := buildRequestSearchBody(requestSearchFilters{
-				pageSize:      pageSize,
-				pageToken:     pageToken,
-				scopeUserID:   scopeUserID,
-				appID:         appID,
-				entitlementID: entitlementID,
-				state:         state,
-				typ:           typ,
-			})
-
-			data, err := c.Post(cmd.Context(), "/api/v1/search/tasks", body)
-			if err != nil {
-				return fmt.Errorf("API error: %w", err)
-			}
-
-			var resp taskSearchList
-			if err := json.Unmarshal(data, &resp); err != nil {
-				return fmt.Errorf("failed to parse response: %w", err)
-			}
-
-			keep, err := guard.checkPage(cmd, route, resp.ids())
-			if err != nil {
-				return err
-			}
-			for _, item := range keepRows(resp.List, keep) {
-				if item.Task == nil {
-					continue // skipped rather than emitted as an all-"" row
-				}
-				if err := enc.Encode(taskRow(*item.Task)); err != nil {
-					return err
-				}
-				if limitReached(enc.Written(), limit) {
-					return nil
-				}
-			}
-
-			if resp.NextPageToken == "" || manualPaging {
-				break
-			}
-			guard.markTokenUsed(pageToken)
-			pageToken = resp.NextPageToken
-		}
-
-		return nil
+		return listPages(cmd, c, pageSpec[taskSearchItem]{
+			Route: "POST /api/v1/search/tasks",
+			Fetch: postPageBody(cmd.Context(), "/api/v1/search/tasks", func(size int, token string) map[string]any {
+				return buildRequestSearchBody(requestSearchFilters{
+					pageSize:      size,
+					pageToken:     token,
+					scopeUserID:   scopeUserID,
+					appID:         appID,
+					entitlementID: entitlementID,
+					state:         state,
+					typ:           typ,
+				})
+			}),
+			Parse: parseList[taskSearchItem],
+			ID:    taskItemID,
+			Rows:  taskItemRows,
+		})
 	},
 }
 
