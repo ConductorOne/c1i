@@ -473,7 +473,7 @@ func init() {
 	pf.String("error-format", "text", "Error output format: "+errorFormatFlag.usage())
 	allowEmpty(rootCmd, emptyOverridesEnv, "fields", "error-format")
 	pf.Bool("debug", false, "Trace HTTP requests (method, URL, status, timing) to stderr")
-	pf.Bool("dry-run", false, "Preview C1 REST mutations (method, path, body) without sending; mcp gateway call and auth login reject it")
+	pf.Bool("dry-run", false, "Preview C1 REST mutations (method, path, body) without sending; mcp gateway call, auth login and auth logout reject it")
 	bindGlobalEnvSettings()
 }
 

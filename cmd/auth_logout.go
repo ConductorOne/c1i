@@ -15,8 +15,13 @@ var authLogoutCmd = &cobra.Command{
 	Long: `Remove credentials stored for the current C1 URL from both the OS
 keyring and the file fallback, including older copies of the same tenant's
 credentials (a :443 name, the legacy *.conductor.one short name).
-Environment variables (C1I_CLIENT_ID, C1I_CLIENT_SECRET) are not affected.`,
+Environment variables (C1I_CLIENT_ID, C1I_CLIENT_SECRET) are not affected.
+--dry-run is rejected (exit 2): a logout cannot be previewed, and it deletes
+the stored credential.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
+		if dryRunActive() {
+			return &usageError{fmt.Errorf("--dry-run is unsupported for auth logout: it cannot preview or suppress deleting a stored credential")}
+		}
 		baseURL, err := GetBaseURL()
 		if err != nil {
 			return err
