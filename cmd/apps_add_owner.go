@@ -41,7 +41,7 @@ One owner per call; to change several at once use "apps set-owners".`,
 			Method: http.MethodPost,
 			Path:   client.Path("/api/v1/apps/%s/owners/%s", args[0], userID),
 			Body:   addOwnerEmptyBody(),
-		})
+		}, withPreRead(existingUsersCheck("user-id", []string{userID})))
 	},
 }
 
@@ -50,6 +50,7 @@ func init() {
 		"use \"apps set-owners\" to set several owners")
 	markRequired(appsAddOwnerCmd, "user-id")
 	markMutating(appsAddOwnerCmd)
+	markUserRefChecked(appsAddOwnerCmd, "user-id")
 	appsCmd.AddCommand(appsAddOwnerCmd)
 }
 

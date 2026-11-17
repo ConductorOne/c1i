@@ -30,6 +30,8 @@ var requestsCreateRevokeCmd = &cobra.Command{
 	Short: "Create a revoke access request",
 	Long: `Create a revoke access request.
 
+An omitted --user-id is the caller.
+
 Prints the created task as pretty JSON, unwrapped like "requests get": the id
 is .id. Its .state is a snapshot from creation, not the outcome; re-read with
 "c1i requests get <task-id>" before acting on it. --fields is a usage error on
@@ -55,5 +57,6 @@ func init() {
 	markRequired(requestsCreateRevokeCmd, "app-id")
 	markRequired(requestsCreateRevokeCmd, "entitlement-id")
 	markMutating(requestsCreateRevokeCmd)
+	markUserRefChecked(requestsCreateRevokeCmd, "user-id")
 	requestsCreateCmd.AddCommand(requestsCreateRevokeCmd)
 }

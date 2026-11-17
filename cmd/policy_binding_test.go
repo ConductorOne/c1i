@@ -79,11 +79,11 @@ func TestPolicyBindingValidation(t *testing.T) {
 		wantErr     string // "" means success
 		wantLookups int
 		wantPosts   int
-		wantExit    int    // 0 means exitUsage when wantErr is set
+		wantExit    int    // 0 means exitUsage when wantErr is set; unknown id is exitNotFound
 		wantReq     string // substring some request must contain
 	}{
 		{name: "update 404", args: []string{"apps", "update", "app-1", "--grant-policy-id", "nope"},
-			wantErr: `--grant-policy-id "nope": no such policy`, wantLookups: 1},
+			wantErr: `--grant-policy-id "nope": no such policy`, wantExit: exitNotFound, wantLookups: 1},
 		{name: "update wrong type", args: []string{"apps", "update", "app-1", "--grant-policy-id", "rp"},
 			wantErr: `--grant-policy-id "rp" is a POLICY_TYPE_REVOKE policy; it must be POLICY_TYPE_GRANT`, wantLookups: 1},
 		{name: "update deleted", args: []string{"apps", "update", "app-1", "--grant-policy-id", "del"},
@@ -103,16 +103,16 @@ func TestPolicyBindingValidation(t *testing.T) {
 		{name: "create trims policy id", args: []string{"apps", "create", "--display-name", "a", "--grant-policy-id", "\tgp\n"},
 			wantLookups: 1, wantPosts: 1, wantReq: `"grantPolicyId":"gp"`},
 		{name: "update dry run refuses like a real run", args: []string{"apps", "update", "app-1", "--grant-policy-id", "nope"}, dryRun: true,
-			wantErr: `--grant-policy-id "nope": no such policy`, wantLookups: 1},
+			wantErr: `--grant-policy-id "nope": no such policy`, wantExit: exitNotFound, wantLookups: 1},
 		{name: "update dry run looks up and sends nothing", args: []string{"apps", "update", "app-1", "--grant-policy-id", "gp"}, dryRun: true, wantLookups: 1},
 		{name: "create 404", args: []string{"apps", "create", "--display-name", "a", "--revoke-policy-id", "nope"},
-			wantErr: "no such policy", wantLookups: 1},
+			wantErr: "no such policy", wantExit: exitNotFound, wantLookups: 1},
 		{name: "create wrong type", args: []string{"apps", "create", "--display-name", "a", "--certify-policy-id", "gp"},
 			wantErr: "it must be POLICY_TYPE_CERTIFY", wantLookups: 1},
 		{name: "create right type", args: []string{"apps", "create", "--display-name", "a", "--grant-policy-id", "gp"},
 			wantLookups: 1, wantPosts: 1},
 		{name: "create dry run refuses like a real run", args: []string{"apps", "create", "--display-name", "a", "--grant-policy-id", "nope"}, dryRun: true,
-			wantErr: `--grant-policy-id "nope": no such policy`, wantLookups: 1},
+			wantErr: `--grant-policy-id "nope": no such policy`, wantExit: exitNotFound, wantLookups: 1},
 		{name: "create dry run looks up and sends nothing", args: []string{"apps", "create", "--display-name", "a", "--grant-policy-id", "gp"}, dryRun: true, wantLookups: 1},
 	}
 	for _, tc := range cases {

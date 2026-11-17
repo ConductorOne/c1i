@@ -43,9 +43,8 @@ var tasksReassignCmd = &cobra.Command{
 	Long: `Reassign a task's approval step to one or more other users.
 
 --to-user-id sets the step's approvers to the users named; repeat it to
-assign several. Before sending, each id is looked up: an unknown user exits 2
-and no action is sent, because the API would store it as the step's approver.
-A --dry-run preview looks them up too. A repeated id is sent once. If a step already names a bad approver,
+assign several. The API would store an unknown id as the step's approver. A
+repeated id is sent once. If a step already names a bad approver,
 re-run "tasks reassign" with valid ids; a system owner can also "tasks reset"
 or "tasks restart" where the task offers them.
 
@@ -72,5 +71,6 @@ func init() {
 	allowEmpty(tasksReassignCmd, emptyIsOmitted, "comment")
 	markRequired(tasksReassignCmd, "to-user-id")
 	markMutating(tasksReassignCmd)
+	markUserRefChecked(tasksReassignCmd, "to-user-id")
 	tasksCmd.AddCommand(tasksReassignCmd)
 }

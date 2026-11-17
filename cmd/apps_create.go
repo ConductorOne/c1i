@@ -21,8 +21,9 @@ the whole list -- including you.
 --grant-policy-id, --revoke-policy-id and --certify-policy-id bind policies
 at creation. Omitted, the server assigns its default grant and revoke
 policies and no certify policy. As with "apps update", c1i first checks
-each id exists and has the flag's type (exit 2 otherwise, nothing sent);
---dry-run does the check too. An empty policy id is a usage error.
+each id exists and has the flag's type (exit 4 if it does not exist, 2 if
+deleted or of the wrong type; nothing sent); --dry-run does the check too. An
+empty policy id is a usage error.
 --identity-matching takes the same values as on "apps update".
 
 Prints the created app as pretty JSON, unwrapped like "apps get": the id is

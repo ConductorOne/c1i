@@ -249,8 +249,8 @@ func TestAppsMutationPreReads(t *testing.T) {
 	})
 	t.Setenv("C1I_URL", mutTestURL)
 	r := runMutationCLI(t, s.srv, 0, nil, "apps", "set-owners", "app-1", "--user-id", "ghost", "--error-format", "json")
-	if r.exit != exitUsage || r.errorObject(t)["applied"] != false {
-		t.Errorf("exit %d stderr %s, want 2 and applied:false", r.exit, r.stderr)
+	if r.exit != exitNotFound || r.errorObject(t)["applied"] != false {
+		t.Errorf("exit %d stderr %s, want 4 and applied:false", r.exit, r.stderr)
 	}
 	if got := s.requests(); len(got) != 1 || got[0].method != http.MethodGet {
 		t.Errorf("requests = %+v, want only the user lookup", got)

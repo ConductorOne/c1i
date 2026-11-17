@@ -85,7 +85,12 @@ requires --app-id. Approve discovered tools afterward with
 		}
 
 		path := client.Path("/api/v1/apps/%s/mcp_servers", appID)
-		return sendMutation(cmd, mutation{Method: http.MethodPost, Path: path, Body: body, Unwrap: byID("connectorId")})
+		// buildRegisterBody already validated the flag, so the error is nil.
+		var opts []mutationOpt
+		if owners, _ := repeatableStringFlag(cmd, "user-id"); len(owners) > 0 {
+			opts = append(opts, withPreRead(existingUsersCheck("user-id", owners)))
+		}
+		return sendMutation(cmd, mutation{Method: http.MethodPost, Path: path, Body: body, Unwrap: byID("connectorId")}, opts...)
 	},
 }
 
@@ -179,5 +184,6 @@ func init() {
 	// without --app-id/--type/--display-name; RunE enforces them otherwise.
 	annotateRequired(mcpServersRegisterCmd, "app-id", "type", "display-name")
 	markMutating(mcpServersRegisterCmd)
+	markUserRefChecked(mcpServersRegisterCmd, "user-id")
 	mcpServersCmd.AddCommand(mcpServersRegisterCmd)
 }

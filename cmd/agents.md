@@ -315,9 +315,9 @@ APP_ID=$(c1i apps create --display-name "Example" | jq -er .id)
 |---|---|---|
 | 0 | success | — |
 | 1 | generic / unclassified error | inspect the message; on a write, read `applied` (a `--wait` timeout or failed stdout write is `true`) before retrying |
-| 2 | usage error (bad flags/args, an empty, `.` or `..` id, a blank flag or positional, a control character in a path flag (`-o/--output`, `--out-dir`, `--*-file`) an invalid header name or a control character in a header value (`api --header`, MCP `--header-name`/`--header-value`/`--bearer-token`, and those fields plus `awsSigv4` `accessKeyId`/`sessionToken` in a `--*-config-file`, either JSON spelling), a control character in a `--config-field` key, a missing, malformed, `null` or wrong-shape `--*-file` input, a non-object element in an array `--*-file` or `--body-file`, a refused redirect (but `upgrade` and the `docs` commands exit `8`), or any API `4xx` other than `401`/`403`/`404`/`408`/`429`/`499`) | fix the invocation, don't retry as-is — but read the message first: an API `4xx` can also be a state rejection (e.g. `task is closed`) rather than a bad argument |
+| 2 | usage error (bad flags/args, an empty, `.` or `..` id, a blank flag or positional, a control character in a path flag (`-o/--output`, `--out-dir`, `--*-file`) an invalid header name or a control character in a header value (`api --header`, MCP `--header-name`/`--header-value`/`--bearer-token`, and those fields plus `awsSigv4` `accessKeyId`/`sessionToken` in a `--*-config-file`, either JSON spelling), a control character in a `--config-field` key, a missing, malformed, `null` or wrong-shape `--*-file` input, a non-object element in an array `--*-file` or `--body-file`, a referenced id that exists but is soft-deleted or of the wrong kind (a deleted or wrong-type policy), a refused redirect (but `upgrade` and the `docs` commands exit `8`), or any API `4xx` other than `401`/`403`/`404`/`408`/`429`/`499`) | fix the invocation, don't retry as-is — but read the message first: an API `4xx` can also be a state rejection (e.g. `task is closed`) rather than a bad argument |
 | 3 | not authenticated, or API `401`/`403` (including a `400`/`401`/`403` from the token endpoint; any other token-endpoint failure exits like an API response: `404` 4, `429` 5, `5xx` or a `200` that is not a token 6) | re-authenticate (`c1i auth login`); a scoped credential needs a role that covers the call |
-| 4 | API `404` | stop — the resource/path doesn't exist |
+| 4 | API `404`, or a referenced id that does not exist, whether the server or a c1i pre-check catches it | stop — the resource/path doesn't exist |
 | 5 | API `429` | back off and retry |
 | 6 | C1 failed: API `5xx`, a `200` with a body that isn't JSON or a usable token, a redirect chain that never settles, a stuck pagination cursor, or a list page in a shape the command doesn't recognize | retryable, except a stuck cursor or unrecognized page, which persists: the printed rows (if any) are real but incomplete. On a write, a `5xx` is `applied: "unknown"` (but `false` when the failure is at the token endpoint and nothing was sent yet) and a non-JSON `200` is `applied: true`: re-read before re-sending |
 | 7 | `mcp gateway call` succeeded but the tool reported `isError: true` | inspect the printed result, not just the code |
@@ -503,7 +503,7 @@ resource with `--resource-id` likewise means you drop
   must converge before the next step; it waits until the owner set equals
   the request, removals included. `apps set-owners` prints the API's JSON
   response, `{}` (progress on stderr; a wait failure is `"applied": true`), and
-  exits 2 before the write on an unknown
+  exits 4 before the write on an unknown
   user, which the API would store as an owner no user matches. Entitlement
   owners work the same way:
   read with `c1i entitlements owners <entitlement-id> --app-id <app-id>`,
@@ -511,7 +511,7 @@ resource with `--resource-id` likewise means you drop
   --app-id --user-id` (one user per call; a repeated `--user-id` exits 2, as on
   `apps add-owner|remove-owner` and `accounts set-owner`) or `entitlements set-owners <entitlement-id> --app-id
   --user-id ...`. `set-owners` replaces the list and needs at least one
-  `--user-id`; an unknown user exits 2 before the write, because the API
+  `--user-id`; an unknown user exits 4 before the write, because the API
   would silently drop it and could leave no owners. `remove-owner` exits 4
   both for an unknown user and for one who was never an owner. Pass `--wait`
   on `add-owner` (waits until the owner appears) or `set-owners` (waits until
@@ -524,7 +524,8 @@ resource with `--resource-id` likewise means you drop
 - `apps update`/`apps create` `--grant-policy-id`, `--revoke-policy-id` and
   `--certify-policy-id` are checked by c1i (exists, not deleted, right
   `policyType`) because the API itself stores any id with exit `0`; raw `api`
-  calls get no such check. An empty id is exit `2`; unbind with
+  calls get no such check. An unknown policy is exit `4`; a deleted or
+  wrong-type one is `2`. An empty id is exit `2`; unbind with
   `--unbind-policy <kind>`. An app user mapper set with
   `apps update --app-user-mapper-file` can be replaced but not removed.
 - `--unbind-policy grant` (or `revoke`) leaves the app with no grant (or
@@ -577,7 +578,7 @@ resource with `--resource-id` likewise means you drop
   through `api`, read the task back rather than trusting the response's
   `state`. The same holds for `restart`, `reset`, `skip-step`, `process` and
   `update-grant-duration`. `reassign` looks up each `--to-user-id` before
-  sending: an unknown user exits 2, because the API stores it as the step's
+  sending: an unknown user exits 4, because the API stores it as the step's
   approver (`--dry-run` looks them up too, so a preview refuses what a real run
   does). A repeated id is sent once. Recover a step that already names a bad
   approver by re-running `reassign` with valid ids; a system owner can also
@@ -605,6 +606,15 @@ resource with `--resource-id` likewise means you drop
 - `requests create grant --duration` likewise takes `24h` or `86400s`; the
   server refuses `0s` with `value must be greater than 0s`. The value lands at
   that same `.type.grant.grantDuration` path.
+- A user id on a write is looked up before anything is sent, so an unknown one
+  exits 4 with no write (`--dry-run` refuses it too; the lookup needs user
+  read, else exit 3): `accounts set-owner`, `apps add-owner|set-owners`,
+  `entitlements add-owner|set-owners|create --owner-id`, `requests create grant|revoke
+  --user-id`, `mcp servers register --user-id`, `tasks reassign --to-user-id`.
+  `remove-owner` never pre-checks (the server decides; a `--dry-run` preview
+  can pass an id the real run 404s). Only flag values are checked: user ids
+  inside a `--*-file`/`--body-file`, or sent via `api`, go as-is. A filter (`grants list`/`requests list
+  --user-id`) is not checked: an unknown one returns no rows.
 - Entitlement ids are unique only within an app — some system-builtin
   entitlements reuse the same id across every app that has one. Always key
   on `(app_id, id)` together, never `id` alone.

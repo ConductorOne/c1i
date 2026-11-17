@@ -3,7 +3,6 @@ package cmd
 import (
 	"bytes"
 	"context"
-	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -312,13 +311,12 @@ func TestEntitlementOwnersWaitTimesOut(t *testing.T) {
 // leave the entitlement with no owners, so set-owners looks each distinct id
 // up first.
 func TestEntitlementsSetOwnersChecksUsersExist(t *testing.T) {
-	t.Run("unknown user is exit 2 naming it, and no PUT is sent", func(t *testing.T) {
+	t.Run("unknown user is exit 4 naming it, and no PUT is sent", func(t *testing.T) {
 		_, seen := entOwnerServerUsers(t, []string{`{"userIds":[]}`}, map[string]int{"ghost": http.StatusNotFound})
 		_, _, err := runEntOwnerCmd(t, entitlementsSetOwnersCmd,
 			map[string][]string{"app-id": {"app1"}, "user-id": {"u1", "ghost"}}, "ent1")
-		var ue *usageError
-		if !errors.As(err, &ue) {
-			t.Fatalf("error = %v, want a *usageError (exit 2)", err)
+		if exitCode(err) != exitNotFound {
+			t.Fatalf("error = %v, want exit 4", err)
 		}
 		if !strings.Contains(err.Error(), `"ghost"`) {
 			t.Errorf("error %q does not name the unknown id", err)
@@ -358,9 +356,8 @@ func TestEntitlementsSetOwnersChecksUsersExist(t *testing.T) {
 		_, seen := entOwnerServerUsers(t, []string{`{"userIds":[]}`}, map[string]int{"ghost": http.StatusNotFound})
 		_, _, err := runEntOwnerCmd(t, entitlementsSetOwnersCmd,
 			map[string][]string{"app-id": {"app1"}, "user-id": {"ghost"}}, "ent1")
-		var ue *usageError
-		if !errors.As(err, &ue) || !strings.Contains(err.Error(), `"ghost"`) {
-			t.Fatalf("error = %v, want a *usageError naming ghost", err)
+		if exitCode(err) != exitNotFound || !strings.Contains(err.Error(), `"ghost"`) {
+			t.Fatalf("error = %v, want exit 4 naming ghost", err)
 		}
 		if w := withoutUserLookups(seen()); len(w) != 0 {
 			t.Errorf("dry-run sent %+v", w)

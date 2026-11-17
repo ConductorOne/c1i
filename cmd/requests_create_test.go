@@ -222,6 +222,10 @@ func TestRequestsCreateGrantDurationConvertsGoForm(t *testing.T) {
 // client-side, so the preview carries it as the real call would.
 func TestRequestsCreateGrantDryRunPreviewsZeroDuration(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet && r.URL.Path == "/api/v1/users/zz-user" {
+			_, _ = fmt.Fprint(w, `{"user":{"id":"u"}}`)
+			return
+		}
 		t.Errorf("unexpected request under --dry-run: %s %s", r.Method, r.URL.Path)
 	}))
 	defer srv.Close()
@@ -259,6 +263,8 @@ func TestRequestsCreateGrantExplicitUserIDSkipsSelfResolution(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/api/v1/users/"+explicitUserID:
+			_, _ = fmt.Fprint(w, `{"user":{"id":"u"}}`)
 		case r.Method == http.MethodGet && r.URL.Path == "/api/v1/auth/introspect":
 			gotIntrospect = true
 			_, _ = fmt.Fprint(w, `{"userId":"should-not-be-used"}`)
@@ -371,6 +377,8 @@ func TestRequestsCreateGrantDryRunExplicitUserIDSkipsSelfResolution(t *testing.T
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/api/v1/users/"+explicitUserID:
+			_, _ = fmt.Fprint(w, `{"user":{"id":"u"}}`)
 		case r.Method == http.MethodGet && r.URL.Path == "/api/v1/auth/introspect":
 			gotIntrospect = true
 			_, _ = fmt.Fprint(w, `{"userId":"should-not-be-used"}`)
@@ -686,6 +694,8 @@ func TestRequestsCreateRevokeExplicitUserIDSkipsSelfResolution(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/api/v1/users/"+explicitUserID:
+			_, _ = fmt.Fprint(w, `{"user":{"id":"u"}}`)
 		case r.Method == http.MethodGet && r.URL.Path == "/api/v1/auth/introspect":
 			gotIntrospect = true
 			_, _ = fmt.Fprint(w, `{"userId":"should-not-be-used"}`)
@@ -789,6 +799,8 @@ func TestRequestsCreateRevokeDryRunExplicitUserIDSkipsSelfResolution(t *testing.
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/api/v1/users/"+explicitUserID:
+			_, _ = fmt.Fprint(w, `{"user":{"id":"u"}}`)
 		case r.Method == http.MethodGet && r.URL.Path == "/api/v1/auth/introspect":
 			gotIntrospect = true
 			_, _ = fmt.Fprint(w, `{"userId":"should-not-be-used"}`)

@@ -8,6 +8,27 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Upgrading from 0.10.1
 
+**An unknown referenced id now exits `4`, not `2`.** These commands already
+looked the id up before sending and exited `2` on a miss; they now exit `4`
+(nothing sent, `--dry-run` included): `apps set-owners`, `entitlements
+set-owners`, `entitlements create --owner-id`, `tasks reassign --to-user-id`,
+and the `--grant-policy-id`, `--revoke-policy-id`, `--certify-policy-id` and
+`--emergency-grant-policy-id` checks on `apps create|update` and `entitlements
+create|update`. A policy that exists but is deleted or of the wrong type is
+still `2`.
+
+Newly checked: `accounts set-owner`, `apps add-owner`, `entitlements add-owner`,
+`requests create grant|revoke` (an explicit `--user-id`) and `mcp servers
+register --user-id`. Previously an unknown user reached the server and the
+result was the server's (`apps`/`entitlements add-owner`: 404, exit `4`); now it
+exits `4` before sending, and `--dry-run` (which used to exit `0`) refuses it
+the same way. Each now needs user read, previews included (else exit `3`). A
+user's status is not checked, only that the id resolves; a lookup answered 200
+with a non-JSON body exits `6`. `remove-owner` never
+pre-checks: the server decides, so a preview can pass an id the real run 404s.
+Only flag values are checked; ids inside a `--body-file`/`--*-file`, or sent via
+`api`, go as-is.
+
 A list row's string field that is absent in the API response is now `null`
 instead of `""` on every list and search row c1i builds, so `jq 'select(.field)'`
 no longer matches every row. Use `select(.field != null)`, or `.field // empty`;
@@ -102,6 +123,11 @@ on 5 and 6.
   pagination contract or is overridden: a `pageToken`/`pageSize` in the file of
   the findings and role-mining search commands, and a positional id key whose
   value differs from the positional, are refused (see Upgrading).
+- A user id on a write is now checked before it is sent: `accounts set-owner`,
+  `apps add-owner`, `entitlements add-owner` (its `--dry-run` previewed an
+  unknown user), `requests create grant|revoke --user-id` and `mcp servers
+  register --user-id` no longer pass an unknown id to the API. A test fails on
+  any new user-id flag that is neither checked nor exempted with a reason.
 
 - `--help` now marks "(required)" on `--body-file`, `--refs-file` and
   `--entitlement-id` of every command that demands them at run time, such as

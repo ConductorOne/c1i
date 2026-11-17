@@ -16,7 +16,7 @@ Unlike "entitlements set-owners", which replaces the whole list with exactly
 the ids you pass, this adds one owner without touching the rest of the list.
 Adding a user who is already an owner exits 0.
 
-An unknown user, entitlement or app exits 4.
+An unknown entitlement or app exits 4.
 
 ` + ownerAsyncWaitNote + `
 Verify with "c1i entitlements owners <entitlement-id> --app-id <app-id>".
@@ -41,6 +41,7 @@ One owner per call; to change several at once use "entitlements set-owners".`,
 
 		path := client.Path("/api/v1/apps/%s/entitlements/%s/owners", appID, entitlementID)
 		return sendMutation(cmd, mutation{Method: http.MethodPost, Path: path, Body: map[string]any{"userId": userID}},
+			withPreRead(existingUsersCheck("user-id", []string{userID})),
 			withWait(func(c *client.Client) waitOp[[]string] {
 				return entitlementOwnersWaitOp(c, appID, entitlementID, untilPresent([]string{userID}), waitTimeout)
 			}, wait))
@@ -54,5 +55,6 @@ func init() {
 	markRequired(entitlementsAddOwnerCmd, "app-id", "user-id")
 	addWaitFlags(entitlementsAddOwnerCmd, "GET .../ownerids until the owner appears", 4*time.Minute)
 	markMutating(entitlementsAddOwnerCmd)
+	markUserRefChecked(entitlementsAddOwnerCmd, "user-id")
 	entitlementsCmd.AddCommand(entitlementsAddOwnerCmd)
 }

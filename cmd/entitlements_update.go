@@ -23,9 +23,9 @@ it, with the mask derived from exactly the flags you pass. An omitted flag is
 left alone.
 
 Policies: each --<kind>-policy-id is checked before anything is sent. It must
-name an existing, undeleted policy of the slot's type, or the command exits 2.
---emergency-grant-policy-id takes a grant policy. The server enforces that only
-when the same call enables emergency grants, and otherwise stores any id, so
+name an existing, undeleted policy of the slot's type, or the command exits 4
+(an unknown id) or 2 (a deleted or wrong-type one). --emergency-grant-policy-id
+takes a grant policy. The server enforces that only when the same call enables emergency grants, and otherwise stores any id, so
 this command checks it on every bind. Unbind a slot with the repeatable
 --unbind-policy grant|revoke|certify|emergency-grant; an empty policy id is a
 usage error, so an unset shell variable cannot unbind one. --dry-run does the

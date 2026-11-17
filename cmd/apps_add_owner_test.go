@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 
@@ -37,6 +39,15 @@ func TestAppsAddOwnerRequiresUserID(t *testing.T) {
 func TestAppsAddOwnerDryRunPreviewsRequestWithoutSending(t *testing.T) {
 	resetCmdFlags(t, appsAddOwnerCmd)
 	t.Setenv("C1I_URL", "https://example.invalid")
+	// The preview looks the user up (a read), so the stub must answer it.
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet || r.URL.Path != "/api/v1/users/user1" {
+			t.Errorf("unexpected request under --dry-run: %s %s", r.Method, r.URL.Path)
+		}
+		_, _ = w.Write([]byte(`{"user":{"id":"user1"}}`))
+	}))
+	defer srv.Close()
+	stubNewGrantClient(t, srv)
 
 	orig := viper.GetBool("dry_run")
 	viper.Set("dry_run", true)

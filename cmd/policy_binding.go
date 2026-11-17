@@ -159,7 +159,7 @@ func fetchBoundPolicyType(ctx context.Context, c *client.Client, flag, id string
 	if err != nil {
 		var apiErr *client.APIError
 		if errors.As(err, &apiErr) && apiErr.StatusCode == http.StatusNotFound {
-			return "", &usageError{fmt.Errorf("--%s %q: no such policy", flag, id)}
+			return "", refNotFound(flag, id, "policy", apiErr)
 		}
 		return "", fmt.Errorf("checking --%s %q: %w", flag, id, err)
 	}

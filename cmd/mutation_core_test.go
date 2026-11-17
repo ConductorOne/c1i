@@ -146,8 +146,8 @@ func TestCoreEntitlementsUpdatePolicyCheck(t *testing.T) {
 	t.Setenv("C1I_URL", mutTestURL)
 	args := []string{"entitlements", "update", "e-1", "--app-id", "app-1", "--grant-policy-id", "ghost"}
 	r := runMutationCLI(t, s.srv, 0, nil, append(args, "--error-format", "json")...)
-	if r.exit != exitUsage || r.errorObject(t)["applied"] != false {
-		t.Errorf("exit %d stderr %s, want 2 and applied:false", r.exit, r.stderr)
+	if r.exit != exitNotFound || r.errorObject(t)["applied"] != false {
+		t.Errorf("exit %d stderr %s, want 4 and applied:false", r.exit, r.stderr)
 	}
 	for _, q := range s.requests() {
 		if q.method != http.MethodGet {
@@ -158,8 +158,8 @@ func TestCoreEntitlementsUpdatePolicyCheck(t *testing.T) {
 	withDryRun(t)
 	dry := newMutServer(t, func(*http.Request, int) mutReply { return mutReply{status: 404, body: `{"code":5}`} })
 	r = runMutationCLI(t, dry.srv, 0, nil, args...)
-	if r.exit != exitUsage || r.stdout != "" || len(dry.requests()) != 1 {
-		t.Errorf("dry run: exit %d stdout %q, %d requests, want exit 2, no preview, one lookup", r.exit, r.stdout, len(dry.requests()))
+	if r.exit != exitNotFound || r.stdout != "" || len(dry.requests()) != 1 {
+		t.Errorf("dry run: exit %d stdout %q, %d requests, want exit 4, no preview, one lookup", r.exit, r.stdout, len(dry.requests()))
 	}
 }
 

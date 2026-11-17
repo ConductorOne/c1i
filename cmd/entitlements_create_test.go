@@ -853,7 +853,7 @@ func ownerCreateServer(t *testing.T, userStatus int, userBody string) *mutServer
 
 // TestEntitlementCreateUnknownOwnerCreatesNothing pins the fix for the orphaned
 // resource type/resource: an unknown --owner-id used to fail at step 3 (exit
-// 6), after steps 1 and 2 had already created objects. It must exit 2 on the
+// 6), after steps 1 and 2 had already created objects. It must exit 4 on the
 // owner pre-read and send no create at all.
 func TestEntitlementCreateUnknownOwnerCreatesNothing(t *testing.T) {
 	s := ownerCreateServer(t, http.StatusNotFound, `{"code":5,"message":"not found"}`)
@@ -861,8 +861,8 @@ func TestEntitlementCreateUnknownOwnerCreatesNothing(t *testing.T) {
 	r := runMutationCLI(t, s.srv, 0, nil,
 		"entitlements", "create", "--app-id", "app-1", "--display-name", "e", "--owner-id", "u-missing")
 
-	if r.exit != exitUsage {
-		t.Fatalf("exit %d (%v), want %d", r.exit, r.err, exitUsage)
+	if r.exit != exitNotFound {
+		t.Fatalf("exit %d (%v), want %d", r.exit, r.err, exitNotFound)
 	}
 	if r.err == nil || !strings.Contains(r.err.Error(), `--owner-id "u-missing": no such user`) {
 		t.Errorf("err = %v, want it to name the unknown owner", r.err)

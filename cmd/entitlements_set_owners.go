@@ -42,5 +42,6 @@ func init() {
 	markRequired(entitlementsSetOwnersCmd, "app-id")
 	addSetOwnersFlags(entitlementsSetOwnersCmd)
 	markMutating(entitlementsSetOwnersCmd)
+	markUserRefChecked(entitlementsSetOwnersCmd, "user-id")
 	entitlementsCmd.AddCommand(entitlementsSetOwnersCmd)
 }
