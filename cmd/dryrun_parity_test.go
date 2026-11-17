@@ -164,6 +164,13 @@ func TestDryRunParityBadIDs(t *testing.T) {
 						if r.stdout != "" {
 							t.Errorf("args %v: printed %q", args, r.stdout)
 						}
+						want := "argument"
+						if id.pos < 0 {
+							want = "--" + id.flag
+						}
+						if !strings.Contains(r.stderr, want) {
+							t.Errorf("stderr %q does not name %s", r.stderr, want)
+						}
 						if got := s.requests(); len(got) != 0 {
 							t.Errorf("args %v: requests sent: %v", args, got)
 						}
@@ -177,15 +184,57 @@ func TestDryRunParityBadIDs(t *testing.T) {
 	}
 }
 
-// TestDryRunParityUnknownID: with every id the invocation sets replaced by an
-// id that does not exist, a command with a pre-read exits 4 in both modes; one
-// without exits 4 on the write (real) and previews, sending nothing (dry-run).
+// TestDryRunParityUnknownID: every id the invocation sets, and then each id
+// flag it leaves unset (alone, or paired with another when alone is a usage
+// error), is replaced by an id that does not exist against a server that 404s
+// everything. If the real run failed on a pre-read (every request it sent was a
+// GET), --dry-run must fail identically and send no write; if it failed on the
+// write, --dry-run must exit 0, send nothing and print a preview. A base row
+// with `reads` metadata must classify the same way.
 func TestDryRunParityUnknownID(t *testing.T) {
 	t.Setenv("C1I_URL", mutTestURL)
 	missing := func(*http.Request, int) mutReply {
 		return mutReply{status: http.StatusNotFound, body: `{"code":5,"message":"not found"}`}
 	}
-	checked := 0
+	// check returns false when the invocation is not runnable as built (a usage
+	// error from a flag group), so the caller can try a different shape.
+	check := func(t *testing.T, args []string, wantRead *bool) bool {
+		t.Helper()
+		clearViperOverrides(t, "dry_run")
+		real := newMutServer(t, missing)
+		rr := runMutationCLI(t, real.srv, 0, nil, args...)
+		if rr.exit == exitUsage {
+			return false
+		}
+		if rr.exit != exitNotFound {
+			t.Errorf("%v: real run exit %d (%v), want %d", args, rr.exit, rr.err, exitNotFound)
+			return true
+		}
+		sent := real.requests()
+		preRead := len(sent) > 0 && len(nonGETRequests(real)) == 0
+		if wantRead != nil && preRead != *wantRead {
+			t.Errorf("%v: real run sent %+v; pre-read refusal = %v, table says %v", args, sent, preRead, *wantRead)
+		}
+		dry := newMutServer(t, missing)
+		dr := runMutationCLI(t, dry.srv, 0, nil, append(slices.Clone(args), "--dry-run")...)
+		if w := nonGETRequests(dry); len(w) != 0 {
+			t.Errorf("%v: dry run sent %+v", args, w)
+		}
+		if preRead {
+			if dr.exit != exitNotFound || dr.stdout != "" || dr.stderr != rr.stderr {
+				t.Errorf("%v: dry run exit %d stdout %q stderr %q, want exit %d, no preview, stderr %q", args, dr.exit, dr.stdout, dr.stderr, exitNotFound, rr.stderr)
+			}
+			return true
+		}
+		if dr.err != nil || !strings.Contains(dr.stdout, `"dryRun": true`) {
+			t.Errorf("%v: dry run exit %d (%v) stdout %q, want a preview", args, dr.exit, dr.err, dr.stdout)
+		}
+		if got := dry.requests(); len(got) != 0 {
+			t.Errorf("%v: dry run with no pre-read sent %+v", args, got)
+		}
+		return true
+	}
+	base, optional := 0, 0
 	for _, row := range mutationTable {
 		leaf, _, err := rootCmd.Find(strings.Fields(row.cmd))
 		if err != nil {
@@ -194,43 +243,40 @@ func TestDryRunParityUnknownID(t *testing.T) {
 		t.Run(row.cmd, func(t *testing.T) {
 			full := row.argv(t)
 			n := len(strings.Fields(row.cmd))
+			head := full[:n]
 			tail, set := rowIDArgsReplaced(t, leaf, full[n:], unknownID)
-			if set == 0 {
-				t.Skip("takes no id")
-			}
-			checked++
-			args := append(slices.Clone(full[:n]), tail...)
-
-			clearViperOverrides(t, "dry_run")
-			real := newMutServer(t, missing)
-			rr := runMutationCLI(t, real.srv, 0, nil, args...)
-			if rr.exit != exitNotFound {
-				t.Errorf("real run: exit %d (%v), want %d", rr.exit, rr.err, exitNotFound)
-			}
-			if w := nonGETRequests(real); row.reads > 0 && len(w) != 0 {
-				t.Errorf("real run wrote after a failed pre-read: %+v", w)
-			}
-
-			dry := newMutServer(t, missing)
-			dr := runMutationCLI(t, dry.srv, 0, nil, append(slices.Clone(args), "--dry-run")...)
-			if w := nonGETRequests(dry); len(w) != 0 {
-				t.Errorf("dry run sent %+v", w)
-			}
-			if row.reads > 0 {
-				if dr.exit != exitNotFound || dr.stdout != "" || dr.stderr != rr.stderr {
-					t.Errorf("dry run: exit %d stdout %q stderr %q, want exit %d, no preview, stderr %q", dr.exit, dr.stdout, dr.stderr, exitNotFound, rr.stderr)
+			if set > 0 {
+				wantRead := row.reads > 0
+				if !check(t, append(slices.Clone(head), tail...), &wantRead) {
+					t.Errorf("row invocation with unknown ids is a usage error")
 				}
-				return
+				base++
 			}
-			if dr.err != nil || !strings.Contains(dr.stdout, `"dryRun": true`) {
-				t.Errorf("dry run: exit %d (%v) stdout %q, want a preview", dr.exit, dr.err, dr.stdout)
+			// Id flags the row leaves unset: each alone, then all together.
+			original := full[n:]
+			var unset []idArg
+			for _, id := range mutatingIDArgs(leaf) {
+				if id.pos >= 0 || slices.ContainsFunc(original, func(a string) bool { return flagArgName(a) == id.flag }) {
+					continue
+				}
+				unset = append(unset, id)
 			}
-			if got := dry.requests(); len(got) != 0 {
-				t.Errorf("dry run with no pre-read sent %+v", got)
+			// A flag that is a usage error alone belongs to a group: try it
+			// with each other unset id flag, and check the pairs that run.
+			for i, id := range unset {
+				optional++
+				alone := withIDArg(t, tail, id, unknownID)
+				if check(t, append(slices.Clone(head), alone...), nil) {
+					continue
+				}
+				for _, other := range unset[i+1:] {
+					pair := withIDArg(t, alone, other, unknownID)
+					check(t, append(slices.Clone(head), pair...), nil)
+				}
 			}
 		})
 	}
-	if checked < 60 {
-		t.Fatalf("checked only %d commands", checked)
+	if base < 60 || optional < 30 {
+		t.Fatalf("checked %d base and %d optional-flag cases; the walk is not seeing the tree", base, optional)
 	}
 }

@@ -6,8 +6,6 @@ import (
 	"slices"
 	"strings"
 	"testing"
-
-	"github.com/spf13/pflag"
 )
 
 // dotIDExemptions names an id argument that legitimately takes "." with the
@@ -47,21 +45,9 @@ func idPositionalIndexes(use string) []int {
 // --dry-run. A new id argument is covered by its name alone.
 func TestEveryIDArgumentRefusesDotBeforeAnyRequest(t *testing.T) {
 	t.Setenv("C1I_URL", mutTestURL)
-	type target struct {
-		label, flag string
-		pos         int
-	}
 	checked := 0
 	for _, c := range blankCheckCommands() {
-		var targets []target
-		c.Flags().VisitAll(func(f *pflag.Flag) {
-			if hasTestIDSuffix(f.Name) && (f.Value.Type() == "string" || f.Value.Type() == "stringArray") {
-				targets = append(targets, target{label: "--" + f.Name, flag: f.Name, pos: -1})
-			}
-		})
-		for _, i := range idPositionalIndexes(c.Use) {
-			targets = append(targets, target{label: fmt.Sprintf("positional #%d", i), pos: i})
-		}
+		targets := mutatingIDArgs(c)
 		for _, tg := range targets {
 			for _, v := range []string{".", "..", " .. "} {
 				for _, dry := range []bool{false, true} {
