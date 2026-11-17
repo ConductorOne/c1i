@@ -567,6 +567,8 @@ always exit `4`:
   `access-profiles get` still returns it with `deletedAt` populated.
 - `webhooks delete`: the webhook leaves `webhooks list`, but `webhooks get`
   still returns it at exit `0` with `deletedAt` set.
+- `attribute-mappings delete`: reflected immediately. `attribute-mappings get`
+  exits `4` and the list omits it; deleting again exits `0`.
 - `service-principals delete`: reflected immediately. `service-principals get`
   exits `4` and the lists omit it; `users get <sp-id>` shows
   `"status": "DELETED"` and `deletedAt`.
@@ -1818,6 +1820,72 @@ c1i service-principals bindings delete --service-principal-id <sp-id> --function
 
 `bindings list` is by subject — it returns the principals a subject is bound to.
 `add` and `delete` are idempotent.
+
+### User attribute mappings
+
+A mapping copies a value from an app's synced users into a structured C1.ai
+user field: employment type, department, job title, manager and so on. Without
+one, those fields stay empty however rich the app's profile data is.
+
+```sh
+c1i attribute-types list [--limit <n>]
+c1i attribute-mappings list [--app-id <app-id>] [--page-size <n>] [--page-token <token>] [--limit <n>]
+c1i attribute-mappings get <mapping-id>
+c1i attribute-mappings create --app-id <app-id> --type <name-or-id> [--key <profile-key>] [--custom-key <attribute>] [--fallbacks-file <file>] [--profile-type-id <id>]... | --body-file <file>
+c1i attribute-mappings update <mapping-id> [--key <profile-key>] [--custom-key <attribute>] [--fallbacks-file <file>]
+c1i attribute-mappings delete <mapping-id>
+```
+
+`attribute-types list` rows are `id`, `display_name` and `config_kind`, which
+decides what `create` needs: `app_user_profile` (Department, Job Title,
+Employment Type, ...) needs `--key`, the profile key to read; `app` (Manager
+Email, Directory Status) reads the app itself and takes no `--key`;
+`custom_app_user_profile` (Custom) needs `--key` and `--custom-key`, the custom
+user attribute that receives the value. `create` looks `--type` up by display
+name or id (type ids are specific to a tenant), picks the request body from the
+config kind, and refuses a wrong `--key` (exit `2`, where the server answers
+`500`) or an unknown type (exit `4`) before sending anything; `--dry-run`
+makes the same lookup. `create` prints the mapping unwrapped: `jq -er .id`.
+Rows of `attribute-mappings list` are `id`, `app_id`, `key` (null for an `app`
+type), `display_name`, `attribute_type_id`, `attribute_type_name`,
+`config_kind`, `priority`, `count` and `evaluation_error_count`; `--app-id`
+filters after each page, so every page is still read.
+
+```sh
+c1i attribute-mappings create --app-id "$APP" --type "Employment Type" --key employment_type
+c1i attribute-mappings create --app-id "$APP" --type "Manager Email"
+```
+
+Traps:
+
+- Values are copied verbatim: a CSV `Full-Time` becomes `employmentType:
+  "Full-Time"`, so a CEL comparison against a lowercase literal never matches.
+- Evaluation is asynchronous and nothing signals completion. In the runs
+  measured, users carried the value, and a changed `--key` showed on them,
+  within a minute; re-read the user rather than trusting the command's exit
+  code. The mapping's `count` stayed `0` throughout, so it is no readiness
+  check.
+- A second `create` for the same app and type is not refused: it makes a second
+  mapping with its own id. List before creating in a script.
+- An unknown `--app-id` exits `4` on a real run only: `--dry-run` looks up the
+  type, not the app.
+- The server sets `display_name` (the type's name, or `--custom-key`, as seen
+  in one live run); there is no flag for it.
+- `update` can change `--key`, `--custom-key` and `--fallbacks-file`, not the
+  type or the app. The server's PUT replaces the whole mapping and ignores
+  `updateMask`, so c1i reads the mapping first and sends back its current
+  attribute type, fallbacks and profile types with only your flags changed
+  (`--dry-run` reads too), so an edit made between the read and the write is
+  overwritten. `--fallbacks-file '[]'` clears the fallbacks.
+- `--profile-type-id` binds profile types; the server refuses it on a built-in
+  type (`builtin attributes cannot be bound to profile types`). Profile types
+  have no create command here.
+- Precedence when two apps map the same attribute type was not tested. Do not
+  map a type that another app already maps on users that overlap.
+
+`delete` removes the mapping: `get` then exits `4` and the lists omit it;
+deleting again exits `0`. `--body-file` sends a full request verbatim, mutually
+exclusive with the flags.
 
 ### Webhooks
 

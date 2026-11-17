@@ -30,6 +30,7 @@ func fixedListCommands(t *testing.T) map[string]*cobra.Command {
 		"role-mining suggestions list":       roleMiningSuggestionsListCmd,
 		"role-mining runs list":              roleMiningRunsListCmd,
 		"role-mining custom-analysis list":   roleMiningCustomAnalysisListCmd,
+		"attribute-types list":               attributeTypesListCmd,
 		"findings routing-rules list":        sub(findingsRoutingRulesCmd, "list"),
 		"findings transformation-rules list": sub(findingsTransformationRulesCmd, "list"),
 	}

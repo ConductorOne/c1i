@@ -240,6 +240,14 @@ func listPaginationCases() []listPaginationCase {
 			rowIDs:   idRows("id"),
 		},
 		{
+			name:     "attribute-mappings list",
+			cmd:      attributeMappingsListCmd,
+			method:   http.MethodGet,
+			wantPath: "/api/v1/user-attribute-mappings",
+			page:     nestedPage("list", "userAttributeMapping", "id"),
+			rowIDs:   idRows("id"),
+		},
+		{
 			name:     "apps list",
 			cmd:      appsListCmd,
 			method:   http.MethodGet,

@@ -51,6 +51,8 @@ const (
 	tblSPDoc      = `{"id":"sp-1","displayName":"zz"}`
 	tblWebhook    = `{"webhook":{"id":"wh-1","displayName":"zz"}}`
 	tblWebhookDoc = `{"id":"wh-1","displayName":"zz"}`
+	tblMapping    = `{"attribute":{"userAttributeMapping":{"id":"map-1","appId":"app-1","attributeType":{"id":"ty-1","displayName":"Department"}},"appPath":"a","fallbacksPath":"f"},"expanded":[]}`
+	tblMappingDoc = `{"id":"map-1","appId":"app-1","attributeType":{"id":"ty-1","displayName":"Department"},"expanded":[],"appPath":"a","fallbacksPath":"f"}`
 	tblStep       = "Resolved policy step: step-9\n"
 )
 
@@ -127,6 +129,12 @@ var mutationTable = []mutationRow{
 	{cmd: "apps managed-state promote", args: []string{"res-1", "--app-id", "app-1", "--resource-type-id", "rt-1"},
 		body: tblBinding, want: tblBindingDoc, ids: []string{".resourceId", ".state.managed.appId"}, method: "POST",
 		path: "/api/v1/apps/app-1/resource_types/rt-1/managed_state_bindings/res-1/promote", reads: 1},
+	// attribute-mappings
+	{cmd: "attribute-mappings create", args: []string{"--app-id", "app-1", "--type", "Department", "--key", "department"},
+		body: tblMapping, want: tblMappingDoc, ids: idPath, method: "POST", path: "/api/v1/user-attribute-mappings", reads: 1},
+	{cmd: "attribute-mappings update", args: []string{"map-1", "--key", "dept"},
+		body: tblMapping, want: tblMappingDoc, ids: idPath, method: "PUT", path: "/api/v1/user-attribute-mappings/map-1", reads: 1},
+	{cmd: "attribute-mappings delete", args: []string{"map-1"}, body: `{}`, method: "DELETE", path: "/api/v1/user-attribute-mappings/map-1"},
 	// automations
 	{cmd: "automations update", args: []string{"a-1", "--enabled=false"},
 		body: `{"automation":{"id":"a-1","enabled":false},"webhookCapabilityUrl":"","webhookHmacSecret":""}`,
@@ -232,7 +240,9 @@ var mutationTable = []mutationRow{
 
 // tblGet answers every pre-send read: the policy-step, user, catalog-id and
 // self lookups.
-const tblGet = `{"taskView":{"task":{"id":"task-1","policy":{"current":{"id":"step-9"}}}},"user":{"id":"u1"},"userId":"self-1"}`
+const tblGet = `{"taskView":{"task":{"id":"task-1","policy":{"current":{"id":"step-9"}}}},"user":{"id":"u1"},"userId":"self-1",` +
+	`"list":[{"id":"ty-1","displayName":"Department","appUserProfile":{}}],` +
+	`"attribute":{"userAttributeMapping":{"id":"map-1","attributeType":{"id":"ty-1","displayName":"Department","appUserProfile":{"appId":"app-1","appUserProfileAttributeKey":"department"}}}}}`
 
 func tableRoute(body string) func(*http.Request, int) mutReply {
 	return func(r *http.Request, _ int) mutReply {

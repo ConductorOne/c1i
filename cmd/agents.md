@@ -735,6 +735,19 @@ resource with `--resource-id` likewise means you drop
   `720h`: anything else exits `2` before sending, and over `720h` update returns
   `callback_timeout must be between 0 and 30 days`. A webhook has no
   signing secret.
+- `attribute-mappings` map an app's profile keys onto C1.ai user fields (run
+  `attribute-types list` first; type ids differ per tenant, so pass `--type`
+  by display name). `create` takes `--key` for `app_user_profile` types, none
+  for `app` types (Manager Email), and `--key` plus `--custom-key` for Custom;
+  a wrong one exits `2` before anything is sent, an unknown `--type` exits `4`,
+  and `--dry-run` makes the same type lookup. It prints the mapping unwrapped
+  (`jq -er .id`). Values are copied verbatim, evaluation is asynchronous with no
+  completion signal (re-read the user; `count` is not a readiness check), and a
+  second create for the same app and type makes a second mapping. The server's
+  PUT ignores `updateMask` and replaces fallbacks and profile types it is not
+  sent, so `update` reads the mapping and re-sends them. `delete` is hard
+  (`get` exits `4`). Precedence across apps mapping the same type was not
+  tested.
 - `apps delete <app-id>` is soft: the app is marked with `deletedAt`
   (`apps get` shows it), and `apps list` omits deleted apps.
 - `entitlements delete <entitlement-id>` is soft: `entitlements get` still

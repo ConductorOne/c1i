@@ -275,6 +275,15 @@ func getUnwrapCases() []getUnwrapCase {
 			wantKeys:    []string{"id", "displayName", "deletedAt"},
 		},
 		{
+			name:        "attribute-mappings get",
+			cmd:         attributeMappingsGetCmd,
+			args:        []string{"map-1"},
+			idKey:       "id",
+			body:        `{"attribute":{"userAttributeMapping":{"id":"map-1","appId":"app-1","attributeType":{"id":"ty-1","displayName":"Department"}},"appPath":"","fallbacksPath":""},"expanded":[]}`,
+			payloadPath: []string{"attribute", "userAttributeMapping"},
+			wantKeys:    []string{"id", "appId", "attributeType", "expanded", "appPath", "fallbacksPath"},
+		},
+		{
 			name:        "access-profiles bundle-automation get",
 			cmd:         accessProfilesBundleAutomationGetCmd,
 			args:        []string{"cat-1"},
