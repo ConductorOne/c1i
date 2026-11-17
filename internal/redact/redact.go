@@ -90,7 +90,8 @@ func isSecretField(k string) bool {
 // PAT as in `https://<token>@host` or `https://<token>:x-oauth-basic@host`;
 // the conventional non-secret "git" user is kept) and the value of every
 // secret-named query, fragment or `;` parameter, encoded values included (a
-// secret inside a percent-encoded nested URL), leaving the rest as sent. A
+// secret inside a percent-encoded nested URL) and pairs after an encoded "?"
+// or "#" in a path segment (see maskEncodedQueries), leaving the rest as sent. A
 // string that does not parse as a URL with a host goes through urlText instead,
 // so a malformed or scheme-less one fails closed.
 func URL(s string) string {
@@ -196,6 +197,7 @@ func maskPairsDepth(s string, depth int) string {
 		// Keep the separator as sent; only the value is replaced.
 		return m[:sepLen+sepEnd] + Placeholder
 	})
+	head = maskEncodedQueries(head)
 	if tail == "" {
 		return head
 	}
@@ -219,6 +221,66 @@ func maskPairsDepth(s string, depth int) string {
 		pieces[i] = maskSemi(p)
 	}
 	return head + tail[:1] + strings.Join(pieces, "&")
+}
+
+// maskEncodedQueries masks secret pairs after an encoded "?" or "#" inside a
+// path segment: an id "x?token=s" is sent as "x%3Ftoken=s". Pairs end at "&",
+// ";", "/" or an encoded "&", "?", "#" or ";". One level of encoding only.
+func maskEncodedQueries(head string) string {
+	if !strings.Contains(head, "%") {
+		return head
+	}
+	segs := strings.Split(head, "/")
+	for i, seg := range segs {
+		start := -1
+		for j := 0; j+2 < len(seg); j++ {
+			if seg[j] == '%' && (strings.EqualFold(seg[j+1:j+3], "3F") || seg[j+1:j+3] == "23") {
+				start = j
+				break
+			}
+		}
+		if start < 0 {
+			continue
+		}
+		var b strings.Builder
+		b.WriteString(seg[:start])
+		for rest := seg[start:]; rest != ""; {
+			if n := pairDelim(rest); n > 0 {
+				b.WriteString(rest[:n])
+				rest = rest[n:]
+				continue
+			}
+			end := 1
+			for end < len(rest) && pairDelim(rest[end:]) == 0 {
+				end++
+			}
+			b.WriteString(maskPair(rest[:end]))
+			rest = rest[end:]
+		}
+		segs[i] = b.String()
+	}
+	return strings.Join(segs, "/")
+}
+
+// pairDelim returns the length of the pair delimiter s starts with, or 0.
+func pairDelim(s string) int {
+	if s != "" && (s[0] == '&' || s[0] == ';') {
+		return 1
+	}
+	return encodedDelim(s)
+}
+
+// encodedDelim returns 3 when s starts with an encoded "&", "?", "#" or ";".
+func encodedDelim(s string) int {
+	if len(s) < 3 || s[0] != '%' {
+		return 0
+	}
+	for _, d := range []string{"26", "3F", "23", "3B"} {
+		if strings.EqualFold(s[1:3], d) {
+			return 3
+		}
+	}
+	return 0
 }
 
 // maskSemi masks each ";"-separated pair of seg.
@@ -302,7 +364,8 @@ func ErrorURL(err error) {
 
 // Text masks URL- and query-shaped substrings of server-supplied prose (an
 // error body that echoes a request): absolute and scheme-relative URLs, a
-// "/path?query" or "/path;param" run, a "?name=value" query (also one nested,
+// "/path?query" or "/path;param" run, a path with an encoded "?" or "#" in
+// a segment ("/apps/x%3Ftoken=v"), a "?name=value" query (also one nested,
 // unencoded, in a value), a bare "a=1&b=2" run, a percent-encoded
 // "name%3Dvalue", and a "name": value pair of a secret-named JSON field
 // (text that is not whole JSON, such as a truncated body; "code" excepted, see
@@ -711,6 +774,7 @@ var (
 	textCandidateRE = regexp.MustCompile(
 		`(?i)(?:[a-z][a-z0-9+.-]*:)?//` + urlChars + `+` + // absolute / scheme-relative URL
 			`|/[^\s"'<>\\?;]*[?;]` + urlChars + `*` + // /path?query, /path;param
+			`|/[^\s"'<>\\?;]*%(?:3[Ff]|23)` + urlChars + `*` + // /path/id%3Fquery
 			`|\?` + urlChars + `+` + // ?query
 			`|[\w.%\[\]-]+=[^\s&"'<>\\]*(?:&[\w.%\[\]-]+=[^\s&"'<>\\]*)+` + // a=1&b=2
 			`|[\w.%\[\]-]+%3[Dd][^\s&"'<>\\]*`) // name%3Dvalue
