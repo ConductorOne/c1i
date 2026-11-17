@@ -253,13 +253,24 @@ func findingRow(item map[string]any) map[string]any {
 		"id": optString(item, "id"), "app_id": optString(item, "appId"), "severity": optString(item, "severity"), "state": optString(item, "state"), "task_id": optString(item, "taskId"), "assignee_identity_user_id": optString(item, "assigneeIdentityUserId"), "finding_type": findingType(item), "updated_at": optString(item, "updatedAt"),
 	}
 }
+
+// findingRuleRow is a routing-rule row. Routing rules carry a real integer
+// priority; transformation rules do not (they order themselves by
+// evaluationOrder), so the two rows are built from separate bases.
 func findingRuleRow(item map[string]any) map[string]any {
+	row := findingRuleCommonRow(item)
+	row["priority"] = item["priority"]
+	return row
+}
+
+// findingRuleCommonRow is the column set both rule kinds share.
+func findingRuleCommonRow(item map[string]any) map[string]any {
 	return map[string]any{
-		"id": optString(item, "id"), "app_id": optString(item, "appId"), "display_name": optString(item, "displayName"), "description": optString(item, "description"), "priority": item["priority"], "enabled": boolField(item, "enabled"), "finding_type": optString(item, "findingType"),
+		"id": optString(item, "id"), "app_id": optString(item, "appId"), "display_name": optString(item, "displayName"), "description": optString(item, "description"), "enabled": boolField(item, "enabled"), "finding_type": optString(item, "findingType"),
 	}
 }
 func findingTransformationRuleRow(item map[string]any) map[string]any {
-	row := findingRuleRow(item)
+	row := findingRuleCommonRow(item)
 	row["evaluation_order"] = item["evaluationOrder"]
 	row["transform_count"] = len(arrayField(item, "transforms"))
 	return row

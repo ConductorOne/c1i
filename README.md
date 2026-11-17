@@ -1558,7 +1558,12 @@ update`; and `templateId`/`template_id` on `mcp classifiers templates add-rule`
 and `instantiate`.
 
 The rule-list endpoints do not currently expose public filtering or paging; use
-`--limit` only to cap local output. Use JSON files for oneof actions, custom
+`--limit` only to cap local output. Both `list` rows carry `id`, `app_id`,
+`display_name`, `description`, `enabled` and `finding_type`; a routing row adds
+`priority` (a real integer the API sends), while a transformation row adds
+`evaluation_order` (its application sequence, not a rank) and `transform_count`
+and has no `priority` — `--fields priority` therefore matches nothing there.
+Use JSON files for oneof actions, custom
 finding targets, and nested rules; the commands insert positional IDs into the
 request. `findings create-task` accepts an optional `--policy-id`, looked up first (no
 type check): unknown exits `4`, deleted `2`, and the credential needs policy
