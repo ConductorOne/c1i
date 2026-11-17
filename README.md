@@ -785,6 +785,10 @@ c1i apps add-owner <app-id> --user-id <id>
 c1i apps remove-owner <app-id> --user-id <id>
 c1i apps set-owners <app-id> --user-id <id> [--user-id <id> ...] [--wait] [--wait-timeout 4m]
 c1i apps delete <app-id>
+c1i apps resource-types list --app-id <app-id> [--page-size N] [--page-token TOKEN] [--limit N]
+c1i apps managed-state list --app-id <app-id> --resource-type-id <id> [--page-size N] [--page-token TOKEN] [--limit N]
+c1i apps managed-state get <resource-id> --app-id <app-id> --resource-type-id <id>
+c1i apps managed-state promote <resource-id> --app-id <app-id> --resource-type-id <id> [--user-id <id> ...]
 ```
 
 `user_count` is the platform's stored count, not a live tally: on some apps it differs from the number of `accounts list --app-id <app-id>` rows. To size a change, count those rows, not `user_count`.
@@ -832,6 +836,24 @@ for a well-formed but nonexistent app id, so an empty result can also mean
 `accounts set-owner`. `apps add-owner` looks the user up first like `set-owners`
 (an unknown one exits `4`, nothing sent); `remove-owner` does not, so a deleted
 user can still be removed (and `--dry-run` previews an unknown one).
+
+`apps managed-state` inspects and promotes the apps a connector discovered (an
+identity provider's catalog): `--app-id` is the connector app and
+`--resource-type-id` its resource type named `app` (`apps resource-types list`
+shows it). `list` rows carry `resource_id`, `display_name`, `state`
+(`unmanaged` or `managed`) and `managed_app_id` (null while unmanaged); a well-formed but unknown
+app or resource type lists zero rows at exit `0`, while `get` exits `4`.
+`promote` creates a managed app for `<resource-id>`, prints the binding
+unwrapped like `get` (read the new app's id with `jq -er .state.managed.appId`),
+and honors `--dry-run`. **Promote creates an app and nothing checks for an
+existing one of the same name**: promoting two discovered apps with the same name
+made two apps with that name. Promoting an already-managed binding exits `0` and
+returns the existing app, not a second one. Without `--user-id` the new app's
+owners were the connector app's owners; with it, exactly those users (looked up
+first; an unknown one exits `4`, nothing sent). Deleting the managed app
+soft-deletes the binding: it leaves `list`, `get` still answers with `deletedAt`
+set, and `promote` exits `4`. `c1i docs guide promote-idp-app-to-managed` walks
+the whole workflow.
 
 **Owner commands (apps and entitlements).** Owner changes are applied
 asynchronously and can take several minutes to appear; pass --wait to block
@@ -1968,6 +1990,7 @@ search API (`api.mintlify.com`), not to the C1 API.
 `docs search` is a semantic search with no relevance threshold: every query returns up to 10 nearest matches, so even a nonsense query comes back with plausible-looking hits. A returned hit is not proof a concept exists, and an unexpected hit is not proof the thing you searched for is absent — read the snippet, or fetch the page with `docs page`, to judge. To check whether an API endpoint exists, use `docs endpoints --filter`, which has a real no-match.
 
 `docs guide` is embedded static content (no network call), unlike `docs search` / `docs page`, which make a network call. Guides ship in two families: registering and operating MCP servers (`register-mcp-server`, `assign-toolset-everyone`, `test-mcp-gateway`, `decommission-mcp-server`) and everyday app/access-request workflows (`configure-new-app`, `request-access`, `inspect-and-approve-task`, `delegate-entitlement-provisioning`). Run `c1i docs guide` with no argument for the full, current list.
+`docs guide` is embedded static content (no network call), unlike `docs search` / `docs page`, which make a network call. Guides ship in two families: registering and operating MCP servers (`register-mcp-server`, `assign-toolset-everyone`, `test-mcp-gateway`) and everyday app/access-request workflows (`configure-new-app`, `request-access`, `inspect-and-approve-task`, `delegate-entitlement-provisioning`, `promote-idp-app-to-managed`). Run `c1i docs guide` with no argument for the full, current list.
 
 `docs skill` is kept as an alias of `docs agents` for backward compatibility;
 both print identical output.

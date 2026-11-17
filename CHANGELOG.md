@@ -168,6 +168,11 @@ covers its camelCase key for the coverage check but is sent as given.
   `--wait`.
 - `docs guide decommission-mcp-server`: inventory what depends on an MCP
   server, what deleting it takes with it, and how to verify it is gone.
+- `apps managed-state list|get|promote` and `apps resource-types list`: inspect
+  the apps a connector discovered and promote one to a managed app, without the
+  raw `api`. `promote` creates an app and nothing checks for an existing one of
+  the same name; promoting an already-managed binding exits `0` and returns the
+  existing app. New guide `docs guide promote-idp-app-to-managed`.
 
 ### Changed
 

@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
 
@@ -297,10 +298,18 @@ func TestMarshalMutationBody(t *testing.T) {
 
 // Every apps mutation is annotated, so its pre-helper errors carry applied.
 func TestAppsMutationsMarked(t *testing.T) {
-	for _, c := range appsCmd.Commands() {
-		mutating := !slices.Contains([]string{"get", "list", "owners"}, c.Name())
-		if isMutating(c) != mutating {
-			t.Errorf("apps %s: isMutating = %v, want %v", c.Name(), isMutating(c), mutating)
+	var visit func(parent *cobra.Command)
+	visit = func(parent *cobra.Command) {
+		for _, c := range parent.Commands() {
+			if c.HasSubCommands() {
+				visit(c)
+				continue
+			}
+			mutating := !slices.Contains([]string{"get", "list", "owners"}, c.Name())
+			if isMutating(c) != mutating {
+				t.Errorf("%s: isMutating = %v, want %v", c.CommandPath(), isMutating(c), mutating)
+			}
 		}
 	}
+	visit(appsCmd)
 }

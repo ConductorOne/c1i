@@ -763,8 +763,8 @@ func TestCompositeIDListCommandsEmitRowsWithoutID(t *testing.T) {
 			}
 		})
 	}
-	if n != 6 {
-		t.Fatalf("found %d compositeID cases, want 6", n)
+	if n != 7 {
+		t.Fatalf("found %d compositeID cases, want 7", n)
 	}
 }
 
