@@ -666,6 +666,14 @@ non-empty value` when blank).
 
 ### Added
 
+- `attribute-types list` and `attribute-mappings list|get|create|update|delete`
+  manage user-attribute mappings, which copy an app's profile keys into
+  structured user fields (employment type, department, job title, manager).
+  `create --type` takes a display name or id and builds the request from the
+  type's config kind; a `--key` the kind does not take exits `2` (the server
+  answers `500`) and an unknown type exits `4`, nothing sent. `update` reads the
+  mapping and re-sends its attribute type, fallbacks and profile types, because
+  the server's PUT replaces them and ignores `updateMask`.
 - `docs readme` and `docs changelog` print the README and CHANGELOG embedded
   in the binary (no network or credentials; `--output FILE` writes to a file),
   for installs from a release archive, which ships only the binary. Stderr

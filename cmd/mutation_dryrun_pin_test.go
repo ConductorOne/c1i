@@ -37,6 +37,8 @@ var dryRunStubs = map[string][]string{
 	"c1i access-reviews create":                           {`--body-file=@{"ownerIds":["u1"]}`},
 	"c1i access-reviews update":                           {"x1", "--body-file=@{}", "--update-mask=displayName"},
 	"c1i apps update":                                     {"x1", "--description=d"},
+	"c1i attribute-mappings create":                       {"--body-file=@{}"},
+	"c1i attribute-mappings update":                       {"x1", "--key=k"},
 	"c1i automations update":                              {"x1", "--description=d"},
 	"c1i entitlements update":                             {"x1", "--app-id=x1", "--description=d"},
 	"c1i findings assignee":                               {"x1", "--body-file=@{}"},
@@ -80,6 +82,12 @@ var dryRunStubs = map[string][]string{
 	"c1i webhooks update":                                 {"x1", "--display-name=x1"},
 }
 
+// dryRunReadBodies is the answer to a leaf's pre-send GET where the generic
+// `{}` cannot be built on (update reads the mapping it replaces).
+var dryRunReadBodies = map[string]string{
+	"c1i attribute-mappings update": `{"attribute":{"userAttributeMapping":{"attributeType":{"id":"t","displayName":"n","appUserProfile":{"appId":"a","appUserProfileAttributeKey":"k"}}}}}`,
+}
+
 // stubArgs builds a leaf's arguments: one per required positional in Use and
 // a typed value per required flag.
 func stubArgs(c *cobra.Command) []string {
@@ -114,8 +122,9 @@ func stubArgs(c *cobra.Command) []string {
 // leaf does.
 func TestDryRunPreviewSetMatchesRuleB(t *testing.T) {
 	ix := loadSrcIndex(t, nil)
+	readBody := `{}`
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		_, _ = w.Write([]byte(`{}`))
+		_, _ = w.Write([]byte(readBody))
 	}))
 	t.Cleanup(srv.Close)
 	stub := func(_ *cobra.Command, _ string) (*client.Client, error) {
@@ -147,6 +156,10 @@ func TestDryRunPreviewSetMatchesRuleB(t *testing.T) {
 		rep := ix.closureOf(l.root)
 		migrated := len(rep.helpers) > 0
 		t.Run(strings.TrimPrefix(l.path, "c1i "), func(t *testing.T) {
+			readBody = `{}`
+			if b, ok := dryRunReadBodies[l.path]; ok {
+				readBody = b
+			}
 			resetCmdFlags(t, rootCmd)
 			resetCmdFlags(t, l.cmd)
 			var out, errOut bytes.Buffer
