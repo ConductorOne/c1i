@@ -621,25 +621,29 @@ Without --user-id the new app's owners were the connector app's owners. Pass
 ## Undoing a promotion
 
 "apps delete" on "$NEW_APP_ID" deletes the app, and it also soft-deletes the
-binding, but not at once. In the run checked, "managed-state get" still showed
-the deleted app as managed for several seconds, and a promote in that window
-exited 0 and created another app with the same name. Do not promote until the
-binding reads deletedAt set:
+binding, but not at once. In one run, "managed-state get" right after the
+delete still showed the deleted app as managed, a promote then exited 0 and
+created another app with the same name, and the binding's deletedAt landed
+about 5 seconds after the delete. Do not promote until the binding reads
+deletedAt set:
 
     c1i apps managed-state get "$RES_ID" --app-id "$CONN_APP_ID" --resource-type-id "$RT_ID" | jq .deletedAt
 
 After that the discovered app leaves "managed-state list" and promote exits 4.
-The binding reappeared about 8 minutes later in the run checked (presumably the
-connector's next sync), unmanaged, under the same resource_id, and then reads
-like any other unmanaged binding, so a promote would create a new app.
+The binding later reappeared unmanaged under the same resource_id (after about
+8 minutes in one run and about 25 seconds in another, presumably the
+connector's sync), and then reads like any other unmanaged binding, so a
+promote would create a new app.
 
 ## Common failures
 
 - exit 4 on promote: an unknown app, resource type, resource id or user, or a
-  binding whose managed app was deleted (until it reappears, about 8 minutes
-  in the run checked). A --dry-run catches all but the last.
-- exit 0 and a second app right after "apps delete": the binding's soft-delete
-  had not landed yet; see "Undoing a promotion".
+  binding whose managed app was deleted (until it reappears, which took from
+  about 25 seconds to 8 minutes in the runs checked). A --dry-run catches all
+  but the last.
+- exit 0 and a new app right after "apps delete": the binding's soft-delete had
+  not landed yet. Find the extra app with "apps list" and delete it, then see
+  "Undoing a promotion".
 `
 
 // guideRequestAccess walks the requester side of a grant/revoke access
