@@ -107,8 +107,8 @@ func TestManagedStatePromoteUnknownBindingExits4(t *testing.T) {
 		}
 		t.Run(name, func(t *testing.T) {
 			t.Setenv("C1I_URL", mutTestURL)
+			clearViperOverrides(t, "dry_run")
 			viper.Set("dry_run", dry)
-			t.Cleanup(func() { viper.Set("dry_run", nil) })
 			s := newMutServer(t, fixedReply(404, `{"code":5,"message":"not found"}`))
 			args := append([]string{"apps", "managed-state", "promote", "a/b"}, msScope...)
 			r := runMutationCLI(t, s.srv, 0, nil, args...)

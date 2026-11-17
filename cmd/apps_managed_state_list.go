@@ -1,10 +1,6 @@
 package cmd
 
 import (
-	"encoding/json"
-	"fmt"
-	"strconv"
-
 	"github.com/spf13/cobra"
 )
 
@@ -62,82 +58,30 @@ A well-formed but unknown app or resource type returns zero rows and exit 0: the
 endpoint answers 200 with an empty list. "managed-state get" on the same ids
 exits 4.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		baseURL, err := GetBaseURL()
+		c, err := listClientFor(cmd)
 		if err != nil {
 			return err
 		}
-
-		c, err := newListClient(cmd, baseURL)
-		if err != nil {
-			return fmt.Errorf("authentication failed: %w", err)
-		}
-
 		path := managedStateBindingsPath(cmd)
-		requestedPageSize := pageSizeFlag(cmd)
-		pageToken, _ := cmd.Flags().GetString("page-token")
-		manualPaging := cmd.Flags().Changed("page-token")
-		limit := getIntFlag(cmd, "limit")
-
-		enc := newEmitter(cmd)
-		guard := newPaginationCursorGuard().withCompositeIDs() // the wrapper may be null
-		route := "GET " + path
-		for !limitReached(enc.Written(), limit) {
-			if guard.tokenAlreadyUsed(pageToken) {
-				return guard.warnStuck(cmd, route)
-			}
-			pageSize := requestedPageSize
-			if !enc.Filtered() {
-				pageSize = effectivePageSize(requestedPageSize, limit, enc.Written())
-			}
-			params := map[string]string{"page_size": strconv.Itoa(pageSize)}
-			if pageToken != "" {
-				params["page_token"] = pageToken
-			}
-
-			data, err := c.Get(cmd.Context(), path, params)
-			if err != nil {
-				return fmt.Errorf("API error: %w", err)
-			}
-
-			var resp struct {
-				List          []managedStateListItem `json:"list"`
-				NextPageToken string                 `json:"nextPageToken"`
-			}
-			if err := json.Unmarshal(data, &resp); err != nil {
-				return fmt.Errorf("failed to parse response: %w", err)
-			}
-
-			ids := make([]string, len(resp.List))
-			for i, it := range resp.List {
-				if it.Binding != nil {
-					ids[i] = it.Binding.ResourceID
+		return listPages(cmd, c, pageSpec[managedStateListItem]{
+			Route:     "GET " + path,
+			Fetch:     getPage(cmd.Context(), path, nil),
+			Parse:     parseList[managedStateListItem],
+			Composite: true, // the wrapper may be null
+			ID: func(it managedStateListItem) string {
+				if it.Binding == nil {
+					return ""
 				}
-			}
-			keep, err := guard.checkPage(cmd, route, ids)
-			if err != nil {
-				return err
-			}
-			for _, item := range keepRows(resp.List, keep) {
-				// A missing wrapper is skipped rather than emitted as an all-null row.
-				if item.Binding == nil {
-					continue
-				}
-				if err := enc.Encode(managedStateRow(*item.Binding)); err != nil {
-					return err
-				}
-				if limitReached(enc.Written(), limit) {
+				return it.Binding.ResourceID
+			},
+			// A missing wrapper is skipped rather than emitted as an all-null row.
+			Rows: func(it managedStateListItem) []any {
+				if it.Binding == nil {
 					return nil
 				}
-			}
-
-			if resp.NextPageToken == "" || manualPaging {
-				break
-			}
-			guard.markTokenUsed(pageToken)
-			pageToken = resp.NextPageToken
-		}
-
-		return nil
+				return []any{managedStateRow(*it.Binding)}
+			},
+		})
 	},
 }
 
