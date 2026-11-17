@@ -174,6 +174,7 @@ func TestFieldsListPreExistingErrorNotMasked(t *testing.T) {
 // TestFieldsListNoProjectionNeverErrors: without --fields set at all, the
 // zero-match check must never fire, no matter what rows a command emits.
 func TestFieldsListNoProjectionNeverErrors(t *testing.T) {
+	clearViperOverrides(t, "fields")
 	viper.Set("fields", "")
 	root, buf := newTestListTree([]any{
 		map[string]any{"anything": "goes"},

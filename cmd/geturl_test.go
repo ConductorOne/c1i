@@ -38,6 +38,7 @@ func executeRootC() (*cobra.Command, error) {
 // executeRootCtx runs rootCmd with ctx on every command in the tree.
 func executeRootCtx(ctx context.Context) (*cobra.Command, error) {
 	setContexts(rootCmd, ctx)
+	defer setContexts(rootCmd, context.Background()) // no cancelled ctx outlives the call
 	return rootCmd.ExecuteContextC(ctx)
 }
 

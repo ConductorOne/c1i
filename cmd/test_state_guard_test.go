@@ -20,6 +20,10 @@ var rootExecuteAllowlist = map[string]string{
 	"executeRootCtx": "the one helper; it sets a live context on every command first",
 }
 
+// viperPairingAllowlist names funcs exempt from the clearViperOverrides
+// pairing rule, with a reason.
+var viperPairingAllowlist = map[string]string{}
+
 var rootExecuteMethods = map[string]bool{
 	"Execute": true, "ExecuteContext": true, "ExecuteC": true, "ExecuteContextC": true,
 }
@@ -33,6 +37,61 @@ func isSel(e ast.Expr, recv, name string) bool {
 	return ok && id.Name == recv && (name == "" || s.Sel.Name == name)
 }
 
+// isViperSet matches viper.Set and viper.GetViper().Set.
+func isViperSet(e ast.Expr) bool {
+	if isSel(e, "viper", "Set") {
+		return true
+	}
+	s, ok := e.(*ast.SelectorExpr)
+	if !ok || s.Sel.Name != "Set" {
+		return false
+	}
+	c, ok := s.X.(*ast.CallExpr)
+	return ok && isSel(c.Fun, "viper", "GetViper")
+}
+
+// unclearedViperSets returns "file:line" for each non-nil viper.Set(k, ...) in
+// a func with no clearViperOverrides(t, ..., k, ...) of the same key: without
+// it the override outlives the test. Keys must be string literals.
+func unclearedViperSets(fset *token.FileSet, f *ast.File) []string {
+	var out []string
+	for _, d := range f.Decls {
+		fd, ok := d.(*ast.FuncDecl)
+		if !ok {
+			continue
+		}
+		if _, ok := viperPairingAllowlist[fd.Name.Name]; ok {
+			continue
+		}
+		cleared := map[string]bool{}
+		var sets []*ast.CallExpr
+		ast.Inspect(fd, func(n ast.Node) bool {
+			c, ok := n.(*ast.CallExpr)
+			if !ok {
+				return true
+			}
+			if id, ok := c.Fun.(*ast.Ident); ok && id.Name == "clearViperOverrides" {
+				for _, a := range c.Args {
+					if l, ok := a.(*ast.BasicLit); ok {
+						cleared[l.Value] = true
+					}
+				}
+			} else if isViperSet(c.Fun) && len(c.Args) == 2 {
+				if id, ok := c.Args[1].(*ast.Ident); !ok || id.Name != "nil" {
+					sets = append(sets, c)
+				}
+			}
+			return true
+		})
+		for _, c := range sets {
+			if l, ok := c.Args[0].(*ast.BasicLit); !ok || !cleared[l.Value] {
+				out = append(out, fset.Position(c.Pos()).String())
+			}
+		}
+	}
+	return out
+}
+
 // restoreViaViperSet returns "file:line" for each viper.Set(k, non-nil) inside
 // a t.Cleanup func literal or a defer. viper.Set(k, nil) is how an override is
 // dropped, so it is the one allowed call.
@@ -41,7 +100,7 @@ func restoreViaViperSet(fset *token.FileSet, f *ast.File) []string {
 	scan := func(root ast.Node) {
 		ast.Inspect(root, func(n ast.Node) bool {
 			c, ok := n.(*ast.CallExpr)
-			if !ok || !isSel(c.Fun, "viper", "Set") || len(c.Args) != 2 {
+			if !ok || !isViperSet(c.Fun) || len(c.Args) != 2 {
 				return true
 			}
 			if id, ok := c.Args[1].(*ast.Ident); ok && id.Name == "nil" {
@@ -69,6 +128,24 @@ func restoreViaViperSet(fset *token.FileSet, f *ast.File) []string {
 	return out
 }
 
+// isRootExecute matches rootCmd.Execute* and X.Root().Execute*. A local alias
+// of rootCmd is not tracked (limitation); review catches that.
+func isRootExecute(e ast.Expr) bool {
+	s, ok := e.(*ast.SelectorExpr)
+	if !ok || !rootExecuteMethods[s.Sel.Name] {
+		return false
+	}
+	if isSel(s, "rootCmd", "") {
+		return true
+	}
+	c, ok := s.X.(*ast.CallExpr)
+	if !ok {
+		return false
+	}
+	m, ok := c.Fun.(*ast.SelectorExpr)
+	return ok && m.Sel.Name == "Root"
+}
+
 // directRootExecutes returns "file:line" for each rootCmd.Execute* call
 // outside an allowlisted func.
 func directRootExecutes(fset *token.FileSet, f *ast.File) []string {
@@ -82,8 +159,7 @@ func directRootExecutes(fset *token.FileSet, f *ast.File) []string {
 			continue
 		}
 		ast.Inspect(fd, func(n ast.Node) bool {
-			if c, ok := n.(*ast.CallExpr); ok && isSel(c.Fun, "rootCmd", "") &&
-				rootExecuteMethods[c.Fun.(*ast.SelectorExpr).Sel.Name] {
+			if c, ok := n.(*ast.CallExpr); ok && isRootExecute(c.Fun) {
 				out = append(out, fset.Position(c.Pos()).String())
 			}
 			return true
@@ -113,6 +189,12 @@ func scanTestFiles(t *testing.T, check func(*token.FileSet, *ast.File) []string)
 func TestNoViperRestoreInCleanupOrDefer(t *testing.T) {
 	for _, v := range scanTestFiles(t, restoreViaViperSet) {
 		t.Errorf("%s: viper.Set in a Cleanup/defer leaves an override that beats --dry-run/--fields in later tests; use clearViperOverrides(t, key)", v)
+	}
+}
+
+func TestEveryViperSetIsClearedInItsTest(t *testing.T) {
+	for _, v := range scanTestFiles(t, unclearedViperSets) {
+		t.Errorf("%s: viper.Set(key, ...) without clearViperOverrides(t, key) in the same func leaves an override that masks env/flags in later tests", v)
 	}
 }
 
@@ -167,6 +249,29 @@ func TestStateLeakGuardsCatchPlantedViolations(t *testing.T) {
 		if got := restoreViaViperSet(fset, f); len(got) != 0 {
 			t.Errorf("viper guard flagged a legal use %v: %s", got, src)
 		}
+	}
+
+	for _, src := range []string{
+		`func TestX(t *testing.T) { viper.Set("fields", "") }`,
+		`func TestX(t *testing.T) { clearViperOverrides(t, "url"); viper.Set("fields", "x") }`,
+		`func TestX(t *testing.T) { viper.GetViper().Set("fields", "x") }`,
+	} {
+		fset, f := parseSnippet(t, src)
+		if len(unclearedViperSets(fset, f)) == 0 {
+			t.Errorf("pairing guard missed: %s", src)
+		}
+	}
+	for _, src := range []string{
+		`func TestX(t *testing.T) { clearViperOverrides(t, "fields"); viper.Set("fields", "") }`,
+		`func TestX(t *testing.T) { clearViperOverrides(t, "url", "fields"); viper.Set("fields", "") }`,
+	} {
+		fset, f := parseSnippet(t, src)
+		if got := unclearedViperSets(fset, f); len(got) != 0 {
+			t.Errorf("pairing guard flagged a legal use %v: %s", got, src)
+		}
+	}
+	if fset, f := parseSnippet(t, `func TestX(t *testing.T) { _ = c.Root().ExecuteContext(ctx) }`); len(directRootExecutes(fset, f)) == 0 {
+		t.Error("execute guard missed X.Root().Execute*")
 	}
 
 	for _, m := range []string{"Execute()", "ExecuteContext(ctx)", "ExecuteC()", "ExecuteContextC(ctx)"} {
