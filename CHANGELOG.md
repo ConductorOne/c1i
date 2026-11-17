@@ -189,7 +189,9 @@ Inputs now refused (exit 2):
   the apps a connector discovered and promote one to a managed app, without the
   raw `api`. `promote` creates an app and nothing checks for an existing one of
   the same name; promoting an already-managed binding exits `0` and returns the
-  existing app. New guide `docs guide promote-idp-app-to-managed`.
+  existing app. `promote` reads the binding and looks up any `--user-id` first:
+  an unknown one exits `4`, `--dry-run` included. New guide `docs guide
+  promote-idp-app-to-managed`.
 - `attribute-types list` and `attribute-mappings list|get|create|update|delete`
   manage user-attribute mappings, which copy an app's profile keys into
   structured user fields (employment type, department, job title, manager).
@@ -320,14 +322,16 @@ Inputs now refused (exit 2):
   ""`) registered a server with an empty config at exit 0; it now exits 2.
 - `docs agents|readme|changelog -o "  "` wrote a file named with spaces; it now
   exits 2.
-- README no longer points at a 0.10.0 section that was never published.
+- README and the 0.10.1 changelog no longer point at a 0.10.0 section that was
+  never published.
+- A malformed list response's decode error now names the list key.
 
 ## [0.10.1] - 2026-11-12
 
 0.10.0 was tagged, but its release failed in preflight: first a bug in the
 shared release workflow (ConductorOne/github-workflows#174), then GO-2026-6859
 in that workflow's locked Go 1.27.3 toolchain. No 0.10.0 binaries were
-published. This release contains the changes listed under 0.10.0; if you are
+published. This release contains every change listed below; if you are
 upgrading from 0.9.2, read "Upgrading from 0.9.2" below.
 
 ### Security
