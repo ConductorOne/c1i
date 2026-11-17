@@ -340,3 +340,23 @@ func TestHardenOutDirStripsSetgidEvenWhenAlreadyStrict(t *testing.T) {
 		t.Errorf("warning %q does not report the true old mode (with setgid, 2500)", warn.String())
 	}
 }
+
+// --commit is a commit id carried in the request path, so the dot rule must
+// refuse a "." or ".." before credentials load, like every other id argument.
+func TestFunctionsSourceCommitRefusesDotBeforeCredentials(t *testing.T) {
+	t.Setenv("C1I_URL", mutTestURL)
+	t.Setenv("C1I_CLIENT_ID", "")
+	t.Setenv("C1I_CLIENT_SECRET", "")
+	for _, v := range []string{".", "..", " .. "} {
+		t.Run(v, func(t *testing.T) {
+			clearViperOverrides(t, "dry_run")
+			err := runRootWithArgs(t, []string{"functions", "source", "fn1", "--commit", v})
+			if got := exitCode(err); got != exitUsage {
+				t.Fatalf("exitCode = %d, want %d; err: %v", got, exitUsage, err)
+			}
+			if err == nil || !strings.Contains(err.Error(), "is not an id") {
+				t.Errorf("err = %v, want the dot-segment id refusal", err)
+			}
+		})
+	}
+}
