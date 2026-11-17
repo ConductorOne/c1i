@@ -528,7 +528,7 @@ func parseKeyed[T any](keys ...string) func([]byte) ([]T, string, error) {
 			}
 			var got []T
 			if err := json.Unmarshal(v, &got); err != nil {
-				return nil, "", fmt.Errorf("failed to parse response: %w", err)
+				return nil, "", fmt.Errorf("failed to parse response: %q: %w", key, err)
 			}
 			if len(items) == 0 {
 				items = got
