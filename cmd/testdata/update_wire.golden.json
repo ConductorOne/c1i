@@ -1,4 +1,58 @@
 {
+  "access-profiles create ": {
+    "exit": 2
+  },
+  "access-profiles create --display-name N": {
+    "exit": 0,
+    "method": "POST",
+    "path": "/api/v1/catalogs",
+    "body": {
+      "displayName": "N"
+    }
+  },
+  "access-profiles create --display-name N --description ": {
+    "exit": 0,
+    "method": "POST",
+    "path": "/api/v1/catalogs",
+    "body": {
+      "description": "",
+      "displayName": "N"
+    }
+  },
+  "access-profiles create --display-name N --enrollment-behavior ": {
+    "exit": 0,
+    "method": "POST",
+    "path": "/api/v1/catalogs",
+    "body": {
+      "displayName": "N",
+      "enrollmentBehavior": ""
+    }
+  },
+  "access-profiles create --display-name N --enrollment-behavior bogus": {
+    "exit": 2
+  },
+  "access-profiles create --display-name N --enrollment-behavior bypass --unenrollment-behavior revoke-all --unenrollment-entitlement-behavior enforce": {
+    "exit": 0,
+    "method": "POST",
+    "path": "/api/v1/catalogs",
+    "body": {
+      "displayName": "N",
+      "enrollmentBehavior": "REQUEST_CATALOG_ENROLLMENT_BEHAVIOR_BYPASS_ENTITLEMENT_REQUEST_POLICY",
+      "unenrollmentBehavior": "REQUEST_CATALOG_UNENROLLMENT_BEHAVIOR_REVOKE_ALL",
+      "unenrollmentEntitlementBehavior": "REQUEST_CATALOG_UNENROLLMENT_ENTITLEMENT_BEHAVIOR_ENFORCE"
+    }
+  },
+  "access-profiles create --display-name N --published --visible-to-everyone=false --request-bundle": {
+    "exit": 0,
+    "method": "POST",
+    "path": "/api/v1/catalogs",
+    "body": {
+      "displayName": "N",
+      "published": true,
+      "requestBundle": true,
+      "visibleToEveryone": false
+    }
+  },
   "access-profiles update ": {
     "exit": 2
   },
@@ -204,6 +258,9 @@
   "apps update ": {
     "exit": 2
   },
+  "apps update --app-user-mapper-file {dir}/badmap.json": {
+    "exit": 2
+  },
   "apps update --app-user-mapper-file {dir}/mapper.json": {
     "exit": 0,
     "method": "POST",
@@ -399,6 +456,18 @@
         "id": "app-1"
       },
       "updateMask": "grantPolicyId,certifyPolicyId"
+    }
+  },
+  "apps update --unbind-policy revoke": {
+    "exit": 0,
+    "method": "POST",
+    "path": "/api/v1/apps/app-1",
+    "body": {
+      "app": {
+        "id": "app-1",
+        "revokePolicyId": ""
+      },
+      "updateMask": "revokePolicyId"
     }
   },
   "automations update ": {
@@ -726,6 +795,19 @@
       "updateMask": "revokePolicyId"
     }
   },
+  "entitlements update --unbind-policy certify": {
+    "exit": 0,
+    "method": "POST",
+    "path": "/api/v1/apps/a1/entitlements/ent-1",
+    "body": {
+      "entitlement": {
+        "appId": "a1",
+        "certifyPolicyId": "",
+        "id": "ent-1"
+      },
+      "updateMask": "certifyPolicyId"
+    }
+  },
   "entitlements update --unbind-policy emergency-grant": {
     "exit": 0,
     "method": "POST",
@@ -737,6 +819,32 @@
         "id": "ent-1"
       },
       "updateMask": "emergencyGrantPolicyId"
+    }
+  },
+  "entitlements update --unbind-policy grant": {
+    "exit": 0,
+    "method": "POST",
+    "path": "/api/v1/apps/a1/entitlements/ent-1",
+    "body": {
+      "entitlement": {
+        "appId": "a1",
+        "grantPolicyId": "",
+        "id": "ent-1"
+      },
+      "updateMask": "grantPolicyId"
+    }
+  },
+  "entitlements update --unbind-policy revoke": {
+    "exit": 0,
+    "method": "POST",
+    "path": "/api/v1/apps/a1/entitlements/ent-1",
+    "body": {
+      "entitlement": {
+        "appId": "a1",
+        "id": "ent-1",
+        "revokePolicyId": ""
+      },
+      "updateMask": "revokePolicyId"
     }
   },
   "mcp servers update ": {
@@ -978,6 +1086,19 @@
       "updateMask": "none"
     }
   },
+  "mcp servers update-credentials --type external --external-config-file {dir}/ext.json": {
+    "exit": 0,
+    "method": "POST",
+    "path": "/api/v1/apps/a1/mcp_servers/cn-1/credentials",
+    "body": {
+      "appId": "a1",
+      "connectorId": "cn-1",
+      "externalConfig": {
+        "url": "https://mcp.example.invalid"
+      },
+      "updateMask": "url"
+    }
+  },
   "mcp servers update-credentials --type external --require-tool-approval": {
     "exit": 0,
     "method": "POST",
@@ -1035,6 +1156,22 @@
       "updateMask": "bearerToken,tokenSharing,url"
     }
   },
+  "mcp servers update-credentials --type external --token-sharing per-user": {
+    "exit": 0,
+    "method": "POST",
+    "path": "/api/v1/apps/a1/mcp_servers/cn-1/credentials",
+    "body": {
+      "appId": "a1",
+      "connectorId": "cn-1",
+      "externalConfig": {
+        "tokenSharing": "MCP_SERVER_TOKEN_SHARING_PER_USER"
+      },
+      "updateMask": "tokenSharing"
+    }
+  },
+  "mcp servers update-credentials --type external --transport bogus": {
+    "exit": 2
+  },
   "mcp servers update-credentials --type external --transport streamable-http": {
     "exit": 0,
     "method": "POST",
@@ -1072,6 +1209,9 @@
       "updateMask": "url"
     }
   },
+  "mcp servers update-credentials --type hosted": {
+    "exit": 2
+  },
   "mcp servers update-credentials --type hosted --auth bearer-token --bearer-token T": {
     "exit": 0,
     "method": "POST",
@@ -1086,6 +1226,20 @@
         "mcpServerCatalogId": "cat-1"
       },
       "updateMask": "bearerToken"
+    }
+  },
+  "mcp servers update-credentials --type hosted --auth none --update-mask none": {
+    "exit": 0,
+    "method": "POST",
+    "path": "/api/v1/apps/a1/mcp_servers/cn-1/credentials",
+    "body": {
+      "appId": "a1",
+      "connectorId": "cn-1",
+      "hostedConfig": {
+        "mcpServerCatalogId": "cat-1",
+        "none": {}
+      },
+      "updateMask": "none"
     }
   },
   "mcp servers update-credentials --type hosted --catalog-id cat-9 --auth none": {
@@ -1133,6 +1287,19 @@
         "sourceAppId": "s1"
       },
       "updateMask": "configFields,mcpServerCatalogId,sourceAppId"
+    }
+  },
+  "mcp servers update-credentials --type hosted --hosted-config-file {dir}/hosted.json": {
+    "exit": 0,
+    "method": "POST",
+    "path": "/api/v1/apps/a1/mcp_servers/cn-1/credentials",
+    "body": {
+      "appId": "a1",
+      "connectorId": "cn-1",
+      "hostedConfig": {
+        "mcpServerCatalogId": "cat-9"
+      },
+      "updateMask": "mcpServerCatalogId"
     }
   },
   "mcp toolsets update ": {
@@ -1274,6 +1441,12 @@
       "updateMask": "policyType"
     }
   },
+  "policies update --policy-type grant --steps-file {dir}/empty.json": {
+    "exit": 2
+  },
+  "policies update --policy-type grant --steps-file {dir}/empty.json --allow-deny-all": {
+    "exit": 2
+  },
   "policies update --policy-type revoke --steps-file {dir}/steps.json": {
     "exit": 0,
     "method": "POST",
@@ -1379,6 +1552,9 @@
       "updateMask": "policySteps"
     }
   },
+  "policies update --steps-file {dir}/steps.json --description lookup fails": {
+    "exit": 4
+  },
   "service-principals credentials update ": {
     "exit": 2
   },
@@ -1407,6 +1583,35 @@
         "id": "sp-1"
       },
       "updateMask": "displayName"
+    }
+  },
+  "webhooks create ": {
+    "exit": 2
+  },
+  "webhooks create --display-name Name --destination-url http://hooks.example.invalid/x": {
+    "exit": 2
+  },
+  "webhooks create --display-name Name --destination-url https://hooks.example.invalid/x": {
+    "exit": 0,
+    "method": "POST",
+    "path": "/api/v1/webhooks",
+    "body": {
+      "displayName": "Name",
+      "url": "https://hooks.example.invalid/x"
+    }
+  },
+  "webhooks create --display-name Name --destination-url https://hooks.example.invalid/x --callback-timeout -1h": {
+    "exit": 2
+  },
+  "webhooks create --display-name Name --destination-url https://hooks.example.invalid/x --description  --callback-timeout 10m": {
+    "exit": 0,
+    "method": "POST",
+    "path": "/api/v1/webhooks",
+    "body": {
+      "callbackTimeout": "600s",
+      "description": "",
+      "displayName": "Name",
+      "url": "https://hooks.example.invalid/x"
     }
   },
   "webhooks update ": {

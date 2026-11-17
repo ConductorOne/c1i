@@ -26,6 +26,10 @@ var updateWireFiles = map[string]string{
 	"rules.json":  `[{"condition":"true","policyKey":"k"}]`,
 	"policy.json": `{"displayName":"n"}`,
 	"auto.json":   `{"description":"d"}`,
+	"ext.json":    `{"url":"https://mcp.example.invalid"}`,
+	"hosted.json": `{"mcpServerCatalogId":"cat-9"}`,
+	"empty.json":  `[]`,
+	"badmap.json": `{"mappingCases":[]}`,
 }
 
 func updateWireCases() []updateWireCase {
@@ -186,6 +190,46 @@ func updateWireCases() []updateWireCase {
 		[]string{"--callback-timeout", "600s", "--description", "D", "--destination-url", "https://hooks.example.invalid/x", "--display-name", "Name"},
 		[]string{"--description", "", "--callback-timeout", "0s"},
 	)
+	add("apps update", []string{"app-1"},
+		[]string{"--unbind-policy", "revoke"},
+		[]string{"--app-user-mapper-file", "{dir}/badmap.json"},
+	)
+	add("entitlements update", []string{"ent-1", "--app-id", "a1"},
+		[]string{"--unbind-policy", "grant"},
+		[]string{"--unbind-policy", "revoke"},
+		[]string{"--unbind-policy", "certify"},
+	)
+	add("policies update", []string{"pol-1"},
+		[]string{"--policy-type", "grant", "--steps-file", "{dir}/empty.json"},
+		[]string{"--policy-type", "grant", "--steps-file", "{dir}/empty.json", "--allow-deny-all"},
+	)
+	add("policies update", []string{"pol-404"},
+		[]string{"--steps-file", "{dir}/steps.json", "--description", "lookup fails"},
+	)
+	add("mcp servers update-credentials", []string{"cn-1", "--app-id", "a1"},
+		[]string{"--type", "external", "--external-config-file", "{dir}/ext.json"},
+		[]string{"--type", "hosted", "--hosted-config-file", "{dir}/hosted.json"},
+		[]string{"--type", "hosted"},
+		[]string{"--type", "hosted", "--auth", "none", "--update-mask", "none"},
+		[]string{"--type", "external", "--token-sharing", "per-user"},
+		[]string{"--type", "external", "--transport", "bogus"},
+	)
+	add("webhooks create", nil,
+		none,
+		[]string{"--display-name", "Name", "--destination-url", "https://hooks.example.invalid/x"},
+		[]string{"--display-name", "Name", "--destination-url", "https://hooks.example.invalid/x", "--description", "", "--callback-timeout", "10m"},
+		[]string{"--display-name", "Name", "--destination-url", "http://hooks.example.invalid/x"},
+		[]string{"--display-name", "Name", "--destination-url", "https://hooks.example.invalid/x", "--callback-timeout", "-1h"},
+	)
+	add("access-profiles create", nil,
+		none,
+		[]string{"--display-name", "N"},
+		[]string{"--display-name", "N", "--description", ""},
+		[]string{"--display-name", "N", "--published", "--visible-to-everyone=false", "--request-bundle"},
+		[]string{"--display-name", "N", "--enrollment-behavior", "bypass", "--unenrollment-behavior", "revoke-all", "--unenrollment-entitlement-behavior", "enforce"},
+		[]string{"--display-name", "N", "--enrollment-behavior", ""},
+		[]string{"--display-name", "N", "--enrollment-behavior", "bogus"},
+	)
 	return cases
 }
 
@@ -204,6 +248,8 @@ func runUpdateWireCase(t *testing.T, dir string, c updateWireCase) updateWireRes
 		if r.Method == http.MethodGet {
 			p := r.URL.Path
 			switch {
+			case p == "/api/v1/policies/pol-404":
+				return mutReply{status: http.StatusNotFound, body: `{"code":5,"message":"not found"}`}
 			case strings.HasPrefix(p, "/api/v1/policies/"):
 				typ := "POLICY_TYPE_GRANT"
 				switch id := strings.TrimPrefix(p, "/api/v1/policies/"); {
