@@ -106,7 +106,7 @@ c1i auth whoami --url https://example.conductor.one --fields tenant
 # Mint a short-lived bearer token for driving raw API calls yourself
 c1i auth token            # add --json for token type and absolute expiry (RFC3339)
 
-# Remove stored credentials
+# Remove stored credentials (--dry-run is rejected: the delete cannot be previewed)
 c1i auth logout
 ```
 
@@ -366,8 +366,9 @@ typed.
 It applies to every REST write command and to non-GET `api` calls, and never
 sends that mutation. `mcp gateway call` rejects both `--dry-run` and
 `C1I_DRY_RUN`: c1i cannot preview or suppress a gateway tool's side effects, so
-inspect the tool and treat its invocation as live. `auth login` rejects both
-too: it can't preview or suppress storing a credential.
+inspect the tool and treat its invocation as live. `auth login` and
+`auth logout` reject both too: c1i cannot preview or suppress storing or
+deleting a credential, and a previewed logout used to delete it.
 
 A preview resolves the URL first, so it needs one configured (exit `2`
 without), and it applies the same id guard as a real send: an empty, `.` or
