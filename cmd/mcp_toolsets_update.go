@@ -39,7 +39,7 @@ Prints the updated toolset, unwrapped like "mcp toolsets get".`,
 			"appId":       appID,
 			"connectorId": connectorID,
 		}
-		mask, err := mcpToolsetsUpdateSpec.build(cmd, profile)
+		mask, err := mcpToolsetsUpdateSpec.buildUpdateMask(cmd, profile)
 		if err != nil {
 			return err
 		}

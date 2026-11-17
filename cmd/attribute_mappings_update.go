@@ -117,7 +117,7 @@ func buildAttributeMappingUpdate(ctx context.Context, cmd *cobra.Command, c *cli
 		return nil, &nonJSONResponseError{fmt.Errorf("the mapping has no attributeType")}
 	}
 	obj := map[string]any{"attributeType": at, "fallbacks": orEmptyList(cur["fallbacks"]), "profileTypeIds": orEmptyList(cur["profileTypeIds"])}
-	mask, err := spec.build(cmd, obj)
+	mask, err := spec.buildUpdateMask(cmd, obj)
 	if err != nil {
 		return nil, err
 	}

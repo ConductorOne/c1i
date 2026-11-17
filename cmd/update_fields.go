@@ -135,9 +135,9 @@ func (s *updateSpec) apply(cmd *cobra.Command, obj map[string]any) ([]string, er
 	return paths, nil
 }
 
-// build is apply plus the mask string; no path at all is a usage error that
+// buildUpdateMask is apply plus the mask string; no path at all is a usage error that
 // names every field flag of the table.
-func (s *updateSpec) build(cmd *cobra.Command, obj map[string]any) (string, error) {
+func (s *updateSpec) buildUpdateMask(cmd *cobra.Command, obj map[string]any) (string, error) {
 	paths, err := s.apply(cmd, obj)
 	if err != nil {
 		return "", err

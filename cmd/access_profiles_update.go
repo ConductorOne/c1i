@@ -40,7 +40,7 @@ get" (the id is .id). --fields is a usage error on a mutation.`,
 // exactly one supplied catalog field.
 func buildAccessProfileUpdateBody(cmd *cobra.Command, id string) (map[string]any, error) {
 	catalog := map[string]any{"id": id}
-	mask, err := catalogFields.build(cmd, catalog)
+	mask, err := catalogFields.buildUpdateMask(cmd, catalog)
 	if err != nil {
 		return nil, err
 	}

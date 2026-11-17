@@ -6,6 +6,7 @@ import (
 	"go/token"
 	"os"
 	"path/filepath"
+	"reflect"
 	"regexp"
 	"sort"
 	"strconv"
@@ -119,14 +120,30 @@ func TestNothingToUpdateNamesEveryFlag(t *testing.T) {
 var maskVarName = regexp.MustCompile(`(?i)^(paths|mask\w*|maskpaths)$`)
 
 // maskSources are the calls whose result may be passed on as a mask.
+// buildUpdateMask is trusted only as a method call (see isMaskSource) and
+// declared only on updateSpec (TestUpdateMaskSourceIsDeclaredOnce).
 var maskSources = map[string]bool{
-	"build": true, "bodyFileMask": true, "optionalUpdateMask": true,
+	"buildUpdateMask": true, "bodyFileMask": true, "optionalUpdateMask": true,
 	"deriveCredentialUpdateMask": true, "buildUpdatePolicyPatch": true,
 }
 
 // maskAllowedFuncs ("file:func") may join mask paths themselves: the one
 // normalizer every --update-mask value goes through.
 var maskAllowedFuncs = map[string]bool{"flags.go:normalizeUpdateMask": true}
+
+// isMaskSource reports whether e is a call to a maskSources function; a bare
+// call to the method's name is a look-alike function, not the updateSpec method.
+func isMaskSource(e ast.Expr) bool {
+	name := calleeName(e)
+	if !maskSources[name] {
+		return false
+	}
+	if name == "buildUpdateMask" {
+		_, isMethod := e.(*ast.CallExpr).Fun.(*ast.SelectorExpr)
+		return isMethod
+	}
+	return true
+}
 
 func calleeName(e ast.Expr) string {
 	call, ok := e.(*ast.CallExpr)
@@ -177,7 +194,7 @@ func maskAssignments(decl ast.Node) (seen, bad map[string]bool) {
 			seen[id.Name] = true
 			good := plain
 			switch {
-			case len(rhs) == 1 && maskSources[calleeName(rhs[0])]:
+			case len(rhs) == 1 && isMaskSource(rhs[0]):
 			case len(lhs) == len(rhs):
 				_, good2 := constString(rhs[i])
 				good = good && good2
@@ -225,6 +242,14 @@ func handBuiltMasks(t *testing.T, name, src string) []string {
 		}
 		seen, bad := maskAssignments(decl)
 		ast.Inspect(decl, func(n ast.Node) bool {
+			if fld, ok := n.(*ast.Field); ok && fld.Tag != nil {
+				if tag, err := strconv.Unquote(fld.Tag.Value); err == nil {
+					name, _, _ := strings.Cut(reflect.StructTag(tag).Get("json"), ",")
+					if name == "updateMask" {
+						report(fld.Tag.Pos(), `struct tag json:"updateMask"`)
+					}
+				}
+			}
 			if e, ok := n.(ast.Expr); ok {
 				if s, ok := constString(e); ok && s == "updateMask" {
 					report(e.Pos(), `string "updateMask"`)
@@ -260,6 +285,59 @@ func handBuiltMasks(t *testing.T, name, src string) []string {
 	return out
 }
 
+// TestUpdateMaskSourceIsDeclaredOnce: the method name the guard trusts must
+// not be declared anywhere else, or a look-alike method would be trusted too.
+func TestUpdateMaskSourceIsDeclaredOnce(t *testing.T) {
+	files, err := filepath.Glob("*.go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	found := 0
+	for _, name := range files {
+		if strings.HasSuffix(name, "_test.go") {
+			continue
+		}
+		f, err := parser.ParseFile(token.NewFileSet(), name, nil, 0)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, decl := range f.Decls {
+			fd, ok := decl.(*ast.FuncDecl)
+			if !ok || fd.Name.Name != "buildUpdateMask" {
+				continue
+			}
+			found++
+			if !declaresUpdateSpecMethod(fd) || name != "update_fields.go" {
+				t.Errorf("%s: only (*updateSpec).buildUpdateMask in update_fields.go may use this name", name)
+			}
+		}
+	}
+	if found != 1 {
+		t.Errorf("found %d declarations of buildUpdateMask, want 1", found)
+	}
+	for _, src := range []string{
+		`package p; func buildUpdateMask() {}`,
+		`package p; func (o *other) buildUpdateMask() {}`,
+	} {
+		f, _ := parser.ParseFile(token.NewFileSet(), "x.go", src, 0)
+		if declaresUpdateSpecMethod(f.Decls[0].(*ast.FuncDecl)) {
+			t.Errorf("look-alike accepted: %s", src)
+		}
+	}
+}
+
+func declaresUpdateSpecMethod(fd *ast.FuncDecl) bool {
+	if fd.Recv == nil || len(fd.Recv.List) != 1 {
+		return false
+	}
+	star, ok := fd.Recv.List[0].Type.(*ast.StarExpr)
+	if !ok {
+		return false
+	}
+	id, ok := star.X.(*ast.Ident)
+	return ok && id.Name == "updateSpec"
+}
+
 // TestUpdateCommandsDoNotBuildMasksByHand keeps the mask in update_fields.go:
 // a command declares fields in a table, or wraps a body-file's mask with
 // wrapUpdate/setUpdateMask.
@@ -290,8 +368,11 @@ func TestUpdateCommandsDoNotBuildMasksByHand(t *testing.T) {
 		`package p; func f(maskParts []string) string { return strings.Join(maskParts, ",") }`,
 		`package p; func f(o map[string]any, fieldPaths []string) any { return wrapUpdate("k", o, strings.Join(fieldPaths, ",")) }`,
 		`package p; func f(b map[string]any, ps []string) { m := strings.Join(ps, ","); setUpdateMask(b, m) }`,
-		`package p; func f(b map[string]any, s *updateSpec) any { m, _ := s.build(nil, b); m += ",b"; return wrapUpdate("k", b, m) }`,
+		`package p; func f(b map[string]any, s *updateSpec) any { m, _ := s.buildUpdateMask(nil, b); m += ",b"; return wrapUpdate("k", b, m) }`,
 		`package p; const k = "update" + "Mask"`,
+		"package p; type T struct { M string `json:\"updateMask,omitempty\"` }",
+		`package p; func build(b map[string]any) string { return "a,b" }; func f(b map[string]any) any { m := build(b); return wrapUpdate("k", b, m) }`,
+		`package p; func buildUpdateMask(b map[string]any) string { return "a,b" }; func f(b map[string]any) any { m := buildUpdateMask(b); return wrapUpdate("k", b, m) }`,
 		`package p; func f(o map[string]any, m string) any { return wrapUpdate("k", o, m) }`,
 	}
 	for _, src := range planted {
@@ -302,7 +383,7 @@ func TestUpdateCommandsDoNotBuildMasksByHand(t *testing.T) {
 	clean := []string{
 		`package p; func f(b map[string]any) any { return wrapUpdate("k", b, "m") }`,
 		`package p; func f(parts []string) string { return strings.Join(parts, ",") }`,
-		`package p; func f(b map[string]any, s *updateSpec) any { m, err := s.build(nil, b); _ = err; return wrapUpdate("k", b, m) }`,
+		`package p; func f(b map[string]any, s *updateSpec) any { m, err := s.buildUpdateMask(nil, b); _ = err; return wrapUpdate("k", b, m) }`,
 		`package p; func f(b map[string]any) any { m, _, _ := bodyFileMask(nil); return wrapUpdate("k", b, m) }`,
 	}
 	for _, src := range clean {

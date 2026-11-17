@@ -74,7 +74,7 @@ func buildAutomationUpdateBody(cmd *cobra.Command, id string) (map[string]any, e
 		}
 	} else {
 		automation = map[string]any{}
-		if mask, err = automationUpdateSpec.build(cmd, automation); err != nil {
+		if mask, err = automationUpdateSpec.buildUpdateMask(cmd, automation); err != nil {
 			return nil, err
 		}
 	}
