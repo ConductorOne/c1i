@@ -335,7 +335,7 @@ tracked root file outside its allowlist. Stage explicit paths rather than `-A`.
   for an unreachable gateway and `PaginationError` for a `tools/list` cursor
   that never ends. `cmd/errors.go` maps them — plus its own
   `usageError`, `toolExecutionError`, `nonJSONResponseError`,
-  `stuckPaginationCursorError` (a list's cursor stopped advancing),
+  `stuckPaginationCursorError` (a list's cursor stopped advancing), `refNotFoundError` (a referenced id or name is unknown: exit 4; with no request behind it, no status),
   and `upstreamError` wrappers, for failures with no natural
   client-level type, `helperLeftError` (a login's leftover credential, always
   1), and `mutationError` (`applied`, from `AttemptError`) — to exit codes:

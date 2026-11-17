@@ -21,7 +21,8 @@ updateMask (any path is accepted, none narrows the write). So c1i first reads
 the mapping and sends back its current attributeType, fallbacks and
 profileTypeIds with only your flags changed, and still sends the mask it
 builds (attributeType, fallbacks) as the API documents. --dry-run does the
-read too. The type itself and the app cannot be changed; the type's config
+read too. The read and the write are not atomic: an edit to the fallbacks or profile
+types made between them is overwritten. The type itself and the app cannot be changed; the type's config
 kind decides which key flags apply (--key on an app-level type exits 2).
 
 --fallbacks-file is a JSON array replacing the fallbacks; "[]" clears them.

@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"net/http"
 	"strings"
 
 	"github.com/ConductorOne/c1i/internal/client"
@@ -53,8 +52,9 @@ var attributeTypesListCmd = &cobra.Command{
 	Long: `List the user attribute types: the targets a mapping writes to ("Department",
 "Job Title", "Manager Email", ...). Rows are id, display_name and
 config_kind: "app" (a type read from the app itself, e.g. Manager Email),
-"app_user_profile" (read from one profile key of the app's users), or
-"custom_app_user_profile" (Custom: also names the custom user attribute).
+"app_user_profile" (read from one profile key of the app's users),
+"custom_app_user_profile" (Custom: also names the custom user attribute), or
+"cel_expression" (create refuses it; use --body-file). It is null when none is set.
 
 Type ids are specific to a tenant: look a type up by display name, as
 "attribute-mappings create --type" does. The endpoint takes no page_size or
@@ -121,8 +121,7 @@ func resolveAttributeType(types []attributeType, want string) (attributeType, er
 	case 1:
 		return named[0], nil
 	case 0:
-		return attributeType{}, refNotFound("type", want, "attribute type (see \"c1i attribute-types list\")",
-			&client.APIError{Method: http.MethodGet, Path: attributeTypesPath, StatusCode: http.StatusNotFound})
+		return attributeType{}, refNotFoundLocal("type", want, "attribute type (see \"c1i attribute-types list\")")
 	}
 	ids := make([]string, len(named))
 	for i, t := range named {

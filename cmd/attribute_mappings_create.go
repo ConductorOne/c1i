@@ -35,9 +35,11 @@ a built-in type ("builtin attributes cannot be bound to profile types"). No
 profile type existed to test a successful binding.
 
 The mapping's display_name is set by the server (the type's name, or
---custom-key for Custom); there is no flag for it. A second create for the
+--custom-key for Custom, as seen in one live run); there is no flag for it. A second create for the
 same app and type is not refused: it makes a second mapping with its own id,
-so list before creating in a script. An unknown --app-id exits 4.
+so list before creating in a script. A real run with an unknown --app-id
+exits 4 (the server's answer); --dry-run looks the type up but not the app, so
+it previews such a request.
 
 --body-file sends a full CreateRequest verbatim (attributeType with its
 config, appId, ...), mutually exclusive with every other flag; nothing is
@@ -118,7 +120,7 @@ func readAttributeMappingCreateFlags(cmd *cobra.Command) (*attributeMappingCreat
 	return in, nil
 }
 
-// checkKeys refuses a --key / --custom-key the type's config kind does not
+// checkAttributeKeys refuses a --key / --custom-key the type's config kind does not
 // take, and requires the ones it does.
 func checkAttributeKeys(kind, typeName, key, customKey string) error {
 	switch kind {

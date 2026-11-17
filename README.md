@@ -1867,13 +1867,16 @@ Traps:
   check.
 - A second `create` for the same app and type is not refused: it makes a second
   mapping with its own id. List before creating in a script.
+- An unknown `--app-id` exits `4` on a real run only: `--dry-run` looks up the
+  type, not the app.
 - The server sets `display_name` (the type's name, or `--custom-key`); there is
   no flag for it.
 - `update` can change `--key`, `--custom-key` and `--fallbacks-file`, not the
   type or the app. The server's PUT replaces the whole mapping and ignores
   `updateMask`, so c1i reads the mapping first and sends back its current
   attribute type, fallbacks and profile types with only your flags changed
-  (`--dry-run` reads too). `--fallbacks-file '[]'` clears the fallbacks.
+  (`--dry-run` reads too), so an edit made between the read and the write is
+  overwritten. `--fallbacks-file '[]'` clears the fallbacks.
 - `--profile-type-id` binds profile types; the server refuses it on a built-in
   type (`builtin attributes cannot be bound to profile types`). Profile types
   have no create command here.

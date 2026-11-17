@@ -1,10 +1,16 @@
 package cmd
 
 import (
+	"bytes"
+	"context"
 	"encoding/json"
 	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
+
+	"github.com/ConductorOne/c1i/internal/client"
+	"github.com/spf13/cobra"
 )
 
 const (
@@ -227,5 +233,95 @@ func TestKeepMappingsOfApp(t *testing.T) {
 	}
 	if got := compactRaw(t, string(out)); got != `{"list":[{"userAttributeMapping":{"appId":"x","id":"a"}}],"nextPageToken":"n"}` {
 		t.Errorf("got %s", got)
+	}
+}
+
+// A type c1i did not find in a 200 answer is not a 404: the JSON error must
+// not claim a method, path or status.
+func TestAttributeMappingUnknownTypeJSONErrorHasNoFabricatedStatus(t *testing.T) {
+	r, _ := amRun(t, amRoute(amTypes, ""), "attribute-mappings", "create", "--app-id", amApp, "--type", "Nope", "--key", "k", "--error-format", "json")
+	if r.exit != exitNotFound {
+		t.Fatalf("exit %d, want 4", r.exit)
+	}
+	obj := r.errorObject(t)
+	for _, k := range []string{"status", "method", "path", "body"} {
+		if _, ok := obj[k]; ok {
+			t.Errorf("error object has %q: %v", k, obj)
+		}
+	}
+	if obj["applied"] != false {
+		t.Errorf("applied = %v, want false", obj["applied"])
+	}
+}
+
+func amListPages(t *testing.T, appID string, flags map[string]string, pages map[string]string) (string, int, error) {
+	t.Helper()
+	reqs := 0
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		reqs++
+		_, _ = w.Write([]byte(pages[r.URL.Query().Get("page_token")]))
+	}))
+	t.Cleanup(srv.Close)
+	orig := newListClient
+	newListClient = func(_ *cobra.Command, _ string) (*client.Client, error) {
+		return client.NewForTesting(srv.URL, srv.Client()), nil
+	}
+	t.Cleanup(func() { newListClient = orig })
+	t.Setenv("C1I_URL", "https://example.invalid")
+	cmd := attributeMappingsListCmd
+	resetCmdFlags(t, cmd)
+	flags["app-id"] = appID
+	for n, v := range flags {
+		if err := cmd.Flags().Set(n, v); err != nil {
+			t.Fatal(err)
+		}
+	}
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetErr(&bytes.Buffer{})
+	cmd.SetContext(context.Background())
+	t.Cleanup(func() { cmd.SetOut(nil); cmd.SetErr(nil) })
+	err := cmd.RunE(cmd, nil)
+	return out.String(), reqs, err
+}
+
+func amItem(id, app string) string {
+	return `{"userAttributeMapping":{"id":"` + id + `","appId":"` + app + `"}}`
+}
+
+func TestAttributeMappingsListAppFilterAcrossPages(t *testing.T) {
+	pages := map[string]string{
+		"":   `{"list":[` + amItem("a1", "x") + `,` + amItem("b1", "y") + `],"nextPageToken":"t2"}`,
+		"t2": `{"list":[` + amItem("c1", "y") + `],"nextPageToken":"t3"}`,
+		"t3": `{"list":[` + amItem("d1", "x") + `,` + amItem("e1", "x") + `]}`,
+	}
+	ids := func(out string) string {
+		var got []string
+		for _, l := range strings.Fields(out) {
+			var row map[string]any
+			_ = json.Unmarshal([]byte(l), &row)
+			got = append(got, row["id"].(string))
+		}
+		return strings.Join(got, ",")
+	}
+	out, reqs, err := amListPages(t, "x", map[string]string{}, pages)
+	if err != nil || ids(out) != "a1,d1,e1" || reqs != 3 {
+		t.Errorf("all pages: ids %s, %d requests, err %v; want a1,d1,e1 over 3 requests", ids(out), reqs, err)
+	}
+	out, _, err = amListPages(t, "x", map[string]string{"limit": "2"}, pages)
+	if err != nil || ids(out) != "a1,d1" {
+		t.Errorf("--limit 2: ids %s, err %v; want a1,d1", ids(out), err)
+	}
+	out, _, err = amListPages(t, "zzz", map[string]string{}, pages)
+	if err != nil || strings.TrimSpace(out) != "" {
+		t.Errorf("no match: out %q err %v; want nothing at exit 0", out, err)
+	}
+}
+
+func TestAttributeMappingsListAppFilterRefusesUnrecognizedShape(t *testing.T) {
+	pages := map[string]string{"": `{"list":[{"userAttributeMapping":{"id":"a1"}}]}`}
+	out, _, err := amListPages(t, "x", map[string]string{}, pages)
+	if err == nil || exitCode(err) != exitServer || out != "" {
+		t.Errorf("out %q err %v exit %d; want exit 6 and no rows", out, err, exitCode(err))
 	}
 }

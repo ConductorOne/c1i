@@ -224,6 +224,10 @@ func exitCode(err error) int {
 	if errors.As(err, &me) && me.exit != 0 {
 		return me.exit
 	}
+	var rn *refNotFoundError
+	if errors.As(err, &rn) && rn.notFound == nil {
+		return exitNotFound
+	}
 	var apiErr *client.APIError
 	if errors.As(err, &apiErr) {
 		switch {

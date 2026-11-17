@@ -119,6 +119,10 @@ func keepMappingsOfApp(data []byte, appID string) ([]byte, error) {
 		if err := json.Unmarshal(raw, &item); err != nil {
 			return nil, &nonJSONResponseError{err}
 		}
+		// A shape change must not read as "no mapping of that app".
+		if item.Mapping.AppID == "" {
+			return nil, &nonJSONResponseError{fmt.Errorf("a list item has no userAttributeMapping.appId, so --app-id cannot be applied")}
+		}
 		if item.Mapping.AppID == appID {
 			kept = append(kept, raw)
 		}
