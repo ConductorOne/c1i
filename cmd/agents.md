@@ -636,6 +636,10 @@ resource with `--resource-id` likewise means you drop
 - `requests create grant --duration` likewise takes `24h` or `86400s`; the
   server refuses `0s` with `value must be greater than 0s`. The value lands at
   that same `.type.grant.grantDuration` path.
+- `requests create grant|revoke --app-user-id` targets one application account
+  instead of a C1 user; the account is looked up under `--app-id` first (an
+  unknown one exits 4). Either `--user-id` or `--app-user-id` identifies the
+  recipient, and with both the account must belong to the user.
 - `requests create grant --wait` blocks until the created grant appears in
   `grants list` and the set settles; the task is printed immediately and
   progress goes to stderr. `--wait-min` defaults to 1, `--wait-stable` to 3,

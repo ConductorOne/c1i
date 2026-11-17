@@ -11,13 +11,16 @@ import (
 // Like the grant endpoint, the fields must be sent at the TOP LEVEL — a
 // "task" wrapper is rejected with a 400 "unknown field \"task\"" — and the
 // user field is identityUserId, not userId.
-func buildRevokeTaskBody(appID, entitlementID, userID, description string) map[string]any {
+func buildRevokeTaskBody(appID, entitlementID, userID, appUserID, description string) map[string]any {
 	body := map[string]any{
 		"appId":            appID,
 		"appEntitlementId": entitlementID,
 	}
 	if userID != "" {
 		body["identityUserId"] = userID
+	}
+	if appUserID != "" {
+		body["appUserId"] = appUserID
 	}
 	if description != "" {
 		body["description"] = description
@@ -30,7 +33,9 @@ var requestsCreateRevokeCmd = &cobra.Command{
 	Short: "Create a revoke access request",
 	Long: `Create a revoke access request.
 
-An omitted --user-id is the caller.
+An omitted --user-id is the caller. --app-user-id names one application
+account instead; either flag alone identifies the recipient, and with both the
+account must belong to the user.
 
 Prints the created task as pretty JSON, unwrapped like "requests get": the id
 is .id. Its .state is a snapshot from creation, not the outcome; re-read with
@@ -41,10 +46,11 @@ exits 0 with null.`,
 		appID, _ := cmd.Flags().GetString("app-id")
 		entitlementID, _ := cmd.Flags().GetString("entitlement-id")
 		userID, _ := cmd.Flags().GetString("user-id")
+		appUserID, _ := cmd.Flags().GetString("app-user-id")
 		description, _ := cmd.Flags().GetString("description")
 
-		body := buildRevokeTaskBody(appID, entitlementID, userID, description)
-		return sendMutation(cmd, mutation{Method: http.MethodPost, Path: "/api/v1/task/revoke", Body: body}, selfUserOpts(userID)...)
+		body := buildRevokeTaskBody(appID, entitlementID, userID, appUserID, description)
+		return sendMutation(cmd, mutation{Method: http.MethodPost, Path: "/api/v1/task/revoke", Body: body}, recipientOpts(appID, userID, appUserID)...)
 	},
 }
 
@@ -52,6 +58,7 @@ func init() {
 	requestsCreateRevokeCmd.Flags().String("app-id", "", "Application ID")
 	requestsCreateRevokeCmd.Flags().String("entitlement-id", "", "Entitlement ID")
 	requestsCreateRevokeCmd.Flags().String("user-id", "", "User ID (defaults to self if omitted)")
+	requestsCreateRevokeCmd.Flags().String("app-user-id", "", "Application account (app user) ID to revoke; an alternative to --user-id for a user with several accounts")
 	requestsCreateRevokeCmd.Flags().String("description", "", "Justification or description")
 	allowEmpty(requestsCreateRevokeCmd, emptyIsOmitted, "description")
 	markRequired(requestsCreateRevokeCmd, "app-id")

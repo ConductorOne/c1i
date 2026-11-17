@@ -726,6 +726,9 @@ access that way unless you already know how you'd take it back.
 
        c1i requests create grant --app-id "$APP_ID" --entitlement-id "$ENTITLEMENT_ID" --user-id "$USER_ID" --description "<why>"
 
+   If the user has several accounts in the app, target one with
+   "--app-user-id" instead of (or alongside) "--user-id".
+
    Prints the task as JSON; capture "jq -er .id" as TASK_ID (.state is a
    snapshot from creation, not the outcome; re-read with requests get). Add
    "--wait" to block until the grant appears in "grants list" before the

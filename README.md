@@ -1495,15 +1495,18 @@ first and reports it on stderr as `Resolved catalog id: …`, also under
 ### Access Requests
 
 ```sh
-c1i requests create grant --app-id <id> --entitlement-id <eid> [--user-id <uid>] [--description <text>] [--duration <duration>] [--emergency] [--wait [--wait-min N] [--wait-stable N] [--wait-timeout D]]
-c1i requests create revoke --app-id <id> --entitlement-id <eid> [--user-id <uid>] [--description <text>]
+c1i requests create grant --app-id <id> --entitlement-id <eid> [--user-id <uid> | --app-user-id <auid>] [--description <text>] [--duration <duration>] [--emergency] [--wait [--wait-min N] [--wait-stable N] [--wait-timeout D]]
+c1i requests create revoke --app-id <id> --entitlement-id <eid> [--user-id <uid> | --app-user-id <auid>] [--description <text>]
 c1i requests list [--user-id <id> | --all] [--app-id <id>] [--entitlement-id <id>] [--state open|closed] [--type grant|revoke] [--page-size N] [--page-token TOKEN] [--limit N]
 c1i requests get <request-id>
 ```
 
 On `create`, `--user-id` defaults to the authenticated user when omitted; an
 explicit one is looked up first (an unknown user exits `4`, nothing is sent,
-`--dry-run` included).
+`--dry-run` included). `--app-user-id` names one application account instead,
+which is how a user with several accounts in the app is targeted; it is looked
+up under `--app-id` first (an unknown account exits `4`). Either flag alone
+identifies the recipient, and with both the account must belong to the user.
 `requests create grant --duration` follows the [Durations](#durations) rule
 (`24h`, `86400s`); the server refuses `0s` with `value must be greater than
 0s`.
