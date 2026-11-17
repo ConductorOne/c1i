@@ -80,6 +80,12 @@ partial apply on multi-step commands.
 Pushing a tag runs `.github/workflows/release.yaml`, which calls the shared
 workflow in `ConductorOne/github-workflows` at `@v4`. Before tagging:
 
+- Cut the release in a docs-only PR: move `## [Unreleased]` content under
+  `## [<version>] - <date>`, update the compare links at the bottom, and refresh
+  the README upgrade block. `README.md` and `CHANGELOG.md` are embedded verbatim
+  and `cmd/agents.md` is embedded with `{{VERSION}}` substituted at run time
+  (`docs readme|changelog|agents`); tests compare the rendered output, so the
+  files must change together.
 - Run the full check, the seed sweep and the dependency scan above on the
   `main` commit you will tag, after its CI passes.
 - Read the commits to the shared `release.yaml` since the previous tag. A

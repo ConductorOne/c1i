@@ -6,6 +6,8 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.11.0] - 2026-11-17
+
 ### Upgrading from 0.10.1
 
 Exit codes:
@@ -187,16 +189,16 @@ Inputs now refused (exit 2):
   rejects with "this user has multiple app users; specify app_user_id". The
   account is looked up under `--app-id` first (an unknown one exits `4`), and
   either `--user-id` or `--app-user-id` may identify the recipient.
-- `requests create grant --wait` blocks until the created grant appears in
-  `grants list` and the matching set settles, using the same poll as
+- `requests create grant --wait` blocks until a new grant for the request
+  appears in `grants list` and the matching set settles, using the same poll as
   `grants list --wait`. `--wait-min` defaults to `1` (a create expects a
   grant; `grants list` keeps `0` because an empty set is a valid answer),
   `--wait-stable` defaults to `3` and `--wait-timeout` to `4m`. The task is
   printed as soon as it is created, progress goes to stderr, and a timeout
   exits `1` although the request was accepted. The wait reads the matching set
   before sending and settles only on a grant that was not already there, so a
-  recipient who already holds the entitlement waits to the timeout.
-  `--dry-run` never polls.
+  recipient who already holds the entitlement waits to the timeout and
+  `--wait-min 0` cannot settle on an empty set. `--dry-run` never polls.
 - `grants add --app-id --entitlement-id --user-id ...` grants users a manually
   managed entitlement directly (`POST .../add-manual-user`), skipping request
   policy and approval. It sends one request carrying every `--user-id` (a
@@ -283,7 +285,7 @@ Inputs now refused (exit 2):
 - `auth logout` refuses `--dry-run` (exit `2`, before any read, delete or
   token-cache clear) instead of deleting the stored credential and its cached
   token at exit `0`; a preview cannot be honored for a delete. `C1I_DRY_RUN`
-  is refused the same way, and the global flag's help names it.
+  is refused the same way, and the refusal names both.
 - `mcp servers register` / `update-credentials` no longer drop a flag they
   cannot send: the other type's config file (`--hosted-config-file` with
   `--type external` or `--external-config-file` with `--type hosted`), a
@@ -411,6 +413,16 @@ Inputs now refused (exit 2):
 - README and the 0.10.1 changelog no longer point at a 0.10.0 section that was
   never published.
 - A malformed list response's decode error now names the list key.
+- `docs page` accepts a leading slash or the full `https://c1.ai/docs/` URL,
+  so a path copied from a browser works (the old `conductorone.com/docs`
+  prefix is still accepted); an empty path is a usage error.
+- `apps managed-state promote` names the `--app-id` it used in its
+  no-such-discovered-app error, so an unknown app is distinguishable from an
+  unknown resource id.
+- Help and the agents guide corrected three stale claims: `apps update`
+  no longer says a blank `--display-name` can be sent, `docs agents` says only
+  `requests list --user-id` returns no rows for an unknown filter, and the
+  `auth logout` refusal names `C1I_DRY_RUN` as well as the flag.
 
 ## [0.10.1] - 2026-11-12
 
@@ -2862,7 +2874,8 @@ First changelog entry; releases through v0.1.5 predate this file (see the
 
 - CI enforces `gofmt` via golangci-lint; module-wide formatting normalized.
 
-[Unreleased]: https://github.com/ConductorOne/c1i/compare/v0.10.1...HEAD
+[Unreleased]: https://github.com/ConductorOne/c1i/compare/v0.11.0...HEAD
+[0.11.0]: https://github.com/ConductorOne/c1i/compare/v0.10.1...v0.11.0
 [0.10.1]: https://github.com/ConductorOne/c1i/releases/tag/v0.10.1
 [0.9.2]: https://github.com/ConductorOne/c1i/releases/tag/v0.9.2
 [0.9.1]: https://github.com/ConductorOne/c1i/releases/tag/v0.9.1
