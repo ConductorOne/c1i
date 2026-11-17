@@ -149,6 +149,18 @@ silently ignored:
 A padded mask (`" a , b "`) is now sent as `a,b`. A snake_case path still
 covers its camelCase key for the coverage check but is sent as given.
 
+### Added
+
+- `grants add --app-id --entitlement-id --user-id ...` grants users a manually
+  managed entitlement directly (`POST .../add-manual-user`), skipping request
+  policy and approval. It sends one request for every `--user-id` (a repeated id
+  once), looks up each user first (unknown exits `4`, nothing sent, `--dry-run`
+  included), and `--wait` blocks until every user shows in `grants list`.
+  There is no `grants remove`: the only direct removal, `remove-membership`,
+  rejects a manual entitlement (`entitlement is not an SSO application sign-in
+  entitlement`); use `requests create revoke`, whose task waits on a
+  provisioning step on a manual entitlement.
+
 ### Changed
 
 - **`upgrade --dry-run` prints the same JSON preview as every other

@@ -1046,6 +1046,32 @@ A grant outlives the entitlement or account it points at, so rows also carry
 'select(.entitlement_deleted_at)'` finds grants whose backing object is gone.
 Absent timestamps are `null`, never `""`.
 
+#### Granting directly
+
+```sh
+c1i grants add --app-id <id> --entitlement-id <eid> --user-id <uid> [--user-id <uid> ...] [--wait]
+```
+
+`grants add` makes each user a manually managed member of the entitlement in
+one request (`POST .../add-manual-user`). It **bypasses the grant policy**:
+there is no approval step and no request task, and it needs a role that may
+manage the app. For a grant that goes through policy use `requests create
+grant`. A repeated `--user-id` is sent once. Each user is looked up first, so
+an unknown user exits `4` with nothing sent (`--dry-run` included; the lookup
+needs user read, else exit `3`); the server itself answers an unknown user with
+`200` and does nothing. An unknown entitlement or app exits `4`. The response
+(`bulkActionId`, `failedUsersErrorMap`) is printed as JSON.
+
+The grant lands asynchronously (seconds in testing, but reads can lag). `--wait`
+polls the entitlement's grants until every user appears, or `--wait-timeout`
+(default `4m`) elapses; a timeout exits `1`, though the write was accepted.
+
+There is no `grants remove`: the only direct removal, `DELETE
+.../remove-membership`, takes one app user id and fails on a manual entitlement
+with `entitlement is not an SSO application sign-in entitlement`. Use
+`requests create revoke`; on a manual entitlement its task waits on a
+provisioning step, and the grant stays until that step is completed.
+
 ### Tasks
 
 ```sh
