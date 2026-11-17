@@ -177,6 +177,11 @@ Inputs now refused (exit 2):
 
 ### Added
 
+- `requests create grant|revoke --app-user-id` targets one application account
+  when the C1 user has several in the app, which the create endpoint otherwise
+  rejects with "this user has multiple app users; specify app_user_id". The
+  account is looked up under `--app-id` first (an unknown one exits `4`), and
+  either `--user-id` or `--app-user-id` may identify the recipient.
 - `requests create grant --wait` blocks until the created grant appears in
   `grants list` and the matching set settles, using the same poll as
   `grants list --wait`. `--wait-min` defaults to `1` (a create expects a

@@ -24,7 +24,7 @@ import (
 // proto field names — identityUserId (not userId) and grantDuration (not
 // duration) — which would otherwise be rejected as unknown fields too.
 func TestBuildGrantTaskBodyNoWrapper(t *testing.T) {
-	body := buildGrantTaskBody("app1", "ent1", "user1", "86400s", "test", true)
+	body := buildGrantTaskBody("app1", "ent1", "user1", "", "86400s", "test", true)
 
 	if _, wrapped := body["task"]; wrapped {
 		t.Fatalf("body must not wrap fields under a \"task\" key: %v", body)
@@ -69,7 +69,7 @@ func TestBuildGrantTaskBodyNoWrapper(t *testing.T) {
 // unset, so the request carries only appId/appEntitlementId (self-request,
 // default duration, no description, non-emergency).
 func TestBuildGrantTaskBodyOmitsEmpty(t *testing.T) {
-	body := buildGrantTaskBody("app1", "ent1", "", "", "", false)
+	body := buildGrantTaskBody("app1", "ent1", "", "", "", "", false)
 	if len(body) != 2 {
 		t.Fatalf("expected only appId and appEntitlementId, got %v", body)
 	}
@@ -567,7 +567,7 @@ func TestRequestsCreateGrantDryRunIntrospectNetworkFailureExitsGenerically(t *te
 // TestBuildRevokeTaskBodyNoWrapper pins the same flat-body contract for
 // POST /api/v1/task/revoke (CreateRevokeTaskRequest).
 func TestBuildRevokeTaskBodyNoWrapper(t *testing.T) {
-	body := buildRevokeTaskBody("app1", "ent1", "user1", "test")
+	body := buildRevokeTaskBody("app1", "ent1", "user1", "", "test")
 
 	if _, wrapped := body["task"]; wrapped {
 		t.Fatalf("body must not wrap fields under a \"task\" key: %v", body)
@@ -596,7 +596,7 @@ func TestBuildRevokeTaskBodyNoWrapper(t *testing.T) {
 // TestBuildRevokeTaskBodyOmitsEmpty mirrors the grant omit-empty case: with no
 // user or description, the body carries only appId/appEntitlementId.
 func TestBuildRevokeTaskBodyOmitsEmpty(t *testing.T) {
-	body := buildRevokeTaskBody("app1", "ent1", "", "")
+	body := buildRevokeTaskBody("app1", "ent1", "", "", "")
 	if len(body) != 2 {
 		t.Fatalf("expected only appId and appEntitlementId, got %v", body)
 	}
