@@ -41,20 +41,20 @@ func (r *recordingReporter) runCleanups() {
 // with a live one it must not. Drives the real stub against a fake reporter.
 func TestNilServerFailsWhenAClientIsBuilt(t *testing.T) {
 	nilRec := &recordingReporter{}
+	defer nilRec.runCleanups()
 	stubMutationClient(nilRec, nil, 0)
 	_, _ = newClient(nil, mutTestURL)
-	nilRec.runCleanups()
 	if nilRec.errors != 1 {
 		t.Fatalf("nil-server stub reported %d failures on a client build, want 1", nilRec.errors)
 	}
 
 	s := newMutServer(t, fixedReply(200, "{}"))
 	liveRec := &recordingReporter{}
+	defer liveRec.runCleanups()
 	stubMutationClient(liveRec, s.srv, 0)
 	if _, err := newClient(nil, mutTestURL); err != nil {
 		t.Fatal(err)
 	}
-	liveRec.runCleanups()
 	if liveRec.errors != 0 {
 		t.Fatalf("live-server stub reported %d failures, want 0", liveRec.errors)
 	}

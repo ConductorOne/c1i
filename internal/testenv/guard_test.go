@@ -162,3 +162,18 @@ func TestPackagesTouchingHomeUseTestenv(t *testing.T) {
 		t.Errorf("checked only %d packages; go list output not understood", checked)
 	}
 }
+
+func TestClaimTestProcessRefusesAChild(t *testing.T) {
+	env := map[string]string{}
+	get := func(k string) string { return env[k] }
+	set := func(k, v string) error { env[k] = v; return nil }
+	if err := claimTestProcess(get, set, 42); err != nil || env[ParentEnv] != "42" {
+		t.Fatalf("first claim: err=%v env=%v", err, env)
+	}
+	if err := claimTestProcess(get, set, 43); err == nil || !strings.Contains(err.Error(), ParentEnv) || env[ParentEnv] != "42" {
+		t.Fatalf("second claim: err=%v env=%v, want a refusal that keeps the parent's marker", err, env)
+	}
+	if strings.HasPrefix(strings.ToUpper(ParentEnv), "C1I_") {
+		t.Fatalf("%s would be stripped by Isolate", ParentEnv)
+	}
+}

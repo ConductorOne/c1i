@@ -52,11 +52,14 @@ export GC="$(go env GOCACHE)" GM="$(go env GOMODCACHE)"
   > ../dev/sweep-{}.log 2>&1 || { grep -m3 -E "shuffle|--- FAIL" ../dev/sweep-{}.log; exit 255; }')
 ```
 
-Don't edit the tree while it runs. On a shared host, run tests under resource
+Don't edit the tree while it runs: tests parse `cmd/*.go` at run time, so an
+edit makes the frozen binary disagree with the source. On a shared host, run tests under resource
 limits (a cgroup or `systemd-run --scope` capping tasks, memory and CPU) and
 never run an unbounded sweep; a runaway run once forced a host reboot. A test
 must never exec the test binary (`os.Args[0]`, `os.Executable()`) or spawn
-`go test`; run the code in-process instead (`TestNoTestExecsTheTestBinary`).
+`go test`; run the code in-process instead. `testenv.Run` enforces it at
+runtime (a child that inherits `C1ITEST_PARENT_PID` exits 2 without running);
+`TestNoTestExecsTheTestBinary` is only an early warning.
 Test-only waits (login poll, retry backoff) shrink through `internal/timing`,
 set by `internal/testenv`; production is unscaled and pinned by a test.
 

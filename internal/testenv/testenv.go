@@ -71,10 +71,27 @@ func pinGoDirs() {
 // (500ms becomes 0.5ms); tests assert counts and computed delays, not seconds.
 const WaitDivisor = 1000
 
+// ParentEnv marks a test process; a child that inherits it refuses to run.
+// Not C1I_*, which Isolate strips.
+const ParentEnv = "C1ITEST_PARENT_PID"
+
+// claimTestProcess refuses when ParentEnv is already set (a test re-ran the
+// test binary, which can fork without bound) and otherwise sets it for children.
+func claimTestProcess(get func(string) string, set func(k, v string) error, pid int) error {
+	if parent := get(ParentEnv); parent != "" {
+		return fmt.Errorf("testenv: %s=%s is set: a test binary was started from a test; run the code in-process instead", ParentEnv, parent)
+	}
+	return set(ParentEnv, fmt.Sprint(pid))
+}
+
 // Run is a TestMain body: isolate, swap in go-keyring's in-memory mock (global
 // and irreversible, so it is set once here), run the tests, clean up. Use as
 // os.Exit(testenv.Run(m)).
 func Run(m *testing.M) int {
+	if err := claimTestProcess(os.Getenv, os.Setenv, os.Getpid()); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		return 2
+	}
 	cleanup := Isolate()
 	defer cleanup()
 	keyring.MockInit()
