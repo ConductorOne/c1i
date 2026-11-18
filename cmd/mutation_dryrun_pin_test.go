@@ -88,9 +88,12 @@ var dryRunStubs = map[string][]string{
 	"c1i service-principals credentials update":           {"x1", "--service-principal-id=x1", "--display-name=x1"},
 	"c1i service-principals update":                       {"x1", "--display-name=x1"},
 	"c1i tasks approve":                                   {"x1", "--policy-step-id=p1"},
+	"c1i tasks escalate":                                  {"x1", "--policy-step-id=p1"},
 	"c1i tasks reassign":                                  {"x1", "--to-user-id=x1", "--policy-step-id=p1"},
 	"c1i tasks skip-step":                                 {"x1", "--policy-step-id=p1"},
+	"c1i tasks retry-provisioning":                        {"x1", "--policy-step-id=p1"},
 	"c1i tasks update-grant-duration":                     {"x1", "--duration=8h"},
+	"c1i tasks update-request-data":                       {"x1", "--data-file=@{}"},
 	"c1i webhooks create":                                 {"--destination-url=https://hooks.example.invalid/x", "--display-name=x1"},
 	"c1i webhooks update":                                 {"x1", "--display-name=x1"},
 }

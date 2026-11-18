@@ -125,6 +125,8 @@ var wantEmptyAllowed = map[string]string{
 	"c1i tasks reset --comment":                                 emptyIsOmitted,
 	"c1i tasks restart --comment":                               emptyIsOmitted,
 	"c1i tasks skip-step --comment":                             emptyIsOmitted,
+	"c1i tasks escalate --comment":                              emptyIsOmitted,
+	"c1i tasks retry-provisioning --comment":                    emptyIsOmitted,
 	"c1i webhooks create --description":                         emptyIsSent,
 	"c1i webhooks update --description":                         emptyIsSent,
 }
@@ -210,6 +212,8 @@ var inventoryExtraArgs = map[string][]string{
 	"c1i tasks approve":                  {"--policy-step-id=s1"},
 	"c1i tasks deny":                     {"--policy-step-id=s1"},
 	"c1i tasks skip-step":                {"--policy-step-id=s1"},
+	"c1i tasks escalate":                 {"--policy-step-id=s1"},
+	"c1i tasks retry-provisioning":       {"--policy-step-id=s1"},
 	"c1i mcp servers register":           {"--type=external", "--server-url=https://mcp.example.com/x"},
 	"c1i mcp servers test-connection":    {"--server-url=https://mcp.example.com/x"},
 	"c1i mcp servers update-credentials": {"--type=external", "--server-url=https://mcp.example.com/x", "--update-mask=url"},

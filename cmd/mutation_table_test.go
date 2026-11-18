@@ -284,6 +284,9 @@ var mutationTable = []mutationRow{
 	{cmd: "tasks reset", args: []string{"task-1"}, body: tblTask("ticketActionId"), want: tblTaskDoc("ticketActionId"), ids: tblTaskIDs("ticketActionId")},
 	{cmd: "tasks restart", args: []string{"task-1"}, body: tblTask("ticketActionId"), want: tblTaskDoc("ticketActionId"), ids: tblTaskIDs("ticketActionId"), reads: 1, stderr: tblStep},
 	{cmd: "tasks skip-step", args: []string{"task-1", "--policy-step-id", "s"}, body: tblTask("ticketActionId"), want: tblTaskDoc("ticketActionId"), ids: tblTaskIDs("ticketActionId")},
+	{cmd: "tasks escalate", args: []string{"task-1"}, body: tblTask("ticketActionId"), want: tblTaskDoc("ticketActionId"), ids: tblTaskIDs("ticketActionId"), reads: 1, stderr: tblStep, method: "POST", path: "/api/v1/tasks/task-1/action/escalate"},
+	{cmd: "tasks retry-provisioning", args: []string{"task-1", "--policy-step-id", "s"}, body: tblTask("ticketActionId"), want: tblTaskDoc("ticketActionId"), ids: tblTaskIDs("ticketActionId"), method: "POST", path: "/api/v1/tasks/task-1/action/retry-provisioning"},
+	{cmd: "tasks update-request-data", args: []string{"task-1", "--data-file", `@{"zz":"x"}`}, body: tblTask("ticketActionId"), want: tblTaskDoc("ticketActionId"), ids: tblTaskIDs("ticketActionId"), method: "POST", path: "/api/v1/tasks/task-1/action/update-request-data"},
 	{cmd: "tasks update-grant-duration", args: []string{"task-1", "--duration", "1h"}, body: tblTask("ticketActionId"), want: tblTaskDoc("ticketActionId"), ids: tblTaskIDs("ticketActionId")},
 	// webhooks
 	{cmd: "webhooks create", args: []string{"--display-name", "zz", "--destination-url", "https://hooks.example.com/x"}, body: tblWebhook, want: tblWebhookDoc, ids: idPath, method: "POST", path: "/api/v1/webhooks"},
