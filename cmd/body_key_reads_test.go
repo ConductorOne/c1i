@@ -15,10 +15,13 @@ import (
 
 // A guard on user JSON reads keys through bodyField and friends
 // (body_fields.go), so a snake_case key cannot skip it. This walk fails on a
-// multi-word literal key READ (m["fooBar"], m["foo_bar"], incl. comma-ok and
-// type assertions) and on a multi-word `case` of a switch over a ranged map
-// key, anywhere in cmd/ outside bodyKeyReadExemptions. Writes (m["k"] = v)
-// are not reads. Not caught: a key held in a variable or table (m[k]).
+// multi-word key READ by literal or package const (m["fooBar"], m[keyConst],
+// incl. comma-ok and type assertions), and on a multi-word `case` or `==`
+// against a ranged map key, anywhere in cmd/ outside bodyKeyReadExemptions.
+// Writes (m["k"] = v) are not reads. Not caught: a key in a local variable
+// or table (m[k]). Inline JSON flags (api --body, functions invoke --input,
+// --claims) are out of scope: api is the raw escape hatch, the others are
+// free-form.
 
 // bodyKeyReadExemption lists the keys a function may read exactly, and why
 // the map is not user JSON.
@@ -31,6 +34,13 @@ type bodyKeyReadExemption struct {
 // a closure in its initializer, "Type.method" for a method). A new key in an
 // exempt function fails like a new function does.
 var bodyKeyReadExemptions = map[string]bodyKeyReadExemption{
+	"api.go:extractListAndToken":                                 {[]string{"nextPageToken"}, "a server response, which is always camelCase"},
+	"body_keys.go:refuseCLIOwnedBodyKeys":                        {[]string{"c1i_owned_body_fields"}, "a cobra flag annotation, not JSON"},
+	"flags.go:flagGiven":                                         {[]string{"c1i_empty_allowed"}, "a cobra flag annotation, not JSON"},
+	"flags.go:pageSizeFlag":                                      {[]string{"c1i_page_size_max"}, "a cobra flag annotation, not JSON"},
+	"flags.go:protoDurationFlag":                                 {[]string{"c1i_proto_duration"}, "a cobra flag annotation, not JSON"},
+	"flags.go:validateHeaderFlags":                               {[]string{"c1i_header_text"}, "a cobra flag annotation, not JSON"},
+	"root.go:validateBlankFlags":                                 {[]string{"c1i_blank_hint", "c1i_empty_allowed"}, "a cobra flag annotation, not JSON"},
 	"api.go:nextPageTokenFromMap":                                {[]string{"nextPageToken"}, "a server response, which is always camelCase"},
 	"attribute_mappings.go:attributeMappingOf":                   {[]string{"userAttributeMapping"}, "a server response, which is always camelCase"},
 	"attribute_mappings.go:attributeMappingRow":                  {[]string{"attributeType", "evaluationErrorCount", "userAttributeMapping"}, "a server response, which is always camelCase"},
@@ -64,7 +74,7 @@ func multiWordKey(lit string) bool { return foldMaskName(lit) != lit }
 
 // literalKeyReads returns each multi-word literal-key read in path, keyed by
 // "file.go:func".
-func literalKeyReads(path string) (map[string][]string, error) {
+func literalKeyReads(path string, consts map[string]string) (map[string][]string, error) {
 	fset := token.NewFileSet()
 	f, err := parser.ParseFile(fset, path, nil, 0)
 	if err != nil {
@@ -72,12 +82,25 @@ func literalKeyReads(path string) (map[string][]string, error) {
 	}
 	out := map[string][]string{}
 	file := filepath.Base(path)
-	add := func(owner string, lit *ast.BasicLit) {
-		if lit == nil || lit.Kind != token.STRING {
+	add := func(owner string, e ast.Expr) {
+		var key string
+		switch x := e.(type) {
+		case *ast.BasicLit:
+			k, err := strconv.Unquote(x.Value)
+			if x.Kind != token.STRING || err != nil {
+				return
+			}
+			key = k
+		case *ast.Ident:
+			k, ok := consts[x.Name]
+			if !ok {
+				return
+			}
+			key = k
+		default:
 			return
 		}
-		key, err := strconv.Unquote(lit.Value)
-		if err != nil || !multiWordKey(key) {
+		if !multiWordKey(key) {
 			return
 		}
 		name := file + ":" + owner
@@ -100,8 +123,17 @@ func literalKeyReads(path string) (map[string][]string, error) {
 				}
 			case *ast.IndexExpr:
 				if !writes[x] {
-					lit, _ := x.Index.(*ast.BasicLit)
-					add(owner, lit)
+					add(owner, x.Index)
+				}
+			case *ast.BinaryExpr:
+				if x.Op != token.EQL && x.Op != token.NEQ {
+					return true
+				}
+				if id, ok := x.X.(*ast.Ident); ok && rangeKeys[id.Name] {
+					add(owner, x.Y)
+				}
+				if id, ok := x.Y.(*ast.Ident); ok && rangeKeys[id.Name] {
+					add(owner, x.X)
 				}
 			case *ast.SwitchStmt:
 				id, ok := x.Tag.(*ast.Ident)
@@ -110,8 +142,7 @@ func literalKeyReads(path string) (map[string][]string, error) {
 				}
 				for _, s := range x.Body.List {
 					for _, e := range s.(*ast.CaseClause).List {
-						lit, _ := e.(*ast.BasicLit)
-						add(owner, lit)
+						add(owner, e)
 					}
 				}
 			}
@@ -136,6 +167,37 @@ func literalKeyReads(path string) (map[string][]string, error) {
 			for _, spec := range d.Specs {
 				if vs, ok := spec.(*ast.ValueSpec); ok && len(vs.Names) > 0 {
 					scan(vs.Names[0].Name, vs)
+				}
+			}
+		}
+	}
+	return out, nil
+}
+
+// packageStringConsts returns the package-level string constants in files.
+func packageStringConsts(files []string) (map[string]string, error) {
+	out := map[string]string{}
+	for _, path := range files {
+		f, err := parser.ParseFile(token.NewFileSet(), path, nil, 0)
+		if err != nil {
+			return nil, err
+		}
+		for _, d := range f.Decls {
+			g, ok := d.(*ast.GenDecl)
+			if !ok || g.Tok != token.CONST {
+				continue
+			}
+			for _, spec := range g.Specs {
+				vs := spec.(*ast.ValueSpec)
+				for i, name := range vs.Names {
+					if i >= len(vs.Values) {
+						continue
+					}
+					if lit, ok := vs.Values[i].(*ast.BasicLit); ok && lit.Kind == token.STRING {
+						if v, err := strconv.Unquote(lit.Value); err == nil {
+							out[name.Name] = v
+						}
+					}
 				}
 			}
 		}
@@ -188,8 +250,13 @@ func unexemptedKeyReads(reads map[string][]string, exempt map[string]bodyKeyRead
 
 func TestBodyKeyReadsAreFolded(t *testing.T) {
 	reads := map[string][]string{}
-	for _, f := range cmdSourceFiles(t) {
-		got, err := literalKeyReads(f)
+	files := cmdSourceFiles(t)
+	consts, err := packageStringConsts(files)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, f := range files {
+		got, err := literalKeyReads(f, consts)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -211,8 +278,9 @@ func TestBodyKeyReadsAreFolded(t *testing.T) {
 	}
 }
 
-// TestLiteralKeyReadsSelfCheck pins what the walk flags: reads, comma-ok
-// reads, assertions and switch cases over a ranged key; not writes. A stale
+// TestLiteralKeyReadsSelfCheck pins what the walk flags: reads by literal or
+// const, comma-ok reads, assertions, and switch cases and == over a ranged
+// key; not writes. A stale
 // exemption and a new key in an exempt function both fail.
 func TestLiteralKeyReadsSelfCheck(t *testing.T) {
 	src := `package cmd
@@ -222,19 +290,27 @@ func f(m map[string]any) {
 	_, _ = m["commaOk"]
 	_, _ = m["assert_key"].(string)
 	_ = m["single"]
+	_ = m[constKey]
 	for k := range m {
 		switch k {
 		case "caseKey", "plain":
 		}
+		if k == "eqKey" || "revKey" != k || k == "flat" {
+		}
 	}
 }
+const constKey = "const_key"
 var v = func(m map[string]any) any { return m["inVar"] }
 `
 	path := filepath.Join(t.TempDir(), "x.go")
 	if err := os.WriteFile(path, []byte(src), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	reads, err := literalKeyReads(path)
+	consts, err := packageStringConsts([]string{path})
+	if err != nil {
+		t.Fatal(err)
+	}
+	reads, err := literalKeyReads(path, consts)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -242,12 +318,12 @@ var v = func(m map[string]any) any { return m["inVar"] }
 		sort.Strings(keys)
 	}
 	got := fmt.Sprint(reads)
-	want := `map[x.go:f:[assert_key caseKey commaOk readKey] x.go:v:[inVar]]`
+	want := `map[x.go:f:[assert_key caseKey commaOk const_key eqKey readKey revKey] x.go:v:[inVar]]`
 	if got != want {
 		t.Errorf("reads = %s, want %s", got, want)
 	}
 	bad, stale := unexemptedKeyReads(reads, map[string]bodyKeyReadExemption{
-		"x.go:f": {keys: []string{"assert_key", "caseKey", "commaOk", "gone"}, reason: "r"},
+		"x.go:f": {keys: []string{"assert_key", "caseKey", "commaOk", "const_key", "eqKey", "revKey", "gone"}, reason: "r"},
 	})
 	if fmt.Sprint(bad) != `[x.go:f reads "readKey" x.go:v reads "inVar"]` || fmt.Sprint(stale) != `[x.go:f "gone"]` {
 		t.Errorf("bad = %v, stale = %v", bad, stale)
