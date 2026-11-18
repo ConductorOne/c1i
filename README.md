@@ -2466,6 +2466,51 @@ about one year of now: the server rejects a future `--until` or a `--since`
 older than ~365 days with a `400` (`value must be less than now within
 8761h6m40s`).
 
+#### System log exporters
+
+```sh
+c1i export exporters list
+c1i export exporters search [--query TEXT] [--export-id ID ...]
+c1i export exporters get <export-id>
+c1i export exporters create --display-name NAME --datasource-id ID [--prefix P] [--format zstd|gzip]
+c1i export exporters update <export-id> [--display-name NAME] [--prefix P] [--format zstd|gzip]
+c1i export exporters delete <export-id>
+c1i export exporters events <export-id>
+```
+
+An exporter continuously writes the tenant's audit events to a datasource; a
+new one starts in `EXPORT_STATE_EXPORTING` and begins writing under `--prefix`
+at once. No datasource API is exposed: take `--datasource-id` from an existing
+exporter's `.datasource.datasourceId`. An unknown datasource id is a `400`,
+`datasource not found`, which c1i reports as an unknown reference (exit `4`). `update` reads the exporter first and sends its
+datasource back (the API refuses an update without one); the datasource id
+cannot be changed. `delete` is soft (`get` still returns the exporter with
+`deletedAt` set; `list` omits it); a repeat delete exits `0` and stamps
+`deletedAt` again. `update` and `events` also succeed on a deleted exporter
+(`update` changes it, exit `0`): check `deletedAt`. `search` has no `--name`: the
+API's `displayName` filter returned an exporter whatever the name. `events`
+reads the exporter first, so an unknown id exits `4` (the API answers it with an
+empty `200`).
+
+### Reports
+
+```sh
+c1i reports list
+c1i reports get <report-id>
+c1i reports delete <report-id>
+c1i reports run <report-id>
+c1i reports update <report-id> [--display-name N] [--description D] [--prompt P]
+c1i reports program <report-id> --program-id ID
+c1i reports provenance <run-id> --report-id ID
+```
+
+Saved reports of the reporting service (not `access-reviews reports`). There is
+no create command: the API saves a report only from an already-rendered
+reporting surface. `run` returns as soon as the run starts; poll with `get`.
+A run's `artifactUrl` may be a signed URL (not observed): treat it as a secret.
+These were checked live only on a tenant with no reports (unknown-id and
+validation paths); the rest follows the API description.
+
 ### Raw API
 
 ```sh

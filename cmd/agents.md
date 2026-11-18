@@ -167,6 +167,11 @@ errors and the same exit codes as any other command, so the table below
 applies either way.
 
 `c1i api` is the right tool when no first-class command exists yet.
+Continuous audit-log export is `export exporters` (create, update, delete,
+`--datasource-id`, `--prefix`, `--export-id`; `events <export-id>` lists what
+one delivered); saved reports are `reports` (`list|get|update|delete|run`,
+`program --program-id`, `provenance <run-id> --report-id`, `update --prompt`).
+There is no `reports` create: the API saves one only from a rendered surface.
 Access-profile lifecycle, requestable and visibility entitlements, and bundle
 automation are first-class under `access-profiles`; use its nested `--help` to
 choose a command. Use `entitlements proxy-bindings` for directional

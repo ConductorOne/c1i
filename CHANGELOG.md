@@ -13,6 +13,16 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `attribute-mappings`. `--type` takes a name or id and is looked up first, so
   an unknown type exits `4` (the server returns an empty list for `list` and
   `search` and creates the value anyway on `create`). `delete` is soft.
+- `export exporters list|search|get|create|update|delete|events` manage
+  continuous system-log exporters. `update` reads the exporter and sends its
+  datasource back with only your flags masked; `events` reads the exporter
+  first so an unknown id exits `4`. `search` omits a name filter because the
+  API's `displayName` search was observed to ignore the name.
+- `reports list|get|update|delete|run|program|provenance` for saved reports
+  (`provenance <run-id> --report-id`). There is no create or `--wait`; `run`
+  returns when the run starts. A run's `artifactUrl` may be a signed URL (not
+  observed), so a failed response write says it was not delivered. Checked
+  live only on unknown-id paths: the tenant used had no reports.
 - `tasks escalate|retry-provisioning <task-id>` (current policy step resolved
   like `approve`) and `tasks update-request-data <task-id> --data-file`, which
   the API describes as submitting the request form of a task at a form step.

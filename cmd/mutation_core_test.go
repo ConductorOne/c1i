@@ -23,6 +23,8 @@ func TestCoreMutationSecretWriteFailure(t *testing.T) {
 			`{"automation":{"id":"a-1"},"webhookHmacSecret":"s3"}`, "webhookHmacSecret/webhookCapabilityUrl were not delivered"},
 		{"automation create with a webhook secret", []string{"automations", "create", "--display-name", "zz"},
 			`{"automation":{"id":"a-1"},"webhookHmacSecret":"s3"}`, "webhookHmacSecret/webhookCapabilityUrl were not delivered"},
+		{"report run with an artifact url", []string{"reports", "run", "rp-1"},
+			`{"run":{"id":"run-1","artifactUrl":"https://example.invalid/a?sig=s3"}}`, "artifactUrl values may be signed URLs and were not delivered"},
 		{"automation without one", []string{"automations", "update", "a-1", "--enabled"},
 			`{"automation":{"id":"a-1"},"webhookHmacSecret":"","webhookCapabilityUrl":""}`, ""},
 	}

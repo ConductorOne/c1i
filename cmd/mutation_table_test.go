@@ -65,6 +65,12 @@ const (
 	tblResourceDoc  = `{"id":"r-1","appId":"app-1","appResourceTypeId":"rt-1","displayName":"zz"}`
 	tblResView      = `{"appResourceView":{"appResource":{"id":"r-1","displayName":"zz"},"appPath":"","objectPermissions":{}},"expanded":[]}`
 	tblResViewDoc   = `{"id":"r-1","displayName":"zz","expanded":[],"appPath":"","objectPermissions":{}}`
+	tblExporter     = `{"exporter":{"exportId":"ex-1","displayName":"zz","state":"EXPORT_STATE_EXPORTING","datasource":{"datasourceId":"ds-1","prefix":"zz/","format":"EXPORT_FORMAT_OCSF_JSON_GZIP"}}}`
+	tblExporterDoc  = `{"exportId":"ex-1","displayName":"zz","state":"EXPORT_STATE_EXPORTING","datasource":{"datasourceId":"ds-1","prefix":"zz/","format":"EXPORT_FORMAT_OCSF_JSON_GZIP"}}`
+	tblReport       = `{"report":{"id":"rp-1","displayName":"zz"},"promptDrifted":false}`
+	tblReportDoc    = `{"id":"rp-1","displayName":"zz","promptDrifted":false}`
+	tblRun          = `{"run":{"id":"run-1","status":"REPORT_RUN_STATUS_PENDING"}}`
+	tblRunDoc       = `{"id":"run-1","status":"REPORT_RUN_STATUS_PENDING"}`
 )
 
 const (
@@ -113,6 +119,13 @@ func cat(parts ...[]string) []string {
 }
 
 var mutationTable = []mutationRow{
+	// export exporters, reports
+	{cmd: "export exporters create", args: []string{"--display-name", "zz", "--datasource-id", "ds-1"}, body: tblExporter, want: tblExporterDoc, ids: []string{".exportId"}, method: "POST", path: "/api/v1/systemlog/exports"},
+	{cmd: "export exporters update", args: []string{"ex-1", "--prefix", "zz/"}, body: tblExporter, want: tblExporterDoc, ids: []string{".exportId"}, method: "POST", path: "/api/v1/systemlog/exports/ex-1", reads: 1},
+	{cmd: "export exporters delete", args: []string{"ex-1"}, body: `{}`, method: "DELETE", path: "/api/v1/systemlog/exports/ex-1"},
+	{cmd: "reports update", args: []string{"rp-1", "--display-name", "zz"}, body: tblReport, want: tblReportDoc, ids: idPath, method: "POST", path: "/api/v1/reporting/reports/rp-1"},
+	{cmd: "reports delete", args: []string{"rp-1"}, body: `{}`, method: "DELETE", path: "/api/v1/reporting/reports/rp-1"},
+	{cmd: "reports run", args: []string{"rp-1"}, body: tblRun, want: tblRunDoc, ids: idPath, method: "POST", path: "/api/v1/reporting/reports/rp-1/run"},
 	// access-profiles
 	{cmd: "access-profiles create", args: []string{"--display-name", "zz"}, body: tblCatalog, want: tblCatalogDoc, ids: idPath},
 	{cmd: "access-profiles update", args: []string{"cat-1", "--description", "d"}, body: tblCatalog, want: tblCatalogDoc, ids: idPath},
@@ -353,7 +366,8 @@ var mutationTable = []mutationRow{
 // self lookups.
 const tblGet = `{"appResourceTypeView":{"appResourceType":{"id":"rt-1"}},"connectorView":{"connector":{"id":"cn1","config":{"@type":"type.googleapis.com/c1.api.app.v1.EnvConfig"}}},"taskView":{"task":{"id":"task-1","policy":{"current":{"id":"step-9"}}}},"user":{"id":"u1"},"userId":"self-1",` +
 	`"list":[{"id":"ty-1","displayName":"Department","name":"Risk Level","appUserProfile":{}}],` +
-	`"attribute":{"userAttributeMapping":{"id":"map-1","attributeType":{"id":"ty-1","displayName":"Department","appUserProfile":{"appId":"app-1","appUserProfileAttributeKey":"department"}}}}}`
+	`"attribute":{"userAttributeMapping":{"id":"map-1","attributeType":{"id":"ty-1","displayName":"Department","appUserProfile":{"appId":"app-1","appUserProfileAttributeKey":"department"}}}},` +
+	`"exporter":{"exportId":"ex-1","displayName":"zz","datasource":{"datasourceId":"ds-1","prefix":"zz/","format":"EXPORT_FORMAT_OCSF_JSON_GZIP"}}}`
 
 func tableRoute(body string) func(*http.Request, int) mutReply {
 	return func(r *http.Request, _ int) mutReply {

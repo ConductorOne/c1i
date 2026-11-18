@@ -299,6 +299,7 @@ func TestRetrySafe(t *testing.T) {
 		{http.MethodPost, "/api/v1/systemlog/events"},
 		{http.MethodPost, "/api/v1/role-mining/suggestions/s1/users"},
 		{http.MethodPost, "/api/v1/task/audits"},
+		{http.MethodPost, "/api/v1/systemlog/exports/e1/events"},
 	}
 	for _, c := range safe {
 		if !retrySafe(c.method, c.path) {
@@ -310,6 +311,9 @@ func TestRetrySafe(t *testing.T) {
 		{http.MethodPost, "/api/v1/systemlog/exports"},
 		{http.MethodPost, "/api/v1/task/action"},
 		{http.MethodPost, "/api/v1/task/audits/x"},
+		{http.MethodPost, "/api/v1/systemlog/exports//events"},
+		{http.MethodPost, "/api/v1/systemlog/exports/a/b/events"},
+		{http.MethodPost, "/api/v1/systemlog/exports/e1"},
 		{http.MethodPost, "/api/v1/role-mining/suggestions/s1/state"},
 		{http.MethodPost, "/api/v1/role-mining/suggestions//users"},
 		{http.MethodPost, "/api/v1/role-mining/suggestions/a/b/users"},
