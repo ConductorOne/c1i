@@ -22,7 +22,10 @@ triggers runs only through "automations execute".
 flags don't cover (circuitBreakerMax/circuitBreakerPeriod, draft steps and
 triggers, appId, annotations, context). It is mutually exclusive with every
 other flag here. Only one of --body-file, --steps-file and --triggers-file can
-read stdin ("-").
+read stdin ("-"). Omitting --enabled leaves the server default (false). The
+API currently rejects an enabled creation with no steps with a 500 "steps
+cannot be nil"; create it disabled, add steps, then enable it with
+"automations update --enabled".
 
 Prints the automation as pretty JSON, unwrapped like "automations get": the id
 is .id. The response's webhookCapabilityUrl and webhookHmacSecret stay

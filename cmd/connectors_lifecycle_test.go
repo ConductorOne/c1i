@@ -75,6 +75,29 @@ func TestConnectorsDeletePreRead(t *testing.T) {
 	}
 }
 
+func TestConnectorsSyncStatusUnwrapsStatus(t *testing.T) {
+	t.Setenv("C1I_URL", mutTestURL)
+	s := newMutServer(t, fixedReply(200, `{"status":{"state":"SYNC_STATE_DONE","lastError":""},"expanded":[]}`))
+	r := runMutationCLI(t, s.srv, 0, nil, "connectors", "sync-status", "cn1", "--app-id", "a1")
+	if r.exit != 0 {
+		t.Fatalf("exit %d (err %v), want 0", r.exit, r.err)
+	}
+	var got map[string]any
+	if err := json.Unmarshal([]byte(r.stdout), &got); err != nil {
+		t.Fatalf("output is not one JSON object: %v (%q)", err, r.stdout)
+	}
+	if got["state"] != "SYNC_STATE_DONE" {
+		t.Errorf("state = %v, want SYNC_STATE_DONE (%q)", got["state"], r.stdout)
+	}
+	if _, ok := got["status"]; ok {
+		t.Errorf("output still has the status envelope: %q", r.stdout)
+	}
+	reqs := s.requests()
+	if len(reqs) != 1 || reqs[0].method != http.MethodGet || reqs[0].rawPath != "/api/v1/apps/a1/connectors/cn1/sync_diagnostics/status" {
+		t.Errorf("requests %v, want the sync-status GET", reqs)
+	}
+}
+
 func TestConnectorsScheduleBody(t *testing.T) {
 	for _, tc := range []struct {
 		name     string

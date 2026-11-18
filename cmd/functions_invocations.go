@@ -20,7 +20,9 @@ function_id, commit_id, status, error, created_at and updated_at. Input and
 output are left out of the rows; read them with "functions invocations get".
 
 A busy function can have tens of thousands of invocations and this command
-pages through all of them; pass --limit for the most recent N.`,
+pages through all of them; pass --limit for the most recent N. The search
+response carries each invocation's full input and output, and the API asks for
+a small page size; use --page-size 10 when payloads may be large.`,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		c, err := listClientFor(cmd)

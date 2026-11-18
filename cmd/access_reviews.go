@@ -53,8 +53,9 @@ var accessReviewsCreateCmd = &cobra.Command{
 	Short: "Create an access-review campaign (pretty JSON)",
 	Long: `Create an access-review campaign from a complete JSON request object.
 
-The request must contain at least one owner id in ownerIds. Provide the JSON
-with --body-file; use "-" to read it from standard input.
+The request must contain at least one owner id in ownerIds and a policyId; the
+server also requires a 27-character policy id. Provide the JSON with
+--body-file; use "-" to read it from standard input.
 
 Prints the campaign unwrapped like "access-reviews get": the id is .id.`,
 	Args: cobra.NoArgs,
@@ -99,8 +100,8 @@ var accessReviewsDeleteCmd = &cobra.Command{
 	Long: `Delete an access-review campaign by ID. The API documents that this "transitions
 an access review campaign to the deleted state, along with its dependent
 objects." The campaign leaves "access-reviews list", but "access-reviews get"
-still returns it with state ACCESS_REVIEW_STATE_DELETED (deletedAt stayed null
-in the run checked, so check state). Deleting it again exits 0 again. Prints
+still returns it with state ACCESS_REVIEW_STATE_DELETED (the model has no
+deletedAt field; check state). Deleting it again exits 0 again. Prints
 the API's response, which is {}; exit 0 is the success signal. Honors
 --dry-run.`,
 	Args: cobra.ExactArgs(1),

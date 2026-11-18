@@ -11,11 +11,14 @@ var appsSearchCmd = &cobra.Command{
 	Use:   "search",
 	Short: "Search applications by name, description, id, policy, or directory (NDJSON output)",
 	Long: `Search applications. Unlike "apps list" (pagination only), this filters
-server-side: --query is a fuzzy match on display name and description,
---display-name a case-insensitive display-name match, --app-id and
---exclude-app-id restrict or remove app ids, --policy-id keeps apps that use
-any of the given policies, and --only-directories sets the server's
-onlyDirectories filter. Repeatable flags may be given more than once.
+server-side: --query uses the server's full-text search over display name and
+description (tokens, stems and 3-character n-grams; it is not a simple
+substring match, and 1-2 character terms behave inconsistently),
+--display-name is a case-insensitive server match (its value is an ILIKE
+pattern, so percent and underscore are wildcards), --app-id and --exclude-app-id restrict
+or remove app ids, --policy-id keeps apps that use any of the given policies,
+and --only-directories sets the server's onlyDirectories filter. Repeatable
+flags may be given more than once.
 
 Rows are the same shape "apps list" emits.
 
@@ -23,8 +26,9 @@ Rows are the same shape "apps list" emits.
 
 Each --policy-id is looked up first: an unknown id exits 4 and a deleted one
 exits 2, before the search is sent. An --app-id the tenant doesn't have simply
-matches nothing (observed: an empty result, exit 0). An id that is not 27
-letters and digits is rejected by the server (exit 2).`,
+matches nothing (observed: an empty result, exit 0). "." and ".." ids are
+refused locally (exit 2); another malformed id is rejected by the server
+(exit 2).`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		appIDs, err := repeatableStringFlag(cmd, "app-id")
 		if err != nil {
@@ -38,6 +42,7 @@ letters and digits is rejected by the server (exit 2).`,
 		if err != nil {
 			return err
 		}
+		policyIDs = dedupe(policyIDs)
 		c, err := listClientFor(cmd)
 		if err != nil {
 			return err
@@ -84,8 +89,8 @@ letters and digits is rejected by the server (exit 2).`,
 }
 
 func init() {
-	appsSearchCmd.Flags().String("query", "", "Fuzzy search on display name and description")
-	appsSearchCmd.Flags().String("display-name", "", "Case-insensitive display name match")
+	appsSearchCmd.Flags().String("query", "", "Full-text search on display name and description (not a substring match)")
+	appsSearchCmd.Flags().String("display-name", "", "Case-insensitive server match (ILIKE pattern: % and _ are wildcards)")
 	addRepeatableStringFlag(appsSearchCmd, "app-id", "Restrict to this app ID (repeatable)")
 	addRepeatableStringFlag(appsSearchCmd, "exclude-app-id", "App ID to exclude from results (repeatable)")
 	addRepeatableStringFlag(appsSearchCmd, "policy-id", "Only apps that use this policy ID; any of several (repeatable)")

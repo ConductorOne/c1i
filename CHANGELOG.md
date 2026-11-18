@@ -65,6 +65,11 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   polls the invocation and exits `1` if it ends `ERROR` or `CANCELLED`.
   `invocations list` reads newest first.
 
+### Fixed
+
+- `functions create|update --file` now refuses a path containing a control
+  character, like every other file-valued flag (exit `2`, nothing sent).
+
 ### Security
 
 - Text-mode stderr (errors, notices, `--wait` progress, the `--debug`

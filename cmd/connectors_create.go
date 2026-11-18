@@ -16,10 +16,11 @@ with an empty config (the API's "delegated" create); set the config afterwards
 with "c1i connectors update <connector-id> --body-file <file> --update-mask
 config".
 
---catalog-id is required: the server answers a missing or unknown one with a
-500, "invalid connector catalog id" (exit 6). An MCP catalog id is refused
-with a 400, "the MCP catalog is not installable; register an MCP server
-through the MCP server API" (exit 2); use "c1i mcp servers register". Omit --user-id and, in the run
+--catalog-id is required. A malformed id is a 400 regex error (exit 2); a
+well-formed id the catalog lacks can answer 500 "invalid connector catalog
+id" (exit 6). An MCP catalog id is refused with a 400, "the MCP catalog is not
+installable; register an MCP server through the MCP server API" (exit 2); use
+"c1i mcp servers register". Omit --user-id and, in the run
 checked, the caller became the connector's only user id.
 
   --body-file   the full CreateDelegated request body, sent verbatim, for

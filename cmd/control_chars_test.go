@@ -341,3 +341,23 @@ func TestConfigFileHeaderFieldsRefuseControlChars(t *testing.T) {
 		t.Errorf("ran %d cases, want 50", ran)
 	}
 }
+
+// TestRepeatablePathFlagRefusesControlChars covers functions create/update
+// --file, a StringArray path flag: the shared guard must check each element,
+// not only scalar string flags.
+func TestRepeatablePathFlagRefusesControlChars(t *testing.T) {
+	resetCmds(t, functionsCreateCmd)
+	if err := functionsCreateCmd.Flags().Set("file", "normal.ts"); err != nil {
+		t.Fatal(err)
+	}
+	if err := validatePathFlags(functionsCreateCmd); err != nil {
+		t.Fatalf("normal --file rejected: %v", err)
+	}
+	if err := functionsCreateCmd.Flags().Set("file", "weird\nname.ts"); err != nil {
+		t.Fatal(err)
+	}
+	err := validatePathFlags(functionsCreateCmd)
+	if err == nil || !strings.Contains(err.Error(), "--file") || !strings.Contains(err.Error(), "control character") {
+		t.Fatalf("err = %v, want a --file control-character usage error", err)
+	}
+}
