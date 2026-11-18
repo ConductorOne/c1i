@@ -11,11 +11,12 @@ var entitlementsSetOwnersCmd = &cobra.Command{
 	Use:   "set-owners <entitlement-id>",
 	Short: "Set the owners of an entitlement (replaces the full owner list)",
 	Long: `Set the complete list of owners for an app entitlement via PUT .../owners,
-replacing any existing owners. Provide one or more --user-id.
+replacing any existing owners. Provide one or more --user-id, or
+--owner-entitlement-id (with --no-user-owners to keep no user owners).
 
-At least one --user-id is required: the API takes an empty list as "remove
-every owner", which is too easy to send by accident with an unset shell
-variable. Use "entitlements remove-owner" to drop owners one at a time.
+At least one --user-id or --owner-entitlement-id is required: the API takes an
+empty list as "remove every owner", which is too easy to send by accident with
+an unset shell variable. Use "entitlements remove-owner" to drop owners one at a time.
 
 ` + setOwnersLookupNote + `
 The API itself accepts an unknown id (exit 0) and drops it: a set naming only

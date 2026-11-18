@@ -38,7 +38,8 @@ users the server could not add) is not empty, the response is still printed,
 each rejected user and its message is reported, and the command exits 1; --wait
 then waits only for the users that were not rejected (none left: no wait).
 
-The direct removal, "c1i grants remove", rejects a manual entitlement with:
+The direct removal, "c1i grants remove", refused manually managed custom and
+group entitlements in testing (a success was never exercised) with:
 entitlement is not an SSO application sign-in entitlement. The
 policy-respecting removal is "c1i requests create revoke"; on a manual
 entitlement its task waits on a provisioning step (the step reads

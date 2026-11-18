@@ -45,7 +45,8 @@ var appsSetOwnersCmd = &cobra.Command{
 	Use:   "set-owners <app-id>",
 	Short: "Set the owners of an app (replaces the full owner list)",
 	Long: `Set the complete list of owners for an app via PUT .../owners, replacing
-any existing owners. Provide one or more --user-id (C1 user IDs, 27 chars each).
+any existing owners. Provide one or more --user-id (C1 user IDs, 27 chars each),
+or --owner-entitlement-id (with --no-user-owners to keep no user owners).
 
 ` + setOwnersLookupNote + `
 The API itself accepts an unknown user id (exit 0) and stores it: GET
