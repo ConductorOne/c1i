@@ -28,6 +28,7 @@ const (
 	tblCatalogDoc = `{"id":"cat-1","displayName":"zz <x>","expanded":[],"accessEntitlementsPath":"a","createdByUserPath":"c","memberCount":"2"}`
 	tblBundle     = `{"requestCatalogId":"cat-1","enabled":true}`
 	tblReview     = `{"accessReview":{"accessReview":{"id":"ar1"},"createdByUserPath":"c","objectPermissions":{},"policyPath":""},"expanded":[{"id":"p1"}]}`
+	tblScope      = `{"list":[],"expanded":[],"scopeV2":{"specificResources":{}},"excludedEntitlements":[],"excludedResourceTypes":[]}`
 	tblReviewDoc  = `{"id":"ar1","expanded":[{"id":"p1"}],"createdByUserPath":"c","objectPermissions":{},"policyPath":""}`
 	tblApp        = `{"app":{"id":"app-1","displayName":"zz <x>","appOwners":[]}}`
 	tblAppDoc     = `{"id":"app-1","displayName":"zz <x>","appOwners":[]}`
@@ -114,6 +115,21 @@ var mutationTable = []mutationRow{
 	{cmd: "access-reviews create", args: []string{"--body-file", `@{"displayName":"zz","ownerIds":["u1"]}`}, body: tblReview, want: tblReviewDoc, ids: idPath},
 	{cmd: "access-reviews update", args: []string{"ar1", "--body-file", `@{}`, "--update-mask", "description"}, body: tblReview, want: tblReviewDoc, ids: idPath},
 	{cmd: "access-reviews reports generate", args: []string{"ar1"}, body: `{}`},
+	{cmd: "access-reviews delete", args: []string{"ar1"}, body: `{}`, method: "DELETE", path: "/api/v1/access_review/ar1"},
+	{cmd: "access-reviews scope set", args: []string{"ar1", "--body-file", `@{"scopeV2":{},"entitlements":[{"appId":"app-1","appEntitlementId":"ent-1"}]}`},
+		body: tblScope, method: "POST", path: "/api/v1/access_review/ar1/scope_and_entitlements", reads: 1},
+	{cmd: "access-reviews scope set-excluded", args: []string{"ar1", "--body-file", `@{"scopeV2":{},"excludedEntitlements":[{"appId":"app-1","appEntitlementId":"ent-1"}]}`},
+		body: `{"excludedEntitlements":[],"scopeV2":{}}`, method: "POST", path: "/api/v1/access_review/ar1/scope_and_excluded_entitlements", reads: 1},
+	{cmd: "access-reviews scope set-by-resource-type", args: []string{"ar1", "--body-file", `@{"scopeV2":{},"resourceTypeSelections":[{"appId":"app-1","resourceTypeId":"rt-1"}]}`},
+		body: `{}`, method: "POST", path: "/api/v1/access_review/ar1/scope_by_resource_type", reads: 1},
+	{cmd: "access-reviews entitlements add", args: cat([]string{"ar1"}, ent), body: `{"entitlementCount":1}`,
+		method: "POST", path: "/api/v1/access_review/ar1/entitlements/add", reads: 1},
+	{cmd: "access-reviews entitlements remove", args: cat([]string{"ar1"}, ent), body: `{"removedCount":1,"entitlementCount":0}`,
+		method: "POST", path: "/api/v1/access_review/ar1/entitlements/remove", reads: 1},
+	{cmd: "access-reviews excluded-entitlements add", args: cat([]string{"ar1"}, ent), body: `{}`,
+		method: "POST", path: "/api/v1/access_review/ar1/excluded_entitlements/add_delete", reads: 1},
+	{cmd: "access-reviews excluded-entitlements remove", args: cat([]string{"ar1"}, ent), body: `{}`,
+		method: "POST", path: "/api/v1/access_review/ar1/excluded_entitlements/add_delete", reads: 1},
 	// accounts
 	{cmd: "accounts set-owner", args: []string{"au-1", "--app-id", "app-1", "--user-id", "u1"},
 		body: `{"appUserView":{"appUser":{"id":"au-1","identityUserId":"u1"},"appPath":"p","identityUserPath":"i","lastUsagePath":"l"},"expanded":[]}`,

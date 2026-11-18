@@ -93,6 +93,22 @@ unwrapped like "access-reviews get".`,
 	},
 }
 
+var accessReviewsDeleteCmd = &cobra.Command{
+	Use:   "delete <campaign-id>",
+	Short: "Soft-delete an access-review campaign",
+	Long: `Delete an access-review campaign by ID. The API documents that this "transitions
+an access review campaign to the deleted state, along with its dependent
+objects." The campaign leaves "access-reviews list", but "access-reviews get"
+still returns it with state ACCESS_REVIEW_STATE_DELETED (deletedAt stayed null
+in the run checked, so check state). Deleting it again exits 0 again. Prints
+the API's response, which is {}; exit 0 is the success signal. Honors
+--dry-run.`,
+	Args: cobra.ExactArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		return sendMutation(cmd, mutation{Method: http.MethodDelete, Path: client.Path("/api/v1/access_review/%s", args[0])})
+	},
+}
+
 var accessReviewReportsListCmd = newAccessReviewListCmd("list <campaign-id>", "List generated access-review reports (NDJSON output)", "/api/v1/access_review/%s/report", true)
 
 var accessReviewReportsGenerateCmd = &cobra.Command{
@@ -206,10 +222,10 @@ func init() {
 	accessReviewReportsGenerateCmd.Flags().String("body-file", "", "Full GenerateAccessReviewReport request JSON object (file or \"-\" for stdin; mutually exclusive with --format)")
 	allowEmpty(accessReviewReportsGenerateCmd, emptyIsOmitted, "format", "body-file")
 
-	for _, command := range []*cobra.Command{accessReviewsCreateCmd, accessReviewsUpdateCmd, accessReviewReportsGenerateCmd} {
+	for _, command := range []*cobra.Command{accessReviewsCreateCmd, accessReviewsUpdateCmd, accessReviewsDeleteCmd, accessReviewReportsGenerateCmd} {
 		markMutating(command)
 	}
 	accessReviewReportsCmd.AddCommand(accessReviewReportsListCmd, accessReviewReportsGenerateCmd)
-	accessReviewsCmd.AddCommand(accessReviewsListCmd, accessReviewsGetCmd, accessReviewsCreateCmd, accessReviewsUpdateCmd, accessReviewReportsCmd)
+	accessReviewsCmd.AddCommand(accessReviewsListCmd, accessReviewsGetCmd, accessReviewsCreateCmd, accessReviewsUpdateCmd, accessReviewsDeleteCmd, accessReviewReportsCmd)
 	rootCmd.AddCommand(accessReviewsCmd)
 }

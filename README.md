@@ -1724,6 +1724,15 @@ c1i access-reviews list [--page-size N] [--page-token TOKEN] [--limit N]
 c1i access-reviews get <campaign-id>
 c1i access-reviews create --body-file <file|->
 c1i access-reviews update <campaign-id> --body-file <file|-> --update-mask <paths>
+c1i access-reviews delete <campaign-id>
+c1i access-reviews scope get <campaign-id>
+c1i access-reviews scope set <campaign-id> --body-file <file|->
+c1i access-reviews scope set-excluded <campaign-id> --body-file <file|->
+c1i access-reviews scope set-by-resource-type <campaign-id> --body-file <file|->
+c1i access-reviews entitlements add <campaign-id> --app-id <app-id> --entitlement-id <id>...
+c1i access-reviews entitlements remove <campaign-id> --app-id <app-id> --entitlement-id <id>...
+c1i access-reviews excluded-entitlements add <campaign-id> --app-id <app-id> --entitlement-id <id>...
+c1i access-reviews excluded-entitlements remove <campaign-id> --app-id <app-id> --entitlement-id <id>...
 c1i access-reviews reports list <campaign-id> [--page-size N] [--page-token TOKEN] [--limit N]
 c1i access-reviews reports generate <campaign-id> [--format json|csv|xlsx]
 c1i access-reviews reports generate <campaign-id> --body-file <file|->
@@ -1736,6 +1745,28 @@ takes a partial `AccessReview` object, inserts the id, and wraps it with the
 required explicit `--update-mask` (see [Update masks](#update-masks)). Prepared campaigns cannot change their
 scope or policy. `create` and `update` print the campaign unwrapped like `get`
 (`jq -er .id`); `reports generate` prints `{}`.
+
+`delete` soft-deletes: the campaign leaves `list`, but `get` still returns it
+with `state` `ACCESS_REVIEW_STATE_DELETED` (check `state`: `deletedAt` stayed
+null in the run checked), and deleting it again exits `0`. The API says the
+delete also takes the campaign's "dependent objects" with it. Prints `{}`.
+
+`scope get` prints a campaign's `scopeV2`, its selected entitlements (`list`)
+and its exclusions in one object; it is not paginated. The three `scope set*`
+commands replace the scope and the whole selection, excluded set, or
+resource-type selection from `--body-file`. To change part of a selection, use
+`entitlements add|remove` or `excluded-entitlements add|remove`. The first pair
+works only while `scopeV2` sets `specificResources`, which `add` sets on a
+campaign with no scope yet; the server takes 1 to 200 per `add`, skips
+already-selected entitlements and ignores unselected ones. Exclusions apply only while `scopeV2` sets `excludedSpecificResources`: set it
+with `scope set-excluded` first. In the run checked, removing the last excluded
+entitlement also cleared it. The API's `scope_by_excluded_resource_type` route
+is "superseded and scheduled for removal", so it has no command; exclude by
+resource type with `scope set-excluded` and
+`scopeV2.excludedAppSelectionCriteria`. Every command that names an
+entitlement or resource type looks each one up first, so an unknown one exits
+`4` before anything is sent, `--dry-run` included; the server alone would
+answer `400`, `500` or a silent skip.
 
 Report generation is asynchronous: `generate` creates a report record but does
 not return a ready download. Use `reports list` to find its state and
