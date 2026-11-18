@@ -361,6 +361,9 @@ tracked root file outside its allowlist. Stage explicit paths rather than `-A`.
   Never hand-roll a page loop or read `nextPageToken` outside it and the `api`
   parsers (`TestNoPaginationLoopOutsideHelper`). A paged POST must pass
   `transport.ReadOnlyPOST`.
+  The docs' single-request list (README.md, `cmd/agents.md`) must name exactly
+  the commands whose RunE reaches `getFixedList`/`getFixedListKey`;
+  `TestSingleRequestListsDocumented` derives that set from the code.
 - **Test state (enforced convention):** pair every `viper.Set` with
   `clearViperOverrides` in the same test, and run the root only through
   `executeRoot*`/`runRootWithArgs` (`TestEveryViperSetIsClearedInItsTest`,
