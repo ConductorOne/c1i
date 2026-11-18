@@ -205,9 +205,14 @@ read the fields you need. `settings ai-governance|sso|cross-app-access history`
 stream change records; `settings session test-source-ip --ip --allow-cidr`
 checks an IP against CIDRs you give it and exits 0 for either answer (read
 `.allowed`). `settings domains set --domain` REPLACES the whole domain set:
-list first and pass every domain to keep. `settings notifications org|user
-update` and `findings settings edge update` take the whole request in
-`--body-file`. The email provider and identity-policy defaults have no command.
+list first and pass every domain to keep (`--body-file` needs a `newDomains`
+array; `[]` empties the set). `settings notifications org|user update` and
+`findings settings edge update` take the whole request in `--body-file` with
+no mask, so a body that names nothing (no non-empty `channelSettings`, or
+neither `settings` nor `subcategorySettings`) exits 2 unsent. In the run
+checked, a partial notifications body on the user scope changed only the
+settings it named; org's partial-body behavior is unmeasured, so send back the
+whole `show` output for org. The email provider and identity-policy defaults have no command.
 
 Role ids for `service-principals credentials create --scoped-role` and
 `auth login --scoped-role` come from `c1i roles list` (NDJSON; README lists the

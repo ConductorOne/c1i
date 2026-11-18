@@ -30,7 +30,8 @@ already in the set keeps its id.
 
 The server does not check that a value looks like a domain. To empty the set,
 use --body-file with {"newDomains": []}; --body-file is the whole request and
-is mutually exclusive with --domain.
+is mutually exclusive with --domain. A body without a "newDomains" array
+(missing or null) exits 2 and nothing is sent.
 
 Prints the response as pretty JSON: {"list": [...]} with the resulting set.`,
 	RunE: func(cmd *cobra.Command, _ []string) error {
@@ -42,6 +43,11 @@ Prints the response as pretty JSON: {"list": [...]} with the resulting set.`,
 			var err error
 			if body, err = readRequiredJSONObject(cmd, "body-file"); err != nil {
 				return err
+			}
+			// A missing or null list must not read as "empty the set"; only an
+			// explicit [] does.
+			if _, ok := body["newDomains"].([]any); !ok {
+				return &usageError{fmt.Errorf(`--body-file must set "newDomains" to an array; send {"newDomains": []} to empty the set`)}
 			}
 		} else {
 			domains, err := repeatableStringFlag(cmd, "domain")

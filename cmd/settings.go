@@ -2,7 +2,9 @@ package cmd
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
+	"strings"
 
 	"github.com/spf13/cobra"
 )
@@ -74,12 +76,17 @@ func settingsUpdateBody(cmd *cobra.Command, key string, spec *updateSpec) (map[s
 }
 
 // newSettingsBodyUpdateCmd is an update with no mask: --body-file is the whole
-// request, sent verbatim.
-func newSettingsBodyUpdateCmd(short, long, path string, unwrap unwrapRule) *cobra.Command {
+// request, sent verbatim once check accepts it. With no mask, a body that
+// names nothing has an unmeasured effect (a mask-less ai-governance update
+// reset every field), so check refuses it before any request.
+func newSettingsBodyUpdateCmd(short, long, path string, unwrap unwrapRule, check func(map[string]any) error) *cobra.Command {
 	c := &cobra.Command{Use: "update", Short: short, Long: long, RunE: func(cmd *cobra.Command, _ []string) error {
 		body, err := readRequiredJSONObject(cmd, "body-file")
 		if err != nil {
 			return err
+		}
+		if err := check(body); err != nil {
+			return &usageError{err}
 		}
 		return sendMutation(cmd, mutation{Method: http.MethodPost, Path: path, Body: body, Unwrap: unwrap})
 	}}
@@ -110,6 +117,24 @@ func newSettingsHistoryCmd(short, long, path string) *cobra.Command {
 
 // settingsDurationForm ends every settings duration flag's help.
 const settingsDurationForm = "as a protobuf duration, e.g. 3600s, or a Go duration such as 8h (omit to leave unchanged)"
+
+// requireNonEmptyBodyKey refuses a body whose key is missing, null, or an
+// empty object or array.
+func requireNonEmptyBodyKey(body map[string]any, keys ...string) error {
+	for _, k := range keys {
+		switch v := body[k].(type) {
+		case map[string]any:
+			if len(v) > 0 {
+				return nil
+			}
+		case []any:
+			if len(v) > 0 {
+				return nil
+			}
+		}
+	}
+	return fmt.Errorf("--body-file must set %s to a non-empty value; the request has no update mask, so nothing is sent without one", strings.Join(keys, " or "))
+}
 
 const settingsContactsPath = "/api/v1/settings/contacts"
 

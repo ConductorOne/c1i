@@ -153,3 +153,62 @@ func TestSettingsDomainsSetInputs(t *testing.T) {
 		})
 	}
 }
+
+// The mask-less body updates refuse a body that names nothing, real run and
+// --dry-run alike: with no mask its effect on the server is unmeasured.
+func TestSettingsMasklessBodiesRefuseEmpty(t *testing.T) {
+	type tc struct {
+		cmd  []string
+		body string
+		ok   bool
+	}
+	notif := func(scope string) []string { return []string{"settings", "notifications", scope, "update"} }
+	edge := []string{"findings", "settings", "edge", "update"}
+	domains := []string{"settings", "domains", "set"}
+	cases := []tc{
+		{edge, `{}`, false},
+		{edge, `{"settings":[]}`, false},
+		{edge, `{"settings":null,"subcategorySettings":[]}`, false},
+		{edge, `{"subcategorySettings":[{"subcategory":"S","enabled":false}]}`, true},
+		{domains, `{}`, false},
+		{domains, `{"newDomains":null}`, false},
+		{domains, `{"newDomains":{}}`, false},
+		{domains, `{"newDomains":[]}`, true},
+	}
+	for _, scope := range []string{"org", "user"} {
+		cases = append(cases,
+			tc{notif(scope), `{}`, false},
+			tc{notif(scope), `{"channelSettings":{}}`, false},
+			tc{notif(scope), `{"channelSettings":null}`, false},
+			tc{notif(scope), `{"channelSettings":[]}`, false},
+			tc{notif(scope), `{"channelSettings":{"email":{"enabled":true}}}`, true},
+		)
+	}
+	for _, c := range cases {
+		for _, dry := range []bool{false, true} {
+			name := strings.Join(c.cmd, " ") + " " + c.body
+			if dry {
+				name += " --dry-run"
+			}
+			t.Run(name, func(t *testing.T) {
+				t.Setenv("C1I_URL", mutTestURL)
+				clearViperOverrides(t, "dry_run")
+				s := newMutServer(t, fixedReply(200, `{}`))
+				args := append(append([]string{}, c.cmd...), "--body-file", writeTempJSON(t, "body.json", c.body))
+				if dry {
+					args = append(args, "--dry-run")
+				}
+				r := runMutationCLI(t, s.srv, 0, nil, args...)
+				if c.ok {
+					if r.exit != 0 {
+						t.Errorf("exit %d (%v), want 0", r.exit, r.err)
+					}
+					return
+				}
+				if r.exit != exitUsage || len(s.requests()) != 0 || r.stdout != "" {
+					t.Errorf("exit %d (%v), %d request(s), stdout %q; want exit 2, nothing sent or previewed", r.exit, r.err, len(s.requests()), r.stdout)
+				}
+			})
+		}
+	}
+}

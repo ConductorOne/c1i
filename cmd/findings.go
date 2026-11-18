@@ -195,12 +195,17 @@ var findingsSettingsEdgeUpdateCmd = &cobra.Command{Use: "update", Short: "Enable
 single write. The body names only what changes, e.g.
 {"settings": [{"category": "EDGE_FINDING_CATEGORY_DATA_VOLUME", "enabled": true}],
  "subcategorySettings": [{"subcategory": "...", "enabled": false}]}.
-An unknown category is a 400 (exit 2).
+A body without a non-empty "settings" or "subcategorySettings" exits 2 and
+nothing is sent. An unknown category is a 400 (exit 2).
 
 Prints the resulting settings as pretty JSON, like "findings settings edge show".`, RunE: func(cmd *cobra.Command, _ []string) error {
 		body, err := readRequiredJSONObject(cmd, "body-file")
 		if err != nil {
 			return err
+		}
+		// No mask: a body naming no category has an unmeasured effect.
+		if err := requireNonEmptyBodyKey(body, "settings", "subcategorySettings"); err != nil {
+			return &usageError{err}
 		}
 		return sendMutation(cmd, mutation{Method: http.MethodPost, Path: "/api/v1/findings/settings/edge/update", Body: body})
 	}}

@@ -1854,15 +1854,19 @@ c1i findings settings edge update --body-file <file|->
   can lock you out.
 - `domains set` replaces the whole set with exactly the `--domain` values; list
   first and pass every domain you keep. `--body-file '{"newDomains": []}'`
-  empties it. The server does not check that a value looks like a domain.
+  empties it; a body without a `newDomains` array exits `2`. The server does not check that a value looks like a domain.
 - `notifications org|user update` sends `--body-file` as the whole request
-  (`{"channelSettings": {...}}`, what `show` prints); there is no mask. On the
-  user scope a partial body changed only what it named. Sending settings back
-  can turn an event `show` printed as `null` (such as `system`) into its
+  (`{"channelSettings": {...}}`, what `show` prints); there is no mask, so a
+  body without a non-empty `channelSettings` object exits `2` and nothing is
+  sent. In the run checked, a partial body on the user scope changed only the
+  settings it named. The org scope's partial-body behavior is unmeasured: for
+  org, send back the whole `show` output with your edits. Sending settings
+  back can turn an event `show` printed as `null` (such as `system`) into its
   default.
 - `findings settings edge update` takes `{"settings": [{"category": ...,
   "enabled": ...}], "subcategorySettings": [...]}` and prints the resulting
-  `{"list", "subcategories"}`.
+  `{"list", "subcategories"}`. A body with neither list non-empty exits `2`
+  and nothing is sent.
 
 Not covered: the tenant email provider, identity-policy defaults, onboarding
 state and per-user developer preferences (use `c1i api`).
