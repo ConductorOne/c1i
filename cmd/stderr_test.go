@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"io"
-	"net"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -124,23 +123,20 @@ func TestNoticeAndProgressEscapeInTextMode(t *testing.T) {
 	}
 }
 
-// A control-char status line reaches the --debug trace escaped.
+// A control-char status line reaches the --debug trace escaped. The response
+// comes from an in-process RoundTripper: a real listener flaked under the
+// parallel seed sweep (ephemeral ports ran out), and the trace prints
+// resp.Status either way.
 func TestDebugTraceEscapesServerStatusLine(t *testing.T) {
-	ln, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer func() { _ = ln.Close() }()
-	go func() {
-		for {
-			c, err := ln.Accept()
-			if err != nil {
-				return
-			}
-			_, _ = io.WriteString(c, "HTTP/1.1 400 Bad\x1b[2J\x07 Req\r\nContent-Length: 2\r\nConnection: close\r\n\r\n{}")
-			_ = c.Close()
-		}
-	}()
+	rt := stubRoundTripper(func(r *http.Request) (*http.Response, error) {
+		return &http.Response{
+			Status:     "400 Bad\x1b[2J\x07 Req",
+			StatusCode: http.StatusBadRequest,
+			Header:     http.Header{"Content-Type": {"application/json"}},
+			Body:       io.NopCloser(strings.NewReader("{}")),
+			Request:    r,
+		}, nil
+	})
 	t.Setenv("C1I_DEBUG", "1")
 	t.Setenv("C1I_ERROR_FORMAT", "text")
 	t.Setenv("C1I_URL", mutTestURL)
@@ -149,7 +145,7 @@ func TestDebugTraceEscapesServerStatusLine(t *testing.T) {
 		res = runCLI(t, func() {
 			orig := newClient
 			newClient = func(*cobra.Command, string) (*client.Client, error) {
-				return client.NewForTesting("http://"+ln.Addr().String(), http.DefaultClient,
+				return client.NewForTesting("http://127.0.0.1:1", &http.Client{Transport: rt},
 					client.WithMaxRetries(0), client.WithDebug(debugWriter())), nil
 			}
 			t.Cleanup(func() { newClient = orig })
