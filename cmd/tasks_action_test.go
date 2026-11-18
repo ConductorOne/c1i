@@ -570,3 +570,32 @@ func TestStepUnusedActionsPreviewWithoutCredentials(t *testing.T) {
 
 // errNoCredentialsForTest stands in for a credential-loading failure.
 var errNoCredentialsForTest = errors.New("authentication failed: no credentials found")
+
+// TestStepLookupSendsTheResolvedTaskID: GET /tasks/{id} accepts a numeric id
+// but the action routes take only the 27-character one, so an action that
+// already read the task sends the id that read returned.
+func TestStepLookupSendsTheResolvedTaskID(t *testing.T) {
+	const numeric = "28814"
+	for name, want := range taskActionExpectations {
+		if want.step == stepUnused {
+			continue
+		}
+		t.Run(name, func(t *testing.T) {
+			cmd := findTasksSubcommand(t, name)
+			resetCmds(t, cmd)
+			if want.setup != nil {
+				want.setup(cmd)
+			}
+			r := newTaskActionRecorder(t, "TASK_STATE_OPEN", "zz-step-1111111111111111111")
+			if _, err := runTaskActionCmd(t, cmd, r.srv, numeric); err != nil {
+				t.Fatalf("%s %s: %v", name, numeric, err)
+			}
+			if len(r.paths) != 1 {
+				t.Fatalf("posted %d times, want 1: %v", len(r.paths), r.paths)
+			}
+			if got, wantPath := r.paths[0], "/api/v1/tasks/"+actionTestTaskID+"/action/"+want.verb; got != wantPath {
+				t.Errorf("posted %q, want the resolved id in %q", got, wantPath)
+			}
+		})
+	}
+}

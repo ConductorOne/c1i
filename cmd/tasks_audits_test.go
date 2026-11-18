@@ -106,3 +106,20 @@ func TestTasksAuditsCommentFlagsAreExclusive(t *testing.T) {
 		t.Errorf("sent %d request(s), want none", len(s.seen))
 	}
 }
+
+// The pre-read accepts a numeric task id; the audit route takes only the
+// 27-character one, so the id the read returned is what gets sent.
+func TestTasksAuditsSendsTheResolvedTaskID(t *testing.T) {
+	s, r := runTasksAudits(t, auditsRoute(`{"list":[],"nextPageToken":""}`), "28814")
+	if r.exit != 0 {
+		t.Fatalf("exit = %d; stderr %q", r.exit, r.stderr)
+	}
+	if len(s.seen) != 2 || s.seen[0].rawPath != "/api/v1/tasks/28814" {
+		t.Fatalf("requests = %+v, want the numeric GET then one page", s.seen)
+	}
+	var body map[string]any
+	_ = json.Unmarshal([]byte(s.seen[1].body), &body)
+	if body["taskId"] != auditsTaskID {
+		t.Errorf("taskId = %v, want the resolved %s", body["taskId"], auditsTaskID)
+	}
+}

@@ -161,6 +161,22 @@ func parseCurrentPolicyStep(data []byte) (id, kind string, err error) {
 	}
 }
 
+// taskViewID is the canonical id from a TaskService.Get body, or "" if the
+// body carries none.
+func taskViewID(data []byte) string {
+	var resp struct {
+		TaskView struct {
+			Task struct {
+				ID string `json:"id"`
+			} `json:"task"`
+		} `json:"taskView"`
+	}
+	if json.Unmarshal(data, &resp) != nil {
+		return ""
+	}
+	return resp.TaskView.Task.ID
+}
+
 // resolvePolicyStepID returns the policy step id an action should target:
 // the explicit --policy-step-id when given, otherwise the task's currently
 // executing step, fetched with a GET.

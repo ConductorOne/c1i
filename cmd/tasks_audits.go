@@ -26,7 +26,8 @@ and --exclude-comments drops them; the two together exit 2 (the server refuses
 the pair with "comments_only and exclude_comments are mutually exclusive").
 
 The task is read first: the audit endpoint answers an unknown task id with an
-empty list, so c1i exits 4 instead of printing nothing.`,
+empty list, so c1i exits 4 instead of printing nothing. That read also accepts
+a numeric task id; the 27-character id it returns is what c1i sends.`,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		commentsOnly, _ := cmd.Flags().GetBool("comments-only")
@@ -34,8 +35,7 @@ empty list, so c1i exits 4 instead of printing nothing.`,
 		if commentsOnly && excludeComments {
 			return &usageError{fmt.Errorf("--comments-only and --exclude-comments are mutually exclusive")}
 		}
-		taskID := args[0]
-		body := map[string]any{"taskId": taskID}
+		body := map[string]any{}
 		if commentsOnly {
 			body["commentsOnly"] = true
 		}
@@ -50,8 +50,15 @@ empty list, so c1i exits 4 instead of printing nothing.`,
 		if err != nil {
 			return err
 		}
-		if _, err := c.Get(cmd.Context(), client.Path("/api/v1/tasks/%s", taskID), nil); err != nil {
+		data, err := c.Get(cmd.Context(), client.Path("/api/v1/tasks/%s", args[0]), nil)
+		if err != nil {
 			return fmt.Errorf("API error: %w", err)
+		}
+		// The GET takes a numeric id too; the audit route takes only the
+		// canonical one.
+		body["taskId"] = args[0]
+		if id := taskViewID(data); id != "" {
+			body["taskId"] = id
 		}
 		return listPages(cmd, c, pageSpec[json.RawMessage]{
 			Route: "POST " + taskAuditsPath,
