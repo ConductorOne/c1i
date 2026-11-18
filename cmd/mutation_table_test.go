@@ -29,6 +29,8 @@ const (
 	tblBundle       = `{"requestCatalogId":"cat-1","enabled":true}`
 	tblReview       = `{"accessReview":{"accessReview":{"id":"ar1"},"createdByUserPath":"c","objectPermissions":{},"policyPath":""},"expanded":[{"id":"p1"}]}`
 	tblScope        = `{"list":[],"expanded":[],"scopeV2":{"specificResources":{}},"excludedEntitlements":[],"excludedResourceTypes":[]}`
+	tblTemplate     = `{"accessReviewTemplate":{"id":"t1","displayName":"zz"}}`
+	tblTemplateDoc  = `{"id":"t1","displayName":"zz"}`
 	tblReviewDoc    = `{"id":"ar1","expanded":[{"id":"p1"}],"createdByUserPath":"c","objectPermissions":{},"policyPath":""}`
 	tblApp          = `{"app":{"id":"app-1","displayName":"zz <x>","appOwners":[]}}`
 	tblAppDoc       = `{"id":"app-1","displayName":"zz <x>","appOwners":[]}`
@@ -159,6 +161,25 @@ var mutationTable = []mutationRow{
 		method: "POST", path: "/api/v1/access_review/ar1/excluded_entitlements/add_delete", reads: 1},
 	{cmd: "access-reviews excluded-entitlements remove", args: cat([]string{"ar1"}, ent), body: `{}`,
 		method: "POST", path: "/api/v1/access_review/ar1/excluded_entitlements/add_delete", reads: 1},
+	{cmd: "access-reviews templates create", args: []string{"--body-file", `@{"displayName":"zz","ownerIds":["u1"]}`}, body: tblTemplate, want: tblTemplateDoc, ids: idPath,
+		method: "POST", path: "/api/v1/access_review_template", reads: 1},
+	{cmd: "access-reviews templates update", args: []string{"t1", "--description", "d"}, body: tblTemplate, want: tblTemplateDoc, ids: idPath,
+		method: "POST", path: "/api/v1/access_review_template/t1", reads: 1},
+	{cmd: "access-reviews templates delete", args: []string{"t1"}, body: `{}`, method: "DELETE", path: "/api/v1/access_review_template/t1"},
+	{cmd: "access-reviews templates scope set", args: []string{"t1", "--body-file", `@{"scope":{},"entitlements":[{"appId":"app-1","appEntitlementId":"ent-1"}]}`},
+		body: `{"list":[],"expanded":[],"scope":{"specificResources":{}},"excludedEntitlements":[],"excludedResourceTypes":[]}`, method: "POST", path: "/api/v1/access_review_template/t1/scope_and_entitlements", reads: 1},
+	{cmd: "access-reviews templates scope set-excluded", args: []string{"t1", "--body-file", `@{"scope":{},"excludedEntitlements":[{"appId":"app-1","appEntitlementId":"ent-1"}]}`},
+		body: `{"excludedEntitlements":[],"scope":{}}`, method: "POST", path: "/api/v1/access_review_template/t1/scope_and_excluded_entitlements", reads: 1},
+	{cmd: "access-reviews templates scope set-by-resource-type", args: []string{"t1", "--body-file", `@{"scope":{},"resourceTypeSelections":[{"appId":"app-1","resourceTypeId":"rt-1"}]}`},
+		body: `{}`, method: "POST", path: "/api/v1/access_review_template/t1/scope_by_resource_type", reads: 1},
+	{cmd: "access-reviews templates entitlements add", args: cat([]string{"t1"}, ent), body: `{"entitlementCount":1}`,
+		method: "POST", path: "/api/v1/access_review_template/t1/entitlements/add", reads: 1},
+	{cmd: "access-reviews templates entitlements remove", args: cat([]string{"t1"}, ent), body: `{"removedCount":1,"entitlementCount":0}`,
+		method: "POST", path: "/api/v1/access_review_template/t1/entitlements/remove", reads: 1},
+	{cmd: "access-reviews templates excluded-entitlements add", args: cat([]string{"t1"}, ent), body: `{}`,
+		method: "POST", path: "/api/v1/access_review_template/t1/excluded_entitlements/add_delete", reads: 1},
+	{cmd: "access-reviews templates excluded-entitlements remove", args: cat([]string{"t1"}, ent), body: `{}`,
+		method: "POST", path: "/api/v1/access_review_template/t1/excluded_entitlements/add_delete", reads: 1},
 	// accounts
 	{cmd: "accounts set-owner", args: []string{"au-1", "--app-id", "app-1", "--user-id", "u1"},
 		body: `{"appUserView":{"appUser":{"id":"au-1","identityUserId":"u1"},"appPath":"p","identityUserPath":"i","lastUsagePath":"l"},"expanded":[]}`,
@@ -364,7 +385,7 @@ var mutationTable = []mutationRow{
 
 // tblGet answers every pre-send read: the policy-step, user, catalog-id and
 // self lookups.
-const tblGet = `{"appResourceTypeView":{"appResourceType":{"id":"rt-1"}},"connectorView":{"connector":{"id":"cn1","config":{"@type":"type.googleapis.com/c1.api.app.v1.EnvConfig"}}},"taskView":{"task":{"id":"task-1","policy":{"current":{"id":"step-9"}}}},"user":{"id":"u1"},"userId":"self-1",` +
+const tblGet = `{"accessReviewTemplate":{"id":"t1","displayName":"zz","policyId":"pol1"},"appResourceTypeView":{"appResourceType":{"id":"rt-1"}},"connectorView":{"connector":{"id":"cn1","config":{"@type":"type.googleapis.com/c1.api.app.v1.EnvConfig"}}},"taskView":{"task":{"id":"task-1","policy":{"current":{"id":"step-9"}}}},"user":{"id":"u1"},"userId":"self-1",` +
 	`"list":[{"id":"ty-1","displayName":"Department","name":"Risk Level","appUserProfile":{}}],` +
 	`"attribute":{"userAttributeMapping":{"id":"map-1","attributeType":{"id":"ty-1","displayName":"Department","appUserProfile":{"appId":"app-1","appUserProfileAttributeKey":"department"}}}},` +
 	`"exporter":{"exportId":"ex-1","displayName":"zz","datasource":{"datasourceId":"ds-1","prefix":"zz/","format":"EXPORT_FORMAT_OCSF_JSON_GZIP"}}}`
