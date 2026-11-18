@@ -76,11 +76,9 @@ func runItemSearch(t *testing.T, c *cobra.Command, resp string, args ...string) 
 	resetCmdFlags(t, rootCmd)
 	resetCmds(t, c)
 	var out bytes.Buffer
-	// Set on the leaf too: another test may have left the leaf's own writer set.
-	c.SetOut(&out)
 	rootCmd.SetOut(&out)
 	rootCmd.SetErr(&bytes.Buffer{})
-	t.Cleanup(func() { c.SetOut(nil); rootCmd.SetOut(nil); rootCmd.SetErr(nil) })
+	t.Cleanup(func() { rootCmd.SetOut(nil); rootCmd.SetErr(nil) })
 	rootCmd.SetArgs(append([]string{"mcp", c.Parent().Name(), "search", "--app-id", "a1", "--connector-id", "c1"}, args...))
 	if err := executeRootCtxOrFail(t); err != nil {
 		t.Fatalf("search: %v", err)
