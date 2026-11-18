@@ -64,7 +64,7 @@ Prints the campaign unwrapped like "access-reviews get": the id is .id.`,
 		if err != nil {
 			return err
 		}
-		if err := validateCampaignOwners(body); err != nil {
+		if _, err := campaignOwnerIDs(body); err != nil {
 			return err
 		}
 		return sendMutation(cmd, mutation{Method: http.MethodPost, Path: "/api/v1/access_review", Body: body})
@@ -191,17 +191,26 @@ func readRequiredJSONObject(cmd *cobra.Command, flag string) (map[string]any, er
 	return readJSONFile[map[string]any](cmd, flag, file)
 }
 
-func validateCampaignOwners(body map[string]any) error {
-	owners, ok := body["ownerIds"].([]any)
-	if !ok || len(owners) == 0 {
-		return &usageError{fmt.Errorf("ownerIds must contain at least one user ID")}
-	}
-	for _, owner := range owners {
-		if id, ok := owner.(string); !ok || id == "" {
-			return &usageError{fmt.Errorf("ownerIds must contain only non-empty user IDs")}
+// campaignOwnerIDs returns a campaign or template body's ownerIds, which must
+// hold at least one non-empty user id.
+func campaignOwnerIDs(body map[string]any) ([]string, error) {
+	var ids []string
+	switch owners := body["ownerIds"].(type) {
+	case []any:
+		for _, owner := range owners {
+			id, ok := owner.(string)
+			if !ok || id == "" {
+				return nil, &usageError{fmt.Errorf("ownerIds must contain only non-empty user IDs")}
+			}
+			ids = append(ids, id)
 		}
+	case []string: // built from flags
+		ids = owners
 	}
-	return nil
+	if len(ids) == 0 {
+		return nil, &usageError{fmt.Errorf("ownerIds must contain at least one user ID")}
+	}
+	return ids, nil
 }
 
 var reportFormatFlag = enumFlag{flag: "format", prefix: "ACCESS_REVIEW_REPORT_FORMAT_", unknown: enumReject, values: []enumValue{
