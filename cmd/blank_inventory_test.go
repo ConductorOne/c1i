@@ -116,6 +116,7 @@ var wantEmptyAllowed = map[string]string{
 	"c1i policies create --rules-file":                          emptyIsOmitted,
 	"c1i policies create --steps-file":                          emptyIsOmitted,
 	"c1i policies update --description":                         emptyIsSent,
+	"c1i requests create action --description":                  emptyIsOmitted,
 	"c1i requests create grant --description":                   emptyIsOmitted,
 	"c1i requests create revoke --description":                  emptyIsOmitted,
 	"c1i tasks approve --comment":                               emptyIsOmitted,
