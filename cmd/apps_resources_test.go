@@ -220,7 +220,7 @@ func TestResourceRowsKeepJSONTypes(t *testing.T) {
 	if r.err != nil {
 		t.Fatalf("exit %d: %v\n%s", r.exit, r.err, r.stderr)
 	}
-	want := `{"app_id":"app-1","custom_description":null,"deleted_at":null,"description":null,"display_name":"zz","external_id":null,"grant_count":24,"id":"r-1","is_manually_managed":true,"parent_resource_id":null,"parent_resource_type_id":null,"resource_type_id":"rt-1"}`
+	want := `{"app_id":"app-1","custom_description":null,"description":null,"display_name":"zz","external_id":null,"grant_count":24,"id":"r-1","is_manually_managed":true,"parent_resource_id":null,"parent_resource_type_id":null,"resource_type_id":"rt-1"}`
 	if got := strings.TrimSpace(r.stdout); got != want {
 		t.Errorf("row\n got %s\nwant %s", got, want)
 	}

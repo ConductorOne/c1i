@@ -34,7 +34,6 @@ type appResource struct {
 	ParentResourceTypeID string    `json:"parentAppResourceTypeId"`
 	ParentResourceID     string    `json:"parentAppResourceId"`
 	IsManuallyManaged    bool      `json:"isManuallyManaged"`
-	DeletedAt            string    `json:"deletedAt"`
 }
 
 // resourceListItem is one row of the resources list and search: an
@@ -44,8 +43,8 @@ type resourceListItem struct {
 }
 
 // resourceRow is the NDJSON row of "resources list" and "search". grant_count
-// and is_manually_managed keep their JSON types; deleted_at is nil on a live
-// resource.
+// and is_manually_managed keep their JSON types. There is no deleted_at: both
+// endpoints omit deleted resources.
 func resourceRow(it resourceListItem) map[string]any {
 	r := it.AppResource
 	return map[string]any{
@@ -60,7 +59,6 @@ func resourceRow(it resourceListItem) map[string]any {
 		"parent_resource_type_id": nilIfEmpty(r.ParentResourceTypeID),
 		"parent_resource_id":      nilIfEmpty(r.ParentResourceID),
 		"is_manually_managed":     r.IsManuallyManaged,
-		"deleted_at":              nilIfEmpty(r.DeletedAt),
 	}
 }
 
@@ -124,9 +122,10 @@ var appsResourcesListCmd = &cobra.Command{
 	Use:   "list",
 	Short: "List the resources of one resource type (NDJSON output)",
 	Long: `List the resources of one resource type of an app (NDJSON output). Rows
-have the same shape as "apps resources search". Deleted resources are listed
-too, with deleted_at set, while their type is live; under a deleted type the
-list is empty. grant_count is a number.
+have the same shape as "apps resources search"; grant_count is a number. A
+deleted resource is not listed ("apps resources get" still returns it, with
+deletedAt set), while a live resource of a deleted type still is. The list
+can trail a write by a few seconds.
 
 A well-formed but unknown resource type returns zero rows and exit 0.`,
 	RunE: func(cmd *cobra.Command, args []string) error {

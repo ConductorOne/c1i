@@ -591,10 +591,9 @@ resource with `--resource-id` likewise means you drop
 - `apps resource-types get|create|update|delete <resource-type-id> --app-id`
   and `apps resources get|create|update|delete <resource-id> --app-id
   --resource-type-id` manage an app's manually managed types and resources;
-  `list`/`search` read them. Deletes are soft: a deleted resource stays in
-  `resources list` (`deleted_at` set) but leaves `search`; a deleted type
-  leaves `resource-types list` and `search`. Search can trail a write by a
-  few seconds. A type delete did not delete its resources (one was
+  `list`/`search` read them. Deletes are soft: `get` still returns the object
+  (`deletedAt` set), `list` and `search` stop returning it; both trail writes
+  by a few seconds. A type delete did not delete its resources (one was
   still live ten minutes later, despite the API spec), so delete resources
   first. `resource-types create --resource-type` is required; only `CUSTOM`
   repeats per app (else 500, exit 6). `resource-types update` renames only.
@@ -602,10 +601,12 @@ resource with `--resource-id` likewise means you drop
   deleted type, before sending. `resources update --custom-description ""`
   clears it; a blank `--display-name`/`--description` exits 2 (the server
   ignores an empty one). Other fields (e.g. `annotations`, merged not
-  replaced) go through `--body-file` + `--update-mask`. Search filters:
-  `--resource-type-id`, `--exclude-resource-type-id`, `--resource-id`,
+  replaced) go through `--body-file` + `--update-mask`. `resources search`
+  filters: `--app-id`, `--resource-type-id`, `--resource-id`,
   `--exclude-resource-id`, `--trait-id`, `--exclude-trait-id`,
-  `--owner-user-id`, `--unowned-only`; an unknown id matches nothing (exit 0).
+  `--owner-user-id`, `--unowned-only`; `resource-types search` takes
+  `--app-id`, `--resource-type-id`, `--exclude-resource-type-id`, `--trait-id`,
+  `--exclude-trait-id`. An unknown id matches nothing (exit 0).
   A type or resource id repeats across apps, so key search rows on `app_id`
   (and `resource_type_id`) plus `id`. `apps resources owners|add-owner|
   remove-owner|set-owners <resource-id>` behave like the app and entitlement

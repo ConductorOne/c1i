@@ -898,10 +898,9 @@ the resources under them; `entitlements create` builds the same objects in one
 call when you also want an entitlement. The resource's own id is positional;
 `--app-id` (and `--resource-type-id` for a resource) is its parent scope.
 `create`, `update` and `delete` act on manually managed objects. Both `delete`s
-are soft (see [Soft delete](#soft-delete)); a deleted resource stays in
-`resources list` with `deleted_at` set but leaves `resources search`, and a
-deleted type leaves both `resource-types list` and `search`. Search can trail
-a write by a few seconds. The API spec says a type delete also deletes its
+are soft (see [Soft delete](#soft-delete)): `get` still returns the object
+with `deletedAt` set, while `list` and `search` stop returning it. `list` and
+`search` can trail a write by a few seconds. The API spec says a type delete also deletes its
 resources, but a resource of a deleted type was still live ten minutes later, so
 delete resources first if they must go. `resource-types create --resource-type`
 has no default and takes the API spec's kinds (`ROLE`, `GROUP`, `LICENSE`,

@@ -20,8 +20,8 @@ It has no default. Only CUSTOM can repeat on one app: a second resource type of
 any other kind fails with a 500 (exit 6, though retrying never helps):
   app resource type already exists
 Find the existing one with "c1i apps resource-types list --app-id <app-id>".
---display-name outside 3 to 512 bytes is refused by the server (exit 2):
-  value length must be between 3 and 512 bytes, inclusive
+The server enforces a --display-name length range; a name outside it is a 400
+(exit 2) whose message states the range.
 
 An unknown app exits 4.
 

@@ -23,8 +23,8 @@ repeated id is sent once). For annotations or matchBatonId, pass the whole
 request with --body-file instead of --display-name/--description/--owner-id;
 it is sent verbatim, and its owner ids are not looked up first.
 
---display-name outside 3 to 512 bytes is refused by the server (exit 2):
-  value length must be between 3 and 512 bytes, inclusive
+The server enforces a --display-name length range; a name outside it is a 400
+(exit 2) whose message states the range.
 
 The resource type is looked up first: a type that does not exist exits 4,
 and a deleted type exits 2 (the server answers that create with a 500, "resource type is

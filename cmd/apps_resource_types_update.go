@@ -14,8 +14,8 @@ var appsResourceTypesUpdateCmd = &cobra.Command{
 
 --display-name is the only field: the API's other writable field, traitIds,
 was answered 200 and left unchanged, so this command does not offer it.
---display-name outside 3 to 512 bytes is refused by the server (exit 2):
-  value length must be between 3 and 512 bytes, inclusive
+The server enforces a --display-name length range; a name outside it is a 400
+(exit 2) whose message states the range.
 
 An unknown app or resource type exits 4.
 

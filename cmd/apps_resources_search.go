@@ -17,9 +17,9 @@ owned by any of the given users; --unowned-only keeps those with no owner.
 Repeatable flags may be given more than once; several values of one flag
 match any of them.
 
-Rows have the same shape as "apps resources list", but a deleted resource is
-not returned ("list" still shows it). Search can trail a write by a few
-seconds: a resource updated moments earlier came back with its old values.
+Rows have the same shape as "apps resources list"; a deleted resource is not
+returned. Search can trail a write by a few seconds: a resource updated
+moments earlier came back with its old values.
 One resource id can appear on several apps (a row per app), so key rows on
 app_id, resource_type_id and id.
 

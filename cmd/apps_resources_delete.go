@@ -12,8 +12,9 @@ var appsResourcesDeleteCmd = &cobra.Command{
 	Long: `Delete a manually managed resource. Honors --dry-run.
 
 The delete is soft: "apps resources get" still returns the resource with
-deletedAt set, and "apps resources list" still lists it. Repeating the delete
-exits 0; an unknown app, resource type or resource exits 4.
+deletedAt set, while "apps resources list" and "search" stop returning it
+(they can trail the delete by a few seconds). Repeating the delete exits 0;
+an unknown app, resource type or resource exits 4.
 
 Prints the API's response, which is {}; exit 0 is the success signal.`,
 	Args: cobra.ExactArgs(1),
