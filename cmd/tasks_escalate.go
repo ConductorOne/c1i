@@ -19,6 +19,9 @@ TASK_ACTION_TYPE_ESCALATE_TO_EMERGENCY_ACCESS; otherwise (for example when the
 entitlement has no emergency-grant policy, or the task was already escalated)
 it refuses with "action not permitted" (exit 2).
 
+A numeric task id works when the step is looked up (the id that read returns
+is sent); with --policy-step-id nothing is read, so pass the 27-character id.
+
 The step id is required by the server, which rejects a missing one with:
   invalid TaskActionsServiceEscalateToEmergencyAccessRequest.PolicyStepId: value does not match regex pattern "^[a-zA-Z0-9]{27}$"
 It defaults to the task's currently executing step, so pass --policy-step-id

@@ -18,18 +18,26 @@ var tasksUpdateRequestDataAction = taskAction{
 var tasksUpdateRequestDataCmd = &cobra.Command{
 	Use:   "update-request-data <task-id>",
 	Short: "Submit form data for a task at a form step",
-	Long: `Submit the request form of a task whose current policy step is a form.
+	Long: `Send form data for a task. The API describes it as submitting the request
+form of a task at a form step; a successful submission has not been observed
+through c1i.
 
 --data-file is a JSON object (file, or "-" for stdin) sent as the request's
 data; a missing, malformed, null or non-object file exits 2 before sending.
-Its keys are the form's field names (.policy.current.form.form.fields[].name
-in "c1i tasks get"). The server validates the object against the form and
-names fields by display name, for example:
-  request data does not match the required schema (field 'Reason' is required)
+The form's field names are at .policy.current.form.form.fields[].name in
+"c1i tasks get". What was observed:
+  - an object that does not fit the form gets a schema error naming fields by
+    display name: request data does not match the required schema (field
+    'Reason' is required)
+  - a valid object on a self-requested task at a form step, whose .actions did
+    not list TASK_ACTION_TYPE_UPDATE_REQUEST_DATA, was refused with "action
+    not permitted"
+  - a task at another step is refused with "current policy step is not a form
+    instance"
+All three exit 2.
 
-The server refuses a task whose current step is not a form with "current
-policy step is not a form instance", and a task whose .actions does not list
-TASK_ACTION_TYPE_UPDATE_REQUEST_DATA with "action not permitted" (both exit 2).
+The task is not read first, so <task-id> must be the 27-character id (the
+numeric id "tasks get" accepts is rejected by this route).
 
 Prints the task as pretty JSON, unwrapped like "tasks get": the id is .id.
 Its .state is the task from before the action, not the outcome; re-read with

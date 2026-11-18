@@ -18,6 +18,9 @@ The server allows it only while the task's .actions lists
 TASK_ACTION_TYPE_RETRY_PROVISIONING; on a task at an approval step it refuses
 with "action not permitted" (exit 2).
 
+A numeric task id works when the step is looked up (the id that read returns
+is sent); with --policy-step-id nothing is read, so pass the 27-character id.
+
 The step id is required by the server, which rejects a missing one with:
   invalid TaskActionsServiceRetryProvisioningRequest.PolicyStepId: value does not match regex pattern "^[a-zA-Z0-9]{27}$"
 It defaults to the task's currently executing step, so pass --policy-step-id

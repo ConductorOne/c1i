@@ -1171,19 +1171,27 @@ value lands at `.type.grant.grantDuration` (there is no top-level
 `escalate` moves a grant task onto its entitlement's emergency-grant policy
 (afterwards `.emergencyAccess` is true); a task with no emergency-grant policy,
 or one already escalated, is refused with `action not permitted`.
-`retry-provisioning` re-drives a failed provision step and is refused the same
-way on a task that is not in one. Both look up the current step like `approve`.
-`update-request-data --data-file` submits a JSON object keyed by the form's
-field names (`.policy.current.form.form.fields[].name`) to a task at a form
-step; the server validates it (`request data does not match the required
-schema (field 'Reason' is required)`) and refuses a task at another step with
-`current policy step is not a form instance`.
+The API describes `retry-provisioning` as re-driving a failed provision step;
+only its refusal has been observed (`action not permitted` on a task at an
+approval step). Both look up the current step like `approve`, and send the id
+that lookup returns, so a numeric task id works; with `--policy-step-id`
+nothing is read and the 27-character id is required.
+The API describes `update-request-data --data-file` as submitting the request
+form of a task at a form step (keys are the form's field names,
+`.policy.current.form.form.fields[].name`); a successful submission has not
+been observed. An object that does not fit the form gets `request data does not
+match the required schema (field 'Reason' is required)`; a valid one on a
+self-requested form task whose `.actions` lacked
+`TASK_ACTION_TYPE_UPDATE_REQUEST_DATA` was refused with `action not
+permitted`; a task at another step gets `current policy step is not a form
+instance`. It reads nothing first, so it needs the 27-character task id.
 
 `audits` prints the task's audit trail as NDJSON, one raw event per row, oldest
 first (`--newest-first` reverses it). `--comments-only` and
 `--exclude-comments` filter comment events and together exit `2`. The task is
 read first, because the audit endpoint answers an unknown task with an empty
-list: an unknown id exits `4`.
+list: an unknown id exits `4`. That read accepts a numeric task id, and the id
+it returns is the one sent.
 
 `approve-with-step-up` is not wrapped (it returns a browser `redirectUrl` to
 finish step-up authentication interactively); reach it through `c1i api`.
