@@ -353,7 +353,9 @@ tracked root file outside its allowlist. Stage explicit paths rather than `-A`.
   response uses the `withResponse` hook, not its own post-send code.
   `TestMutationsWriteOnlyThroughHelper` enforces this. Every stderr line goes
   through `cmd/stderr.go` (`notice`, `progress`) or `cmd/errors.go`, so
-  `--error-format json` makes stderr NDJSON. A `--fields` that matches
+  `--error-format json` makes stderr NDJSON. Server-sourced text in text-mode
+  stderr goes through `escapeControl` (the helpers already do), so a control
+  character prints visibly instead of acting on the terminal. A `--fields` that matches
   no key anywhere in the result is a usage error (exit 2), enforced in two
   separate places: the list path counts matches across rows via rootCmd's
   `PersistentPreRunE`/`PersistentPostRunE`, and `writeObject` checks the

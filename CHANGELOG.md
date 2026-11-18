@@ -47,6 +47,14 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   polls the invocation and exits `1` if it ends `ERROR` or `CANCELLED`.
   `invocations list` reads newest first.
 
+### Security
+
+- Text-mode stderr (errors, notices, `--wait` progress) prints control
+  characters from server-supplied text as visible escapes (`\x1b`, `\u202e`)
+  instead of sending them to the terminal, so an API error body or MCP message
+  cannot rewrite the screen or title. `\n` and `\t` are kept; `--error-format
+  json` output is unchanged.
+
 ## [0.11.0] - 2026-11-17
 
 ### Upgrading from 0.10.1

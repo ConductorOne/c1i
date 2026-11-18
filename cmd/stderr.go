@@ -9,6 +9,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -44,7 +45,7 @@ func notice(cmd *cobra.Command, kind, text string, fields map[string]any) {
 // noticeTo is notice for callers with no command (warnAboutURL).
 func noticeTo(w io.Writer, kind, text string, fields map[string]any) {
 	if !stderrIsJSON() {
-		_, _ = fmt.Fprintln(w, text)
+		_, _ = fmt.Fprintln(w, escapeControl(text))
 		return
 	}
 	obj := make(map[string]any, len(fields)+2)
@@ -59,10 +60,41 @@ func noticeTo(w io.Writer, kind, text string, fields map[string]any) {
 // progress writes one --wait progress line.
 func progress(w io.Writer, subject, text string, elapsed time.Duration) {
 	if !stderrIsJSON() {
-		_, _ = fmt.Fprintln(w, text)
+		_, _ = fmt.Fprintln(w, escapeControl(text))
 		return
 	}
 	writeJSONLine(w, map[string]any{"progress": text, "subject": subject, "elapsed": elapsed.String()})
+}
+
+// escapeControl makes control characters visible so server-supplied text in
+// text-mode stderr cannot drive the terminal: C0/C1 controls, U+2028/2029 and
+// the bidi overrides print as \xNN or \uNNNN. \n and \t pass (multi-line
+// errors are legitimate). Every text-mode stderr line goes through it; JSON
+// mode is escaped by encoding.
+func escapeControl(s string) string {
+	if !strings.ContainsFunc(s, needsEscape) {
+		return s
+	}
+	var b strings.Builder
+	for _, r := range s {
+		switch {
+		case !needsEscape(r):
+			b.WriteRune(r)
+		case r < 0x100:
+			fmt.Fprintf(&b, "\\x%02x", r)
+		default:
+			fmt.Fprintf(&b, "\\u%04x", r)
+		}
+	}
+	return b.String()
+}
+
+func needsEscape(r rune) bool {
+	if r == '\n' || r == '\t' {
+		return false
+	}
+	return unicode.IsControl(r) || r == 0x2028 || r == 0x2029 ||
+		(r >= 0x202a && r <= 0x202e) || (r >= 0x2066 && r <= 0x2069)
 }
 
 func writeJSONLine(w io.Writer, obj map[string]any) {
