@@ -641,8 +641,8 @@ resource with `--resource-id` likewise means you drop
   first. `resource-types create --resource-type` is required; only `CUSTOM`
   repeats per app (else 500, exit 6). `resource-types update` renames only.
   `resources create` exits 4 for an unknown type or `--owner-id` and 2 for a
-  deleted type, before sending; its `--body-file` must not set `appId`, which
-  `--app-id` owns (exit 2). `resources update --custom-description ""`
+  deleted type, before sending; its `--body-file` must not set `appId` or
+  `appResourceTypeId`, which `--app-id` and `--resource-type-id` own (exit 2). `resources update --custom-description ""`
   clears it; a blank `--display-name`/`--description` exits 2 (the server
   ignores an empty one). Other fields (e.g. `annotations`, merged not
   replaced) go through `--body-file` + `--update-mask`. `resources search`

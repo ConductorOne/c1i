@@ -976,7 +976,8 @@ the server ignores an empty name or description, so those exit `2` when
 blank. Other fields (such as `annotations`, which were merged rather than
 replaced) go through `--body-file` with `--update-mask`; `resources create
 --body-file` sends a full request, except that it must not set `appId`/
-`app_id` (exit `2`): `--app-id` owns it, and the server ignored the body value.
+`app_id` or `appResourceTypeId`/`app_resource_type_id` (exit `2`): the flags
+own them, and the server ignored the body values.
 Search rows have the same shape as the matching `list`. The id filters
 (`--resource-type-id`, `--exclude-resource-type-id`, `--resource-id`,
 `--exclude-resource-id`, `--trait-id` and `--exclude-trait-id`, which match the
@@ -2847,8 +2848,8 @@ server did not paginate `list` when tried (`--page-size` had no effect).
 it) first, `--dry-run` included, so an unknown one exits `4`; without the check
 the server answers an unknown function with `400` and stores an unknown commit
 id at exit `0`. `--body-file` is sent verbatim except that a `priority`
-outside 0-1000 exits `2` when the mask names it, since update does not
-validate it.
+outside 0-1000, or one that is not a whole number, exits `2` when the mask
+names it, since update does not validate it.
 
 `update` sends only the flags you pass and names exactly those in the mask.
 `--function-id` replaces the whole function reference (the commit goes back to
