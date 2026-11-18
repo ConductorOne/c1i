@@ -1,6 +1,8 @@
 package cmd
 
 import (
+	"encoding/json"
+	"fmt"
 	"net/http"
 
 	"github.com/ConductorOne/c1i/internal/client"
@@ -29,11 +31,18 @@ var connectorCredentialsGetCmd = &cobra.Command{
 "credential" wrapper. .clientSecret is "" here; it is returned only by
 "connectors credentials rotate".
 
+The server resolves the credential id globally and ignores the app and
+connector path segments, so c1i refuses a credential whose appId or
+connectorId differs from --app-id/--connector-id (exit 4).
+
 A revoked credential is still returned with exit 0: in the run checked, revoke
 set .expiresTime to a time in the past and left .deletedAt null.`,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		return getConnectorResource(cmd, connectorCredentialPath(cmd, args[0]), func(data []byte) error {
+			if err := requireCredentialScope(cmd, data); err != nil {
+				return err
+			}
 			return writeResource(cmd, data, "id")
 		})
 	},
@@ -85,4 +94,29 @@ func init() {
 	}
 	markMutating(connectorCredentialsRevokeCmd)
 	markMutating(connectorCredentialsRotateCmd)
+}
+
+// requireCredentialScope refuses a credential the server returned from a
+// different app or connector. The read resolves the credential id globally and
+// ignores both path segments, so the flags would otherwise look enforced.
+func requireCredentialScope(cmd *cobra.Command, data []byte) error {
+	var resp struct {
+		Credential *struct {
+			ID          string `json:"id"`
+			AppID       string `json:"appId"`
+			ConnectorID string `json:"connectorId"`
+		} `json:"credential"`
+	}
+	if json.Unmarshal(data, &resp) != nil || resp.Credential == nil {
+		return nil // writeResource reports a shape it cannot print
+	}
+	appID, _ := cmd.Flags().GetString("app-id")
+	connectorID, _ := cmd.Flags().GetString("connector-id")
+	c := resp.Credential
+	if (c.AppID != "" && c.AppID != appID) || (c.ConnectorID != "" && c.ConnectorID != connectorID) {
+		return &refNotFoundError{msg: fmt.Sprintf(
+			"credential %q belongs to app %q and connector %q, not --app-id %q --connector-id %q",
+			c.ID, c.AppID, c.ConnectorID, appID, connectorID)}
+	}
+	return nil
 }

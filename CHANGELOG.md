@@ -231,6 +231,9 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `--app-id` owns (the server silently ignored it).
 - `service-principals trusts` rows print an absent `scoped_role_ids`,
   `allow_source_cidrs` or `passthrough_claims` as `null` instead of `[]`.
+- `connectors credentials get` refuses a credential whose `appId` or
+  `connectorId` differs from its flags (exit `4`): the server resolves the id
+  globally and ignored both path segments.
 - `access-reviews templates update --body-file` treats a snake_case key
   (`display_name`, `policy_id`) as set: the update no longer reads the
   template and sends the camelCase field beside it. A masked `policy_id` is

@@ -251,3 +251,25 @@ func assertJSONEqual(t *testing.T, got, want string) {
 		t.Errorf("body %s, want %s", got, want)
 	}
 }
+
+// The credential read resolves the id globally and ignores the app/connector
+// path segments, so c1i refuses a credential that belongs to another one.
+func TestConnectorCredentialGetRefusesForeignScope(t *testing.T) {
+	t.Setenv("C1I_URL", mutTestURL)
+	body := `{"credential":{"id":"cred-1","appId":"other-app","connectorId":"other-connector","displayName":"zz"}}`
+	s := newMutServer(t, fixedReply(200, body))
+	r := runMutationCLI(t, s.srv, 0, nil, "connectors", "credentials", "get", "cred-1", "--app-id", "app-1", "--connector-id", "cn-1")
+	if r.exit != exitNotFound || !strings.Contains(r.stderr, "belongs to app") {
+		t.Fatalf("exit %d stderr %q", r.exit, r.stderr)
+	}
+	if r.stdout != "" {
+		t.Errorf("stdout = %q, want empty", r.stdout)
+	}
+
+	body = `{"credential":{"id":"cred-1","appId":"app-1","connectorId":"cn-1","displayName":"zz"}}`
+	s = newMutServer(t, fixedReply(200, body))
+	r = runMutationCLI(t, s.srv, 0, nil, "connectors", "credentials", "get", "cred-1", "--app-id", "app-1", "--connector-id", "cn-1")
+	if r.exit != 0 || !strings.Contains(r.stdout, `"displayName": "zz"`) {
+		t.Fatalf("matching scope: exit %d stdout %q stderr %q", r.exit, r.stdout, r.stderr)
+	}
+}
