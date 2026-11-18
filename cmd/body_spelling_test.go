@@ -231,7 +231,8 @@ func allSpellingTwins() []spellingTwin {
 type twinRun struct {
 	exit     int
 	requests []string
-	stdout   string
+	stdout   string // keys folded, for comparing twins
+	raw      string // stdout as printed
 }
 
 func runSpellingTwin(t *testing.T, tc spellingTwin, file string) twinRun {
@@ -251,7 +252,7 @@ func runSpellingTwin(t *testing.T, tc spellingTwin, file string) twinRun {
 		argv = append(argv, "--dry-run")
 	}
 	r := runMutationCLI(t, s.srv, 0, nil, argv...)
-	run := twinRun{exit: r.exit, stdout: foldedJSONLines(r.stdout)}
+	run := twinRun{exit: r.exit, stdout: foldedJSONLines(r.stdout), raw: r.stdout}
 	for _, q := range s.requests() {
 		run.requests = append(run.requests, q.method+" "+q.rawPath+" "+foldedJSONLines(q.body))
 	}
@@ -259,7 +260,9 @@ func runSpellingTwin(t *testing.T, tc spellingTwin, file string) twinRun {
 }
 
 // foldedJSONLines re-encodes each JSON document in s with every object key
-// folded (foldMaskName); two keys folding alike become a visible marker.
+// folded (foldMaskName), so twins compare spelling-blind; a second key folding
+// alike (in sorted key order) becomes a visible marker. Use it to compare
+// twins only, never to assert which key was sent.
 func foldedJSONLines(s string) string {
 	dec := json.NewDecoder(strings.NewReader(s))
 	var out []string
@@ -278,7 +281,13 @@ func foldKeys(v any) any {
 	switch x := v.(type) {
 	case map[string]any:
 		out := map[string]any{}
-		for k, e := range x {
+		keys := make([]string, 0, len(x))
+		for k := range x {
+			keys = append(keys, k)
+		}
+		sort.Strings(keys)
+		for _, k := range keys {
+			e := x[k]
 			f := foldMaskName(k)
 			if _, dup := out[f]; dup {
 				f = "DUPLICATE:" + f
@@ -534,14 +543,16 @@ func TestMisCasedKeysAreNotSpellings(t *testing.T) {
 		args       []string
 		file       string
 		exit       int
-		want       string // in the dry-run preview
+		envelope   string         // the preview body's wrapper key, if any
+		want       map[string]any // the exact keys of the sent object
 	}{
 		{"unknown bundle field", "access-profiles bundle-automation create", []string{"ap1", "--body-file", "@BODY"},
-			`{"CreateTasks":true,"entitlements":{"entitlementRefs":[]}}`, exitUsage, ""},
+			`{"CreateTasks":true,"entitlements":{"entitlementRefs":[]}}`, exitUsage, "", nil},
 		{"template policy not looked up", "access-reviews templates create", []string{"--body-file", "@BODY"},
-			`{"displayName":"x","PolicyId":"pol9","ownerIds":["u1"]}`, 0, `"policyid":"pol9"`},
+			`{"displayName":"x","PolicyId":"pol9","ownerIds":["u1"]}`, 0, "",
+			map[string]any{"displayName": "x", "PolicyId": "pol9", "ownerIds": []any{"u1"}}},
 		{"owned id not rewritten", "findings routing-rules update", []string{"r1", "--body-file", "@BODY"},
-			`{"Id":"other"}`, 0, `"id":"other"`},
+			`{"Id":"other"}`, 0, "routingRule", map[string]any{"Id": "other", "id": "r1"}},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -554,8 +565,25 @@ func TestMisCasedKeysAreNotSpellings(t *testing.T) {
 					t.Errorf("looked up a mis-cased key: %s", q)
 				}
 			}
-			if !strings.Contains(r.stdout, tc.want) {
-				t.Errorf("preview %s lacks %s", r.stdout, tc.want)
+			if tc.want == nil {
+				return
+			}
+			var preview struct {
+				Requests []struct {
+					Body map[string]any `json:"body"`
+				} `json:"requests"`
+			}
+			if err := json.Unmarshal([]byte(r.raw), &preview); err != nil || len(preview.Requests) != 1 {
+				t.Fatalf("preview %q: %v", r.raw, err)
+			}
+			got := preview.Requests[0].Body
+			if tc.envelope != "" {
+				got, _ = got[tc.envelope].(map[string]any)
+			}
+			gotJSON, _ := json.Marshal(got)
+			wantJSON, _ := json.Marshal(tc.want)
+			if string(gotJSON) != string(wantJSON) {
+				t.Errorf("sent %s, want %s", gotJSON, wantJSON)
 			}
 		})
 	}
