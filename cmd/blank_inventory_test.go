@@ -144,6 +144,9 @@ var wantEmptyAllowed = map[string]string{
 	// workload federation
 	"c1i service-principals trusts update --description":     emptyIsSent,
 	"c1i workload-federation providers update --description": emptyIsSent,
+	"c1i xaa resource-servers update --description":          emptyIsSent,
+	"c1i xaa scopes update --description":                    emptyIsSent,
+	"c1i xaa access-profiles update --description":           emptyIsSent,
 }
 
 func TestEmptyAllowedInventoryIsPinned(t *testing.T) {

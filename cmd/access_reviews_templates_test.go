@@ -236,12 +236,15 @@ func TestTemplateSetupCommandsWire(t *testing.T) {
 	}
 }
 
-// withTemplateReads answers the template read "templates update" makes before
-// its write, so a tree test's fixed reply still reaches the write.
+// withTemplateReads answers the reads "templates update" and the xaa updates
+// make before their write, so a tree test's fixed reply still reaches the write.
 func withTemplateReads(route func(*http.Request, int) mutReply) func(*http.Request, int) mutReply {
 	return func(r *http.Request, n int) mutReply {
 		if r.Method == http.MethodGet && strings.HasPrefix(r.URL.Path, "/api/v1/access_review_template/") {
 			return mutReply{body: `{"accessReviewTemplate":{"id":"t1","displayName":"cur","policyId":"pol0"}}`}
+		}
+		if r.Method == http.MethodGet && strings.Contains(r.URL.Path, "/xaa/") {
+			return mutReply{body: `{"resourceServer":{"id":"rs-1","displayName":"cur","normalizedAudience":"https://a.example.com"},"scope":{"id":"sc-1","displayName":"cur","scopeValue":"s","xaaResourceServerId":"rs-1"},"accessProfile":{"id":"ap-1","displayName":"cur","xaaResourceServerId":"rs-1"}}`}
 		}
 		return route(r, n)
 	}

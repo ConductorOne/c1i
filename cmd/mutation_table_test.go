@@ -394,6 +394,16 @@ var mutationTable = []mutationRow{
 	{cmd: "workload-federation providers create", args: []string{"--display-name", "zz", "--issuer-url", "https://issuer.example.com", "--well-known-provider", "custom"}, body: tblWFProvider, want: tblWFProviderDoc, ids: idPath, method: "POST", path: "/api/v1/workload_federation/providers"},
 	{cmd: "workload-federation providers update", args: []string{"pr-1", "--disabled"}, body: tblWFProvider, want: tblWFProviderDoc, ids: idPath, method: "PATCH", path: "/api/v1/workload_federation/providers/pr-1"},
 	{cmd: "workload-federation providers delete", args: []string{"pr-1"}, body: `{}`, method: "DELETE", path: "/api/v1/workload_federation/providers/pr-1"},
+	{cmd: "xaa resource-servers create", args: []string{"--app-id", "app-1", "--audience", "https://a.example.com", "--display-name", "zz"}, body: tblXAARS, want: tblXAARSDoc, ids: idPath, method: "POST", path: "/api/v1/apps/app-1/xaa/resource_servers", reads: 1},
+	{cmd: "xaa resource-servers update", args: []string{"rs-1", "--app-id", "app-1", "--description", "d"}, body: tblXAARS, want: tblXAARSDoc, ids: idPath, method: "POST", path: "/api/v1/apps/app-1/xaa/resource_servers/rs-1", reads: 1},
+	{cmd: "xaa resource-servers delete", args: []string{"rs-1", "--app-id", "app-1"}, body: `{}`, method: "DELETE", path: "/api/v1/apps/app-1/xaa/resource_servers/rs-1"},
+	{cmd: "xaa resource-servers resync-scopes", args: []string{"rs-1", "--app-id", "app-1"}, body: `{}`, method: "POST", path: "/api/v1/apps/app-1/xaa/resource_servers/rs-1/resync_scopes"},
+	{cmd: "xaa scopes create", args: []string{"--app-id", "app-1", "--resource-server-id", "rs-1", "--scope-value", "zz.read", "--display-name", "zz"}, body: tblXAAScope, want: tblXAAScopeDoc, ids: idPath, method: "POST", path: "/api/v1/apps/app-1/xaa/scopes", reads: 1},
+	{cmd: "xaa scopes update", args: []string{"sc-1", "--app-id", "app-1", "--state", "enabled"}, body: tblXAAScope, want: tblXAAScopeDoc, ids: idPath, method: "POST", path: "/api/v1/apps/app-1/xaa/scopes/sc-1", reads: 1},
+	{cmd: "xaa scopes delete", args: []string{"sc-1", "--app-id", "app-1"}, body: `{}`, method: "DELETE", path: "/api/v1/apps/app-1/xaa/scopes/sc-1"},
+	{cmd: "xaa access-profiles create", args: []string{"--app-id", "app-1", "--resource-server-id", "rs-1", "--display-name", "zz"}, body: tblXAAProfile, want: tblXAAProfileDoc, ids: idPath, method: "POST", path: "/api/v1/apps/app-1/xaa/access_profiles", reads: 1},
+	{cmd: "xaa access-profiles update", args: []string{"ap-1", "--app-id", "app-1", "--description", "d"}, body: tblXAAProfile, want: tblXAAProfileDoc, ids: idPath, method: "POST", path: "/api/v1/apps/app-1/xaa/access_profiles/ap-1", reads: 1},
+	{cmd: "xaa access-profiles delete", args: []string{"ap-1", "--app-id", "app-1"}, body: `{}`, method: "DELETE", path: "/api/v1/apps/app-1/xaa/access_profiles/ap-1"},
 }
 
 // tblGet answers every pre-send read: the policy-step, user, catalog-id and
@@ -401,6 +411,7 @@ var mutationTable = []mutationRow{
 const tblGet = `{"accessReviewTemplate":{"id":"t1","displayName":"zz","policyId":"pol1"},"policy":{"id":"pol1","policyType":"POLICY_TYPE_CERTIFY"},"appResourceTypeView":{"appResourceType":{"id":"rt-1"}},"connectorView":{"connector":{"id":"cn1","config":{"@type":"type.googleapis.com/c1.api.app.v1.EnvConfig"}}},"taskView":{"task":{"id":"task-1","policy":{"current":{"id":"step-9"}}}},"user":{"id":"u1"},"userId":"self-1",` +
 	`"list":[{"id":"ty-1","displayName":"Department","name":"Risk Level","appUserProfile":{}}],` +
 	`"attribute":{"userAttributeMapping":{"id":"map-1","attributeType":{"id":"ty-1","displayName":"Department","appUserProfile":{"appId":"app-1","appUserProfileAttributeKey":"department"}}}},` +
+	`"resourceServer":{"id":"rs-1","displayName":"zz","normalizedAudience":"https://a.example.com"},"scope":{"id":"sc-1","displayName":"zz","scopeValue":"zz.read","xaaResourceServerId":"rs-1"},"accessProfile":{"id":"ap-1","displayName":"zz","xaaResourceServerId":"rs-1"},` +
 	`"exporter":{"exportId":"ex-1","displayName":"zz","datasource":{"datasourceId":"ds-1","prefix":"zz/","format":"EXPORT_FORMAT_OCSF_JSON_GZIP"}}}`
 
 func tableRoute(body string) func(*http.Request, int) mutReply {

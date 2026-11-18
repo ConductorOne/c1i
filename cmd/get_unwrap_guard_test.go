@@ -620,6 +620,36 @@ func getUnwrapCases() []getUnwrapCase {
 			payloadPath: []string{"provider"},
 			wantKeys:    []string{"id", "displayName", "oidc"},
 		},
+		{
+			name:        "xaa resource-servers get",
+			cmd:         xaaResourceServersGetCmd,
+			args:        []string{"rs-1"},
+			flags:       map[string]string{"app-id": "app-1"},
+			idKey:       "id",
+			body:        `{"resourceServer":{"id":"rs-1","appId":"app-1","displayName":"zz"},"scopeDiscoveryStatus":{"state":"XAA_SCOPE_DISCOVERY_STATE_FAILED"}}`,
+			payloadPath: []string{"resourceServer"},
+			wantKeys:    []string{"id", "appId", "displayName", "scopeDiscoveryStatus"},
+		},
+		{
+			name:        "xaa scopes get",
+			cmd:         xaaScopesGetCmd,
+			args:        []string{"sc-1"},
+			flags:       map[string]string{"app-id": "app-1"},
+			idKey:       "id",
+			body:        `{"scope":{"id":"sc-1","appId":"app-1","scopeValue":"zz.read"}}`,
+			payloadPath: []string{"scope"},
+			wantKeys:    []string{"id", "appId", "scopeValue"},
+		},
+		{
+			name:        "xaa access-profiles get",
+			cmd:         xaaAccessProfilesGetCmd,
+			args:        []string{"ap-1"},
+			flags:       map[string]string{"app-id": "app-1"},
+			idKey:       "id",
+			body:        `{"accessProfile":{"id":"ap-1","appId":"app-1","displayName":"zz"}}`,
+			payloadPath: []string{"accessProfile"},
+			wantKeys:    []string{"id", "appId", "displayName"},
+		},
 	}
 }
 
