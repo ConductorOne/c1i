@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/http"
 
@@ -8,11 +9,24 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// catalogEntitlementRef is the API's AppEntitlementRef: an entitlement ID is
-// scoped to its application, so neither field can be omitted from a mutation.
-type catalogEntitlementRef struct {
-	AppID string `json:"appId"`
-	ID    string `json:"id"`
+// appRefShape names an API's {appId, <id>} pair: an id scoped to its app, so
+// neither field can be omitted. APIs key the second field differently
+// (AppEntitlementRef "id", access-review setup inputs "appEntitlementId").
+type appRefShape struct{ name, idKey string }
+
+var appEntitlementRefShape = appRefShape{name: "AppEntitlementRef", idKey: "id"}
+
+// appRef marshals as {"appId":…,<shape.idKey>:…}, appId first.
+type appRef struct {
+	AppID, ID string
+	shape     appRefShape
+}
+
+func (r appRef) MarshalJSON() ([]byte, error) {
+	appID, _ := json.Marshal(r.AppID) // a string always marshals
+	key, _ := json.Marshal(r.shape.idKey)
+	id, _ := json.Marshal(r.ID)
+	return []byte(`{"appId":` + string(appID) + `,` + string(key) + `:` + string(id) + `}`), nil
 }
 
 var accessProfilesRequestableEntitlementsCmd = &cobra.Command{
@@ -164,7 +178,12 @@ func newAccessProfileEntitlementListCmd(short, endpoint string) *cobra.Command {
 	return cmd
 }
 
-func catalogEntitlementReferences(cmd *cobra.Command, required bool) ([]catalogEntitlementRef, error) {
+func catalogEntitlementReferences(cmd *cobra.Command, required bool) ([]appRef, error) {
+	return appRefsFromFlags(cmd, required, appEntitlementRefShape)
+}
+
+// appRefsFromFlags pairs --app-id with each repeated --entitlement-id.
+func appRefsFromFlags(cmd *cobra.Command, required bool, shape appRefShape) ([]appRef, error) {
 	ids, err := repeatableStringFlag(cmd, "entitlement-id")
 	if err != nil {
 		return nil, err
@@ -173,14 +192,14 @@ func catalogEntitlementReferences(cmd *cobra.Command, required bool) ([]catalogE
 		return nil, &usageError{fmt.Errorf("flag --entitlement-id requires at least one value")}
 	}
 	appID, _ := cmd.Flags().GetString("app-id")
-	refs := make([]catalogEntitlementRef, len(ids))
+	refs := make([]appRef, len(ids))
 	for i, id := range ids {
-		refs[i] = catalogEntitlementRef{AppID: appID, ID: id}
+		refs[i] = appRef{AppID: appID, ID: id, shape: shape}
 	}
 	return refs, nil
 }
 
-func catalogEntitlementReferencesFromFile(cmd *cobra.Command) ([]catalogEntitlementRef, error) {
+func catalogEntitlementReferencesFromFile(cmd *cobra.Command) ([]appRef, error) {
 	refsFile, _ := cmd.Flags().GetString("refs-file")
 	if refsFile == "" {
 		return nil, &usageError{fmt.Errorf("--refs-file is required")}
@@ -189,37 +208,37 @@ func catalogEntitlementReferencesFromFile(cmd *cobra.Command) ([]catalogEntitlem
 	if err != nil {
 		return nil, err
 	}
-	if err := validateAppEntitlementRefs(refs, "refs"); err != nil {
-		return nil, err
-	}
-
-	result := make([]catalogEntitlementRef, len(refs))
-	for i, raw := range refs {
-		ref := raw.(map[string]any)
-		result[i] = catalogEntitlementRef{AppID: ref["appId"].(string), ID: ref["id"].(string)}
-	}
-	return result, nil
+	return parseAppRefs(refs, "refs", appEntitlementRefShape)
 }
 
 func validateAppEntitlementRefs(raw []any, field string) error {
-	refs, err := objectElements(field, raw)
-	if err != nil {
-		return err
-	}
-	for i, ref := range refs {
-		if len(ref) != 2 {
-			return &usageError{fmt.Errorf("%s[%d] must be an AppEntitlementRef with exactly appId and id", field, i)}
-		}
-		appID, appOK := ref["appId"].(string)
-		id, idOK := ref["id"].(string)
-		if !appOK || !idOK || appID == "" || id == "" {
-			return &usageError{fmt.Errorf("%s[%d] must be an AppEntitlementRef with non-empty appId and id", field, i)}
-		}
-	}
-	return nil
+	_, err := parseAppRefs(raw, field, appEntitlementRefShape)
+	return err
 }
 
-func buildRequestableEntitlementsBody(cmd *cobra.Command, refs []catalogEntitlementRef) map[string]any {
+// parseAppRefs requires each element to hold exactly appId and shape.idKey,
+// both non-empty strings.
+func parseAppRefs(raw []any, field string, shape appRefShape) ([]appRef, error) {
+	elems, err := objectElements(field, raw)
+	if err != nil {
+		return nil, err
+	}
+	refs := make([]appRef, len(elems))
+	for i, ref := range elems {
+		if len(ref) != 2 {
+			return nil, &usageError{fmt.Errorf("%s[%d] must be an %s with exactly appId and %s", field, i, shape.name, shape.idKey)}
+		}
+		appID, appOK := ref["appId"].(string)
+		id, idOK := ref[shape.idKey].(string)
+		if !appOK || !idOK || appID == "" || id == "" {
+			return nil, &usageError{fmt.Errorf("%s[%d] must be an %s with non-empty appId and %s", field, i, shape.name, shape.idKey)}
+		}
+		refs[i] = appRef{AppID: appID, ID: id, shape: shape}
+	}
+	return refs, nil
+}
+
+func buildRequestableEntitlementsBody(cmd *cobra.Command, refs []appRef) map[string]any {
 	body := map[string]any{"appEntitlements": refs}
 	if flag := cmd.Flags().Lookup("create-requests"); flag != nil && flag.Changed {
 		createRequests, _ := cmd.Flags().GetBool("create-requests")
@@ -228,7 +247,7 @@ func buildRequestableEntitlementsBody(cmd *cobra.Command, refs []catalogEntitlem
 	return body
 }
 
-func buildVisibilityEntitlementsBody(refs []catalogEntitlementRef) map[string]any {
+func buildVisibilityEntitlementsBody(refs []appRef) map[string]any {
 	return map[string]any{"accessEntitlements": refs}
 }
 
