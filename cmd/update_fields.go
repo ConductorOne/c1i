@@ -102,6 +102,45 @@ func enumUpdate(flag, key string, e *enumFlag) updateField {
 	}}
 }
 
+// intUpdate sends a set int flag; range limits are the server's.
+func intUpdate(flag, key string) updateField {
+	return updateField{flags: []string{flag}, apply: func(cmd *cobra.Command, obj map[string]any) ([]string, error) {
+		if !cmd.Flags().Changed(flag) {
+			return nil, nil
+		}
+		v, err := cmd.Flags().GetInt(flag)
+		if err != nil {
+			return nil, fmt.Errorf("--%s is not an int flag: %w", flag, err)
+		}
+		obj[key] = v
+		return []string{key}, nil
+	}}
+}
+
+// listUpdate sends a set addRepeatableStringFlag flag as an array that
+// replaces the field, each value normalized through e unless e is nil.
+func listUpdate(flag, key string, e *enumFlag) updateField {
+	return updateField{flags: []string{flag}, apply: func(cmd *cobra.Command, obj map[string]any) ([]string, error) {
+		if !cmd.Flags().Changed(flag) {
+			return nil, nil
+		}
+		var (
+			values []string
+			err    error
+		)
+		if e != nil {
+			values, err = parseRepeatableEnum(cmd, e.as(flag))
+		} else {
+			values, err = repeatableStringFlag(cmd, flag)
+		}
+		if err != nil {
+			return nil, err
+		}
+		obj[key] = values
+		return []string{key}, nil
+	}}
+}
+
 // durationUpdate sends a set addProtoDurationFlag flag in protobuf form.
 func durationUpdate(flag, key string) updateField {
 	return updateField{flags: []string{flag}, apply: func(cmd *cobra.Command, obj map[string]any) ([]string, error) {

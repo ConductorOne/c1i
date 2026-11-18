@@ -50,6 +50,8 @@ var changedAllowlist = map[string]string{
 	"update_fields.go:boolUpdate":                                      "the update-field builder: presence of a flag is mask membership",
 	"update_fields.go:optionalBoolUpdate":                              "the update-field builder: presence of a flag is mask membership",
 	"update_fields.go:enumUpdate":                                      "the update-field builder: presence of a flag is mask membership",
+	"update_fields.go:intUpdate":                                       "the update-field builder: presence of a flag is mask membership",
+	"update_fields.go:listUpdate":                                      "the update-field builder: presence of a flag is mask membership; values are checked by repeatableStringFlag",
 	"wait.go:waitFlagValues":                                           "--wait is a bool: passed (even =false) vs defaulted decides whether --wait-* companions are stray",
 }
 

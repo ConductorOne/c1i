@@ -25,6 +25,12 @@ var updateMaskCases = map[string]struct {
 	"mcp classifiers update":            {[]string{"mcp", "classifiers", "update", "cl-1"}, true},
 	"mcp classifiers policy update":     {[]string{"mcp", "classifiers", "policy", "update"}, true},
 	"mcp classifiers tool-gates update": {[]string{"mcp", "classifiers", "tool-gates", "update", "tg-1"}, true},
+	"settings ai-governance update":     {[]string{"settings", "ai-governance", "update"}, true},
+	"settings contacts update":          {[]string{"settings", "contacts", "update"}, true},
+	"settings cross-app-access update":  {[]string{"settings", "cross-app-access", "update"}, true},
+	"settings request update":           {[]string{"settings", "request", "update"}, true},
+	"settings session update":           {[]string{"settings", "session", "update"}, true},
+	"settings sso update":               {[]string{"settings", "sso", "update"}, true},
 	"mcp servers test-connection":       {[]string{"mcp", "servers", "test-connection", "cn-1", "--app-id", "a1", "--server-url", "https://mcp.example.invalid"}, false},
 	"mcp servers update-credentials":    {[]string{"mcp", "servers", "update-credentials", "cn-1", "--app-id", "a1", "--type", "external", "--server-url", "https://mcp.example.invalid"}, false},
 }

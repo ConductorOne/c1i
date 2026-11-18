@@ -34,6 +34,15 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   shows them only with `--state removed`. A tenant without the prompts feature
   answers a well-formed prompts request with 403 `feature not enabled` (exit 3).
 
+- `settings` reads and updates tenant-wide singletons: `ai-governance
+  show|update|history|tenant-defaults`, `session show|update|test-source-ip`,
+  `sso show|update|history`, `cross-app-access show|update|history`, `contacts
+  show|update`, `request show|update`, `domains list|set`, `notifications
+  org|user show|update` and `aws-external-id show`. Masked updates take field
+  flags (mask derived) or `--body-file` with `--update-mask`; `domains set`
+  replaces the whole domain set; `session test-source-ip` exits 0 for either
+  answer. `findings settings edge show|update` covers the Edge finding
+  categories.
 - `apps search` filters applications server-side (`POST /api/v1/search/apps`)
   by `--query` (fuzzy on name and description), `--display-name`, repeatable
   `--app-id` / `--exclude-app-id` / `--policy-id`, and `--only-directories`.
