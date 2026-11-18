@@ -513,6 +513,15 @@ func getUnwrapCases() []getUnwrapCase {
 			wantKeys:    []string{"requestCatalogId", "enabled"},
 		},
 		{
+			name:        "bridges get",
+			cmd:         bridgesGetCmd,
+			args:        []string{"br-1"},
+			idKey:       "id",
+			body:        `{"bridge":{"id":"br-1","displayName":"zz","appliance":{"status":"TUNNEL_APPLIANCE_STATUS_NEVER_CONNECTED","links":[]}}}`,
+			payloadPath: []string{"bridge"},
+			wantKeys:    []string{"id", "displayName", "appliance"},
+		},
+		{
 			name:        "service-principals credentials get",
 			cmd:         spCredentialsGetCmd,
 			args:        []string{"foo-bar-12345"},

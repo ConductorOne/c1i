@@ -979,6 +979,10 @@ resource with `--resource-id` likewise means you drop
   updates print the object unwrapped (`jq -er .id`); `credentials create` adds
   `.clientSecret`, shown once, so never log it. Deletes, `revoke` and
   `bindings add|delete` print `{}`.
+- `bridges` (tunnel bridges): `credentials create <bridge-id>` prints
+  `.clientSecret` once, so never log it. `delete` of an unknown bridge, and
+  `services` or `credentials list` on one, exit `0`; check with `bridges get`
+  (exit `4`).
 - Workload federation: `workload-federation providers` (alias `wf`)
   registers JWT issuers (`--well-known-provider spiffe` requires
   `--bundle-endpoint-url`; other kinds refuse it); `service-principals trusts`

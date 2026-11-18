@@ -186,6 +186,12 @@ func updateWireCases() []updateWireCase {
 		[]string{"--description", ""},
 		[]string{"--description", "D", "--display-name", "N"},
 	)
+	add("bridges update", []string{"br-1"},
+		none,
+		[]string{"--display-name", "N"},
+		[]string{"--description", ""},
+		[]string{"--description", "D", "--display-name", "N"},
+	)
 	add("service-principals update", []string{"sp-1"},
 		none,
 		[]string{"--display-name", "N"},

@@ -872,6 +872,37 @@
       "updateMask": "enabled"
     }
   },
+  "bridges update ": {
+    "exit": 2
+  },
+  "bridges update --description ": {
+    "exit": 0,
+    "method": "PATCH",
+    "path": "/api/v1/iam/tunnel/bridges/br-1",
+    "body": {
+      "description": "",
+      "updateMask": "description"
+    }
+  },
+  "bridges update --description D --display-name N": {
+    "exit": 0,
+    "method": "PATCH",
+    "path": "/api/v1/iam/tunnel/bridges/br-1",
+    "body": {
+      "description": "D",
+      "displayName": "N",
+      "updateMask": "displayName,description"
+    }
+  },
+  "bridges update --display-name N": {
+    "exit": 0,
+    "method": "PATCH",
+    "path": "/api/v1/iam/tunnel/bridges/br-1",
+    "body": {
+      "displayName": "N",
+      "updateMask": "displayName"
+    }
+  },
   "entitlements update ": {
     "exit": 2
   },

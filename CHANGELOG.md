@@ -46,6 +46,8 @@ Output and error text:
 
 ### Added
 
+- `bridges list|get|create|update|delete|services` and `bridges credentials
+  list|create|revoke` manage tunnel bridges and their client credentials.
 - `apps routing-rules list|get|create|update|delete|reorder --app-id` manage an app's
   entitlement routing rules, and `apps usage-controls get <app-id>` shows its
   usage controls. `create` makes a disabled rule unless `--enabled` is given;
