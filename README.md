@@ -921,6 +921,19 @@ c1i entitlements owners <entitlement-id> --app-id <id> [--page-size N] [--page-t
 c1i entitlements add-owner <entitlement-id> --app-id <id> --user-id <id> [--wait] [--wait-timeout 4m]
 c1i entitlements remove-owner <entitlement-id> --app-id <id> --user-id <id>
 c1i entitlements set-owners <entitlement-id> --app-id <id> --user-id <id> [--user-id <id> ...] [--wait] [--wait-timeout 4m]
+c1i entitlements grants <entitlement-id> --app-id <id> [--page-size N] [--page-token TOKEN] [--limit N]
+
+# Membership automation (C1 app entitlements only)
+c1i entitlements automation get <entitlement-id> --app-id <id>
+c1i entitlements automation create <entitlement-id> --app-id <id> --display-name <name> [--description <text>] \
+  [--cel <expr> | --refs-file <file> | --none]
+c1i entitlements automation create <entitlement-id> --app-id <id> --body-file <file>
+c1i entitlements automation update <entitlement-id> --app-id <id> [--display-name <name>] [--description <text>] \
+  [--cel <expr> | --refs-file <file> | --none]
+c1i entitlements automation delete <entitlement-id> --app-id <id>
+c1i entitlements automation exclusions list <entitlement-id> --app-id <id> [--page-size N] [--page-token TOKEN] [--limit N]
+c1i entitlements automation exclusions add <entitlement-id> --app-id <id> --user-id <id> [--user-id <id> ...]
+c1i entitlements automation exclusions remove <entitlement-id> --app-id <id> --user-id <id> [--user-id <id> ...]
 
 # Directional entitlement-to-entitlement proxy binding
 c1i entitlements proxy-bindings get \
@@ -1038,6 +1051,34 @@ well as on an unknown one, so `4` cannot tell those apart; a user who was an
 owner and is already removed exits `0`. `owners` returns zero rows at exit `0`
 for a nonexistent entitlement or app.
 
+`entitlements grants` lists one entitlement's grants (`GET .../grants`) with
+the account, the C1 user (`user_display_name`, `user_email`), `discovered_at`,
+`expires_at` (the API's `expired`: in testing, the future end time set by
+`grants update-duration`; null for a standing grant and once that time had
+passed) and `grant_reason_count`. Like `owners`, it returns zero rows at exit
+`0` for a nonexistent entitlement or app.
+The deprecated `GET .../users` it replaces is not wrapped; its only extra field
+was `originatingTicketId` (use `c1i api` if you need it).
+
+`entitlements automation` manages the one automation rule an entitlement can
+have. Only entitlements of the C1 app take one; any other is refused with
+`only the C1 app can have entitlement automation` (exit `2`). The condition is
+one of `--cel`, `--refs-file` (a JSON array of `{"appId","id"}`; the server
+takes 1 to 32, and c1i looks each up first because the server stores an unknown
+one, so it exits `4`) or `--none`; `create --body-file` sends a whole
+`AppEntitlementAutomation` object and is the only way to set `basic`. `update`
+derives its mask from the flags; the server needs a display name on every
+update, so without `--display-name` c1i reads the automation and sends its
+current name. `get` exits `4` for an entitlement without an automation. Delete
+is soft: `get` then returns it with `deletedAt` set, and `update` and
+`exclusions add|remove` still exit `0` against it (the printed automation keeps
+`deletedAt`), so exit `0` does not mean the rule is live. In testing the server
+refused a second `create` on the same entitlement with a 409, `conflicting
+concurrent write, retry the request`, even after the first was deleted.
+`exclusions add|remove` take C1 user ids; the server answers an unknown one with
+`200` and does nothing, so c1i looks each up first (exit `4`). An automation
+acts on real users as soon as it exists.
+
 `entitlements proxy-bindings` manages directional entitlement-to-entitlement
 visibility and tracking links. Source and destination are each identified by
 their app and entitlement IDs; entitlement IDs are app-scoped. Creating a
@@ -1114,11 +1155,36 @@ The grant lands asynchronously (seconds in testing, but reads can lag). `--wait`
 polls the entitlement's grants until every user appears, or `--wait-timeout`
 (default `4m`) elapses; a timeout exits `1`, though the write was accepted.
 
-There is no `grants remove`: the only direct removal, `DELETE
-.../remove-membership`, takes one app user id and fails on a manual entitlement
-with `entitlement is not an SSO application sign-in entitlement`. Use
-`requests create revoke`; on a manual entitlement its task waits on a
-provisioning step, and the grant stays until that step is completed.
+#### Changing a grant directly
+
+```sh
+c1i grants accounts --app-id <id> --entitlement-id <eid> --user-id <uid>
+c1i grants remove --app-id <id> --entitlement-id <eid> --app-user-id <auid>
+c1i grants update-duration --app-id <id> --entitlement-id <eid> --app-user-id <auid> --deprovision-at 2026-12-01T00:00:00Z
+c1i grants remove-duration --app-id <id> --entitlement-id <eid> --app-user-id <auid>
+```
+
+`grants accounts` lists, one row per account, which of a C1 user's accounts in
+the app hold the entitlement (zero rows at exit `0` for an unknown id). The
+other three address one grant by its account, the `app_user_id` of `grants
+list`.
+
+`grants remove` (`DELETE .../remove-membership`) prints the API's response;
+per the API, its `revokeTaskId` is set only for an access profile. Only refusals
+were observed, never a successful removal: in testing it refused manually
+managed entitlements (custom and group resource types) with `entitlement is not an SSO application
+sign-in entitlement` (exit `2`), an unknown `--app-user-id` included; use
+`requests create revoke` there, whose task on a manual entitlement waits on a
+provisioning step. An unknown entitlement or app exits `4`.
+
+`grants update-duration` sets when C1 starts the revoke (`--deprovision-at`,
+RFC3339; the server refuses a past time with `new_deprovision_at must be in the
+future`); on a manually managed entitlement that opened a revoke task in
+testing, and the grant stayed listed while the task was open.
+`remove-duration` makes it standing again. Both print the grant
+(`.deprovisionAt`), and the change shows as `deprovision_at` in `grants list`.
+An unknown app, entitlement or account, or an account without the grant, exits
+`4`. For a grant still being requested use `tasks update-grant-duration`.
 
 ### Tasks
 
