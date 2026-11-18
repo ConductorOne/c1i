@@ -300,6 +300,8 @@ func TestRetrySafe(t *testing.T) {
 		{http.MethodPost, "/api/v1/role-mining/suggestions/s1/users"},
 		{http.MethodPost, "/api/v1/task/audits"},
 		{http.MethodPost, "/api/v1/systemlog/exports/e1/events"},
+		{http.MethodPost, "/api/v1/apps/a1/connectors/c1/sync_diagnostics/change_timeline"},
+		{http.MethodPost, "/api/v1/apps/a1/connectors/c1/sync_diagnostics/compare_stats"},
 	}
 	for _, c := range safe {
 		if !retrySafe(c.method, c.path) {
@@ -322,6 +324,16 @@ func TestRetrySafe(t *testing.T) {
 		{http.MethodPost, "/mcp/search"},
 		{http.MethodPost, "/x"},
 		{http.MethodPatch, "/api/v1/search/users"},
+		{http.MethodPost, "/api/v1/apps/a1/connectors/c1/sync_diagnostics"},
+		{http.MethodPost, "/api/v1/apps/a1/connectors/c1/sync_diagnostics/status"},
+		{http.MethodPost, "/api/v1/apps/a1/connectors/c1/sync_diagnostics/change_timeline/x"},
+		{http.MethodPost, "/api/v1/apps/a1/connectors/c1/sync_diagnostics/compare_stats/x"},
+		{http.MethodPost, "/api/v1/apps//connectors/c1/sync_diagnostics/compare_stats"},
+		{http.MethodPost, "/api/v1/apps/a1/connectors//sync_diagnostics/change_timeline"},
+		{http.MethodPost, "/api/v1/apps/a/b/connectors/c1/sync_diagnostics/compare_stats"},
+		{http.MethodPost, "/api/v1/apps/a1/connectors/c1/x/change_timeline"},
+		{http.MethodPost, "/api/v1/apps/a1/connectors/c1/sync_diagnostics/force_sync"},
+		{http.MethodPost, "/api/v1/apps/a1/connectors/c1/force_sync"},
 	}
 	for _, c := range unsafe {
 		if retrySafe(c.method, c.path) {

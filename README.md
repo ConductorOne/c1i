@@ -1388,6 +1388,12 @@ c1i connectors update <connector-id> --app-id <id> --body-file <file> --update-m
 c1i connectors delete <connector-id> --app-id <id>
 c1i connectors sync <connector-id> --app-id <id>
 c1i connectors sync-status <connector-id> --app-id <id>
+c1i connectors sync-history <connector-id> --app-id <id> [--runs N]
+c1i connectors sync-errors <connector-id> --app-id <id> [--top-k N]
+c1i connectors sync-changes <connector-id> --app-id <id> [--since TIMESTAMP]
+c1i connectors sync-compare <connector-id> --app-id <id> --left <lifecycle-id> --right <lifecycle-id>
+c1i connectors sync-compare <connector-id> --app-id <id> --body-file <file>
+c1i connectors debuggable [--page-size N] [--page-token TOKEN] [--limit N]
 c1i connectors pause <connector-id> --app-id <id>
 c1i connectors resume <connector-id> --app-id <id>
 c1i connectors schedule <connector-id> --app-id <id> --cron "0 */6 * * *" [--timezone America/Chicago] [--justification TEXT]
@@ -1396,6 +1402,15 @@ c1i connectors credentials rotate --app-id <id> --connector-id <id>
 c1i connectors credentials get <credential-id> --app-id <id> --connector-id <id>
 c1i connectors credentials revoke <credential-id> --app-id <id> --connector-id <id>
 ```
+
+The `sync-*` diagnostics are reads that print the API's response object as
+returned (pretty JSON): `sync-history` (recent runs and `.streak`; `--runs` max
+50), `sync-errors` (distinct redacted errors; `--top-k` max 20), `sync-changes`
+(metadata-only change timeline from `--since`, an RFC 3339 timestamp) and
+`sync-compare` (per-type count deltas between two runs' `.lifecycleId`s from
+`sync-history`; the draft-test form takes `--body-file` and was not exercised
+live). `debuggable` lists, as NDJSON across all apps, the connectors you may
+run them on. An unknown well-formed id exits `4`, a malformed one `2`.
 
 `connectors create` makes a connector with an empty config (the API's
 delegated create; a malformed catalog id is a 400 (exit 2), a well-formed id

@@ -43,6 +43,7 @@ var readOnlyPOST = map[string]string{
 	"cmd/policies_validate_cel.go:policiesValidateCelCmd":            "POST validate-cel",
 	"cmd/settings_session.go:settingsSessionTestSourceIPCmd":         "POST test-source-ip: evaluates an IP against the CIDRs in the body",
 	"cmd/auth_status.go:authStatusCmd":                               "POST /search/users credential probe",
+	"cmd/connectors_sync_diag.go:postSyncDiag":                       "POST change_timeline and compare_stats: sync diagnostics reads, no state change",
 	"cmd/paginate.go:postPageBody":                                   "every paged POST list; a runtime transport.ReadOnlyPOST check refuses non-read paths before sending",
 }
 

@@ -116,6 +116,8 @@ var pathFlagNotPaths = map[string]string{
 	"c1i mcp servers update-credentials --auth":          "help mentions a config file; the value is an auth mode",
 	"c1i apps resources update --update-mask":            "help mentions --body-file; the value is a field mask",
 	"c1i apps resources create --display-name":           "help mentions --body-file; the value is a name",
+	"c1i connectors sync-compare --left":                 "help mentions --body-file; the value is a lifecycle id",
+	"c1i connectors sync-compare --right":                "help mentions --body-file; the value is a lifecycle id",
 }
 
 var pathLikeUsage = regexp.MustCompile(`\bfiles?\b|\bdirector(y|ies)\b|"-"`)

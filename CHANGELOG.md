@@ -8,6 +8,15 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- `connectors sync-history|sync-errors|sync-changes|sync-compare <connector-id>
+  --app-id` and `connectors debuggable`: connector sync diagnostics.
+  `sync-history` prints recent runs and the failure streak (`--runs`, max 50),
+  `sync-errors` the most frequent redacted errors (`--top-k`, max 20),
+  `sync-changes` a metadata-only change timeline (`--since`), and
+  `sync-compare --left --right` count deltas between two runs; `debuggable`
+  lists, as NDJSON, the connectors you may diagnose. A negative `--runs` or
+  `--top-k` exits `2`; a larger one is clamped. The draft-test form of
+  `sync-compare` (`--body-file`) was not exercised live.
 - `access-reviews templates get|create|update|delete <template-id>` and the
   template scope commands `scope get|set|set-excluded|set-by-resource-type`,
   `entitlements add|remove` and `excluded-entitlements add|remove`, shaped like
