@@ -418,6 +418,16 @@ func getUnwrapCases() []getUnwrapCase {
 			wantKeys:    []string{"id", "appId", "attributeType", "expanded", "appPath", "fallbacksPath"},
 		},
 		{
+			name:        "entitlements automation get",
+			cmd:         entitlementsAutomationGetCmd,
+			args:        []string{"e-1"},
+			flags:       map[string]string{"app-id": "app-1"},
+			idKey:       "appEntitlementId",
+			body:        `{"AppEntitlementAutomation":{"appId":"app-1","appEntitlementId":"e-1","displayName":"zz","cel":{"expression":"true"}}}`,
+			payloadPath: []string{"AppEntitlementAutomation"},
+			wantKeys:    []string{"appId", "appEntitlementId", "displayName", "cel"},
+		},
+		{
 			name:        "access-profiles bundle-automation get",
 			cmd:         accessProfilesBundleAutomationGetCmd,
 			args:        []string{"cat-1"},

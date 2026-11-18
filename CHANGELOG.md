@@ -43,6 +43,18 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   replaces the whole domain set; `session test-source-ip` exits 0 for either
   answer. `findings settings edge show|update` covers the Edge finding
   categories.
+- `entitlements grants <entitlement-id>` lists an entitlement's grants with the
+  C1 user, `discovered_at` and `expires_at`. `grants accounts` shows which of a
+  user's accounts hold an entitlement. `grants remove` wraps remove-membership
+  (it refuses manually managed entitlements), and `grants update-duration
+  --deprovision-at` / `grants remove-duration` set or clear when an existing
+  grant is revoked.
+- `entitlements automation get|create|update|delete` and `entitlements
+  automation exclusions list|add|remove` manage an entitlement's membership
+  automation (C1 app entitlements only). A condition is `--cel`, `--refs-file`
+  or `--none`; unknown entitlement references and exclusion user ids exit `4`
+  before sending.
+
 - `apps search` filters applications server-side (`POST /api/v1/search/apps`)
   by `--query` (fuzzy on name and description), `--display-name`, repeatable
   `--app-id` / `--exclude-app-id` / `--policy-id`, and `--only-directories`.

@@ -38,13 +38,12 @@ users the server could not add) is not empty, the response is still printed,
 each rejected user and its message is reported, and the command exits 1; --wait
 then waits only for the users that were not rejected (none left: no wait).
 
-There is no "grants remove". The only direct removal, DELETE
-.../remove-membership, takes one app user id and rejects a manual entitlement
-with: entitlement is not an SSO application sign-in entitlement. The
+The direct removal, "c1i grants remove", rejects a manual entitlement with:
+entitlement is not an SSO application sign-in entitlement. The
 policy-respecting removal is "c1i requests create revoke"; on a manual
 entitlement its task waits on a provisioning step (the step reads
 PROVISION_INSTANCE_STATE_WAITING) and the grant stays until that step is
-completed.
+completed. "c1i grants update-duration" sets when C1 starts the revoke.
 
 Honors --dry-run (with --wait, dry-run still only previews the POST; it never
 polls).`,

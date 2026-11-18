@@ -764,12 +764,27 @@ resource with `--resource-id` likewise means you drop
   manually managed entitlement directly, **bypassing grant policy and
   approval**; prefer `requests create grant` unless that is what you want. One
   request carrying every user id; `--wait` blocks until each shows in `grants list`.
-  There is no `grants remove`: `remove-membership` fails on a manual entitlement
-  with `entitlement is not an SSO application sign-in entitlement`, so remove
-  via `requests create revoke` (on a manual entitlement its task waits on a
-  provisioning step; the grant stays until it is completed). A non-empty
-  `failedUsersErrorMap` in the response (users the server could not add) exits 1
-  after printing it; `--wait` waits only for the others.
+  `grants remove --app-id --entitlement-id --app-user-id` (remove-membership)
+  fails on a manual entitlement with `entitlement is not an SSO application
+  sign-in entitlement`, so remove those via `requests create revoke` (on a
+  manual entitlement its task waits on a provisioning step; the grant stays
+  until it is completed). A non-empty `failedUsersErrorMap` in the response
+  (users the server could not add) exits 1 after printing it; `--wait` waits
+  only for the others.
+- `grants update-duration --deprovision-at <RFC3339>` / `grants remove-duration`
+  (both `--app-id --entitlement-id --app-user-id`) set or clear when an existing
+  grant is revoked; the server refuses a past time. `grants accounts --app-id
+  --entitlement-id --user-id` shows which of a user's accounts hold the
+  entitlement, and `entitlements grants <entitlement-id> --app-id` lists its
+  grants with `expires_at` and `discovered_at`; both return zero rows at exit 0
+  for an unknown id.
+- `entitlements automation get|create|update|delete <entitlement-id> --app-id`
+  works only on C1 app entitlements and acts on real users once it exists.
+  Pick one condition: `--cel`, `--refs-file` (each ref looked up, unknown exits
+  4) or `--none`; `create --body-file` for the full object. `get` exits 4 with
+  no automation; delete is soft (`deletedAt` set). `exclusions
+  list|add|remove <entitlement-id> --app-id [--user-id ...]` manages users the
+  automation leaves alone.
 - A user id on a write is looked up before anything is sent, so an unknown one
   exits 4 with no write (`--dry-run` refuses it too; the lookup needs user
   read, else exit 3): `accounts set-owner`, `apps add-owner|set-owners`,
