@@ -438,7 +438,8 @@ $ cat trace.log
 - **`docs`** commands output NDJSON (`search`, `endpoints`), pretty JSON (`endpoint`), YAML (`openapi`), or plain text (`page`).
 - List commands auto-paginate by default, except the single-request ones the
   agent guide names under Pagination: `apps routing-rules list`,
-  `attribute-types list`, `grants accounts`, `settings ai-governance history`,
+  `attribute-types list`, `bridges services`, `grants accounts`, `settings
+  ai-governance history`,
   `role-mining suggestions|runs|custom-analysis list` and `findings
   routing-rules|transformation-rules list`, each of which warns on stderr
   when the server reports more pages, and `mcp bindings by-tools` and `mcp
@@ -2631,7 +2632,7 @@ c1i bridges create --display-name <name> [--description <text>]
 c1i bridges update <bridge-id> [--display-name <name>] [--description <text>]
 c1i bridges delete <bridge-id>
 c1i bridges services <bridge-id> [--limit <n>]
-c1i bridges credentials list <bridge-id>
+c1i bridges credentials list <bridge-id> [--page-size <n>] [--page-token <token>] [--limit <n>]
 c1i bridges credentials create <bridge-id>
 c1i bridges credentials revoke <credential-id>
 ```

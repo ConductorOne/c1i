@@ -447,7 +447,8 @@ because supplying the flag at all turns auto-pagination off and an unset
 variable would otherwise silently truncate the list. The exceptions send one
 request. `role-mining suggestions|runs|custom-analysis list`, `findings
 routing-rules|transformation-rules list`, `apps routing-rules list`,
-`attribute-types list`, `grants accounts` and `settings ai-governance history`
+`attribute-types list`, `bridges services`, `grants accounts` and `settings
+ai-governance history`
 each print a stderr `partial result` warning if the server reports more pages.
 `mcp bindings by-tools` and `mcp toolsets requestable-connectors` are not
 paginated.
