@@ -13,6 +13,12 @@ const (
 	tblXAAScopeDoc   = `{"id":"sc-1","appId":"app-1","scopeValue":"zz.read"}`
 	tblXAAProfile    = `{"accessProfile":{"id":"ap-1","appId":"app-1","displayName":"zz"}}`
 	tblXAAProfileDoc = `{"id":"ap-1","appId":"app-1","displayName":"zz"}`
+	tblXAABindings   = `{"bindings":[{"appId":"app-1","accessProfileId":"ap-1","xaaScopeId":"sc-1","xaaResourceServerId":"rs-1"}]}`
+	tblXAAMapping    = `{"clientAudienceMapping":{"xaaResourceServerId":"rs-1","clientKey":"dcr://ck-1","audienceClientId":"aud-1","disabled":true}}`
+	tblXAAMappingDoc = `{"xaaResourceServerId":"rs-1","clientKey":"dcr://ck-1","audienceClientId":"aud-1","disabled":true}`
+	// One reply serves the create and the resource-server search before it.
+	tblXAAMappingCreate    = `{"clientAudienceMapping":{"xaaResourceServerId":"rs-1","clientKey":"dcr://ck-1","audienceClientId":"aud-1"},"list":[{"id":"rs-1"}]}`
+	tblXAAMappingCreateDoc = `{"xaaResourceServerId":"rs-1","clientKey":"dcr://ck-1","audienceClientId":"aud-1","list":[{"id":"rs-1"}]}`
 )
 
 const xaaRSRead = `{"resourceServer":{"id":"rs-1","displayName":"cur","normalizedAudience":"https://a.example.com","deletedAt":null}}`

@@ -14,13 +14,16 @@ import (
 
 var xaaCmd = &cobra.Command{
 	Use:   "xaa",
-	Short: "Manage cross-app access (XAA): resource servers, scopes, access profiles",
+	Short: "Manage cross-app access (XAA): resource servers, scopes, access profiles, client mappings",
 	Long: `Manage cross-app access (XAA) objects of an app: resource servers (the
-third-party authorization servers C1 mints grants for), their scopes, and
-access profiles (requestable bundles of scopes).
+third-party authorization servers C1 mints grants for), their scopes, access
+profiles (requestable bundles of scopes) and the scopes bound to each profile,
+plus each resource server's client audience mappings.
 
-Every per-app command takes --app-id. The tenant-wide switch and token
-settings are under "c1i settings cross-app-access".
+Resource servers, scopes and access profiles take --app-id. Client audience
+mappings are scoped by --resource-server-id instead: their routes carry no
+app. The tenant-wide switch and token settings are under
+"c1i settings cross-app-access".
 
 Mutations print the object unwrapped like the matching get (id: .id); deletes
 and resync-scopes print {}. --fields is a usage error on a mutation.`,
