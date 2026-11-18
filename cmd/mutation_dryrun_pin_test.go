@@ -46,6 +46,8 @@ var dryRunStubs = map[string][]string{
 	"c1i apps update":                                     {"x1", "--description=d"},
 	"c1i attribute-mappings create":                       {"--body-file=@{}"},
 	"c1i attribute-mappings update":                       {"x1", "--key=k"},
+	"c1i export exporters update":                         {"x1", "--prefix=k"},
+	"c1i reports update":                                  {"x1", "--prompt=k"},
 	"c1i automations update":                              {"x1", "--description=d"},
 	"c1i apps resource-types update":                      {"x1", "--app-id=x1", "--display-name=zz"},
 	"c1i apps resources create":                           {"--app-id=x1", "--resource-type-id=x1", "--display-name=zz"},
@@ -123,6 +125,7 @@ var dryRunReadBodies = map[string]string{
 	"c1i attributes create":              `{"list":[{"id":"x1","name":"x1"}]}`,
 	"c1i attribute-mappings update":      `{"attribute":{"userAttributeMapping":{"attributeType":{"id":"t","displayName":"n","appUserProfile":{"appId":"a","appUserProfileAttributeKey":"k"}}}}}`,
 	"c1i apps resources create":          `{"appResourceTypeView":{"appResourceType":{"id":"x1"}}}`,
+	"c1i export exporters update":        `{"exporter":{"displayName":"n","datasource":{"datasourceId":"d"}}}`,
 }
 
 // stubArgs builds a leaf's arguments: one per required positional in Use and

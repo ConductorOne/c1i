@@ -91,6 +91,7 @@ const (
 	secretSPCredential
 	secretAutomationWebhook
 	secretConnectorCredential
+	secretReportRun
 )
 
 type mutationOpts struct {
@@ -796,6 +797,8 @@ func secretWording(kind secretKind, doc []byte) string {
 		return "the clientSecret in this response cannot be retrieved again; revoke the credential and create a new one"
 	case secretConnectorCredential:
 		return "the clientSecret in this response cannot be retrieved again; run \"connectors credentials rotate\" again for a new one"
+	case secretReportRun:
+		return "the response's artifactUrl values may be signed URLs and were not delivered; re-read the report with \"reports get\""
 	case secretAutomationWebhook:
 		var v map[string]any
 		if json.Unmarshal(doc, &v) == nil {

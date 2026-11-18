@@ -397,8 +397,9 @@ func retrySafe(method, path string) bool {
 // C1 API spec at /api/v1/search/*, .../search or .../list is a
 // Search/List/Count/Get RPC whose POST just carries the filter body. Also
 // read-only, per the spec: SystemLogService.ListEvents (systemlog/events),
-// TaskAudit.List (task/audits) and RoleMiningManagementService.SearchCohortUsers
-// (role-mining/suggestions/{id}/users).
+// TaskAudit.List (task/audits), RoleMiningManagementService.SearchCohortUsers
+// (role-mining/suggestions/{id}/users) and ExportService.ListEvents
+// (systemlog/exports/{id}/events).
 func ReadOnlyPOST(path string) bool {
 	if !strings.HasPrefix(path, "/api/v1/") {
 		return false
@@ -410,6 +411,10 @@ func ReadOnlyPOST(path string) bool {
 	if rest, ok := strings.CutPrefix(path, "/api/v1/role-mining/suggestions/"); ok {
 		id, tail, _ := strings.Cut(rest, "/")
 		return id != "" && tail == "users"
+	}
+	if rest, ok := strings.CutPrefix(path, "/api/v1/systemlog/exports/"); ok {
+		id, tail, _ := strings.Cut(rest, "/")
+		return id != "" && tail == "events"
 	}
 	return false
 }
