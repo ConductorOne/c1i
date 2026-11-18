@@ -657,3 +657,15 @@ func TestGatewayListToolsStuckCursorExitsUpstream(t *testing.T) {
 		t.Errorf("exitCode = %d, want exitUpstream (%d); err: %v", got, exitUpstream, wrapped)
 	}
 }
+
+// The raw MCP result is never projected, so an explicit --fields is a usage
+// error rather than a silent no-op. The refusal precedes the gateway client,
+// so this exits 2 (not the 3 a missing credential would produce).
+func TestGatewayCallRefusesFields(t *testing.T) {
+	t.Setenv("C1I_URL", mutTestURL)
+	s := newMutServer(t, fixedReply(200, `{}`))
+	r := runMutationCLI(t, s.srv, 0, nil, "mcp", "gateway", "call", "some_tool", "--fields", "content")
+	if r.exit != exitUsage || !strings.Contains(r.stderr, "--fields does not apply") {
+		t.Fatalf("exit %d stderr %q", r.exit, r.stderr)
+	}
+}

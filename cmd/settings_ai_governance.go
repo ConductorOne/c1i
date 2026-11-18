@@ -102,7 +102,8 @@ var settingsAIGovernanceTenantDefaultsCmd = &cobra.Command{
 	Use:   "tenant-defaults",
 	Short: "Show the legacy tenant-default subset of AI governance settings (pretty JSON)",
 	Long: `Show the legacy tenant-default subset of the AI governance settings
-(requireToolApproval), as returned.`,
+(requireToolApproval), as returned. The raw object is not projected, so an
+explicit --fields is a usage error.`,
 	RunE: func(cmd *cobra.Command, _ []string) error {
 		return getFindingsRaw(cmd, settingsAIGovernancePath+"/tenant-defaults")
 	},

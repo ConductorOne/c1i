@@ -18,7 +18,8 @@ var policiesTestProvisionCmd = &cobra.Command{
 changed.
 
 Quote the expression as one shell argument, or pass several unquoted words;
-they are joined with spaces, like "policies validate-cel".
+they are joined with spaces, like "policies validate-cel". Put -- before an
+expression that starts with "-" (e.g. "-1 + 1"), or pflag reads it as a flag.
 
 An expression that does not compile is answered by the server with a 500 that
 carries the CEL error text (exit 6), not a 4xx; c1i does not check CEL itself.

@@ -14,11 +14,9 @@ const notificationsUpdateLong = `--body-file is the whole request: {"channelSett
 "show" prints. There is no update mask, so a body without a non-empty
 channelSettings object exits 2 and nothing is sent.
 
-In the run checked, a partial body on the user scope changed only the
-settings it named. The org scope's partial-body behavior is unmeasured: for
-org, send back the whole "show" output with your edits. Sending settings back
-can materialize an event the read showed as null (e.g. "system") as its
-default.
+In the runs checked, a partial body on either scope changed only the
+settings it named (one of 86 leaves on org). Sending settings back can
+materialize an event the read showed as null (e.g. "system") as its default.
 
 Prints the updated settings as pretty JSON, unwrapped like "show".`
 

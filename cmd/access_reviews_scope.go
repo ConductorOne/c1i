@@ -230,7 +230,9 @@ request object:
 
 The API documents: "Each call replaces the whole selection." To change only some
 entitlements, use "access-reviews entitlements add|remove". Prints the API's
-response, in the shape "access-reviews scope get" prints.`,
+response: its "list" holds only the entitlements this call ADDED (the server
+returns the delta), not the resulting selection -- follow with "access-reviews
+scope get" to read that.`,
 	"/scope_and_entitlements", "entitlements", setupEntitlementShape, entitlementRefKind)
 
 var accessReviewScopeSetExcludedCmd = newSetupBodyCmd(campaignSetup, "set-excluded",

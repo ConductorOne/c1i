@@ -238,7 +238,8 @@ spec says it also cascades to client audience mappings.
 Prints the API's response, which is {}; exit 0 is the success signal.`)
 
 var xaaResourceServersHistoryCmd = xaaResourceServers.historyCmd("List an XAA resource server's change history (NDJSON output)",
-	xaaHistoryLong("resource server", "xaa resource-servers get"))
+	xaaHistoryLong("resource server", "xaa resource-servers get")+
+		"\n\nThe snapshot omits scopeDiscoveryStatus, which is get-only.")
 
 var xaaResourceServersResyncScopesCmd = &cobra.Command{
 	Use:   "resync-scopes <resource-server-id>",

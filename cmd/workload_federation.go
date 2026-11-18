@@ -193,7 +193,8 @@ flags you pass; an omitted flag is left alone. The kind and issuer are fixed.
 --disabled makes the provider reject every token exchange; --disabled=false
 re-enables it. --bundle-endpoint-url is for SPIFFE providers: the API re-checks
 it by fetching its JWKS and refuses one it cannot fetch (exit 2). On any other
-provider the API answers 200 and ignores it.
+provider the API still fetches it (an unfetchable URL is a 400, exit 2) and
+then discards it.
 
 A deleted provider still accepts an update (200) and stays out of "providers
 list".

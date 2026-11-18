@@ -222,9 +222,8 @@ array; `[]` empties the set). `settings notifications org|user update` and
 `findings settings edge update` take the whole request in `--body-file` with
 no mask, so a body that names nothing (no non-empty `channelSettings`, or
 neither `settings` nor `subcategorySettings`) exits 2 unsent. In the run
-checked, a partial notifications body on the user scope changed only the
-settings it named; org's partial-body behavior is unmeasured, so send back the
-whole `show` output for org. The email provider and identity-policy defaults have no command.
+checked, a partial notifications body on either scope changed only the
+settings it named (one of 86 leaves on org). The email provider and identity-policy defaults have no command.
 
 Role ids for `service-principals credentials create --scoped-role`,
 `service-principals trusts create|update --scoped-role` and
@@ -332,7 +331,9 @@ Rule of thumb: a product concept starts at `docs search` → `docs page`; a raw
   server's snapshot, not the outcome; re-read with `tasks get`.
 - Mutation output is never projected: an explicit `--fields` on a mutation
   (even `--fields ""`) exits 2 before anything is sent, and `C1I_FIELDS` is
-  ignored there.
+  ignored there. The raw reads `findings settings show`, `findings settings
+  edge show`, `settings ai-governance tenant-defaults` and `mcp gateway call`
+  refuse an explicit `--fields` too.
 - Casing differs by mode: list rows are snake_case (`app_id`,
   `display_name`); single-object reads carry the API's own camelCase
   (`displayName`, `createdAt`). `--fields` matches either casing at any

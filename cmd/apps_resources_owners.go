@@ -23,10 +23,10 @@ leave out; read it with
 
 Auto-paginates to completion like every other list command.
 
-A well-formed resource, resource type or app id that does not exist returns
-zero rows and exit 0, not a 404. An empty result here is either "no owners" or
-"wrong id"; "apps resources get" on the same ids exits 4 and can tell you
-which.
+The server ignores --resource-type-id and returns the owners of the resource
+id (a bogus type id still lists them, observed). A wrong or unknown --app-id
+does not: it returns zero rows and exit 0, like an unknown resource id. Use
+"apps resources get" with the same ids to validate them; it exits 4.
 
 ` + entitlementOwnersListNote,
 	Args: cobra.ExactArgs(1),

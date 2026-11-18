@@ -15,10 +15,11 @@ var appsRoutingRulesUpdateCmd = &cobra.Command{
 	Short: "Change one of an app's entitlement routing rules (pretty JSON)",
 	Long: `Change an entitlement routing rule. Only the flags given change.
 
-The API has no update mask: every update replaces the whole rule, and a field
-the request leaves out is cleared. So c1i reads the rule first and sends every
-writable field (display name, description, enabled, condition and the whole
-settings object) with your flags merged in. A change someone else made between
+The API has no update mask: every update replaces the whole rule, and a
+writable field the request leaves out is cleared. So c1i reads the rule first
+and sends every writable field (display name, description, enabled, condition
+and the whole settings object) with your flags merged in. Priority is
+server-assigned on update and is preserved; change order with "reorder". A change someone else made between
 that read and the write is overwritten.
 
 --enabled=false disables the rule; --enabled makes it route real requests.

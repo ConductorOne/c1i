@@ -171,9 +171,11 @@ var findingsRoutingRulesCmd = newFindingRulesCmd("routing-rules", "Manage findin
 var findingsTransformationRulesCmd = newFindingRulesCmd("transformation-rules", "Manage finding transformation rules", "/api/v1/findings/transformation-rules", "transformationRule", findingTransformationRuleRow)
 
 var findingsSettingsCmd = &cobra.Command{Use: "settings", Short: "Inspect and update finding detector settings"}
-var findingsSettingsShowCmd = &cobra.Command{Use: "show", Short: "Show finding detector settings (pretty JSON)", Args: cobra.NoArgs, RunE: func(cmd *cobra.Command, _ []string) error {
-	return getFindingsRaw(cmd, "/api/v1/findings/settings")
-}}
+var findingsSettingsShowCmd = &cobra.Command{Use: "show", Short: "Show finding detector settings (pretty JSON)",
+	Long: `Show the tenant's finding detector settings, as returned. The raw object is
+not projected, so an explicit --fields is a usage error.`, Args: cobra.NoArgs, RunE: func(cmd *cobra.Command, _ []string) error {
+		return getFindingsRaw(cmd, "/api/v1/findings/settings")
+	}}
 var findingsSettingsUpdateCmd = &cobra.Command{Use: "update", Short: "Atomically update detector settings from JSON (pretty JSON)", Args: cobra.NoArgs, RunE: func(cmd *cobra.Command, _ []string) error {
 	body, err := readRequiredJSONObject(cmd, "body-file")
 	if err != nil {
@@ -187,7 +189,8 @@ var findingsSettingsEdgeShowCmd = &cobra.Command{Use: "show", Short: "Show which
 	Long: `Show whether each Edge finding category (list) and subcategory
 (subcategories) is detected, as returned. Categories never configured read
 back their shipped default. The Edge finding type's own switch ("findings
-settings show") still gates every category.`, RunE: func(cmd *cobra.Command, _ []string) error {
+settings show") still gates every category. The raw object is not projected,
+so an explicit --fields is a usage error.`, RunE: func(cmd *cobra.Command, _ []string) error {
 		return getFindingsRaw(cmd, "/api/v1/findings/settings/edge")
 	}}
 var findingsSettingsEdgeUpdateCmd = &cobra.Command{Use: "update", Short: "Enable or disable Edge finding categories from JSON (pretty JSON)",
@@ -251,6 +254,9 @@ func getFindingResource(cmd *cobra.Command, path, idKey string) error {
 }
 
 func getFindingsRaw(cmd *cobra.Command, path string) error {
+	if err := refuseMutationFields(cmd); err != nil {
+		return err
+	}
 	baseURL, err := GetBaseURL()
 	if err != nil {
 		return err

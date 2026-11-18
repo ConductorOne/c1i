@@ -82,3 +82,25 @@ func TestFindingsCreateTaskHelpStatesPolicyRead(t *testing.T) {
 		t.Errorf("Long does not carry policyRefHelp once:\n%s", findingsCreateTaskCmd.Long)
 	}
 }
+
+// findings settings show prints the API's raw object, so --fields is refused
+// instead of quietly ignored.
+func TestFindingsSettingsShowRefusesFields(t *testing.T) {
+	t.Setenv("C1I_URL", mutTestURL)
+	s := newMutServer(t, fixedReply(200, `{"list":[]}`))
+	r := runMutationCLI(t, s.srv, 0, nil, "findings", "settings", "show", "--fields", "list")
+	if r.exit != exitUsage || !strings.Contains(r.stderr, "--fields does not apply") {
+		t.Fatalf("exit %d stderr %q", r.exit, r.stderr)
+	}
+	if len(s.requests()) != 0 {
+		t.Errorf("sent %v", s.requests())
+	}
+
+	// C1I_FIELDS alone stays silently unprojected, as documented.
+	t.Setenv("C1I_FIELDS", "list")
+	s = newMutServer(t, fixedReply(200, `{"list":[]}`))
+	r = runMutationCLI(t, s.srv, 0, nil, "findings", "settings", "show")
+	if r.exit != 0 || !strings.Contains(r.stdout, `"list": []`) {
+		t.Fatalf("C1I_FIELDS: exit %d stdout %q stderr %q", r.exit, r.stdout, r.stderr)
+	}
+}

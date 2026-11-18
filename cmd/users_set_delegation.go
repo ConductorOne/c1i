@@ -20,9 +20,11 @@ an empty delegate id, which the API describes as removing it). --start-at and
 Observed against a tenant: the server answered an unknown delegate with 404
 (exit 4), an expiry before the start with 400 "end date must be after start
 date for temporary user delegation" (exit 2), and accepted a start or expiry in
-the past and a self-delegation at exit 0. Clearing returned {"item": null},
-repeatedly; on a user who had never had a delegation it returned 404 "provided
-delegated user id is empty" (exit 4). "users get" showed delegatedUserId empty
+the past and a self-delegation at exit 0. Clearing returned {"item": null};
+a second clear, or one on a user who never had a delegation, returned 404
+"provided delegated user id is empty" (exit 4). Immediately after a set, the
+clear's lookup missed the new binding for a few seconds in one run (0s and 4s
+alternately). "users get" showed delegatedUserId empty
 while the start was still in the future, so the printed .item is the
 confirmation.
 

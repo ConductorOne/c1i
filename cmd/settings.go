@@ -185,7 +185,7 @@ var settingsRequestUpdateSpec = settingsUpdateSpec(
 var settingsRequestUpdateCmd = newSettingsUpdateCmd("Update access-request settings (pretty JSON)",
 	`Update the tenant's access-request settings. Only the flags you pass change.
 The server bounds --max-bulk-entitlement-selection ("value must be inside
-range [0, 50]", exit 2).
+range [0, 50]", exit 2); 0 reads back as the server default 10.
 
 Prints the updated settings as pretty JSON, unwrapped like "settings request
 show".`,

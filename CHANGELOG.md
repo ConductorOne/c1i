@@ -257,6 +257,10 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   unknown field, and c1i does not read them as one.
 - `functions create|update --file` now refuses a path containing a control
   character, like every other file-valued flag (exit `2`, nothing sent).
+- `--fields` on `mcp gateway call`, `findings settings show`, `findings
+  settings edge show` and `settings ai-governance tenant-defaults` is a usage
+  error: they print a raw API/MCP object that was never projected, so the flag
+  used to be silently ignored.
 
 ### Security
 
