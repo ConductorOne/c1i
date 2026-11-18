@@ -48,6 +48,8 @@ func preReadServer(t *testing.T) *mutServer {
 				return mutReply{body: `{"user":{"id":"u1"}}`}
 			case strings.HasPrefix(p, "/api/v1/policies/"):
 				return mutReply{body: `{"policy":{"id":"p1","policyType":"POLICY_TYPE_GRANT"}}`}
+			case strings.HasPrefix(p, "/api/v1/apps/"):
+				return mutReply{body: `{"app":{"id":"app1"}}`}
 			}
 		}
 		return mutReply{body: `{}`}

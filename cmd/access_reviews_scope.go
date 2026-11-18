@@ -49,7 +49,7 @@ var (
 	}}
 )
 
-const setupRefHelp = "Looks up each referenced %s first: an unknown one exits 4 before anything is sent, --dry-run included."
+const setupRefHelp = "Looks up each referenced %s first: an unknown one exits 4 and a deleted one 2, before anything is sent, --dry-run included."
 
 // labeledRef is a reference plus how an error names it.
 type labeledRef struct {
@@ -84,6 +84,15 @@ func requireExistingRefs(ctx context.Context, c *client.Client, kind refKind, re
 		}
 		if !json.Valid(data) {
 			return &nonJSONResponseError{fmt.Errorf("checking %s: the %s lookup did not return JSON", r.label, kind.what)}
+		}
+		var resp map[string]json.RawMessage
+		if json.Unmarshal(data, &resp) != nil {
+			return &nonJSONResponseError{fmt.Errorf("checking %s: the %s lookup did not return an object", r.label, kind.what)}
+		}
+		for _, raw := range resp {
+			if hasJSONField(raw, "deletedAt", 3) {
+				return &usageError{fmt.Errorf("%s: the %s is deleted", r.label, kind.what)}
+			}
 		}
 	}
 	return nil
@@ -303,4 +312,25 @@ func init() {
 	accessReviewEntitlementsCmd.AddCommand(accessReviewEntitlementsAddCmd, accessReviewEntitlementsRemoveCmd)
 	accessReviewExcludedEntitlementsCmd.AddCommand(accessReviewExcludedEntitlementsAddCmd, accessReviewExcludedEntitlementsRemoveCmd)
 	accessReviewsCmd.AddCommand(accessReviewScopeCmd, accessReviewEntitlementsCmd, accessReviewExcludedEntitlementsCmd)
+}
+
+// hasJSONField reports whether raw (an object, possibly nested under the
+// response's view envelope) carries the named field with a non-null value.
+func hasJSONField(raw json.RawMessage, field string, depth int) bool {
+	if depth < 0 {
+		return false
+	}
+	var obj map[string]json.RawMessage
+	if json.Unmarshal(raw, &obj) != nil {
+		return false
+	}
+	if v, ok := obj[field]; ok && string(v) != "null" && string(v) != `""` {
+		return true
+	}
+	for _, v := range obj {
+		if len(v) > 0 && v[0] == '{' && hasJSONField(v, field, depth-1) {
+			return true
+		}
+	}
+	return false
 }

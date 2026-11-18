@@ -150,6 +150,12 @@ func TestPreviewRedactsUrlsHeadersAndKeyNames(t *testing.T) {
 			nil, []string{"visibleKey"}},
 		{"git@ is not a secret", map[string]any{"a": "git@github.example:org/repo.git", "b": "ssh://git@github.example/org/repo"},
 			nil, []string{"git@github.example:org/repo.git", "ssh://git@github.example/org/repo"}},
+		{"an email-shaped value is not a secret", map[string]any{"displayName": "zz12l4@example.com"},
+			nil, []string{"zz12l4@example.com"}},
+		{"a bare token URL stays masked", map[string]any{"url": "TOKENleak@h.example/p"},
+			[]string{"TOKENleak"}, []string{"h.example/p"}},
+		{"userinfo embedded in text", map[string]any{"note": "u=//svc:PWleak@h.example/x"},
+			[]string{"PWleak"}, []string{"h.example/x"}},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

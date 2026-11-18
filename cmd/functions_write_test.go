@@ -289,3 +289,23 @@ func TestFunctionsInvokeWaitPollsThroughNonFinalStatuses(t *testing.T) {
 		t.Errorf("polled %d times, want %d (one per status until SUCCESS)", polls, len(statuses))
 	}
 }
+
+// A --update-mask naming displayName with no value in the object is refused:
+// the fill would resend the current name and change nothing at exit 0.
+func TestFunctionsUpdateRefusesMaskedDisplayNameWithoutValue(t *testing.T) {
+	t.Setenv("C1I_URL", mutTestURL)
+	for _, dry := range []bool{false, true} {
+		s := newMutServer(t, fixedReply(200, `{"function":{"id":"fn-1","displayName":"cur"}}`))
+		args := []string{"functions", "update", "fn-1", "--body-file", writeTempFile(t, `{"description":"d"}`), "--update-mask", "displayName"}
+		if dry {
+			args = append(args, "--dry-run")
+		}
+		r := runMutationCLI(t, s.srv, 0, nil, args...)
+		if r.exit != exitUsage || !strings.Contains(r.stderr, "sets no displayName") {
+			t.Errorf("dry=%v: exit %d stderr %q", dry, r.exit, r.stderr)
+		}
+		if len(s.requests()) != 0 {
+			t.Errorf("dry=%v: sent %v", dry, s.requests())
+		}
+	}
+}

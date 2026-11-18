@@ -113,6 +113,32 @@ func URL(s string) string {
 
 const gitUser = "git"
 
+// URLValue redacts s only when it is URL-shaped: an absolute URL, a
+// network-path reference, or a bare "token@host.tld/path" / "user:pass@host"
+// credential. Plain text is returned unchanged, so a preview shows the value
+// that will be sent (an email-shaped display name is not a credential).
+func URLValue(s string) string {
+	if strings.Contains(s, "://") || strings.HasPrefix(s, "//") {
+		return URL(s)
+	}
+	if u, err := url.Parse(s); err == nil && u.Host != "" {
+		return URL(s)
+	}
+	if bareCredentialPathRE.MatchString(s) || bareUserinfoRE.MatchString(s) {
+		return urlText(s)
+	}
+	// Not a URL, but the string can still embed a "//user:pass@" or
+	// "//token@" run, and a bare host/path can carry secret-named query or
+	// ";" parameters. Both stay masked; a bare "local@domain.tld" does not.
+	s = urlPasswordRE.ReplaceAllStringFunc(s, func(m string) string {
+		return "//" + maskedUser(m[2:strings.Index(m, ":")]) + ":" + Placeholder + "@"
+	})
+	s = urlUsernameRE.ReplaceAllStringFunc(s, func(m string) string {
+		return "//" + maskedUser(m[2:len(m)-1]) + "@"
+	})
+	return maskEncodedValues(maskSecretPairs(s), maxEscapeLevels)
+}
+
 // maskedUser keeps only the conventional non-secret "git" user.
 func maskedUser(name string) string {
 	if name == gitUser {
@@ -126,7 +152,9 @@ var (
 	urlUsernameRE  = regexp.MustCompile(`(//)([^/?#:@]+)@`)
 	bareUserinfoRE = regexp.MustCompile(`^([^/@\s:]+):[^/@\s]*@`)
 	bareTokenRE    = regexp.MustCompile(`^([^/@\s:]+)@([^/@\s]*\.[^/@\s]*)`)
-	pathParamRE    = regexp.MustCompile(`(?i)(;|%3B)([^=;/?#\s]+)(?:=|%3D)([^;/?#\s]*)`)
+	// A bare token@host URL has a path; a plain email does not.
+	bareCredentialPathRE = regexp.MustCompile(`^[^/@\s:]+@[^/@\s]*\.[^/@\s]*/`)
+	pathParamRE          = regexp.MustCompile(`(?i)(;|%3B)([^=;/?#\s]+)(?:=|%3D)([^;/?#\s]*)`)
 )
 
 // indexEncodedEqual returns the byte index of the first "%3d" or "%3D" in s,

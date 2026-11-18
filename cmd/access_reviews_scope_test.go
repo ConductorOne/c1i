@@ -151,3 +151,55 @@ func TestAccessReviewSetupRefLookupFailureStopsWrite(t *testing.T) {
 		t.Errorf("sent %d requests, want only the lookup", got)
 	}
 }
+
+// A soft-deleted referenced entitlement is refused locally, like an unknown
+// one: the server answers 400 and --dry-run would otherwise approve it.
+func TestAccessReviewSetupDeletedRefIsRefused(t *testing.T) {
+	t.Setenv("C1I_URL", mutTestURL)
+	route := func(r *http.Request, _ int) mutReply {
+		if r.Method == http.MethodGet {
+			return mutReply{body: `{"appEntitlementView":{"appEntitlement":{"id":"ent-1","deletedAt":"2026-01-01T00:00:00Z"}}}`}
+		}
+		return mutReply{body: `{}`}
+	}
+	for _, dry := range []bool{false, true} {
+		s := newMutServer(t, route)
+		args := []string{"access-reviews", "templates", "entitlements", "add", "tpl-1", "--app-id", "app-1", "--entitlement-id", "ent-1"}
+		if dry {
+			args = append(args, "--dry-run")
+		}
+		r := runMutationCLI(t, s.srv, 0, nil, args...)
+		if r.exit != exitUsage || !strings.Contains(r.stderr, "the entitlement is deleted") {
+			t.Errorf("dry=%v: exit %d stderr %q", dry, r.exit, r.stderr)
+		}
+		if len(writes(s)) != 0 {
+			t.Errorf("dry=%v: sent %v", dry, writes(s))
+		}
+	}
+}
+
+// hasJSONField must see a nested deletedAt, ignore null/empty/absent ones,
+// and stop at its depth bound.
+func TestHasJSONField(t *testing.T) {
+	cases := []struct {
+		name string
+		raw  string
+		want bool
+	}{
+		{"top level", `{"deletedAt":"2026-01-01T00:00:00Z"}`, true},
+		{"nested view", `{"appEntitlementView":{"appEntitlement":{"deletedAt":"x"}}}`, true},
+		{"three deep", `{"a":{"b":{"c":{"deletedAt":"x"}}}}`, true},
+		{"four deep", `{"a":{"b":{"c":{"d":{"deletedAt":"x"}}}}}`, false},
+		{"null", `{"appEntitlement":{"deletedAt":null}}`, false},
+		{"empty string", `{"appEntitlement":{"deletedAt":""}}`, false},
+		{"absent", `{"appEntitlement":{"id":"x"}}`, false},
+		{"array payload", `{"list":[{"deletedAt":"x"}]}`, false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := hasJSONField([]byte(tc.raw), "deletedAt", 3); got != tc.want {
+				t.Errorf("hasJSONField(%s) = %v, want %v", tc.raw, got, tc.want)
+			}
+		})
+	}
+}

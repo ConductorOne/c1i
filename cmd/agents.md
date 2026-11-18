@@ -179,7 +179,8 @@ entitlement-to-entitlement links, `access-reviews` for campaign lists,
 lifecycle calls (`delete` included), reports, and a campaign's scope and
 entitlement selection (`scope get|set|set-excluded|set-by-resource-type`,
 `entitlements add|remove`, `excluded-entitlements add|remove`; an unknown
-`--entitlement-id` or body-file reference exits 4 before the send; the API's
+`--entitlement-id` or body-file reference exits 4 (a soft-deleted one 2)
+before the send; the API's
 `scope_by_excluded_resource_type` route is "superseded and scheduled for
 removal" and has no command), `access-reviews templates` for reusable campaign
 templates (`get|create|update|delete` plus the same scope commands; no route
@@ -592,7 +593,8 @@ resource with `--resource-id` likewise means you drop
   `connectors schedule --cron X [--timezone Z] [--justification R]` or
   `--clear`. `connectors credentials rotate` prints `.clientSecret` once and
   leaves the previous credential valid for days; end it with `credentials
-  revoke`.
+  revoke`. `credentials get` refuses a credential whose `appId`/`connectorId`
+  differ from the flags (exit `4`): the server ignores both path segments.
 - Promote a connector-discovered app to a managed one with `apps managed-state
   list|get|promote` (`--app-id` the connector app, `--resource-type-id` its
   resource type named `app`, from `apps resource-types list --app-id`;
@@ -639,7 +641,8 @@ resource with `--resource-id` likewise means you drop
   first. `resource-types create --resource-type` is required; only `CUSTOM`
   repeats per app (else 500, exit 6). `resource-types update` renames only.
   `resources create` exits 4 for an unknown type or `--owner-id` and 2 for a
-  deleted type, before sending. `resources update --custom-description ""`
+  deleted type, before sending; its `--body-file` must not set `appId` or
+  `appResourceTypeId`, which `--app-id` and `--resource-type-id` own (exit 2). `resources update --custom-description ""`
   clears it; a blank `--display-name`/`--description` exits 2 (the server
   ignores an empty one). Other fields (e.g. `annotations`, merged not
   replaced) go through `--body-file` + `--update-mask`. `resources search`
@@ -695,6 +698,9 @@ resource with `--resource-id` likewise means you drop
   polls `GET .../ownerids` plus the entitlement list and can time out (exit
   1, applied). Without `--owner-entitlement-id`, entitlement owners are left
   alone.
+- `apps update` reads the app first: a malformed id exits `2`, an unknown
+  app `4` and a soft-deleted one `2`, before anything is sent (`--dry-run`
+  included).
 - `apps update`/`apps create` `--grant-policy-id`, `--revoke-policy-id` and
   `--certify-policy-id` are checked by c1i (exists, not deleted, right
   `policyType`) because the API itself stores any id with exit `0`; raw `api`
@@ -739,7 +745,9 @@ resource with `--resource-id` likewise means you drop
   the published commit, and an unpublished function exits `2`.
 - Code pushed with `functions create --file` or `functions update --file` is
   not published, so `functions invoke` keeps running the old commit until you
-  pass the printed `.commit.id` to `functions update --publish-commit`.
+  pass the printed `.commit.id` to `functions update --publish-commit`. A
+  `--update-mask` naming `displayName` with no value in the object exits `2`
+  instead of resending the current name.
 - `functions invocations list <function-id>` is newest first and a busy
   function can have tens of thousands of invocations: pass `--limit`.
 - `functions usage` filters automations client-side by
@@ -861,7 +869,7 @@ resource with `--resource-id` likewise means you drop
 - `entitlements automation get|create|update|delete <entitlement-id> --app-id`
   works only on C1 app entitlements and acts on real users once it exists.
   Pick one condition: `--cel`, `--refs-file` (each ref looked up, unknown exits
-  4) or `--none`; `create --body-file` for the full object. `get` exits 4 with
+  4, deleted 2) or `--none`; `create --body-file` for the full object. `get` exits 4 with
   no automation; delete is soft (`deletedAt` set), and `update` and
   `exclusions add|remove` still exit 0 on a deleted one, so check `deletedAt`.
   `exclusions
@@ -994,7 +1002,9 @@ resource with `--resource-id` likewise means you drop
   `--body-file` (update: plus `--update-mask`); the server 403s a JSON patch
   hook when its preview is off. Created disabled unless `--enabled`. The server
   stores any `--filter-cel` (an uncompilable one too) at exit `0`;
-  `update --clear-filter` clears it. `--function-id` and `--function-commit-id`
+  `update --clear-filter` clears it. `--priority` is `0` to `1000`: create is
+  server-validated, update is not, so c1i refuses an out-of-range value
+  (exit `2`) before sending. `--function-id` and `--function-commit-id`
   are looked up first (unknown: exit `4`, `--dry-run` too; not for `--body-file`). `delete` is soft: `get` still returns the
   hook with no deleted marker, `list` omits it, repeat delete exits `0`.
   `webhooks search --query TEXT --webhook-id ID...` matches names, and the

@@ -228,3 +228,19 @@ func TestResourceRowsKeepJSONTypes(t *testing.T) {
 		t.Errorf("path %s", got)
 	}
 }
+
+// The create path's --app-id owns the app; a --body-file that also sets it is
+// refused (the server ignores the body value, so sending it is misleading).
+func TestResourceCreateBodyFileRefusesOwnedAppID(t *testing.T) {
+	t.Setenv("C1I_URL", mutTestURL)
+	for _, body := range []string{`{"displayName":"x","appId":"a1"}`, `{"display_name":"x","app_id":"a1"}`} {
+		s := newMutServer(t, xaaRoute(map[string]string{"/rt-1": `{"appResourceTypeView":{"appResourceType":{"id":"rt-1"}}}`, "/apps/app-1": `{"app":{"id":"app-1"}}`}, `{"appResource":{"id":"r1"}}`))
+		r := runMutationCLI(t, s.srv, 0, nil, append([]string{"apps", "resources", "create"}, append(resScopeArgs, "--body-file", writeTempFile(t, body))...)...)
+		if r.exit != exitUsage || !strings.Contains(r.stderr, "--app-id") {
+			t.Errorf("body %s: exit %d stderr %q", body, r.exit, r.stderr)
+		}
+		if len(writes(s)) != 0 {
+			t.Errorf("body %s: sent %v", body, writes(s))
+		}
+	}
+}

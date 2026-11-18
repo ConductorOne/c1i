@@ -19,6 +19,9 @@ The API requires {"app": {"id": "...", ...}, "updateMask": "..."}. The update
 mask is derived exactly from the flags you pass: an omitted flag is left
 alone, while an explicit empty value is a change.
 
+c1i reads the app first: an unknown app exits 4 and a deleted one exits 2,
+before anything is sent, --dry-run included.
+
 A blank --display-name (empty, whitespace or invisible-only) exits 2,
 nothing sent; a non-blank name is sent as given.
 
@@ -51,7 +54,8 @@ offers no way to remove a mapper.`,
 			return &usageError{err}
 		}
 		return sendMutation(cmd, mutation{Method: http.MethodPost, Path: client.Path("/api/v1/apps/%s", args[0]), Body: body},
-			withPolicyBindingsCheck(cmd, appPolicyKinds))
+			withPolicyBindingsCheck(cmd, appPolicyKinds),
+			liveAppPreRead(args[0], "<app-id>"))
 	},
 }
 

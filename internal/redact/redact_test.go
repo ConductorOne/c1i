@@ -745,3 +745,30 @@ func FuzzSecondCopyEscaping(f *testing.F) {
 		}
 	})
 }
+
+// URLValue redacts URL-shaped strings only: a preview must show an
+// email-shaped display name exactly as it will be sent.
+func TestURLValueMasksOnlyURLShaped(t *testing.T) {
+	kept := []string{"zz12l4@example.com", "Ada Lovelace <ada@example.invalid>", "not a url"}
+	for _, in := range kept {
+		if got := URLValue(in); got != in {
+			t.Errorf("URLValue(%q) = %q, want unchanged", in, got)
+		}
+	}
+	redacted := map[string]string{
+		"https://user:PWleak@h.example/x?token=Qleak": "PWleak",
+		"TOKENleak@h.example/p":                       "TOKENleak",
+		"user:PWleak@h.example/x":                     "PWleak",
+		"//u:PWleak@h.example/x":                      "PWleak",
+		"h.example/cb?token=Qleak":                    "Qleak",
+		"h.example/x;api_key=Qleak":                   "Qleak",
+		"x?client_secret=Qleak":                       "Qleak",
+		"note u=//svc:Qleak@egress.example/x":         "Qleak",
+		"see //TOKENleak@host.example/p":              "TOKENleak",
+	}
+	for in, leak := range redacted {
+		if got := URLValue(in); strings.Contains(got, leak) || !strings.Contains(got, Placeholder) {
+			t.Errorf("URLValue(%q) = %q", in, got)
+		}
+	}
+}

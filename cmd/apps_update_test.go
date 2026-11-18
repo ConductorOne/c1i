@@ -154,6 +154,14 @@ func TestAppsUpdateWire(t *testing.T) {
 	var gotBody map[string]any
 	var hits int
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet {
+			if r.URL.EscapedPath() != "/api/v1/apps/app%2Fid%20%3F%23" {
+				t.Errorf("read = %s, want escaped app path", r.URL.EscapedPath())
+			}
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = fmt.Fprint(w, `{"app":{"id":"x"}}`)
+			return
+		}
 		hits++
 		if r.Method != http.MethodPost || r.URL.EscapedPath() != "/api/v1/apps/app%2Fid%20%3F%23" {
 			t.Errorf("request = %s %s, want POST escaped app path", r.Method, r.URL.EscapedPath())
@@ -262,5 +270,56 @@ func TestAppsCreateWirePolicyFlags(t *testing.T) {
 	}
 	if !reflect.DeepEqual(gotBody, want) {
 		t.Errorf("body = %#v\nwant   %#v", gotBody, want)
+	}
+}
+
+// The update reads the app first so a malformed id is a usage error (the API
+// 404s the POST path), an unknown app exits 4 and a deleted one 2, before any
+// write, --dry-run included.
+func TestAppsUpdateChecksLiveAppFirst(t *testing.T) {
+	t.Setenv("C1I_URL", mutTestURL)
+	route := func(r *http.Request, _ int) mutReply {
+		if r.Method != http.MethodGet {
+			return mutReply{body: `{"app":{"id":"app-1"}}`}
+		}
+		switch r.URL.Path {
+		case "/api/v1/apps/app-1":
+			return mutReply{body: `{"app":{"id":"app-1"}}`}
+		case "/api/v1/apps/gone":
+			return mutReply{body: `{"app":{"id":"gone","deletedAt":"2026-01-01T00:00:00Z"}}`}
+		case "/api/v1/apps/badid":
+			return mutReply{status: http.StatusBadRequest, body: `{"code":3,"message":"invalid UpdateAppRequest.App.Id: value does not match regex pattern"}`}
+		default:
+			return mutReply{status: http.StatusNotFound, body: `{"code":5,"message":"not found"}`}
+		}
+	}
+	cases := []struct {
+		name string
+		id   string
+		exit int
+		want string
+	}{
+		{"malformed id", "badid", exitUsage, "invalid UpdateAppRequest.App.Id"},
+		{"deleted app", "gone", exitUsage, "the app is deleted"},
+		{"unknown app", "missing", exitNotFound, "no such app"},
+	}
+	for _, tc := range cases {
+		for _, dry := range []bool{false, true} {
+			t.Run(tc.name, func(t *testing.T) {
+				clearViperOverrides(t, "dry_run")
+				s := newMutServer(t, route)
+				args := []string{"apps", "update", tc.id, "--description", "x"}
+				if dry {
+					args = append(args, "--dry-run")
+				}
+				r := runMutationCLI(t, s.srv, 0, nil, args...)
+				if r.exit != tc.exit || !strings.Contains(r.stderr, tc.want) {
+					t.Errorf("dry=%v exit %d stderr %q, want %d and %q", dry, r.exit, r.stderr, tc.exit, tc.want)
+				}
+				if sent := writes(s); len(sent) != 0 {
+					t.Errorf("dry=%v sent %v", dry, sent)
+				}
+			})
+		}
 	}
 }

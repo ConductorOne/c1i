@@ -278,7 +278,7 @@ func TestWFListRowsKeepTypes(t *testing.T) {
 	if r.exit != 0 {
 		t.Fatalf("exit %d: %s", r.exit, r.stderr)
 	}
-	want := `{"allow_source_cidrs":["10.0.0.0/24"],"client_id":"t-1@tenant.example.com/wfe","condition_expression":null,"created_at":null,"description":null,"disabled":false,"display_name":null,"passthrough_claims":[],"provider_id":null,"scoped_role_ids":[],"service_principal_id":null,"updated_at":null}` + "\n"
+	want := `{"allow_source_cidrs":["10.0.0.0/24"],"client_id":"t-1@tenant.example.com/wfe","condition_expression":null,"created_at":null,"description":null,"disabled":false,"display_name":null,"passthrough_claims":null,"provider_id":null,"scoped_role_ids":null,"service_principal_id":null,"updated_at":null}` + "\n"
 	if r.stdout != want {
 		t.Errorf("row %s, want %s", r.stdout, want)
 	}

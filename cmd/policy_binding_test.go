@@ -201,10 +201,13 @@ func TestPolicyUnbindAndEmptyID(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			var bodies []string
-			var lookups int
+			var lookups, gets int
 			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				if r.Method == http.MethodGet {
-					lookups++
+					gets++
+					if strings.HasPrefix(r.URL.Path, "/api/v1/policies/") {
+						lookups++
+					}
 				} else {
 					b, _ := io.ReadAll(r.Body)
 					bodies = append(bodies, string(b))
@@ -223,8 +226,8 @@ func TestPolicyUnbindAndEmptyID(t *testing.T) {
 				if err == nil || !strings.Contains(err.Error(), tc.wantErr) || exitCode(err) != exitUsage {
 					t.Fatalf("err = %v (exit %d), want exit 2 containing %q", err, exitCode(err), tc.wantErr)
 				}
-				if len(bodies)+lookups != 0 {
-					t.Errorf("requests sent before a usage error: %d lookups, bodies %v", lookups, bodies)
+				if len(bodies)+gets != 0 {
+					t.Errorf("requests sent before a usage error: %d GETs, bodies %v", gets, bodies)
 				}
 				return
 			}

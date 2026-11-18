@@ -90,9 +90,8 @@ immutable and unique per resource server (409, exit 2: "already exists for
 this resource server"). The server provisions a backing entitlement
 (appEntitlementId).
 
-The resource server is looked up first under --app-id: if it does not exist
-the command exits 4, and if it is deleted, 2 (the server would accept both).
---dry-run does the lookup too.
+The app and resource server are looked up first: an unknown one exits 4 and a
+deleted one 2 (the server would accept both). --dry-run does the lookup too.
 
 Prints the created scope, unwrapped like "xaa scopes get": the id is .id.
 Honors --dry-run.
@@ -115,6 +114,7 @@ Example:
 			return err
 		}
 		return sendMutation(cmd, mutation{Method: http.MethodPost, Path: xaaScopes.collectionPath(appID), Body: body, Unwrap: named("scope")},
+			liveAppPreRead(appID, "--app-id"),
 			withPreRead(xaaResourceServers.refCheck(appID, "resource-server-id", rsID, true)))
 	},
 }

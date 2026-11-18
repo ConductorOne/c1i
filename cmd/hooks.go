@@ -5,6 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"strconv"
+	"strings"
 
 	"github.com/ConductorOne/c1i/internal/client"
 	"github.com/spf13/cobra"
@@ -65,7 +67,7 @@ func hookFieldFlags(cmd *cobra.Command, update bool) {
 	allowEmpty(cmd, emptyIsSent, "description")
 	f.String("event", "", verb+" event ("+keep+hookEventFlag.usage()+")"+reqd)
 	f.String("filter-cel", "", verb+" CEL filter, evaluated against the event context ("+keep+"not validated by the server)")
-	f.Int("priority", 0, verb+" priority ("+keep+"the server enforces its range)")
+	f.Int("priority", 0, verb+" priority ("+keep+"0 to 1000)")
 	tail := ""
 	if update {
 		tail = " (omit to leave unchanged)"
@@ -99,6 +101,23 @@ var hookFunctionField = hookUpdate([]string{"function-id", "function-commit-id"}
 	return []string{"function"}, nil
 })
 
+// hookPriorityField sends --priority. Create is validated by the server in
+// [0,1000], but Update is not, so refuse an out-of-range value before the send.
+var hookPriorityField = updateField{flags: []string{"priority"}, apply: func(cmd *cobra.Command, obj map[string]any) ([]string, error) {
+	if !flagGiven(cmd, "priority") {
+		return nil, nil
+	}
+	v, err := cmd.Flags().GetInt("priority")
+	if err != nil {
+		return nil, err
+	}
+	if v < 0 || v > 1000 {
+		return nil, &usageError{fmt.Errorf("--priority must be between 0 and 1000 (got %d)", v)}
+	}
+	obj["priority"] = v
+	return []string{"priority"}, nil
+}}
+
 // hookCommonFields are the writable Hook fields, in mask order, shared by
 // create and update.
 func hookCommonFields() []updateField {
@@ -107,7 +126,7 @@ func hookCommonFields() []updateField {
 		strUpdate("description", "description"),
 		enumUpdate("event", "event", &hookEventFlag),
 		hookFilterField,
-		intUpdate("priority", "priority"),
+		hookPriorityField,
 		boolUpdate("enabled", "enabled"),
 		boolUpdate("managed-by-guardrails", "managedByGuardrails"),
 		hookFunctionField,
@@ -163,6 +182,49 @@ func requireHookRef(ctx context.Context, c *client.Client, path, flag, id, what 
 			return refNotFound(flag, id, what, apiErr)
 		}
 		return fmt.Errorf("checking --%s %q: %w", flag, id, err)
+	}
+	return nil
+}
+
+// checkHookPriorityValue refuses an out-of-range priority in a --body-file
+// when the mask names it: Update does not validate it, so the server stores it.
+func checkHookPriorityValue(mask string, hook map[string]any) error {
+	named := false
+	for _, path := range strings.Split(mask, ",") {
+		if foldMaskName(path) == foldMaskName("priority") {
+			named = true
+		}
+	}
+	if !named {
+		return nil
+	}
+	v, ok := hook["priority"]
+	if !ok {
+		return nil
+	}
+	var n int64
+	switch x := v.(type) {
+	case nil:
+		return nil // the server clears it to 0
+	case float64:
+		n = int64(x)
+		if float64(n) != x {
+			return &usageError{fmt.Errorf("--body-file priority must be a whole number (got %v)", x)}
+		}
+	case int:
+		n = int64(x)
+	case string:
+		// The server coerces a numeric string, so range-check it too.
+		parsed, err := strconv.ParseInt(strings.TrimSpace(x), 10, 64)
+		if err != nil {
+			return nil // not a number; the server decides
+		}
+		n = parsed
+	default:
+		return nil // the server decides
+	}
+	if n < 0 || n > 1000 {
+		return &usageError{fmt.Errorf("--body-file priority must be between 0 and 1000 (got %d)", n)}
 	}
 	return nil
 }

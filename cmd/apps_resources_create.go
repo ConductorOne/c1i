@@ -117,7 +117,10 @@ func init() {
 	c.Flags().String("display-name", "", "Display name of the new resource (required unless --body-file)")
 	c.Flags().String("description", "", "Description of the new resource")
 	addRepeatableStringFlag(c, "owner-id", "C1 user ID to make an owner of the new resource (repeatable)")
-	c.Flags().String("body-file", "", "Full create request JSON object, sent verbatim (file, or \"-\" for stdin); mutually exclusive with --display-name, --description and --owner-id")
+	c.Flags().String("body-file", "", "Full create request JSON object, sent verbatim (file, or \"-\" for stdin); mutually exclusive with --display-name, --description and --owner-id; must not set appId/appResourceTypeId (--app-id and --resource-type-id own them)")
+	ownBodyKeys(c, "body-file",
+		[]ownedKey{{key: "appId", owner: "--app-id"}, {key: "app_id", owner: "--app-id"}},
+		[]ownedKey{{key: "appResourceTypeId", owner: "--resource-type-id"}, {key: "app_resource_type_id", owner: "--resource-type-id"}})
 	annotateRequired(c, "display-name")
 	markMutating(c)
 	markUserRefChecked(c, "owner-id")

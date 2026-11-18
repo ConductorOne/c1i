@@ -379,3 +379,68 @@ func hookRefServer(t *testing.T, notFound string) (*httptest.Server, *[]webhookR
 	t.Cleanup(srv.Close)
 	return srv, &reqs
 }
+
+// Create is validated by the server in [0,1000]; Update is not, so c1i
+// refuses an out-of-range --priority before the send.
+func TestHooksPriorityRangeIsChecked(t *testing.T) {
+	withCatalogDryRun(t, false)
+	srv, reqs := webhooksServer(t, hookEnvelope)
+	stubCatalogClient(t, srv)
+	for _, bad := range []string{"-1", "1001"} {
+		if _, err := runPairs(t, srv, hooksUpdateCmd, []string{"hk-1"}, "priority", bad); err == nil || !strings.Contains(err.Error(), "--priority must be between 0 and 1000") {
+			t.Errorf("priority %s: err %v", bad, err)
+		}
+		if _, err := runPairs(t, srv, hooksCreateCmd, nil, "display-name", "zz", "event", "pre-output", "function-id", "fn-1", "priority", bad); err == nil || !strings.Contains(err.Error(), "--priority must be between 0 and 1000") {
+			t.Errorf("create priority %s: err %v", bad, err)
+		}
+	}
+	if sent := hookWrites(*reqs); len(sent) != 0 {
+		t.Errorf("sent %v", sent)
+	}
+	// The guard runs under --dry-run too.
+	withCatalogDryRun(t, true)
+	if _, err := runPairs(t, srv, hooksUpdateCmd, []string{"hk-1"}, "priority", "-1"); err == nil || !strings.Contains(err.Error(), "--priority must be between 0 and 1000") {
+		t.Errorf("dry-run priority -1: err %v", err)
+	}
+	withCatalogDryRun(t, false)
+	*reqs = nil
+	if _, err := runPairs(t, srv, hooksUpdateCmd, []string{"hk-1"}, "priority", "1000"); err != nil {
+		t.Errorf("priority 1000: %v", err)
+	}
+	hook, _ := hookWrites(*reqs)[0].body["hook"].(map[string]any)
+	if got := hook["priority"]; got != float64(1000) {
+		t.Errorf("sent priority = %v, want 1000", got)
+	}
+	if mask, _ := hookWrites(*reqs)[0].body["updateMask"].(string); mask != "priority" {
+		t.Errorf("mask = %q, want priority", mask)
+	}
+}
+
+// A --body-file priority is checked when the mask names it: create is
+// server-validated, update is not.
+func TestHooksBodyFilePriorityIsChecked(t *testing.T) {
+	withCatalogDryRun(t, false)
+	srv, _ := webhooksServer(t, hookEnvelope)
+	stubCatalogClient(t, srv)
+	for _, v := range []string{"-1", "1001", `"5000"`} {
+		file := writeTempFile(t, `{"priority":`+v+`,"displayName":"zz"}`)
+		_, err := runPairs(t, srv, hooksUpdateCmd, []string{"hk-1"}, "body-file", file, "update-mask", "priority")
+		if err == nil || !strings.Contains(err.Error(), "--body-file priority must be between 0 and 1000") {
+			t.Errorf("priority %s: err %v", v, err)
+		}
+	}
+	for _, v := range []string{"null", "10", `"10"`} {
+		file := writeTempFile(t, `{"priority":`+v+`,"displayName":"zz"}`)
+		if _, err := runPairs(t, srv, hooksUpdateCmd, []string{"hk-1"}, "body-file", file, "update-mask", "priority"); err != nil {
+			t.Errorf("priority %s: %v", v, err)
+		}
+	}
+	file := writeTempFile(t, `{"priority":500.5,"displayName":"zz"}`)
+	if _, err := runPairs(t, srv, hooksUpdateCmd, []string{"hk-1"}, "body-file", file, "update-mask", "priority"); err == nil || !strings.Contains(err.Error(), "whole number") {
+		t.Errorf("fractional priority: err %v", err)
+	}
+	file = writeTempFile(t, `{"priority":5000,"displayName":"zz"}`)
+	if _, err := runPairs(t, srv, hooksUpdateCmd, []string{"hk-1"}, "body-file", file, "update-mask", "displayName"); err != nil {
+		t.Errorf("priority outside the mask: %v", err)
+	}
+}

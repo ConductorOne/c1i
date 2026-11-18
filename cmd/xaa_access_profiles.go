@@ -67,9 +67,8 @@ var xaaAccessProfilesCreateCmd = &cobra.Command{
 provisions a backing entitlement (appEntitlementId). Display names need not be
 unique.
 
-The resource server is looked up first under --app-id: if it does not exist
-the command exits 4, and if it is deleted, 2 (the server would accept both).
---dry-run does the lookup too.
+The app and resource server are looked up first: an unknown one exits 4 and a
+deleted one 2 (the server would accept both). --dry-run does the lookup too.
 
 Prints the created profile, unwrapped like "xaa access-profiles get": the id
 is .id. Honors --dry-run.
@@ -88,6 +87,7 @@ Example:
 			return err
 		}
 		return sendMutation(cmd, mutation{Method: http.MethodPost, Path: xaaAccessProfiles.collectionPath(appID), Body: body, Unwrap: named("accessProfile")},
+			liveAppPreRead(appID, "--app-id"),
 			withPreRead(xaaResourceServers.refCheck(appID, "resource-server-id", rsID, true)))
 	},
 }

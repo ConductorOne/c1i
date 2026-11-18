@@ -31,7 +31,8 @@ already in the set keeps its id.
 The server does not check that a value looks like a domain. To empty the set,
 use --body-file with {"newDomains": []}; --body-file is the whole request and
 is mutually exclusive with --domain. A body without a "newDomains" array
-(missing or null) exits 2 and nothing is sent.
+(missing or null) exits 2 and nothing is sent; so does an element that is not
+a string or is blank.
 
 Prints the response as pretty JSON: {"list": [...]} with the resulting set.`,
 	RunE: func(cmd *cobra.Command, _ []string) error {
@@ -46,12 +47,21 @@ Prints the response as pretty JSON: {"list": [...]} with the resulting set.`,
 			}
 			// A missing or null list must not read as "empty the set"; only an
 			// explicit [] does.
-			_, ok, err := bodyFieldAs[[]any](body, "newDomains")
+			domains, ok, err := bodyFieldAs[[]any](body, "newDomains")
 			if err != nil {
 				return err
 			}
 			if !ok {
 				return &usageError{fmt.Errorf(`--body-file must set "newDomains" to an array; send {"newDomains": []} to empty the set`)}
+			}
+			for i, v := range domains {
+				s, ok := v.(string)
+				if !ok {
+					return &usageError{fmt.Errorf("--body-file newDomains[%d] must be a string, not %s", i, jsonKindName(v))}
+				}
+				if !hasVisibleRune(s) {
+					return &usageError{fmt.Errorf("--body-file newDomains[%d] is blank: it must contain a visible character", i)}
+				}
 			}
 		} else {
 			domains, err := repeatableStringFlag(cmd, "domain")

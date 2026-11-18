@@ -206,6 +206,36 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- `apps update` reads the app first: a malformed id is a usage error (the API
+  404s the update path), an unknown app exits `4` and a soft-deleted one `2`,
+  before anything is sent, `--dry-run` included.
+- `xaa resource-servers create`, `scopes create` and `access-profiles create`
+  refuse a soft-deleted `--app-id` (exit `2`), as their documented lookup
+  already promised; the server had stored the object anyway.
+- `xaa resource-servers create|update --signing-algorithm` reports that flag on
+  an invalid value, not the settings command's `--default-signing-algorithm`.
+- Commands that look a referenced entitlement or resource type up before a
+  write (access-review setup, entitlement automation) refuse a soft-deleted
+  one (exit `2`) instead of approving it under `--dry-run` and taking the
+  server's `400`.
+- `--dry-run` previews no longer mask an email-shaped value (a display name,
+  `--security-email`); URL-shaped strings are still masked.
+- `hooks create|update --priority` is checked against `0`-`1000` before
+  sending. Create was server-validated; update stored an out-of-range value at
+  exit `0`.
+- `functions update --body-file --update-mask displayName` with no
+  `displayName` in the object exits `2`: it used to resend the current name
+  and change nothing at exit `0`.
+- `settings domains set --body-file` refuses a `newDomains` element that is
+  not a string or is blank (the `--domain` channel already did), and
+  `apps resources create --body-file` refuses `appId`/`app_id` and
+  `appResourceTypeId`/`app_resource_type_id`, which `--app-id` and
+  `--resource-type-id` own (the server silently ignored them).
+- `service-principals trusts` rows print an absent `scoped_role_ids`,
+  `allow_source_cidrs` or `passthrough_claims` as `null` instead of `[]`.
+- `connectors credentials get` refuses a credential whose `appId` or
+  `connectorId` differs from its flags (exit `4`): the server resolves the id
+  globally and ignored both path segments.
 - `access-reviews templates update --body-file` treats a snake_case key
   (`display_name`, `policy_id`) as set: the update no longer reads the
   template and sends the camelCase field beside it. A masked `policy_id` is

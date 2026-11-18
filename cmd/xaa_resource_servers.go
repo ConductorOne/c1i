@@ -91,6 +91,10 @@ ones; omit it for both. A server created seconds ago may not be found yet.`,
 var xaaSearchSigningAlgFlag = enumFlag{flag: "signing-algorithm", prefix: "XAA_SIGNING_ALGORITHM_", unknown: enumPassPrefixed,
 	values: append([]enumValue{{name: "unspecified", api: "XAA_SIGNING_ALGORITHM_UNSPECIFIED"}}, xaaSigningAlgFlag.values...)}
 
+// The shared tenant flag is named for its settings command; create and update
+// expose the same values as --signing-algorithm.
+var xaaResourceServerSigningAlgFlag = xaaSigningAlgFlag.as("signing-algorithm")
+
 var xaaResourceServersGetCmd = xaaResourceServers.getCmd("Show one XAA resource server (pretty JSON)",
 	`Show one cross-app access resource server, unwrapped: the server's fields at
 the top level plus scopeDiscoveryStatus, the outcome of the latest scope
@@ -121,8 +125,9 @@ instead of the field flags; it is sent verbatim. Its functionId, and commitId
 if given, are looked up first: an unknown one exits 4 (the server would store
 it), --dry-run included.
 
-The app is looked up first: an unknown --app-id exits 4 (the server would
-store the server under it). --dry-run does the lookup too.
+The app is looked up first: an unknown --app-id exits 4 and a deleted one 2
+(the server would store the server under either). --dry-run does the lookup
+too.
 
 Prints the created server, unwrapped like "xaa resource-servers get": the id
 is .id. Honors --dry-run.
@@ -141,7 +146,7 @@ Example:
 		}
 		appID := xaaAppID(cmd)
 		return sendMutation(cmd, mutation{Method: http.MethodPost, Path: xaaResourceServers.collectionPath(appID), Body: body, Unwrap: named("resourceServer")},
-			withPreRead(xaaAppCheck(appID)), withPreRead(hookCheck))
+			liveAppPreRead(appID, "--app-id"), withPreRead(hookCheck))
 	},
 }
 
@@ -174,7 +179,7 @@ var xaaResourceServerUpdateSpec = &updateSpec{
 		strUpdate("description", "description"),
 		listUpdate("resource-uri", "resourceUris", nil),
 		durationUpdate("max-grant-lifetime", "maxGrantLifetime"),
-		enumUpdate("signing-algorithm", "signingAlgorithm", &xaaSigningAlgFlag),
+		enumUpdate("signing-algorithm", "signingAlgorithm", &xaaResourceServerSigningAlgFlag),
 		boolUpdate("require-proof-of-possession", "requireProofOfPossession"),
 		boolUpdate("disabled", "disabled"),
 	},

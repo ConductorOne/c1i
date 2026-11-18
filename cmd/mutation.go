@@ -662,7 +662,7 @@ func redactSecrets(v any) any {
 			} else if strings.Contains(sk, "headers") {
 				out[k] = redactHeaders(e)
 			} else if str, ok := e.(string); ok {
-				out[k] = redact.URL(str)
+				out[k] = redact.URLValue(str)
 			} else {
 				out[k] = redactSecrets(e)
 			}
@@ -672,7 +672,7 @@ func redactSecrets(v any) any {
 		out := make([]any, len(x))
 		for i, e := range x {
 			if str, ok := e.(string); ok {
-				out[i] = redact.URL(str)
+				out[i] = redact.URLValue(str)
 			} else {
 				out[i] = redactSecrets(e)
 			}
