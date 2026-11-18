@@ -13,11 +13,11 @@ Exit codes:
 - **An unknown app on `apps set-owners` or `mcp servers register` exits `4`,
   not `0`; a deleted app on those and on `apps update` and `apps
   add-owner|remove-owner` exits `2`; a malformed `apps update` id exits `2`,
-  not `4`.** Their `--dry-run` now reads the app, so it needs credentials. See
-  Fixed.
+  not `4`; an app read that answers `200` without an app exits `6`.** Their
+  `--dry-run` now reads the app, so it needs credentials. See Fixed.
 - **`--fields` on `mcp gateway call` and `findings settings show` exits `2`**
-  (it was ignored), and `docs endpoint --fields` that matches nothing exits
-  `2`. See Fixed.
+  (it was ignored). `docs endpoint --fields` now projects the schema (it was
+  ignored), and a spec that matches nothing exits `2`. See Fixed.
 - **`policies create|update --body-file` with a snake_case key that breaks a
   policy guard, or a checked field in both spellings, exits `2`**; it used to
   be sent. See Fixed.
