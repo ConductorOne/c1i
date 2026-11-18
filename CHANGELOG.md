@@ -26,6 +26,14 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   circuit breaker, or times out. The circuit-breaker and cancel-pending verbs
   print the API's `bulkActionId`; the work is asynchronous and c1i cannot read
   a bulk action.
+- `access-reviews delete <campaign-id>` soft-deletes a campaign: it leaves
+  `list`, and `get` returns it with `state` `ACCESS_REVIEW_STATE_DELETED`.
+- `access-reviews scope get|set|set-excluded|set-by-resource-type`,
+  `access-reviews entitlements add|remove` and `access-reviews
+  excluded-entitlements add|remove` read and edit a campaign's scope,
+  entitlement selection and exclusions. Each referenced entitlement or resource
+  type is looked up first, so an unknown one exits `4` before the send,
+  `--dry-run` included. Most of these API routes are marked draft in the spec.
 
 ## [0.11.0] - 2026-11-17
 

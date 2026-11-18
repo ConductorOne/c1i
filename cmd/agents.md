@@ -171,7 +171,12 @@ Access-profile lifecycle, requestable and visibility entitlements, and bundle
 automation are first-class under `access-profiles`; use its nested `--help` to
 choose a command. Use `entitlements proxy-bindings` for directional
 entitlement-to-entitlement links, `access-reviews` for campaign lists,
-lifecycle calls, and reports, and `mcp classifiers` for AI-governance
+lifecycle calls (`delete` included), reports, and a campaign's scope and
+entitlement selection (`scope get|set|set-excluded|set-by-resource-type`,
+`entitlements add|remove`, `excluded-entitlements add|remove`; an unknown
+`--entitlement-id` or body-file reference exits 4 before the send; the API's
+`scope_by_excluded_resource_type` route is "superseded and scheduled for
+removal" and has no command), and `mcp classifiers` for AI-governance
 classifiers, bindings, templates, the singleton agent policy, and tool gates.
 Classifier creates and updates take JSON because their nested, ordered rules
 must be preserved; read first and use the explicit `--update-mask` for updates.
