@@ -36,6 +36,8 @@ var updateMaskCases = map[string]struct {
 	"settings sso update":               {[]string{"settings", "sso", "update"}, true},
 	"mcp servers test-connection":       {[]string{"mcp", "servers", "test-connection", "cn-1", "--app-id", "a1", "--server-url", "https://mcp.example.invalid"}, false},
 	"mcp servers update-credentials":    {[]string{"mcp", "servers", "update-credentials", "cn-1", "--app-id", "a1", "--type", "external", "--server-url", "https://mcp.example.invalid"}, false},
+
+	"service-principals trusts update": {[]string{"service-principals", "trusts", "update", "t-1", "--service-principal-id", "sp-1"}, true},
 }
 
 func commandsWithUpdateMask(c *cobra.Command, out map[string]bool) {

@@ -11,6 +11,8 @@ var servicePrincipalsDeleteCmd = &cobra.Command{
 	Short: "Delete a service principal and all its credentials",
 	Long: `Delete a service principal and all its credentials.
 
+Its workload federation trusts are deleted with it.
+
 Prints the API's response, which is {}; exit 0 is the success signal.`,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {

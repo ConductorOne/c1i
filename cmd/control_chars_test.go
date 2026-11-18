@@ -122,6 +122,8 @@ var pathFlagNotPaths = map[string]string{
 	"c1i apps resources create --display-name":           "help mentions --body-file; the value is a name",
 	"c1i connectors sync-compare --left":                 "help mentions --body-file; the value is a lifecycle id",
 	"c1i connectors sync-compare --right":                "help mentions --body-file; the value is a lifecycle id",
+
+	"c1i service-principals trusts update --update-mask": "help mentions --body-file; the value is a field mask",
 }
 
 var pathLikeUsage = regexp.MustCompile(`\bfiles?\b|\bdirector(y|ies)\b|"-"`)

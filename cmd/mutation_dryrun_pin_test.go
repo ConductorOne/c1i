@@ -135,6 +135,10 @@ var dryRunStubs = map[string][]string{
 	"c1i apps resources add-owner":                              {"x1", "--app-id=x1", "--resource-type-id=x1", "--user-id=x1"},
 	"c1i apps resources remove-owner":                           {"x1", "--app-id=x1", "--resource-type-id=x1", "--user-id=x1"},
 	"c1i apps resources set-owners":                             {"x1", "--app-id=x1", "--resource-type-id=x1", "--user-id=x1"},
+
+	"c1i service-principals trusts update":     {"x1", "--service-principal-id=x1", "--display-name=x1"},
+	"c1i workload-federation providers create": {"--display-name=x1", "--issuer-url=https://issuer.example.com", "--well-known-provider=custom"},
+	"c1i workload-federation providers update": {"x1", "--display-name=x1"},
 }
 
 // dryRunReadBodies is the answer to a leaf's pre-send GET where the generic

@@ -24,7 +24,11 @@ function, SSO application, AuthZEN server, or edge) act as the principal.
   service-principals get <sp-id>
   service-principals create --display-name "payments-reconciler"
   service-principals credentials create <sp-id> --display-name ci --expires 720h
-  service-principals bindings add --service-principal-id <sp-id> --function-id <fn-id>`,
+  service-principals bindings add --service-principal-id <sp-id> --function-id <fn-id>
+
+A trust ("service-principals trusts") lets an external workload act as the
+principal with its own JWT, from an issuer registered with
+"c1i workload-federation providers".`,
 }
 
 // newServicePrincipalsClient is the client seam for the non-list SPC commands
