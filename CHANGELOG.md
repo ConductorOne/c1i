@@ -25,7 +25,47 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - `requests create action` and `requests create resource-action` (`--action-id`,
   `--form-values-file`; `action` also `--description`, `--group-only`). No API
   route lists these actions; an unknown id exits `4` (`action not found`).
+- `mcp resources` and `mcp prompts`: `list`, `search` (`--query`, repeatable
+  `--state`, `--kind static|template` for resources, `--include-grant-status`
+  to add `entitlement_active` and `grant_count`), `get`, `history`, and
+  `approve <id>... [--state approved|disabled|pending]`, which works like `mcp
+  tools approve`. State is the only field either API can change, so neither has
+  an `update`. `mcp resources list` returns removed resources too; `search`
+  shows them only with `--state removed`. A tenant without the prompts feature
+  answers a well-formed prompts request with 403 `feature not enabled` (exit 3).
 
+- `settings` reads and updates tenant-wide singletons: `ai-governance
+  show|update|history|tenant-defaults`, `session show|update|test-source-ip`,
+  `sso show|update|history`, `cross-app-access show|update|history`, `contacts
+  show|update`, `request show|update`, `domains list|set`, `notifications
+  org|user show|update` and `aws-external-id show`. Masked updates take field
+  flags (mask derived) or `--body-file` with `--update-mask`; `domains set`
+  replaces the whole domain set; `session test-source-ip` exits 0 for either
+  answer. `findings settings edge show|update` covers the Edge finding
+  categories.
+- `entitlements grants <entitlement-id>` lists an entitlement's grants with the
+  C1 user, `discovered_at` and `expires_at`. `grants accounts` shows which of a
+  user's accounts hold an entitlement. `grants remove` wraps remove-membership
+  (it refuses manually managed entitlements), and `grants update-duration
+  --deprovision-at` / `grants remove-duration` set or clear when an existing
+  grant is revoked.
+- `entitlements automation get|create|update|delete` and `entitlements
+  automation exclusions list|add|remove` manage an entitlement's membership
+  automation (C1 app entitlements only). A condition is `--cel`, `--refs-file`
+  or `--none`; unknown entitlement references and exclusion user ids exit `4`
+  before sending.
+
+- `apps resource-types get|create|update|delete|search` and `apps resources
+  list|get|create|update|delete|search`, for an app's resource types and
+  resources, plus `apps resources owners|add-owner|remove-owner|set-owners`
+  for a resource's owners. The resource's own id is positional; `--app-id` and
+  `--resource-type-id` are its parent scope. `resources create` looks up the
+  resource type (unknown: exit 4, deleted: exit 2) and each `--owner-id`
+  first; `resources set-owners` looks up the resource, since the API stores
+  owners for an unknown one at `200`. `apps resource-types list` rows gain
+  `app_id`, matching the new search rows.
+- `--resource-type` on `entitlements create` and `apps resource-types create`
+  lists `SESSION_POLICY` and `CLAW_AGENT`, as the API spec now does.
 - `apps search` filters applications server-side (`POST /api/v1/search/apps`)
   by `--query` (fuzzy on name and description), `--display-name`, repeatable
   `--app-id` / `--exclude-app-id` / `--policy-id`, and `--only-directories`.

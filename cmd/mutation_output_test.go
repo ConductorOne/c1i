@@ -41,6 +41,7 @@ var readOnlyPOST = map[string]string{
 	"cmd/mcp_servers_discover_oidc.go:mcpServersDiscoverOIDCCmd":     "POST discover-oidc probe",
 	"cmd/mcp_servers_test_connection.go:mcpServersTestConnectionCmd": "POST test-connection probe",
 	"cmd/policies_validate_cel.go:policiesValidateCelCmd":            "POST validate-cel",
+	"cmd/settings_session.go:settingsSessionTestSourceIPCmd":         "POST test-source-ip: evaluates an IP against the CIDRs in the body",
 	"cmd/auth_status.go:authStatusCmd":                               "POST /search/users credential probe",
 	"cmd/paginate.go:postPageBody":                                   "every paged POST list; a runtime transport.ReadOnlyPOST check refuses non-read paths before sending",
 }
@@ -64,7 +65,9 @@ var outOfScopeSelectors = map[string]string{
 // batchCommands maps each command calling sendMutationBatch to the id key
 // every output line carries.
 var batchCommands = map[string]string{
-	"c1i mcp tools approve": "id",
+	"c1i mcp tools approve":     "id",
+	"c1i mcp prompts approve":   "id",
+	"c1i mcp resources approve": "id",
 }
 
 // nonMutatingOutputModes are declarations a mutating command reaches that

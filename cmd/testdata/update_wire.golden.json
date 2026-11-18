@@ -1585,6 +1585,202 @@
       "updateMask": "displayName"
     }
   },
+  "settings ai-governance update ": {
+    "exit": 2
+  },
+  "settings ai-governance update --allowed-client-type bogus": {
+    "exit": 2
+  },
+  "settings ai-governance update --allowed-client-type personal --allowed-client-type MCP_CLIENT_TYPE_SERVICE": {
+    "exit": 0,
+    "method": "POST",
+    "path": "/api/v1/settings/ai-governance",
+    "body": {
+      "aiGovernanceSettings": {
+        "allowedClientTypes": [
+          "MCP_CLIENT_TYPE_PERSONAL",
+          "MCP_CLIENT_TYPE_SERVICE"
+        ]
+      },
+      "updateMask": "allowedClientTypes"
+    }
+  },
+  "settings ai-governance update --body-file {dir}/auto.json --audit-verbosity full --update-mask auditVerbosity": {
+    "exit": 2
+  },
+  "settings ai-governance update --body-file {dir}/auto.json --update-mask codeModeConcurrency": {
+    "exit": 0,
+    "method": "POST",
+    "path": "/api/v1/settings/ai-governance",
+    "body": {
+      "aiGovernanceSettings": {
+        "description": "d"
+      },
+      "updateMask": "codeModeConcurrency"
+    }
+  },
+  "settings ai-governance update --default-tool-classification read --audit-verbosity full --auto-discovery=false --discovery-interval 1h": {
+    "exit": 0,
+    "method": "POST",
+    "path": "/api/v1/settings/ai-governance",
+    "body": {
+      "aiGovernanceSettings": {
+        "auditVerbosity": "AUDIT_VERBOSITY_FULL",
+        "autoDiscoveryEnabled": false,
+        "defaultToolClassification": "TOOL_CLASSIFICATION_READ",
+        "discoveryInterval": "3600s"
+      },
+      "updateMask": "defaultToolClassification,auditVerbosity,autoDiscoveryEnabled,discoveryInterval"
+    }
+  },
+  "settings ai-governance update --inactivity-close-after 1.5h": {
+    "exit": 2
+  },
+  "settings ai-governance update --inactivity-hide-after 24h --retention-delete-after 2160h": {
+    "exit": 0,
+    "method": "POST",
+    "path": "/api/v1/settings/ai-governance",
+    "body": {
+      "aiGovernanceSettings": {
+        "defaultClientLifecycle": {
+          "inactivityHideAfter": "86400s",
+          "retentionDeleteAfter": "7776000s"
+        }
+      },
+      "updateMask": "defaultClientLifecycle.inactivityHideAfter,defaultClientLifecycle.retentionDeleteAfter"
+    }
+  },
+  "settings ai-governance update --prefer-code-mode --surface-requestable-tools=false --untrusted-judge-disable=false": {
+    "exit": 0,
+    "method": "POST",
+    "path": "/api/v1/settings/ai-governance",
+    "body": {
+      "aiGovernanceSettings": {
+        "preferCodeModeOverDirectTools": true,
+        "surfaceRequestableTools": false,
+        "untrustedJudgeDisable": false
+      },
+      "updateMask": "preferCodeModeOverDirectTools,surfaceRequestableTools,untrustedJudgeDisable"
+    }
+  },
+  "settings contacts update ": {
+    "exit": 2
+  },
+  "settings contacts update --billing-email ": {
+    "exit": 2
+  },
+  "settings contacts update --security-email a@example.com --security-email b@example.com --operations-email ops@example.com": {
+    "exit": 0,
+    "method": "POST",
+    "path": "/api/v1/settings/contacts",
+    "body": {
+      "contacts": {
+        "operationsEmails": [
+          "ops@example.com"
+        ],
+        "securityEmails": [
+          "a@example.com",
+          "b@example.com"
+        ]
+      },
+      "updateMask": "securityEmails,operationsEmails"
+    }
+  },
+  "settings cross-app-access update ": {
+    "exit": 2
+  },
+  "settings cross-app-access update --default-signing-algorithm eddsa --enabled-signing-algorithm eddsa --enabled-signing-algorithm rs256": {
+    "exit": 0,
+    "method": "POST",
+    "path": "/api/v1/settings/cross-app-access",
+    "body": {
+      "settings": {
+        "defaultSigningAlgorithm": "XAA_SIGNING_ALGORITHM_EDDSA",
+        "enabledSigningAlgorithms": [
+          "XAA_SIGNING_ALGORITHM_EDDSA",
+          "XAA_SIGNING_ALGORITHM_RS256"
+        ]
+      },
+      "updateMask": "defaultSigningAlgorithm,enabledSigningAlgorithms"
+    }
+  },
+  "settings cross-app-access update --enabled=false --default-grant-lifetime 1h --allow-refresh-token-subjects --xaa-id-token-lifetime 300s": {
+    "exit": 0,
+    "method": "POST",
+    "path": "/api/v1/settings/cross-app-access",
+    "body": {
+      "settings": {
+        "allowRefreshTokenSubjects": true,
+        "defaultGrantLifetime": "3600s",
+        "enabled": false,
+        "xaaIdTokenLifetime": "300s"
+      },
+      "updateMask": "enabled,defaultGrantLifetime,allowRefreshTokenSubjects,xaaIdTokenLifetime"
+    }
+  },
+  "settings request update ": {
+    "exit": 2
+  },
+  "settings request update --max-bulk-entitlement-selection x": {
+    "exit": 2
+  },
+  "settings request update --skip-justification --max-bulk-entitlement-selection 0": {
+    "exit": 0,
+    "method": "POST",
+    "path": "/api/v1/settings/request",
+    "body": {
+      "requestSettings": {
+        "maxBulkEntitlementSelection": 0,
+        "skipJustification": true
+      },
+      "updateMask": "skipJustification,maxBulkEntitlementSelection"
+    }
+  },
+  "settings session update ": {
+    "exit": 2
+  },
+  "settings session update --external-clients-enabled=false --client-id-metadata-document-policy allowlist-only": {
+    "exit": 0,
+    "method": "POST",
+    "path": "/api/v1/settings/session",
+    "body": {
+      "sessionSettings": {
+        "clientIdMetadataDocumentPolicy": "CLIENT_ID_METADATA_DOCUMENT_POLICY_ALLOWLIST_ONLY",
+        "externalClientsEnabled": false
+      },
+      "updateMask": "externalClientsEnabled,clientIdMetadataDocumentPolicy"
+    }
+  },
+  "settings session update --max-session-length 8h --idle-timeout 1800s --enable-idle-timeout": {
+    "exit": 0,
+    "method": "POST",
+    "path": "/api/v1/settings/session",
+    "body": {
+      "sessionSettings": {
+        "enableIdleTimeout": true,
+        "idleTimeout": "1800s",
+        "maxSessionLength": "28800s"
+      },
+      "updateMask": "maxSessionLength,enableIdleTimeout,idleTimeout"
+    }
+  },
+  "settings sso update ": {
+    "exit": 2
+  },
+  "settings sso update --enabled --default-subject-type pairwise --default-assertion-lifetime 5m --default-id-token-alg es256": {
+    "exit": 0,
+    "method": "POST",
+    "path": "/api/v1/settings/sso",
+    "body": {
+      "settings": {
+        "defaultAssertionLifetime": "300s",
+        "defaultIdTokenSignedResponseAlg": "OIDC_SIGNING_ALGORITHM_ES256",
+        "defaultSubjectType": "SSO_SUBJECT_TYPE_PAIRWISE",
+        "enabled": true
+      },
+      "updateMask": "enabled,defaultSubjectType,defaultAssertionLifetime,defaultIdTokenSignedResponseAlg"
+    }
+  },
   "webhooks create ": {
     "exit": 2
   },

@@ -411,15 +411,17 @@ func TestWaitForOwnersAPIErrorOverHTTP(t *testing.T) {
 // exactly when a default gets "tidied" uniformly across callers, so each is
 // pinned by name here; a new --wait caller has to add itself.
 var wantWaitTimeoutDefaults = map[string]time.Duration{
-	"c1i apps set-owners":         4 * time.Minute,
-	"c1i automations execute":     4 * time.Minute,
-	"c1i entitlements add-owner":  4 * time.Minute,
-	"c1i entitlements set-owners": 4 * time.Minute,
-	"c1i functions invoke":        5 * time.Minute,
-	"c1i grants add":              4 * time.Minute,
-	"c1i grants list":             4 * time.Minute,
-	"c1i mcp servers register":    time.Minute,
-	"c1i requests create grant":   4 * time.Minute,
+	"c1i apps set-owners":           4 * time.Minute,
+	"c1i automations execute":       4 * time.Minute,
+	"c1i entitlements add-owner":    4 * time.Minute,
+	"c1i entitlements set-owners":   4 * time.Minute,
+	"c1i apps resources add-owner":  4 * time.Minute,
+	"c1i apps resources set-owners": 4 * time.Minute,
+	"c1i functions invoke":          5 * time.Minute,
+	"c1i grants add":                4 * time.Minute,
+	"c1i grants list":               4 * time.Minute,
+	"c1i mcp servers register":      time.Minute,
+	"c1i requests create grant":     4 * time.Minute,
 }
 
 // TestWaitFlagsAreRegisteredIdentically walks the whole command tree and

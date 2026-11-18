@@ -184,13 +184,44 @@ must be preserved; read first and use the explicit `--update-mask` for updates.
 exits 2, and on `mcp servers update-credentials`/`test-connection` an explicit
 mask must name every config key the command sends (see README "Update masks").
 
+Tenant-wide settings are first-class under `settings` (README "Settings"):
+`ai-governance`, `session`, `sso`, `cross-app-access`, `contacts` and `request`
+have `show` and a masked `update` whose flags derive the mask
+(`--default-tool-classification`, `--audit-verbosity`, `--auto-discovery`,
+`--discovery-interval`, `--prefer-code-mode`, `--surface-requestable-tools`,
+`--untrusted-judge-disable`, `--allowed-client-type`, `--inactivity-hide-after`,
+`--inactivity-close-after`, `--retention-delete-after`; `--max-session-length`,
+`--enable-idle-timeout`, `--idle-timeout`, `--external-clients-enabled`,
+`--client-id-metadata-document-policy`; `--enabled`, `--default-subject-type`,
+`--default-assertion-lifetime`, `--default-id-token-alg`;
+`--default-grant-lifetime`, `--allow-refresh-token-subjects`,
+`--default-signing-algorithm`, `--enabled-signing-algorithm`,
+`--xaa-id-token-lifetime`; `--security-email`, `--billing-email`,
+`--operations-email`; `--skip-justification`,
+`--max-bulk-entitlement-selection`), or `--body-file` with `--update-mask` for
+any other field. A repeatable list flag replaces the whole list; to clear a
+field, mask it and leave it out of the body. The singletons have no id, so
+read the fields you need. `settings ai-governance|sso|cross-app-access history`
+stream change records; `settings session test-source-ip --ip --allow-cidr`
+checks an IP against CIDRs you give it and exits 0 for either answer (read
+`.allowed`). `settings domains set --domain` REPLACES the whole domain set:
+list first and pass every domain to keep (`--body-file` needs a `newDomains`
+array; `[]` empties the set). `settings notifications org|user update` and
+`findings settings edge update` take the whole request in `--body-file` with
+no mask, so a body that names nothing (no non-empty `channelSettings`, or
+neither `settings` nor `subcategorySettings`) exits 2 unsent. In the run
+checked, a partial notifications body on the user scope changed only the
+settings it named; org's partial-body behavior is unmeasured, so send back the
+whole `show` output for org. The email provider and identity-policy defaults have no command.
+
 Role ids for `service-principals credentials create --scoped-role` and
 `auth login --scoped-role` come from `c1i roles list` (NDJSON; README lists the
 fields); `c1i roles get <role-id>` adds a role's `serviceRoles` and
 `permissions`.
 
 Every flag sent to the API as a duration (`--duration-grant`, `--duration`,
-`--expires`, `--callback-timeout`) takes a whole-number Go (`8h`, `1h30m`) or
+`--expires`, `--callback-timeout`, the `settings ... update` lifetimes and
+intervals) takes a whole-number Go (`8h`, `1h30m`) or
 protobuf (`28800s`) duration, with no sign and no decimals, and is sent in
 seconds. Anything else (`-1h`, `+1h`, `1.5h`, `01h`, empty) exits `2` before
 sending; zero is sent, and the server decides.
@@ -514,6 +545,15 @@ resource with `--resource-id` likewise means you drop
   with the first failure's code while earlier ids stay applied: under
   `--error-format json` check each per-id error's `applied` and the summary's
   `notAttempted`.
+- `mcp prompts approve` and `mcp resources approve` work the same way; state
+  is the only field those APIs let you change, so neither family has an
+  `update`. `mcp resources list` includes removed resources; `search` hides
+  them unless `--state removed`. `--include-grant-status` on either `search`
+  adds `entitlement_active` and `grant_count`; without it those keys are
+  absent, not false/0. A tenant without the prompts feature answers a
+  well-formed prompts request with 403 `feature not enabled` (exit 3); the
+  message names a feature, not a credential, so logging in again is unlikely
+  to change it.
 - Other `mcp` mutations print the response unwrapped (for ids see the
   Mutations bullet under Reading output). Deletes, `resync-tools` and `mcp
   bindings delete` print `{}`; capture ids with `jq -er`, which fails on a `--dry-run` preview.
@@ -548,6 +588,31 @@ resource with `--resource-id` likewise means you drop
   `.state.managed.appId` (top-level `appId` is the connector). Without
   `--user-id` the new app's owners were the connector app's; `docs guide
   promote-idp-app-to-managed` has the timings and the full flow.
+- `apps resource-types get|create|update|delete <resource-type-id> --app-id`
+  and `apps resources get|create|update|delete <resource-id> --app-id
+  --resource-type-id` manage an app's manually managed types and resources;
+  `list`/`search` read them. Deletes are soft: `get` still returns the object
+  (`deletedAt` set), `list` and `search` stop returning it; both trail writes
+  by a few seconds. A type delete did not delete its resources (one was
+  still live ten minutes later, despite the API spec), so delete resources
+  first. `resource-types create --resource-type` is required; only `CUSTOM`
+  repeats per app (else 500, exit 6). `resource-types update` renames only.
+  `resources create` exits 4 for an unknown type or `--owner-id` and 2 for a
+  deleted type, before sending. `resources update --custom-description ""`
+  clears it; a blank `--display-name`/`--description` exits 2 (the server
+  ignores an empty one). Other fields (e.g. `annotations`, merged not
+  replaced) go through `--body-file` + `--update-mask`. `resources search`
+  filters: `--app-id`, `--resource-type-id`, `--resource-id`,
+  `--exclude-resource-id`, `--trait-id`, `--exclude-trait-id`,
+  `--owner-user-id`, `--unowned-only`; `resource-types search` takes
+  `--app-id`, `--resource-type-id`, `--exclude-resource-type-id`, `--trait-id`,
+  `--exclude-trait-id`. An unknown id matches nothing (exit 0).
+  A type or resource id repeats across apps, so key search rows on `app_id`
+  (and `resource_type_id`) plus `id`. `apps resources owners|add-owner|
+  remove-owner|set-owners <resource-id>` behave like the app and entitlement
+  owner verbs; `set-owners` pre-reads the resource (the API stores owners for
+  an unknown one at 200). `owners` rows omit the response's `immutableUserIds`
+  (owners the API says cannot be removed); read them with `c1i api`.
 - Owner changes are applied asynchronously and can take several minutes to
   appear; pass --wait to block until they do. Grant provisioning is
   asynchronous too. A read immediately after a write can look like a no-op.
@@ -724,12 +789,29 @@ resource with `--resource-id` likewise means you drop
   manually managed entitlement directly, **bypassing grant policy and
   approval**; prefer `requests create grant` unless that is what you want. One
   request carrying every user id; `--wait` blocks until each shows in `grants list`.
-  There is no `grants remove`: `remove-membership` fails on a manual entitlement
-  with `entitlement is not an SSO application sign-in entitlement`, so remove
-  via `requests create revoke` (on a manual entitlement its task waits on a
-  provisioning step; the grant stays until it is completed). A non-empty
-  `failedUsersErrorMap` in the response (users the server could not add) exits 1
-  after printing it; `--wait` waits only for the others.
+  `grants remove --app-id --entitlement-id --app-user-id` (remove-membership)
+  fails on a manual entitlement with `entitlement is not an SSO application
+  sign-in entitlement`, so remove those via `requests create revoke` (on a
+  manual entitlement its task waits on a provisioning step; the grant stays
+  until it is completed); its success path is untested. A non-empty
+  `failedUsersErrorMap` in the response (users the server could not add) exits
+  1 after printing it; `--wait` waits only for the others.
+- `grants update-duration --deprovision-at <RFC3339>` / `grants remove-duration`
+  (both `--app-id --entitlement-id --app-user-id`) set or clear when an existing
+  grant is revoked; the server refuses a past time. `grants accounts --app-id
+  --entitlement-id --user-id` shows which of a user's accounts hold the
+  entitlement, and `entitlements grants <entitlement-id> --app-id` lists its
+  grants with `expires_at` and `discovered_at`; both return zero rows at exit 0
+  for an unknown id.
+- `entitlements automation get|create|update|delete <entitlement-id> --app-id`
+  works only on C1 app entitlements and acts on real users once it exists.
+  Pick one condition: `--cel`, `--refs-file` (each ref looked up, unknown exits
+  4) or `--none`; `create --body-file` for the full object. `get` exits 4 with
+  no automation; delete is soft (`deletedAt` set), and `update` and
+  `exclusions add|remove` still exit 0 on a deleted one, so check `deletedAt`.
+  `exclusions
+  list|add|remove <entitlement-id> --app-id [--user-id ...]` manages users the
+  automation leaves alone.
 - A user id on a write is looked up before anything is sent, so an unknown one
   exits 4 with no write (`--dry-run` refuses it too; the lookup needs user
   read, else exit 3): `accounts set-owner`, `apps add-owner|set-owners`,

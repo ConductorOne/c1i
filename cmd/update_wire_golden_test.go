@@ -230,6 +230,41 @@ func updateWireCases() []updateWireCase {
 		[]string{"--display-name", "N", "--enrollment-behavior", ""},
 		[]string{"--display-name", "N", "--enrollment-behavior", "bogus"},
 	)
+	add("settings ai-governance update", nil,
+		none,
+		[]string{"--default-tool-classification", "read", "--audit-verbosity", "full", "--auto-discovery=false", "--discovery-interval", "1h"},
+		[]string{"--prefer-code-mode", "--surface-requestable-tools=false", "--untrusted-judge-disable=false"},
+		[]string{"--allowed-client-type", "personal", "--allowed-client-type", "MCP_CLIENT_TYPE_SERVICE"},
+		[]string{"--allowed-client-type", "bogus"},
+		[]string{"--inactivity-hide-after", "24h", "--retention-delete-after", "2160h"},
+		[]string{"--inactivity-close-after", "1.5h"},
+		[]string{"--body-file", "{dir}/auto.json", "--update-mask", "codeModeConcurrency"},
+		[]string{"--body-file", "{dir}/auto.json", "--audit-verbosity", "full", "--update-mask", "auditVerbosity"},
+	)
+	add("settings session update", nil,
+		none,
+		[]string{"--max-session-length", "8h", "--idle-timeout", "1800s", "--enable-idle-timeout"},
+		[]string{"--external-clients-enabled=false", "--client-id-metadata-document-policy", "allowlist-only"},
+	)
+	add("settings sso update", nil,
+		none,
+		[]string{"--enabled", "--default-subject-type", "pairwise", "--default-assertion-lifetime", "5m", "--default-id-token-alg", "es256"},
+	)
+	add("settings cross-app-access update", nil,
+		none,
+		[]string{"--enabled=false", "--default-grant-lifetime", "1h", "--allow-refresh-token-subjects", "--xaa-id-token-lifetime", "300s"},
+		[]string{"--default-signing-algorithm", "eddsa", "--enabled-signing-algorithm", "eddsa", "--enabled-signing-algorithm", "rs256"},
+	)
+	add("settings contacts update", nil,
+		none,
+		[]string{"--security-email", "a@example.com", "--security-email", "b@example.com", "--operations-email", "ops@example.com"},
+		[]string{"--billing-email", ""},
+	)
+	add("settings request update", nil,
+		none,
+		[]string{"--skip-justification", "--max-bulk-entitlement-selection", "0"},
+		[]string{"--max-bulk-entitlement-selection", "x"},
+	)
 	return cases
 }
 

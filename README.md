@@ -431,7 +431,7 @@ $ cat trace.log
   fails rather than printing `null`. Deletes and other empty responses print
   `{}`; exit `0` is the success signal. A task's `.state` (`tasks` actions,
   `requests create`) is the server's snapshot, not the outcome: re-read with
-  `tasks get`. `mcp tools approve` prints one compact JSON line per tool.
+  `tasks get`. `mcp tools|prompts|resources approve` print one compact JSON line per id.
 - **`api`** outputs pretty-printed JSON. With `--paginate`, outputs NDJSON (one list item per line). A `200` whose body is not JSON is an error (exit `6`), not a silent pass-through — a `--path` that escapes the API prefix can reach the web app and return HTML. An empty body still succeeds, since some endpoints answer a write with nothing.
 - **`docs`** commands output NDJSON (`search`, `endpoints`), pretty JSON (`endpoint`), YAML (`openapi`), or plain text (`page`).
 - List commands auto-paginate by default, except the single-request ones the
@@ -523,7 +523,8 @@ U+200B) exits 2 on every create and update, before any request is sent.
 ### Durations
 
 Every duration flag (`--duration-grant`, `requests create grant --duration`,
-`tasks update-grant-duration --duration`, `--expires`, `--callback-timeout`)
+`tasks update-grant-duration --duration`, `--expires`, `--callback-timeout`, and
+the `settings ... update` lifetimes, intervals and timeouts)
 takes a whole-number Go (`8h`, `1h30m`) or protobuf (`3600s`) duration and sends
 it in seconds. There is no sign, no decimal and no `d` unit: `-1h`, `1.5h` and
 `7d` exit `2`, as does an empty value. `0s` is accepted by c1i and sent as is;
@@ -802,6 +803,21 @@ c1i apps remove-owner <app-id> --user-id <id>
 c1i apps set-owners <app-id> --user-id <id> [--user-id <id> ...] [--wait] [--wait-timeout 4m]
 c1i apps delete <app-id>
 c1i apps resource-types list --app-id <app-id> [--page-size N] [--page-token TOKEN] [--limit N]
+c1i apps resource-types search [--query <text>] [--display-name <name>] [--app-id <id> ...] [--resource-type-id <id> ...] [--exclude-resource-type-id <id> ...] [--trait-id <id> ...] [--exclude-trait-id <id> ...] [--page-size N] [--page-token TOKEN] [--limit N]
+c1i apps resource-types get <resource-type-id> --app-id <app-id>
+c1i apps resource-types create --app-id <app-id> --display-name <name> --resource-type <kind>
+c1i apps resource-types update <resource-type-id> --app-id <app-id> --display-name <name>
+c1i apps resource-types delete <resource-type-id> --app-id <app-id>
+c1i apps resources list --app-id <app-id> --resource-type-id <id> [--page-size N] [--page-token TOKEN] [--limit N]
+c1i apps resources search [--query <text>] [--app-id <id> ...] [--resource-type-id <id> ...] [--resource-id <id> ...] [--exclude-resource-id <id> ...] [--trait-id <id> ...] [--exclude-trait-id <id> ...] [--owner-user-id <id> ...] [--unowned-only] [--page-size N] [--page-token TOKEN] [--limit N]
+c1i apps resources get <resource-id> --app-id <app-id> --resource-type-id <id>
+c1i apps resources create --app-id <app-id> --resource-type-id <id> (--display-name <name> [--description <text>] [--owner-id <id> ...] | --body-file <path|->)
+c1i apps resources update <resource-id> --app-id <app-id> --resource-type-id <id> ([--display-name <name>] [--description <text>] [--custom-description <text>] | --body-file <path|-> --update-mask <paths>)
+c1i apps resources delete <resource-id> --app-id <app-id> --resource-type-id <id>
+c1i apps resources owners <resource-id> --app-id <app-id> --resource-type-id <id> [--page-size N] [--page-token TOKEN] [--limit N]
+c1i apps resources add-owner <resource-id> --app-id <app-id> --resource-type-id <id> --user-id <id> [--wait] [--wait-timeout 4m]
+c1i apps resources remove-owner <resource-id> --app-id <app-id> --resource-type-id <id> --user-id <id>
+c1i apps resources set-owners <resource-id> --app-id <app-id> --resource-type-id <id> --user-id <id> [--user-id <id> ...] [--wait] [--wait-timeout 4m]
 c1i apps managed-state list --app-id <app-id> --resource-type-id <id> [--page-size N] [--page-token TOKEN] [--limit N]
 c1i apps managed-state get <resource-id> --app-id <app-id> --resource-type-id <id>
 c1i apps managed-state promote <resource-id> --app-id <app-id> --resource-type-id <id> [--user-id <id> ...]
@@ -877,9 +893,48 @@ promote creates a new app. A binding's top-level `appId` is the connector app;
 the managed app is `.state.managed.appId`. `c1i docs guide
 promote-idp-app-to-managed` walks the whole workflow and has the timings.
 
-**Owner commands (apps and entitlements).** Owner changes are applied
+`apps resource-types` and `apps resources` manage an app's resource types and
+the resources under them; `entitlements create` builds the same objects in one
+call when you also want an entitlement. The resource's own id is positional;
+`--app-id` (and `--resource-type-id` for a resource) is its parent scope.
+`create`, `update` and `delete` act on manually managed objects. Both `delete`s
+are soft (see [Soft delete](#soft-delete)): `get` still returns the object
+with `deletedAt` set, while `list` and `search` stop returning it. `list` and
+`search` can trail a write by a few seconds. The API spec says a type delete also deletes its
+resources, but a resource of a deleted type was still live ten minutes later, so
+delete resources first if they must go. `resource-types create --resource-type`
+has no default and takes the API spec's kinds (`ROLE`, `GROUP`, `LICENSE`,
+`PROJECT`, `CATALOG`, `CUSTOM`, `VAULT`, `PROFILE_TYPE`, `SESSION_POLICY`,
+`CLAW_AGENT`); only `CUSTOM` can repeat on one app (otherwise a 500,
+`app resource type already exists`, exit `6`). `resource-types update` renames
+only: the API answered a `traitIds` change `200` and left it unchanged.
+`resources create` looks up each `--owner-id` first, and an unknown one exits
+`4` where the server would 500. It looks up the resource type too: a type that
+does not exist exits `4`. A deleted type exits `2` where the server would 500. `resources update`
+sends only the flags you pass; `--custom-description ""` clears that field, while
+the server ignores an empty name or description, so those exit `2` when
+blank. Other fields (such as `annotations`, which were merged rather than
+replaced) go through `--body-file` with `--update-mask`; `resources create
+--body-file` likewise sends a full request verbatim.
+Search rows have the same shape as the matching `list`. The id filters
+(`--resource-type-id`, `--exclude-resource-type-id`, `--resource-id`,
+`--exclude-resource-id`, `--trait-id` and `--exclude-trait-id`, which match the
+`trait_ids` of a type) keep or drop rows; `--owner-user-id` keeps resources any
+given user owns and `--unowned-only` those with none. Every unknown filter id
+tried matched nothing (exit `0`). One resource type or resource id can appear
+under several apps, so key search rows on `app_id` (and `resource_type_id`)
+plus `id`. `apps resources owners`, `add-owner`, `remove-owner` and
+`set-owners` follow the app and entitlement owner commands below, on the
+`.../resource_types/{resource-type-id}/resource/{resource-id}/owners` route.
+The API answers `set-owners` on an unknown resource `200 {}` and stores the
+owners anyway, so c1i looks the resource up first (exit `4`). The owners
+response also carries `immutableUserIds` (owners the API says cannot be
+removed), which the rows leave out; read it with `c1i api`.
+
+**Owner commands (apps, entitlements and resources).** Owner changes are applied
 asynchronously and can take several minutes to appear; pass --wait to block
-until they do. `--wait` (on `set-owners`, and on `entitlements add-owner`)
+until they do. `--wait` (on `set-owners`, and on `entitlements add-owner` and
+`apps resources add-owner`)
 polls `GET .../ownerids` until the change lands (`add-owner`: the owner
 appears; `set-owners`: the owner set equals the requested ids, removals
 included) or `--wait-timeout` (default `4m`) elapses. Its progress lines go to
@@ -920,6 +975,19 @@ c1i entitlements owners <entitlement-id> --app-id <id> [--page-size N] [--page-t
 c1i entitlements add-owner <entitlement-id> --app-id <id> --user-id <id> [--wait] [--wait-timeout 4m]
 c1i entitlements remove-owner <entitlement-id> --app-id <id> --user-id <id>
 c1i entitlements set-owners <entitlement-id> --app-id <id> --user-id <id> [--user-id <id> ...] [--wait] [--wait-timeout 4m]
+c1i entitlements grants <entitlement-id> --app-id <id> [--page-size N] [--page-token TOKEN] [--limit N]
+
+# Membership automation (C1 app entitlements only)
+c1i entitlements automation get <entitlement-id> --app-id <id>
+c1i entitlements automation create <entitlement-id> --app-id <id> --display-name <name> [--description <text>] \
+  [--cel <expr> | --refs-file <file> | --none]
+c1i entitlements automation create <entitlement-id> --app-id <id> --body-file <file>
+c1i entitlements automation update <entitlement-id> --app-id <id> [--display-name <name>] [--description <text>] \
+  [--cel <expr> | --refs-file <file> | --none]
+c1i entitlements automation delete <entitlement-id> --app-id <id>
+c1i entitlements automation exclusions list <entitlement-id> --app-id <id> [--page-size N] [--page-token TOKEN] [--limit N]
+c1i entitlements automation exclusions add <entitlement-id> --app-id <id> --user-id <id> [--user-id <id> ...]
+c1i entitlements automation exclusions remove <entitlement-id> --app-id <id> --user-id <id> [--user-id <id> ...]
 
 # Directional entitlement-to-entitlement proxy binding
 c1i entitlements proxy-bindings get \
@@ -994,7 +1062,8 @@ required, so `--resource-id` without `--resource-type-id` is rejected at exit
 `2` before anything is sent.
 
 `--resource-type` is `ROLE`, `GROUP`, `LICENSE`, `PROJECT`, `CATALOG`,
-`CUSTOM`, `VAULT` or `PROFILE_TYPE` (case-insensitive here, uppercase on the
+`CUSTOM`, `VAULT`, `PROFILE_TYPE`, `SESSION_POLICY` or `CLAW_AGENT` (the API
+spec's kinds; case-insensitive here, uppercase on the
 wire; defaults to `CUSTOM`) and describes the resource type this command creates, so passing it
 together with `--resource-type-id` is a usage error rather than a silently
 ignored flag. Only `CUSTOM` can repeat on one app: a second resource type of
@@ -1036,6 +1105,34 @@ on `add-owner` (c1i looks the user up first, so `--dry-run` refuses it too). `re
 well as on an unknown one, so `4` cannot tell those apart; a user who was an
 owner and is already removed exits `0`. `owners` returns zero rows at exit `0`
 for a nonexistent entitlement or app.
+
+`entitlements grants` lists one entitlement's grants (`GET .../grants`) with
+the account, the C1 user (`user_display_name`, `user_email`), `discovered_at`,
+`expires_at` (the API's `expired`: in testing, the future end time set by
+`grants update-duration`; null for a standing grant and once that time had
+passed) and `grant_reason_count`. Like `owners`, it returns zero rows at exit
+`0` for a nonexistent entitlement or app.
+The deprecated `GET .../users` it replaces is not wrapped; its only extra field
+was `originatingTicketId` (use `c1i api` if you need it).
+
+`entitlements automation` manages the one automation rule an entitlement can
+have. Only entitlements of the C1 app take one; any other is refused with
+`only the C1 app can have entitlement automation` (exit `2`). The condition is
+one of `--cel`, `--refs-file` (a JSON array of `{"appId","id"}`; the server
+takes 1 to 32, and c1i looks each up first because the server stores an unknown
+one, so it exits `4`) or `--none`; `create --body-file` sends a whole
+`AppEntitlementAutomation` object and is the only way to set `basic`. `update`
+derives its mask from the flags; the server needs a display name on every
+update, so without `--display-name` c1i reads the automation and sends its
+current name. `get` exits `4` for an entitlement without an automation. Delete
+is soft: `get` then returns it with `deletedAt` set, and `update` and
+`exclusions add|remove` still exit `0` against it (the printed automation keeps
+`deletedAt`), so exit `0` does not mean the rule is live. In testing the server
+refused a second `create` on the same entitlement with a 409, `conflicting
+concurrent write, retry the request`, even after the first was deleted.
+`exclusions add|remove` take C1 user ids; the server answers an unknown one with
+`200` and does nothing, so c1i looks each up first (exit `4`). An automation
+acts on real users as soon as it exists.
 
 `entitlements proxy-bindings` manages directional entitlement-to-entitlement
 visibility and tracking links. Source and destination are each identified by
@@ -1113,11 +1210,36 @@ The grant lands asynchronously (seconds in testing, but reads can lag). `--wait`
 polls the entitlement's grants until every user appears, or `--wait-timeout`
 (default `4m`) elapses; a timeout exits `1`, though the write was accepted.
 
-There is no `grants remove`: the only direct removal, `DELETE
-.../remove-membership`, takes one app user id and fails on a manual entitlement
-with `entitlement is not an SSO application sign-in entitlement`. Use
-`requests create revoke`; on a manual entitlement its task waits on a
-provisioning step, and the grant stays until that step is completed.
+#### Changing a grant directly
+
+```sh
+c1i grants accounts --app-id <id> --entitlement-id <eid> --user-id <uid>
+c1i grants remove --app-id <id> --entitlement-id <eid> --app-user-id <auid>
+c1i grants update-duration --app-id <id> --entitlement-id <eid> --app-user-id <auid> --deprovision-at 2026-12-01T00:00:00Z
+c1i grants remove-duration --app-id <id> --entitlement-id <eid> --app-user-id <auid>
+```
+
+`grants accounts` lists, one row per account, which of a C1 user's accounts in
+the app hold the entitlement (zero rows at exit `0` for an unknown id). The
+other three address one grant by its account, the `app_user_id` of `grants
+list`.
+
+`grants remove` (`DELETE .../remove-membership`) prints the API's response;
+per the API, its `revokeTaskId` is set only for an access profile. Only refusals
+were observed, never a successful removal: in testing it refused manually
+managed entitlements (custom and group resource types) with `entitlement is not an SSO application
+sign-in entitlement` (exit `2`), an unknown `--app-user-id` included; use
+`requests create revoke` there, whose task on a manual entitlement waits on a
+provisioning step. An unknown entitlement or app exits `4`.
+
+`grants update-duration` sets when C1 starts the revoke (`--deprovision-at`,
+RFC3339; the server refuses a past time with `new_deprovision_at must be in the
+future`); on a manually managed entitlement that opened a revoke task in
+testing, and the grant stayed listed while the task was open.
+`remove-duration` makes it standing again. Both print the grant
+(`.deprovisionAt`), and the change shows as `deprovision_at` in `grants list`.
+An unknown app, entitlement or account, or an account without the grant, exits
+`4`. For a grant still being requested use `tasks update-grant-duration`.
 
 ### Tasks
 
@@ -1528,6 +1650,18 @@ c1i mcp tools approve <tool-id>... --app-id <id> --connector-id <id> [--state ap
 c1i mcp tools delete  <tool-id> --app-id <id> --connector-id <id>
 c1i mcp tools history <tool-id> --app-id <id> --connector-id <id> [--page-size N] [--limit N]
 
+# Resources and prompts (discovered by sync; state is the only writable field, so approve replaces update)
+c1i mcp resources list    --app-id <id> --connector-id <id> [--page-size N] [--limit N]   # every state, removed included
+c1i mcp resources search  --app-id <id> --connector-id <id> [--query <text>] [--state ...] [--kind static|template] [--include-grant-status] [--limit N]   # removed only with --state removed
+c1i mcp resources get     <resource-id> --app-id <id> --connector-id <id>
+c1i mcp resources approve <resource-id>... --app-id <id> --connector-id <id> [--state approved|disabled|pending]
+c1i mcp resources history <resource-id> --app-id <id> --connector-id <id> [--page-size N] [--limit N]
+c1i mcp prompts list    --app-id <id> --connector-id <id> [--page-size N] [--limit N]   # well-formed requests get 403 "feature not enabled" (exit 3) where the tenant lacks prompts
+c1i mcp prompts search  --app-id <id> --connector-id <id> [--query <text>] [--state ...] [--include-grant-status] [--limit N]
+c1i mcp prompts get     <prompt-id> --app-id <id> --connector-id <id>
+c1i mcp prompts approve <prompt-id>... --app-id <id> --connector-id <id> [--state approved|disabled|pending]
+c1i mcp prompts history <prompt-id> --app-id <id> --connector-id <id> [--page-size N] [--limit N]
+
 # Toolsets (admin-curated tool groupings; one AppEntitlement per toolset)
 c1i mcp toolsets list                   --app-id <id> --connector-id <id> [--page-size N] [--limit N]
 c1i mcp toolsets get                    <toolset-id> --app-id <id> --connector-id <id>
@@ -1787,6 +1921,91 @@ the API's shape: `bulk-state`/`bulk-create-tasks` print `{"bulkActionId"}`,
 The public API intentionally excludes its internal summary, app-NHI, and
 shadow-MCP notification RPCs. `FindingSearchService.GetSearchTerms` is also not
 routed through public REST.
+
+### Settings
+
+`settings` reads and updates tenant-wide singletons. Each has no id: `show`
+prints it as pretty JSON, unwrapped from its envelope, and `update` prints the
+updated object the same way.
+
+```sh
+c1i settings ai-governance show
+c1i settings ai-governance update [--default-tool-classification read|write|destructive|sensitive|dangerous] \
+  [--audit-verbosity minimal|standard|full] [--auto-discovery[=false]] [--discovery-interval 1h] \
+  [--prefer-code-mode[=false]] [--surface-requestable-tools[=false]] [--untrusted-judge-disable[=false]] \
+  [--allowed-client-type personal|shared|service|ephemeral ...] \
+  [--inactivity-hide-after 24h] [--inactivity-close-after 168h] [--retention-delete-after 2160h]
+c1i settings ai-governance history [--limit N]
+c1i settings ai-governance tenant-defaults
+c1i settings session show
+c1i settings session update [--max-session-length 8h] [--enable-idle-timeout[=false]] [--idle-timeout 30m] \
+  [--external-clients-enabled[=false]] [--client-id-metadata-document-policy allow-all|requestable|allowlist-only]
+c1i settings session test-source-ip --ip <address> [--allow-cidr <cidr> ...]
+c1i settings sso show
+c1i settings sso update [--enabled[=false]] [--default-subject-type pairwise|public|compatibility] \
+  [--default-assertion-lifetime 5m] [--default-id-token-alg eddsa|es256|rs256]
+c1i settings sso history [--page-size N] [--page-token TOKEN] [--limit N]
+c1i settings cross-app-access show
+c1i settings cross-app-access update [--enabled[=false]] [--default-grant-lifetime 1h] \
+  [--allow-refresh-token-subjects[=false]] [--default-signing-algorithm eddsa|rs256|es256] \
+  [--enabled-signing-algorithm <alg> ...] [--xaa-id-token-lifetime 5m]
+c1i settings cross-app-access history [--page-size N] [--page-token TOKEN] [--limit N]
+c1i settings contacts show
+c1i settings contacts update [--security-email <email> ...] [--billing-email <email> ...] [--operations-email <email> ...]
+c1i settings request show
+c1i settings request update [--skip-justification[=false]] [--max-bulk-entitlement-selection N]
+c1i settings domains list [--page-size N] [--page-token TOKEN] [--limit N]
+c1i settings domains set --domain <domain> ... | --body-file <file|->
+c1i settings notifications org show
+c1i settings notifications org update --body-file <file|->
+c1i settings notifications user show
+c1i settings notifications user update --body-file <file|->
+c1i settings aws-external-id show
+c1i findings settings edge show
+c1i findings settings edge update --body-file <file|->
+```
+
+- **Masked updates** (`ai-governance`, `session`, `sso`, `cross-app-access`,
+  `contacts`, `request`) derive the mask from the flags you pass; anything else
+  goes through `--body-file` (the object `show` prints) with an explicit
+  `--update-mask`, as in [Update masks](#update-masks). To clear a field, mask
+  it and leave it out of the body: `{}` with `--update-mask
+  defaultGrantLifetime` sets that lifetime back to `null`. A repeatable list
+  flag (`--allowed-client-type`, `--enabled-signing-algorithm`, the contact
+  email flags) replaces the whole list. The ai-governance lifecycle flags
+  change one `defaultClientLifecycle` duration each and leave the other two.
+- The server bounds some values and says so when it refuses one (exit `2`):
+  `--max-session-length` must be one of the lengths it lists, and
+  `--max-bulk-entitlement-selection` must be in `[0, 50]`. Contact addresses
+  must be valid email addresses. `sso update` on a tenant without the SSO
+  provider feature is a 403, `feature not enabled` (exit `3`).
+- `ai-governance history` is one read (the endpoint takes no paging); the `sso`
+  and `cross-app-access` histories page like any list. Each record is the
+  change metadata plus the full settings snapshot, as returned.
+- `session test-source-ip` asks whether `--ip` passes the `--allow-cidr` rules
+  you give it; it changes nothing and exits `0` for either answer (read
+  `.allowed`). With no `--allow-cidr` the answer is `false`. The source-IP
+  allowlists themselves have no flags: send them with `--body-file` and
+  `--update-mask`, and test first, since a list that leaves out your address
+  can lock you out.
+- `domains set` replaces the whole set with exactly the `--domain` values; list
+  first and pass every domain you keep. `--body-file '{"newDomains": []}'`
+  empties it; a body without a `newDomains` array exits `2`. The server does not check that a value looks like a domain.
+- `notifications org|user update` sends `--body-file` as the whole request
+  (`{"channelSettings": {...}}`, what `show` prints); there is no mask, so a
+  body without a non-empty `channelSettings` object exits `2` and nothing is
+  sent. In the run checked, a partial body on the user scope changed only the
+  settings it named. The org scope's partial-body behavior is unmeasured: for
+  org, send back the whole `show` output with your edits. Sending settings
+  back can turn an event `show` printed as `null` (such as `system`) into its
+  default.
+- `findings settings edge update` takes `{"settings": [{"category": ...,
+  "enabled": ...}], "subcategorySettings": [...]}` and prints the resulting
+  `{"list", "subcategories"}`. A body with neither list non-empty exits `2`
+  and nothing is sent.
+
+Not covered: the tenant email provider, identity-policy defaults, onboarding
+state and per-user developer preferences (use `c1i api`).
 
 ### Role mining
 

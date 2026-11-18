@@ -18,8 +18,9 @@ import (
 // "<command path> <positional>". A read command's filter is not listed: it is
 // out of scope by construction, since an unknown value returns no rows.
 var userRefExemptions = map[string]string{
-	"c1i apps remove-owner --user-id":         "removal never pre-checks a reference; the server decides (documented --dry-run exception)",
-	"c1i entitlements remove-owner --user-id": "removal never pre-checks a reference; the server decides (documented --dry-run exception)",
+	"c1i apps remove-owner --user-id":           "removal never pre-checks a reference; the server decides (documented --dry-run exception)",
+	"c1i entitlements remove-owner --user-id":   "removal never pre-checks a reference; the server decides (documented --dry-run exception)",
+	"c1i apps resources remove-owner --user-id": "removal never pre-checks a reference; the server decides (documented --dry-run exception)",
 
 	// A service principal is a C1 user, but these address it as the scope the
 	// request acts on, not as a reference being added; the server decides.
@@ -137,19 +138,24 @@ func TestEveryUserRefFlagIsCheckedOrExempt(t *testing.T) {
 // userRefCases is one invocation per checked flag, with the flag's value last
 // so the test can swap it.
 var userRefCases = map[string][]string{
-	"c1i accounts set-owner --user-id":         {"accounts", "set-owner", "au1", "--app-id", "app1", "--user-id"},
-	"c1i apps add-owner --user-id":             {"apps", "add-owner", "app1", "--user-id"},
-	"c1i connectors create --user-id":          {"connectors", "create", "--app-id", "app1", "--catalog-id", "cat1", "--user-id"},
-	"c1i apps set-owners --user-id":            {"apps", "set-owners", "app1", "--user-id"},
-	"c1i entitlements add-owner --user-id":     {"entitlements", "add-owner", "ent1", "--app-id", "app1", "--user-id"},
-	"c1i entitlements set-owners --user-id":    {"entitlements", "set-owners", "ent1", "--app-id", "app1", "--user-id"},
-	"c1i entitlements create --owner-id":       {"entitlements", "create", "--app-id", "app1", "--display-name", "e", "--owner-id"},
-	"c1i requests create grant --user-id":      {"requests", "create", "grant", "--app-id", "app1", "--entitlement-id", "ent1", "--user-id"},
-	"c1i requests create revoke --user-id":     {"requests", "create", "revoke", "--app-id", "app1", "--entitlement-id", "ent1", "--user-id"},
-	"c1i grants add --user-id":                 {"grants", "add", "--app-id", "app1", "--entitlement-id", "ent1", "--user-id"},
-	"c1i mcp servers register --user-id":       {"mcp", "servers", "register", "--app-id", "app1", "--type", "external", "--display-name", "Srv", "--server-url", "https://mcp.example.com/sse", "--auth", "none", "--user-id"},
-	"c1i tasks reassign --to-user-id":          {"tasks", "reassign", "t1", "--policy-step-id", "s1", "--to-user-id"},
-	"c1i apps managed-state promote --user-id": {"apps", "managed-state", "promote", "res1", "--app-id", "app1", "--resource-type-id", "rt1", "--user-id"},
+	"c1i accounts set-owner --user-id":                        {"accounts", "set-owner", "au1", "--app-id", "app1", "--user-id"},
+	"c1i apps add-owner --user-id":                            {"apps", "add-owner", "app1", "--user-id"},
+	"c1i connectors create --user-id":                         {"connectors", "create", "--app-id", "app1", "--catalog-id", "cat1", "--user-id"},
+	"c1i apps set-owners --user-id":                           {"apps", "set-owners", "app1", "--user-id"},
+	"c1i entitlements add-owner --user-id":                    {"entitlements", "add-owner", "ent1", "--app-id", "app1", "--user-id"},
+	"c1i entitlements set-owners --user-id":                   {"entitlements", "set-owners", "ent1", "--app-id", "app1", "--user-id"},
+	"c1i entitlements create --owner-id":                      {"entitlements", "create", "--app-id", "app1", "--display-name", "e", "--owner-id"},
+	"c1i requests create grant --user-id":                     {"requests", "create", "grant", "--app-id", "app1", "--entitlement-id", "ent1", "--user-id"},
+	"c1i requests create revoke --user-id":                    {"requests", "create", "revoke", "--app-id", "app1", "--entitlement-id", "ent1", "--user-id"},
+	"c1i entitlements automation exclusions add --user-id":    {"entitlements", "automation", "exclusions", "add", "e1", "--app-id", "app1", "--user-id"},
+	"c1i entitlements automation exclusions remove --user-id": {"entitlements", "automation", "exclusions", "remove", "e1", "--app-id", "app1", "--user-id"},
+	"c1i grants add --user-id":                                {"grants", "add", "--app-id", "app1", "--entitlement-id", "ent1", "--user-id"},
+	"c1i mcp servers register --user-id":                      {"mcp", "servers", "register", "--app-id", "app1", "--type", "external", "--display-name", "Srv", "--server-url", "https://mcp.example.com/sse", "--auth", "none", "--user-id"},
+	"c1i tasks reassign --to-user-id":                         {"tasks", "reassign", "t1", "--policy-step-id", "s1", "--to-user-id"},
+	"c1i apps managed-state promote --user-id":                {"apps", "managed-state", "promote", "res1", "--app-id", "app1", "--resource-type-id", "rt1", "--user-id"},
+	"c1i apps resources add-owner --user-id":                  {"apps", "resources", "add-owner", "res1", "--app-id", "app1", "--resource-type-id", "rt1", "--user-id"},
+	"c1i apps resources set-owners --user-id":                 {"apps", "resources", "set-owners", "res1", "--app-id", "app1", "--resource-type-id", "rt1", "--user-id"},
+	"c1i apps resources create --owner-id":                    {"apps", "resources", "create", "--app-id", "app1", "--resource-type-id", "rt1", "--display-name", "zz", "--owner-id"},
 }
 
 // TestUserRefChecksRefuseUnknownUsers: for every checked flag, an unknown user
@@ -192,6 +198,9 @@ func TestUserRefChecksRefuseUnknownUsers(t *testing.T) {
 					return mutReply{status: userStatus, body: `{"code":5,"message":"not found"}`}
 				}
 				return mutReply{body: `{"user":{"id":"u"}}`}
+			}
+			if r.Method == http.MethodGet && strings.Contains(r.URL.Path, "/resource_types/") {
+				return mutReply{body: `{"appResourceTypeView":{"appResourceType":{"id":"rt1"}}}`}
 			}
 			return mutReply{body: `{}`}
 		})

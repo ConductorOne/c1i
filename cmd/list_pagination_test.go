@@ -166,6 +166,7 @@ func runListPaginationCaseTo(t *testing.T, tc listPaginationCase, srv *httptest.
 	var errOut bytes.Buffer
 	tc.cmd.SetOut(out)
 	tc.cmd.SetErr(&errOut)
+	t.Cleanup(func() { tc.cmd.SetOut(nil); tc.cmd.SetErr(nil) })
 	tc.cmd.SetContext(context.Background())
 	runErr := tc.cmd.RunE(tc.cmd, tc.args)
 	return errOut.String(), runErr
@@ -221,7 +222,61 @@ func listPaginationCases() []listPaginationCase {
 		return fmt.Sprintf(`{"list":[%s],"nextPageToken":%s}`, strings.Join(items, ","), jstr(next))
 	}
 
+	// resourceTypeSearchPage and resourceSearchPage scope each row to an app
+	// (and type), since a resource type or resource id repeats across apps.
+	resourceTypeSearchPage := func(ids []string, next string) string {
+		items := make([]string, 0, len(ids))
+		for _, id := range ids {
+			items = append(items, fmt.Sprintf(`{"id":%s,"appId":"app1"}`, jstr(id)))
+		}
+		return fmt.Sprintf(`{"list":[%s],"nextPageToken":%s}`, strings.Join(items, ","), jstr(next))
+	}
+	resourceSearchPage := func(ids []string, next string) string {
+		items := make([]string, 0, len(ids))
+		for _, id := range ids {
+			items = append(items, fmt.Sprintf(`{"appResource":{"id":%s,"appId":"app1","appResourceTypeId":"rt1"}}`, jstr(id)))
+		}
+		return fmt.Sprintf(`{"list":[%s],"nextPageToken":%s}`, strings.Join(items, ","), jstr(next))
+	}
+
 	return []listPaginationCase{
+		{
+			name:        "apps resource-types search",
+			compositeID: true,
+			cmd:         appsResourceTypesSearchCmd,
+			method:      http.MethodPost,
+			wantPath:    "/api/v1/search/app_resource_types",
+			page:        resourceTypeSearchPage,
+			rowIDs:      idRows("id"),
+		},
+		{
+			name:       "apps resources list",
+			cmd:        appsResourcesListCmd,
+			method:     http.MethodGet,
+			wantPath:   "/api/v1/apps/app1/resource_types/rt1/resources",
+			extraFlags: map[string]string{"app-id": "app1", "resource-type-id": "rt1"},
+			page:       nestedPage("list", "appResource", "id"),
+			rowIDs:     idRows("id"),
+		},
+		{
+			name:        "apps resources search",
+			compositeID: true,
+			cmd:         appsResourcesSearchCmd,
+			method:      http.MethodPost,
+			wantPath:    "/api/v1/search/app_resources",
+			page:        resourceSearchPage,
+			rowIDs:      idRows("id"),
+		},
+		{
+			name:       "apps resources owners",
+			cmd:        appsResourcesOwnersCmd,
+			method:     http.MethodGet,
+			wantPath:   "/api/v1/apps/app1/resource_types/rt1/resource/res1/owners",
+			args:       []string{"res1"},
+			extraFlags: map[string]string{"app-id": "app1", "resource-type-id": "rt1"},
+			page:       flatPage("list", "id"),
+			rowIDs:     idRows("id"),
+		},
 		{
 			name:       "accounts list",
 			cmd:        accountsListCmd,
@@ -491,6 +546,76 @@ func listPaginationCases() []listPaginationCase {
 				"app-id": "app1", "connector-id": "conn1",
 			},
 			page:   flatPage("tools", "id"),
+			rowIDs: idRows("id"),
+		},
+		{
+			name:     "mcp prompts history",
+			noRowID:  true,
+			cmd:      mcpPromptsHistoryCmd,
+			method:   http.MethodGet,
+			wantPath: "/api/v1/apps/app1/connectors/conn1/mcp_prompts/item1/history",
+			args:     []string{"item1"},
+			extraFlags: map[string]string{
+				"app-id": "app1", "connector-id": "conn1",
+			},
+			page:   flatPage("list", "id"),
+			rowIDs: idRows("id"),
+		},
+		{
+			name:     "mcp prompts list",
+			cmd:      mcpPromptsListCmd,
+			method:   http.MethodGet,
+			wantPath: "/api/v1/apps/app1/connectors/conn1/mcp_prompts",
+			extraFlags: map[string]string{
+				"app-id": "app1", "connector-id": "conn1",
+			},
+			page:   flatPage("prompts", "id"),
+			rowIDs: idRows("id"),
+		},
+		{
+			name:     "mcp prompts search",
+			cmd:      mcpPromptsSearchCmd,
+			method:   http.MethodPost,
+			wantPath: "/api/v1/apps/app1/connectors/conn1/mcp_prompts/search",
+			extraFlags: map[string]string{
+				"app-id": "app1", "connector-id": "conn1",
+			},
+			page:   flatPage("list", "id"),
+			rowIDs: idRows("id"),
+		},
+		{
+			name:     "mcp resources history",
+			noRowID:  true,
+			cmd:      mcpResourcesHistoryCmd,
+			method:   http.MethodGet,
+			wantPath: "/api/v1/apps/app1/connectors/conn1/mcp_resources/item1/history",
+			args:     []string{"item1"},
+			extraFlags: map[string]string{
+				"app-id": "app1", "connector-id": "conn1",
+			},
+			page:   flatPage("list", "id"),
+			rowIDs: idRows("id"),
+		},
+		{
+			name:     "mcp resources list",
+			cmd:      mcpResourcesListCmd,
+			method:   http.MethodGet,
+			wantPath: "/api/v1/apps/app1/connectors/conn1/mcp_resources",
+			extraFlags: map[string]string{
+				"app-id": "app1", "connector-id": "conn1",
+			},
+			page:   flatPage("resources", "id"),
+			rowIDs: idRows("id"),
+		},
+		{
+			name:     "mcp resources search",
+			cmd:      mcpResourcesSearchCmd,
+			method:   http.MethodPost,
+			wantPath: "/api/v1/apps/app1/connectors/conn1/mcp_resources/search",
+			extraFlags: map[string]string{
+				"app-id": "app1", "connector-id": "conn1",
+			},
+			page:   flatPage("list", "id"),
 			rowIDs: idRows("id"),
 		},
 		{

@@ -57,6 +57,12 @@ const (
 	tblStep        = "Resolved policy step: step-9\n"
 	tblFunction    = `{"function":{"id":"fn-1","displayName":"zz"},"commit":{"id":"c-1","functionId":"fn-1"}}`
 	tblFunctionDoc = `{"id":"fn-1","displayName":"zz","commit":{"id":"c-1","functionId":"fn-1"}}`
+	tblResType     = `{"appResourceType":{"id":"rt-1","appId":"app-1","displayName":"zz"},"expanded":[]}`
+	tblResTypeDoc  = `{"id":"rt-1","appId":"app-1","displayName":"zz","expanded":[]}`
+	tblResource    = `{"appResource":{"id":"r-1","appId":"app-1","appResourceTypeId":"rt-1","displayName":"zz"}}`
+	tblResourceDoc = `{"id":"r-1","appId":"app-1","appResourceTypeId":"rt-1","displayName":"zz"}`
+	tblResView     = `{"appResourceView":{"appResource":{"id":"r-1","displayName":"zz"},"appPath":"","objectPermissions":{}},"expanded":[]}`
+	tblResViewDoc  = `{"id":"r-1","displayName":"zz","expanded":[],"appPath":"","objectPermissions":{}}`
 )
 
 const (
@@ -93,6 +99,7 @@ var (
 	idPath   = []string{".id"}
 	ent      = []string{"--app-id", "app-1", "--entitlement-id", "ent-1"}
 	mcpScope = []string{"--app-id=a1", "--connector-id=cn1"}
+	resScope = []string{"--app-id", "app-1", "--resource-type-id", "rt-1"}
 )
 
 func cat(parts ...[]string) []string {
@@ -149,6 +156,15 @@ var mutationTable = []mutationRow{
 	{cmd: "apps add-owner", args: []string{"app-1", "--user-id", "u1"}, body: `{}`, reads: 1},
 	{cmd: "apps remove-owner", args: []string{"app-1", "--user-id", "u1"}, body: `{}`},
 	{cmd: "apps set-owners", args: []string{"app-1", "--user-id", "u1"}, body: `{}`, method: "PUT", path: "/api/v1/apps/app-1/owners", reads: 1},
+	{cmd: "apps resource-types create", args: []string{"--app-id", "app-1", "--display-name", "zz", "--resource-type", "custom"}, body: tblResType, want: tblResTypeDoc, ids: idPath, method: "POST", path: "/api/v1/apps/app-1/resource_types"},
+	{cmd: "apps resource-types update", args: []string{"rt-1", "--app-id", "app-1", "--display-name", "zz"}, body: tblResType, want: tblResTypeDoc, ids: idPath, method: "POST", path: "/api/v1/apps/app-1/resource_types/rt-1"},
+	{cmd: "apps resource-types delete", args: []string{"rt-1", "--app-id", "app-1"}, body: `{}`, method: "DELETE", path: "/api/v1/apps/app-1/resource_types/rt-1"},
+	{cmd: "apps resources create", args: cat([]string{"--display-name", "zz"}, resScope), body: tblResource, want: tblResourceDoc, ids: idPath, method: "POST", path: "/api/v1/apps/app-1/resource_types/rt-1/resources", reads: 1},
+	{cmd: "apps resources update", args: cat([]string{"r-1", "--description", "d"}, resScope), body: tblResView, want: tblResViewDoc, ids: idPath, method: "POST", path: "/api/v1/apps/app-1/resource_types/rt-1/resources/r-1"},
+	{cmd: "apps resources delete", args: cat([]string{"r-1"}, resScope), body: `{}`, method: "DELETE", path: "/api/v1/apps/app-1/resource_types/rt-1/resources/r-1"},
+	{cmd: "apps resources add-owner", args: cat([]string{"r-1", "--user-id", "u1"}, resScope), body: `{}`, method: "POST", path: "/api/v1/apps/app-1/resource_types/rt-1/resource/r-1/owners", reads: 1},
+	{cmd: "apps resources remove-owner", args: cat([]string{"r-1", "--user-id", "u1"}, resScope), body: `{}`, method: "DELETE", path: "/api/v1/apps/app-1/resource_types/rt-1/resource/r-1/owners"},
+	{cmd: "apps resources set-owners", args: cat([]string{"r-1", "--user-id", "u1"}, resScope), body: `{}`, method: "PUT", path: "/api/v1/apps/app-1/resource_types/rt-1/resource/r-1/owners", reads: 2},
 	{cmd: "apps managed-state promote", args: []string{"res-1", "--app-id", "app-1", "--resource-type-id", "rt-1"},
 		body: tblBinding, want: tblBindingDoc, ids: []string{".resourceId", ".state.managed.appId"}, method: "POST",
 		path: "/api/v1/apps/app-1/resource_types/rt-1/managed_state_bindings/res-1/promote", reads: 1},
@@ -204,6 +220,15 @@ var mutationTable = []mutationRow{
 	{cmd: "entitlements set-owners", args: []string{"e-1", "--app-id", "app-1", "--user-id", "u1"}, body: `{}`, method: "PUT", path: "/api/v1/apps/app-1/entitlements/e-1/owners", reads: 1},
 	{cmd: "entitlements proxy-bindings create", args: []string{"--source-app-id", "sa", "--source-entitlement-id", "se", "--destination-app-id", "da", "--destination-entitlement-id", "de"},
 		body: tblProxy, want: tblProxyDoc, ids: []string{".srcAppId", ".srcAppEntitlementId", ".dstAppId", ".dstAppEntitlementId"}, method: "POST", path: "/api/v1/apps/sa/se/bindings/da/de"},
+	{cmd: "entitlements automation create", args: []string{"e-1", "--app-id", "app-1", "--display-name", "zz-a", "--none"},
+		body: `{"automation":{"appEntitlementId":"e-1","displayName":"zz-a","none":{}}}`, want: `{"appEntitlementId":"e-1","displayName":"zz-a","none":{}}`, ids: []string{".appEntitlementId"},
+		method: "POST", path: "/api/v1/apps/app-1/entitlements/e-1/automation/create"},
+	{cmd: "entitlements automation update", args: []string{"e-1", "--app-id", "app-1", "--display-name", "zz-b"},
+		body: `{"AppEntitlementAutomation":{"appEntitlementId":"e-1","displayName":"zz-b"}}`, want: `{"appEntitlementId":"e-1","displayName":"zz-b"}`, ids: []string{".appEntitlementId"},
+		method: "POST", path: "/api/v1/apps/app-1/entitlements/e-1/automation/update"},
+	{cmd: "entitlements automation delete", args: []string{"e-1", "--app-id", "app-1"}, body: `{}`, method: "DELETE", path: "/api/v1/apps/app-1/entitlements/e-1/automation"},
+	{cmd: "entitlements automation exclusions add", args: []string{"e-1", "--app-id", "app-1", "--user-id", "u1"}, body: `{}`, method: "POST", path: "/api/v1/apps/app-1/entitlements/e-1/automation/exclusions", reads: 1},
+	{cmd: "entitlements automation exclusions remove", args: []string{"e-1", "--app-id", "app-1", "--user-id", "u1"}, body: `{}`, method: "DELETE", path: "/api/v1/apps/app-1/entitlements/e-1/automation/exclusions", reads: 1},
 	{cmd: "entitlements proxy-bindings delete", args: []string{"--source-app-id", "sa", "--source-entitlement-id", "se", "--destination-app-id", "da", "--destination-entitlement-id", "de"},
 		body: `{}`, method: "DELETE", path: "/api/v1/apps/sa/se/bindings/da/de"},
 	// findings
@@ -214,6 +239,7 @@ var mutationTable = []mutationRow{
 	{cmd: "findings bulk-state", args: []string{"--body-file", "@{}"}, body: `{"bulkActionId":"b1"}`, ids: []string{".bulkActionId"}},
 	{cmd: "findings bulk-create-tasks", args: []string{"--body-file", "@{}"}, body: `{"bulkActionId":"b1"}`, ids: []string{".bulkActionId"}},
 	{cmd: "findings settings update", args: []string{"--body-file", "@{}"}, body: `{"list":[{"id":"s1"}]}`, ids: []string{".list[]"}},
+	{cmd: "findings settings edge update", args: []string{"--body-file", `@{"settings":[{"category":"C","enabled":true}]}`}, body: `{"list":[{"category":"C","enabled":true}],"subcategories":[]}`, method: "POST", path: "/api/v1/findings/settings/edge/update"},
 	{cmd: "findings routing-rules create", args: []string{"--body-file", "@{}"}, body: `{"routingRule":{"id":"r1"}}`, want: `{"id":"r1"}`, ids: idPath},
 	{cmd: "findings routing-rules update", args: []string{"r1", "--body-file", "@{}"}, body: `{"routingRule":{"id":"r1","displayName":"n"}}`, want: `{"id":"r1","displayName":"n"}`, ids: idPath},
 	{cmd: "findings routing-rules delete", args: []string{"r1"}, body: `{}`},
@@ -222,6 +248,14 @@ var mutationTable = []mutationRow{
 	{cmd: "findings transformation-rules delete", args: []string{"x1"}, body: `{}`},
 	// grants
 	{cmd: "grants add", args: cat(ent, []string{"--user-id", "u1"}), body: `{"failedUsersErrorMap":{},"bulkActionId":"b1"}`, ids: []string{".bulkActionId"}, method: "POST", path: "/api/v1/apps/app-1/entitlements/ent-1/add-manual-user", reads: 1},
+	{cmd: "grants remove", args: cat(ent, []string{"--app-user-id", "au-1"}), body: `{"revokeTaskId":"t1"}`, ids: []string{".revokeTaskId"},
+		method: "DELETE", path: "/api/v1/apps/app-1/entitlements/ent-1/remove-membership"},
+	{cmd: "grants update-duration", args: cat(ent, []string{"--app-user-id", "au-1", "--deprovision-at", "2026-12-01T00:00:00Z"}),
+		body: `{"binding":{"appUserId":"au-1","deprovisionAt":"2026-12-01T00:00:00Z"}}`, want: `{"appUserId":"au-1","deprovisionAt":"2026-12-01T00:00:00Z"}`, ids: []string{".appUserId", ".deprovisionAt"},
+		method: "POST", path: "/api/v1/apps/app-1/entitlements/ent-1/users/au-1/update-grant-duration"},
+	{cmd: "grants remove-duration", args: cat(ent, []string{"--app-user-id", "au-1"}),
+		body: `{"binding":{"appUserId":"au-1","deprovisionAt":null}}`, want: `{"appUserId":"au-1","deprovisionAt":null}`, ids: []string{".appUserId"},
+		method: "POST", path: "/api/v1/apps/app-1/entitlements/ent-1/users/au-1/remove-grant-duration"},
 	// mcp
 	{cmd: "mcp bindings create", args: cat(mcpScope, []string{"--toolset-id=ts1", "--tool-id=t1"}), body: `{"bindings":[{"mcpToolId":"t1"}]}`, ids: []string{".bindings[].mcpToolId"}},
 	{cmd: "mcp bindings delete", args: cat(mcpScope, []string{"--toolset-id=ts1", "--tool-id=t1"}), body: `{}`},
@@ -232,6 +266,17 @@ var mutationTable = []mutationRow{
 	{cmd: "mcp classifiers templates instantiate", args: []string{"tp1"}, body: tblClassifier, want: tblClassDoc, ids: idPath},
 	{cmd: "mcp classifiers bindings create", args: []string{"--body-file", `@{"surface":"S","classifierId":"cl1"}`}, body: `{"binding":{"id":"b1","surface":"S"}}`, want: `{"id":"b1","surface":"S"}`, ids: idPath},
 	{cmd: "mcp classifiers bindings delete", args: []string{"b1"}, body: `{}`},
+	// settings
+	{cmd: "settings ai-governance update", args: []string{"--audit-verbosity", "full"}, body: `{"aiGovernanceSettings":{"auditVerbosity":"AUDIT_VERBOSITY_FULL"}}`, want: `{"auditVerbosity":"AUDIT_VERBOSITY_FULL"}`, method: "POST", path: "/api/v1/settings/ai-governance"},
+	{cmd: "settings session update", args: []string{"--max-session-length", "8h"}, body: `{"sessionSettings":{"maxSessionLength":"28800s"}}`, want: `{"maxSessionLength":"28800s"}`, method: "POST", path: "/api/v1/settings/session"},
+	{cmd: "settings sso update", args: []string{"--enabled=false"}, body: `{"settings":{"enabled":false}}`, want: `{"enabled":false}`, method: "POST", path: "/api/v1/settings/sso"},
+	{cmd: "settings cross-app-access update", args: []string{"--enabled=false"}, body: `{"settings":{"enabled":false}}`, want: `{"enabled":false}`, method: "POST", path: "/api/v1/settings/cross-app-access"},
+	// No "@": the preview masks a user@host string's user part.
+	{cmd: "settings contacts update", args: []string{"--security-email", "security-team"}, body: `{"contacts":{"securityEmails":["security-team"]}}`, want: `{"securityEmails":["security-team"]}`, method: "POST", path: "/api/v1/settings/contacts"},
+	{cmd: "settings request update", args: []string{"--max-bulk-entitlement-selection", "11"}, body: `{"requestSettings":{"maxBulkEntitlementSelection":11}}`, want: `{"maxBulkEntitlementSelection":11}`, method: "POST", path: "/api/v1/settings/request"},
+	{cmd: "settings domains set", args: []string{"--domain", "zz.example.com"}, body: `{"list":[{"id":"d1","domain":"zz.example.com"}]}`, ids: []string{".list[].id"}, method: "PUT", path: "/api/v1/settings/domains"},
+	{cmd: "settings notifications org update", args: []string{"--body-file", `@{"channelSettings":{"email":{"enabled":true}}}`}, body: `{"orgNotificationSettings":{"channelSettings":{"email":{"enabled":true}}}}`, want: `{"channelSettings":{"email":{"enabled":true}}}`, method: "POST", path: "/api/v1/settings/notifications/org"},
+	{cmd: "settings notifications user update", args: []string{"--body-file", `@{"channelSettings":{"email":{"enabled":true}}}`}, body: `{"userNotificationSettings":{"channelSettings":{"email":{"enabled":true}}}}`, want: `{"channelSettings":{"email":{"enabled":true}}}`, method: "POST", path: "/api/v1/settings/notifications/user"},
 	{cmd: "mcp classifiers policy update", args: []string{"--body-file", `@{"defaultOutcome":"X"}`, "--update-mask=defaultOutcome"}, body: `{"policy":{"defaultOutcome":"X"}}`, want: `{"defaultOutcome":"X"}`},
 	{cmd: "mcp classifiers tool-gates create", args: []string{"--body-file", `@{"displayName":"zz"}`}, body: tblGate, want: tblGateDoc, ids: idPath},
 	{cmd: "mcp classifiers tool-gates update", args: []string{"g1", "--body-file", `@{"displayName":"zz"}`, "--update-mask=enabled"}, body: tblGate, want: tblGateDoc, ids: idPath},
@@ -245,6 +290,8 @@ var mutationTable = []mutationRow{
 	{cmd: "mcp servers resync-tools", args: []string{"cn1", "--app-id=a1"}, body: `{}`},
 	{cmd: "mcp tools approve", args: cat([]string{"t1"}, mcpScope), body: `{"tool":{"id":"t1","state":"MCP_TOOL_STATE_APPROVED"}}`, want: `{"id":"t1","state":"MCP_TOOL_STATE_APPROVED"}`, ids: idPath},
 	{cmd: "mcp tools delete", args: cat([]string{"t1"}, mcpScope), body: `{}`},
+	{cmd: "mcp prompts approve", args: cat([]string{"p1"}, mcpScope), body: `{"prompt":{"id":"p1","state":"MCP_PROMPT_STATE_APPROVED"}}`, want: `{"id":"p1","state":"MCP_PROMPT_STATE_APPROVED"}`, ids: idPath},
+	{cmd: "mcp resources approve", args: cat([]string{"r1"}, mcpScope), body: `{"resource":{"id":"r1","state":"MCP_RESOURCE_STATE_APPROVED"}}`, want: `{"id":"r1","state":"MCP_RESOURCE_STATE_APPROVED"}`, ids: idPath},
 	{cmd: "mcp toolsets create", args: cat(mcpScope, []string{"--display-name=zz"}), body: tblToolset, want: tblToolsetDoc, ids: idPath},
 	{cmd: "mcp toolsets update", args: cat([]string{"ts1"}, mcpScope, []string{"--display-name=zz"}), body: tblToolset, want: tblToolsetDoc, ids: idPath},
 	{cmd: "mcp toolsets delete", args: cat([]string{"ts1"}, mcpScope), body: `{}`},
@@ -299,7 +346,7 @@ var mutationTable = []mutationRow{
 
 // tblGet answers every pre-send read: the policy-step, user, catalog-id and
 // self lookups.
-const tblGet = `{"connectorView":{"connector":{"id":"cn1","config":{"@type":"type.googleapis.com/c1.api.app.v1.EnvConfig"}}},"taskView":{"task":{"id":"task-1","policy":{"current":{"id":"step-9"}}}},"user":{"id":"u1"},"userId":"self-1",` +
+const tblGet = `{"appResourceTypeView":{"appResourceType":{"id":"rt-1"}},"connectorView":{"connector":{"id":"cn1","config":{"@type":"type.googleapis.com/c1.api.app.v1.EnvConfig"}}},"taskView":{"task":{"id":"task-1","policy":{"current":{"id":"step-9"}}}},"user":{"id":"u1"},"userId":"self-1",` +
 	`"list":[{"id":"ty-1","displayName":"Department","appUserProfile":{}}],` +
 	`"attribute":{"userAttributeMapping":{"id":"map-1","attributeType":{"id":"ty-1","displayName":"Department","appUserProfile":{"appId":"app-1","appUserProfileAttributeKey":"department"}}}}}`
 

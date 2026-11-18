@@ -47,6 +47,7 @@ var wantEmptyAllowed = map[string]string{
 	"c1i api --method":                                          emptyIsOmitted,
 	"c1i apps create --description":                             emptyIsOmitted,
 	"c1i apps update --description":                             emptyIsSent,
+	"c1i apps resources update --custom-description":            emptyIsSent,
 	"c1i auth login --client-secret":                            emptyIsOmitted,
 	"c1i automations update --description":                      emptyIsSent,
 	"c1i functions create --description":                        emptyIsSent,
@@ -59,6 +60,7 @@ var wantEmptyAllowed = map[string]string{
 	"c1i entitlements create --description":                     emptyIsOmitted,
 	"c1i entitlements create --slug":                            emptyIsOmitted,
 	"c1i entitlements update --description":                     emptyIsSent,
+	"c1i entitlements automation update --description":          emptyIsSent,
 	"c1i export events --sort":                                  emptyIsOmitted,
 	"c1i functions source --commit":                             emptyIsOmitted,
 	"c1i functions source --out-dir":                            emptyIsOmitted,
@@ -107,6 +109,8 @@ var wantEmptyAllowed = map[string]string{
 	"c1i mcp servers update-credentials --transport":            emptyIsOmitted,
 	"c1i mcp servers update-credentials --update-mask":          emptyIsOmitted,
 	"c1i mcp tools approve --state":                             emptyIsOmitted,
+	"c1i mcp prompts approve --state":                           emptyIsOmitted,
+	"c1i mcp resources approve --state":                         emptyIsOmitted,
 	"c1i mcp toolsets create --description":                     emptyIsOmitted,
 	"c1i mcp toolsets update --description":                     emptyIsSent,
 	"c1i automations create --description":                      emptyIsOmitted,
@@ -226,6 +230,8 @@ var inventoryKeyArgs = map[string][]string{
 	"c1i mcp servers update-credentials --hosted-config-file": {"--type=hosted", "--catalog-id=cat1", "--update-mask=hostedConfig"},
 	// A closed local port: no DNS lookup for the device-flow endpoint.
 	"c1i auth login --client-secret": {"--url=https://127.0.0.1:1"},
+	// A display name skips the read that fills the current one.
+	"c1i entitlements automation update --description": {"--display-name=zz-a"},
 }
 
 // extraArgsFor returns c's extra "--flag=value" args minus any that set flag.

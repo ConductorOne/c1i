@@ -14,7 +14,7 @@ import (
 // resourceTypeKinds is the AppResourceType enum, and the single source for
 // every place this repo names it. TestResourceTypeKindsAreDocumented holds the
 // help text, README.md and the configure-new-app guide to this list.
-var resourceTypeKinds = []string{"ROLE", "GROUP", "LICENSE", "PROJECT", "CATALOG", "CUSTOM", "VAULT", "PROFILE_TYPE"}
+var resourceTypeKinds = []string{"ROLE", "GROUP", "LICENSE", "PROJECT", "CATALOG", "CUSTOM", "VAULT", "PROFILE_TYPE", "SESSION_POLICY", "CLAW_AGENT"}
 
 // resourceTypeFlag passes unknowns: the enum has no prefix, so the server
 // stays authoritative if it grows.

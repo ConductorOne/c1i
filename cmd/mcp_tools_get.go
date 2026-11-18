@@ -1,45 +1,5 @@
 package cmd
 
-import (
-	"fmt"
+var mcpToolsGetCmd = toolItems.getCmd("Get a single MCP tool (pretty JSON)", "")
 
-	"github.com/ConductorOne/c1i/internal/client"
-	"github.com/spf13/cobra"
-)
-
-var mcpToolsGetCmd = &cobra.Command{
-	Use:   "get <tool-id>",
-	Short: "Get a single MCP tool (pretty JSON)",
-	Args:  cobra.ExactArgs(1),
-	RunE: func(cmd *cobra.Command, args []string) error {
-
-		baseURL, err := GetBaseURL()
-		if err != nil {
-			return err
-		}
-
-		c, err := newClient(cmd, baseURL)
-		if err != nil {
-			return fmt.Errorf("authentication failed: %w", err)
-		}
-
-		appID, _ := cmd.Flags().GetString("app-id")
-		connectorID, _ := cmd.Flags().GetString("connector-id")
-		id := args[0]
-
-		path := client.Path("/api/v1/apps/%s/connectors/%s/mcp_tools/%s", appID, connectorID, id)
-		data, err := c.Get(cmd.Context(), path, nil)
-		if err != nil {
-			return fmt.Errorf("API error: %w", err)
-		}
-
-		return writeResource(cmd, data, "id")
-	},
-}
-
-func init() {
-	mcpToolsGetCmd.Flags().String("app-id", "", "Application ID")
-	mcpToolsGetCmd.Flags().String("connector-id", "", "Connector ID")
-	markRequired(mcpToolsGetCmd, "app-id", "connector-id")
-	mcpToolsCmd.AddCommand(mcpToolsGetCmd)
-}
+func init() { toolItems.registerGet(mcpToolsCmd, mcpToolsGetCmd) }

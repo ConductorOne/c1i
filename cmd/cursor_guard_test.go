@@ -30,12 +30,12 @@ func stalePageItems(format string) string {
 // cursorGuardExemptions lists functions ("file:func") that read a pagination
 // cursor without following it, so they need no paginationCursorGuard.
 var cursorGuardExemptions = map[string]string{
-	"api.go:extractListAndToken": "parser: returns the cursor to a guarded caller",
-	"api.go:nextPageTokenOf":     "parser: feeds the non-paginate partial-result warning",
-	"paginate.go:getFixedList":   "fetches one page and warns if the server reports more; never follows the cursor",
-	"paginate.go:mapPages":       "parser: returns the cursor to runPages, which guards it",
-	"api.go:apiPageParser":       "parser: returns the cursor to runPages, which guards it",
-	"api.go:warnPartialResult":   "feeds the non-paginate partial-result warning",
+	"api.go:extractListAndToken":  "parser: returns the cursor to a guarded caller",
+	"api.go:nextPageTokenOf":      "parser: feeds the non-paginate partial-result warning",
+	"paginate.go:getFixedListKey": "fetches one page and warns if the server reports more; never follows the cursor",
+	"paginate.go:mapPages":        "parser: returns the cursor to runPages, which guards it",
+	"api.go:apiPageParser":        "parser: returns the cursor to runPages, which guards it",
+	"api.go:warnPartialResult":    "feeds the non-paginate partial-result warning",
 }
 
 // cursorReadFuncs are calls that surface a next-page cursor from a response.
@@ -763,8 +763,8 @@ func TestCompositeIDListCommandsEmitRowsWithoutID(t *testing.T) {
 			}
 		})
 	}
-	if n != 7 {
-		t.Fatalf("found %d compositeID cases, want 7", n)
+	if n != 9 {
+		t.Fatalf("found %d compositeID cases, want 9", n)
 	}
 }
 

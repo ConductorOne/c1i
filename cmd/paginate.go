@@ -639,6 +639,12 @@ func rowGuardID(row map[string]any, idKeys []string) string {
 }
 
 func getFixedList(cmd *cobra.Command, path string, row listRowFn) error {
+	return getFixedListKey(cmd, path, "list", row)
+}
+
+// getFixedListKey is getFixedList for a response that holds its rows under
+// key instead of "list".
+func getFixedListKey(cmd *cobra.Command, path, key string, row listRowFn) error {
 	baseURL, err := GetBaseURL()
 	if err != nil {
 		return err
@@ -651,7 +657,7 @@ func getFixedList(cmd *cobra.Command, path string, row listRowFn) error {
 	if err != nil {
 		return fmt.Errorf("API error: %w", err)
 	}
-	items, next, err := extractListAndToken(data, "list")
+	items, next, err := extractListAndToken(data, key)
 	if err != nil {
 		return unreadablePage(fmt.Errorf("failed to parse response: %w", err))
 	}

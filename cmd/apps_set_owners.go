@@ -72,8 +72,9 @@ those GET .../ownerids reported owners for.
 
 // runOwnerSetPut is the body of every set-owners command: it PUTs the
 // --user-id list to path, prints the response, and with --wait polls the
-// op waitFor builds until the owner set equals the request.
-func runOwnerSetPut(cmd *cobra.Command, path string, waitFor func(*client.Client, func([]string) bool, time.Duration) waitOp[[]string]) error {
+// op waitFor builds until the owner set equals the request. extra adds
+// pre-send reads of the owned object.
+func runOwnerSetPut(cmd *cobra.Command, path string, waitFor func(*client.Client, func([]string) bool, time.Duration) waitOp[[]string], extra ...mutationOpt) error {
 	userIDs, err := repeatableStringFlag(cmd, "user-id")
 	if err != nil {
 		return err
@@ -87,9 +88,10 @@ func runOwnerSetPut(cmd *cobra.Command, path string, waitFor func(*client.Client
 	if err != nil {
 		return err
 	}
-	return sendMutation(cmd, mutation{Method: http.MethodPut, Path: path, Body: buildSetOwnersBody(userIDs)},
+	opts := append(append([]mutationOpt{}, extra...),
 		withPreRead(existingUsersCheck("user-id", userIDs)),
 		withWait(func(c *client.Client) waitOp[[]string] { return waitFor(c, untilEqual(userIDs), waitTimeout) }, wait))
+	return sendMutation(cmd, mutation{Method: http.MethodPut, Path: path, Body: buildSetOwnersBody(userIDs)}, opts...)
 }
 
 // appOwnersWaitOp polls an app's ownerids until done accepts them.
