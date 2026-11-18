@@ -196,7 +196,8 @@ is sent with "id" set to <template-id>.
 
 The server validates displayName and policyId on every update, whatever the
 mask names, so when the request leaves either unset c1i reads the template
-first and fills it in; the mask still decides what changes. That read makes an
+first and fills it in; the mask still decides what changes. A mask that names
+either one needs its value in --body-file (else exit 2, nothing sent). That read makes an
 unknown <template-id> exit 4 before the update is sent, --dry-run included. A
 policyId is looked up only when the mask names it.
 
@@ -252,7 +253,14 @@ func buildTemplateUpdate(cmd *cobra.Command, id string) (body, tpl map[string]an
 	} else if mask, err = templateUpdateSpec.buildUpdateMask(cmd, tpl); err != nil {
 		return nil, nil, "", "", err
 	}
-	if slices.Contains(strings.Split(mask, ","), "policyId") {
+	masked := strings.Split(mask, ",")
+	for _, key := range []string{"displayName", "policyId"} {
+		// The fill would send the current value for a named field: a silent no-op.
+		if _, set := tpl[key]; !set && slices.Contains(masked, key) {
+			return nil, nil, "", "", &usageError{fmt.Errorf("--update-mask names %s but --body-file sets no %s", key, key)}
+		}
+	}
+	if slices.Contains(masked, "policyId") {
 		policyID, _ = tpl["policyId"].(string)
 	}
 	tpl["id"] = id
@@ -299,8 +307,9 @@ var accessReviewTemplatesDeleteCmd = &cobra.Command{
 	Long: `Delete an access-review template by ID. The API documents: "The template can
 no longer be used to create campaigns." In the run checked, "templates get"
 still returned the deleted template with deletedAt null, and deleting it again
-exited 0. An unknown id exits 4. Prints the API's response, which is {}; exit
-0 is the success signal. Honors --dry-run.`,
+exited 0. An unknown id exits 4. Prints the API's response, which is {}. Exit 0
+only means the API accepted the request; in the run checked, the template
+stayed readable with deletedAt null. Honors --dry-run.`,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		return sendMutation(cmd, mutation{Method: http.MethodDelete, Path: templatePath(args[0])})

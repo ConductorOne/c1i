@@ -2153,12 +2153,15 @@ covers every other field. The server validates `displayName` and `policyId` on
 every update whatever the mask names, so when the request leaves either unset,
 `update` reads the template first and fills it in (the mask still decides what
 changes); that read makes an unknown `<template-id>` exit `4`. A `policyId` is
-looked up only when the mask names it. `create` and `update` print
+looked up only when the mask names it. A `--body-file` mask that names
+`displayName` or `policyId` needs that field in the file, or `update` exits `2`
+before sending anything. `create` and `update` print
 the template unwrapped like `get` (`jq -er .id`).
 
 `delete` prints `{}`. The API says a deleted template "can no longer be used to
-create campaigns"; in the run checked, `get` still returned it with
-`deletedAt` null, and deleting it again exited `0`.
+create campaigns". Exit `0` only means the API accepted the request; in the
+run checked, the template stayed readable with `deletedAt` null, and deleting
+it again exited `0`.
 
 The scope commands work like the campaign ones above, with the template's
 scope under `scope` instead of `scopeV2`, and the same lookups of every

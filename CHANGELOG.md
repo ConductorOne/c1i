@@ -20,7 +20,6 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `update` reads the template to fill the `displayName` and `policyId` the
   server demands on every update when the request leaves one unset; the mask
   still decides what changes.
-
 - `attributes types|list|search|get|create|delete` for tenant attribute values
   (Compliance Framework, Risk Level), distinct from `attribute-types` and
   `attribute-mappings`. `--type` takes a name or id and is looked up first, so

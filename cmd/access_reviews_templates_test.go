@@ -261,3 +261,44 @@ func TestTemplateUpdateReadsOnlyWhatItNeeds(t *testing.T) {
 		t.Errorf("requests = %+v, want the update alone", sent)
 	}
 }
+
+// A mask naming displayName or policyId with no value for it in the body file
+// would have the fill send the current value back: exit 2, nothing sent,
+// --dry-run included. A named policyId in the body is still looked up.
+func TestTemplateUpdateMaskedRequiredFieldNeedsBodyValue(t *testing.T) {
+	cases := []struct {
+		name, body, mask, policyType string
+		exit                         int
+		inErr                        string
+	}{
+		{"displayName missing", `{"description":"q"}`, "displayName", "POLICY_TYPE_CERTIFY", exitUsage, "--update-mask names displayName but --body-file sets no displayName"},
+		{"policyId missing", `{"description":"q"}`, "description,policyId", "POLICY_TYPE_CERTIFY", exitUsage, "--update-mask names policyId but --body-file sets no policyId"},
+		{"policyId grant", `{"policyId":"pol1"}`, "policyId", "POLICY_TYPE_GRANT", exitUsage, "is a POLICY_TYPE_GRANT policy"},
+	}
+	for _, tc := range cases {
+		for _, dry := range []bool{false, true} {
+			name := tc.name
+			if dry {
+				name += " dry-run"
+			}
+			t.Run(name, func(t *testing.T) {
+				t.Setenv("C1I_URL", mutTestURL)
+				if dry {
+					withDryRun(t)
+				}
+				s := newMutServer(t, templateRoute(tc.policyType))
+				row := mutationRow{cmd: "access-reviews templates update", args: []string{"t1", "--body-file", "@" + tc.body, "--update-mask", tc.mask}}
+				r := runMutationCLI(t, s.srv, 0, nil, row.argv(t)...)
+				if r.exit != tc.exit || !strings.Contains(r.stderr, tc.inErr) {
+					t.Errorf("exit %d, stderr %q; want exit %d naming %q", r.exit, r.stderr, tc.exit, tc.inErr)
+				}
+				if r.stdout != "" {
+					t.Errorf("stdout = %q, want nothing", r.stdout)
+				}
+				if w := writesOf(s); len(w) != 0 {
+					t.Errorf("wrote %+v", w)
+				}
+			})
+		}
+	}
+}
