@@ -15,8 +15,7 @@ nothing when tried); each --webhook-id restricts the search to that webhook
 webhook must satisfy both.
 
 The search index lags the writes: a new webhook was missing from an unfiltered
-search for a few seconds, and a deleted one was still found right after the
-delete. Use "webhooks list" or "webhooks get" for the current state.`,
+search for a few seconds, and a deleted one may still be found briefly. Use "webhooks list" or "webhooks get" for the current state.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		body := map[string]any{}
 		if flagGiven(cmd, "query") {

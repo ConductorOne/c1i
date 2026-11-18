@@ -11,7 +11,8 @@ var hooksUpdateCmd = &cobra.Command{
 	Short: "Update a hook's fields",
 	Long: `Update a hook. Only the flags you pass are sent, and each is named in the
 update mask. --function-id replaces the whole function reference;
---function-commit-id needs it. --clear-filter removes the CEL filter (the
+--function-commit-id needs it; both are looked up first (an unknown one exits 4,
+--dry-run included), unless --body-file is used. --clear-filter removes the CEL filter (the
 server clears it when the mask names "filter" and the filter is null). A
 built-in pattern or JSON patch config is edited with --body-file and
 --update-mask (the Hook object, and the paths it changes).
@@ -29,7 +30,7 @@ unwrapped like "hooks get": the id is .id. Honors --dry-run.`,
 		if err != nil {
 			return err
 		}
-		return sendMutation(cmd, mutation{Method: http.MethodPost, Path: hookPath(args[0]), Body: body})
+		return sendMutation(cmd, mutation{Method: http.MethodPost, Path: hookPath(args[0]), Body: body}, hookFunctionPreRead(cmd)...)
 	},
 }
 

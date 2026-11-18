@@ -792,7 +792,8 @@ c1i users set-delegation <user-id> (--delegate-user-id ID [--start-at RFC3339] [
 
 `users list` reads `POST /api/v1/search/users`, which with no `--origin` returns only directory-origin users: local-origin users (service principals among them) and system users are excluded. `--origin all` lists every user; repeat `--origin` with `directory`, `local`, `system` or a `USER_ORIGIN_*` value (as a row's `origin` prints) to pick origins (any other value is a usage error, exit `2`). Each row carries `origin` (e.g. `USER_ORIGIN_LOCAL`) when the server reports one.
 `users profile-types` prints `{"profileTypes": [...]}` for a user across their
-connected apps (empty on the user tried).
+connected apps (empty on the user tried; an unknown user id also returned an
+empty list at exit `0`).
 
 `users set-delegation` designates a delegate, optionally for a window
 (`--start-at`/`--expire-at`, RFC3339), and prints the binding. `--clear` removes
@@ -2569,8 +2570,8 @@ it again exits `0`.
 as `list`. `--query` matched the display name; a word only in a description
 matched nothing. `--webhook-id` (repeatable) restricts it to those webhooks;
 both together must both match. The search index lags writes: a new webhook was
-missing from an unfiltered search for a few seconds, and a deleted one was
-still found right after the delete, so use `list`/`get` for the current state.
+missing from an unfiltered search for a few seconds, and a deleted one may
+still be found briefly, so use `list`/`get` for the current state.
 
 ### Hooks
 
@@ -2596,6 +2597,11 @@ hook intercepts tool calls. `list` rows carry `id`, `display_name`, `event`,
 `kind` (`function`, `builtin_pattern`, `json_patch`), `enabled`,
 `managed_by_guardrails` and `priority`; `get` shows the whole config. The
 server did not paginate `list` when tried (`--page-size` had no effect).
+
+`create` and `update` look up `--function-id` (and `--function-commit-id` under
+it) first, `--dry-run` included, so an unknown one exits `4`; without the check
+the server answers an unknown function with `400` and stores an unknown commit
+id at exit `0`. `--body-file` is sent verbatim and not checked.
 
 `update` sends only the flags you pass and names exactly those in the mask.
 `--function-id` replaces the whole function reference (the commit goes back to

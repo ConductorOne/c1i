@@ -13,7 +13,8 @@ var usersProfileTypesCmd = &cobra.Command{
 	Long: `Show the profile types associated with a user across their connected apps
 (GET /api/v1/users/{user_id}/profile-types), as {"profileTypes": [...]}.
 Each profile type has id, name, slug, description, priority, displayToUser
-and iconUrl as the API returns them.`,
+and iconUrl as the API returns them. An unknown user id also returned an empty
+list at exit 0.`,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		baseURL, err := GetBaseURL()

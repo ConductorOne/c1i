@@ -957,7 +957,8 @@ resource with `--resource-id` likewise means you drop
   `--body-file` (update: plus `--update-mask`); the server 403s a JSON patch
   hook when its preview is off. Created disabled unless `--enabled`. The server
   stores any `--filter-cel` (an uncompilable one too) at exit `0`;
-  `update --clear-filter` clears it. `delete` is soft: `get` still returns the
+  `update --clear-filter` clears it. `--function-id` and `--function-commit-id`
+  are looked up first (unknown: exit `4`, `--dry-run` too; not for `--body-file`). `delete` is soft: `get` still returns the
   hook with no deleted marker, `list` omits it, repeat delete exits `0`.
   `webhooks search --query TEXT --webhook-id ID...` matches names, and the
   index lags writes (use `list`/`get` for current state).

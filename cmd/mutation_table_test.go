@@ -382,7 +382,7 @@ var mutationTable = []mutationRow{
 	{cmd: "webhooks test", args: []string{"wh-1"}, body: `{"webhook":{"id":"inst-1","webhookId":"wh-1"}}`, want: `{"id":"inst-1","webhookId":"wh-1"}`, ids: []string{".id", ".webhookId"}, method: "POST", path: "/api/v1/webhooks/wh-1/test"},
 	{cmd: "webhooks delete", args: []string{"wh-1"}, body: `{}`, method: "DELETE", path: "/api/v1/webhooks/wh-1"},
 	// hooks and users set-delegation
-	{cmd: "hooks create", args: []string{"--display-name", "zz", "--event", "pre-tool-use", "--function-id", "fn-1"}, body: `{"hook":{"id":"hk-1","displayName":"zz"}}`, want: `{"id":"hk-1","displayName":"zz"}`, ids: idPath, method: "POST", path: "/api/v1/hooks"},
+	{cmd: "hooks create", args: []string{"--display-name", "zz", "--event", "pre-tool-use", "--function-id", "fn-1"}, body: `{"hook":{"id":"hk-1","displayName":"zz"}}`, want: `{"id":"hk-1","displayName":"zz"}`, ids: idPath, method: "POST", path: "/api/v1/hooks", reads: 1},
 	{cmd: "hooks update", args: []string{"hk-1", "--priority", "3"}, body: `{"hook":{"id":"hk-1","displayName":"zz"}}`, want: `{"id":"hk-1","displayName":"zz"}`, ids: idPath, method: "POST", path: "/api/v1/hooks/hk-1"},
 	{cmd: "hooks delete", args: []string{"hk-1"}, body: `{}`, method: "DELETE", path: "/api/v1/hooks/hk-1"},
 	{cmd: "users set-delegation", args: []string{"u-1", "--delegate-user-id", "u-2"}, body: `{"item":{"userId":"u-1","delegatedUserId":"u-2"}}`, want: `{"userId":"u-1","delegatedUserId":"u-2"}`, ids: []string{".userId"}, method: "POST", path: "/api/v1/users/u-1/set-delegation-by-admin"},

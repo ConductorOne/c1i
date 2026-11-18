@@ -3,7 +3,9 @@ package cmd
 import (
 	"bytes"
 	"context"
+	"io"
 	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -34,6 +36,17 @@ func runPairs(t *testing.T, srv interface{ Close() }, cmd *cobra.Command, args [
 	return out.String(), err
 }
 
+// writes drops the pre-send lookups (GETs) from the recorded requests.
+func hookWrites(reqs []webhookReq) []webhookReq {
+	var out []webhookReq
+	for _, r := range reqs {
+		if r.method != http.MethodGet {
+			out = append(out, r)
+		}
+	}
+	return out
+}
+
 const hookEnvelope = `{"hook":{"id":"hk-1","displayName":"zz-hook"}}`
 
 func TestHooksCreateBuildsFunctionHook(t *testing.T) {
@@ -52,7 +65,7 @@ func TestHooksCreateBuildsFunctionHook(t *testing.T) {
 		"filter":   map[string]any{"celExpression": `ctx.tool_name == "x"`},
 		"priority": float64(7), "enabled": false, "managedByGuardrails": true,
 	}
-	if len(*reqs) != 1 || (*reqs)[0].method != http.MethodPost || (*reqs)[0].path != "/api/v1/hooks" || !reflect.DeepEqual((*reqs)[0].body, want) {
+	if w := hookWrites(*reqs); len(w) != 1 || w[0].method != http.MethodPost || w[0].path != "/api/v1/hooks" || !reflect.DeepEqual(w[0].body, want) {
 		t.Fatalf("requests = %#v\nwant POST /api/v1/hooks %#v", *reqs, want)
 	}
 	if !strings.Contains(out, `"id": "hk-1"`) || strings.Contains(out, `"hook"`) {
@@ -134,7 +147,7 @@ func TestHooksUpdateMask(t *testing.T) {
 				t.Fatalf("RunE: %v", err)
 			}
 			want := map[string]any{"hook": tc.hook, "updateMask": tc.mask}
-			if len(*reqs) != 1 || (*reqs)[0].path != "/api/v1/hooks/hk-1" || !reflect.DeepEqual((*reqs)[0].body, want) {
+			if w := hookWrites(*reqs); len(w) != 1 || w[0].path != "/api/v1/hooks/hk-1" || !reflect.DeepEqual(w[0].body, want) {
 				t.Fatalf("requests = %#v\nwant POST /api/v1/hooks/hk-1 %#v", *reqs, want)
 			}
 		})
@@ -286,4 +299,83 @@ func TestUsersProfileTypesGet(t *testing.T) {
 	if !strings.Contains(out, `"profileTypes": []`) {
 		t.Errorf("stdout = %s", out)
 	}
+}
+
+// A create without --enabled sends no enabled key, and an update without it
+// leaves it out of the body and the mask: an enabled hook intercepts tool calls.
+func TestHooksNeverSendEnabledUnlessAsked(t *testing.T) {
+	withCatalogDryRun(t, false)
+	srv, reqs := webhooksServer(t, hookEnvelope)
+	stubCatalogClient(t, srv)
+	if _, err := runPairs(t, srv, hooksCreateCmd, nil, "display-name", "zz", "event", "pre-output", "function-id", "fn-1"); err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	// reqs holds the pre-read GET of the function, then the write.
+	last := hookWrites(*reqs)[0]
+	want := map[string]any{"displayName": "zz", "event": "HOOK_EVENT_TYPE_PRE_OUTPUT", "function": map[string]any{"functionId": "fn-1"}}
+	if last.method != http.MethodPost || !reflect.DeepEqual(last.body, want) {
+		t.Errorf("create body = %#v, want exactly %#v", last.body, want)
+	}
+	*reqs = nil
+	if _, err := runPairs(t, srv, hooksUpdateCmd, []string{"hk-1"}, "priority", "2"); err != nil {
+		t.Fatalf("update: %v", err)
+	}
+	hook, _ := hookWrites(*reqs)[0].body["hook"].(map[string]any)
+	mask, _ := hookWrites(*reqs)[0].body["updateMask"].(string)
+	if _, has := hook["enabled"]; has || strings.Contains(mask, "enabled") {
+		t.Errorf("update sent enabled: hook %#v mask %q", hook, mask)
+	}
+}
+
+func TestHooksFunctionRefsAreLookedUpFirst(t *testing.T) {
+	withCatalogDryRun(t, false)
+	for _, dry := range []bool{false, true} {
+		for _, tc := range []struct {
+			name         string
+			pairs        []string
+			notFoundPath string
+		}{
+			{"unknown function", []string{"function-id", "fn-x"}, "/api/v1/functions/fn-x"},
+			{"unknown commit", []string{"function-id", "fn-1", "function-commit-id", "c-x"}, "/api/v1/functions/fn-1/commits/c-x"},
+		} {
+			for _, create := range []bool{true, false} {
+				t.Run(tc.name+map[bool]string{true: " create", false: " update"}[create]+map[bool]string{true: " dry", false: ""}[dry], func(t *testing.T) {
+					srv, reqs := hookRefServer(t, tc.notFoundPath)
+					stubCatalogClient(t, srv)
+					cmd, args, pairs := hooksUpdateCmd, []string{"hk-1"}, tc.pairs
+					if create {
+						cmd, args = hooksCreateCmd, nil
+						pairs = append([]string{"display-name", "zz", "event", "pre-output"}, tc.pairs...)
+					}
+					withCatalogDryRun(t, dry)
+					_, err := runPairs(t, srv, cmd, args, pairs...)
+					if code := exitCode(err); code != exitNotFound {
+						t.Errorf("exit = %d, want %d (err %v)", code, exitNotFound, err)
+					}
+					for _, r := range *reqs {
+						if r.method != http.MethodGet {
+							t.Errorf("sent a %s %s after a failed lookup", r.method, r.path)
+						}
+					}
+				})
+			}
+		}
+	}
+}
+
+func hookRefServer(t *testing.T, notFound string) (*httptest.Server, *[]webhookReq) {
+	t.Helper()
+	var reqs []webhookReq
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		reqs = append(reqs, webhookReq{method: r.Method, path: r.URL.EscapedPath()})
+		w.Header().Set("Content-Type", "application/json")
+		if r.URL.EscapedPath() == notFound {
+			w.WriteHeader(http.StatusNotFound)
+			_, _ = io.WriteString(w, `{"code":5,"message":"not found"}`)
+			return
+		}
+		_, _ = io.WriteString(w, `{"hook":{"id":"hk-1"}}`)
+	}))
+	t.Cleanup(srv.Close)
+	return srv, &reqs
 }

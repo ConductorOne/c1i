@@ -17,6 +17,11 @@ object, sent verbatim and exclusive with the field flags: the only way to
 create a built-in pattern hook. A JSON patch hook is refused by the server
 with 403 when its preview is not enabled for the tenant.
 
+--function-id and --function-commit-id are looked up first, --dry-run included:
+an unknown one exits 4 (the server answers an unknown function with 400
+"function ... not found" and stores an unknown commit id at exit 0). A
+--body-file is sent verbatim and not checked.
+
 A hook that sets none of the type fields is refused by the server with 400
 "hook function reference is missing function_id". The server does not
 validate --filter-cel: it stored an uncompilable and a non-boolean expression
@@ -30,7 +35,7 @@ intercepts tool calls. Prints the hook, unwrapped like "hooks get": the id is
 		if err != nil {
 			return err
 		}
-		return sendMutation(cmd, mutation{Method: http.MethodPost, Path: hooksPath, Body: body})
+		return sendMutation(cmd, mutation{Method: http.MethodPost, Path: hooksPath, Body: body}, hookFunctionPreRead(cmd)...)
 	},
 }
 

@@ -1,7 +1,10 @@
 package cmd
 
 import (
+	"context"
+	"errors"
 	"fmt"
+	"net/http"
 
 	"github.com/ConductorOne/c1i/internal/client"
 	"github.com/spf13/cobra"
@@ -128,4 +131,38 @@ var hookUpdateFields = &updateSpec{
 	})),
 	alt:   "--body-file with --update-mask",
 	scope: []string{"body-file", "update-mask"},
+}
+
+// hookFunctionPreRead looks up --function-id, and --function-commit-id under it,
+// before the send: the server answers an unknown function with a 400 and stores
+// an unknown commit id with a 200. Not applied to --body-file, which is verbatim.
+func hookFunctionPreRead(cmd *cobra.Command) []mutationOpt {
+	if !flagGiven(cmd, "function-id") {
+		return nil
+	}
+	fn := mustGetString(cmd, "function-id")
+	commit := ""
+	if flagGiven(cmd, "function-commit-id") {
+		commit = mustGetString(cmd, "function-commit-id")
+	}
+	return []mutationOpt{withPreRead(preRead{Run: func(ctx context.Context, c *client.Client, _ *mutation) ([]resolvedID, error) {
+		if err := requireHookRef(ctx, c, client.Path("/api/v1/functions/%s", fn), "function-id", fn, "function"); err != nil {
+			return nil, err
+		}
+		if commit == "" {
+			return nil, nil
+		}
+		return nil, requireHookRef(ctx, c, client.Path("/api/v1/functions/%s/commits/%s", fn, commit), "function-commit-id", commit, "commit of that function")
+	}})}
+}
+
+func requireHookRef(ctx context.Context, c *client.Client, path, flag, id, what string) error {
+	if _, err := c.Get(ctx, path, nil); err != nil {
+		var apiErr *client.APIError
+		if errors.As(err, &apiErr) && apiErr.StatusCode == http.StatusNotFound {
+			return refNotFound(flag, id, what, apiErr)
+		}
+		return fmt.Errorf("checking --%s %q: %w", flag, id, err)
+	}
+	return nil
 }
