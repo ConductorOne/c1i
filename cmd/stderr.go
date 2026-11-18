@@ -10,6 +10,7 @@ import (
 	"sync"
 	"time"
 	"unicode"
+	"unicode/utf8"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -72,21 +73,33 @@ func progress(w io.Writer, subject, text string, elapsed time.Duration) {
 // errors are legitimate). Every text-mode stderr line goes through it; JSON
 // mode is escaped by encoding.
 func escapeControl(s string) string {
-	if !strings.ContainsFunc(s, needsEscape) {
-		return s
-	}
 	var b strings.Builder
-	for _, r := range s {
+	for i := 0; i < len(s); {
+		r, n := utf8.DecodeRuneInString(s[i:])
 		switch {
+		case r == utf8.RuneError && n == 1: // invalid byte: a lone 0x9b is CSI on 8-bit terminals
+			fmt.Fprintf(&b, "\\x%02x", s[i])
 		case !needsEscape(r):
-			b.WriteRune(r)
+			b.WriteString(s[i : i+n])
 		case r < 0x100:
 			fmt.Fprintf(&b, "\\x%02x", r)
 		default:
 			fmt.Fprintf(&b, "\\u%04x", r)
 		}
+		i += n
 	}
 	return b.String()
+}
+
+// escapeWriter applies escapeControl to each Write; the debug trace writes
+// whole lines, so no sequence is split across calls.
+type escapeWriter struct{ out io.Writer }
+
+func (e escapeWriter) Write(p []byte) (int, error) {
+	if _, err := io.WriteString(e.out, escapeControl(string(p))); err != nil {
+		return 0, err
+	}
+	return len(p), nil
 }
 
 func needsEscape(r rune) bool {
@@ -107,13 +120,14 @@ func writeJSONLine(w io.Writer, obj map[string]any) {
 
 // debugWriter is the --debug trace sink every transport call site passes to
 // WithDebug: nil when --debug is off, stderr in text mode, and a writer that
-// wraps each line as {"debug":…} in JSON mode.
+// wraps each line as {"debug":…} in JSON mode. Text mode escapes control
+// characters: the trace prints the server's status line and transport errors.
 func debugWriter() io.Writer {
 	if !viper.GetBool("debug") {
 		return nil
 	}
 	if !stderrIsJSON() {
-		return os.Stderr
+		return escapeWriter{os.Stderr}
 	}
 	return &jsonLineWriter{out: os.Stderr, key: "debug"}
 }
