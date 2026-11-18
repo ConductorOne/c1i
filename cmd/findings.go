@@ -182,6 +182,29 @@ var findingsSettingsUpdateCmd = &cobra.Command{Use: "update", Short: "Atomically
 	return sendMutation(cmd, mutation{Method: http.MethodPost, Path: "/api/v1/findings/settings/update", Body: body})
 }}
 
+var findingsSettingsEdgeCmd = &cobra.Command{Use: "edge", Short: "Inspect and update Edge finding category settings"}
+var findingsSettingsEdgeShowCmd = &cobra.Command{Use: "show", Short: "Show which Edge finding categories are detected (pretty JSON)",
+	Long: `Show whether each Edge finding category (list) and subcategory
+(subcategories) is detected, as returned. Categories never configured read
+back their shipped default. The Edge finding type's own switch ("findings
+settings show") still gates every category.`, RunE: func(cmd *cobra.Command, _ []string) error {
+		return getFindingsRaw(cmd, "/api/v1/findings/settings/edge")
+	}}
+var findingsSettingsEdgeUpdateCmd = &cobra.Command{Use: "update", Short: "Enable or disable Edge finding categories from JSON (pretty JSON)",
+	Long: `Enable or disable detection for one or more Edge finding categories in a
+single write. The body names only what changes, e.g.
+{"settings": [{"category": "EDGE_FINDING_CATEGORY_DATA_VOLUME", "enabled": true}],
+ "subcategorySettings": [{"subcategory": "...", "enabled": false}]}.
+An unknown category is a 400 (exit 2).
+
+Prints the resulting settings as pretty JSON, like "findings settings edge show".`, RunE: func(cmd *cobra.Command, _ []string) error {
+		body, err := readRequiredJSONObject(cmd, "body-file")
+		if err != nil {
+			return err
+		}
+		return sendMutation(cmd, mutation{Method: http.MethodPost, Path: "/api/v1/findings/settings/edge/update", Body: body})
+	}}
+
 var findingsAuditsCmd = &cobra.Command{Use: "audits", Short: "Search finding audit events"}
 var findingsAuditsSearchCmd = &cobra.Command{Use: "search", Short: "Search finding audit events from JSON (NDJSON output)", RunE: func(cmd *cobra.Command, _ []string) error {
 	body, err := readOptionalJSONObject(cmd, "body-file")
@@ -318,7 +341,11 @@ func init() {
 	findingsCreateTaskCmd.Flags().String("policy-id", "", "Optional remediation policy ID")
 	findingsSettingsUpdateCmd.Flags().String("body-file", "", "JSON request object file (or \"-\" for stdin)")
 	annotateRequired(findingsSettingsUpdateCmd, "body-file")
-	findingsSettingsCmd.AddCommand(findingsSettingsShowCmd, findingsSettingsUpdateCmd)
+	findingsSettingsEdgeUpdateCmd.Flags().String("body-file", "", "JSON request object file (or \"-\" for stdin)")
+	annotateRequired(findingsSettingsEdgeUpdateCmd, "body-file")
+	markMutating(findingsSettingsEdgeUpdateCmd)
+	findingsSettingsEdgeCmd.AddCommand(findingsSettingsEdgeShowCmd, findingsSettingsEdgeUpdateCmd)
+	findingsSettingsCmd.AddCommand(findingsSettingsShowCmd, findingsSettingsUpdateCmd, findingsSettingsEdgeCmd)
 	findingsAuditsCmd.AddCommand(findingsAuditsSearchCmd)
 	findingsShadowMCPOccurrencesCmd.AddCommand(findingsShadowMCPOccurrencesSearchCmd)
 	findingsCmd.AddCommand(findingsSearchCmd, findingsGetCmd, findingsCreateCmd, findingsStateCmd, findingsAssigneeCmd, findingsCreateTaskCmd, findingsBulkStateCmd, findingsBulkCreateTasksCmd, findingsRoutingRulesCmd, findingsTransformationRulesCmd, findingsSettingsCmd, findingsAuditsCmd, findingsShadowMCPOccurrencesCmd)
