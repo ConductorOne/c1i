@@ -47,6 +47,7 @@ var wantEmptyAllowed = map[string]string{
 	"c1i api --method":                                          emptyIsOmitted,
 	"c1i apps create --description":                             emptyIsOmitted,
 	"c1i apps update --description":                             emptyIsSent,
+	"c1i apps resources update --custom-description":            emptyIsSent,
 	"c1i auth login --client-secret":                            emptyIsOmitted,
 	"c1i automations update --description":                      emptyIsSent,
 	"c1i functions create --description":                        emptyIsSent,

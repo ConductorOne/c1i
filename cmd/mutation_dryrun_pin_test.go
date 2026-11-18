@@ -47,6 +47,9 @@ var dryRunStubs = map[string][]string{
 	"c1i attribute-mappings create":                       {"--body-file=@{}"},
 	"c1i attribute-mappings update":                       {"x1", "--key=k"},
 	"c1i automations update":                              {"x1", "--description=d"},
+	"c1i apps resource-types update":                      {"x1", "--app-id=x1", "--display-name=zz"},
+	"c1i apps resources create":                           {"--app-id=x1", "--resource-type-id=x1", "--display-name=zz"},
+	"c1i apps resources update":                           {"x1", "--app-id=x1", "--resource-type-id=x1", "--description=d"},
 	"c1i connectors create":                               {"--app-id=x1", "--catalog-id=x1"},
 	"c1i connectors schedule":                             {"x1", "--app-id=x1", "--clear"},
 	"c1i connectors update":                               {"x1", "--app-id=x1", "--body-file=@{}", "--update-mask=config"},
@@ -118,6 +121,7 @@ var dryRunReadBodies = map[string]string{
 	"c1i functions invoke":               `{"function":{"publishedCommitId":"c1"}}`,
 	"c1i entitlements automation update": `{"AppEntitlementAutomation":{"displayName":"x1"}}`,
 	"c1i attribute-mappings update":      `{"attribute":{"userAttributeMapping":{"attributeType":{"id":"t","displayName":"n","appUserProfile":{"appId":"a","appUserProfileAttributeKey":"k"}}}}}`,
+	"c1i apps resources create":          `{"appResourceTypeView":{"appResourceType":{"id":"x1"}}}`,
 }
 
 // stubArgs builds a leaf's arguments: one per required positional in Use and
