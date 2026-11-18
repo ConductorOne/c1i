@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/ConductorOne/c1i/internal/client"
+	"github.com/ConductorOne/c1i/internal/timing"
 	"github.com/spf13/cobra"
 )
 
@@ -158,7 +159,7 @@ func invocationWaitOp(c *client.Client, functionID, invocationID string, timeout
 			return []string{got.Invocation.Status}, nil
 		},
 		Done:     func(s []string) bool { return len(s) == 1 && s[0] == invocationSucceeded },
-		Interval: invocationPollInterval,
+		Interval: timing.Scale(invocationPollInterval),
 		Timeout:  timeout,
 		Subject:  "invocation " + invocationID,
 		Success:  "Invocation " + invocationID + " succeeded",
