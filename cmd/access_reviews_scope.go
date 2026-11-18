@@ -20,9 +20,12 @@ type setupOwner struct {
 	// scopeKey is the read's stable top-level key, standing in for an id:
 	// a campaign answers scopeV2, a template scope.
 	scopeKey string
+	// idKeys are the body fields the positional id owns, in both spellings.
+	idKeys []string
 }
 
-var campaignSetup = setupOwner{pathFmt: "/api/v1/access_review/%s", use: "<campaign-id>", noun: "campaign", scopeKey: "scopeV2"}
+var campaignSetup = setupOwner{pathFmt: "/api/v1/access_review/%s", use: "<campaign-id>", noun: "campaign", scopeKey: "scopeV2",
+	idKeys: []string{"accessReviewId", "access_review_id"}}
 
 func (o setupOwner) path(id, suffix string) string {
 	return client.Path(o.pathFmt, id) + suffix
@@ -175,6 +178,7 @@ func newSetupBodyCmd(o setupOwner, use, short, long, suffix, refKey string, shap
 		},
 	}
 	cmd.Flags().String("body-file", "", "Full request JSON object (file or \"-\" for stdin)")
+	ownBodyKeys(cmd, "body-file", argBodyKeys(0, o.use, o.idKeys...))
 	annotateRequired(cmd, "body-file")
 	markMutating(cmd)
 	return cmd

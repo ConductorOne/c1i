@@ -43,6 +43,8 @@ func TestResourceSetOwnersRefusesUnknownResource(t *testing.T) {
 		clearViperOverrides(t, "dry_run")
 		s := newMutServer(t, func(r *http.Request, _ int) mutReply {
 			switch {
+			case r.Method == http.MethodGet && r.URL.Path == "/api/v1/apps/app-1":
+				return mutReply{body: `{}`}
 			case r.Method == http.MethodGet && strings.HasPrefix(r.URL.Path, "/api/v1/users/"):
 				return mutReply{body: `{"user":{"id":"u1"}}`}
 			case r.Method == http.MethodGet:

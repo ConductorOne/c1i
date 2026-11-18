@@ -18,8 +18,9 @@ create a built-in pattern hook. A JSON patch hook is refused by the server
 with 403 when its preview is not enabled for the tenant.
 
 --function-id and --function-commit-id are looked up first, --dry-run included:
-an unknown one exits 4 (the server answers an unknown function with 400
-"function ... not found" and stores an unknown commit id at exit 0). A
+an unknown one exits 4 and a deleted one 2 (the server answers an unknown
+function with 400 "function ... not found" and stores an unknown commit id at
+exit 0). A
 --body-file is sent verbatim and not checked.
 
 A hook that sets none of the type fields is refused by the server with 400

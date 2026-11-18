@@ -248,7 +248,7 @@ func ownerEntitlement(cmd *cobra.Command, o ownerV2) (entitlementRef, bool, erro
 
 // addEntitlementOwner POSTs one entitlement owner. The ref is in the path; the
 // body repeats it, as the schema asks.
-func addEntitlementOwner(cmd *cobra.Command, o ownerV2, ref entitlementRef) error {
+func addEntitlementOwner(cmd *cobra.Command, o ownerV2, ref entitlementRef, extra ...mutationOpt) error {
 	if wait, _ := cmd.Flags().GetBool("wait"); wait {
 		return &usageError{fmt.Errorf("--wait does not apply with --owner-entitlement-id: the entitlement owner is in place when add-owner returns")}
 	}
@@ -257,13 +257,13 @@ func addEntitlementOwner(cmd *cobra.Command, o ownerV2, ref entitlementRef) erro
 		Path:   o.entitlementPath(ref),
 		Body:   map[string]any{"appEntitlementRef": ref},
 		Unwrap: named(o.envelope),
-	})
+	}, extra...)
 }
 
 // removeEntitlementOwner DELETEs one entitlement owner; the route takes no
 // body.
-func removeEntitlementOwner(cmd *cobra.Command, o ownerV2, ref entitlementRef) error {
-	return sendMutation(cmd, mutation{Method: http.MethodDelete, Path: o.entitlementPath(ref)})
+func removeEntitlementOwner(cmd *cobra.Command, o ownerV2, ref entitlementRef, extra ...mutationOpt) error {
+	return sendMutation(cmd, mutation{Method: http.MethodDelete, Path: o.entitlementPath(ref)}, extra...)
 }
 
 // setOwnersV2 PUTs both owner lists. userIDs is empty only with

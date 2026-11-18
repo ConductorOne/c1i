@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/spf13/viper"
 	"go.yaml.in/yaml/v3"
 )
 
@@ -144,5 +145,26 @@ components:
 		} else if !bytes.Equal(out, first) {
 			t.Fatalf("run %d differs:\n%s\nfirst:\n%s", i, out, first)
 		}
+	}
+}
+
+// docs endpoint projects --fields like every other single-object read.
+func TestDocsEndpointProjectsFields(t *testing.T) {
+	primeOpenAPICache(t)
+	clearViperOverrides(t, "fields")
+	viper.Set("fields", "summary")
+	t.Cleanup(func() { clearViperOverrides(t, "fields") })
+
+	var out bytes.Buffer
+	restoreCmdWriters(t)
+	resetCmdFlags(t, docsEndpointCmd)
+	docsEndpointCmd.SetOut(&out)
+	docsEndpointCmd.SetErr(&bytes.Buffer{})
+	if err := docsEndpointCmd.RunE(docsEndpointCmd, []string{"/api/v1/users/{id}"}); err != nil {
+		t.Fatalf("RunE: %v", err)
+	}
+	got := out.String()
+	if !strings.Contains(got, `"summary": "Get User"`) || strings.Contains(got, "operationId") {
+		t.Errorf("projected output = %s, want only summary", got)
 	}
 }

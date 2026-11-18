@@ -176,12 +176,16 @@ func hookFunctionPreRead(cmd *cobra.Command) []mutationOpt {
 }
 
 func requireHookRef(ctx context.Context, c *client.Client, path, flag, id, what string) error {
-	if _, err := c.Get(ctx, path, nil); err != nil {
+	data, err := c.Get(ctx, path, nil)
+	if err != nil {
 		var apiErr *client.APIError
 		if errors.As(err, &apiErr) && apiErr.StatusCode == http.StatusNotFound {
 			return refNotFound(flag, id, what, apiErr)
 		}
 		return fmt.Errorf("checking --%s %q: %w", flag, id, err)
+	}
+	if hasJSONField(data, "deletedAt", 2) {
+		return &usageError{fmt.Errorf("--%s %q: the %s is deleted", flag, id, what)}
 	}
 	return nil
 }

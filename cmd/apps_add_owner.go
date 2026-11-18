@@ -23,7 +23,7 @@ at least one before you ever run this -- this adds to that set, it doesn't
 start one.
 
 ` + ownerAsyncNote + `
-An unknown app id exits 4.
+An unknown app id exits 4, and a deleted one 2.
 Verify with "c1i apps owners <app-id>".
 
 Prints the API's response, which is {}; exit 0 is the success signal.
@@ -38,7 +38,7 @@ One owner per call; to change several at once use "apps set-owners".
 			if err != nil {
 				return err
 			}
-			return addEntitlementOwner(cmd, appOwnerV2(args[0]), ref)
+			return addEntitlementOwner(cmd, appOwnerV2(args[0]), ref, deletedAppPreRead(args[0], "<app-id>"))
 		}
 		userID, _ := cmd.Flags().GetString("user-id")
 		// Everything the endpoint needs is in the path, but it still parses
@@ -48,7 +48,7 @@ One owner per call; to change several at once use "apps set-owners".
 			Method: http.MethodPost,
 			Path:   client.Path("/api/v1/apps/%s/owners/%s", args[0], userID),
 			Body:   addOwnerEmptyBody(),
-		}, withPreRead(existingUsersCheck("user-id", []string{userID})))
+		}, deletedAppPreRead(args[0], "<app-id>"), withPreRead(existingUsersCheck("user-id", []string{userID})))
 	},
 }
 

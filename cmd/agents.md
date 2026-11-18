@@ -577,7 +577,9 @@ resource with `--resource-id` likewise means you drop
   (a list read right after register can omit it for a second or two; a timeout
   exits 1). A register response with no server id exits 6, with or without
   `--wait`.
-- `connectors create` makes a connector with an empty config; set it with
+- `connectors create` reads the app first (unknown `4`, deleted `2`) and
+  refuses a `--body-file` that sets `appId` (the path owns it). It makes a
+  connector with an empty config; set it with
   `connectors update <id> --app-id A --body-file <file> --update-mask config`,
   the file being `connectors get` output with `.config` edited and `expanded`,
   `appPath`, `capabilitiesPath`, `usersPath` deleted (else 400). Update ignored
@@ -655,8 +657,8 @@ resource with `--resource-id` likewise means you drop
   A type or resource id repeats across apps, so key search rows on `app_id`
   (and `resource_type_id`) plus `id`. `apps resources owners|add-owner|
   remove-owner|set-owners <resource-id>` behave like the app and entitlement
-  owner verbs; `set-owners` pre-reads the resource (the API stores owners for
-  an unknown one at 200). `owners` rows omit the response's `immutableUserIds`
+  owner write verbs; they pre-read the app (deleted `2`) and `set-owners` also
+  pre-reads the resource (the API stores owners for an unknown one at 200). `owners` rows omit the response's `immutableUserIds`
   (owners the API says cannot be removed); read them with `c1i api`.
 - Owner changes are applied asynchronously and can take several minutes to
   appear; pass --wait to block until they do. Grant provisioning is
@@ -668,7 +670,8 @@ resource with `--resource-id` likewise means you drop
   the request, removals included. `apps set-owners` prints the API's JSON
   response, `{}` (progress on stderr; a wait failure is `"applied": true`), and
   exits 4 before the write on an unknown
-  user, which the API would store as an owner no user matches. Entitlement
+  user, which the API would store as an owner no user matches, and 2 on a
+  deleted app. Entitlement
   owners work the same way:
   read with `c1i entitlements owners <entitlement-id> --app-id <app-id>`,
   write with `entitlements add-owner`/`remove-owner <entitlement-id>
@@ -1006,7 +1009,8 @@ resource with `--resource-id` likewise means you drop
   `update --clear-filter` clears it. `--priority` is `0` to `1000`: create is
   server-validated, update is not, so c1i refuses an out-of-range value
   (exit `2`) before sending. `--function-id` and `--function-commit-id`
-  are looked up first (unknown: exit `4`, `--dry-run` too; not for `--body-file`). `delete` is soft: `get` still returns the
+  are looked up first (unknown: exit `4`, deleted: `2`, `--dry-run` too; not
+  for `--body-file`). `delete` is soft: `get` still returns the
   hook with no deleted marker, `list` omits it, repeat delete exits `0`.
   `webhooks search --query TEXT --webhook-id ID...` matches names, and the
   index lags writes (use `list`/`get` for current state).

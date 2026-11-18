@@ -281,6 +281,9 @@ Prints the trust as pretty JSON, unwrapped like "trusts get".`,
 			if err := checkTrustBodyMask(trust, mask); err != nil {
 				return err
 			}
+			if err := checkTrustBodyClientID(trust, args[0]); err != nil {
+				return err
+			}
 		} else {
 			trust = map[string]any{}
 			if mask, err = spTrustsUpdateSpec.buildUpdateMask(cmd, trust); err != nil {
@@ -496,7 +499,7 @@ func init() {
 	addRepeatableStringFlag(spTrustsUpdateCmd, "scoped-role", "Replace the scoped role IDs (repeatable)")
 	addRepeatableStringFlag(spTrustsUpdateCmd, "allow-cidr", "Replace the source CIDR allowlist (repeatable)")
 	addRepeatableStringFlag(spTrustsUpdateCmd, "passthrough-claim", "Replace the passthrough claim names (repeatable)")
-	uf.String("body-file", "", "Trust JSON object (file, or \"-\" for stdin); requires --update-mask; mutually exclusive with the field flags")
+	uf.String("body-file", "", "Trust JSON object (file, or \"-\" for stdin); requires --update-mask; mutually exclusive with the field flags; must not set a different clientId")
 	uf.String("update-mask", "", bodyFileMaskUsage)
 	setBlankHint(spTrustsUpdateCmd, "update-mask", updateMaskBlankHint)
 	registerUpdateSpec(spTrustsUpdateCmd, spTrustsUpdateSpec)
@@ -514,4 +517,27 @@ func init() {
 
 	spTrustsCmd.AddCommand(spTrustsListCmd, spTrustsSearchCmd, spTrustsGetCmd, spTrustsCreateCmd, spTrustsUpdateCmd, spTrustsDeleteCmd, spTrustsTestTokenCmd)
 	servicePrincipalsCmd.AddCommand(spTrustsCmd)
+}
+
+// checkTrustBodyClientID refuses a body clientId that names another trust.
+// <trust-id> may be the part before "@", so either form of the same id passes.
+func checkTrustBodyClientID(body map[string]any, positional string) error {
+	v, key, err := bodyField(body, "clientId")
+	if err != nil {
+		return err
+	}
+	if v == nil {
+		return nil
+	}
+	s, ok := v.(string)
+	if !ok {
+		return &usageError{fmt.Errorf("--body-file %s must be a string", key)}
+	}
+	if s == positional {
+		return nil
+	}
+	if prefix, _, _ := strings.Cut(s, "@"); prefix == positional {
+		return nil
+	}
+	return &usageError{fmt.Errorf("--body-file %s is %q but <trust-id> is %q; remove it or set it to the argument", key, s, positional)}
 }

@@ -100,9 +100,9 @@ func TestMcpAuthFlagsCompleteValuesPass(t *testing.T) {
 				if r.err != nil {
 					t.Fatalf("exit %d: %v", r.exit, r.err)
 				}
-				reqs := s.requests()
+				reqs := nonGETRequests(s)
 				if len(reqs) != 1 {
-					t.Fatalf("%d request(s), want 1", len(reqs))
+					t.Fatalf("%d write(s), want 1", len(reqs))
 				}
 				for _, n := range c.companions {
 					if !strings.Contains(reqs[0].body, `"`+jsonKeyFor(n)+`":"`+c.values[n]+`"`) {
@@ -141,8 +141,8 @@ func TestMcpAuthFlagsCompleteValuesPass(t *testing.T) {
 						t.Errorf("preview missing %s value %q:\n%s", n, c.values[n], r.stdout)
 					}
 				}
-				if got := len(s.requests()); got != 0 {
-					t.Errorf("%d request(s) sent on --dry-run, want none", got)
+				if got := len(nonGETRequests(s)); got != 0 {
+					t.Errorf("%d write(s) sent on --dry-run, want none", got)
 				}
 			})
 		}
@@ -172,9 +172,9 @@ func TestMcpAuthPerUserLeavesSecretToTheUser(t *testing.T) {
 				if r.err != nil {
 					t.Fatalf("exit %d: %v", r.exit, r.err)
 				}
-				reqs := s.requests()
+				reqs := nonGETRequests(s)
 				if len(reqs) != 1 {
-					t.Fatalf("%d request(s), want 1", len(reqs))
+					t.Fatalf("%d write(s), want 1", len(reqs))
 				}
 				if !strings.Contains(reqs[0].body, `"MCP_SERVER_TOKEN_SHARING_PER_USER"`) {
 					t.Errorf("body missing per-user token sharing: %s", reqs[0].body)
@@ -341,8 +341,8 @@ func TestMcpAuthUnchangedShapes(t *testing.T) {
 		if r.err != nil {
 			t.Fatalf("exit %d: %v", r.exit, r.err)
 		}
-		if len(s.requests()) != 0 {
-			t.Errorf("%d request(s) sent on --dry-run, want none", len(s.requests()))
+		if len(nonGETRequests(s)) != 0 {
+			t.Errorf("%d write(s) sent on --dry-run, want none", len(nonGETRequests(s)))
 		}
 	})
 }

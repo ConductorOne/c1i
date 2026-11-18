@@ -53,10 +53,14 @@ func TestEntitlementOwnerWire(t *testing.T) {
 				if r.exit != 0 {
 					t.Fatalf("exit = %d (%v)", r.exit, r.err)
 				}
-				// Only resources set-owners reads first: its resource lookup.
+				// apps and resources pre-read the app; resources set-owners
+				// also reads its resource.
 				got, reads := s.requests(), 0
+				if f.name == "apps" || f.name == "resources" {
+					reads++
+				}
 				if f.name == "resources" && tc.verb == "set-owners" {
-					reads = 1
+					reads++
 				}
 				if len(got) != reads+1 {
 					t.Fatalf("sent %d requests, want %d: %+v", len(got), reads+1, got)
@@ -85,11 +89,11 @@ func TestSetOwnersEntitlementFormSendsUsers(t *testing.T) {
 		t.Fatalf("exit = %d (%v)", r.exit, r.err)
 	}
 	got := s.requests()
-	if len(got) != 2 || got[0].method != "GET" || got[1].method != "PUT" {
-		t.Fatalf("requests = %+v, want the user lookup then the PUT", got)
+	if len(got) != 3 || got[0].method != "GET" || got[1].method != "GET" || got[2].method != "PUT" {
+		t.Fatalf("requests = %+v, want app read, user lookup, PUT", got)
 	}
-	if want := `{"appEntitlementRefs":[{"appId":"app-1","id":"e-9"}],"roleSlug":"primary","userRefs":[{"id":"u1"}]}`; got[1].body != want || got[1].rawPath != "/api/v2/apps/app-1/owners" {
-		t.Errorf("PUT %s %s, want /api/v2/apps/app-1/owners %s", got[1].rawPath, got[1].body, want)
+	if want := `{"appEntitlementRefs":[{"appId":"app-1","id":"e-9"}],"roleSlug":"primary","userRefs":[{"id":"u1"}]}`; got[2].body != want || got[2].rawPath != "/api/v2/apps/app-1/owners" {
+		t.Errorf("PUT %s %s, want /api/v2/apps/app-1/owners %s", got[2].rawPath, got[2].body, want)
 	}
 }
 

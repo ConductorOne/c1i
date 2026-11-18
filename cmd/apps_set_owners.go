@@ -50,9 +50,8 @@ any existing owners. Provide one or more --user-id (C1 user IDs, 27 chars each).
 ` + setOwnersLookupNote + `
 The API itself accepts an unknown user id (exit 0) and stores it: GET
 .../ownerids lists it but "apps owners" does not, so a set naming only such ids
-leaves the app with no real owners. An unknown but well-formed app id is also
-answered 200 {} (measured), while "apps get"/"apps add-owner" 404 on the same
-id; confirm with "apps get" first.
+leaves the app with no real owners. c1i reads the app first: an unknown app id
+exits 4 and a deleted one 2, before anything is sent, --dry-run included.
 
 ` + ownerAsyncWaitNote + `
 Verify with "c1i apps owners <app-id>". Don't check ownership via the
@@ -68,7 +67,8 @@ those GET .../ownerids reported owners for.
 		return runOwnerSetPut(cmd, client.Path("/api/v1/apps/%s/owners", appID), appOwnerV2(appID),
 			func(c *client.Client, done func([]string) bool, timeout time.Duration) waitOp[[]string] {
 				return appOwnersWaitOp(c, appID, done, timeout)
-			})
+			},
+			deletedAppPreRead(appID, "<app-id>"))
 	},
 }
 

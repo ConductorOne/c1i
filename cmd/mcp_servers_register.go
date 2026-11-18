@@ -16,6 +16,9 @@ var mcpServersRegisterCmd = &cobra.Command{
 	Short: "Register a new MCP server under an app (pretty JSON)",
 	Long: `Register a new HOSTED or EXTERNAL MCP server under an existing app.
 
+The app is looked up first: an unknown --app-id exits 4 and a deleted one 2
+(the server would store the server and its access profiles under either).
+
 HOSTED servers run inside C1 from a catalog impl — browse
 "c1i mcp servers catalog list" and pass the entry's id via --catalog-id.
 EXTERNAL servers point at a third-party MCP URL via --server-url.
@@ -109,7 +112,8 @@ requires --app-id. Approve discovered tools afterward with
 			}
 			return writeOutcome{Wait: serverListedWaitOp(c, appID, id, waitTimeout)}
 		}, wait))
-		return sendMutation(cmd, mutation{Method: http.MethodPost, Path: path, Body: body, Unwrap: byID("connectorId")}, opts...)
+		return sendMutation(cmd, mutation{Method: http.MethodPost, Path: path, Body: body, Unwrap: byID("connectorId")},
+			append(opts, deletedAppPreRead(appID, "--app-id"))...)
 	},
 }
 

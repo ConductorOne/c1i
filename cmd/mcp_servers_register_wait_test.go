@@ -85,8 +85,8 @@ func TestMCPServersRegisterWait(t *testing.T) {
 		if r.exit != exitServer || r.errorObject(t)["applied"] != true {
 			t.Errorf("exit %d stderr %s, want 6 and applied:true", r.exit, r.stderr)
 		}
-		if got := s.requests(); len(got) != 1 {
-			t.Errorf("requests = %+v, want only the POST", got)
+		if got := nonGETRequests(s); len(got) != 1 {
+			t.Errorf("writes = %+v, want only the POST", got)
 		}
 	})
 	t.Run("dry-run sends and polls nothing", func(t *testing.T) {
@@ -94,8 +94,8 @@ func TestMCPServersRegisterWait(t *testing.T) {
 		s := newMutServer(t, fixedReply(200, created))
 		t.Setenv("C1I_URL", mutTestURL)
 		r := runMutationCLI(t, s.srv, 0, nil, registerWaitArgs("--wait")...)
-		if r.err != nil || len(s.requests()) != 0 {
-			t.Errorf("err %v requests %+v, want a preview and no requests", r.err, s.requests())
+		if r.err != nil || len(nonGETRequests(s)) != 0 {
+			t.Errorf("err %v writes %+v, want a preview and no writes", r.err, nonGETRequests(s))
 		}
 	})
 	t.Run("wait-timeout without wait is a usage error", func(t *testing.T) {

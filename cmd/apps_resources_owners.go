@@ -47,8 +47,8 @@ replacing any existing owners. Provide one or more --user-id.
 ` + setOwnersLookupNote + `
 The API answers an unknown resource, resource type or app 200 {} and stores
 the owners anyway, so this command looks the resource up first: an unknown
-one exits 4, --dry-run included. The server accepts owners on a deleted
-resource.
+one exits 4, --dry-run included. c1i also reads the app: a deleted app exits 2.
+The server accepts owners on a deleted resource.
 
 ` + ownerAsyncWaitNote + `
 Verify with "c1i apps resources owners <resource-id> --app-id <app-id>
@@ -64,6 +64,7 @@ Verify with "c1i apps resources owners <resource-id> --app-id <app-id>
 			func(c *client.Client, done func([]string) bool, timeout time.Duration) waitOp[[]string] {
 				return resourceOwnersWaitOp(c, s, id, done, timeout)
 			},
+			deletedAppPreRead(s.appID, "--app-id"),
 			withPreRead(resourceExistsCheck(s, id)))
 	},
 }
@@ -76,7 +77,7 @@ Unlike "apps resources set-owners", which replaces the whole list with exactly
 the ids you pass, this adds one owner without touching the rest of the list.
 Adding a user who is already an owner exits 0.
 
-An unknown resource, resource type or app exits 4.
+An unknown resource, resource type or app exits 4, and a deleted app 2.
 
 ` + ownerAsyncWaitNote + `
 Verify with "c1i apps resources owners <resource-id> --app-id <app-id>
@@ -102,10 +103,11 @@ One owner per call; to change several at once use "apps resources set-owners".
 			if err != nil {
 				return err
 			}
-			return addEntitlementOwner(cmd, s.ownerV2(id), ref)
+			return addEntitlementOwner(cmd, s.ownerV2(id), ref, deletedAppPreRead(s.appID, "--app-id"))
 		}
 		userID := mustGetString(cmd, "user-id")
 		return sendMutation(cmd, mutation{Method: http.MethodPost, Path: s.ownersPath(id), Body: map[string]any{"userId": userID}},
+			deletedAppPreRead(s.appID, "--app-id"),
 			withPreRead(existingUsersCheck("user-id", []string{userID})),
 			withWait(func(c *client.Client) waitOp[[]string] {
 				return resourceOwnersWaitOp(c, s, id, untilPresent([]string{userID}), waitTimeout)
@@ -120,7 +122,7 @@ var appsResourcesRemoveOwnerCmd = &cobra.Command{
 .../owners. Unlike "apps resources set-owners", this removes one owner without
 touching the rest of the list. Removing a user who is not an owner exits 0.
 
-An unknown resource, resource type, app or user exits 4.
+An unknown resource, resource type, app or user exits 4, and a deleted app 2.
 ` + ownerAsyncNote + `
 Verify with "c1i apps resources owners <resource-id> --app-id <app-id>
 --resource-type-id <resource-type-id>".
@@ -137,13 +139,13 @@ One owner per call; to change several at once use "apps resources set-owners".
 			if err != nil {
 				return err
 			}
-			return removeEntitlementOwner(cmd, resourceScopeOf(cmd).ownerV2(args[0]), ref)
+			return removeEntitlementOwner(cmd, resourceScopeOf(cmd).ownerV2(args[0]), ref, deletedAppPreRead(resourceScopeOf(cmd).appID, "--app-id"))
 		}
 		return sendMutation(cmd, mutation{
 			Method: http.MethodDelete,
 			Path:   resourceScopeOf(cmd).ownersPath(args[0]),
 			Body:   map[string]any{"userId": mustGetString(cmd, "user-id")},
-		})
+		}, deletedAppPreRead(resourceScopeOf(cmd).appID, "--app-id"))
 	},
 }
 
