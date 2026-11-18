@@ -127,7 +127,7 @@ func invokeCommitPreRead(functionID, commitID string) mutationOpt {
 			return nil, err
 		}
 		if published == "" {
-			return nil, &usageError{fmt.Errorf("function %s has no published commit; pass --commit-id, or publish one with \"functions update %s --publish-commit <commit-id>\"", functionID, functionID)}
+			return nil, &usageError{fmt.Errorf("function %s has no published commit; push code with \"functions update %s --file <path>\" and publish the returned .commit.id with --publish-commit, or pass --commit-id for an existing commit", functionID, functionID)}
 		}
 		body["commitId"] = published
 		return []resolvedID{{Name: "commitId", Label: "published commit", ID: published}}, nil

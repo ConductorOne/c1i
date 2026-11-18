@@ -12,7 +12,8 @@ var connectorsSyncCmd = &cobra.Command{
 	Short: "Start a sync of a connector now",
 	Long: `Start a sync of a connector now. The API queues the sync; exit 0 means it
 was accepted, not that it finished. Follow progress with
-"c1i connectors sync-status".
+"c1i connectors sync-status". On a paused connector the API can accept the call
+but queue nothing; resume the connector first.
 
 Prints the API's response, which is {}. Honors --dry-run.`,
 	Args: cobra.ExactArgs(1),

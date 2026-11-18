@@ -12,8 +12,8 @@ var functionsDeleteCmd = &cobra.Command{
 	Short: "Soft-delete a function",
 	Long: `Soft-delete a function by ID. "functions list" stops listing it, while
 "functions get" still returns it, with deletedAt set. Deleting it again exits
-4 (404). The API's own description says a function that a hook still
-references is refused until the hook is removed or retargeted.
+4 (404). The API refuses a function still referenced by a hook or workflow
+template until that reference is removed or retargeted.
 
 Prints the API's response, which is {}; exit 0 is the success signal.
 Honors --dry-run.`,

@@ -80,7 +80,7 @@ func TestAppsSearchWire(t *testing.T) {
 		return s, runCLI(t, stub, nil, append([]string{"apps", "search"}, args...)...)
 	}
 	s, r := run("--query", "q", "--display-name", "D", "--app-id", "i1", "--app-id", "i2",
-		"--exclude-app-id", "x1", "--policy-id", "p1", "--policy-id", "p2", "--only-directories", "--limit", "1")
+		"--exclude-app-id", "x1", "--policy-id", "p1", "--policy-id", "p1", "--policy-id", "p2", "--only-directories", "--limit", "1")
 	if r.err != nil {
 		t.Fatalf("exit %d: %v", r.exit, r.err)
 	}

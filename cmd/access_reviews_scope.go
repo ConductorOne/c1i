@@ -29,9 +29,9 @@ func (o setupOwner) path(id, suffix string) string {
 }
 
 var (
-	setupEntitlementShape    = appRefShape{name: "AccessReviewSetupEntitlementInput", idKey: "appEntitlementId"}
-	excludedEntitlementShape = appRefShape{name: "AccessReviewExcludedEntitlementInput", idKey: "appEntitlementId"}
-	resourceTypeRefShape     = appRefShape{name: "ResourceTypeIdRef", idKey: "resourceTypeId"}
+	setupEntitlementShape    = appRefShape{name: "AccessReviewSetupEntitlementInput", idKey: "appEntitlementId", article: "an"}
+	excludedEntitlementShape = appRefShape{name: "AccessReviewExcludedEntitlementInput", idKey: "appEntitlementId", article: "an"}
+	resourceTypeRefShape     = appRefShape{name: "ResourceTypeIdRef", idKey: "resourceTypeId", article: "a"}
 )
 
 // refKind is what a referenced id names and how to look it up.

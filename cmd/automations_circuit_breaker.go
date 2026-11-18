@@ -18,7 +18,9 @@ var automationsCircuitBreakerCmd = &cobra.Command{
 	Long: `An automation's circuit breaker (circuitBreakerMax per circuitBreakerPeriod,
 set through "automations update --body-file") disables it when it runs too
 often; executions that arrive while it is tripped are paused. "automations
-get" shows the limit but no field saying whether the breaker is tripped.`,
+get" shows the limit but no field saying whether the breaker is tripped. A
+tenant without the AUTOMATION_CIRCUIT_BREAKER feature answers 400 "automation
+circuit breaker feature is not enabled for this tenant" (exit 2).`,
 }
 
 var automationsCircuitBreakerClearCmd = &cobra.Command{
@@ -50,8 +52,9 @@ var automationsCircuitBreakerResolvePausedCmd = &cobra.Command{
 	Long: `Run or cancel the executions paused while the automation's circuit breaker was
 tripped. --decision is required.
 
-Prints the API's response, {"bulkActionId": "..."} (it may also carry the
-deprecated pausedCount and erroredCount). The API describes the resolution
+Prints the API's response, {"bulkActionId": "..."}; it also carries the
+deprecated pausedCount and erroredCount, which were always 0 in the runs
+checked even when executions were resolved. The API describes the resolution
 as asynchronous: exit 0 means accepted, not finished. c1i has no command to
 read a bulk action. Honors --dry-run.`,
 	Args: cobra.ExactArgs(1),

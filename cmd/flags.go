@@ -86,11 +86,21 @@ func validateHeaderFlags(cmd *cobra.Command) error {
 
 // pathFlagNames are the string flags that name a file or directory without the
 // "-file" suffix. TestEveryPathLikeFlagIsCovered fails on a path flag this misses.
-var pathFlagNames = map[string]bool{"output": true, "out-dir": true}
+var pathFlagNames = map[string]bool{"output": true, "out-dir": true, "file": true}
 
 // isPathFlag reports whether f names a file or directory ("-" is stdin/stdout).
+// Repeatable path flags are StringArray/StringSlice values, so the guard must
+// inspect every element, not just scalar string flags.
 func isPathFlag(f *pflag.Flag) bool {
-	return f.Value.Type() == "string" && (pathFlagNames[f.Name] || strings.HasSuffix(f.Name, "-file"))
+	if !pathFlagNames[f.Name] && !strings.HasSuffix(f.Name, "-file") {
+		return false
+	}
+	switch f.Value.Type() {
+	case "string", "stringArray", "stringSlice":
+		return true
+	default:
+		return false
+	}
 }
 
 // validatePathFlags refuses a set path flag holding a control character: it
@@ -101,7 +111,15 @@ func validatePathFlags(cmd *cobra.Command) error {
 		if err != nil || !f.Changed || !isPathFlag(f) {
 			return
 		}
-		err = checkNoControl("--"+f.Name, "", "path", f.Value.String(), false)
+		values := []string{f.Value.String()}
+		if sv, ok := f.Value.(pflag.SliceValue); ok {
+			values = sv.GetSlice()
+		}
+		for _, value := range values {
+			if err = checkNoControl("--"+f.Name, "", "path", value, false); err != nil {
+				return
+			}
+		}
 	})
 	return err
 }

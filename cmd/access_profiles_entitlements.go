@@ -12,9 +12,9 @@ import (
 // appRefShape names an API's {appId, <id>} pair: an id scoped to its app, so
 // neither field can be omitted. APIs key the second field differently
 // (AppEntitlementRef "id", access-review setup inputs "appEntitlementId").
-type appRefShape struct{ name, idKey string }
+type appRefShape struct{ name, idKey, article string }
 
-var appEntitlementRefShape = appRefShape{name: "AppEntitlementRef", idKey: "id"}
+var appEntitlementRefShape = appRefShape{name: "AppEntitlementRef", idKey: "id", article: "an"}
 
 // appRef marshals as {"appId":…,<shape.idKey>:…}, appId first.
 type appRef struct {
@@ -226,12 +226,12 @@ func parseAppRefs(raw []any, field string, shape appRefShape) ([]appRef, error) 
 	refs := make([]appRef, len(elems))
 	for i, ref := range elems {
 		if len(ref) != 2 {
-			return nil, &usageError{fmt.Errorf("%s[%d] must be an %s with exactly appId and %s", field, i, shape.name, shape.idKey)}
+			return nil, &usageError{fmt.Errorf("%s[%d] must be %s %s with exactly appId and %s", field, i, shape.article, shape.name, shape.idKey)}
 		}
 		appID, appOK := ref["appId"].(string)
 		id, idOK := ref[shape.idKey].(string)
 		if !appOK || !idOK || appID == "" || id == "" {
-			return nil, &usageError{fmt.Errorf("%s[%d] must be an %s with non-empty appId and %s", field, i, shape.name, shape.idKey)}
+			return nil, &usageError{fmt.Errorf("%s[%d] must be %s %s with non-empty appId and %s", field, i, shape.article, shape.name, shape.idKey)}
 		}
 		refs[i] = appRef{AppID: appID, ID: id, shape: shape}
 	}

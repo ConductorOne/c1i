@@ -825,7 +825,7 @@ c1i apps managed-state promote <resource-id> --app-id <app-id> --resource-type-i
 
 `user_count` is the platform's stored count, not a live tally: on some apps it differs from the number of `accounts list --app-id <app-id>` rows. To size a change, count those rows, not `user_count`.
 
-`apps list` takes no filters; to narrow by name, id, policy or directory use `apps search` (`POST /api/v1/search/apps`), which emits the same rows. `--query` is a fuzzy match on name and description, `--display-name` a case-insensitive name match, and `--only-directories` sets the server's `onlyDirectories` filter. Each `--policy-id` is looked up first (unknown: exit `4`, deleted: exit `2`, nothing searched). Observed: an `--app-id` the tenant lacks matches nothing (empty result, exit `0`), and a malformed id is rejected by the server (exit `2`).
+`apps list` takes no filters; to narrow by name, id, policy or directory use `apps search` (`POST /api/v1/search/apps`), which emits the same rows. `--query` uses the server's full-text search over name and description (tokens, stems and 3-character n-grams, not simple substring matching; 1-2 character terms behave inconsistently), `--display-name` is a case-insensitive server match whose value is an ILIKE pattern (`%` and `_` are wildcards), and `--only-directories` sets the server's `onlyDirectories` filter. Each `--policy-id` is looked up first (unknown: exit `4`, deleted: exit `2`, nothing searched). Observed: an `--app-id` the tenant lacks matches nothing (empty result, exit `0`); `.`/`..` ids are refused locally and another malformed id is rejected by the server (exit `2`).
 
 `apps create` needs only `--display-name`; it makes a plain, unmanaged
 container app — the zero state for "make an app, then register MCP servers
@@ -1367,7 +1367,9 @@ c1i connectors credentials revoke <credential-id> --app-id <id> --connector-id <
 ```
 
 `connectors create` makes a connector with an empty config (the API's
-delegated create; an MCP catalog id is a 400, use `mcp servers register`); set the config with `connectors update --body-file <file>
+delegated create; a malformed catalog id is a 400 (exit 2), a well-formed id
+the catalog lacks can be a 500 (exit 6), and an MCP catalog id is a 400 — use
+`mcp servers register`); set the config with `connectors update --body-file <file>
 --update-mask config`, where the file is a `connectors get` output with
 `.config` edited and the view keys removed (`jq 'del(.expanded, .appPath,
 .capabilitiesPath, .usersPath)'`; the server refuses them as unknown fields).
@@ -1379,7 +1381,8 @@ server (exit 2): deleting that through this route left its toolsets and their
 entitlements live, so use `mcp servers delete`.
 
 `sync` queues a sync and exits 0 when it is accepted, not when it finishes;
-follow it with `sync-status`. `pause` and `resume` exit 0 when repeated.
+follow it with `sync-status`. On a paused connector the server can accept the
+call but queue nothing, so resume the connector first. `pause` and `resume` exit 0 when repeated.
 `schedule --clear` removes the schedule; c1i does not validate `--cron` or
 `--timezone`, and the server accepted invalid values in the run checked.
 `--justification` is sent as `justification.reason`.
@@ -1406,8 +1409,9 @@ c1i functions invocations list <function-id> [--page-size N] [--page-token TOKEN
 c1i functions invocations get <invocation-id> --function-id <function-id>
 ```
 
-Every file-valued flag (`-o/--output`, `--out-dir`, `--*-file`) refuses a path
-containing a control character (exit 2); `-` still means stdin/stdout.
+Every file-valued flag (`-o/--output`, `--out-dir`, repeatable `--file`, and
+`--*-file`) refuses a path containing a control character (exit 2); `-` still
+means stdin/stdout.
 
 `functions source` auto-resolves the function's published commit (falling back
 to its head/latest draft) and base64-decodes the source files. Without
@@ -1431,7 +1435,9 @@ command printed (`.commit.id`) to `functions update <function-id>
 function to resend its current name, which the server validates on every
 update. Other fields go through `--body-file` with a camelCase `--update-mask`.
 `functions delete` is a soft delete: `functions get` still returns the function
-with `deletedAt` set, and a second delete exits `4`.
+with `deletedAt` set, and a second delete exits `4`. The API refuses a function
+still referenced by a hook or workflow template until that reference is removed
+or retargeted.
 
 `functions invoke` starts an asynchronous run of the published commit (exit `2`
 when nothing is published; pass `--commit-id` to run another commit, which is
@@ -1443,7 +1449,9 @@ run is the error naming `ended in FUNCTION_INVOCATION_STATUS_ERROR` (or
 `CANCELLED`), and a timeout says so and is not necessarily a failure. Read
 the input, output and error with `functions invocations get`.
 `functions invocations list` is newest first; a busy function can have tens of
-thousands of invocations, so pass `--limit`.
+thousands of invocations, so pass `--limit`. The search response carries each
+invocation's full input and output, so use a small `--page-size` when payloads
+may be large.
 
 `functions list` and `functions commits` read routes whose pagination cursor
 stops advancing on large result sets; the guard described under
@@ -1489,7 +1497,10 @@ top-level siblings.
 `--triggers-file` are JSON arrays sent as `automationSteps` and `triggers`.
 `--body-file` sends a full CreateAutomationRequest verbatim (circuit breaker,
 drafts, `appId`, annotations) and excludes every other flag. It prints the
-automation unwrapped like `update`. An automation with no triggers runs only
+automation unwrapped like `update`. Omitting `--enabled` leaves the server
+default, `false`. The API currently returns a 500 for creating an enabled
+automation with no steps; create it disabled, add steps, then enable it with
+`automations update --enabled`. An automation with no triggers runs only
 through `automations execute`, which also starts a disabled automation.
 
 `automations execute` prints `{"executionId": "..."}`; `--context-file` is a
@@ -1508,7 +1519,11 @@ Terminating an execution that has already ended (DONE or TERMINATE) exits
 
 `circuit-breaker clear`, `circuit-breaker resolve-paused` and `cancel-pending`
 print `{"bulkActionId": "..."}` and are asynchronous: exit `0` means accepted,
-and c1i has no command to read a bulk action. `clear` without `--decision`
+and c1i has no command to read a bulk action. The circuit-breaker verbs also
+return the deprecated `pausedCount` and `erroredCount`; both were always `0` in
+the runs checked, even when paused executions were resolved. A tenant without
+the `AUTOMATION_CIRCUIT_BREAKER` feature answers `400` "automation circuit
+breaker feature is not enabled for this tenant" (exit `2`). `clear` without `--decision`
 only clears the breaker (an empty id). With `--decision`, or on
 `resolve-paused` (where it is required), an id came back even with nothing
 paused. `--reason` is recorded with the decision. `cancel-pending` cancels queued
@@ -2067,15 +2082,16 @@ c1i access-reviews reports generate <campaign-id> --body-file <file|->
 
 `create` takes the complete API request object. Its `scopeV2` is a deeply
 nested oneof, so the CLI intentionally accepts it through `--body-file` rather
-than a lossy flag surface; at least one `ownerIds` entry is required. `update`
-takes a partial `AccessReview` object, inserts the id, and wraps it with the
-required explicit `--update-mask` (see [Update masks](#update-masks)). Prepared campaigns cannot change their
+than a lossy flag surface; at least one `ownerIds` entry and a 27-character
+`policyId` are required by the server. `update` takes a partial `AccessReview`
+object, inserts the id, and wraps it with the required explicit `--update-mask`
+(see [Update masks](#update-masks)). Prepared campaigns cannot change their
 scope or policy. `create` and `update` print the campaign unwrapped like `get`
 (`jq -er .id`); `reports generate` prints `{}`.
 
 `delete` soft-deletes: the campaign leaves `list`, but `get` still returns it
-with `state` `ACCESS_REVIEW_STATE_DELETED` (check `state`: `deletedAt` stayed
-null in the run checked), and deleting it again exits `0`. The API says the
+with `state` `ACCESS_REVIEW_STATE_DELETED` (the model has no `deletedAt` field;
+check `state`), and deleting it again exits `0`. The API says the
 delete also takes the campaign's "dependent objects" with it. Prints `{}`.
 
 `scope get` prints a campaign's `scopeV2`, its selected entitlements (`list`)
