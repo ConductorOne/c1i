@@ -108,6 +108,7 @@ or parsed exits 2 naming the file, even with `--url` (a missing one is fine; `do
 
 In text mode, control characters and invalid UTF-8 from the server print on
 stderr as visible escapes (`\x1b`, `\u202e`); `\n` and `\t` are kept.
+
 `--error-format json` is the one worth setting by default if you parse
 failures: stderr becomes NDJSON. Error objects carry `"error"` (select them
 with `jq 'select(.error)'`) plus `status`, `method`, `path`, and the response
@@ -443,12 +444,13 @@ Most list commands auto-paginate to completion by default — one invocation
 gets every page. Pass `--page-token` with a cursor to opt out and fetch a
 single page manually; a blank value is refused (exit 2, before any request),
 because supplying the flag at all turns auto-pagination off and an unset
-variable would otherwise silently truncate the list. The exceptions send one request:
-`role-mining suggestions|runs|custom-analysis list` and
-`findings routing-rules|transformation-rules list`, `apps routing-rules list`,
+variable would otherwise silently truncate the list. The exceptions send one
+request. `role-mining suggestions|runs|custom-analysis list`, `findings
+routing-rules|transformation-rules list`, `apps routing-rules list`,
 `attribute-types list`, `grants accounts` and `settings ai-governance history`
-print a stderr `partial result` warning if the server reports more pages, and
-`mcp bindings by-tools` and `mcp toolsets requestable-connectors` are not paginated.
+each print a stderr `partial result` warning if the server reports more pages.
+`mcp bindings by-tools` and `mcp toolsets requestable-connectors` are not
+paginated.
 A `--body-file` key that the command itself sets must be absent: any value,
 including `null`, exits 2 before any request, listing every offending key. A
 key set from a positional id is the one exception: it may be present when it

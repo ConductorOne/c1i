@@ -440,9 +440,9 @@ $ cat trace.log
   agent guide names under Pagination: `apps routing-rules list`,
   `attribute-types list`, `grants accounts`, `settings ai-governance history`,
   `role-mining suggestions|runs|custom-analysis list` and `findings
-  routing-rules|transformation-rules list` (each warns on stderr when the
-  server reports more pages), and `mcp bindings by-tools` and `mcp toolsets
-  requestable-connectors`. Pass `--page-token` with a
+  routing-rules|transformation-rules list`, each of which warns on stderr
+  when the server reports more pages, and `mcp bindings by-tools` and `mcp
+  toolsets requestable-connectors`. Pass `--page-token` with a
   non-empty cursor to fetch a single page manually; supplying the flag at all
   disables auto-pagination, so a blank value is a usage error (exit 2) rather
   than an empty filter.
@@ -2674,7 +2674,8 @@ c1i service-principals trusts test-token <trust-id> --service-principal-id <sp-i
 A trust's id is its client id (`word-word-12345@tenant.example.com/wfe`, as
 rows print it in `client_id`); `<trust-id>` takes that or the part before
 `@`, which is all c1i sends: the rest is not checked, and the trust is looked
-up under `--service-principal-id`. `--condition` is a CEL expression over `claims`
+up under `--service-principal-id`. A row prints an absent `scoped_role_ids`,
+`allow_source_cidrs` or `passthrough_claims` as `null`, not `[]`. `--condition` is a CEL expression over `claims`
 that must return a bool; the API refuses an invalid one (exit `2`). The API
 stores a trust for an unknown service principal or `--scoped-role`, so
 `create` looks up `<sp-id>` and each `--scoped-role` first, and `update` each
@@ -3019,7 +3020,7 @@ and for those fields, plus `awsSigv4` `accessKeyId` and `sessionToken`, inside
 (`customHeader`/`custom_header`, `headerValue`/`header_value`, ...). A
 violation is a usage error (exit 2) that names the flag or JSON path and never
 echoes the text. A control character in a `--config-field` key or in a path flag
-(`-o/--output`, `--out-dir`, `--*-file`) is also exit 2.
+(`-o/--output`, `--out-dir`, `--file`, `--*-file`) is also exit 2.
 
 With `--paginate`, a `pageToken` in the body (or `page_token` in `--query`) is the first page's cursor and later pages replace it; `pageSize` is sent as given. Each page's first array-valued field is unwrapped and each
 item is emitted as a single line of NDJSON, the same format list commands use.

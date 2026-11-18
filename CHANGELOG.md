@@ -10,30 +10,24 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 Exit codes:
 
-- **`apps update`, `apps set-owners`, `apps add-owner|remove-owner` and `mcp
-  servers register` read the app before sending**, `--dry-run` included (so a
-  preview needs credentials that can read it): an unknown app exits `4`, a
-  soft-deleted one `2`, and a `200` without an app `6`. `apps set-owners` (the
-  API answers `200 {}`) and `mcp servers register` (the server was stored)
-  used to exit `0` for an unknown app; `apps update` with a malformed id now
-  exits `2` (the read is refused) instead of the update's `404` (`4`).
-- **`--fields` on `mcp gateway call` and `findings settings show` exits `2`**:
-  their raw output was never projected, so the flag was silently ignored.
-  `docs endpoint --fields` now projects the schema, so a spec that matches
-  nothing exits `2`.
-- **`policies create|update --body-file` checks snake_case keys too.** A
-  snake_case body that breaks a policy guard used to be sent and now exits
-  `2`, and a checked field set in both spellings exits `2` before sending,
-  `--dry-run` included. Valid snake_case bodies c1i used to refuse are now
-  sent.
+- **An unknown app on `apps set-owners` or `mcp servers register` exits `4`,
+  not `0`; a deleted app on those and on `apps update` and `apps
+  add-owner|remove-owner` exits `2`; a malformed `apps update` id exits `2`,
+  not `4`.** Their `--dry-run` now reads the app, so it needs credentials. See
+  Fixed.
+- **`--fields` on `mcp gateway call` and `findings settings show` exits `2`**
+  (it was ignored), and `docs endpoint --fields` that matches nothing exits
+  `2`. See Fixed.
+- **`policies create|update --body-file` with a snake_case key that breaks a
+  policy guard, or a checked field in both spellings, exits `2`**; it used to
+  be sent. See Fixed.
 
 Output and error text:
 
-- **`--dry-run` previews print an email-shaped value as sent** (an email-shaped
-  display name used to be masked); the user of an scp-form git remote
-  (`ghp_x@github.com:repo.git`) is now masked.
+- **`--dry-run` previews show email-shaped values unmasked and mask an
+  scp-form git remote's user.** See Fixed.
 - **Text-mode stderr and `auth login`'s device code and URL escape control
-  characters** from the server (`\x1b`, `‮`); `\n` and `\t` are kept. See
+  characters** from the server (`\x1b`, `\u202e`); `\n` and `\t` are kept. See
   Security.
 - **`apps resource-types list` rows gain `app_id`**, and **the owner verbs'
   missing-flag message names `--owner-entitlement-id`** (still exit `2`). See
@@ -45,7 +39,7 @@ Output and error text:
   server with control characters escaped, as stderr already does.
 - Text-mode stderr (errors, notices, `--wait` progress, the `--debug`
   trace) prints control characters and invalid UTF-8 bytes from
-  server-supplied text as visible escapes (`\x1b`, `‮`) instead of
+  server-supplied text as visible escapes (`\x1b`, `\u202e`) instead of
   sending them to the terminal, so an API error body or MCP message cannot
   rewrite the screen or title. `\n` and `\t` are kept; `--error-format json`
   output is unchanged.
@@ -129,8 +123,8 @@ Output and error text:
   certify policy exits `2`. The server alone stores either without complaint.
   `update` reads the template to fill the `displayName` and `policyId` the
   server demands on every update when the request leaves one unset; the mask
-  still decides what changes, and a masked field the `--body-file` omits exits
-  `2`. In the run checked, `delete` exited `0` but the template stayed readable
+  still decides what changes, and a masked `displayName` or `policyId` the
+  `--body-file` omits exits `2`. In the run checked, `delete` exited `0` but the template stayed readable
   with `deletedAt` null.
 - `attributes types|list|search|get|create|delete` for tenant attribute values
   (Compliance Framework, Risk Level), distinct from `attribute-types` and
