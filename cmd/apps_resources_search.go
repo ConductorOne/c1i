@@ -54,7 +54,7 @@ letters and digits is rejected by the server (exit 2).`,
 				r := it.AppResource
 				return scopedRowID(r.AppID, r.ResourceTypeID, r.ID)
 			},
-			Rows:      rowFn(resourceRow),
+			Rows:      rowFn(appResourceRow),
 			Composite: true,
 		})
 	},

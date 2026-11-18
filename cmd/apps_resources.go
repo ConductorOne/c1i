@@ -42,10 +42,10 @@ type resourceListItem struct {
 	AppResource appResource `json:"appResource"`
 }
 
-// resourceRow is the NDJSON row of "resources list" and "search". grant_count
+// appResourceRow is the NDJSON row of "resources list" and "search". grant_count
 // and is_manually_managed keep their JSON types. There is no deleted_at: both
 // endpoints omit deleted resources.
-func resourceRow(it resourceListItem) map[string]any {
+func appResourceRow(it resourceListItem) map[string]any {
 	r := it.AppResource
 	return map[string]any{
 		"id":                      nilIfEmpty(r.ID),
@@ -139,7 +139,7 @@ A well-formed but unknown resource type returns zero rows and exit 0.`,
 			Fetch: getPage(cmd.Context(), path, nil),
 			Parse: parseList[resourceListItem],
 			ID:    func(it resourceListItem) string { return it.AppResource.ID },
-			Rows:  rowFn(resourceRow),
+			Rows:  rowFn(appResourceRow),
 		})
 	},
 }
