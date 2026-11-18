@@ -41,9 +41,10 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `set-owners --owner-entitlement-id ...`, which replaces user and entitlement
   owners together and so needs `--user-id` for each user owner to keep or
   `--no-user-owners`. They use the v2 owner routes under the role `primary`.
-  `--user-id` keeps its existing behavior, except that `add-owner`,
-  `remove-owner` and `set-owners` now say "one of --user-id or
-  --owner-entitlement-id is required" when neither is given.
+  `--user-id` keeps its existing behavior, except the message when neither
+  flag is given: `add-owner` and `remove-owner` say "one of --user-id or
+  --owner-entitlement-id is required", `set-owners` says "at least one
+  --user-id or --owner-entitlement-id is required".
 - `tasks escalate|retry-provisioning <task-id>` (current policy step resolved
   like `approve`) and `tasks update-request-data <task-id> --data-file`, which
   the API describes as submitting the request form of a task at a form step.
