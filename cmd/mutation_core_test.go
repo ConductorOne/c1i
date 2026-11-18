@@ -19,6 +19,8 @@ func TestCoreMutationSecretWriteFailure(t *testing.T) {
 			`{"credential":{"id":"c-1"},"clientSecret":"s3"}`, "the clientSecret in this response cannot be retrieved again; revoke the credential and create a new one"},
 		{"automation with a webhook secret", []string{"automations", "update", "a-1", "--enabled"},
 			`{"automation":{"id":"a-1"},"webhookHmacSecret":"s3"}`, "webhookHmacSecret/webhookCapabilityUrl were not delivered"},
+		{"automation create with a webhook secret", []string{"automations", "create", "--display-name", "zz"},
+			`{"automation":{"id":"a-1"},"webhookHmacSecret":"s3"}`, "webhookHmacSecret/webhookCapabilityUrl were not delivered"},
 		{"automation without one", []string{"automations", "update", "a-1", "--enabled"},
 			`{"automation":{"id":"a-1"},"webhookHmacSecret":"","webhookCapabilityUrl":""}`, ""},
 	}

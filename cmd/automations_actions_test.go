@@ -35,7 +35,7 @@ func TestAutomationsExecuteWait(t *testing.T) {
 
 	t.Run("polls until DONE and prints the id first", func(t *testing.T) {
 		s := newMutServer(t, executionRoute("AUTOMATION_EXECUTION_STATE_PENDING", "AUTOMATION_EXECUTION_STATE_WAITING", executionStateDone))
-		r := runMutationCLI(t, s.srv, 0, nil, "automations", "execute", "a-1", "--wait")
+		r := runMutationCLI(t, s.srv, 0, nil, "automations", "execute", "a-1", "--wait", "--wait-timeout", "2s")
 		if r.err != nil || !strings.Contains(r.stdout, `"executionId": "7"`) {
 			t.Fatalf("exit %d err %v stdout %q", r.exit, r.err, r.stdout)
 		}
@@ -49,7 +49,7 @@ func TestAutomationsExecuteWait(t *testing.T) {
 	for _, state := range []string{executionStateError, executionStateTerm, executionStatePaused} {
 		t.Run("ends in "+state, func(t *testing.T) {
 			s := newMutServer(t, executionRoute("AUTOMATION_EXECUTION_STATE_PROCESS_STEP", state))
-			r := runMutationCLI(t, s.srv, 0, nil, "automations", "execute", "a-1", "--wait", "--error-format", "json")
+			r := runMutationCLI(t, s.srv, 0, nil, "automations", "execute", "a-1", "--wait", "--wait-timeout", "2s", "--error-format", "json")
 			if r.exit != exitError || !strings.Contains(r.stdout, `"7"`) {
 				t.Fatalf("exit %d stdout %q, want 1 and the executionId", r.exit, r.stdout)
 			}
@@ -74,14 +74,14 @@ func TestAutomationsExecuteWait(t *testing.T) {
 			}
 			return mutReply{body: `{"automationExecution":{"id":"7"}}`}
 		})
-		r := runMutationCLI(t, s.srv, 0, nil, "automations", "execute", "a-1", "--wait", "--error-format", "json")
+		r := runMutationCLI(t, s.srv, 0, nil, "automations", "execute", "a-1", "--wait", "--wait-timeout", "2s", "--error-format", "json")
 		if r.exit != exitServer || r.errorObject(t)["applied"] != true {
 			t.Errorf("exit %d stderr %s, want 6 and applied:true", r.exit, r.stderr)
 		}
 	})
 	t.Run("response without executionId exits 6 and polls nothing", func(t *testing.T) {
 		s := newMutServer(t, fixedReply(200, `{}`))
-		r := runMutationCLI(t, s.srv, 0, nil, "automations", "execute", "a-1", "--wait", "--error-format", "json")
+		r := runMutationCLI(t, s.srv, 0, nil, "automations", "execute", "a-1", "--wait", "--wait-timeout", "2s", "--error-format", "json")
 		if r.exit != exitServer || r.errorObject(t)["applied"] != true {
 			t.Errorf("exit %d stderr %s, want 6 and applied:true", r.exit, r.stderr)
 		}
@@ -98,7 +98,7 @@ func TestAutomationsExecuteWait(t *testing.T) {
 	})
 	t.Run("dry run never polls", func(t *testing.T) {
 		withDryRun(t)
-		r := runMutationCLI(t, nil, 0, nil, "automations", "execute", "a-1", "--wait")
+		r := runMutationCLI(t, nil, 0, nil, "automations", "execute", "a-1", "--wait", "--wait-timeout", "2s")
 		if r.err != nil || !strings.Contains(r.stdout, `"dryRun": true`) {
 			t.Errorf("exit %d err %v stdout %q", r.exit, r.err, r.stdout)
 		}
