@@ -5,6 +5,8 @@ import (
 	"net/http"
 	"strings"
 	"testing"
+
+	"github.com/ConductorOne/c1i/internal/transport"
 )
 
 // dryRunCase is a mutation with a pre-send read: ghost names a resource that
@@ -52,10 +54,17 @@ func preReadServer(t *testing.T) *mutServer {
 	})
 }
 
+// isWrite reports whether a request a stub saw writes: a POST the transport
+// treats as a read (transport.ReadOnlyPOST: a search a pre-send check runs)
+// does not.
+func isWrite(method, path string) bool {
+	return method != http.MethodGet && (method != http.MethodPost || !transport.ReadOnlyPOST(path))
+}
+
 func nonGETRequests(s *mutServer) []entOwnerRequest {
 	var out []entOwnerRequest
 	for _, rq := range s.requests() {
-		if rq.method != http.MethodGet {
+		if isWrite(rq.method, rq.rawPath) {
 			out = append(out, rq)
 		}
 	}

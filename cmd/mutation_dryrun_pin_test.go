@@ -143,6 +143,9 @@ var dryRunStubs = map[string][]string{
 	"c1i xaa resource-servers update":          {"x1", "--app-id=x1", "--description=d"},
 	"c1i xaa scopes update":                    {"x1", "--app-id=x1", "--description=d"},
 	"c1i xaa access-profiles update":           {"x1", "--app-id=x1", "--description=d"},
+
+	// xaa part 2
+	"c1i xaa client-audience-mappings update": {"x1", "--resource-server-id=x1", "--disabled"},
 }
 
 // dryRunReadBodies is the answer to a leaf's pre-send GET where the generic
@@ -161,6 +164,12 @@ var dryRunReadBodies = map[string]string{
 	"c1i xaa resource-servers update":     `{"resourceServer":{"id":"x1","displayName":"n","normalizedAudience":"https://x1.example.com"}}`,
 	"c1i xaa scopes update":               `{"scope":{"id":"x1","displayName":"n","scopeValue":"s","xaaResourceServerId":"r"}}`,
 	"c1i xaa access-profiles update":      `{"accessProfile":{"id":"x1","displayName":"n","xaaResourceServerId":"r"}}`,
+
+	// xaa part 2
+	"c1i xaa access-profiles add-scopes":      `{"scope":{"id":"x1"}}`,
+	"c1i xaa access-profiles remove-scopes":   `{"scope":{"id":"x1"}}`,
+	"c1i xaa client-audience-mappings create": `{"list":[{"id":"x1"}]}`,
+	"c1i xaa client-audience-mappings update": `{"clientAudienceMapping":{"audienceClientId":"a"}}`,
 }
 
 // stubArgs builds a leaf's arguments: one per required positional in Use and

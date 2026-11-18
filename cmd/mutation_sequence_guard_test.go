@@ -132,7 +132,7 @@ func seqGuardServer(t *testing.T, getStatus int) *mutServer {
 func (m *mutServer) mutations() int {
 	n := 0
 	for _, r := range m.requests() {
-		if r.method != http.MethodGet {
+		if isWrite(r.method, r.rawPath) {
 			n++
 		}
 	}

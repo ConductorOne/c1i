@@ -996,8 +996,16 @@ resource with `--resource-id` likewise means you drop
   the server stores either. Updates read the object to fill server-validated
   fields; an update of a deleted object exits 0 and applies. Deletes are soft and cascade from a resource server to its scopes,
   profiles and their entitlements within seconds. `resource-servers search
-  --disabled=false` means enabled only; omit for both. Scope bindings and
-  client-audience mappings have no command yet (use `c1i api`).
+  --disabled=false` means enabled only; omit for both. `access-profiles
+  scopes|add-scopes|remove-scopes <access-profile-id> --app-id` list and
+  change a profile's scopes (repeatable `--scope-id`, looked up first: unknown
+  exits 4, deleted exits 2 on add). `xaa client-audience-mappings
+  list|search|get|create|update|delete|history` take `--resource-server-id`,
+  not `--app-id`; the mapping's id is its client key (positional, may be a
+  URL, sent in the query or body). `create --client-key --audience-client-id
+  [--disabled]` first searches the tenant's resource servers: not found, or
+  deleted, or created about a second earlier exits 4. A deleted key cannot be
+  recreated (exit 2).
 - `webhooks create` and `webhooks update` take the endpoint as
   `--destination-url` (`--url` is the global tenant flag), and it must be an
   absolute `https://` URL with a host (an IPv6 literal host is refused); a
