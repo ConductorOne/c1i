@@ -49,7 +49,8 @@ hasUsageData (false when the app's access entitlement has no usage data).
 An app whose controls were never set prints only hasUsageData.
 
 The usage-controls endpoint answers an unknown app as it does an app with no
-controls, so c1i reads the app first: an unknown app exits 4.`,
+controls, so c1i reads the app first: an unknown app exits 4 and a deleted
+one exits 2.`,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		baseURL, err := GetBaseURL()
@@ -60,8 +61,8 @@ controls, so c1i reads the app first: an unknown app exits 4.`,
 		if err != nil {
 			return fmt.Errorf("authentication failed: %w", err)
 		}
-		if _, err := c.Get(cmd.Context(), client.Path("/api/v1/apps/%s", args[0]), nil); err != nil {
-			return fmt.Errorf("API error reading app %s: %w", args[0], err)
+		if err := requireLiveApp(cmd.Context(), c, args[0], "<app-id>"); err != nil {
+			return err
 		}
 		data, err := c.Get(cmd.Context(), usageControlsPath(args[0]), nil)
 		if err != nil {

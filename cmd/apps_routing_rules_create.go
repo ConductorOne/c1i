@@ -32,14 +32,15 @@ An app holds a limited number of rules (10 when measured). Past the limit the
 server answers 400 (exit 2):
   This app already has the maximum of 10 entitlement configuration rules. Delete a rule to add another.
 
-An unknown app exits 4.
+c1i reads the app first: an unknown app exits 4 and a deleted one exits 2,
+before anything is sent, --dry-run included.
 
 Prints the created rule, unwrapped like "apps routing-rules get": the id is
 .id. Honors --dry-run.
 
 Example:
   c1i apps routing-rules create --app-id <app-id> --display-name "Engineering" \
-    --condition 'subject.department == "Engineering"' --request-policy-id <policy-id>`,
+    --condition 'entitlement.displayName == "Admin"' --request-policy-id <policy-id>`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		appID, _ := cmd.Flags().GetString("app-id")
 		body := map[string]any{"displayName": mustGetString(cmd, "display-name")}
@@ -64,7 +65,7 @@ Example:
 			Path:   routingRulesPath(appID),
 			Body:   body,
 			Unwrap: named("routingRule"),
-		})
+		}, liveAppPreRead(appID, "--app-id"))
 	},
 }
 
@@ -94,14 +95,17 @@ func routingRuleSettings(cmd *cobra.Command) (map[string]any, error) {
 	return settings, nil
 }
 
+// routingRuleSettingsFlags are the flags routingRuleSettings reads.
+var routingRuleSettingsFlags = []string{"request-policy-id", "emergency-grant-policy-id", "emergency-grant-enabled", "max-grant-duration", "request-schema-id"}
+
 // addRoutingRuleSettingsFlags registers the settings flags routingRuleSettings reads.
 func addRoutingRuleSettingsFlags(cmd *cobra.Command) {
 	f := cmd.Flags()
-	f.String("request-policy-id", "", "Grant policy a matching request uses")
-	f.String("emergency-grant-policy-id", "", "Grant policy for emergency access requests")
+	f.String("request-policy-id", "", `Grant policy a matching request uses`)
+	f.String("emergency-grant-policy-id", "", `Grant policy for emergency access requests`)
 	f.Bool("emergency-grant-enabled", false, "Allow emergency access requests (needs --emergency-grant-policy-id)")
 	addProtoDurationFlag(cmd, "max-grant-duration", "Longest grant a matching request may ask for, as a protobuf duration, e.g. 3600s, or a Go duration such as 8h")
-	f.String("request-schema-id", "", "Request schema (form) a matching request fills in")
+	f.String("request-schema-id", "", `Request schema (form) a matching request fills in`)
 }
 
 func init() {

@@ -18,7 +18,8 @@ The server refuses (400, exit 2) a list that is not exactly the app's active
 rules, quoting the problem, e.g.:
   rule_ids must be a permutation of active rules for the app: got 3 ids for 4 active rules
 A missing, extra, repeated, unknown or deleted id is refused this way; nothing
-is reordered. An unknown app exits 4.
+is reordered. c1i reads the app first: an unknown app exits 4 and a deleted
+one exits 2, before anything is sent, --dry-run included.
 
 Prints the API's response, {"list": [...]}: every rule in its new order, each
 shaped like "apps routing-rules get". Honors --dry-run.
@@ -35,7 +36,7 @@ Example:
 			Method: http.MethodPost,
 			Path:   client.Path("/api/v1/apps/%s/entitlement_configuration_rules/reorder", appID),
 			Body:   map[string]any{"ruleIds": ids},
-		})
+		}, liveAppPreRead(appID, "--app-id"))
 	},
 }
 
