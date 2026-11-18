@@ -117,6 +117,10 @@ var conditionalRequiredFlags = map[string]string{
 	"c1i access-reviews templates create --display-name": "unless --body-file",
 	"c1i access-reviews templates create --policy-id":    "unless --body-file",
 	"c1i access-reviews templates create --owner-id":     "unless --body-file",
+	"c1i hooks create --display-name":                    "unless --body-file",
+	"c1i hooks create --event":                           "unless --body-file",
+	"c1i hooks create --function-id":                     "unless --body-file",
+	"c1i users set-delegation --delegate-user-id":        "unless --clear",
 }
 
 func skippedRequiredFlagCommand(c *cobra.Command) bool {

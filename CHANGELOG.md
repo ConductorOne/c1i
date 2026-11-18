@@ -17,6 +17,14 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   lists, as NDJSON, the connectors you may diagnose. A negative `--runs` or
   `--top-k` exits `2`; a larger one is clamped. The draft-test form of
   `sync-compare` (`--body-file`) was not exercised live.
+- `hooks list|get|create|update|delete` for tool-call interception hooks (the
+  `hooks` service). Flags build a function hook; a built-in pattern or JSON patch
+  hook goes through `--body-file`. `update --clear-filter` removes the CEL
+  filter. `webhooks search`, `users profile-types`, `users set-delegation` and
+  `policies test-provision` cover four more operations. `hooks search` and
+  `reports create` are not commands: the first is the same as `list` (the API
+  returns UNIMPLEMENTED for a query or refs), the second needs a rendered
+  reporting surface.
 - `access-reviews templates get|create|update|delete <template-id>` and the
   template scope commands `scope get|set|set-excluded|set-by-resource-type`,
   `entitlements add|remove` and `excluded-entitlements add|remove`, shaped like

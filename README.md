@@ -786,9 +786,23 @@ Exit codes are unchanged.
 ```sh
 c1i users list [--query <text>] [--email <email>] [--status enabled|disabled|deleted] [--origin directory|local|system|all]... [--page-size N] [--page-token TOKEN] [--limit N]
 c1i users get <user-id>
+c1i users profile-types <user-id>
+c1i users set-delegation <user-id> (--delegate-user-id ID [--start-at RFC3339] [--expire-at RFC3339] | --clear)
 ```
 
 `users list` reads `POST /api/v1/search/users`, which with no `--origin` returns only directory-origin users: local-origin users (service principals among them) and system users are excluded. `--origin all` lists every user; repeat `--origin` with `directory`, `local`, `system` or a `USER_ORIGIN_*` value (as a row's `origin` prints) to pick origins (any other value is a usage error, exit `2`). Each row carries `origin` (e.g. `USER_ORIGIN_LOCAL`) when the server reports one.
+`users profile-types` prints `{"profileTypes": [...]}` for a user across their
+connected apps (empty on the user tried; an unknown user id also returned an
+empty list at exit `0`).
+
+`users set-delegation` designates a delegate, optionally for a window
+(`--start-at`/`--expire-at`, RFC3339), and prints the binding. `--clear` removes
+the delegation (it sends an empty delegate id, which the API describes as removing it). Tried against a tenant: an unknown delegate
+or user id was `404` (exit `4`), an expiry before the start `400` (exit `2`), and
+a past start or expiry and a self-delegation were accepted at exit `0`.
+Clearing printed `{"item": null}`, repeatedly; on a user who had never had a
+delegation it was `404` `provided delegated user id is empty`. `users get`
+showed `delegatedUserId` empty while the start was still in the future.
 
 ### Apps
 
@@ -1595,6 +1609,7 @@ c1i policies update <policy-id> [--display-name <name>] [--description <text>] [
 c1i policies update <policy-id> --body-file <file|-> --update-mask <paths>
 c1i policies delete <policy-id>
 c1i policies validate-cel <condition>
+c1i policies test-provision <cel>
 ```
 
 A policy describes how C1 processes a task: who approves it (an ordered list
@@ -1644,6 +1659,12 @@ environment `ExpressionApproval.expressions` run in (see the command's
 `--help`). An invalid condition prints its compile markers and exits 2, so
 `c1i policies validate-cel '<cond>' && ...` only continues on a condition
 that compiles.
+
+`test-provision <cel>` posts the expression to the account provision policy
+tester and prints `{"value", "type"}` (`1+1` gave `"2"`, `number`; nothing is
+created). A CEL expression that does not compile is answered with a `500`
+carrying the CEL error text (exit `6`), not a `4xx`; c1i does not check CEL
+itself.
 
 A soft-deleted policy disappears from `list` and the default `search`; only
 `search --include-deleted` finds it there (see [Soft delete](#soft-delete)).
@@ -2503,6 +2524,7 @@ from a policy's webhook approval or provision step (which name one by
 
 ```sh
 c1i webhooks list [--page-size N] [--page-token TOKEN] [--limit N]
+c1i webhooks search [--query TEXT] [--webhook-id ID]... [--page-size N] [--page-token TOKEN] [--limit N]
 c1i webhooks get <webhook-id>
 c1i webhooks create --display-name NAME --destination-url https://hooks.example.com/c1 [--description TEXT] [--callback-timeout 10m]
 c1i webhooks update <webhook-id> [--display-name NAME] [--destination-url URL] [--description TEXT] [--callback-timeout DURATION]
@@ -2543,6 +2565,59 @@ whether or not the URL is reachable. Its `.id` is the delivery and `.webhookId`
 the webhook you tested. Exit `0` does not mean the endpoint answered.
 `webhooks delete` is a soft delete (see [Soft delete](#soft-delete)); deleting
 it again exits `0`.
+
+`webhooks search` posts to `/api/v1/search/webhooks` and prints the same rows
+as `list`. `--query` matched the display name; a word only in a description
+matched nothing. `--webhook-id` (repeatable) restricts it to those webhooks;
+both together must both match. The search index lags writes: a new webhook was
+missing from an unfiltered search for a few seconds, and a deleted one may
+still be found briefly, so use `list`/`get` for the current state.
+
+### Hooks
+
+Hooks are customer-configured interception points for tool calls: an event
+(`pre-tool-use`, `post-tool-use` or `pre-output`), an optional CEL filter, a
+priority, and one of a function, a built-in pattern or a JSON patch.
+
+```sh
+c1i hooks list [--page-size N] [--page-token TOKEN] [--limit N]
+c1i hooks get <hook-id>
+c1i hooks create --display-name NAME --event pre-tool-use --function-id FUNCTION_ID [--function-commit-id ID] [--description TEXT] [--filter-cel EXPR] [--priority N] [--enabled] [--managed-by-guardrails]
+c1i hooks create --body-file hook.json
+c1i hooks update <hook-id> [--display-name NAME] [--description TEXT] [--event EVENT] [--filter-cel EXPR | --clear-filter] [--priority N] [--enabled[=false]] [--managed-by-guardrails[=false]] [--function-id ID [--function-commit-id ID]]
+c1i hooks update <hook-id> --body-file hook.json --update-mask builtinPattern
+c1i hooks delete <hook-id>
+```
+
+The flags build a function hook. A built-in pattern hook (14 pattern configs)
+and a JSON patch hook go through `--body-file`, a full Hook object; the server
+refuses a JSON patch hook with `403` when its preview is not enabled for the
+tenant. A hook is created disabled unless `--enabled` is passed; an enabled
+hook intercepts tool calls. `list` rows carry `id`, `display_name`, `event`,
+`kind` (`function`, `builtin_pattern`, `json_patch`), `enabled`,
+`managed_by_guardrails` and `priority`; `get` shows the whole config. The
+server did not paginate `list` when tried (`--page-size` had no effect).
+
+`create` and `update` look up `--function-id` (and `--function-commit-id` under
+it) first, `--dry-run` included, so an unknown one exits `4`; without the check
+the server answers an unknown function with `400` and stores an unknown commit
+id at exit `0`. `--body-file` is sent verbatim and not checked.
+
+`update` sends only the flags you pass and names exactly those in the mask.
+`--function-id` replaces the whole function reference (the commit goes back to
+the published one unless `--function-commit-id` is given); `--clear-filter`
+sends a null filter under the `filter` mask, which clears it. The server
+leaves a field outside the mask alone and accepts an unknown mask path at exit
+`0`. It does not validate `--filter-cel`: an uncompilable and a non-boolean
+expression were both stored at exit `0`. Create refuses a hook with no type
+field with `400` `hook function reference is missing function_id`.
+
+`hooks delete` is soft: the hook leaves `list`, but `get` still returns it at
+exit `0` with no marker (a Hook has no `deletedAt`), `update` still changes it,
+and deleting it again exits `0`. The API says a hook referenced by a guardrail
+rule cannot be deleted until the reference is removed (not observed). An
+unknown id is `404` (exit `4`). `create`/`update` print the hook unwrapped
+(`jq -er .id`); `delete` prints `{}`.
 
 ### Export
 

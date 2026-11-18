@@ -950,6 +950,24 @@ resource with `--resource-id` likewise means you drop
   it with `deleted_at`; repeat delete exits `0`); there is no update. The
   per-type routes (`/api/v1/attributes/compliance_frameworks`, `.../risk_levels`)
   have no commands; use `api`.
+- `hooks list|get|create|update|delete` manage tool-call interception hooks.
+  Flags build a function hook (`--event pre-tool-use|post-tool-use|pre-output`,
+  `--function-id`, `--filter-cel`, `--priority`, `--enabled`,
+  `--managed-by-guardrails`); a built-in pattern or JSON patch hook needs
+  `--body-file` (update: plus `--update-mask`); the server 403s a JSON patch
+  hook when its preview is off. Created disabled unless `--enabled`. The server
+  stores any `--filter-cel` (an uncompilable one too) at exit `0`;
+  `update --clear-filter` clears it. `--function-id` and `--function-commit-id`
+  are looked up first (unknown: exit `4`, `--dry-run` too; not for `--body-file`). `delete` is soft: `get` still returns the
+  hook with no deleted marker, `list` omits it, repeat delete exits `0`.
+  `webhooks search --query TEXT --webhook-id ID...` matches names, and the
+  index lags writes (use `list`/`get` for current state).
+- `users set-delegation <user-id> --delegate-user-id ID` (`--start-at`,
+  `--expire-at` RFC3339) prints the binding; `--clear` removes it. The server
+  accepted past times and self-delegation; `users get` shows `delegatedUserId`
+  only once the start has passed. `users profile-types <user-id>` prints
+  `{"profileTypes": [...]}`. `policies test-provision <cel>` prints `{value,
+  type}`; a CEL that does not compile is a `500` (exit `6`), unchecked by c1i.
 - `webhooks create` and `webhooks update` take the endpoint as
   `--destination-url` (`--url` is the global tenant flag), and it must be an
   absolute `https://` URL with a host (an IPv6 literal host is refused); a

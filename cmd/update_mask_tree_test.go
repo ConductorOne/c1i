@@ -22,6 +22,7 @@ var updateMaskCases = map[string]struct {
 	"apps resources update":             {[]string{"apps", "resources", "update", "r-1", "--app-id", "a-1", "--resource-type-id", "rt-1"}, true},
 	"connectors update":                 {[]string{"connectors", "update", "cn-1", "--app-id", "a1"}, true},
 	"functions update":                  {[]string{"functions", "update", "f-1"}, true},
+	"hooks update":                      {[]string{"hooks", "update", "h-1"}, true},
 	"access-reviews update":             {[]string{"access-reviews", "update", "c-1"}, true},
 	"access-reviews templates update":   {[]string{"access-reviews", "templates", "update", "t-1"}, true},
 	"mcp classifiers update":            {[]string{"mcp", "classifiers", "update", "cl-1"}, true},

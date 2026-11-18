@@ -19,6 +19,7 @@ example from a policy's webhook approval or provision step.
 
   webhooks list
   webhooks get <webhook-id>
+  webhooks search --query "ticketing"
   webhooks create --display-name "ticketing-bridge" --destination-url https://hooks.example.com/c1
   webhooks update <webhook-id> --destination-url https://hooks.example.com/c1-v2
   webhooks test <webhook-id>

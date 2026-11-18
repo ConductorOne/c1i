@@ -18,9 +18,11 @@ import (
 // "<command path> <positional>". A read command's filter is not listed: it is
 // out of scope by construction, since an unknown value returns no rows.
 var userRefExemptions = map[string]string{
-	"c1i apps remove-owner --user-id":           "removal never pre-checks a reference; the server decides (documented --dry-run exception)",
-	"c1i entitlements remove-owner --user-id":   "removal never pre-checks a reference; the server decides (documented --dry-run exception)",
-	"c1i apps resources remove-owner --user-id": "removal never pre-checks a reference; the server decides (documented --dry-run exception)",
+	"c1i apps remove-owner --user-id":             "removal never pre-checks a reference; the server decides (documented --dry-run exception)",
+	"c1i entitlements remove-owner --user-id":     "removal never pre-checks a reference; the server decides (documented --dry-run exception)",
+	"c1i apps resources remove-owner --user-id":   "removal never pre-checks a reference; the server decides (documented --dry-run exception)",
+	"c1i users set-delegation <user-id>":          "an unknown id is answered by the server (404 observed), so no pre-read",
+	"c1i users set-delegation --delegate-user-id": "an unknown delegate is answered by the server with 404 (observed), so no pre-read",
 
 	// A service principal is a C1 user, but these address it as the scope the
 	// request acts on, not as a reference being added; the server decides.
