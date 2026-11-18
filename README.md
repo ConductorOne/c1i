@@ -827,6 +827,13 @@ c1i apps resource-types get <resource-type-id> --app-id <app-id>
 c1i apps resource-types create --app-id <app-id> --display-name <name> --resource-type <kind>
 c1i apps resource-types update <resource-type-id> --app-id <app-id> --display-name <name>
 c1i apps resource-types delete <resource-type-id> --app-id <app-id>
+c1i apps routing-rules list --app-id <app-id> [--limit N]
+c1i apps routing-rules get <rule-id> --app-id <app-id>
+c1i apps routing-rules create --app-id <app-id> --display-name <name> [--description <text>] [--condition <cel>] [--enabled] [--priority N] [--request-policy-id <id>] [--emergency-grant-policy-id <id>] [--emergency-grant-enabled] [--max-grant-duration <dur>] [--request-schema-id <id>]
+c1i apps routing-rules update <rule-id> --app-id <app-id> [--display-name <name>] [--description <text>] [--condition <cel>] [--enabled[=false]] [--request-policy-id <id>] [--emergency-grant-policy-id <id>] [--emergency-grant-enabled[=false]] [--max-grant-duration <dur>] [--request-schema-id <id>]
+c1i apps routing-rules delete <rule-id> --app-id <app-id>
+c1i apps routing-rules reorder --app-id <app-id> --rule-id <id> [--rule-id <id> ...]
+c1i apps usage-controls get <app-id>
 c1i apps resources list --app-id <app-id> --resource-type-id <id> [--page-size N] [--page-token TOKEN] [--limit N]
 c1i apps resources search [--query <text>] [--app-id <id> ...] [--resource-type-id <id> ...] [--resource-id <id> ...] [--exclude-resource-id <id> ...] [--trait-id <id> ...] [--exclude-trait-id <id> ...] [--owner-user-id <id> ...] [--unowned-only] [--page-size N] [--page-token TOKEN] [--limit N]
 c1i apps resources get <resource-id> --app-id <app-id> --resource-type-id <id>
@@ -911,6 +918,37 @@ in that window creates another app, so wait until `get` shows `deletedAt` set
 promote creates a new app. A binding's top-level `appId` is the connector app;
 the managed app is `.state.managed.appId`. `c1i docs guide
 promote-idp-app-to-managed` walks the whole workflow and has the timings.
+
+`apps routing-rules` manages an app's entitlement routing rules (the API's
+entitlement configuration rules). Rules are evaluated by `priority` (1 first);
+the first enabled rule whose CEL `--condition` matches supplies the request
+settings: `--request-policy-id`, `--emergency-grant-policy-id` with
+`--emergency-grant-enabled`, `--max-grant-duration` and `--request-schema-id`.
+An enabled rule routes real requests; `create` makes a disabled rule unless
+`--enabled` is given. `create --priority` is a 1-indexed insertion slot: later
+rules move down one, and a slot past the end (or omitting it) appends.
+`reorder --rule-id` takes every active rule's id once, in the new order, and
+assigns priorities 1..N; a missing, extra, repeated, unknown or deleted id is a
+`400` (exit `2`), `rule_ids must be a permutation of active rules for the app:
+...`. `delete` is soft (`get` still returns the rule with `deletedAt`) and
+renumbers the rest; a repeat delete exits `4`. An app held at most 10 rules when
+measured; past that `create` exits `2` with `This app already has the maximum of
+10 entitlement configuration rules. Delete a rule to add another.` The server
+checks referenced ids: an unknown policy or request schema exits `4`, a
+non-grant policy `2`. `list` takes no paging and answers an unknown app with
+zero rows (exit `0`); the other commands exit `4` for an unknown app or rule.
+`create`, `update` and `reorder` read the app first: a deleted app exits `2`
+before anything is sent, `--dry-run` included. The update API has no mask and
+replaces the whole rule, so `update` reads the rule and sends every writable
+field with only your flags changed; a change made between that read and the
+write is overwritten. `update` refuses a deleted rule (exit `2`), cannot
+change the order (use `reorder`), and cannot unset a policy or schema id.
+`apps usage-controls get <app-id>` shows the
+notify and revoke-on-non-use controls beside `hasUsageData`; an app whose
+controls were never set prints only `hasUsageData`. The endpoint answers an
+unknown app like an app with no controls, so c1i reads the app first (exit
+`4`; a deleted app exits `2`). Updating usage controls answered `501` (`feature is disabled`) on the
+tenant tested, so there is no `update` command.
 
 `apps resource-types` and `apps resources` manage an app's resource types and
 the resources under them; `entitlements create` builds the same objects in one

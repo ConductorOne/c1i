@@ -384,6 +384,171 @@
       "updateMask": "scopeType"
     }
   },
+  "apps routing-rules update ": {
+    "exit": 2
+  },
+  "apps routing-rules update --condition ": {
+    "exit": 0,
+    "method": "POST",
+    "path": "/api/v1/apps/app-1/entitlement_configuration_rules/rr-1",
+    "body": {
+      "condition": "",
+      "description": "desc",
+      "displayName": "cur",
+      "enabled": true,
+      "settings": {
+        "emergencyGrantEnabled": true,
+        "emergencyGrantPolicyId": "gp-9",
+        "maxGrantDuration": "3600s",
+        "requestPolicyId": "gp-0",
+        "requestSchemaId": "rs-0"
+      }
+    }
+  },
+  "apps routing-rules update --description ": {
+    "exit": 0,
+    "method": "POST",
+    "path": "/api/v1/apps/app-1/entitlement_configuration_rules/rr-1",
+    "body": {
+      "condition": "c == 1",
+      "description": "",
+      "displayName": "cur",
+      "enabled": true,
+      "settings": {
+        "emergencyGrantEnabled": true,
+        "emergencyGrantPolicyId": "gp-9",
+        "maxGrantDuration": "3600s",
+        "requestPolicyId": "gp-0",
+        "requestSchemaId": "rs-0"
+      }
+    }
+  },
+  "apps routing-rules update --display-name N": {
+    "exit": 0,
+    "method": "POST",
+    "path": "/api/v1/apps/app-1/entitlement_configuration_rules/rr-1",
+    "body": {
+      "condition": "c == 1",
+      "description": "desc",
+      "displayName": "N",
+      "enabled": true,
+      "settings": {
+        "emergencyGrantEnabled": true,
+        "emergencyGrantPolicyId": "gp-9",
+        "maxGrantDuration": "3600s",
+        "requestPolicyId": "gp-0",
+        "requestSchemaId": "rs-0"
+      }
+    }
+  },
+  "apps routing-rules update --emergency-grant-enabled=false": {
+    "exit": 0,
+    "method": "POST",
+    "path": "/api/v1/apps/app-1/entitlement_configuration_rules/rr-1",
+    "body": {
+      "condition": "c == 1",
+      "description": "desc",
+      "displayName": "cur",
+      "enabled": true,
+      "settings": {
+        "emergencyGrantEnabled": false,
+        "emergencyGrantPolicyId": "gp-9",
+        "maxGrantDuration": "3600s",
+        "requestPolicyId": "gp-0",
+        "requestSchemaId": "rs-0"
+      }
+    }
+  },
+  "apps routing-rules update --emergency-grant-policy-id gp-2": {
+    "exit": 0,
+    "method": "POST",
+    "path": "/api/v1/apps/app-1/entitlement_configuration_rules/rr-1",
+    "body": {
+      "condition": "c == 1",
+      "description": "desc",
+      "displayName": "cur",
+      "enabled": true,
+      "settings": {
+        "emergencyGrantEnabled": true,
+        "emergencyGrantPolicyId": "gp-2",
+        "maxGrantDuration": "3600s",
+        "requestPolicyId": "gp-0",
+        "requestSchemaId": "rs-0"
+      }
+    }
+  },
+  "apps routing-rules update --enabled=false": {
+    "exit": 0,
+    "method": "POST",
+    "path": "/api/v1/apps/app-1/entitlement_configuration_rules/rr-1",
+    "body": {
+      "condition": "c == 1",
+      "description": "desc",
+      "displayName": "cur",
+      "enabled": false,
+      "settings": {
+        "emergencyGrantEnabled": true,
+        "emergencyGrantPolicyId": "gp-9",
+        "maxGrantDuration": "3600s",
+        "requestPolicyId": "gp-0",
+        "requestSchemaId": "rs-0"
+      }
+    }
+  },
+  "apps routing-rules update --max-grant-duration 8h": {
+    "exit": 0,
+    "method": "POST",
+    "path": "/api/v1/apps/app-1/entitlement_configuration_rules/rr-1",
+    "body": {
+      "condition": "c == 1",
+      "description": "desc",
+      "displayName": "cur",
+      "enabled": true,
+      "settings": {
+        "emergencyGrantEnabled": true,
+        "emergencyGrantPolicyId": "gp-9",
+        "maxGrantDuration": "28800s",
+        "requestPolicyId": "gp-0",
+        "requestSchemaId": "rs-0"
+      }
+    }
+  },
+  "apps routing-rules update --request-policy-id gp-1": {
+    "exit": 0,
+    "method": "POST",
+    "path": "/api/v1/apps/app-1/entitlement_configuration_rules/rr-1",
+    "body": {
+      "condition": "c == 1",
+      "description": "desc",
+      "displayName": "cur",
+      "enabled": true,
+      "settings": {
+        "emergencyGrantEnabled": true,
+        "emergencyGrantPolicyId": "gp-9",
+        "maxGrantDuration": "3600s",
+        "requestPolicyId": "gp-1",
+        "requestSchemaId": "rs-0"
+      }
+    }
+  },
+  "apps routing-rules update --request-schema-id rs-1": {
+    "exit": 0,
+    "method": "POST",
+    "path": "/api/v1/apps/app-1/entitlement_configuration_rules/rr-1",
+    "body": {
+      "condition": "c == 1",
+      "description": "desc",
+      "displayName": "cur",
+      "enabled": true,
+      "settings": {
+        "emergencyGrantEnabled": true,
+        "emergencyGrantPolicyId": "gp-9",
+        "maxGrantDuration": "3600s",
+        "requestPolicyId": "gp-0",
+        "requestSchemaId": "rs-1"
+      }
+    }
+  },
   "apps update ": {
     "exit": 2
   },

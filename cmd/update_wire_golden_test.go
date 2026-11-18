@@ -281,6 +281,18 @@ func updateWireCases() []updateWireCase {
 		[]string{"--skip-justification", "--max-bulk-entitlement-selection", "0"},
 		[]string{"--max-bulk-entitlement-selection", "x"},
 	)
+	add("apps routing-rules update", []string{"rr-1", "--app-id", "app-1"},
+		none,
+		[]string{"--display-name", "N"},
+		[]string{"--enabled=false"},
+		[]string{"--condition", ""},
+		[]string{"--description", ""},
+		[]string{"--request-policy-id", "gp-1"},
+		[]string{"--emergency-grant-policy-id", "gp-2"},
+		[]string{"--emergency-grant-enabled=false"},
+		[]string{"--max-grant-duration", "8h"},
+		[]string{"--request-schema-id", "rs-1"},
+	)
 	return cases
 }
 
@@ -312,6 +324,11 @@ func runUpdateWireCase(t *testing.T, dir string, c updateWireCase) updateWireRes
 				return mutReply{body: `{"policy":{"policyType":"` + typ + `"}}`}
 			case strings.HasPrefix(p, "/api/v1/access_review_template/"):
 				return mutReply{body: `{"accessReviewTemplate":{"id":"t-1","displayName":"cur","policyId":"cp-0"}}`}
+			case p == "/api/v1/apps/app-1":
+				return mutReply{body: `{"app":{"id":"app-1"}}`}
+			case strings.Contains(p, "/entitlement_configuration_rules/"):
+				return mutReply{body: `{"routingRule":{"id":"rr-1","appId":"app-1","displayName":"cur","description":"desc","priority":2,"enabled":true,"condition":"c == 1",` +
+					`"settings":{"requestPolicyId":"gp-0","emergencyGrantPolicyId":"gp-9","emergencyGrantEnabled":true,"maxGrantDuration":"3600s","requestSchemaId":"rs-0"},"deletedAt":null}}`}
 			case strings.Contains(p, "/mcp_servers/"):
 				return mutReply{body: `{"mcpServer":{"mcpServerCatalogId":"cat-1"}}`}
 			}

@@ -76,6 +76,12 @@ const (
 )
 
 const (
+	tblRoutingRule     = `{"routingRule":{"id":"rr-1","appId":"app-1","displayName":"zz","priority":1,"enabled":false}}`
+	tblRoutingRuleDoc  = `{"id":"rr-1","appId":"app-1","displayName":"zz","priority":1,"enabled":false}`
+	tblRoutingRuleList = `{"list":[{"id":"rr-1","appId":"app-1","priority":1}]}`
+)
+
+const (
 	tblConnector    = `{"connectorView":{"connector":{"id":"cn1","appId":"a1","displayName":"zz"},"appPath":"","capabilitiesPath":"","usersPath":""},"expanded":[]}`
 	tblConnectorDoc = `{"id":"cn1","appId":"a1","displayName":"zz","expanded":[],"appPath":"","capabilitiesPath":"","usersPath":""}`
 )
@@ -204,6 +210,10 @@ var mutationTable = []mutationRow{
 	{cmd: "apps managed-state promote", args: []string{"res-1", "--app-id", "app-1", "--resource-type-id", "rt-1"},
 		body: tblBinding, want: tblBindingDoc, ids: []string{".resourceId", ".state.managed.appId"}, method: "POST",
 		path: "/api/v1/apps/app-1/resource_types/rt-1/managed_state_bindings/res-1/promote", reads: 1},
+	{cmd: "apps routing-rules create", args: []string{"--app-id", "app-1", "--display-name", "zz"}, body: tblRoutingRule, want: tblRoutingRuleDoc, ids: idPath, method: "POST", path: "/api/v1/apps/app-1/entitlement_configuration_rules", reads: 1},
+	{cmd: "apps routing-rules update", args: []string{"rr-1", "--app-id", "app-1", "--description", "d"}, body: tblRoutingRule, want: tblRoutingRuleDoc, ids: idPath, method: "POST", path: "/api/v1/apps/app-1/entitlement_configuration_rules/rr-1", reads: 2},
+	{cmd: "apps routing-rules delete", args: []string{"rr-1", "--app-id", "app-1"}, body: `{}`, method: "DELETE", path: "/api/v1/apps/app-1/entitlement_configuration_rules/rr-1"},
+	{cmd: "apps routing-rules reorder", args: []string{"--app-id", "app-1", "--rule-id", "rr-1"}, body: tblRoutingRuleList, method: "POST", path: "/api/v1/apps/app-1/entitlement_configuration_rules/reorder", reads: 1},
 	// attributes
 	{cmd: "attributes create", args: []string{"--type", "Risk Level", "--value", "zz"}, body: tblAttrValue, want: tblAttrValueDoc, ids: idPath, method: "POST", path: "/api/v1/attributes", reads: 1},
 	{cmd: "attributes delete", args: []string{"av-1"}, body: `{}`, method: "DELETE", path: "/api/v1/attribute/av-1"},
@@ -417,6 +427,7 @@ const tblGet = `{"accessReviewTemplate":{"id":"t1","displayName":"zz","policyId"
 	`"list":[{"id":"ty-1","displayName":"Department","name":"Risk Level","appUserProfile":{}}],` +
 	`"attribute":{"userAttributeMapping":{"id":"map-1","attributeType":{"id":"ty-1","displayName":"Department","appUserProfile":{"appId":"app-1","appUserProfileAttributeKey":"department"}}}},` +
 	`"resourceServer":{"id":"rs-1","displayName":"zz","normalizedAudience":"https://a.example.com"},"scope":{"id":"sc-1","displayName":"zz","scopeValue":"zz.read","xaaResourceServerId":"rs-1"},"accessProfile":{"id":"ap-1","displayName":"zz","xaaResourceServerId":"rs-1"},` +
+	`"app":{"id":"app-1"},"routingRule":{"id":"rr-1","displayName":"zz","settings":{}},` +
 	`"clientAudienceMapping":{"xaaResourceServerId":"rs-1","clientKey":"dcr://ck-1","audienceClientId":"aud-1"},` +
 	`"exporter":{"exportId":"ex-1","displayName":"zz","datasource":{"datasourceId":"ds-1","prefix":"zz/","format":"EXPORT_FORMAT_OCSF_JSON_GZIP"}}}`
 
