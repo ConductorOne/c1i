@@ -780,6 +780,22 @@ func listPaginationCases() []listPaginationCase {
 			rowIDs:   idRows("id"),
 		},
 		{
+			name:     "hooks list",
+			cmd:      hooksListCmd,
+			method:   http.MethodGet,
+			wantPath: "/api/v1/hooks",
+			page:     flatPage("list", "id"),
+			rowIDs:   idRows("id"),
+		},
+		{
+			name:     "webhooks search",
+			cmd:      webhooksSearchCmd,
+			method:   http.MethodPost,
+			wantPath: "/api/v1/search/webhooks",
+			page:     flatPage("list", "id"),
+			rowIDs:   idRows("id"),
+		},
+		{
 			name:     "service-principals credentials list",
 			cmd:      spCredentialsListCmd,
 			method:   http.MethodGet,

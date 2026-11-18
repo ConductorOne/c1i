@@ -447,6 +447,15 @@ func getUnwrapCases() []getUnwrapCase {
 			wantKeys:    []string{"id", "displayName", "deletedAt"},
 		},
 		{
+			name:        "hooks get",
+			cmd:         hooksGetCmd,
+			args:        []string{"h-1"},
+			idKey:       "id",
+			body:        `{"hook":{"id":"h-1","displayName":"zz-hook-a","filter":null}}`,
+			payloadPath: []string{"hook"},
+			wantKeys:    []string{"id", "displayName", "filter"},
+		},
+		{
 			name:        "attributes get",
 			cmd:         attributesGetCmd,
 			args:        []string{"av-1"},

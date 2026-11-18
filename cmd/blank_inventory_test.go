@@ -138,6 +138,8 @@ var wantEmptyAllowed = map[string]string{
 	"c1i tasks retry-provisioning --comment":                    emptyIsOmitted,
 	"c1i webhooks create --description":                         emptyIsSent,
 	"c1i webhooks update --description":                         emptyIsSent,
+	"c1i hooks create --description":                            emptyIsSent,
+	"c1i hooks update --description":                            emptyIsSent,
 }
 
 func TestEmptyAllowedInventoryIsPinned(t *testing.T) {
@@ -212,6 +214,8 @@ func TestEmptyAllowedFlagsAcceptEmpty(t *testing.T) {
 var inventoryExtraArgs = map[string][]string{
 	"c1i api":                             {"--path=/api/v1/users"},
 	"c1i webhooks create":                 {"--destination-url=https://hooks.example.com/x"},
+	"c1i hooks create":                    {"--display-name=x1", "--event=pre-tool-use", "--function-id=f1"},
+	"c1i users set-delegation":            {"--delegate-user-id=u2"},
 	"c1i functions update":                {"--display-name=n"},
 	"c1i policies create":                 {"--display-name=x", "--policy-type=grant", "--allow-deny-all=true"},
 	"c1i automations create":              {"--display-name=x"},

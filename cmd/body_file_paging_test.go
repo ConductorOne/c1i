@@ -215,6 +215,7 @@ var ownedBodyKeyCommands = []struct {
 	{name: "c1i mcp classifiers templates add-rule", args: []string{"mcp", "classifiers", "templates", "add-rule", "k1", "t1"}, keys: []string{"templateId", "template_id"}, positionals: []string{"k1", "t1"}},
 	{name: "c1i connectors update", args: []string{"connectors", "update", "cn1", "--app-id", "a1", "--update-mask", "config"}, keys: []string{"id"}, positionals: []string{"cn1"}, extra: `"config":{}`},
 	{name: "c1i mcp classifiers templates instantiate", args: []string{"mcp", "classifiers", "templates", "instantiate", "t1"}, keys: []string{"templateId", "template_id"}, positionals: []string{"t1"}},
+	{name: "c1i hooks update", args: []string{"hooks", "update", "h1", "--update-mask", "description"}, keys: []string{"id"}, positionals: []string{"h1"}, extra: `"description":"d"`},
 }
 
 var pagingKeys = []string{"pageSize", "page_size", "pageToken", "page_token"}

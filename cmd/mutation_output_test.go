@@ -41,6 +41,7 @@ var readOnlyPOST = map[string]string{
 	"cmd/mcp_servers_discover_oidc.go:mcpServersDiscoverOIDCCmd":     "POST discover-oidc probe",
 	"cmd/mcp_servers_test_connection.go:mcpServersTestConnectionCmd": "POST test-connection probe",
 	"cmd/policies_validate_cel.go:policiesValidateCelCmd":            "POST validate-cel",
+	"cmd/policies_test_provision.go:policiesTestProvisionCmd":        "POST test-account-provision-policy: evaluates the CEL in the body",
 	"cmd/settings_session.go:settingsSessionTestSourceIPCmd":         "POST test-source-ip: evaluates an IP against the CIDRs in the body",
 	"cmd/auth_status.go:authStatusCmd":                               "POST /search/users credential probe",
 	"cmd/connectors_sync_diag.go:postSyncDiag":                       "POST change_timeline and compare_stats: sync diagnostics reads, no state change",
