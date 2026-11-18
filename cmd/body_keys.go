@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"sort"
 	"strconv"
 	"strings"
 
@@ -90,8 +89,9 @@ func ownBodyKeys(cmd *cobra.Command, flag string, groups ...[]ownedKey) {
 // refuseCLIOwnedBodyKeys fails with a usage error naming every key of body
 // that the command owns on `flag` and may not carry: any value of a flag-owned
 // key (null included), and any value of a positional-owned key other than
-// that positional as a string. Keys match in any spelling (foldMaskName), so
-// declaring one spelling covers both.
+// that positional as a string. A key matches in either spelling the server
+// accepts (fieldSpellings), so declaring one covers both; a body carrying
+// both is refused.
 func refuseCLIOwnedBodyKeys(cmd *cobra.Command, flag string, body map[string]any) error {
 	f := cmd.Flags().Lookup(flag)
 	if f == nil {
@@ -104,11 +104,6 @@ func refuseCLIOwnedBodyKeys(cmd *cobra.Command, flag string, body map[string]any
 	// first-declared one.
 	canonical := map[int]string{}
 	equal := map[int][]string{}
-	bodyKeys := make([]string, 0, len(body))
-	for k := range body {
-		bodyKeys = append(bodyKeys, k)
-	}
-	sort.Strings(bodyKeys)
 	claimed := map[string]bool{}
 	for _, e := range f.Annotations[ownedBodyFieldsAnnotation] {
 		p := strings.Split(e, "\x1f")
@@ -120,17 +115,17 @@ func refuseCLIOwnedBodyKeys(cmd *cobra.Command, flag string, body map[string]any
 				canonical[pos] = declared
 			}
 		}
-		for _, key := range bodyKeys {
-			if claimed[key] || foldMaskName(key) != foldMaskName(declared) {
+		for _, key := range bodyKeys(body, declared) {
+			if claimed[key] {
 				continue
 			}
 			claimed[key] = true
-			value := body[key]
 			if arg == "" {
 				keys = append(keys, key)
 				owners = appendUnique(owners, owner)
 				continue
 			}
+			value := body[key]
 			if pos < len(positionals) {
 				if s, isString := value.(string); isString && s == positionals[pos] {
 					equal[pos] = append(equal[pos], key)
@@ -156,6 +151,12 @@ func refuseCLIOwnedBodyKeys(cmd *cobra.Command, flag string, body map[string]any
 	msgs = append(msgs, mismatches...)
 	if len(msgs) > 0 {
 		return &usageError{errors.New(strings.Join(msgs, "; "))}
+	}
+	for _, present := range equal {
+		if len(present) > 1 { // both spellings, each equal to the positional
+			_, _, err := bodyField(body, present[0])
+			return err
+		}
 	}
 	for pos, present := range equal {
 		for _, k := range present {

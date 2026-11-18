@@ -135,9 +135,13 @@ Example:
 		if err != nil {
 			return err
 		}
+		hookCheck, err := claimsHookCheck(body)
+		if err != nil {
+			return err
+		}
 		appID := xaaAppID(cmd)
 		return sendMutation(cmd, mutation{Method: http.MethodPost, Path: xaaResourceServers.collectionPath(appID), Body: body, Unwrap: named("resourceServer")},
-			withPreRead(xaaAppCheck(appID)), withPreRead(claimsHookCheck(body)))
+			withPreRead(xaaAppCheck(appID)), withPreRead(hookCheck))
 	},
 }
 
@@ -208,8 +212,12 @@ Prints the updated server, unwrapped like "xaa resource-servers get".`,
 		if err != nil {
 			return err
 		}
+		hookCheck, err := claimsHookCheck(obj)
+		if err != nil {
+			return err
+		}
 		return sendMutation(cmd, mutation{Method: http.MethodPost, Path: xaaResourceServers.itemPath(appID, args[0]), Body: body, Unwrap: named("resourceServer")},
-			withPreRead(xaaResourceServers.requiredFill(appID, args[0], obj)), withPreRead(claimsHookCheck(obj)))
+			withPreRead(xaaResourceServers.requiredFill(appID, args[0], obj)), withPreRead(hookCheck))
 	},
 }
 

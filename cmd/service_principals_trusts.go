@@ -306,14 +306,10 @@ Prints the trust as pretty JSON, unwrapped like "trusts get".`,
 	},
 }
 
-// trustListFields are the trust's list fields in both spellings the API
-// accepts. A mask naming one that the body omits makes the server clear it;
-// clearing scopedRoleIds widens the trust to all of the principal's roles.
-var trustListFields = [][2]string{
-	{"scopedRoleIds", "scoped_role_ids"},
-	{"allowSourceCidrs", "allow_source_cidrs"},
-	{"passthroughClaims", "passthrough_claims"},
-}
+// trustListFields are the trust's list fields. A mask naming one that the
+// body omits makes the server clear it; clearing scopedRoleIds widens the
+// trust to all of the principal's roles.
+var trustListFields = []string{"scopedRoleIds", "allowSourceCidrs", "passthroughClaims"}
 
 // checkTrustBodyMask refuses a mask that names a list field the --body-file
 // object leaves out or sets to null; an explicit [] is the way to clear one.
@@ -329,11 +325,12 @@ func checkTrustBodyMask(trust map[string]any, mask string) error {
 		named[strings.TrimPrefix(f, "trust.")] = true
 	}
 	for _, f := range trustListFields {
-		if !all && !named[foldMaskName(f[0])] {
-			continue
+		v, _, err := bodyField(trust, f)
+		if err != nil {
+			return err
 		}
-		if trust[f[0]] == nil && trust[f[1]] == nil {
-			return &usageError{fmt.Errorf("--update-mask names %s but --body-file sets no %s; send an explicit [] to clear it", f[0], f[0])}
+		if (all || named[foldMaskName(f)]) && v == nil {
+			return &usageError{fmt.Errorf("--update-mask names %s but --body-file sets no %s; send an explicit [] to clear it", f, f)}
 		}
 	}
 	return nil
@@ -351,24 +348,26 @@ func trustRoleRefs(trust map[string]any, fromBody bool) ([]labeledRef, error) {
 		}
 		out = append(out, labeledRef{appRef{ID: id}, label})
 	}
-	for _, key := range trustListFields[0] {
-		switch v := trust[key].(type) {
-		case nil:
-		case []string:
-			for _, id := range v {
-				add(key, id)
-			}
-		case []any:
-			for i, e := range v {
-				id, ok := e.(string)
-				if !ok {
-					return nil, &usageError{fmt.Errorf("--body-file: %s[%d] must be a string", key, i)}
-				}
-				add(key, id)
-			}
-		default:
-			return nil, &usageError{fmt.Errorf("--body-file: %s must be an array of strings", key)}
+	raw, key, err := bodyField(trust, "scopedRoleIds")
+	if err != nil {
+		return nil, err
+	}
+	switch v := raw.(type) {
+	case nil:
+	case []string:
+		for _, id := range v {
+			add(key, id)
 		}
+	case []any:
+		for i, e := range v {
+			id, ok := e.(string)
+			if !ok {
+				return nil, &usageError{fmt.Errorf("--body-file: %s[%d] must be a string", key, i)}
+			}
+			add(key, id)
+		}
+	default:
+		return nil, &usageError{fmt.Errorf("--body-file: %s must be an array of strings", key)}
 	}
 	return out, nil
 }

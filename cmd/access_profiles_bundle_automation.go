@@ -133,9 +133,11 @@ func validateBundleAutomationBody(body map[string]any) error {
 	}
 
 	for key := range body {
-		switch foldMaskName(key) {
-		case foldMaskName("createTasks"), foldMaskName("disableCircuitBreaker"), "enabled", "entitlements":
-		default:
+		known := false
+		for _, field := range []string{"createTasks", "disableCircuitBreaker", "enabled", "entitlements"} {
+			known = known || isFieldSpelling(key, field)
+		}
+		if !known {
 			return &usageError{fmt.Errorf("unsupported bundle automation field %q", key)}
 		}
 	}
@@ -158,7 +160,7 @@ func validateBundleAutomationBody(body map[string]any) error {
 			return &usageError{fmt.Errorf("entitlements must be a JSON object")}
 		}
 		for nestedKey := range entitlements {
-			if foldMaskName(nestedKey) != foldMaskName("entitlementRefs") {
+			if !isFieldSpelling(nestedKey, "entitlementRefs") {
 				return &usageError{fmt.Errorf("entitlements contains unsupported field %q", nestedKey)}
 			}
 		}

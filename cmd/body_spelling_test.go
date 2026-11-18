@@ -195,6 +195,10 @@ var otherSpellingTwins = []spellingTwin{
 		camel: `{"channelSettings":{"email":{}}}`, snake: `{"channel_settings":{"email":{}}}`},
 	{name: "user notifications empty settings", path: "settings notifications user update", flag: "body-file", args: []string{"--body-file", "@BODY"},
 		camel: `{"channelSettings":{}}`, snake: `{"channel_settings":{}}`, exit: exitUsage},
+	{name: "edge settings need a category", path: "findings settings edge update", flag: "body-file", args: []string{"--body-file", "@BODY"},
+		camel: `{"subcategorySettings":[]}`, snake: `{"subcategory_settings":[]}`, exit: exitUsage},
+	{name: "edge settings valid", path: "findings settings edge update", flag: "body-file", args: []string{"--body-file", "@BODY"},
+		camel: `{"subcategorySettings":[{"subcategory":"x","enabled":false}]}`, snake: `{"subcategory_settings":[{"subcategory":"x","enabled":false}]}`},
 	{name: "domains explicit empty", path: "settings domains set", flag: "body-file", args: []string{"--body-file", "@BODY"},
 		camel: `{"newDomains":[]}`, snake: `{"new_domains":[]}`},
 	{name: "app mapper cases", path: "apps update", flag: "app-user-mapper-file", args: []string{"a1", "--app-user-mapper-file", "@BODY"},
@@ -355,6 +359,24 @@ func TestBodyFileRefusesBothSpellings(t *testing.T) {
 			camel: `{"mappingCases":[{"userKeyCel":"a"}],"mapping_cases":[]}`},
 		{name: "xaa required field", path: "xaa resource-servers update", args: []string{"rs1", "--app-id", "a1", "--body-file", "@BODY", "--update-mask", "description"},
 			camel: `{"displayName":"a","display_name":"b"}`},
+		{name: "trust scoped roles", path: "service-principals trusts update", args: []string{"tr1", "--service-principal-id", "sp1", "--body-file", "@BODY", "--update-mask", "displayName"},
+			camel: `{"scopedRoleIds":["r1"],"scoped_role_ids":["r2"]}`},
+		{name: "trust cidrs", path: "service-principals trusts update", args: []string{"tr1", "--service-principal-id", "sp1", "--body-file", "@BODY", "--update-mask", "displayName"},
+			camel: `{"allowSourceCidrs":[],"allow_source_cidrs":[]}`},
+		{name: "edge settings later key", path: "findings settings edge update", args: []string{"--body-file", "@BODY"},
+			camel: `{"settings":[{"category":"x"}],"subcategorySettings":[],"subcategory_settings":[]}`},
+		{name: "config header arm", path: "mcp servers register", args: []string{"--app-id", "a1", "--type", "external", "--display-name", "x", "--external-config-file", "@BODY"},
+			camel: `{"url":"https://mcp.example","customHeader":{"headerName":"X-A"},"custom_header":{"headerName":"X-B"}}`},
+		{name: "config header field", path: "mcp servers test-connection", args: []string{"--external-config-file", "@BODY"},
+			camel: `{"url":"https://mcp.example","customHeader":{"headerName":"X-A","header_name":"X-B"}}`},
+		{name: "config with explicit mask", path: "mcp servers update-credentials", args: []string{"c1", "--app-id", "a1", "--type", "external", "--external-config-file", "@BODY", "--update-mask", "bearerToken"},
+			camel: `{"bearerToken":{"token":"a"},"bearer_token":{"token":"b"}}`},
+		{name: "config with derived mask", path: "mcp servers update-credentials", args: []string{"c1", "--app-id", "a1", "--type", "external", "--external-config-file", "@BODY"},
+			camel: `{"url":"https://mcp.example","transportType":"x","transport_type":"y"}`},
+		{name: "owned positional key", path: "findings state", args: []string{"fd1", "--body-file", "@BODY"},
+			camel: `{"findingId":"fd1","finding_id":"fd1"}`},
+		{name: "claims hook before the app lookup", path: "xaa resource-servers create", args: []string{"--app-id", "a1", "--body-file", "@BODY"},
+			camel: `{"displayName":"x","modifyClaimsHook":{"functionId":"f1","function_id":"f2"}}`},
 		{name: "api page token", path: "api", args: []string{"--path", "/api/v1/probe", "--paginate", "--body-file", "@BODY"},
 			camel: `{"pageToken":"","page_token":""}`, real: true},
 	}
@@ -392,7 +414,6 @@ var spellingExempt = map[string]string{
 	"findings routing-rules create --body-file":                 "sent verbatim, no guard reads it",
 	"findings routing-rules update --body-file":                 "sent verbatim; the owned id key is covered by findings state",
 	"findings search --body-file":                               "owned paging keys, covered by role-mining suggestions users",
-	"findings settings edge update --body-file":                 "sent verbatim, no guard reads it",
 	"findings settings update --body-file":                      "sent verbatim, no guard reads it",
 	"findings shadow-mcp-occurrences search --body-file":        "owned paging keys, covered by role-mining suggestions users",
 	"findings transformation-rules create --body-file":          "sent verbatim, no guard reads it",
@@ -500,5 +521,71 @@ func TestOwnedBodyKeyMatchesEitherSpelling(t *testing.T) {
 	}
 	if got := strings.Join(sortedKeys(body), ","); got != "thingId" {
 		t.Errorf("body keys %s, want the positional under the declared spelling only", got)
+	}
+}
+
+// TestMisCasedKeysAreNotSpellings: only the camelCase and snake_case forms
+// name a field (the server refuses any other casing as an unknown field), so
+// c1i treats another casing as an unknown key.
+func TestMisCasedKeysAreNotSpellings(t *testing.T) {
+	t.Setenv("C1I_URL", mutTestURL)
+	cases := []struct {
+		name, path string
+		args       []string
+		file       string
+		exit       int
+		want       string // in the dry-run preview
+	}{
+		{"unknown bundle field", "access-profiles bundle-automation create", []string{"ap1", "--body-file", "@BODY"},
+			`{"CreateTasks":true,"entitlements":{"entitlementRefs":[]}}`, exitUsage, ""},
+		{"template policy not looked up", "access-reviews templates create", []string{"--body-file", "@BODY"},
+			`{"displayName":"x","PolicyId":"pol9","ownerIds":["u1"]}`, 0, `"policyid":"pol9"`},
+		{"owned id not rewritten", "findings routing-rules update", []string{"r1", "--body-file", "@BODY"},
+			`{"Id":"other"}`, 0, `"id":"other"`},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			r := runSpellingTwin(t, spellingTwin{path: tc.path, args: tc.args}, tc.file)
+			if r.exit != tc.exit {
+				t.Fatalf("exit %d, want %d; requests %v", r.exit, tc.exit, r.requests)
+			}
+			for _, q := range r.requests {
+				if strings.Contains(q, "pol9") {
+					t.Errorf("looked up a mis-cased key: %s", q)
+				}
+			}
+			if !strings.Contains(r.stdout, tc.want) {
+				t.Errorf("preview %s lacks %s", r.stdout, tc.want)
+			}
+		})
+	}
+}
+
+func TestFieldSpellings(t *testing.T) {
+	for _, tc := range []struct{ in, camel, snake string }{
+		{"pageSize", "pageSize", "page_size"},
+		{"page_size", "pageSize", "page_size"},
+		{"id", "id", "id"},
+		{"awsSigv4", "awsSigv4", "aws_sigv4"},
+		{"scopedRoleIds", "scopedRoleIds", "scoped_role_ids"},
+		{"mcp_server_catalog_id", "mcpServerCatalogId", "mcp_server_catalog_id"},
+	} {
+		if c, s := fieldSpellings(tc.in); c != tc.camel || s != tc.snake {
+			t.Errorf("fieldSpellings(%q) = %q, %q; want %q, %q", tc.in, c, s, tc.camel, tc.snake)
+		}
+	}
+	obj := map[string]any{"PageSize": 1, "pagesize": 2, "PAGE_SIZE": 3, "Page_Size": 4}
+	if v, key, err := bodyField(obj, "pageSize"); v != nil || key != "" || err != nil {
+		t.Errorf("bodyField matched a mis-cased key: %v %q %v", v, key, err)
+	}
+	if bodySetsField(obj, "pageSize") {
+		t.Error("bodySetsField matched a mis-cased key")
+	}
+	if err := setBodyField(obj, "pageSize", 5); err != nil || obj["pageSize"] != 5 {
+		t.Errorf("setBodyField: %v, %v", err, obj)
+	}
+	both := map[string]any{"pageSize": 1, "page_size": 2}
+	if _, _, err := bodyField(both, "page_size"); exitCode(err) != exitUsage {
+		t.Errorf("both spellings: %v, want a usage error", err)
 	}
 }

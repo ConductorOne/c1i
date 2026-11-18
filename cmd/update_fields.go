@@ -252,6 +252,9 @@ func sortedConfigKeys(cfg map[string]any) []string {
 // checkDerivedMaskKeys refuses a config key that would become an empty or
 // malformed --update-mask path, naming the key.
 func checkDerivedMaskKeys(cfg map[string]any) error {
+	if err := refuseBothSpellings(cfg); err != nil {
+		return err
+	}
 	for i, k := range sortedConfigKeys(cfg) {
 		if !hasVisibleRune(k) {
 			return &usageError{fmt.Errorf("config key %d is empty; it would become an empty --update-mask path", i+1)}

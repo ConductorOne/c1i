@@ -672,9 +672,12 @@ func normalizeUpdateMask(mask string) (string, error) {
 // itself is sent as given). The catalog id is required by the API but never a
 // field being changed.
 func requireMaskCoversConfig(mask string, cfg map[string]any) error {
+	if err := refuseBothSpellings(cfg); err != nil {
+		return err
+	}
 	var uncovered []string
 	for key := range cfg {
-		if foldMaskName(key) == foldMaskName("mcpServerCatalogId") {
+		if isFieldSpelling(key, "mcpServerCatalogId") {
 			continue
 		}
 		if !hasVisibleRune(key) {

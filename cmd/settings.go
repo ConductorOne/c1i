@@ -118,9 +118,10 @@ func newSettingsHistoryCmd(short, long, path string) *cobra.Command {
 // settingsDurationForm ends every settings duration flag's help.
 const settingsDurationForm = "as a protobuf duration, e.g. 3600s, or a Go duration such as 8h (omit to leave unchanged)"
 
-// requireNonEmptyBodyKey refuses a body whose key is missing, null, or an
-// empty object or array.
+// requireNonEmptyBodyKey refuses a body whose keys are all missing, null, or
+// an empty object or array, and one that sets any of them in both spellings.
 func requireNonEmptyBodyKey(body map[string]any, keys ...string) error {
+	set := false
 	for _, k := range keys {
 		raw, _, err := bodyField(body, k)
 		if err != nil {
@@ -128,14 +129,13 @@ func requireNonEmptyBodyKey(body map[string]any, keys ...string) error {
 		}
 		switch v := raw.(type) {
 		case map[string]any:
-			if len(v) > 0 {
-				return nil
-			}
+			set = set || len(v) > 0
 		case []any:
-			if len(v) > 0 {
-				return nil
-			}
+			set = set || len(v) > 0
 		}
+	}
+	if set {
+		return nil
 	}
 	return fmt.Errorf("--body-file must set %s to a non-empty value; the request has no update mask, so nothing is sent without one", strings.Join(keys, " or "))
 }
