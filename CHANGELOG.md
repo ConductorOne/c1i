@@ -50,10 +50,11 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ### Security
 
 - Text-mode stderr (errors, notices, `--wait` progress, the `--debug`
-  trace) prints control characters and invalid UTF-8 bytes
-  from server-supplied text as visible escapes (`\x1b`, `\u202e`) instead of sending them to the terminal, so an API error body or MCP message
-  cannot rewrite the screen or title. `\n` and `\t` are kept; `--error-format
-  json` output is unchanged.
+  trace) prints control characters and invalid UTF-8 bytes from
+  server-supplied text as visible escapes (`\x1b`, `\u202e`) instead of
+  sending them to the terminal, so an API error body or MCP message cannot
+  rewrite the screen or title. `\n` and `\t` are kept; `--error-format json`
+  output is unchanged.
 
 ## [0.11.0] - 2026-11-17
 
