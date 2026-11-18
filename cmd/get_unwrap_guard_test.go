@@ -73,6 +73,15 @@ func getUnwrapCases() []getUnwrapCase {
 			wantKeys:    []string{"id", "displayName"},
 		},
 		{
+			name:        "automations executions get",
+			cmd:         automationsExecutionsGetCmd,
+			args:        []string{"7"},
+			idKey:       "id",
+			body:        `{"automationExecution":{"id":"7","automationTemplateId":"aut-1","state":"AUTOMATION_EXECUTION_STATE_DONE","context":{"context":{}}},"expanded":[],"view":null}`,
+			payloadPath: []string{"automationExecution"},
+			wantKeys:    []string{"id", "automationTemplateId", "state", "context", "expanded", "view"},
+		},
+		{
 			name:        "automations get",
 			cmd:         automationsGetCmd,
 			args:        []string{"aut-1"},
