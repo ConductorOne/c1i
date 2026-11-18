@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"errors"
 	"go/ast"
 	"go/parser"
 	"go/token"
@@ -390,5 +391,55 @@ func TestUpdateCommandsDoNotBuildMasksByHand(t *testing.T) {
 		if got := handBuiltMasks(t, "clean.go", src); len(got) != 0 {
 			t.Errorf("the checker flagged sanctioned code %v: %s", got, src)
 		}
+	}
+}
+
+// intUpdate and listUpdate read only flags registered the matching way; a
+// misregistered flag or a blank list occurrence must not reach the body.
+func TestIntAndListUpdateFields(t *testing.T) {
+	newCmd := func() *cobra.Command {
+		c := &cobra.Command{Use: "x"}
+		c.Flags().Int("n", 0, "")
+		c.Flags().String("n-str", "", "")
+		addRepeatableStringFlag(c, "l", "")
+		c.Flags().String("l-str", "", "")
+		return c
+	}
+	apply := func(f updateField, args ...string) (map[string]any, []string, error) {
+		c := newCmd()
+		if err := c.ParseFlags(args); err != nil {
+			t.Fatal(err)
+		}
+		obj := map[string]any{}
+		paths, err := f.apply(c, obj)
+		return obj, paths, err
+	}
+	if obj, paths, err := apply(intUpdate("n", "k"), "--n", "0"); err != nil || obj["k"] != 0 || strings.Join(paths, ",") != "k" {
+		t.Errorf("intUpdate --n 0: %v %v %v; want k=0 masked", obj, paths, err)
+	}
+	if obj, paths, err := apply(intUpdate("n", "k")); err != nil || len(obj) != 0 || len(paths) != 0 {
+		t.Errorf("intUpdate unset: %v %v %v; want nothing", obj, paths, err)
+	}
+	if _, _, err := apply(intUpdate("n-str", "k"), "--n-str", "3"); err == nil {
+		t.Error("intUpdate on a string flag: no error")
+	}
+	if obj, paths, err := apply(listUpdate("l", "k", nil), "--l", "a", "--l", "b,c"); err != nil || strings.Join(obj["k"].([]string), "|") != "a|b,c" || strings.Join(paths, ",") != "k" {
+		t.Errorf("listUpdate: %v %v %v; want [a b,c] masked", obj, paths, err)
+	}
+	for _, args := range [][]string{{"--l", ""}, {"--l", "a", "--l", " "}} {
+		var u *usageError
+		if obj, _, err := apply(listUpdate("l", "k", nil), args...); !errors.As(err, &u) || len(obj) != 0 {
+			t.Errorf("listUpdate %q: obj %v err %v; want a usage error and no field", args, obj, err)
+		}
+	}
+	if _, _, err := apply(listUpdate("l-str", "k", nil), "--l-str", "a"); err == nil {
+		t.Error("listUpdate on a plain string flag: no error")
+	}
+	e := enumFlag{prefix: "P_", unknown: enumReject, values: []enumValue{{name: "one", api: "P_ONE"}}}
+	if obj, _, err := apply(listUpdate("l", "k", &e), "--l", "ONE", "--l", "p_one"); err != nil || strings.Join(obj["k"].([]string), "|") != "P_ONE|P_ONE" {
+		t.Errorf("listUpdate enum: %v %v; want [P_ONE P_ONE]", obj, err)
+	}
+	if _, _, err := apply(listUpdate("l", "k", &e), "--l", "two"); err == nil || !strings.Contains(err.Error(), "--l") {
+		t.Errorf("listUpdate enum bogus: %v; want an error naming --l", err)
 	}
 }
