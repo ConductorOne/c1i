@@ -13,6 +13,11 @@ func init() {
 	mcpCmd.AddCommand(mcpToolsCmd)
 }
 
+var toolItems = mcpItemKind{
+	noun: "tool", segment: "mcp_tools", envelope: "tool", state: toolStateFlag, historyMax: maxHistoryPageSize,
+	removedAdvice: `use "mcp tools delete" to soft-delete a tool, or --state=disabled to block it`,
+}
+
 var toolStateFlag = enumFlag{flag: "state", prefix: "MCP_TOOL_STATE_", unknown: enumPassPrefixed, values: []enumValue{
 	{name: "pending", api: "MCP_TOOL_STATE_PENDING_REVIEW", aliases: []string{"MCP_TOOL_STATE_PENDING"}},
 	{name: "approved", api: "MCP_TOOL_STATE_APPROVED"},

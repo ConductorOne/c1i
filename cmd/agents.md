@@ -514,6 +514,15 @@ resource with `--resource-id` likewise means you drop
   with the first failure's code while earlier ids stay applied: under
   `--error-format json` check each per-id error's `applied` and the summary's
   `notAttempted`.
+- `mcp prompts approve` and `mcp resources approve` work the same way; state
+  is the only field those APIs let you change, so neither family has an
+  `update`. `mcp resources list` includes removed resources; `search` hides
+  them unless `--state removed`. `--include-grant-status` on either `search`
+  adds `entitlement_active` and `grant_count`; without it those keys are
+  absent, not false/0. A tenant without the prompts feature answers a
+  well-formed prompts request with 403 `feature not enabled` (exit 3); the
+  message names a feature, not a credential, so logging in again is unlikely
+  to change it.
 - Other `mcp` mutations print the response unwrapped (for ids see the
   Mutations bullet under Reading output). Deletes, `resync-tools` and `mcp
   bindings delete` print `{}`; capture ids with `jq -er`, which fails on a `--dry-run` preview.

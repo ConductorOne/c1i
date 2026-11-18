@@ -76,6 +76,24 @@ var seqGuardCases = map[string]seqGuardCase{
 			"connector-id": "same value in every request of the batch",
 		},
 	},
+	"mcp prompts approve": {
+		base:       []string{"p1", "p2", "--app-id", "app-1", "--connector-id", "c-1"},
+		writes:     2,
+		positional: true,
+		firstUse: map[string]string{
+			"app-id":       "same value in every request of the batch",
+			"connector-id": "same value in every request of the batch",
+		},
+	},
+	"mcp resources approve": {
+		base:       []string{"r1", "r2", "--app-id", "app-1", "--connector-id", "c-1"},
+		writes:     2,
+		positional: true,
+		firstUse: map[string]string{
+			"app-id":       "same value in every request of the batch",
+			"connector-id": "same value in every request of the batch",
+		},
+	},
 }
 
 // multiRequestExempt are commands that send several requests by design and

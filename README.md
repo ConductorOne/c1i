@@ -431,7 +431,7 @@ $ cat trace.log
   fails rather than printing `null`. Deletes and other empty responses print
   `{}`; exit `0` is the success signal. A task's `.state` (`tasks` actions,
   `requests create`) is the server's snapshot, not the outcome: re-read with
-  `tasks get`. `mcp tools approve` prints one compact JSON line per tool.
+  `tasks get`. `mcp tools|prompts|resources approve` print one compact JSON line per id.
 - **`api`** outputs pretty-printed JSON. With `--paginate`, outputs NDJSON (one list item per line). A `200` whose body is not JSON is an error (exit `6`), not a silent pass-through — a `--path` that escapes the API prefix can reach the web app and return HTML. An empty body still succeeds, since some endpoints answer a write with nothing.
 - **`docs`** commands output NDJSON (`search`, `endpoints`), pretty JSON (`endpoint`), YAML (`openapi`), or plain text (`page`).
 - List commands auto-paginate by default, except the single-request ones the
@@ -1512,6 +1512,18 @@ c1i mcp tools search  --app-id <id> --connector-id <id> [--query <text>] [--stat
 c1i mcp tools approve <tool-id>... --app-id <id> --connector-id <id> [--state approved|disabled|pending]
 c1i mcp tools delete  <tool-id> --app-id <id> --connector-id <id>
 c1i mcp tools history <tool-id> --app-id <id> --connector-id <id> [--page-size N] [--limit N]
+
+# Resources and prompts (discovered by sync; state is the only writable field, so approve replaces update)
+c1i mcp resources list    --app-id <id> --connector-id <id> [--page-size N] [--limit N]   # every state, removed included
+c1i mcp resources search  --app-id <id> --connector-id <id> [--query <text>] [--state ...] [--kind static|template] [--include-grant-status] [--limit N]   # removed only with --state removed
+c1i mcp resources get     <resource-id> --app-id <id> --connector-id <id>
+c1i mcp resources approve <resource-id>... --app-id <id> --connector-id <id> [--state approved|disabled|pending]
+c1i mcp resources history <resource-id> --app-id <id> --connector-id <id> [--page-size N] [--limit N]
+c1i mcp prompts list    --app-id <id> --connector-id <id> [--page-size N] [--limit N]   # well-formed requests get 403 "feature not enabled" (exit 3) where the tenant lacks prompts
+c1i mcp prompts search  --app-id <id> --connector-id <id> [--query <text>] [--state ...] [--include-grant-status] [--limit N]
+c1i mcp prompts get     <prompt-id> --app-id <id> --connector-id <id>
+c1i mcp prompts approve <prompt-id>... --app-id <id> --connector-id <id> [--state approved|disabled|pending]
+c1i mcp prompts history <prompt-id> --app-id <id> --connector-id <id> [--page-size N] [--limit N]
 
 # Toolsets (admin-curated tool groupings; one AppEntitlement per toolset)
 c1i mcp toolsets list                   --app-id <id> --connector-id <id> [--page-size N] [--limit N]

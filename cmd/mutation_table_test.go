@@ -245,6 +245,8 @@ var mutationTable = []mutationRow{
 	{cmd: "mcp servers resync-tools", args: []string{"cn1", "--app-id=a1"}, body: `{}`},
 	{cmd: "mcp tools approve", args: cat([]string{"t1"}, mcpScope), body: `{"tool":{"id":"t1","state":"MCP_TOOL_STATE_APPROVED"}}`, want: `{"id":"t1","state":"MCP_TOOL_STATE_APPROVED"}`, ids: idPath},
 	{cmd: "mcp tools delete", args: cat([]string{"t1"}, mcpScope), body: `{}`},
+	{cmd: "mcp prompts approve", args: cat([]string{"p1"}, mcpScope), body: `{"prompt":{"id":"p1","state":"MCP_PROMPT_STATE_APPROVED"}}`, want: `{"id":"p1","state":"MCP_PROMPT_STATE_APPROVED"}`, ids: idPath},
+	{cmd: "mcp resources approve", args: cat([]string{"r1"}, mcpScope), body: `{"resource":{"id":"r1","state":"MCP_RESOURCE_STATE_APPROVED"}}`, want: `{"id":"r1","state":"MCP_RESOURCE_STATE_APPROVED"}`, ids: idPath},
 	{cmd: "mcp toolsets create", args: cat(mcpScope, []string{"--display-name=zz"}), body: tblToolset, want: tblToolsetDoc, ids: idPath},
 	{cmd: "mcp toolsets update", args: cat([]string{"ts1"}, mcpScope, []string{"--display-name=zz"}), body: tblToolset, want: tblToolsetDoc, ids: idPath},
 	{cmd: "mcp toolsets delete", args: cat([]string{"ts1"}, mcpScope), body: `{}`},

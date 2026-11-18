@@ -275,6 +275,7 @@ func TestPageSizeFlagEnforcesTheMaxItAdvertises(t *testing.T) {
 var historyPageSizeCommands = []string{
 	"c1i mcp tools history",
 	"c1i mcp bindings history",
+	"c1i mcp resources history",
 }
 
 func TestHistoryCommandsKeepTheir200Ceiling(t *testing.T) {
