@@ -581,6 +581,13 @@ resource with `--resource-id` likewise means you drop
   a displayName/description mask in the runs checked. `connectors delete` refuses a connector backing an MCP
   server (exit 2; use `mcp servers delete`, which also removes its toolsets).
   `connectors sync` only queues a sync; poll `connectors sync-status`.
+  Why did a sync fail: `connectors debuggable` (NDJSON: `appId`,
+  `connectorId`, `syncStatus`) finds targets; then `sync-history <id>
+  --app-id A [--runs N]` (runs + `.streak`; each `.lifecycleId`),
+  `sync-errors` (`--top-k`), `sync-changes` (`--since` RFC 3339) and
+  `sync-compare --left L --right R` (lifecycle ids from `sync-history`; the
+  draft-test form is `--body-file`, not exercised live). All print the API
+  object as returned; unknown well-formed id exits 4, malformed 2.
   `connectors schedule --cron X [--timezone Z] [--justification R]` or
   `--clear`. `connectors credentials rotate` prints `.clientSecret` once and
   leaves the previous credential valid for days; end it with `credentials
