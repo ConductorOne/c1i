@@ -2078,6 +2078,83 @@ c1i findings settings edge update --body-file <file|->
 Not covered: the tenant email provider, identity-policy defaults, onboarding
 state and per-user developer preferences (use `c1i api`).
 
+### Cross-app access (XAA)
+
+`xaa` manages an app's cross-app access objects: resource servers
+(third-party authorization servers C1 mints grants for), their OAuth scopes,
+and access profiles (requestable bundles of one server's scopes). Every
+per-app command takes `--app-id`. The tenant-wide switch is
+`settings cross-app-access` ([Settings](#settings)).
+
+```sh
+c1i xaa resource-servers list --app-id <app-id> [--page-size N] [--page-token TOKEN] [--limit N]
+c1i xaa resource-servers search [--app-id <id> ...] [--query <text>] \
+  [--signing-algorithm unspecified|eddsa|rs256|es256 ...] [--disabled[=false]] [--limit N]
+c1i xaa resource-servers get <resource-server-id> --app-id <app-id>
+c1i xaa resource-servers create --app-id <app-id> --audience <https-issuer> --display-name <name> \
+  [--description <text>] [--resource-uri <uri> ...] [--max-grant-lifetime 1h] \
+  [--signing-algorithm eddsa|rs256|es256] [--require-proof-of-possession] [--disabled] | --body-file <file|->
+c1i xaa resource-servers update <resource-server-id> --app-id <app-id> [--display-name <name>] [--description <text>] \
+  [--resource-uri <uri> ...] [--max-grant-lifetime 1h] [--signing-algorithm <alg>] \
+  [--require-proof-of-possession[=false]] [--disabled[=false]] | --body-file <file|-> --update-mask <paths>
+c1i xaa resource-servers delete <resource-server-id> --app-id <app-id>
+c1i xaa resource-servers history <resource-server-id> --app-id <app-id> [--limit N]
+c1i xaa resource-servers resync-scopes <resource-server-id> --app-id <app-id>
+c1i xaa scopes list --app-id <app-id> [--limit N]
+c1i xaa scopes get <scope-id> --app-id <app-id>
+c1i xaa scopes delete <scope-id> --app-id <app-id>
+c1i xaa scopes history <scope-id> --app-id <app-id> [--limit N]
+c1i xaa scopes create --app-id <app-id> --resource-server-id <id> --scope-value <scope> --display-name <name> \
+  [--description <text>] [--classification read|write|destructive|sensitive|dangerous] \
+  [--state pending-review|enabled|disabled]
+c1i xaa scopes update <scope-id> --app-id <app-id> [--display-name <name>] [--description <text>] \
+  [--state pending-review|enabled|disabled] [--classification <class>]
+c1i xaa access-profiles list --app-id <app-id> [--limit N]
+c1i xaa access-profiles get <access-profile-id> --app-id <app-id>
+c1i xaa access-profiles delete <access-profile-id> --app-id <app-id>
+c1i xaa access-profiles history <access-profile-id> --app-id <app-id> [--limit N]
+c1i xaa access-profiles for-entitlement <entitlement-id> --app-id <app-id>
+c1i xaa access-profiles create --app-id <app-id> --resource-server-id <id> --display-name <name> [--description <text>]
+c1i xaa access-profiles update <access-profile-id> --app-id <app-id> [--display-name <name>] [--description <text>]
+```
+
+- `--audience` must be https; the server stores it normalized (lowercase host,
+  no trailing slash) and it is immutable. It is unique across the tenant (409,
+  exit `2`) and must not be the tenant's own issuer. Registering a server
+  starts a scope discovery run; `get` shows its outcome as
+  `scopeDiscoveryStatus`, and `resync-scopes` starts another.
+- Creates look up their references first, because the server accepts an
+  unknown app on `resource-servers create` and an unknown or deleted
+  resource server on `scopes create` and `access-profiles create`: unknown
+  exits `4`, deleted exits `2`, `--dry-run` included.
+- Updates fill the fields the server validates on every update (display name,
+  audience, scope value, resource server id) from a read when you leave them
+  unset; the mask still decides what changes. A scope is approved with
+  `scopes update --state enabled`; `--state removed` exits `2` (create refuses
+  it server-side). The resource server's `modifyClaimsHook` and clearing a
+  field go through `--body-file` with `--update-mask` (camelCase paths; the
+  server refused `*` and snake_case paths with exit `2`). A body key counts in
+  either spelling (`display_name` or `displayName`). A hook's `functionId`, and
+  `commitId` if given, are looked up first: unknown exits `4`, since the server
+  stores either. An update of a deleted scope or resource server exits `0` and
+  applies; `deletedAt` stays set.
+- `search --disabled=true` lists only disabled servers and `--disabled=false`
+  only enabled ones; omit it for both. In the run checked, `--query` matched
+  display names, not audiences, and a just-created server took a few seconds
+  to appear. Scope and access-profile search are not implemented server-side
+  (501); use `list --app-id`.
+- Deletes are soft: `get` returns the object with `deletedAt`, `list` stops
+  listing it, and repeating the delete exits `0`. Deleting a resource server
+  deleted its scopes and access profiles, and each scope or profile's backing
+  entitlement went with it within seconds, in the run checked.
+- `history` and `list` of an unknown id or app list nothing and exit `0`.
+- `access-profiles for-entitlement` exits `4` for an entitlement with no
+  profile; in the run checked it also did so for a profile created seconds
+  earlier.
+
+Not covered yet: access-profile scope bindings and client-audience mappings
+(use `c1i api`).
+
 ### Role mining
 
 `role-mining` manages the public role-mining analysis workflow, its suggested

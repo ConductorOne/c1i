@@ -2,11 +2,9 @@ package cmd
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
-	"slices"
 	"strings"
 
 	"github.com/ConductorOne/c1i/internal/client"
@@ -212,7 +210,7 @@ Prints the template unwrapped like "access-reviews templates get".
 		}
 		return sendMutation(cmd, mutation{Method: http.MethodPost, Path: templatePath(args[0]), Body: body},
 			withPreRead(templatePolicyCheck(policyLabel, policyID)),
-			withPreRead(templateRequiredFieldsFill(args[0], tpl)))
+			withPreRead(requiredFieldsFill(templatePath(args[0]), "accessReviewTemplate", "template", templateRequiredFields, tpl)))
 	},
 }
 
@@ -242,8 +240,8 @@ func buildTemplateUpdate(cmd *cobra.Command, id string) (body, tpl map[string]an
 		if tpl, err = readJSONFile[map[string]any](cmd, "body-file", mustGetString(cmd, "body-file")); err != nil {
 			return nil, nil, "", "", err
 		}
-		for _, key := range []string{"displayName", "policyId"} {
-			if v, ok := tpl[key]; ok {
+		for _, key := range templateRequiredFields {
+			if v, ok := bodyField(tpl, key); ok {
 				if s, ok := v.(string); !ok || !hasVisibleRune(s) {
 					return nil, nil, "", "", &usageError{fmt.Errorf("--body-file %s must be a non-blank string; omit it to keep the current value", key)}
 				}
@@ -253,53 +251,22 @@ func buildTemplateUpdate(cmd *cobra.Command, id string) (body, tpl map[string]an
 	} else if mask, err = templateUpdateSpec.buildUpdateMask(cmd, tpl); err != nil {
 		return nil, nil, "", "", err
 	}
-	masked := strings.Split(mask, ",")
-	for _, key := range []string{"displayName", "policyId"} {
-		// The fill would send the current value for a named field: a silent no-op.
-		if _, set := tpl[key]; !set && slices.Contains(masked, key) {
-			return nil, nil, "", "", &usageError{fmt.Errorf("--update-mask names %s but --body-file sets no %s", key, key)}
-		}
+	if err := refuseMaskedFieldWithoutValue(mask, tpl, templateRequiredFields); err != nil {
+		return nil, nil, "", "", err
 	}
-	if slices.Contains(masked, "policyId") {
-		policyID, _ = tpl["policyId"].(string)
+	for _, p := range strings.Split(mask, ",") {
+		if foldMaskName(p) == foldMaskName("policyId") {
+			v, _ := bodyField(tpl, "policyId")
+			policyID, _ = v.(string)
+		}
 	}
 	tpl["id"] = id
 	return wrapUpdate("accessReviewTemplate", tpl, mask), tpl, policyLabel, policyID, nil
 }
 
-// templateRequiredFieldsFill copies the current displayName and policyId into
-// tpl where the request leaves them unset: the server rejects an update
-// without both, even when the mask names neither.
-func templateRequiredFieldsFill(id string, tpl map[string]any) preRead {
-	return preRead{Run: func(ctx context.Context, c *client.Client, _ *mutation) ([]resolvedID, error) {
-		_, hasName := tpl["displayName"]
-		_, hasPolicy := tpl["policyId"]
-		if hasName && hasPolicy {
-			return nil, nil
-		}
-		data, err := c.Get(ctx, templatePath(id), nil)
-		if err != nil {
-			return nil, fmt.Errorf("reading the template before the update: %w", err)
-		}
-		var resp struct {
-			Template map[string]any `json:"accessReviewTemplate"`
-		}
-		if json.Unmarshal(data, &resp) != nil || resp.Template == nil {
-			return nil, &nonJSONResponseError{errors.New("reading the template before the update: the response held no accessReviewTemplate")}
-		}
-		for _, key := range []string{"displayName", "policyId"} {
-			if _, set := tpl[key]; set {
-				continue
-			}
-			v, ok := resp.Template[key].(string)
-			if !ok || v == "" {
-				return nil, &nonJSONResponseError{fmt.Errorf("reading the template before the update: the response held no %s", key)}
-			}
-			tpl[key] = v
-		}
-		return nil, nil
-	}}
-}
+// templateRequiredFields are what the server validates on every update,
+// whatever the mask names.
+var templateRequiredFields = []string{"displayName", "policyId"}
 
 var accessReviewTemplatesDeleteCmd = &cobra.Command{
 	Use:   "delete <template-id>",

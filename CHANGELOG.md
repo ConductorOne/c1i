@@ -39,6 +39,18 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `0` on a match, `1` on no match and `2` on an evaluation error;
   `test-token` exits `1`, naming the failed steps, when the trust would reject
   the token.
+- `xaa resource-servers list|search|get|create|update|delete|history|resync-scopes`,
+  `xaa scopes list|get|create|update|delete|history` and `xaa access-profiles
+  list|get|for-entitlement|create|update|delete|history` manage cross-app access
+  objects under `--app-id`. Creates look up `--app-id` and
+  `--resource-server-id` first, since the server stores an object under an
+  unknown app or an unknown or deleted resource server: unknown exits `4`,
+  deleted `2`. Updates read the object to fill the fields the server validates
+  on every update; the mask still decides what changes. A resource server's
+  `modifyClaimsHook` function and commit are looked up first (unknown exits
+  `4`). `scopes update --state removed` exits `2`. Scope bindings and
+  client-audience mappings are not covered yet.
+
 - `access-reviews templates get|create|update|delete <template-id>` and the
   template scope commands `scope get|set|set-excluded|set-by-resource-type`,
   `entitlements add|remove` and `excluded-entitlements add|remove`, shaped like
@@ -176,6 +188,11 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- `access-reviews templates update --body-file` treats a snake_case key
+  (`display_name`, `policy_id`) as set: the update no longer reads the
+  template and sends the camelCase field beside it. A masked `policy_id` is
+  looked up like `policyId` (unknown exits `4`, a non-certify policy `2`), and
+  a blank value exits `2` in either spelling.
 - `functions create|update --file` now refuses a path containing a control
   character, like every other file-valued flag (exit `2`, nothing sent).
 

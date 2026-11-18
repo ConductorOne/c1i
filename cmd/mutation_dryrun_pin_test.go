@@ -139,6 +139,10 @@ var dryRunStubs = map[string][]string{
 	"c1i service-principals trusts update":     {"x1", "--service-principal-id=x1", "--display-name=x1"},
 	"c1i workload-federation providers create": {"--display-name=x1", "--issuer-url=https://issuer.example.com", "--well-known-provider=custom"},
 	"c1i workload-federation providers update": {"x1", "--display-name=x1"},
+	"c1i xaa resource-servers create":          {"--app-id=x1", "--audience=https://x1.example.com", "--display-name=x1"},
+	"c1i xaa resource-servers update":          {"x1", "--app-id=x1", "--description=d"},
+	"c1i xaa scopes update":                    {"x1", "--app-id=x1", "--description=d"},
+	"c1i xaa access-profiles update":           {"x1", "--app-id=x1", "--description=d"},
 }
 
 // dryRunReadBodies is the answer to a leaf's pre-send GET where the generic
@@ -152,6 +156,11 @@ var dryRunReadBodies = map[string]string{
 	"c1i apps resources create":           `{"appResourceTypeView":{"appResourceType":{"id":"x1"}}}`,
 	"c1i export exporters update":         `{"exporter":{"displayName":"n","datasource":{"datasourceId":"d"}}}`,
 	"c1i access-reviews templates update": `{"accessReviewTemplate":{"id":"x1","displayName":"x1","policyId":"x1"}}`,
+	"c1i xaa scopes create":               `{"resourceServer":{"id":"x1"}}`,
+	"c1i xaa access-profiles create":      `{"resourceServer":{"id":"x1"}}`,
+	"c1i xaa resource-servers update":     `{"resourceServer":{"id":"x1","displayName":"n","normalizedAudience":"https://x1.example.com"}}`,
+	"c1i xaa scopes update":               `{"scope":{"id":"x1","displayName":"n","scopeValue":"s","xaaResourceServerId":"r"}}`,
+	"c1i xaa access-profiles update":      `{"accessProfile":{"id":"x1","displayName":"n","xaaResourceServerId":"r"}}`,
 }
 
 // stubArgs builds a leaf's arguments: one per required positional in Use and

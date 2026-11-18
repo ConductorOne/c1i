@@ -236,12 +236,15 @@ func TestTemplateSetupCommandsWire(t *testing.T) {
 	}
 }
 
-// withTemplateReads answers the template read "templates update" makes before
-// its write, so a tree test's fixed reply still reaches the write.
+// withTemplateReads answers the reads "templates update" and the xaa updates
+// make before their write, so a tree test's fixed reply still reaches the write.
 func withTemplateReads(route func(*http.Request, int) mutReply) func(*http.Request, int) mutReply {
 	return func(r *http.Request, n int) mutReply {
 		if r.Method == http.MethodGet && strings.HasPrefix(r.URL.Path, "/api/v1/access_review_template/") {
 			return mutReply{body: `{"accessReviewTemplate":{"id":"t1","displayName":"cur","policyId":"pol0"}}`}
+		}
+		if r.Method == http.MethodGet && strings.Contains(r.URL.Path, "/xaa/") {
+			return mutReply{body: `{"resourceServer":{"id":"rs-1","displayName":"cur","normalizedAudience":"https://a.example.com"},"scope":{"id":"sc-1","displayName":"cur","scopeValue":"s","xaaResourceServerId":"rs-1"},"accessProfile":{"id":"ap-1","displayName":"cur","xaaResourceServerId":"rs-1"}}`}
 		}
 		return route(r, n)
 	}
@@ -300,5 +303,93 @@ func TestTemplateUpdateMaskedRequiredFieldNeedsBodyValue(t *testing.T) {
 				}
 			})
 		}
+	}
+}
+
+// TestTemplateUpdateMatchesSnakeCaseBodyKeys: the server reads display_name as
+// displayName, so a snake_case body key counts as set: no fill duplicates it,
+// and a mask naming it is not refused.
+func TestTemplateUpdateMatchesSnakeCaseBodyKeys(t *testing.T) {
+	t.Setenv("C1I_URL", mutTestURL)
+	cases := []struct {
+		name, file, mask, body string
+		reads                  int
+	}{
+		{"fill skips a snake_case key", `{"display_name":"n","description":"d"}`, "description",
+			`{"accessReviewTemplate":{"description":"d","display_name":"n","id":"t1","policyId":"pol0"},"updateMask":"description"}`, 1},
+		{"mask names a snake_case key the body sets", `{"display_name":"n","policy_id":"pol1"}`, "display_name",
+			`{"accessReviewTemplate":{"display_name":"n","id":"t1","policy_id":"pol1"},"updateMask":"display_name"}`, 0},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			s := newMutServer(t, templateRoute("POLICY_TYPE_CERTIFY"))
+			row := mutationRow{cmd: "access-reviews templates update", args: []string{"t1", "--body-file", "@" + tc.file, "--update-mask", tc.mask}}
+			r := runMutationCLI(t, s.srv, 0, nil, row.argv(t)...)
+			if r.err != nil {
+				t.Fatalf("exit %d: %v\n%s", r.exit, r.err, r.stderr)
+			}
+			w := writesOf(s)
+			if len(w) != 1 || len(s.requests()) != tc.reads+1 {
+				t.Fatalf("requests = %+v, want %d read(s) and one write", s.requests(), tc.reads)
+			}
+			if got := sortedJSON(t, w[0].body); got != tc.body {
+				t.Errorf("body\n got %s\nwant %s", got, tc.body)
+			}
+		})
+	}
+}
+
+// TestTemplateUpdateLooksUpSnakeCasePolicyID: a masked policyId set as
+// policy_id in the body is looked up like the camelCase key: unknown exits 4,
+// a non-certify policy 2, nothing written, dry run included.
+func TestTemplateUpdateLooksUpSnakeCasePolicyID(t *testing.T) {
+	t.Setenv("C1I_URL", mutTestURL)
+	cases := []struct {
+		name, policyType string
+		missing          []string
+		exit             int
+	}{
+		{"unknown policy", "POLICY_TYPE_CERTIFY", []string{"/api/v1/policies/pol9"}, exitNotFound},
+		{"grant policy", "POLICY_TYPE_GRANT", nil, exitUsage},
+	}
+	for _, tc := range cases {
+		for _, dry := range []bool{false, true} {
+			t.Run(tc.name, func(t *testing.T) {
+				clearViperOverrides(t, "dry_run")
+				s := newMutServer(t, templateRoute(tc.policyType, tc.missing...))
+				row := mutationRow{cmd: "access-reviews templates update", args: []string{"t1", "--body-file", `@{"policy_id":"pol9","displayName":"A"}`, "--update-mask", "policyId"}}
+				args := row.argv(t)
+				if dry {
+					args = append(args, "--dry-run")
+				}
+				r := runMutationCLI(t, s.srv, 0, nil, args...)
+				if r.exit != tc.exit {
+					t.Errorf("dry=%v: exit %d (%v), want %d", dry, r.exit, r.err, tc.exit)
+				}
+				if w := writesOf(s); len(w) != 0 {
+					t.Errorf("dry=%v: sent %v", dry, w)
+				}
+				var looked bool
+				for _, q := range s.requests() {
+					looked = looked || q.rawPath == "/api/v1/policies/pol9"
+				}
+				if !looked {
+					t.Errorf("dry=%v: no policy lookup: %+v", dry, s.requests())
+				}
+			})
+		}
+	}
+}
+
+// TestTemplateUpdateRefusesBlankSnakeCaseField: a blank display_name exits 2
+// like a blank displayName, before any request.
+func TestTemplateUpdateRefusesBlankSnakeCaseField(t *testing.T) {
+	t.Setenv("C1I_URL", mutTestURL)
+	clearViperOverrides(t, "dry_run")
+	s := newMutServer(t, templateRoute("POLICY_TYPE_CERTIFY"))
+	row := mutationRow{cmd: "access-reviews templates update", args: []string{"t1", "--body-file", `@{"display_name":" "}`, "--update-mask", "description"}}
+	r := runMutationCLI(t, s.srv, 0, nil, row.argv(t)...)
+	if r.exit != exitUsage || len(s.requests()) != 0 {
+		t.Errorf("exit %d (%v), %d request(s); want 2, none", r.exit, r.err, len(s.requests()))
 	}
 }
