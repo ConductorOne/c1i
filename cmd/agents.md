@@ -515,6 +515,11 @@ server's catalog id (`mcp servers update-credentials` without `--catalog-id`), o
 cannot preview or suppress a tool's side effects, so inspect the tool first
 and treat its call as live. `auth login` rejects it too.
 
+A preview checks the input shape and runs the pre-reads a command documents.
+An exit-0 preview does not prove an id exists: a command with no pre-read sends
+no `GET`, so an unknown id previews at exit `0` and exits `4` for real. To
+confirm an id exists, read it with the family's `get` or `list` command.
+
 **An inherited `C1I_DRY_RUN=1` turns every write into a preview**, and
 `jq -r .id` on a preview prints `null` and your script carries on. Extract ids
 with `jq -er`, which fails instead.
