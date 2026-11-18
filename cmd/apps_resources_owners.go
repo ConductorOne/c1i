@@ -102,7 +102,7 @@ One owner per call; to change several at once use "apps resources set-owners".
 			if err != nil {
 				return err
 			}
-			return addEntitlementOwner(cmd, s.ownerV2(id), ref, wait, waitTimeout)
+			return addEntitlementOwner(cmd, s.ownerV2(id), ref)
 		}
 		userID := mustGetString(cmd, "user-id")
 		return sendMutation(cmd, mutation{Method: http.MethodPost, Path: s.ownersPath(id), Body: map[string]any{"userId": userID}},

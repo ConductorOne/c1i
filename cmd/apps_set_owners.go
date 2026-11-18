@@ -86,8 +86,16 @@ func runOwnerSetPut(cmd *cobra.Command, path string, v2 ownerV2, waitFor func(*c
 	if err != nil {
 		return err
 	}
-	if len(userIDs) == 0 && len(entitlementIDs) == 0 {
+	noUsers, _ := cmd.Flags().GetBool("no-user-owners")
+	switch {
+	case noUsers && len(entitlementIDs) == 0:
+		return &usageError{fmt.Errorf("--no-user-owners requires --owner-entitlement-id")}
+	case noUsers && len(userIDs) > 0:
+		return &usageError{fmt.Errorf("--no-user-owners and --user-id are mutually exclusive")}
+	case len(userIDs) == 0 && len(entitlementIDs) == 0:
 		return &usageError{fmt.Errorf("at least one --user-id or --owner-entitlement-id is required")}
+	case len(userIDs) == 0 && !noUsers:
+		return &usageError{fmt.Errorf("--owner-entitlement-id also replaces user owners: repeat --user-id for each user owner to keep, or pass --no-user-owners to remove them all; to add one entitlement owner use add-owner")}
 	}
 	// The entitlement owners PUT 500s on a repeated id.
 	userIDs = dedupe(userIDs)
@@ -168,9 +176,10 @@ func buildSetOwnersBody(userIDs []string) map[string]any {
 
 // addSetOwnersFlags registers the flags every set-owners command shares.
 func addSetOwnersFlags(cmd *cobra.Command) {
-	addRepeatableStringFlag(cmd, "user-id", "C1 user ID to set as owner (repeatable; replaces the full owner list); this or --owner-entitlement-id is required")
+	addRepeatableStringFlag(cmd, "user-id", "C1 user ID to set as owner (repeatable; replaces the user owners); this or --owner-entitlement-id is required")
 	addEntitlementOwnerFlags(cmd, true)
-	addWaitFlags(cmd, "GET .../ownerids until the owner set equals the requested ids (removals included)", 4*time.Minute)
+	cmd.Flags().Bool("no-user-owners", false, "With --owner-entitlement-id and no --user-id, remove every user owner")
+	addWaitFlags(cmd, "GET .../ownerids (with --owner-entitlement-id, also the entitlement owner list) until the owners equal the request (removals included)", 4*time.Minute)
 }
 
 func init() {

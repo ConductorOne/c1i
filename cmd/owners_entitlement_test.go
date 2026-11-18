@@ -5,7 +5,6 @@ import (
 	"strings"
 	"sync"
 	"testing"
-	"time"
 )
 
 // entOwnerFamilies are the owned objects whose owner verbs take
@@ -44,7 +43,7 @@ func TestEntitlementOwnerWire(t *testing.T) {
 			{"add-owner", []string{"--owner-entitlement-id", "e-9"}, "POST", f.v2 + "/owners/entitlements/primary/app-1/e-9", `{"appEntitlementRef":{"appId":"app-1","id":"e-9"}}`},
 			{"add-owner", []string{"--owner-entitlement-id", "e-9", "--owner-entitlement-app-id", "app-2"}, "POST", f.v2 + "/owners/entitlements/primary/app-2/e-9", `{"appEntitlementRef":{"appId":"app-2","id":"e-9"}}`},
 			{"remove-owner", []string{"--owner-entitlement-id", "e/9"}, "DELETE", f.v2 + "/owners/entitlements/primary/app-1/e%2F9", ``},
-			{"set-owners", []string{"--owner-entitlement-id", "e-9", "--owner-entitlement-id", "e-8", "--owner-entitlement-id", "e-9"}, "PUT", f.v2 + "/owners", `{"appEntitlementRefs":[{"appId":"app-1","id":"e-9"},{"appId":"app-1","id":"e-8"}],"roleSlug":"primary","userRefs":[]}`},
+			{"set-owners", []string{"--owner-entitlement-id", "e-9", "--owner-entitlement-id", "e-8", "--owner-entitlement-id", "e-9", "--no-user-owners"}, "PUT", f.v2 + "/owners", `{"appEntitlementRefs":[{"appId":"app-1","id":"e-9"},{"appId":"app-1","id":"e-8"}],"roleSlug":"primary","userRefs":[]}`},
 		}
 		for _, tc := range cases {
 			t.Run(f.name+" "+tc.verb+" "+strings.Join(tc.extra, " "), func(t *testing.T) {
@@ -195,65 +194,135 @@ func TestAddEntitlementOwnerOutputUnwrapped(t *testing.T) {
 	}
 }
 
-// TestSetOwnersEntitlementFormWait pins that --wait on the v2 set polls both
-// v2 owner lists until they equal the request, and keeps polling while a
-// replaced user owner lingers.
+// TestSetOwnersEntitlementFormWait pins that --wait on the v2 set polls the
+// v1 ownerids for users and the v2 list for entitlements until both equal the
+// request, and keeps polling while a replaced user lingers in ownerids.
 func TestSetOwnersEntitlementFormWait(t *testing.T) {
-	orig := ownerWaitInterval
-	ownerWaitInterval = 5 * time.Millisecond
-	t.Cleanup(func() { ownerWaitInterval = orig })
 	t.Setenv("C1I_URL", mutTestURL)
 	var mu sync.Mutex
-	userPolls := 0
+	idPolls := 0
 	s := newMutServer(t, func(r *http.Request, _ int) mutReply {
 		mu.Lock()
 		defer mu.Unlock()
 		switch {
 		case r.Method == http.MethodPut:
 			return mutReply{body: `{}`}
-		case strings.HasSuffix(r.URL.Path, "/owners/entitlements"):
-			return mutReply{body: `{"list":[{"appEntitlement":{"id":"e-9","appId":"app-1"}}]}`}
-		case strings.HasSuffix(r.URL.Path, "/owners/users"):
-			userPolls++
-			if userPolls == 1 {
-				return mutReply{body: `{"list":[{"user":{"id":"u-old"}}]}`}
+		case r.URL.Path == "/api/v1/apps/app-1/entitlements/e-1/ownerids":
+			idPolls++
+			if idPolls == 1 {
+				return mutReply{body: `{"userIds":["u-old"]}`}
 			}
-			return mutReply{body: `{"list":[]}`}
+			return mutReply{body: `{"userIds":[]}`}
+		case r.URL.Path == "/api/v2/apps/app-1/entitlements/e-1/owners/entitlements":
+			return mutReply{body: `{"list":[{"appEntitlement":{"id":"e-9","appId":"app-1"}}]}`}
 		}
 		return mutReply{status: http.StatusTeapot, body: `{}`}
 	})
-	r := runMutationCLI(t, s.srv, 0, nil, "entitlements", "set-owners", "e-1", "--app-id", "app-1", "--owner-entitlement-id", "e-9", "--wait", "--wait-timeout", "5s")
+	r := runMutationCLI(t, s.srv, 0, nil, "entitlements", "set-owners", "e-1", "--app-id", "app-1", "--owner-entitlement-id", "e-9", "--no-user-owners", "--wait", "--wait-timeout", "5s")
 	if r.exit != 0 {
 		t.Fatalf("exit = %d (%v) stderr %q", r.exit, r.err, r.stderr)
 	}
 	mu.Lock()
 	defer mu.Unlock()
-	if userPolls != 2 {
-		t.Errorf("polled the user owners %d times, want 2 (until the replaced user is gone)", userPolls)
+	if idPolls != 2 {
+		t.Errorf("polled ownerids %d times, want 2 (until the replaced user is gone)", idPolls)
 	}
 	if !strings.Contains(r.stderr, "Owners provisioned on entitlement e-1 of app app-1") {
 		t.Errorf("stderr = %q", r.stderr)
 	}
 }
 
-// TestAddEntitlementOwnerWaitTimesOut pins that a --wait which never sees the
-// entitlement exits 1 with the applied wording.
-func TestAddEntitlementOwnerWaitTimesOut(t *testing.T) {
-	orig := ownerWaitInterval
-	ownerWaitInterval = 5 * time.Millisecond
-	t.Cleanup(func() { ownerWaitInterval = orig })
+// TestSetOwnersEntitlementFormWaitTimesOut pins that a v2 set whose user
+// removal never reaches ownerids exits 1 with the applied wording, even when
+// the v2 user list is already empty.
+func TestSetOwnersEntitlementFormWaitTimesOut(t *testing.T) {
 	t.Setenv("C1I_URL", mutTestURL)
 	s := newMutServer(t, func(r *http.Request, _ int) mutReply {
-		if r.Method == http.MethodPost {
+		switch {
+		case r.Method == http.MethodPut:
 			return mutReply{body: `{}`}
+		case strings.HasSuffix(r.URL.Path, "/ownerids"):
+			return mutReply{body: `{"userIds":["u-old"]}`}
 		}
-		return mutReply{body: `{"list":[]}`}
+		return mutReply{body: `{"list":[{"appEntitlement":{"id":"e-9","appId":"app-1"}}]}`}
 	})
-	r := runMutationCLI(t, s.srv, 0, nil, "apps", "resources", "add-owner", "r-1", "--app-id", "app-1", "--resource-type-id", "rt-1", "--owner-entitlement-id", "e-9", "--wait", "--wait-timeout", "50ms")
+	r := runMutationCLI(t, s.srv, 0, nil, "apps", "resources", "set-owners", "r-1", "--app-id", "app-1", "--resource-type-id", "rt-1", "--owner-entitlement-id", "e-9", "--no-user-owners", "--wait", "--wait-timeout", "100ms")
 	if r.exit != 1 {
 		t.Fatalf("exit = %d, want 1 (%v)", r.exit, r.err)
 	}
 	if r.err == nil || !strings.Contains(r.err.Error(), "was applied") {
 		t.Errorf("error %v, want the applied wording", r.err)
+	}
+}
+
+// TestSetOwnersEntitlementFormNeedsUserDecision pins that the v2 set, which
+// also replaces user owners, needs --user-id or --no-user-owners: either
+// refusal exits 2 before any request, --dry-run included.
+func TestSetOwnersEntitlementFormNeedsUserDecision(t *testing.T) {
+	const keepUsers = "--owner-entitlement-id also replaces user owners: repeat --user-id for each user owner to keep, or pass --no-user-owners to remove them all; to add one entitlement owner use add-owner"
+	for _, f := range entOwnerFamilies {
+		for _, dry := range []bool{false, true} {
+			cases := []struct {
+				extra []string
+				want  string // "" = accepted
+			}{
+				{[]string{"--owner-entitlement-id", "e-9"}, keepUsers},
+				{[]string{"--user-id", "u1", "--no-user-owners"}, "--no-user-owners requires --owner-entitlement-id"},
+				{[]string{"--no-user-owners"}, "--no-user-owners requires --owner-entitlement-id"},
+				{[]string{"--owner-entitlement-id", "e-9", "--user-id", "u1", "--no-user-owners"}, "--no-user-owners and --user-id are mutually exclusive"},
+				{[]string{"--owner-entitlement-id", "e-9", "--no-user-owners"}, ""},
+				{[]string{"--owner-entitlement-id", "e-9", "--user-id", "u1"}, ""},
+			}
+			for _, tc := range cases {
+				name := f.name + " " + strings.Join(tc.extra, " ")
+				if dry {
+					name += " dry-run"
+				}
+				t.Run(name, func(t *testing.T) {
+					t.Setenv("C1I_URL", mutTestURL)
+					s := newMutServer(t, func(r *http.Request, _ int) mutReply {
+						if r.Method == http.MethodGet && strings.HasPrefix(r.URL.Path, "/api/v1/users/") {
+							return mutReply{body: `{"user":{"id":"u1"}}`}
+						}
+						return mutReply{body: `{}`}
+					})
+					args := entOwnerArgs(f.prefix, "set-owners", f.args, tc.extra)
+					if dry {
+						args = append(args, "--dry-run")
+					}
+					r := runMutationCLI(t, s.srv, 0, nil, args...)
+					if tc.want == "" {
+						if r.exit != 0 {
+							t.Fatalf("exit = %d (%v)", r.exit, r.err)
+						}
+						return
+					}
+					if r.exit != exitUsage || r.err == nil || r.err.Error() != tc.want {
+						t.Errorf("exit %d, error %v; want exit %d, %q", r.exit, r.err, exitUsage, tc.want)
+					}
+					if n := len(s.requests()); n != 0 {
+						t.Errorf("sent %d request(s); a usage error sends nothing", n)
+					}
+				})
+			}
+		}
+	}
+}
+
+// TestAddEntitlementOwnerRefusesWait pins that --wait is a usage error with
+// --owner-entitlement-id: nothing is sent.
+func TestAddEntitlementOwnerRefusesWait(t *testing.T) {
+	for _, f := range entOwnerFamilies[1:] {
+		t.Run(f.name, func(t *testing.T) {
+			t.Setenv("C1I_URL", mutTestURL)
+			s := newMutServer(t, func(*http.Request, int) mutReply { return mutReply{body: `{}`} })
+			r := runMutationCLI(t, s.srv, 0, nil, entOwnerArgs(f.prefix, "add-owner", f.args, []string{"--owner-entitlement-id", "e-9", "--wait", "--wait-timeout", "1s"})...)
+			if r.exit != exitUsage || r.err == nil || !strings.Contains(r.err.Error(), "--wait does not apply with --owner-entitlement-id") {
+				t.Errorf("exit %d, error %v; want the --wait refusal", r.exit, r.err)
+			}
+			if n := len(s.requests()); n != 0 {
+				t.Errorf("sent %d request(s); a usage error sends nothing", n)
+			}
+		})
 	}
 }

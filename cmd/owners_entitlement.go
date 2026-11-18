@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/ConductorOne/c1i/internal/client"
+	"github.com/ConductorOne/c1i/internal/timing"
 	"github.com/spf13/cobra"
 )
 
@@ -19,6 +20,7 @@ const ownerRoleSlug = "primary"
 // ownerV2 is one owned object's v2 owner routes.
 type ownerV2 struct {
 	base     string // the owned object's v2 path, e.g. /api/v2/apps/{id}
+	ownerIDs string // its v1 GET .../ownerids, which --wait reads for users
 	appID    string // the --owner-entitlement-app-id default
 	envelope string // the key a create response wraps the owner in
 	target   string // names the object in --wait progress lines
@@ -28,20 +30,22 @@ type ownerV2 struct {
 func appOwnerV2(appID string) ownerV2 {
 	return ownerV2{
 		base:     client.Path("/api/v2/apps/%s", appID),
+		ownerIDs: client.Path("/api/v1/apps/%s/ownerids", appID),
 		appID:    appID,
 		envelope: "appOwnerEntitlement",
 		target:   "app " + appID,
-		recheck:  "c1i apps owners " + appID + " --entitlements",
+		recheck:  "c1i apps owners " + appID,
 	}
 }
 
 func entitlementOwnerV2(appID, entitlementID string) ownerV2 {
 	return ownerV2{
 		base:     client.Path("/api/v2/apps/%s/entitlements/%s", appID, entitlementID),
+		ownerIDs: client.Path("/api/v1/apps/%s/entitlements/%s/ownerids", appID, entitlementID),
 		appID:    appID,
 		envelope: "appEntitlementOwnerEntitlement",
 		target:   "entitlement " + entitlementID + " of app " + appID,
-		recheck:  "c1i entitlements owners " + entitlementID + " --app-id " + appID + " --entitlements",
+		recheck:  "c1i entitlements owners " + entitlementID + " --app-id " + appID,
 	}
 }
 
@@ -49,10 +53,11 @@ func entitlementOwnerV2(appID, entitlementID string) ownerV2 {
 func (s resourceScope) ownerV2(id string) ownerV2 {
 	return ownerV2{
 		base:     client.Path("/api/v2/apps/%s/resource_types/%s/resources/%s", s.appID, s.typeID, id),
+		ownerIDs: s.ownerIDsPath(id),
 		appID:    s.appID,
 		envelope: "appResourceOwnerEntitlement",
 		target:   "resource " + id,
-		recheck:  "c1i apps resources owners " + id + " --app-id " + s.appID + " --resource-type-id " + s.typeID + " --entitlements",
+		recheck:  "c1i apps resources owners " + id + " --app-id " + s.appID + " --resource-type-id " + s.typeID,
 	}
 }
 
@@ -119,57 +124,45 @@ func listEntitlementOwners(cmd *cobra.Command, o ownerV2) error {
 	return listPages(cmd, c, o.entitlementOwnersSpec(cmd.Context()))
 }
 
-// v2UserOwner is one item of GET .../owners/users, as far as --wait needs it.
-type v2UserOwner struct {
-	User struct {
-		ID string `json:"id"`
-	} `json:"user"`
-}
+// entitlementOwnerWaitInterval is how often the entitlement form of
+// set-owners --wait re-polls.
+const entitlementOwnerWaitInterval = 12 * time.Second
 
-// ownerKeys reads the owner set --wait compares, every page of it:
-// entitlementRef.waitKey for each entitlement owner and, when withUsers,
-// "user:<id>" for each user owner.
-func (o ownerV2) ownerKeys(ctx context.Context, c *client.Client, withUsers bool) ([]string, error) {
+// ownerKeys reads the owner set --wait compares: "user:<id>" for each id in
+// the v1 GET .../ownerids, which "owners" agrees with and which a v2 set was
+// seen to update minutes late or not at all, and entitlementRef.waitKey for
+// every entitlement owner, all pages.
+func (o ownerV2) ownerKeys(ctx context.Context, c *client.Client) ([]string, error) {
+	userIDs, err := fetchOwnerIDs(ctx, c, o.ownerIDs)
+	if err != nil {
+		return nil, fmt.Errorf("API error: %w", err)
+	}
 	spec := o.entitlementOwnersSpec(ctx)
 	spec.PageSize = maxPageSize
 	ents, err := collectPages(c, spec)
 	if err != nil {
 		return nil, err
 	}
-	keys := make([]string, 0, len(ents))
+	keys := make([]string, 0, len(userIDs)+len(ents))
+	for _, id := range userIDs {
+		keys = append(keys, "user:"+id)
+	}
 	for _, e := range ents {
 		keys = append(keys, entitlementRef{AppID: e.AppEntitlement.AppID, ID: e.AppEntitlement.ID}.waitKey())
-	}
-	if !withUsers {
-		return keys, nil
-	}
-	path := o.base + "/owners/users"
-	users, err := collectPages(c, pageSpec[v2UserOwner]{
-		Route:    "GET " + path,
-		Fetch:    getPage(ctx, path, map[string]string{"role_slug": ownerRoleSlug}),
-		Parse:    parseList[v2UserOwner],
-		ID:       func(u v2UserOwner) string { return u.User.ID },
-		PageSize: maxPageSize,
-	})
-	if err != nil {
-		return nil, err
-	}
-	for _, u := range users {
-		keys = append(keys, "user:"+u.User.ID)
 	}
 	return keys, nil
 }
 
-func (o ownerV2) waitOp(c *client.Client, withUsers bool, done func([]string) bool, timeout time.Duration) waitOp[[]string] {
+func (o ownerV2) waitOp(c *client.Client, done func([]string) bool, timeout time.Duration) waitOp[[]string] {
 	return waitOp[[]string]{
-		Poll:     func(ctx context.Context) ([]string, error) { return o.ownerKeys(ctx, c, withUsers) },
+		Poll:     func(ctx context.Context) ([]string, error) { return o.ownerKeys(ctx, c) },
 		Done:     done,
-		Interval: ownerWaitInterval,
+		Interval: timing.Scale(entitlementOwnerWaitInterval),
 		Timeout:  timeout,
 		Subject:  "owners to provision on " + o.target,
 		Success:  "Owners provisioned on " + o.target,
 		Slow:     "owner changes " + ownerAsyncLag,
-		Recheck:  o.recheck,
+		Recheck:  o.recheck + " and " + o.recheck + " --entitlements",
 	}
 }
 
@@ -183,8 +176,8 @@ supports; list them with "owners --entitlements".`
 
 	entitlementOwnerAddNote = entitlementOwnerNote + `
 Adding an entitlement that is already an owner exits 0; an unknown
-entitlement exits 4. Where add-owner takes --wait, this form polls GET
-.../owners/entitlements until the entitlement appears.`
+entitlement exits 4. --wait does not apply to this form (exit 2): the
+entitlement owner is in place when add-owner returns.`
 
 	entitlementOwnerRemoveNote = entitlementOwnerNote + `
 Removing an entitlement owner a second time exits 0; an unknown entitlement
@@ -192,13 +185,19 @@ exits 4.`
 
 	entitlementOwnerSetNote = `With --owner-entitlement-id, entitlements own the object too (their
 grantees are its owners), and the set goes through the v2 owner route, which
-replaces BOTH lists, user and entitlement owners, with exactly the ids
-given: --owner-entitlement-id without --user-id removes every user owner.
-Without --owner-entitlement-id, set-owners replaces user owners only and
+replaces the entitlement owners AND is meant to replace the user owners with
+the --user-id values. Repeat --user-id for each user owner to keep, or pass
+--no-user-owners to remove them all; with neither, c1i refuses (exit 2) and
+sends nothing. The user part was not reliably reflected by the v1 owner
+reads: for an app they caught up 1-2 minutes later, and for a resource a
+user owner the set removed was still listed by "owners" and GET
+.../ownerids more than 8 minutes later. --wait therefore polls GET
+.../ownerids for the users and the v2 list for the entitlements until both
+equal the request, and times out (exit 1, the write applied) if they never
+do. Without --owner-entitlement-id, set-owners replaces user owners only and
 leaves entitlement owners in place. --owner-entitlement-app-id names the
 entitlements' app when it is not the owned object's. In this form an unknown
-entitlement or owned object exits 4, and --wait polls the v2 user and
-entitlement owner lists until both equal the request.`
+entitlement or owned object exits 4.`
 
 	entitlementOwnersListNote = `--entitlements lists the entitlements that own it instead of its users,
 from the v2 owner route (role "primary"): id is the entitlement's and
@@ -249,15 +248,16 @@ func ownerEntitlement(cmd *cobra.Command, o ownerV2) (entitlementRef, bool, erro
 
 // addEntitlementOwner POSTs one entitlement owner. The ref is in the path; the
 // body repeats it, as the schema asks.
-func addEntitlementOwner(cmd *cobra.Command, o ownerV2, ref entitlementRef, wait bool, waitTimeout time.Duration) error {
+func addEntitlementOwner(cmd *cobra.Command, o ownerV2, ref entitlementRef) error {
+	if wait, _ := cmd.Flags().GetBool("wait"); wait {
+		return &usageError{fmt.Errorf("--wait does not apply with --owner-entitlement-id: the entitlement owner is in place when add-owner returns")}
+	}
 	return sendMutation(cmd, mutation{
 		Method: http.MethodPost,
 		Path:   o.entitlementPath(ref),
 		Body:   map[string]any{"appEntitlementRef": ref},
 		Unwrap: named(o.envelope),
-	}, withWait(func(c *client.Client) waitOp[[]string] {
-		return o.waitOp(c, false, untilPresent([]string{ref.waitKey()}), waitTimeout)
-	}, wait))
+	})
 }
 
 // removeEntitlementOwner DELETEs one entitlement owner; the route takes no
@@ -266,8 +266,8 @@ func removeEntitlementOwner(cmd *cobra.Command, o ownerV2, ref entitlementRef) e
 	return sendMutation(cmd, mutation{Method: http.MethodDelete, Path: o.entitlementPath(ref)})
 }
 
-// setOwnersV2 PUTs both owner lists. userIDs may be empty: the v2 set
-// replaces user owners too, and an explicit [] shows that in the preview.
+// setOwnersV2 PUTs both owner lists. userIDs is empty only with
+// --no-user-owners; the explicit [] shows that in the preview.
 func setOwnersV2(cmd *cobra.Command, o ownerV2, userIDs, entitlementIDs []string, wait bool, waitTimeout time.Duration, extra ...mutationOpt) error {
 	appID, err := entitlementAppID(cmd, o.appID)
 	if err != nil {
@@ -290,7 +290,7 @@ func setOwnersV2(cmd *cobra.Command, o ownerV2, userIDs, entitlementIDs []string
 		opts = append(opts, withPreRead(existingUsersCheck("user-id", userIDs)))
 	}
 	opts = append(opts, withWait(func(c *client.Client) waitOp[[]string] {
-		return o.waitOp(c, true, untilEqual(want), waitTimeout)
+		return o.waitOp(c, untilEqual(want), waitTimeout)
 	}, wait))
 	return sendMutation(cmd, mutation{
 		Method: http.MethodPut,

@@ -38,7 +38,7 @@ One owner per call; to change several at once use "apps set-owners".
 			if err != nil {
 				return err
 			}
-			return addEntitlementOwner(cmd, appOwnerV2(args[0]), ref, false, 0)
+			return addEntitlementOwner(cmd, appOwnerV2(args[0]), ref)
 		}
 		userID, _ := cmd.Flags().GetString("user-id")
 		// Everything the endpoint needs is in the path, but it still parses

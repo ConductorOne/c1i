@@ -43,7 +43,7 @@ One owner per call; to change several at once use "entitlements set-owners".
 			if err != nil {
 				return err
 			}
-			return addEntitlementOwner(cmd, entitlementOwnerV2(appID, entitlementID), ref, wait, waitTimeout)
+			return addEntitlementOwner(cmd, entitlementOwnerV2(appID, entitlementID), ref)
 		}
 		userID, _ := cmd.Flags().GetString("user-id")
 

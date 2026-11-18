@@ -39,7 +39,8 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `add-owner|remove-owner --owner-entitlement-id <id>
   [--owner-entitlement-app-id <id>]`, `owners --entitlements`, and
   `set-owners --owner-entitlement-id ...`, which replaces user and entitlement
-  owners together. They use the v2 owner routes under the role `primary`.
+  owners together and so needs `--user-id` for each user owner to keep or
+  `--no-user-owners`. They use the v2 owner routes under the role `primary`.
   `--user-id` keeps its existing behavior, except that `add-owner`,
   `remove-owner` and `set-owners` now say "one of --user-id or
   --owner-entitlement-id is required" when neither is given.
