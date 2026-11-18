@@ -862,8 +862,11 @@ preview, where `jq -r` exits 0 with `null`). An explicit `--fields` on a
 mutation is a usage error (exit `2`).
 
 `apps update` sends only the fields whose flags you pass, and prints the
-updated app the same way. `--grant-policy-id`, `--revoke-policy-id` and
-`--certify-policy-id` bind policies, on `apps create` too (omitted at create,
+updated app the same way. It reads the app first: a malformed id is a usage
+error (the API 404s the update path), an unknown app exits `4` and a
+soft-deleted one `2`, before anything is sent (`--dry-run` included).
+`--grant-policy-id`, `--revoke-policy-id` and `--certify-policy-id` bind
+policies, on `apps create` too (omitted at create,
 the server assigns its default grant and revoke policies and no certify
 policy). Before sending, c1i fetches each policy and refuses (nothing sent)
 an id that doesn't exist (exit `4`), is deleted, or isn't of the flag's
@@ -1535,7 +1538,9 @@ is not published: `functions create` leaves the function unpublished, and
 command printed (`.commit.id`) to `functions update <function-id>
 --publish-commit`. `functions update` without `--display-name` first reads the
 function to resend its current name, which the server validates on every
-update. Other fields go through `--body-file` with a camelCase `--update-mask`.
+update; a `--update-mask` that names `displayName` with no value in the object
+exits `2` rather than resending it. Other fields go through `--body-file` with
+a camelCase `--update-mask`.
 `functions delete` is a soft delete: `functions get` still returns the function
 with `deletedAt` set, and a second delete exits `4`. The API refuses a function
 still referenced by a hook or workflow template until that reference is removed
@@ -2099,7 +2104,9 @@ c1i findings settings edge update --body-file <file|->
   can lock you out.
 - `domains set` replaces the whole set with exactly the `--domain` values; list
   first and pass every domain you keep. `--body-file '{"newDomains": []}'`
-  empties it; a body without a `newDomains` array exits `2`. The server does not check that a value looks like a domain.
+  empties it; a body without a `newDomains` array exits `2`, as does an element
+  that is not a string or is blank. The server does not check that a value
+  looks like a domain.
 - `notifications org|user update` sends `--body-file` as the whole request
   (`{"channelSettings": {...}}`, what `show` prints); there is no mask, so a
   body without a non-empty `channelSettings` object exits `2` and nothing is

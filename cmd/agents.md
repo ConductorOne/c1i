@@ -639,7 +639,8 @@ resource with `--resource-id` likewise means you drop
   first. `resource-types create --resource-type` is required; only `CUSTOM`
   repeats per app (else 500, exit 6). `resource-types update` renames only.
   `resources create` exits 4 for an unknown type or `--owner-id` and 2 for a
-  deleted type, before sending. `resources update --custom-description ""`
+  deleted type, before sending; its `--body-file` must not set `appId`, which
+  `--app-id` owns (exit 2). `resources update --custom-description ""`
   clears it; a blank `--display-name`/`--description` exits 2 (the server
   ignores an empty one). Other fields (e.g. `annotations`, merged not
   replaced) go through `--body-file` + `--update-mask`. `resources search`
@@ -695,6 +696,9 @@ resource with `--resource-id` likewise means you drop
   polls `GET .../ownerids` plus the entitlement list and can time out (exit
   1, applied). Without `--owner-entitlement-id`, entitlement owners are left
   alone.
+- `apps update` reads the app first: a malformed id exits `2`, an unknown
+  app `4` and a soft-deleted one `2`, before anything is sent (`--dry-run`
+  included).
 - `apps update`/`apps create` `--grant-policy-id`, `--revoke-policy-id` and
   `--certify-policy-id` are checked by c1i (exists, not deleted, right
   `policyType`) because the API itself stores any id with exit `0`; raw `api`
@@ -739,7 +743,9 @@ resource with `--resource-id` likewise means you drop
   the published commit, and an unpublished function exits `2`.
 - Code pushed with `functions create --file` or `functions update --file` is
   not published, so `functions invoke` keeps running the old commit until you
-  pass the printed `.commit.id` to `functions update --publish-commit`.
+  pass the printed `.commit.id` to `functions update --publish-commit`. A
+  `--update-mask` naming `displayName` with no value in the object exits `2`
+  instead of resending the current name.
 - `functions invocations list <function-id>` is newest first and a busy
   function can have tens of thousands of invocations: pass `--limit`.
 - `functions usage` filters automations client-side by
@@ -994,7 +1000,9 @@ resource with `--resource-id` likewise means you drop
   `--body-file` (update: plus `--update-mask`); the server 403s a JSON patch
   hook when its preview is off. Created disabled unless `--enabled`. The server
   stores any `--filter-cel` (an uncompilable one too) at exit `0`;
-  `update --clear-filter` clears it. `--function-id` and `--function-commit-id`
+  `update --clear-filter` clears it. `--priority` is `0` to `1000`: create is
+  server-validated, update is not, so c1i refuses an out-of-range value
+  (exit `2`) before sending. `--function-id` and `--function-commit-id`
   are looked up first (unknown: exit `4`, `--dry-run` too; not for `--body-file`). `delete` is soft: `get` still returns the
   hook with no deleted marker, `list` omits it, repeat delete exits `0`.
   `webhooks search --query TEXT --webhook-id ID...` matches names, and the

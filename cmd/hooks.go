@@ -65,7 +65,7 @@ func hookFieldFlags(cmd *cobra.Command, update bool) {
 	allowEmpty(cmd, emptyIsSent, "description")
 	f.String("event", "", verb+" event ("+keep+hookEventFlag.usage()+")"+reqd)
 	f.String("filter-cel", "", verb+" CEL filter, evaluated against the event context ("+keep+"not validated by the server)")
-	f.Int("priority", 0, verb+" priority ("+keep+"the server enforces its range)")
+	f.Int("priority", 0, verb+" priority ("+keep+"0 to 1000)")
 	tail := ""
 	if update {
 		tail = " (omit to leave unchanged)"
@@ -99,6 +99,23 @@ var hookFunctionField = hookUpdate([]string{"function-id", "function-commit-id"}
 	return []string{"function"}, nil
 })
 
+// hookPriorityField sends --priority. Create is validated by the server in
+// [0,1000], but Update is not, so refuse an out-of-range value before the send.
+var hookPriorityField = updateField{flags: []string{"priority"}, apply: func(cmd *cobra.Command, obj map[string]any) ([]string, error) {
+	if !flagGiven(cmd, "priority") {
+		return nil, nil
+	}
+	v, err := cmd.Flags().GetInt("priority")
+	if err != nil {
+		return nil, err
+	}
+	if v < 0 || v > 1000 {
+		return nil, &usageError{fmt.Errorf("--priority must be between 0 and 1000 (got %d)", v)}
+	}
+	obj["priority"] = v
+	return []string{"priority"}, nil
+}}
+
 // hookCommonFields are the writable Hook fields, in mask order, shared by
 // create and update.
 func hookCommonFields() []updateField {
@@ -107,7 +124,7 @@ func hookCommonFields() []updateField {
 		strUpdate("description", "description"),
 		enumUpdate("event", "event", &hookEventFlag),
 		hookFilterField,
-		intUpdate("priority", "priority"),
+		hookPriorityField,
 		boolUpdate("enabled", "enabled"),
 		boolUpdate("managed-by-guardrails", "managedByGuardrails"),
 		hookFunctionField,

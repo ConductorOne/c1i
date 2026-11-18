@@ -125,6 +125,9 @@ func TestSettingsDomainsSetInputs(t *testing.T) {
 		{"neither", nil, exitUsage, ""},
 		{"both", []string{"--domain", "a.example.com", "--body-file", "@{}"}, exitUsage, ""},
 		{"blank domain", []string{"--domain", "a.example.com", "--domain", " "}, exitUsage, ""},
+		{"blank body element", []string{"--body-file", "@" + `{"newDomains":[""]}`}, exitUsage, ""},
+		{"whitespace body element", []string{"--body-file", "@" + `{"newDomains":[" "]} `}, exitUsage, ""},
+		{"non-string body element", []string{"--body-file", "@" + `{"newDomains":[123]}`}, exitUsage, ""},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Setenv("C1I_URL", mutTestURL)

@@ -204,7 +204,9 @@ func TestPolicyUnbindAndEmptyID(t *testing.T) {
 			var lookups int
 			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				if r.Method == http.MethodGet {
-					lookups++
+					if strings.HasPrefix(r.URL.Path, "/api/v1/policies/") {
+						lookups++
+					}
 				} else {
 					b, _ := io.ReadAll(r.Body)
 					bodies = append(bodies, string(b))

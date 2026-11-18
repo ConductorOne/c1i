@@ -379,3 +379,25 @@ func hookRefServer(t *testing.T, notFound string) (*httptest.Server, *[]webhookR
 	t.Cleanup(srv.Close)
 	return srv, &reqs
 }
+
+// Create is validated by the server in [0,1000]; Update is not, so c1i
+// refuses an out-of-range --priority before the send.
+func TestHooksPriorityRangeIsChecked(t *testing.T) {
+	withCatalogDryRun(t, false)
+	srv, reqs := webhooksServer(t, hookEnvelope)
+	stubCatalogClient(t, srv)
+	for _, bad := range []string{"-1", "1001"} {
+		if _, err := runPairs(t, srv, hooksUpdateCmd, []string{"hk-1"}, "priority", bad); err == nil || !strings.Contains(err.Error(), "--priority must be between 0 and 1000") {
+			t.Errorf("priority %s: err %v", bad, err)
+		}
+		if _, err := runPairs(t, srv, hooksCreateCmd, nil, "display-name", "zz", "event", "pre-output", "function-id", "fn-1", "priority", bad); err == nil || !strings.Contains(err.Error(), "--priority must be between 0 and 1000") {
+			t.Errorf("create priority %s: err %v", bad, err)
+		}
+	}
+	if sent := hookWrites(*reqs); len(sent) != 0 {
+		t.Errorf("sent %v", sent)
+	}
+	if _, err := runPairs(t, srv, hooksUpdateCmd, []string{"hk-1"}, "priority", "1000"); err != nil {
+		t.Errorf("priority 1000: %v", err)
+	}
+}

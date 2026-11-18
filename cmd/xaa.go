@@ -159,21 +159,6 @@ createdAt, actor, annotations, traceId and syslogEventId.
 An unknown id lists nothing and exits 0.`
 }
 
-// xaaAppCheck refuses an unknown --app-id (exit 4) before a create the server
-// would accept, storing an object under an app that does not exist.
-func xaaAppCheck(appID string) preRead {
-	return preRead{Run: func(ctx context.Context, c *client.Client, _ *mutation) ([]resolvedID, error) {
-		if _, err := c.Get(ctx, client.Path("/api/v1/apps/%s", appID), nil); err != nil {
-			var apiErr *client.APIError
-			if errors.As(err, &apiErr) && apiErr.StatusCode == http.StatusNotFound {
-				return nil, refNotFound("app-id", appID, "app", apiErr)
-			}
-			return nil, fmt.Errorf("checking --app-id %q: %w", appID, err)
-		}
-		return nil, nil
-	}}
-}
-
 // refCheck looks up the object of k that --flag names under --app-id: unknown
 // exits 4, and with refuseDeleted a deleted one exits 2. The server stores a
 // create under an unknown or deleted resource server, and answers an unknown

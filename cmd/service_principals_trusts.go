@@ -66,13 +66,6 @@ type wfTrust struct {
 	UpdatedAt           string   `json:"updatedAt"`
 }
 
-func emptyIfNil(s []string) []string {
-	if s == nil {
-		return []string{}
-	}
-	return s
-}
-
 func wfTrustRow(t wfTrust) map[string]any {
 	return map[string]any{
 		"client_id":            nilIfEmpty(t.ClientID),
@@ -82,9 +75,9 @@ func wfTrustRow(t wfTrust) map[string]any {
 		"description":          nilIfEmpty(t.Description),
 		"condition_expression": nilIfEmpty(t.ConditionExpression),
 		"disabled":             t.Disabled,
-		"scoped_role_ids":      emptyIfNil(t.ScopedRoleIDs),
-		"allow_source_cidrs":   emptyIfNil(t.AllowSourceCIDRs),
-		"passthrough_claims":   emptyIfNil(t.PassthroughClaims),
+		"scoped_role_ids":      t.ScopedRoleIDs,
+		"allow_source_cidrs":   t.AllowSourceCIDRs,
+		"passthrough_claims":   t.PassthroughClaims,
 		"created_at":           nilIfEmpty(t.CreatedAt),
 		"updated_at":           nilIfEmpty(t.UpdatedAt),
 	}

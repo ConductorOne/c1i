@@ -32,18 +32,27 @@ via --body-file plus an explicit --update-mask (both required together,
 mutually exclusive with --display-name, --description and --publish-commit;
 --file still applies). The object is sent with "id" set to <function-id>.
 Mask paths are camelCase: "published_commit_id" is a 400, "invalid path".
+A mask that names displayName with no displayName in the object exits 2
+(c1i would otherwise resend the current name, a silent no-op).
 Secret values come back as "".
 
 Prints the function, unwrapped like "functions get", with the pushed commit
 as the sibling .commit (null without --file). Honors --dry-run.`,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		body, err := buildFunctionUpdateBody(cmd, args[0])
+		body, mask, err := buildFunctionUpdateBody(cmd, args[0])
 		if err != nil {
 			return err
 		}
 		m := mutation{Method: http.MethodPost, Path: "/api/v1/functions/update", Body: body, Unwrap: named("function")}
-		_, nameKey, err := bodyField(body["function"].(map[string]any), "displayName")
+		function := body["function"].(map[string]any)
+		if mask != "" {
+			// functionDisplayNamePreRead would resend the current name.
+			if err := refuseMaskedFieldWithoutValue(mask, function, []string{"displayName"}); err != nil {
+				return err
+			}
+		}
+		_, nameKey, err := bodyField(function, "displayName")
 		if err != nil {
 			return err
 		}
@@ -64,18 +73,18 @@ var functionUpdateSpec = &updateSpec{
 	scope: []string{"body-file", "update-mask", "file", "commit-message"},
 }
 
-func buildFunctionUpdateBody(cmd *cobra.Command, id string) (map[string]any, error) {
+func buildFunctionUpdateBody(cmd *cobra.Command, id string) (map[string]any, string, error) {
 	f := cmd.Flags()
 	mask, usingBody, err := bodyFileMask(cmd, functionUpdateSpec.flagNames()...)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 	files, err := functionFileMap(cmd)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 	if flagGiven(cmd, "commit-message") && files == nil {
-		return nil, &usageError{fmt.Errorf("--commit-message requires --file: it names the commit --file pushes")}
+		return nil, "", &usageError{fmt.Errorf("--commit-message requires --file: it names the commit --file pushes")}
 	}
 
 	var function map[string]any
@@ -83,7 +92,7 @@ func buildFunctionUpdateBody(cmd *cobra.Command, id string) (map[string]any, err
 	case usingBody:
 		bodyFile, _ := f.GetString("body-file")
 		if function, err = readJSONFile[map[string]any](cmd, "body-file", bodyFile); err != nil {
-			return nil, err
+			return nil, "", err
 		}
 	case files != nil && !anyFlagGiven(cmd, functionUpdateSpec.flagNames()...):
 		// A code push alone: content is independent of the mask, and the
@@ -93,7 +102,7 @@ func buildFunctionUpdateBody(cmd *cobra.Command, id string) (map[string]any, err
 	default:
 		function = map[string]any{}
 		if mask, err = functionUpdateSpec.buildUpdateMask(cmd, function); err != nil {
-			return nil, err
+			return nil, "", err
 		}
 	}
 	function["id"] = id
@@ -106,7 +115,7 @@ func buildFunctionUpdateBody(cmd *cobra.Command, id string) (map[string]any, err
 		message, _ := f.GetString("commit-message")
 		body["commitMessage"] = message
 	}
-	return body, nil
+	return body, mask, nil
 }
 
 // anyFlagGiven reports whether any of names was set on the command line.

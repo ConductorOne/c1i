@@ -41,6 +41,8 @@ func spellingRoute(r *http.Request, n int) mutReply {
 		return mutReply{body: `{"function":{"id":"f1","displayName":"current"}}`}
 	case strings.HasPrefix(p, "/api/v1/apps/a1/mcp_servers/"):
 		return mutReply{body: `{"mcpServer":{"mcpServerCatalogId":"cat-from-server"}}`}
+	case p == "/api/v1/apps/a1":
+		return mutReply{body: `{"app":{"id":"a1"}}`}
 	}
 	return mutReply{body: `{"user":{"id":"u1"}}`}
 }

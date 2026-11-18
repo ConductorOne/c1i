@@ -45,6 +45,8 @@ func xaaRoute(reads map[string]string, write string) func(*http.Request, int) mu
 func TestXAACreatesCheckReferencesFirst(t *testing.T) {
 	t.Setenv("C1I_URL", mutTestURL)
 	deleted := `{"resourceServer":{"id":"rs-1","deletedAt":"2026-01-01T00:00:00Z"}}`
+	liveApp := `{"app":{"id":"app-1"}}`
+	deletedApp := `{"app":{"id":"app-1","deletedAt":"2026-01-01T00:00:00Z"}}`
 	cases := []struct {
 		name  string
 		args  []string
@@ -53,10 +55,13 @@ func TestXAACreatesCheckReferencesFirst(t *testing.T) {
 		want  string
 	}{
 		{"rs create unknown app", []string{"xaa", "resource-servers", "create", "--app-id", "app-x", "--audience", "https://a.example.com", "--display-name", "zz"}, nil, exitNotFound, `--app-id "app-x": no such app`},
-		{"scope create unknown rs", []string{"xaa", "scopes", "create", "--app-id", "app-1", "--resource-server-id", "rs-x", "--scope-value", "s", "--display-name", "zz"}, nil, exitNotFound, `--resource-server-id "rs-x": no such resource server`},
-		{"scope create deleted rs", []string{"xaa", "scopes", "create", "--app-id", "app-1", "--resource-server-id", "rs-1", "--scope-value", "s", "--display-name", "zz"}, map[string]string{"/rs-1": deleted}, exitUsage, "the resource server is deleted"},
-		{"profile create unknown rs", []string{"xaa", "access-profiles", "create", "--app-id", "app-1", "--resource-server-id", "rs-x", "--display-name", "zz"}, nil, exitNotFound, `--resource-server-id "rs-x": no such resource server`},
-		{"profile create deleted rs", []string{"xaa", "access-profiles", "create", "--app-id", "app-1", "--resource-server-id", "rs-1", "--display-name", "zz"}, map[string]string{"/rs-1": deleted}, exitUsage, "the resource server is deleted"},
+		{"rs create deleted app", []string{"xaa", "resource-servers", "create", "--app-id", "app-1", "--audience", "https://a.example.com", "--display-name", "zz"}, map[string]string{"/apps/app-1": deletedApp}, exitUsage, "the app is deleted"},
+		{"scope create unknown rs", []string{"xaa", "scopes", "create", "--app-id", "app-1", "--resource-server-id", "rs-x", "--scope-value", "s", "--display-name", "zz"}, map[string]string{"/apps/app-1": liveApp}, exitNotFound, `--resource-server-id "rs-x": no such resource server`},
+		{"scope create deleted rs", []string{"xaa", "scopes", "create", "--app-id", "app-1", "--resource-server-id", "rs-1", "--scope-value", "s", "--display-name", "zz"}, map[string]string{"/apps/app-1": liveApp, "/rs-1": deleted}, exitUsage, "the resource server is deleted"},
+		{"scope create deleted app", []string{"xaa", "scopes", "create", "--app-id", "app-1", "--resource-server-id", "rs-1", "--scope-value", "s", "--display-name", "zz"}, map[string]string{"/apps/app-1": deletedApp, "/rs-1": xaaRSRead}, exitUsage, "the app is deleted"},
+		{"profile create unknown rs", []string{"xaa", "access-profiles", "create", "--app-id", "app-1", "--resource-server-id", "rs-x", "--display-name", "zz"}, map[string]string{"/apps/app-1": liveApp}, exitNotFound, `--resource-server-id "rs-x": no such resource server`},
+		{"profile create deleted rs", []string{"xaa", "access-profiles", "create", "--app-id", "app-1", "--resource-server-id", "rs-1", "--display-name", "zz"}, map[string]string{"/apps/app-1": liveApp, "/rs-1": deleted}, exitUsage, "the resource server is deleted"},
+		{"profile create deleted app", []string{"xaa", "access-profiles", "create", "--app-id", "app-1", "--resource-server-id", "rs-1", "--display-name", "zz"}, map[string]string{"/apps/app-1": deletedApp, "/rs-1": xaaRSRead}, exitUsage, "the app is deleted"},
 	}
 	for _, tc := range cases {
 		for _, dry := range []bool{false, true} {
@@ -339,6 +344,24 @@ func TestXAAClaimsHookFunctionIsLookedUp(t *testing.T) {
 					t.Errorf("dry=%v: sent %v", dry, w)
 				}
 			})
+		}
+	}
+}
+
+// The shared tenant enum is named --default-signing-algorithm on the settings
+// command; a bad value here must name the flag the caller typed.
+func TestXAASigningAlgorithmErrorNamesItsFlag(t *testing.T) {
+	t.Setenv("C1I_URL", mutTestURL)
+	for _, args := range [][]string{
+		{"xaa", "resource-servers", "create", "--app-id", "app-1", "--audience", "https://a.example.com", "--display-name", "zz", "--signing-algorithm", "bogus"},
+	} {
+		s := newMutServer(t, xaaRoute(map[string]string{"/apps/app-1": `{"app":{"id":"app-1"}}`}, `{}`))
+		r := runMutationCLI(t, s.srv, 0, nil, args...)
+		if r.exit != exitUsage || !strings.Contains(r.stderr, `invalid --signing-algorithm "bogus"`) || strings.Contains(r.stderr, "default-signing-algorithm") {
+			t.Errorf("%v: exit %d stderr %q", args, r.exit, r.stderr)
+		}
+		if len(writes(s)) != 0 {
+			t.Errorf("%v: sent %v", args, writes(s))
 		}
 	}
 }
