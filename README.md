@@ -2120,9 +2120,11 @@ state and per-user developer preferences (use `c1i api`).
 
 `xaa` manages an app's cross-app access objects: resource servers
 (third-party authorization servers C1 mints grants for), their OAuth scopes,
-and access profiles (requestable bundles of one server's scopes). Every
-per-app command takes `--app-id`. The tenant-wide switch is
-`settings cross-app-access` ([Settings](#settings)).
+access profiles (requestable bundles of one server's scopes) and the scopes
+bound to each profile, plus each resource server's client audience mappings.
+Resource servers, scopes and access profiles take `--app-id`; client audience
+mappings take `--resource-server-id` instead, since their routes carry no app.
+The tenant-wide switch is `settings cross-app-access` ([Settings](#settings)).
 
 ```sh
 c1i xaa resource-servers list --app-id <app-id> [--page-size N] [--page-token TOKEN] [--limit N]
@@ -2154,6 +2156,18 @@ c1i xaa access-profiles history <access-profile-id> --app-id <app-id> [--limit N
 c1i xaa access-profiles for-entitlement <entitlement-id> --app-id <app-id>
 c1i xaa access-profiles create --app-id <app-id> --resource-server-id <id> --display-name <name> [--description <text>]
 c1i xaa access-profiles update <access-profile-id> --app-id <app-id> [--display-name <name>] [--description <text>]
+c1i xaa access-profiles scopes <access-profile-id> --app-id <app-id> [--limit N]
+c1i xaa access-profiles add-scopes <access-profile-id> --app-id <app-id> --scope-id <scope-id> [--scope-id <scope-id> ...]
+c1i xaa access-profiles remove-scopes <access-profile-id> --app-id <app-id> --scope-id <scope-id> [--scope-id <scope-id> ...]
+c1i xaa client-audience-mappings list --resource-server-id <id> [--limit N]
+c1i xaa client-audience-mappings search [--resource-server-id <id> ...] [--query <text>] [--disabled[=false]] [--limit N]
+c1i xaa client-audience-mappings get <client-key> --resource-server-id <id>
+c1i xaa client-audience-mappings create --resource-server-id <id> --client-key <client-key> \
+  --audience-client-id <client-id> [--disabled]
+c1i xaa client-audience-mappings update <client-key> --resource-server-id <id> \
+  [--audience-client-id <client-id>] [--disabled[=false]]
+c1i xaa client-audience-mappings delete <client-key> --resource-server-id <id>
+c1i xaa client-audience-mappings history <client-key> --resource-server-id <id> [--limit N]
 ```
 
 - `--audience` must be https; the server stores it normalized (lowercase host,
@@ -2179,8 +2193,30 @@ c1i xaa access-profiles update <access-profile-id> --app-id <app-id> [--display-
 - `search --disabled=true` lists only disabled servers and `--disabled=false`
   only enabled ones; omit it for both. In the run checked, `--query` matched
   display names, not audiences, and a just-created server took a few seconds
-  to appear. Scope and access-profile search are not implemented server-side
-  (501); use `list --app-id`.
+  to appear. Scope, access-profile and scope-binding search are not
+  implemented server-side (501); use `list --app-id` or `access-profiles
+  scopes`.
+- `access-profiles add-scopes` and `remove-scopes` take a repeatable
+  `--scope-id` (a repeat is sent once; the server takes at most 100). Each
+  scope is looked up first under `--app-id`: unknown exits `4` (the server
+  answers 400 on add and a silent success on remove), and a deleted one exits
+  `2` on add. A scope of another resource server exits `2` from the server.
+  Re-adding a bound scope, or removing an unbound one, exits `0`. `add-scopes`
+  prints `{"bindings": [...]}`; `remove-scopes` prints `{}`.
+- A client audience mapping's id is its client key, which may be a URL; c1i
+  sends it as a query parameter or in the body, never in the path. The server
+  accepted a CIMD client id URL and a `dcr://` key, and refused other forms
+  ("client_key is not a recognized form"). `create` looks the resource server
+  up first with a tenant-wide resource-server search, because the server
+  stores a mapping under an unknown resource server: a server the search does
+  not return exits `4`, `--dry-run` included. Search omits deleted servers,
+  and a server created a moment earlier was missing from it for about a second
+  in the run checked; retry then. A key already mapped exits `2`, and so does
+  a key whose mapping was deleted: the server refuses to recreate it. `update`
+  fills the audience client id from a read when you leave it unset (the
+  server validates it whatever the mask names), so an unknown key exits `4`
+  before the update. Deletes are soft; `get` still returns the mapping with
+  `deletedAt`, and `update` still changes it.
 - Deletes are soft: `get` returns the object with `deletedAt`, `list` stops
   listing it, and repeating the delete exits `0`. Deleting a resource server
   deleted its scopes and access profiles, and each scope or profile's backing

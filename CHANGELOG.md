@@ -57,8 +57,17 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   deleted `2`. Updates read the object to fill the fields the server validates
   on every update; the mask still decides what changes. A resource server's
   `modifyClaimsHook` function and commit are looked up first (unknown exits
-  `4`). `scopes update --state removed` exits `2`. Scope bindings and
-  client-audience mappings are not covered yet.
+  `4`). `scopes update --state removed` exits `2`.
+- `xaa access-profiles scopes|add-scopes|remove-scopes <access-profile-id>`
+  list and change the scopes bound to a cross-app access profile, and `xaa
+  client-audience-mappings list|search|get|create|update|delete|history`
+  manage a resource server's client audience mappings under
+  `--resource-server-id`, keyed by client key. Each `--scope-id` is looked up
+  first (unknown exits `4`; deleted exits `2` on add), since the server answers
+  an unknown scope with 400 on add and a silent success on remove. Mapping
+  `create` searches the tenant's resource servers first, since the server
+  stores a mapping under an unknown one: not found exits `4`, and so does a
+  deleted server or one created about a second earlier.
 
 - `access-reviews templates get|create|update|delete <template-id>` and the
   template scope commands `scope get|set|set-excluded|set-by-resource-type`,

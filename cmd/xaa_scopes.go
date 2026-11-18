@@ -115,7 +115,7 @@ Example:
 			return err
 		}
 		return sendMutation(cmd, mutation{Method: http.MethodPost, Path: xaaScopes.collectionPath(appID), Body: body, Unwrap: named("scope")},
-			withPreRead(xaaResourceServerCheck(appID, rsID)))
+			withPreRead(xaaResourceServers.refCheck(appID, "resource-server-id", rsID, true)))
 	},
 }
 

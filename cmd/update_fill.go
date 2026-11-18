@@ -9,12 +9,12 @@ import (
 	"github.com/ConductorOne/c1i/internal/client"
 )
 
-// requiredFieldsFill copies each of fields from the object a GET of path holds
-// under envelope into obj, where obj leaves it unset: the server rejects an
-// update without them, even when the mask names none. label names the object
-// in errors ("template"). The read also makes an unknown id fail before the
-// send, --dry-run included.
-func requiredFieldsFill(path, envelope, label string, fields []string, obj map[string]any) preRead {
+// requiredFieldsFill copies each of fields from the object a GET of path (with
+// query, which may be nil) holds under envelope into obj, where obj leaves it
+// unset: the server rejects an update without them, even when the mask names
+// none. label names the object in errors ("template"). The read also makes an
+// unknown id fail before the send, --dry-run included.
+func requiredFieldsFill(path string, query map[string]string, envelope, label string, fields []string, obj map[string]any) preRead {
 	return preRead{Run: func(ctx context.Context, c *client.Client, _ *mutation) ([]resolvedID, error) {
 		var missing []string
 		for _, f := range fields {
@@ -25,7 +25,7 @@ func requiredFieldsFill(path, envelope, label string, fields []string, obj map[s
 		if len(missing) == 0 {
 			return nil, nil
 		}
-		data, err := c.Get(ctx, path, nil)
+		data, err := c.Get(ctx, path, query)
 		if err != nil {
 			return nil, fmt.Errorf("reading the %s before the update: %w", label, err)
 		}

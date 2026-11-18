@@ -414,6 +414,11 @@ var mutationTable = []mutationRow{
 	{cmd: "xaa access-profiles create", args: []string{"--app-id", "app-1", "--resource-server-id", "rs-1", "--display-name", "zz"}, body: tblXAAProfile, want: tblXAAProfileDoc, ids: idPath, method: "POST", path: "/api/v1/apps/app-1/xaa/access_profiles", reads: 1},
 	{cmd: "xaa access-profiles update", args: []string{"ap-1", "--app-id", "app-1", "--description", "d"}, body: tblXAAProfile, want: tblXAAProfileDoc, ids: idPath, method: "POST", path: "/api/v1/apps/app-1/xaa/access_profiles/ap-1", reads: 1},
 	{cmd: "xaa access-profiles delete", args: []string{"ap-1", "--app-id", "app-1"}, body: `{}`, method: "DELETE", path: "/api/v1/apps/app-1/xaa/access_profiles/ap-1"},
+	{cmd: "xaa access-profiles add-scopes", args: []string{"ap-1", "--app-id", "app-1", "--scope-id", "sc-1"}, body: tblXAABindings, method: "POST", path: "/api/v1/apps/app-1/xaa/access_profiles/ap-1/scope_bindings", reads: 1},
+	{cmd: "xaa access-profiles remove-scopes", args: []string{"ap-1", "--app-id", "app-1", "--scope-id", "sc-1"}, body: `{}`, method: "POST", path: "/api/v1/apps/app-1/xaa/access_profiles/ap-1/scope_bindings/delete", reads: 1},
+	{cmd: "xaa client-audience-mappings create", args: []string{"--resource-server-id", "rs-1", "--client-key", "dcr://ck-1", "--audience-client-id", "aud-1"}, body: tblXAAMappingCreate, want: tblXAAMappingCreateDoc, method: "POST", path: "/api/v1/xaa/resource_servers/rs-1/client_audience_mappings", reads: 1},
+	{cmd: "xaa client-audience-mappings update", args: []string{"dcr://ck-1", "--resource-server-id", "rs-1", "--disabled"}, body: tblXAAMapping, want: tblXAAMappingDoc, method: "POST", path: "/api/v1/xaa/resource_servers/rs-1/client_audience_mappings/update", reads: 1},
+	{cmd: "xaa client-audience-mappings delete", args: []string{"dcr://ck-1", "--resource-server-id", "rs-1"}, body: `{}`, method: "POST", path: "/api/v1/xaa/resource_servers/rs-1/client_audience_mappings/delete"},
 }
 
 // tblGet answers every pre-send read: the policy-step, user, catalog-id and
@@ -423,6 +428,7 @@ const tblGet = `{"accessReviewTemplate":{"id":"t1","displayName":"zz","policyId"
 	`"attribute":{"userAttributeMapping":{"id":"map-1","attributeType":{"id":"ty-1","displayName":"Department","appUserProfile":{"appId":"app-1","appUserProfileAttributeKey":"department"}}}},` +
 	`"resourceServer":{"id":"rs-1","displayName":"zz","normalizedAudience":"https://a.example.com"},"scope":{"id":"sc-1","displayName":"zz","scopeValue":"zz.read","xaaResourceServerId":"rs-1"},"accessProfile":{"id":"ap-1","displayName":"zz","xaaResourceServerId":"rs-1"},` +
 	`"app":{"id":"app-1"},"routingRule":{"id":"rr-1","displayName":"zz","settings":{}},` +
+	`"clientAudienceMapping":{"xaaResourceServerId":"rs-1","clientKey":"dcr://ck-1","audienceClientId":"aud-1"},` +
 	`"exporter":{"exportId":"ex-1","displayName":"zz","datasource":{"datasourceId":"ds-1","prefix":"zz/","format":"EXPORT_FORMAT_OCSF_JSON_GZIP"}}}`
 
 func tableRoute(body string) func(*http.Request, int) mutReply {
@@ -610,7 +616,7 @@ func TestMutationTable(t *testing.T) {
 				t.Errorf("preview stderr = %q, want %q", r.stderr, want)
 			}
 			for _, q := range p.requests() {
-				if q.method != http.MethodGet {
+				if isWrite(q.method, q.rawPath) {
 					t.Errorf("preview sent %s %s", q.method, q.rawPath)
 				}
 			}

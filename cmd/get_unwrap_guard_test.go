@@ -670,6 +670,16 @@ func getUnwrapCases() []getUnwrapCase {
 			payloadPath: []string{"accessProfile"},
 			wantKeys:    []string{"id", "appId", "displayName"},
 		},
+		{
+			name:        "xaa client-audience-mappings get",
+			cmd:         xaaClientMappingsGetCmd,
+			args:        []string{"dcr://ck-1"},
+			flags:       map[string]string{"resource-server-id": "rs-1"},
+			idKey:       "clientKey",
+			body:        tblXAAMapping,
+			payloadPath: []string{"clientAudienceMapping"},
+			wantKeys:    []string{"clientKey", "xaaResourceServerId", "audienceClientId", "disabled"},
+		},
 	}
 }
 

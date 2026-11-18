@@ -14,13 +14,16 @@ import (
 
 var xaaCmd = &cobra.Command{
 	Use:   "xaa",
-	Short: "Manage cross-app access (XAA): resource servers, scopes, access profiles",
+	Short: "Manage cross-app access (XAA): resource servers, scopes, access profiles, client mappings",
 	Long: `Manage cross-app access (XAA) objects of an app: resource servers (the
-third-party authorization servers C1 mints grants for), their scopes, and
-access profiles (requestable bundles of scopes).
+third-party authorization servers C1 mints grants for), their scopes, access
+profiles (requestable bundles of scopes) and the scopes bound to each profile,
+plus each resource server's client audience mappings.
 
-Every per-app command takes --app-id. The tenant-wide switch and token
-settings are under "c1i settings cross-app-access".
+Resource servers, scopes and access profiles take --app-id. Client audience
+mappings are scoped by --resource-server-id instead: their routes carry no
+app. The tenant-wide switch and token settings are under
+"c1i settings cross-app-access".
 
 Mutations print the object unwrapped like the matching get (id: .id); deletes
 and resync-scopes print {}. --fields is a usage error on a mutation.`,
@@ -83,14 +86,14 @@ func (k xaaKind) getCmd(short, long string) *cobra.Command {
 		Long:  long,
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return getXAAObject(cmd, k.itemPath(xaaAppID(cmd), args[0]), k.envelope)
+			return getXAAObject(cmd, k.itemPath(xaaAppID(cmd), args[0]), nil, k.envelope)
 		},
 	}
 	addXAAAppFlag(c)
 	return c
 }
 
-func getXAAObject(cmd *cobra.Command, path, envelope string) error {
+func getXAAObject(cmd *cobra.Command, path string, query map[string]string, envelope string) error {
 	baseURL, err := GetBaseURL()
 	if err != nil {
 		return err
@@ -99,7 +102,7 @@ func getXAAObject(cmd *cobra.Command, path, envelope string) error {
 	if err != nil {
 		return fmt.Errorf("authentication failed: %w", err)
 	}
-	data, err := c.Get(cmd.Context(), path, nil)
+	data, err := c.Get(cmd.Context(), path, query)
 	if err != nil {
 		return fmt.Errorf("API error: %w", err)
 	}
@@ -171,29 +174,30 @@ func xaaAppCheck(appID string) preRead {
 	}}
 }
 
-// xaaResourceServerCheck refuses a --resource-server-id that is unknown under
-// --app-id (exit 4) or deleted (exit 2); the server accepts both on create.
-// The lookup is under the app, so it also catches an unknown app.
-func xaaResourceServerCheck(appID, rsID string) preRead {
+// refCheck looks up the object of k that --flag names under --app-id: unknown
+// exits 4, and with refuseDeleted a deleted one exits 2. The server stores a
+// create under an unknown or deleted resource server, and answers an unknown
+// scope with 400 (bind) or a silent 200 (unbind). The lookup is under the
+// app, so it also catches an unknown app.
+func (k xaaKind) refCheck(appID, flag, id string, refuseDeleted bool) preRead {
 	return preRead{Run: func(ctx context.Context, c *client.Client, _ *mutation) ([]resolvedID, error) {
-		data, err := c.Get(ctx, xaaResourceServers.itemPath(appID, rsID), nil)
+		data, err := c.Get(ctx, k.itemPath(appID, id), nil)
 		if err != nil {
 			var apiErr *client.APIError
 			if errors.As(err, &apiErr) && apiErr.StatusCode == http.StatusNotFound {
-				return nil, refNotFound("resource-server-id", rsID, "resource server under --app-id "+strconv.Quote(appID), apiErr)
+				return nil, refNotFound(flag, id, k.label+" under --app-id "+strconv.Quote(appID), apiErr)
 			}
-			return nil, fmt.Errorf("checking --resource-server-id %q: %w", rsID, err)
+			return nil, fmt.Errorf("checking --%s %q: %w", flag, id, err)
 		}
-		var resp struct {
-			RS *struct {
-				DeletedAt *string `json:"deletedAt"`
-			} `json:"resourceServer"`
+		var resp map[string]json.RawMessage
+		var obj *struct {
+			DeletedAt *string `json:"deletedAt"`
 		}
-		if err := json.Unmarshal(data, &resp); err != nil || resp.RS == nil {
-			return nil, &nonJSONResponseError{fmt.Errorf("checking --resource-server-id %q: the lookup did not return a resource server", rsID)}
+		if json.Unmarshal(data, &resp) != nil || json.Unmarshal(resp[k.envelope], &obj) != nil || obj == nil {
+			return nil, &nonJSONResponseError{fmt.Errorf("checking --%s %q: the lookup did not return a %s", flag, id, k.label)}
 		}
-		if resp.RS.DeletedAt != nil {
-			return nil, &usageError{fmt.Errorf("--resource-server-id %q: the resource server is deleted", rsID)}
+		if refuseDeleted && obj.DeletedAt != nil {
+			return nil, &usageError{fmt.Errorf("--%s %q: the %s is deleted", flag, id, k.label)}
 		}
 		return nil, nil
 	}}
@@ -242,7 +246,7 @@ func claimsHookCheck(obj map[string]any) (preRead, error) {
 
 // requiredFill is requiredFieldsFill for one object of k.
 func (k xaaKind) requiredFill(appID, id string, obj map[string]any) preRead {
-	return requiredFieldsFill(k.itemPath(appID, id), k.envelope, k.label, k.required, obj)
+	return requiredFieldsFill(k.itemPath(appID, id), nil, k.envelope, k.label, k.required, obj)
 }
 
 // buildXAAUpdate returns the wrapped update request and the object inside it
