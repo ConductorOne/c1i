@@ -300,13 +300,16 @@ tracked root file outside its allowlist. Stage explicit paths rather than `-A`.
   Scope a rule by what the value does, not its flag name, and back a name-keyed
   rule with a tree test that fails on a flag it misses.
 - **Guards read user JSON in either spelling (enforced convention):** the API
-  takes `policyId` and `policy_id` as one field and 400s on both, so a check on
-  a `--*-file` object reads it through `bodyField`/`bodyFieldAs`/
-  `bodySetsField` and fills with `setBodyField` (`cmd/body_fields.go`), never
-  `m["camelCase"]`; both spellings exit 2. `TestBodyKeyReadsAreFolded` fails
-  on a literal multi-word key read outside its per-function exemptions;
-  `TestEveryJSONFileFlagHasSpellingTwin` holds every file flag to a snake_case
-  twin or a stated exemption.
+  takes exactly `policyId` and `policy_id` as one field (any other casing is
+  an unknown field) and 400s on both, so a check on a `--*-file` object reads
+  it through `bodyField`/`bodyFieldAs`/`bodySetsField` and fills with
+  `setBodyField` (`cmd/body_fields.go`), never `m["camelCase"]`; a checked
+  field in both spellings exits 2. `TestBodyKeyReadsAreFolded` fails on a
+  multi-word key read by literal or const, or compared with a ranged key,
+  outside its per-function exemptions (a key in a local variable escapes it);
+  `TestEveryJSONFileFlagHasSpellingTwin` holds every file flag to a
+  snake_case twin or a stated exemption. Inline JSON flags (`api --body`, the
+  raw escape hatch; free-form `--input`, `--claims`) are out of scope.
 - **A new flag must be named in a top-level doc (enforced convention):**
   `TestEveryFlagIsDocumented` (`cmd/flag_docs_coverage_test.go`) walks the tree
   and fails CI on any long flag absent from **both** README.md and

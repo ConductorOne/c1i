@@ -202,9 +202,11 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   unspecified type, approver fallback and agent rules, rule outcomes). Valid
   snake_case bodies that c1i refused with exit `2` are now sent, and fills no
   longer add a second spelling of a field the file sets (`functions update`,
-  `mcp servers update-credentials`, `api --paginate`). A file that sets one
-  field in both spellings exits `2`, nothing sent; the API refuses such a body
-  with 400 "duplicate field".
+  `mcp servers update-credentials`, `api --paginate`). A file that sets a
+  field c1i checks in both spellings exits `2` before anything is sent; the
+  API refuses any field sent in both with 400 "duplicate field". Only those
+  two spellings name a field: the API refuses `PageSize` or `PAGE_SIZE` as an
+  unknown field, and c1i does not read them as one.
 - `functions create|update --file` now refuses a path containing a control
   character, like every other file-valued flag (exit `2`, nothing sent).
 
