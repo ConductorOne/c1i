@@ -17,6 +17,15 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   command's one-line description; `--json` adds full paths, aliases, version,
   and family/command/leaf counts for scripts and docs verification. It needs no
   credentials or network.
+- `automations create` (common fields as flags, or the full request through
+  `--body-file`), `automations execute [--context-file] [--wait]`,
+  `automations circuit-breaker clear|resolve-paused [--decision] [--reason]`,
+  `automations cancel-pending [--reason]`, and `automations executions
+  get|terminate <execution-id>`. `execute --wait` polls the execution and exits
+  `1` (`applied: true`) if it ends in ERROR or TERMINATE, is paused by the
+  circuit breaker, or times out. The circuit-breaker and cancel-pending verbs
+  print the API's `bulkActionId`; the work is asynchronous and c1i cannot read
+  a bulk action.
 
 ## [0.11.0] - 2026-11-17
 

@@ -1240,7 +1240,15 @@ c1i automations get <automation-id>
 c1i automations update <automation-id> [--display-name NAME] [--description TEXT] [--enabled[=false]]
 c1i automations update <automation-id> --body-file automation.json --update-mask triggers
 c1i automations delete <automation-id>
+c1i automations create --display-name NAME [--description TEXT] [--enabled[=false]] [--steps-file steps.json] [--triggers-file triggers.json]
+c1i automations create --body-file automation.json
+c1i automations execute <automation-id> [--context-file context.json] [--wait [--wait-timeout 4m]]
+c1i automations circuit-breaker clear <automation-id> [--decision run|cancel] [--reason TEXT]
+c1i automations circuit-breaker resolve-paused <automation-id> --decision run|cancel [--reason TEXT]
+c1i automations cancel-pending <automation-id> [--reason TEXT]
 c1i automations executions list [--state done|error|pending|...] [--template-id <tid>] [--page-size N] [--page-token TOKEN] [--limit N]
+c1i automations executions get <execution-id>
+c1i automations executions terminate <execution-id>
 ```
 
 Each `automations list` row includes `function_ids` (every distinct function the automation invokes), so `--calls-function` can answer "which automations call function X?". `executions list --state` accepts the short forms (`done`, `error`, `pending`, ...) or the full `AUTOMATION_EXECUTION_STATE_*` enum; state and template filtering are applied client-side, so pair a narrow filter with `--limit` to bound the work.
@@ -1257,6 +1265,38 @@ left as they were.
 prints `{}`. `automations update` prints the automation unwrapped
 (`jq -er .id`), with `webhookCapabilityUrl` and `webhookHmacSecret` as
 top-level siblings.
+
+`automations create` takes the common fields as flags: `--steps-file` and
+`--triggers-file` are JSON arrays sent as `automationSteps` and `triggers`.
+`--body-file` sends a full CreateAutomationRequest verbatim (circuit breaker,
+drafts, `appId`, annotations) and excludes every other flag. It prints the
+automation unwrapped like `update`. An automation with no triggers runs only
+through `automations execute`, which also starts a disabled automation.
+
+`automations execute` prints `{"executionId": "..."}`; `--context-file` is a
+JSON object sent as the execution's context. `--wait` polls
+`automations executions get` until the execution ends, printing the id first and
+progress on stderr. An execution that ends in `AUTOMATION_EXECUTION_STATE_ERROR`
+or `_TERMINATE`, or is paused by the circuit breaker, exits `1` with an error
+naming the state and `applied: true` (the execution was started). A
+`--wait-timeout` (default 4m) also exits `1`, and the execution may still be
+running. `executions get` prints the execution unwrapped (`.state`);
+execution ids are integers, and a non-integer one is a `400` (exit `2`).
+`executions terminate` prints `{}` and is asynchronous: re-read the
+execution, whose state becomes `AUTOMATION_EXECUTION_STATE_TERMINATE`.
+Terminating an execution that has already ended (DONE or TERMINATE) exits
+`0` and leaves its state unchanged.
+
+`circuit-breaker clear`, `circuit-breaker resolve-paused` and `cancel-pending`
+print `{"bulkActionId": "..."}` and are asynchronous: exit `0` means accepted,
+and c1i has no command to read a bulk action. `clear` without `--decision`
+only clears the breaker (an empty id). With `--decision`, or on
+`resolve-paused` (where it is required), an id came back even with nothing
+paused. `--reason` is recorded with the decision. `cancel-pending` cancels queued
+executions that have not started. A tenant without that feature answers `400`
+`cancelling queued automation runs is not enabled for this tenant` (exit `2`).
+An unknown automation id is a `404` (exit `4`) on `execute`, `clear` and
+`resolve-paused`.
 
 `automations list` and `automations executions list` read
 `POST /api/v1/search/automations` and `POST /api/v1/search/automation_executions`
