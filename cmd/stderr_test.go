@@ -123,10 +123,8 @@ func TestNoticeAndProgressEscapeInTextMode(t *testing.T) {
 	}
 }
 
-// A control-char status line reaches the --debug trace escaped. The response
-// comes from an in-process RoundTripper: a real listener flaked under the
-// parallel seed sweep (ephemeral ports ran out), and the trace prints
-// resp.Status either way.
+// A control-char status line reaches the --debug trace escaped. A RoundTripper
+// supplies it: the trace prints resp.Status, so no socket is needed.
 func TestDebugTraceEscapesServerStatusLine(t *testing.T) {
 	rt := stubRoundTripper(func(r *http.Request) (*http.Response, error) {
 		return &http.Response{
