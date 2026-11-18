@@ -368,7 +368,10 @@ secret-named URL parameters. Everything else is shown as sent, and a body that
 is not JSON prints as `"[redacted: not JSON]"`. A 0.9.2 preview showed them as
 typed.
 
-A preview checks the input shape and runs the pre-reads a command documents. An exit-0 preview does not prove an id exists: a command with no pre-read sends no `GET`, so an unknown id previews at exit `0` and exits `4` for real. To confirm an id exists, read it (`<family> get <id>`).
+A preview checks the input shape and runs the pre-reads a command documents.
+An exit-0 preview does not prove an id exists: a command with no pre-read sends
+no `GET`, so an unknown id previews at exit `0` and exits `4` for real. To
+confirm an id exists, read it with the family's `get` or `list` command.
 
 It applies to every REST write command and to non-GET `api` calls, and never
 sends that mutation. `mcp gateway call` rejects both `--dry-run` and

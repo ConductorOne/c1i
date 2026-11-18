@@ -261,11 +261,12 @@ Output and error text:
 
 ### Changed
 
-- docs clarify that a `--dry-run` preview does not check that an id exists
 - **Task actions that look up the current policy step** (`approve`, `deny`,
   `reassign`, `restart`, `skip-step`, `escalate`, `retry-provisioning`) send
   the task id that lookup returns, so the numeric id `tasks get` accepts works
   for them too.
+- **Docs: a `--dry-run` preview does not check that an id exists.** README and
+  `docs agents` state the rule; read the target to confirm it.
 - **`apps resource-types list` rows gain `app_id`**, matching the new search
   rows.
 - **`--resource-type` on `entitlements create` and `apps resource-types create`
