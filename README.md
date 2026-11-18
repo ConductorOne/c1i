@@ -435,8 +435,10 @@ $ cat trace.log
 - **`api`** outputs pretty-printed JSON. With `--paginate`, outputs NDJSON (one list item per line). A `200` whose body is not JSON is an error (exit `6`), not a silent pass-through — a `--path` that escapes the API prefix can reach the web app and return HTML. An empty body still succeeds, since some endpoints answer a write with nothing.
 - **`docs`** commands output NDJSON (`search`, `endpoints`), pretty JSON (`endpoint`), YAML (`openapi`), or plain text (`page`).
 - List commands auto-paginate by default, except the single-request ones the
-  agent guide names under Pagination (the `role-mining` and `findings …-rules`
-  lists warn on stderr when a result is partial). Pass `--page-token` with a
+  agent guide names under Pagination: `apps routing-rules list`,
+  `attribute-types list`, `grants accounts`, `settings ai-governance history`
+  and the fixed-size reads (`role-mining` and `findings …-rules` lists warn on
+  stderr when a result is partial). Pass `--page-token` with a
   non-empty cursor to fetch a single page manually; supplying the flag at all
   disables auto-pagination, so a blank value is a usage error (exit 2) rather
   than an empty filter.
@@ -450,8 +452,9 @@ $ cat trace.log
   rows all lack the id the command reads is an unrecognized response (exit `6`);
   commands keyed on several fields, such as `grants list` and
   `entitlements list`, print such rows instead.
-- `--page-size` **requests** a per-call batch size (max 100; `mcp tools
-  history` and `mcp bindings history` allow 200). Most list commands default it
+- `--page-size` **requests** a per-call batch size (max 100; `mcp
+  tools|bindings|resources history` allow 200; `connectors debuggable` caps at
+  50). Most list commands default it
   to 50 (see `--help`); `--page-size 0` asks for the server's default of 25,
   not "none". It is not a guarantee: a page can contain more rows than you asked
   for, by an amount that varies per endpoint and per size, and a positive value
@@ -674,7 +677,7 @@ APP_ID=$(c1i apps create --display-name "Example" | jq -er .id)
     `functions usage` do the same, since their filters run after the fetch.
 - Missing fields are silently omitted, so requesting a superset is safe.
 - Also settable via `C1I_FIELDS`. Applies to read output — list commands, `api`,
-  and single-object `get` commands. Mutation output is never projected, so a
+  single-object `get` commands, and `docs endpoint` Mutation output is never projected, so a
   session-wide `C1I_FIELDS` is ignored there. The raw reads `findings settings
   show`, `findings settings edge show`, `settings ai-governance
   tenant-defaults` and `mcp gateway call` are not projected either: an explicit
@@ -979,7 +982,8 @@ only: the API answered a `traitIds` change `200` and left it unchanged.
 does not exist exits `4`. A deleted type exits `2` where the server would 500. `resources update`
 sends only the flags you pass; `--custom-description ""` clears that field, while
 the server ignores an empty name or description, so those exit `2` when
-blank. Other fields (such as `annotations`, which were merged rather than
+blank. `resources update` and the resource owner writes read the app first:
+a deleted app exits `2`. An unknown one exits `4`. Other fields (such as `annotations`, which were merged rather than
 replaced) go through `--body-file` with `--update-mask`; `resources create
 --body-file` sends a full request, except that it must not set `appId`/
 `app_id` or `appResourceTypeId`/`app_resource_type_id` (exit `2`): the flags
@@ -1916,7 +1920,11 @@ The other `mcp` mutations print their response unwrapped like the matching
 `get` (a server's id is `.connectorId`, a toolset's, classifier's and tool
 gate's is `.id`; `mcp classifiers policy update` prints the singleton policy).
 Deletes, `resync-tools` and `mcp bindings delete` print `{}`, and
-`mcp bindings create` prints `{"bindings":[…]}` as returned.
+`mcp bindings create` prints `{"bindings":[…]}` as returned. `mcp servers
+delete` is a soft delete that also removes the server's toolsets and their
+entitlements, and revokes per-user OAuth credentials: verify the users and
+toolsets it carries before deleting. `mcp tools delete` unbinds the tool from
+its toolsets.
 `mcp servers update-credentials` without `--catalog-id` looks the catalog id up
 first and reports it on stderr as `Resolved catalog id: …`, also under
 `--dry-run`. History endpoints return records newest-first.
@@ -2025,8 +2033,11 @@ The equality rule covers the id a positional sets: `findingId`/`finding_id` on
 `findings state` and `assignee`; `id` on `findings routing-rules update`,
 `transformation-rules update`, `automations update`, `access-reviews update`,
 `access-reviews templates update`, `policies update`, `mcp classifiers update` and `mcp classifiers tool-gates
-update`; and `templateId`/`template_id` on `mcp classifiers templates add-rule`
-and `instantiate`.
+update`; `id` on `functions update`, `hooks update`, `connectors update` and
+`apps resources update`; `templateId`/`template_id` on `mcp classifiers
+templates add-rule` and `instantiate`; and `suggestionId`/`suggestion_id` on
+`role-mining suggestions users`. `trusts update` refuses a `clientId` that names
+another trust; the full id or its part before `@` is accepted.
 
 The rule-list endpoints do not currently expose public filtering or paging; use
 `--limit` only to cap local output. Both `list` rows carry `id`, `app_id`,
@@ -2207,8 +2218,8 @@ c1i xaa client-audience-mappings history <client-key> --resource-server-id <id> 
 - Updates fill the fields the server validates on every update (display name,
   audience, scope value, resource server id) from a read when you leave them
   unset; the mask still decides what changes. A scope is approved with
-  `scopes update --state enabled`; `--state removed` exits `2` (create refuses
-  it server-side). The resource server's `modifyClaimsHook` and clearing a
+  `scopes update --state enabled`; `--state removed` exits `2` on create and
+  update (c1i refuses it before sending). The resource server's `modifyClaimsHook` and clearing a
   field go through `--body-file` with `--update-mask` (camelCase paths; the
   server refused `*` and snake_case paths with exit `2`). A body key counts in
   either spelling (`display_name` or `displayName`). A hook's `functionId`, and
@@ -2251,8 +2262,6 @@ c1i xaa client-audience-mappings history <client-key> --resource-server-id <id> 
   profile; in the run checked it also did so for a profile created seconds
   earlier.
 
-Not covered yet: access-profile scope bindings and client-audience mappings
-(use `c1i api`).
 
 ### Role mining
 
@@ -3078,7 +3087,7 @@ slash, or the full URL.
 
 `docs search` is a semantic search with no relevance threshold: every query returns up to 10 nearest matches, so even a nonsense query comes back with plausible-looking hits. A returned hit is not proof a concept exists, and an unexpected hit is not proof the thing you searched for is absent — read the snippet, or fetch the page with `docs page`, to judge. To check whether an API endpoint exists, use `docs endpoints --filter`, which has a real no-match.
 
-`docs guide` is embedded static content (no network call), unlike `docs search` / `docs page`, which make a network call. Guides ship in two families: registering and operating MCP servers (`register-mcp-server`, `assign-toolset-everyone`, `test-mcp-gateway`, `decommission-mcp-server`) and everyday app/access-request workflows (`configure-new-app`, `request-access`, `inspect-and-approve-task`, `delegate-entitlement-provisioning`, `promote-idp-app-to-managed`). Run `c1i docs guide` with no argument for the full, current list.
+`docs guide` is embedded static content (no network call), unlike `docs search` / `docs page`, which make a network call. Guides cover MCP registration and operation (`register-mcp-server`, `assign-toolset-everyone`, `test-mcp-gateway`, `decommission-mcp-server`), everyday access workflows (`configure-new-app`, `request-access`, `inspect-and-approve-task`, `delegate-entitlement-provisioning`, `promote-idp-app-to-managed`), and the newer services (`run-access-review`, `diagnose-connector-sync`, `configure-cross-app-access`, `configure-workload-federation`). Run `c1i docs guide` with no argument for the full, current list.
 
 `docs skill` is kept as an alias of `docs agents` for backward compatibility;
 both print identical output.

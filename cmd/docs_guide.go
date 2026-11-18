@@ -183,7 +183,9 @@ does not fix it. Put it in a published, visible-to-everyone access profile
     c1i access-profiles requestable-entitlements add "$PROFILE_ID" --app-id "$APP_ID" --entitlement-id "$ENTITLEMENT_ID"
     c1i access-profiles requestable-entitlements list "$PROFILE_ID"
 
-The list shows the profile's members; skip this step if the entitlement is
+The list shows the profile's requestable entitlements (id, app_id,
+display_name), not its members: a published, visible-to-everyone profile is
+what decides who can request them. Skip this step if the entitlement is
 already in a profile your users can see.
 
 For each user ID from step 4:
@@ -242,9 +244,10 @@ PENDING_REVIEW:
     c1i mcp tools get  "$TOOL_ID" --app-id "$APP_ID" --connector-id "$CONNECTOR_ID"
     c1i mcp tools approve "$TOOL_ID" --app-id "$APP_ID" --connector-id "$CONNECTOR_ID"
 
-Note the tool's "tool_name" from either response — the MCP protocol name the
-gateway lists it under. That's "$TOOL_NAME" in step 4, and it is a different
-value than the "$TOOL_ID" used above.
+Note the tool's protocol name: "tool_name" in a "mcp tools list" row, or
+"toolName" in the object "mcp tools get" prints. That is "$TOOL_NAME" in step
+4, and it is a different value than the "$TOOL_ID" used above. (Step 4's
+"mcp gateway list-tools" prints the authoritative gateway name if in doubt.)
 
 ## 3. The caller holds (or can request) the toolset entitlement
 
@@ -410,7 +413,9 @@ of anything specific to what you're about to model.
 
 "--wait" polls "GET .../ownerids" until the owner set equals the ids you
 passed (or times out) and prints "Owners provisioned on app ... after ..." to
-stderr; stdout is the API's JSON response, {}.
+stderr; stdout is the API's JSON response, {}. A timeout exits 1 even though
+the write was accepted: re-read "apps owners" rather than re-running
+"set-owners", which replaces the list.
 ` + ownerAsyncWaitNote + `
 See "Verify" below for why "apps get"'s "appOwners" field is not the way
 to check this.
@@ -418,7 +423,10 @@ to check this.
 Note "set-owners" REPLACES the list with exactly the ids you pass, and
 "apps create" auto-assigns its caller as an owner: passing only "$OWNER_USER_ID"
 here removes yourself. Use "apps add-owner <app-id> --user-id <id>" instead to add without
-replacing.
+replacing. With entitlement owners, set-owners replaces user owners unless
+you repeat --user-id for each one or pass --no-user-owners; use
+--owner-entitlement-id for an entitlement owner, and read the entitlement
+side with "apps owners <app-id> --entitlements".
 
 ### 3. Create a custom entitlement to grant
 
@@ -699,10 +707,12 @@ access that way unless you already know how you'd take it back.
   not mean the entitlement is requestable, and an empty one does not mean
   it isn't — real requestability is decided by access-profile membership,
   which this response does not show. "c1i access-profiles
-  requestable-entitlements list <access-profile-id>" reads one profile's
-  members; to make an entitlement requestable, see "c1i docs guide
-  assign-toolset-everyone" step 5. The create call in step 2 below is the
-  actual test.
+  requestable-entitlements list <access-profile-id>" lists the profile's
+  requestable entitlements, not its members. To make one requestable, create
+  or update an access profile with --published (and, for a general audience,
+  --visible-to-everyone) and add it with "requestable-entitlements add"; see
+  "c1i docs guide assign-toolset-everyone" step 5 for a worked example. The
+  create call in step 2 below is the actual test.
 
 - The target's C1 user id — the directory-sourced identity being granted
   access, not an app account ("c1i accounts list"), which is how that same
@@ -787,6 +797,22 @@ in a minute" -- NOT "the revoke failed". Only zero rows is confirmation.
 
 A revoke task still sitting in TASK_STATE_OPEN past that window means it's
 waiting on an approver, not that the revoke failed.
+
+## When the task is stuck
+
+- tasks audits <task-id> shows the step/state history (use
+  --comments-only for just comments); tasks get shows actions and the
+  current step.
+- tasks reassign <task-id> --policy-step-id <id> --to-user-id <id> changes
+  the approver; tasks restart / tasks reset re-run the current step or the
+  whole policy.
+- tasks skip-step, tasks escalate, tasks retry-provisioning and
+  tasks update-grant-duration cover a stuck step, a failed provision and a
+  grant window; each is gated by the task's actions.
+- tasks update-request-data <task-id> --data-file <file> submits a form
+  step; tasks close ends the task without approving.
+
+Run c1i tasks with no subcommand for the full list and each command's preconditions.
 
 ## Common failures
 
@@ -1015,6 +1041,294 @@ every signal below holds before concluding anything. Once it has landed:
   existed only for this server ("c1i apps delete <app-id>").
 `
 
+// guideRunAccessReview walks a campaign and its reusable template from
+// policy and ownership through scope, entitlements, reports and (soft) delete.
+// Derived from cmd/access_reviews*.go.
+const guideRunAccessReview = `# Run an access review
+
+Plan a certification campaign: pick the policy and reviewers, define what is
+in scope, then read or export the result. The API calls the object an
+"access_review"; c1i calls the family "access-reviews".
+
+## 1. Pick the review policy and owners
+
+    c1i policies list --limit 100 | jq 'select(.policy_type == "POLICY_TYPE_CERTIFY")'
+    c1i users list --email reviewer@example.com
+
+Use a certify policy id (unknown exits 4, a non-certify policy 2) and at least
+one owner user id. A template or campaign made without scope starts empty.
+
+## 2. (Optional) Create a reusable template
+
+There is no route that lists templates; keep the id create prints.
+
+    TEMPLATE_ID=$(c1i access-reviews templates create --display-name "Quarterly access review" --policy-id "$POLICY_ID" --owner-id "$OWNER_ID" | jq -er .id)
+
+Give it a scope and its entitlement selection. Both files are the request body;
+the positional template id owns its own key.
+
+    printf '%s\n' '{"scope":{"specificResources":{}},"entitlements":[{"appId":"APP_ID","appEntitlementId":"ENTITLEMENT_ID"}]}' > template-scope.json
+    c1i access-reviews templates scope set "$TEMPLATE_ID" --body-file template-scope.json
+    c1i access-reviews templates scope get "$TEMPLATE_ID"
+
+## 3. Create the campaign
+
+Campaign create takes the complete request body. At least one ownerIds entry
+and a 27-character policyId are required; scopeV2.specificResources makes it
+entitlement-scoped.
+
+    printf '%s\n' '{"displayName":"Q4 access review","ownerIds":["OWNER_ID"],"policyId":"CERTIFY_POLICY_ID","scopeV2":{"specificResources":{}}}' > campaign.json
+    CAMPAIGN_ID=$(c1i access-reviews create --body-file campaign.json | jq -er .id)
+
+Add or remove specific entitlements. add sets specificResources on a campaign
+with no scope yet; each id is looked up first (unknown 4, deleted 2).
+
+    c1i access-reviews entitlements add "$CAMPAIGN_ID" --app-id "$APP_ID" --entitlement-id "$ENTITLEMENT_ID"
+    c1i access-reviews scope get "$CAMPAIGN_ID"
+
+The scope set commands replace the whole selection; use entitlements
+add/remove for an incremental change. The response list from scope set is only
+what that call added; read the real selection with scope get.
+
+## 4. Track and export
+
+    c1i access-reviews list --limit 20
+    c1i access-reviews get "$CAMPAIGN_ID"
+    c1i access-reviews reports generate "$CAMPAIGN_ID" --format csv
+    c1i access-reviews reports list "$CAMPAIGN_ID"
+
+Generation is asynchronous: the response only confirms the request. Poll
+reports list for the state and its time-limited downloadUrl.
+
+## 5. Clean up
+
+Campaigns start and complete on the server's schedule; c1i has no start or
+close command. When you no longer need it:
+
+    c1i access-reviews delete "$CAMPAIGN_ID"
+    c1i access-reviews get "$CAMPAIGN_ID"
+
+delete is soft: list drops it and get still returns it with state
+ACCESS_REVIEW_STATE_DELETED. The API says delete also removes the campaign's
+dependent objects.
+
+## Notes
+
+- Prepared campaigns cannot change scope or policy.
+- Every referenced entitlement or resource type is looked up first; unknown
+  exits 4, soft-deleted 2, before anything is sent, --dry-run included.
+- A --body-file must not set the id key the positional owns
+  (accessReviewId/access_review_id for campaigns,
+  accessReviewTemplateId/access_review_template_id for templates).
+`
+
+// guideConnectorSyncDiagnostics orders the five diagnostics commands around a
+// failing connector sync. Derived from cmd/connectors_sync_diag.go and
+// cmd/connectors_sync.go.
+const guideConnectorSyncDiagnostics = `# Diagnose a connector sync
+
+Find the connector, read what it is doing, then compare runs or act. Every
+command takes the connector id positionally and the owning app as --app-id.
+
+## 1. Find the connector
+
+    c1i connectors debuggable
+
+Rows carry appId, connectorId, displayName, syncStatus and lastCompletedAt.
+Copy CONNECTOR_ID and APP_ID from one row. An empty list means you may diagnose
+none of this tenant's connectors.
+
+## 2. Current state
+
+    c1i connectors sync-status "$CONNECTOR_ID" --app-id "$APP_ID"
+
+Shows status, the current step, live object counts, the last error and whether
+syncing is paused (syncDisabledReason).
+
+## 3. Recent runs and the failure trend
+
+    c1i connectors sync-history "$CONNECTOR_ID" --app-id "$APP_ID" --runs 20
+
+Newest first, with .streak (failedRuns, finishedRuns, failureRatio, first
+failure after the last success). A run's lifecycleId is what sync-compare
+takes. Counts are int64 values printed as JSON strings.
+
+    c1i connectors sync-errors "$CONNECTOR_ID" --app-id "$APP_ID" --top-k 10
+
+Distinct redacted error messages with errorClass, count, firstSeenAt and
+lastSeenAt. Counts come from a bounded scan, not an exhaustive log.
+
+## 4. What changed around it
+
+    c1i connectors sync-changes "$CONNECTOR_ID" --app-id "$APP_ID" --since 2026-01-01T00:00:00Z
+
+Configuration, release and deployment changes (field names only, never
+values), oldest first, capped to the most recent 100 events. .truncatedSources
+names an incomplete source.
+
+## 5. Compare two runs
+
+    c1i connectors sync-compare "$CONNECTOR_ID" --app-id "$APP_ID" --left "$BEFORE_LIFECYCLE_ID" --right "$AFTER_LIFECYCLE_ID"
+
+perType shows resource/entitlement/grant before, after and delta per type;
+typesAdded, typesRemoved and largeDecrease (a type whose count fell at least
+30 percent) call out the big moves. Counts only, no records.
+
+## 6. Act, then verify
+
+    c1i connectors sync "$CONNECTOR_ID" --app-id "$APP_ID"
+    c1i connectors pause "$CONNECTOR_ID" --app-id "$APP_ID"
+    c1i connectors resume "$CONNECTOR_ID" --app-id "$APP_ID"
+    c1i connectors schedule "$CONNECTOR_ID" --app-id "$APP_ID" --cron "0 */6 * * *"
+
+sync queues a run; exit 0 means accepted, not finished. On a paused connector
+sync can be accepted but queue nothing: resume first. schedule --clear removes
+the schedule. Re-read with sync-status and sync-history --runs 5.
+
+## Notes
+
+- A negative --runs or --top-k exits 2; a value over the documented max is
+  clamped (50 runs, 20 errors).
+- --since is RFC 3339; a future timestamp is a 400 (exit 2).
+- A malformed id is a 400 (exit 2); a well-formed unknown id exits 4.
+`
+
+// guideConfigureCrossAppAccess walks the XAA objects from tenant setting
+// through resource server, scopes, access profile and client mapping.
+// Derived from cmd/xaa*.go and cmd/settings_cross_app_access.go.
+const guideConfigureCrossAppAccess = `# Configure cross-app access (XAA)
+
+Expose one app's scopes to another app's clients: enable the tenant setting,
+register a resource server, approve the scopes it discovers, group them into an
+access profile, then map a client to it. The object family is "xaa"; every
+object is scoped under --app-id except client-audience mappings, which are
+scoped by --resource-server-id.
+
+## 1. Check the tenant switch
+
+    c1i settings cross-app-access show
+    c1i settings cross-app-access update --enabled
+
+Use --enabled=false to turn it off. Read it back with show.
+
+## 2. Register the resource server
+
+    RS_ID=$(c1i xaa resource-servers create --app-id "$APP_ID" --audience https://api.example.com --display-name "Example API" --signing-algorithm es256 | jq -er .id)
+
+--audience must be https, is normalized and is unique per tenant. Optional:
+--description, --resource-uri (repeatable), --max-grant-lifetime,
+--require-proof-of-possession, --disabled. A modifyClaimsHook function is set
+only through --body-file.
+
+## 3. Discover and approve scopes
+
+    c1i xaa resource-servers resync-scopes "$RS_ID" --app-id "$APP_ID"
+    c1i xaa resource-servers get "$RS_ID" --app-id "$APP_ID"
+    c1i xaa scopes list --app-id "$APP_ID" --limit 100
+
+resync-scopes starts discovery; its outcome is scopeDiscoveryStatus on the
+resource server. New scopes start pending-review. Approve them:
+
+    c1i xaa scopes update "$SCOPE_ID" --app-id "$APP_ID" --state enabled
+
+--state disabled blocks a scope; --state removed is refused (use delete).
+The scope value and resource server are immutable.
+
+## 4. Group scopes into an access profile
+
+    PROFILE_ID=$(c1i xaa access-profiles create --app-id "$APP_ID" --resource-server-id "$RS_ID" --display-name "Orders read-only" | jq -er .id)
+    c1i xaa access-profiles add-scopes "$PROFILE_ID" --app-id "$APP_ID" --scope-id "$SCOPE_ID"
+    c1i xaa access-profiles get "$PROFILE_ID" --app-id "$APP_ID"
+
+add-scopes takes repeatable --scope-id; every scope must belong to the same
+resource server (else exit 2). A repeated id is sent once.
+
+## 5. Map a client audience
+
+    c1i xaa client-audience-mappings create --resource-server-id "$RS_ID" --client-key https://client.example.com/metadata.json --audience-client-id orders-agent
+
+The client key is immutable and unique per resource server; a deleted mapping
+cannot be recreated. Find the server first with list/get under --app-id:
+mapping create searches tenant-wide and exits 4 when the server is missing.
+
+    c1i xaa client-audience-mappings list --resource-server-id "$RS_ID"
+    c1i xaa client-audience-mappings get https://client.example.com/metadata.json --resource-server-id "$RS_ID"
+
+## Notes
+
+- All xaa creates read --app-id and the resource server first; unknown exits 4,
+  soft-deleted 2, --dry-run included.
+- Updates read the object to fill server-validated fields; --state removed is
+  refused on create and update.
+- Deletes are soft and cascade from a resource server to its scopes, profiles
+  and their backing entitlements.
+`
+
+// guideConfigureWorkloadFederation walks an external JWT issuer through a
+// service-principal trust and a test token. Derived from
+// cmd/workload_federation.go and cmd/service_principals_trusts.go.
+const guideConfigureWorkloadFederation = `# Configure workload federation
+
+Let an external workload (CI, a cloud role, a SPIFFE workload) exchange its JWT
+for C1 access: register its issuer, write a CEL trust on a service principal,
+then test the token before relying on it.
+
+## 1. Register the provider
+
+    PROVIDER_ID=$(c1i workload-federation providers create --well-known-provider github-actions --issuer-url https://token.actions.githubusercontent.com --display-name "GitHub Actions" | jq -er .id)
+
+Kinds: custom, github-actions, gitlab-ci, hcp-terraform, aws-iam-outbound,
+spiffe. Only spiffe takes --bundle-endpoint-url (its JWKS, required there).
+The issuer must be reachable by OIDC discovery, match a named kind, and be
+unique per tenant (409, exit 2). Kind and issuer are fixed after creation.
+
+    c1i workload-federation providers list
+    c1i workload-federation providers get "$PROVIDER_ID"
+
+## 2. Write and test the CEL condition
+
+    c1i workload-federation test-cel --expression 'claims.sub == "repo:acme/infra:ref:refs/heads/main"' --claims-file claims.json
+
+claims.json is a JSON object of sample claims (or a JWT). The answer prints
+matched/error/expression; exit 0 matched, 1 false, 2 evaluation error. Use the
+same expression as the trust condition.
+
+## 3. Create the service principal and trust
+
+    SP_ID=$(c1i service-principals create --display-name "ci-deployer" | jq -er .id)
+    TRUST_ID=$(c1i service-principals trusts create "$SP_ID" --provider-id "$PROVIDER_ID" --display-name "main branch" --condition 'claims.sub == "repo:acme/infra:ref:refs/heads/main"' | jq -er .clientId)
+
+Optional: --scoped-role (repeatable, each looked up first), --allow-cidr
+(repeatable), --passthrough-claim (repeatable), --description. The API compiles
+the condition; an invalid one exits 2. A new trust is enabled. <sp-id> may be
+the service principal id; <trust-id> may be the client id or its part before
+"@".
+
+## 4. Test a real token
+
+    c1i service-principals trusts test-token "$TRUST_ID" --service-principal-id "$SP_ID" --subject-token-file token.txt
+
+Prints a per-step report (jwtDecode, issuerMatch, signatureValidation, ...)
+and overallResult; exit 0 when it passes, 1 naming failed steps when not.
+--source-ip overrides the caller's address for the --allow-cidr check.
+
+## 5. Operate it
+
+    c1i service-principals trusts list "$SP_ID"
+    c1i service-principals trusts get "$TRUST_ID" --service-principal-id "$SP_ID"
+    c1i service-principals trusts update "$TRUST_ID" --service-principal-id "$SP_ID" --disabled
+
+trusts update takes the trust id positionally and the service principal as
+--service-principal-id; a --body-file must not name a different clientId.
+providers delete is refused while a trust references the provider.
+
+## Notes
+
+- The provider's token exchange and trust are separate objects; rotating the
+  issuer means a new provider and trusts, because the issuer is immutable.
+- test-cel and test-token change nothing.
+`
+
 // guideSummaries makes the no-argument guide listing useful for discovering
 // the right workflow without loading every runbook.
 var guideSummaries = map[string]string{
@@ -1027,6 +1341,10 @@ var guideSummaries = map[string]string{
 	"inspect-and-approve-task":          "Inspect a task's current policy step and resolve it safely",
 	"decommission-mcp-server":           "Inventory, warn about, and delete an MCP server and the access it carries",
 	"promote-idp-app-to-managed":        "Promote an app an identity provider's connector discovered to a managed app",
+	"run-access-review":                 "Create a campaign or template, set its scope, and export the result",
+	"diagnose-connector-sync":           "Read sync status, history and errors, then compare runs and act",
+	"configure-cross-app-access":        "Register an XAA resource server, approve scopes, and map a client",
+	"configure-workload-federation":     "Register an external issuer, trust its JWT, and test the token",
 }
 
 // docsGuides maps a guide name to its embedded content. Keep names stable —
@@ -1042,6 +1360,10 @@ var docsGuides = map[string]string{
 	"inspect-and-approve-task":          guideInspectAndApproveTask,
 	"decommission-mcp-server":           guideDecommissionMCPServer,
 	"promote-idp-app-to-managed":        guidePromoteIdPAppToManaged,
+	"run-access-review":                 guideRunAccessReview,
+	"diagnose-connector-sync":           guideConnectorSyncDiagnostics,
+	"configure-cross-app-access":        guideConfigureCrossAppAccess,
+	"configure-workload-federation":     guideConfigureWorkloadFederation,
 }
 
 // guideNames returns the available guide names, sorted for stable output.

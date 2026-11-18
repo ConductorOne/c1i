@@ -166,10 +166,20 @@ Both share the same error classification: `c1i api` surfaces the same typed
 errors and the same exit codes as any other command, so the table below
 applies either way.
 
+Two families need a workflow entry point rather than id lookup alone:
+`findings` (13 verbs) mutates through `--body-file` JSON; its `bulk-state` and
+`bulk-create-tasks` are asynchronous and print a `bulkActionId` c1i cannot read
+back, and `create-task --policy-id` looks the policy up first (unknown exits 4).
+`role-mining config update --body-file` REPLACES the whole config, and
+`role-mining access-profiles create --body-file` is a multi-operation write;
+read the current config/profile and verify afterwards.
+
 `c1i api` is the right tool when no first-class command exists yet.
 Continuous audit-log export is `export exporters` (create, update, delete,
-`--datasource-id`, `--prefix`, `--export-id`; `events <export-id>` lists what
-one delivered); saved reports are `reports` (`list|get|update|delete|run`,
+`--datasource-id`, `--prefix`, `--export-id`; `export exporters events
+<export-id>` lists what one delivered), and `export events` reads the bulk
+System Log directly (`--since/--until` RFC3339, `--since-event-uid` to resume,
+`--sort`; OCSF NDJSON); saved reports are `reports` (`list|get|update|delete|run`,
 `program --program-id`, `provenance <run-id> --report-id`, `update --prompt`).
 There is no `reports` create: the API saves one only from a rendered surface.
 Access-profile lifecycle, requestable and visibility entitlements, and bundle
@@ -214,7 +224,8 @@ have `show` and a masked `update` whose flags derive the mask
 any other field. A repeatable list flag replaces the whole list; to clear a
 field, mask it and leave it out of the body. The singletons have no id, so
 read the fields you need. `settings ai-governance|sso|cross-app-access history`
-stream change records; `settings session test-source-ip --ip --allow-cidr`
+stream change records; `settings aws-external-id show` prints the IAM trust
+external id; `settings session test-source-ip --ip --allow-cidr`
 checks an IP against CIDRs you give it and exits 0 for either answer (read
 `.allowed`). `settings domains set --domain` REPLACES the whole domain set:
 list first and pass every domain to keep (`--body-file` needs a `newDomains`
@@ -284,7 +295,9 @@ authenticating. Which one depends on what you are after:
 - **Whether an API endpoint exists, or its request/response shape**: `docs
   endpoints --filter <text>` lists matching routes and has a real no-match — an
   empty result means nothing matched, not "the search gave up" — then `docs
-  endpoint <path>` prints that route's full request/response schema.
+  endpoint <path>` prints that route's full request/response schema (its
+  top-level keys are HTTP methods; `--fields` projects it, e.g.
+  `--fields get.summary`).
 - **A step-by-step runbook**: `docs guide` lists the embedded guides with a
   one-line purpose, and `docs guide <name>` prints one. These are static
   content, no network call. The complete workflow index is:
@@ -297,6 +310,10 @@ authenticating. Which one depends on what you are after:
   | Request or approve access | `request-access` → `inspect-and-approve-task` |
   | Configure delegated provisioning | `delegate-entitlement-provisioning` |
   | Promote an identity-provider app to a managed app | `promote-idp-app-to-managed` |
+  | Run an access-review campaign or template | `run-access-review` |
+  | Diagnose a failing connector sync | `diagnose-connector-sync` |
+  | Set up cross-app access (XAA) | `configure-cross-app-access` |
+  | Set up workload federation and trusts | `configure-workload-federation` |
 - **The command tree this build accepts**: `docs map` prints an indented
   outline; `docs map --json` adds full paths, aliases, and counts for scripts or
   docs checks. No auth or network.
@@ -461,6 +478,10 @@ the server returns.
 
 ## Before you mutate
 
+The `--body-file` owned-key rule (a key the command sets, or one a positional
+owns, must be absent or equal to the argument) is described under Pagination;
+it fires before any request, `--dry-run` included.
+
 `--dry-run` (or `C1I_DRY_RUN`) previews a mutation without performing it:
 one JSON object, `{"dryRun":true,"requests":[{"method","url","body"}]}`,
 never with an `id`, plus a stderr notice. `upgrade --dry-run` prints the same
@@ -572,7 +593,8 @@ resource with `--resource-id` likewise means you drop
   Mutations bullet under Reading output). Deletes, `resync-tools` and `mcp
   bindings delete` print `{}`; capture ids with `jq -er`, which fails on a `--dry-run` preview.
   `update-credentials` without `--catalog-id` resolves it first and reports
-  `Resolved catalog id: …` on stderr. `mcp servers register --wait
+  `Resolved catalog id: …` on stderr. `mcp servers register` reads the app
+  first (unknown `4`, deleted `2`). `mcp servers register --wait
   [--wait-timeout 1m]` polls `mcp servers list` until the new server is listed
   (a list read right after register can omit it for a second or two; a timeout
   exits 1). A register response with no server id exits 6, with or without
@@ -930,7 +952,9 @@ resource with `--resource-id` likewise means you drop
   Measured caveat: one run got `200 {}` (and a stored binding) from both a
   requestable and a visibility add on an unpublished catalog; the binding is
   not effective until publication, so publish first and verify with
-  `access-profiles get` rather than relying on the refusal.
+  `access-profiles get` rather than relying on the refusal. The commands are
+  `access-profiles create --published`, `visibility-entitlements add` and
+  `requestable-entitlements add` (not the raw binding routes).
   `--enrollment-behavior unspecified` resets to the server default (measured:
   ENFORCE becomes BYPASS); `--unenrollment-behavior unspecified` resets to
   LEAVE_ACCESS_AS_IS, and the third flag's reset value was not measured.
@@ -1018,8 +1042,10 @@ resource with `--resource-id` likewise means you drop
   `--expire-at` RFC3339) prints the binding; `--clear` removes it. The server
   accepted past times and self-delegation; `users get` shows `delegatedUserId`
   only once the start has passed. `users profile-types <user-id>` prints
-  `{"profileTypes": [...]}`. `policies test-provision <cel>` prints `{value,
-  type}`; a CEL that does not compile is a `500` (exit `6`), unchecked by c1i.
+  `{"profileTypes": [...]}`. `policies validate-cel <condition>` is the safe
+  CEL compile check (markers + `valid`, exit 2 when invalid); `policies
+  test-provision <cel>` prints `{value, type}`, but a CEL that does not compile
+  there is a `500` (exit `6`), unchecked by c1i.
 - `xaa resource-servers|scopes|access-profiles` manage cross-app access
   objects under `--app-id` (README "Cross-app access (XAA)"). `resource-servers
   create --audience --display-name` (https, normalized, immutable, unique per
