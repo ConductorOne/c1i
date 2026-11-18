@@ -181,7 +181,13 @@ entitlement selection (`scope get|set|set-excluded|set-by-resource-type`,
 `entitlements add|remove`, `excluded-entitlements add|remove`; an unknown
 `--entitlement-id` or body-file reference exits 4 before the send; the API's
 `scope_by_excluded_resource_type` route is "superseded and scheduled for
-removal" and has no command), and `mcp classifiers` for AI-governance
+removal" and has no command), `access-reviews templates` for reusable campaign
+templates (`get|create|update|delete` plus the same scope commands; no route
+lists templates, so take the id from `create` or a campaign's
+`accessReviewTemplateId`; `create` takes `--display-name`, `--policy-id`,
+repeatable `--owner-id`, `--description`, `--review-instructions` and
+`--scope-type`, or `--body-file` for schedule fields; owner and policy ids are
+looked up first, an unknown one exits 4), and `mcp classifiers` for AI-governance
 classifiers, bindings, templates, the singleton agent policy, and tool gates.
 Classifier creates and updates take JSON because their nested, ordered rules
 must be preserved; read first and use the explicit `--update-mask` for updates.
@@ -433,7 +439,7 @@ keys are: `findingId`/`finding_id` (`findings state|assignee`),
 `suggestionId`/`suggestion_id` (`role-mining suggestions users`),
 `templateId`/`template_id` (`mcp classifiers templates add-rule|instantiate`),
 and `id` (`findings routing-rules|transformation-rules update`,
-`automations|access-reviews|policies update`, `mcp classifiers update`,
+`automations|access-reviews|access-reviews templates|policies update`, `mcp classifiers update`,
 `mcp classifiers tool-gates update`).
 With `api --paginate`, a `pageToken` in the body (or `page_token` in `--query`)
 is the first page's cursor, and later pages replace it; `pageSize` is sent as
