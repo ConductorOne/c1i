@@ -246,6 +246,9 @@ func withTemplateReads(route func(*http.Request, int) mutReply) func(*http.Reque
 		if r.Method == http.MethodGet && strings.Contains(r.URL.Path, "/xaa/") {
 			return mutReply{body: `{"resourceServer":{"id":"rs-1","displayName":"cur","normalizedAudience":"https://a.example.com"},"scope":{"id":"sc-1","displayName":"cur","scopeValue":"s","xaaResourceServerId":"rs-1"},"accessProfile":{"id":"ap-1","displayName":"cur","xaaResourceServerId":"rs-1"}}`}
 		}
+		if r.Method == http.MethodGet && (strings.Count(r.URL.Path, "/") == 4 && strings.HasPrefix(r.URL.Path, "/api/v1/apps/") || strings.Contains(r.URL.Path, "/entitlement_configuration_rules/")) {
+			return mutReply{body: `{"app":{"id":"x"},"routingRule":{"id":"rr-1","displayName":"cur","settings":{}}}`}
+		}
 		return route(r, n)
 	}
 }

@@ -44,6 +44,7 @@ var dryRunStubs = map[string][]string{
 	"c1i access-reviews scope set-by-resource-type":             {"x1", "--body-file=@{}"},
 	"c1i access-reviews scope set-excluded":                     {"x1", "--body-file=@{}"},
 	"c1i apps update":                                           {"x1", "--description=d"},
+	"c1i apps routing-rules update":                             {"x1", "--app-id=x1", "--description=d"},
 	"c1i attribute-mappings create":                             {"--body-file=@{}"},
 	"c1i attribute-mappings update":                             {"x1", "--key=k"},
 	"c1i export exporters update":                               {"x1", "--prefix=k"},
@@ -148,6 +149,9 @@ var dryRunStubs = map[string][]string{
 // dryRunReadBodies is the answer to a leaf's pre-send GET where the generic
 // `{}` cannot be built on (update reads the mapping it replaces).
 var dryRunReadBodies = map[string]string{
+	"c1i apps routing-rules create":       `{"app":{"id":"x1"},"routingRule":{"id":"x1","displayName":"x1","settings":{}}}`,
+	"c1i apps routing-rules reorder":      `{"app":{"id":"x1"},"routingRule":{"id":"x1","displayName":"x1","settings":{}}}`,
+	"c1i apps routing-rules update":       `{"app":{"id":"x1"},"routingRule":{"id":"x1","displayName":"x1","settings":{}}}`,
 	"c1i connectors delete":               `{"connectorView":{"connector":{"id":"x1","config":{"@type":"type.googleapis.com/c1.api.app.v1.EnvConfig"}}}}`,
 	"c1i functions invoke":                `{"function":{"publishedCommitId":"c1"}}`,
 	"c1i entitlements automation update":  `{"AppEntitlementAutomation":{"displayName":"x1"}}`,

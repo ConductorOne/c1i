@@ -84,13 +84,14 @@ func getUnwrapCases() []getUnwrapCase {
 			wantKeys:    []string{"id", "appId", "displayName", "priority", "enabled", "settings"},
 		},
 		{
-			name:        "apps usage-controls get",
-			cmd:         appsUsageControlsGetCmd,
-			args:        []string{"app-1"},
-			idKey:       "appId",
-			body:        `{"appUsageControls":{"appId":"app-1","notify":true,"notifyAfterDays":30,"revoke":false,"revokeAfterDays":0},"hasUsageData":true}`,
+			name:  "apps usage-controls get",
+			cmd:   appsUsageControlsGetCmd,
+			args:  []string{"app-1"},
+			idKey: "appId",
+			// One body answers both GETs; "app" is there for the app read.
+			body:        `{"appUsageControls":{"appId":"app-1","notify":true,"notifyAfterDays":30,"revoke":false,"revokeAfterDays":0},"hasUsageData":true,"app":{"id":"app-1"}}`,
 			payloadPath: []string{"appUsageControls"},
-			wantKeys:    []string{"appId", "notify", "notifyAfterDays", "revoke", "revokeAfterDays", "hasUsageData"},
+			wantKeys:    []string{"appId", "notify", "notifyAfterDays", "revoke", "revokeAfterDays", "hasUsageData", "app"},
 		},
 		{
 			name:        "apps resources get",

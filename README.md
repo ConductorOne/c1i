@@ -830,6 +830,7 @@ c1i apps resource-types delete <resource-type-id> --app-id <app-id>
 c1i apps routing-rules list --app-id <app-id> [--limit N]
 c1i apps routing-rules get <rule-id> --app-id <app-id>
 c1i apps routing-rules create --app-id <app-id> --display-name <name> [--description <text>] [--condition <cel>] [--enabled] [--priority N] [--request-policy-id <id>] [--emergency-grant-policy-id <id>] [--emergency-grant-enabled] [--max-grant-duration <dur>] [--request-schema-id <id>]
+c1i apps routing-rules update <rule-id> --app-id <app-id> [--display-name <name>] [--description <text>] [--condition <cel>] [--enabled[=false]] [--request-policy-id <id>] [--emergency-grant-policy-id <id>] [--emergency-grant-enabled[=false]] [--max-grant-duration <dur>] [--request-schema-id <id>]
 c1i apps routing-rules delete <rule-id> --app-id <app-id>
 c1i apps routing-rules reorder --app-id <app-id> --rule-id <id> [--rule-id <id> ...]
 c1i apps usage-controls get <app-id>
@@ -936,11 +937,17 @@ measured; past that `create` exits `2` with `This app already has the maximum of
 checks referenced ids: an unknown policy or request schema exits `4`, a
 non-grant policy `2`. `list` takes no paging and answers an unknown app with
 zero rows (exit `0`); the other commands exit `4` for an unknown app or rule.
-There is no `update` command yet. `apps usage-controls get <app-id>` shows the
+`create`, `update` and `reorder` read the app first: a deleted app exits `2`
+before anything is sent, `--dry-run` included. The update API has no mask and
+replaces the whole rule, so `update` reads the rule and sends every writable
+field with only your flags changed; a change made between that read and the
+write is overwritten. `update` refuses a deleted rule (exit `2`), cannot
+change the order (use `reorder`), and cannot unset a policy or schema id.
+`apps usage-controls get <app-id>` shows the
 notify and revoke-on-non-use controls beside `hasUsageData`; an app whose
 controls were never set prints only `hasUsageData`. The endpoint answers an
 unknown app like an app with no controls, so c1i reads the app first (exit
-`4`). Updating usage controls answered `501` (`feature is disabled`) on the
+`4`; a deleted app exits `2`). Updating usage controls answered `501` (`feature is disabled`) on the
 tenant tested, so there is no `update` command.
 
 `apps resource-types` and `apps resources` manage an app's resource types and

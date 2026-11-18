@@ -8,13 +8,15 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
-- `apps routing-rules list|get|create|delete|reorder --app-id` manage an app's
+- `apps routing-rules list|get|create|update|delete|reorder --app-id` manage an app's
   entitlement routing rules, and `apps usage-controls get <app-id>` shows its
   usage controls. `create` makes a disabled rule unless `--enabled` is given;
   `--priority` is an insertion slot. `reorder --rule-id` (repeatable) takes
-  every active rule once, in order. `usage-controls get` exits `4` for an
-  unknown app, which the endpoint answers `200`. Rule `update` and
-  usage-controls `update` are not commands yet.
+  every active rule once, in order. `update` reads the rule and sends every
+  field with only the given flags changed, since the API replaces the whole
+  rule. `usage-controls get` exits `4` for an unknown app, which the endpoint
+  answers `200`; it and `create`, `update` and `reorder` exit `2` for a
+  deleted app. Usage-controls `update` is not a command.
 - `connectors sync-history|sync-errors|sync-changes|sync-compare <connector-id>
   --app-id` and `connectors debuggable`: connector sync diagnostics.
   `sync-history` prints recent runs and the failure streak (`--runs`, max 50),
