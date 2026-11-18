@@ -207,6 +207,7 @@ var ownedBodyKeyCommands = []struct {
 	{name: "c1i functions update", args: []string{"functions", "update", "f1", "--update-mask", "description"}, keys: []string{"id"}, positionals: []string{"f1"}, extra: `"description":"d","displayName":"n"`},
 	{name: "c1i apps resources update", args: []string{"apps", "resources", "update", "r1", "--app-id", "a1", "--resource-type-id", "t1", "--update-mask", "displayName"}, keys: []string{"id"}, positionals: []string{"r1"}, extra: `"displayName":"d"`},
 	{name: "c1i automations update", args: []string{"automations", "update", "a1", "--update-mask", "enabled"}, keys: []string{"id"}, positionals: []string{"a1"}, extra: `"enabled":true`},
+	{name: "c1i access-reviews templates update", args: []string{"access-reviews", "templates", "update", "t1", "--update-mask", "description"}, keys: []string{"id"}, positionals: []string{"t1"}, extra: `"description":"d","displayName":"n","policyId":"p"`},
 	{name: "c1i access-reviews update", args: []string{"access-reviews", "update", "c1", "--update-mask", "displayName"}, keys: []string{"id"}, positionals: []string{"c1"}, extra: `"displayName":"d"`},
 	{name: "c1i policies update", args: []string{"policies", "update", "p1", "--update-mask", "description"}, keys: []string{"id"}, positionals: []string{"p1"}, extra: `"description":"d"`},
 	{name: "c1i mcp classifiers update", args: []string{"mcp", "classifiers", "update", "k1", "--update-mask", "displayName"}, keys: []string{"id"}, positionals: []string{"k1"}, extra: `"displayName":"d"`},

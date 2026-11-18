@@ -156,6 +156,7 @@ var userRefCases = map[string][]string{
 	"c1i apps resources add-owner --user-id":                  {"apps", "resources", "add-owner", "res1", "--app-id", "app1", "--resource-type-id", "rt1", "--user-id"},
 	"c1i apps resources set-owners --user-id":                 {"apps", "resources", "set-owners", "res1", "--app-id", "app1", "--resource-type-id", "rt1", "--user-id"},
 	"c1i apps resources create --owner-id":                    {"apps", "resources", "create", "--app-id", "app1", "--resource-type-id", "rt1", "--display-name", "zz", "--owner-id"},
+	"c1i access-reviews templates create --owner-id":          {"access-reviews", "templates", "create", "--display-name", "zz", "--policy-id", "pol1", "--owner-id"},
 }
 
 // TestUserRefChecksRefuseUnknownUsers: for every checked flag, an unknown user
@@ -198,6 +199,9 @@ func TestUserRefChecksRefuseUnknownUsers(t *testing.T) {
 					return mutReply{status: userStatus, body: `{"code":5,"message":"not found"}`}
 				}
 				return mutReply{body: `{"user":{"id":"u"}}`}
+			}
+			if r.Method == http.MethodGet && strings.HasPrefix(r.URL.Path, "/api/v1/policies/") {
+				return mutReply{body: `{"policy":{"id":"pol1","policyType":"POLICY_TYPE_CERTIFY"}}`}
 			}
 			if r.Method == http.MethodGet && strings.Contains(r.URL.Path, "/resource_types/") {
 				return mutReply{body: `{"appResourceTypeView":{"appResourceType":{"id":"rt1"}}}`}

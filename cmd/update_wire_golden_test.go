@@ -116,6 +116,22 @@ func updateWireCases() []updateWireCase {
 		[]string{"--body-file", "{dir}/auto.json"},
 		[]string{"--body-file", "{dir}/auto.json", "--update-mask", "description", "--enabled"},
 	)
+	add("access-reviews templates update", []string{"t-1"},
+		none,
+		[]string{"--display-name", "N"},
+		[]string{"--description", "D"},
+		[]string{"--description", ""},
+		[]string{"--review-instructions", ""},
+		[]string{"--policy-id", "cp-1"},
+		[]string{"--policy-id", "gp-1"},
+		[]string{"--policy-id", "pol-404"},
+		[]string{"--scope-type", "by-users"},
+		[]string{"--scope-type", "bogus"},
+		[]string{"--description", "D", "--display-name", "N", "--scope-type", "by-entitlements"},
+		[]string{"--body-file", "{dir}/auto.json", "--update-mask", "description"},
+		[]string{"--body-file", "{dir}/auto.json"},
+		[]string{"--body-file", "{dir}/auto.json", "--update-mask", "description", "--display-name", "N"},
+	)
 	add("policies update", []string{"pol-1"},
 		none,
 		[]string{"--display-name", "N"},
@@ -294,6 +310,8 @@ func runUpdateWireCase(t *testing.T, dir string, c updateWireCase) updateWireRes
 					typ = "POLICY_TYPE_CERTIFY"
 				}
 				return mutReply{body: `{"policy":{"policyType":"` + typ + `"}}`}
+			case strings.HasPrefix(p, "/api/v1/access_review_template/"):
+				return mutReply{body: `{"accessReviewTemplate":{"id":"t-1","displayName":"cur","policyId":"cp-0"}}`}
 			case strings.Contains(p, "/mcp_servers/"):
 				return mutReply{body: `{"mcpServer":{"mcpServerCatalogId":"cat-1"}}`}
 			}

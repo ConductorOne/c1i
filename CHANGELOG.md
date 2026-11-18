@@ -8,6 +8,18 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- `access-reviews templates get|create|update|delete <template-id>` and the
+  template scope commands `scope get|set|set-excluded|set-by-resource-type`,
+  `entitlements add|remove` and `excluded-entitlements add|remove`, shaped like
+  the campaign ones. No API route lists templates: the id comes from `create`
+  or a campaign's `accessReviewTemplateId`. `create` takes `--display-name`,
+  `--policy-id` and repeatable `--owner-id` (plus `--description`,
+  `--review-instructions`, `--scope-type`), or `--body-file`; owner and policy
+  ids are looked up first, so an unknown one exits `4`; a policy that is not a
+  certify policy exits `2`. The server alone stores either without complaint.
+  `update` reads the template to fill the `displayName` and `policyId` the
+  server demands on every update when the request leaves one unset; the mask
+  still decides what changes.
 - `attributes types|list|search|get|create|delete` for tenant attribute values
   (Compliance Framework, Risk Level), distinct from `attribute-types` and
   `attribute-mappings`. `--type` takes a name or id and is looked up first, so

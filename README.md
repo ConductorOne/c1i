@@ -541,11 +541,12 @@ An empty path (`a,,b`, a leading or trailing comma) or an empty dot-segment
 (`a..b`, `.a`, `a.`) exits `2` and names its position. Unlike `--fields`, a
 trailing or doubled comma is an error, because a mask scopes a write.
 
-- `policies update`, `automations update`, `access-reviews update`,
+- `policies update`, `automations update`, `access-reviews update`, `access-reviews templates update`,
   `mcp classifiers update`, `mcp classifiers policy update` and
   `mcp classifiers tool-gates update` send the object in `--body-file` with
   that mask. `--body-file` requires `--update-mask`, and a blank mask exits `2`.
-  On `policies update` and `automations update`, which otherwise derive the
+  On `policies update`, `automations update` and `access-reviews templates
+  update`, which otherwise derive the
   mask from their flags, `--update-mask` without `--body-file` exits `2`.
 - `mcp servers update-credentials` derives the mask from the config you supply
   when `--update-mask` is omitted; `--update-mask ""` counts as omitted. An
@@ -1891,7 +1892,7 @@ one exits 2 with the server's regex error.
 The equality rule covers the id a positional sets: `findingId`/`finding_id` on
 `findings state` and `assignee`; `id` on `findings routing-rules update`,
 `transformation-rules update`, `automations update`, `access-reviews update`,
-`policies update`, `mcp classifiers update` and `mcp classifiers tool-gates
+`access-reviews templates update`, `policies update`, `mcp classifiers update` and `mcp classifiers tool-gates
 update`; and `templateId`/`template_id` on `mcp classifiers templates add-rule`
 and `instantiate`.
 
@@ -2110,6 +2111,61 @@ resource type with `scope set-excluded` and
 entitlement or resource type looks each one up first, so an unknown one exits
 `4` before anything is sent, `--dry-run` included; the server alone would
 answer `400`, `500` or a silent skip.
+
+#### Access-review templates
+
+A template is a reusable campaign configuration: owners, review policy, scope
+and schedule. The API has no route that lists or searches templates; an id
+comes from `templates create` (`.id`) or from a campaign made from a template
+(`access-reviews list` rows carry `accessReviewTemplateId`).
+
+```sh
+c1i access-reviews templates get <template-id>
+c1i access-reviews templates create --display-name <name> --policy-id <policy-id> --owner-id <user-id>... \
+  [--description <text>] [--review-instructions <text>] [--scope-type by-entitlements|by-users|...]
+c1i access-reviews templates create --body-file <file|->
+c1i access-reviews templates update <template-id> [--display-name <name>] [--description <text>] \
+  [--review-instructions <text>] [--policy-id <policy-id>] [--scope-type <type>]
+c1i access-reviews templates update <template-id> --body-file <file|-> --update-mask <paths>
+c1i access-reviews templates delete <template-id>
+c1i access-reviews templates scope get <template-id>
+c1i access-reviews templates scope set <template-id> --body-file <file|->
+c1i access-reviews templates scope set-excluded <template-id> --body-file <file|->
+c1i access-reviews templates scope set-by-resource-type <template-id> --body-file <file|->
+c1i access-reviews templates entitlements add <template-id> --app-id <app-id> --entitlement-id <id>...
+c1i access-reviews templates entitlements remove <template-id> --app-id <app-id> --entitlement-id <id>...
+c1i access-reviews templates excluded-entitlements add <template-id> --app-id <app-id> --entitlement-id <id>...
+c1i access-reviews templates excluded-entitlements remove <template-id> --app-id <app-id> --entitlement-id <id>...
+```
+
+The server requires a display name, a review policy and 1 to 10 owners. The
+flags create a template with no scope and no schedule; schedule and recurrence
+fields (`isCampaignScheduleEnabled`, `autoStartCampaign`, `recurrenceRule`, ...)
+have no flags and go through `--body-file`, which is mutually exclusive with the
+other flags. Every owner id and the policy id, from flags or a body file, are
+looked up first, before anything is sent, `--dry-run` included: an unknown one
+exits `4`. A policy that exists but is deleted or not a certify policy exits
+`2`. The server alone stores an unknown owner id and a policy of any type
+without complaint.
+
+`update` derives its mask from the flags; `--body-file` with `--update-mask`
+covers every other field. The server validates `displayName` and `policyId` on
+every update whatever the mask names, so when the request leaves either unset,
+`update` reads the template first and fills it in (the mask still decides what
+changes); that read makes an unknown `<template-id>` exit `4`. A `policyId` is
+looked up only when the mask names it. A `--body-file` mask that names
+`displayName` or `policyId` needs that field in the file, or `update` exits `2`
+before sending anything. `create` and `update` print
+the template unwrapped like `get` (`jq -er .id`).
+
+`delete` prints `{}`. The API says a deleted template "can no longer be used to
+create campaigns". Exit `0` only means the API accepted the request; in the
+run checked, the template stayed readable with `deletedAt` null, and deleting
+it again exited `0`.
+
+The scope commands work like the campaign ones above, with the template's
+scope under `scope` instead of `scopeV2`, and the same lookups of every
+referenced entitlement and resource type.
 
 Report generation is asynchronous: `generate` creates a report record but does
 not return a ready download. Use `reports list` to find its state and

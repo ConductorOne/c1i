@@ -255,6 +255,135 @@
       "updateMask": "visibleToEveryone"
     }
   },
+  "access-reviews templates update ": {
+    "exit": 2
+  },
+  "access-reviews templates update --body-file {dir}/auto.json": {
+    "exit": 2
+  },
+  "access-reviews templates update --body-file {dir}/auto.json --update-mask description": {
+    "exit": 0,
+    "method": "POST",
+    "path": "/api/v1/access_review_template/t-1",
+    "body": {
+      "accessReviewTemplate": {
+        "description": "d",
+        "displayName": "cur",
+        "id": "t-1",
+        "policyId": "cp-0"
+      },
+      "updateMask": "description"
+    }
+  },
+  "access-reviews templates update --body-file {dir}/auto.json --update-mask description --display-name N": {
+    "exit": 2
+  },
+  "access-reviews templates update --description ": {
+    "exit": 0,
+    "method": "POST",
+    "path": "/api/v1/access_review_template/t-1",
+    "body": {
+      "accessReviewTemplate": {
+        "description": "",
+        "displayName": "cur",
+        "id": "t-1",
+        "policyId": "cp-0"
+      },
+      "updateMask": "description"
+    }
+  },
+  "access-reviews templates update --description D": {
+    "exit": 0,
+    "method": "POST",
+    "path": "/api/v1/access_review_template/t-1",
+    "body": {
+      "accessReviewTemplate": {
+        "description": "D",
+        "displayName": "cur",
+        "id": "t-1",
+        "policyId": "cp-0"
+      },
+      "updateMask": "description"
+    }
+  },
+  "access-reviews templates update --description D --display-name N --scope-type by-entitlements": {
+    "exit": 0,
+    "method": "POST",
+    "path": "/api/v1/access_review_template/t-1",
+    "body": {
+      "accessReviewTemplate": {
+        "description": "D",
+        "displayName": "N",
+        "id": "t-1",
+        "policyId": "cp-0",
+        "scopeType": "ACCESS_REVIEW_SCOPE_TYPE_BY_ENTITLEMENTS"
+      },
+      "updateMask": "displayName,description,scopeType"
+    }
+  },
+  "access-reviews templates update --display-name N": {
+    "exit": 0,
+    "method": "POST",
+    "path": "/api/v1/access_review_template/t-1",
+    "body": {
+      "accessReviewTemplate": {
+        "displayName": "N",
+        "id": "t-1",
+        "policyId": "cp-0"
+      },
+      "updateMask": "displayName"
+    }
+  },
+  "access-reviews templates update --policy-id cp-1": {
+    "exit": 0,
+    "method": "POST",
+    "path": "/api/v1/access_review_template/t-1",
+    "body": {
+      "accessReviewTemplate": {
+        "displayName": "cur",
+        "id": "t-1",
+        "policyId": "cp-1"
+      },
+      "updateMask": "policyId"
+    }
+  },
+  "access-reviews templates update --policy-id gp-1": {
+    "exit": 2
+  },
+  "access-reviews templates update --policy-id pol-404": {
+    "exit": 4
+  },
+  "access-reviews templates update --review-instructions ": {
+    "exit": 0,
+    "method": "POST",
+    "path": "/api/v1/access_review_template/t-1",
+    "body": {
+      "accessReviewTemplate": {
+        "displayName": "cur",
+        "id": "t-1",
+        "policyId": "cp-0",
+        "reviewInstructions": ""
+      },
+      "updateMask": "reviewInstructions"
+    }
+  },
+  "access-reviews templates update --scope-type bogus": {
+    "exit": 2
+  },
+  "access-reviews templates update --scope-type by-users": {
+    "exit": 0,
+    "method": "POST",
+    "path": "/api/v1/access_review_template/t-1",
+    "body": {
+      "accessReviewTemplate": {
+        "displayName": "cur",
+        "id": "t-1",
+        "policyId": "cp-0",
+        "scopeType": "ACCESS_REVIEW_SCOPE_TYPE_BY_USERS"
+      },
+      "updateMask": "scopeType"
+    }
+  },
   "apps update ": {
     "exit": 2
   },

@@ -23,6 +23,7 @@ var updateMaskCases = map[string]struct {
 	"connectors update":                 {[]string{"connectors", "update", "cn-1", "--app-id", "a1"}, true},
 	"functions update":                  {[]string{"functions", "update", "f-1"}, true},
 	"access-reviews update":             {[]string{"access-reviews", "update", "c-1"}, true},
+	"access-reviews templates update":   {[]string{"access-reviews", "templates", "update", "t-1"}, true},
 	"mcp classifiers update":            {[]string{"mcp", "classifiers", "update", "cl-1"}, true},
 	"mcp classifiers policy update":     {[]string{"mcp", "classifiers", "policy", "update"}, true},
 	"mcp classifiers tool-gates update": {[]string{"mcp", "classifiers", "tool-gates", "update", "tg-1"}, true},
@@ -68,7 +69,7 @@ func TestUpdateMaskRuleIsOneRuleAcrossTree(t *testing.T) {
 			run := func(t *testing.T, mask string, omitBody bool) (mutResult, *mutServer) {
 				t.Setenv("C1I_URL", mutTestURL)
 				clearViperOverrides(t, "dry_run")
-				s := newMutServer(t, fixedReply(200, `{"reachable":true}`))
+				s := newMutServer(t, withTemplateReads(fixedReply(200, `{"reachable":true}`)))
 				args := append([]string{}, tc.args...)
 				if tc.body && !omitBody {
 					args = append(args, "--body-file", writeTempJSON(t, "body.json", `{"displayName":"n"}`))
