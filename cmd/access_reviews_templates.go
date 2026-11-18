@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"slices"
 	"strings"
 
 	"github.com/ConductorOne/c1i/internal/client"
@@ -241,8 +240,8 @@ func buildTemplateUpdate(cmd *cobra.Command, id string) (body, tpl map[string]an
 		if tpl, err = readJSONFile[map[string]any](cmd, "body-file", mustGetString(cmd, "body-file")); err != nil {
 			return nil, nil, "", "", err
 		}
-		for _, key := range []string{"displayName", "policyId"} {
-			if v, ok := tpl[key]; ok {
+		for _, key := range templateRequiredFields {
+			if v, ok := bodyField(tpl, key); ok {
 				if s, ok := v.(string); !ok || !hasVisibleRune(s) {
 					return nil, nil, "", "", &usageError{fmt.Errorf("--body-file %s must be a non-blank string; omit it to keep the current value", key)}
 				}
@@ -255,9 +254,11 @@ func buildTemplateUpdate(cmd *cobra.Command, id string) (body, tpl map[string]an
 	if err := refuseMaskedFieldWithoutValue(mask, tpl, templateRequiredFields); err != nil {
 		return nil, nil, "", "", err
 	}
-	masked := strings.Split(mask, ",")
-	if slices.Contains(masked, "policyId") {
-		policyID, _ = tpl["policyId"].(string)
+	for _, p := range strings.Split(mask, ",") {
+		if foldMaskName(p) == foldMaskName("policyId") {
+			v, _ := bodyField(tpl, "policyId")
+			policyID, _ = v.(string)
+		}
 	}
 	tpl["id"] = id
 	return wrapUpdate("accessReviewTemplate", tpl, mask), tpl, policyLabel, policyID, nil

@@ -190,7 +190,9 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 - `access-reviews templates update --body-file` treats a snake_case key
   (`display_name`, `policy_id`) as set: the update no longer reads the
-  template and sends the camelCase field beside it.
+  template and sends the camelCase field beside it. A masked `policy_id` is
+  looked up like `policyId` (unknown exits `4`, a non-certify policy `2`), and
+  a blank value exits `2` in either spelling.
 - `functions create|update --file` now refuses a path containing a control
   character, like every other file-valued flag (exit `2`, nothing sent).
 

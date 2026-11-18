@@ -338,3 +338,58 @@ func TestTemplateUpdateMatchesSnakeCaseBodyKeys(t *testing.T) {
 		})
 	}
 }
+
+// TestTemplateUpdateLooksUpSnakeCasePolicyID: a masked policyId set as
+// policy_id in the body is looked up like the camelCase key: unknown exits 4,
+// a non-certify policy 2, nothing written, dry run included.
+func TestTemplateUpdateLooksUpSnakeCasePolicyID(t *testing.T) {
+	t.Setenv("C1I_URL", mutTestURL)
+	cases := []struct {
+		name, policyType string
+		missing          []string
+		exit             int
+	}{
+		{"unknown policy", "POLICY_TYPE_CERTIFY", []string{"/api/v1/policies/pol9"}, exitNotFound},
+		{"grant policy", "POLICY_TYPE_GRANT", nil, exitUsage},
+	}
+	for _, tc := range cases {
+		for _, dry := range []bool{false, true} {
+			t.Run(tc.name, func(t *testing.T) {
+				clearViperOverrides(t, "dry_run")
+				s := newMutServer(t, templateRoute(tc.policyType, tc.missing...))
+				row := mutationRow{cmd: "access-reviews templates update", args: []string{"t1", "--body-file", `@{"policy_id":"pol9","displayName":"A"}`, "--update-mask", "policyId"}}
+				args := row.argv(t)
+				if dry {
+					args = append(args, "--dry-run")
+				}
+				r := runMutationCLI(t, s.srv, 0, nil, args...)
+				if r.exit != tc.exit {
+					t.Errorf("dry=%v: exit %d (%v), want %d", dry, r.exit, r.err, tc.exit)
+				}
+				if w := writesOf(s); len(w) != 0 {
+					t.Errorf("dry=%v: sent %v", dry, w)
+				}
+				var looked bool
+				for _, q := range s.requests() {
+					looked = looked || q.rawPath == "/api/v1/policies/pol9"
+				}
+				if !looked {
+					t.Errorf("dry=%v: no policy lookup: %+v", dry, s.requests())
+				}
+			})
+		}
+	}
+}
+
+// TestTemplateUpdateRefusesBlankSnakeCaseField: a blank display_name exits 2
+// like a blank displayName, before any request.
+func TestTemplateUpdateRefusesBlankSnakeCaseField(t *testing.T) {
+	t.Setenv("C1I_URL", mutTestURL)
+	clearViperOverrides(t, "dry_run")
+	s := newMutServer(t, templateRoute("POLICY_TYPE_CERTIFY"))
+	row := mutationRow{cmd: "access-reviews templates update", args: []string{"t1", "--body-file", `@{"display_name":" "}`, "--update-mask", "description"}}
+	r := runMutationCLI(t, s.srv, 0, nil, row.argv(t)...)
+	if r.exit != exitUsage || len(s.requests()) != 0 {
+		t.Errorf("exit %d (%v), %d request(s); want 2, none", r.exit, r.err, len(s.requests()))
+	}
+}
