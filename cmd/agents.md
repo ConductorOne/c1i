@@ -651,6 +651,15 @@ resource with `--resource-id` likewise means you drop
   repeated `--user-id` once, since the API answers a duplicate with a 500.
   `entitlements owners` returns zero rows at exit 0 for a nonexistent
   entitlement or app, so an empty result can also mean "wrong id".
+- An owner can also be an entitlement (its grantees own the object): on
+  `apps`, `entitlements` and `apps resources`, `add-owner|remove-owner` take
+  `--owner-entitlement-id` instead of `--user-id` (plus
+  `--owner-entitlement-app-id` when the entitlement is in another app), and
+  `owners --entitlements` lists them (`id` is the owning entitlement's). They
+  use the v2 owner routes, role `primary` (the only one the API supports);
+  an unknown entitlement or owned object exits 4. `set-owners` with any
+  `--owner-entitlement-id` replaces BOTH lists (no `--user-id` removes every
+  user owner); without it, entitlement owners are left alone.
 - `apps update`/`apps create` `--grant-policy-id`, `--revoke-policy-id` and
   `--certify-policy-id` are checked by c1i (exists, not deleted, right
   `policyType`) because the API itself stores any id with exit `0`; raw `api`
