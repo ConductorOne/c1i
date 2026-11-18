@@ -68,7 +68,7 @@ one exits 2.`,
 		if err != nil {
 			return fmt.Errorf("API error: %w", err)
 		}
-		return writeNamedResource(cmd, dropNullUsageControls(data), "appUsageControls")
+		return writeOptionalNamedResource(cmd, dropNullUsageControls(data), "appUsageControls")
 	},
 }
 

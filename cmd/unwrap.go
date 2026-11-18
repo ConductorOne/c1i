@@ -15,17 +15,63 @@ const expandedKey = "expanded"
 
 // writeResource is writeObject for a single-resource read: it unwraps the
 // envelope first, so --fields and the caller's jq see the resource's own keys
-// at the top level, as list rows already do. idKey is "id" everywhere except an
-// MCP server, whose only identity is "connectorId".
+// at the top level, as list rows already do. idKey names the resource's
+// identity field ("id" for most). A response with no idKey key outside
+// `expanded` holds no resource and exits 6: printing it would hand the caller
+// a null id at exit 0. The server emits unset fields, so the key is present
+// whenever the object is.
 func writeResource(cmd *cobra.Command, data []byte, idKey string) error {
-	return writeObject(cmd, unwrapEnvelope(data, idKey))
+	if !holdsKey(data, idKey) {
+		return &nonJSONResponseError{fmt.Errorf("the response held no object with a %q", idKey)}
+	}
+	return writeOptionalResource(cmd, data, idKey)
 }
 
 // writeNamedResource is writeObject for an endpoint whose response envelope
 // names its sole resource explicitly. It keeps envelope siblings while
 // avoiding a heuristic search for a property that a singleton may not have.
+// A resourceKey that is missing, null, {} or not an object exits 6.
 func writeNamedResource(cmd *cobra.Command, data []byte, resourceKey string) error {
+	if !holdsObject(data, resourceKey) {
+		return &nonJSONResponseError{fmt.Errorf("the response held no %q object", resourceKey)}
+	}
+	return writeOptionalNamedResource(cmd, data, resourceKey)
+}
+
+// writeOptionalResource and writeOptionalNamedResource skip that check, for a
+// read whose object may legitimately be absent: a singleton (settings, a
+// config, an app's usage controls) or a "latest" lookup.
+func writeOptionalResource(cmd *cobra.Command, data []byte, idKey string) error {
+	return writeObject(cmd, unwrapEnvelope(data, idKey))
+}
+
+func writeOptionalNamedResource(cmd *cobra.Command, data []byte, resourceKey string) error {
 	return writeObject(cmd, unwrapNamedEnvelope(data, resourceKey))
+}
+
+// holdsKey reports whether data is one JSON object with key at its top level
+// or in an object nested outside `expanded`, whatever key's value.
+func holdsKey(data []byte, key string) bool {
+	root, ok := decodeJSONObject(data)
+	if !ok {
+		return false
+	}
+	if _, _, ok := lookupPath(root, []string{key}); ok {
+		return true
+	}
+	delete(root, expandedKey)
+	return len(matchesPathAnyDepth(root, []string{key})) > 0
+}
+
+// holdsObject reports whether data is a JSON object whose key is a non-empty
+// object.
+func holdsObject(data []byte, key string) bool {
+	var root, obj map[string]json.RawMessage
+	if json.Unmarshal(data, &root) != nil {
+		return false
+	}
+	raw, ok := root[key]
+	return ok && json.Unmarshal(raw, &obj) == nil && len(obj) > 0
 }
 
 func unwrapNamedEnvelope(data []byte, resourceKey string) []byte {
@@ -190,6 +236,15 @@ func decodeJSONObject(data []byte) (map[string]any, bool) {
 
 // getNamedObject GETs path and prints the object under envelope, unwrapped.
 func getNamedObject(cmd *cobra.Command, path string, query map[string]string, envelope string) error {
+	return getAndWrite(cmd, path, query, func(data []byte) error { return writeNamedResource(cmd, data, envelope) })
+}
+
+// getSingleton is getNamedObject for a singleton, whose object may be absent.
+func getSingleton(cmd *cobra.Command, path, envelope string) error {
+	return getAndWrite(cmd, path, nil, func(data []byte) error { return writeOptionalNamedResource(cmd, data, envelope) })
+}
+
+func getAndWrite(cmd *cobra.Command, path string, query map[string]string, write func([]byte) error) error {
 	baseURL, err := GetBaseURL()
 	if err != nil {
 		return err
@@ -202,5 +257,5 @@ func getNamedObject(cmd *cobra.Command, path string, query map[string]string, en
 	if err != nil {
 		return fmt.Errorf("API error: %w", err)
 	}
-	return writeNamedResource(cmd, data, envelope)
+	return write(data)
 }

@@ -228,7 +228,7 @@ var mcpClassifierPolicyShowCmd = &cobra.Command{
 	Short: "Show the singleton agent classifier policy (pretty JSON)",
 	Args:  cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, _ []string) error {
-		return getClassifierResource(cmd, "/api/v1/settings/ai-governance/agent-classifier-policy", "policy")
+		return getSingleton(cmd, "/api/v1/settings/ai-governance/agent-classifier-policy", "policy")
 	},
 }
 
@@ -331,19 +331,7 @@ func getClassifierResource(cmd *cobra.Command, path, key string) error {
 }
 
 func getClassifierResourceWithParams(cmd *cobra.Command, path string, params map[string]string, key string) error {
-	baseURL, err := GetBaseURL()
-	if err != nil {
-		return err
-	}
-	c, err := newClient(cmd, baseURL)
-	if err != nil {
-		return fmt.Errorf("authentication failed: %w", err)
-	}
-	data, err := c.Get(cmd.Context(), path, params)
-	if err != nil {
-		return fmt.Errorf("API error: %w", err)
-	}
-	return writeNamedResource(cmd, data, key)
+	return getNamedObject(cmd, path, params, key)
 }
 
 func readOptionalClassifierJSONObject(cmd *cobra.Command, flag string) (map[string]any, error) {

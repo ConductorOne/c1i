@@ -15,6 +15,9 @@ Exit codes:
   add-owner|remove-owner` exits `2`; a malformed `apps update` id exits `2`,
   not `4`; an app read that answers `200` without an app exits `6`.** Their
   `--dry-run` now reads the app, so it needs credentials. See Fixed.
+- **A `get` answered `200` without the object it reads exits `6` and prints
+  nothing**; it printed `{}` (or the empty envelope) at exit `0`. Only a
+  malformed server answer is affected. See Changed.
 - **`--fields` on `mcp gateway call` and `findings settings show` exits `2`**
   (it was ignored). `docs endpoint --fields` now projects the schema (it was
   ignored), and a spec that matches nothing exits `2`. See Fixed.
@@ -261,6 +264,12 @@ Output and error text:
 
 ### Changed
 
+- **Every `get` refuses a `200` that lacks its object** (missing, `null`, `{}`
+  or not an object): it exits `6` with nothing on stdout instead of printing
+  `{}` at exit `0`, as a list page whose rows lack their id already does. Singleton reads
+  (`settings * show`, `role-mining config show`, `mcp classifiers policy
+  show`), the `latest` reads, `connectors sync-status` and an app's unset
+  `usage-controls` still print what the server sent.
 - **Task actions that look up the current policy step** (`approve`, `deny`,
   `reassign`, `restart`, `skip-step`, `escalate`, `retry-provisioning`) send
   the task id that lookup returns, so the numeric id `tasks get` accepts works

@@ -244,7 +244,7 @@ func TestBundleAutomationGetEscapesAccessProfileID(t *testing.T) {
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = fmt.Fprint(w, `{"enabled":true}`)
+		_, _ = fmt.Fprint(w, `{"requestCatalogId":"profile/with space","enabled":true}`)
 	}))
 	defer srv.Close()
 

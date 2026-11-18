@@ -701,7 +701,7 @@ branch on without parsing text:
 | `3` | not authenticated, or API returned `401`/`403` (including a `400`/`401`/`403` from the token endpoint; any other token-endpoint failure is classified like an API response: `404` exits 4, `429` 5, `5xx` or a `200` that is not a token 6) |
 | `4` | API returned `404` (not found), or a referenced id (`--user-id`, a policy id) that does not exist, whether the server or a c1i pre-check catches it |
 | `5` | API returned `429` (rate limited — back off and retry) |
-| `6` | C1 failed: the API returned `5xx`, a redirect chain never settled, it answered `200` with a body that isn't JSON or a usable token, a list command's pagination cursor stopped advancing, or a list page in a shape the command doesn't recognize |
+| `6` | C1 failed: the API returned `5xx`, a redirect chain never settled, it answered `200` with a body that isn't JSON or a usable token, a list command's pagination cursor stopped advancing, a list page in a shape the command doesn't recognize, or a `get` answered `200` without the object it reads |
 | `7` | `mcp gateway call` completed, but the tool itself reported an error (`isError: true` in its result) |
 | `8` | a system beyond C1, or the MCP protocol layer, failed — an upstream connector was unreachable or errored, the gateway itself was unreachable (DNS failure, refused connection), `mcp servers test-connection` reported an EXTERNAL server unreachable (its JSON is still printed), or the gateway returned another protocol-level JSON-RPC error (`invalid params`, `-32602`, is exit `2`) |
 

@@ -717,9 +717,20 @@ func stubGetClient(t *testing.T, srv *httptest.Server) {
 // envelope, and returns the command's stdout.
 func runGetCase(t *testing.T, c getUnwrapCase) string {
 	t.Helper()
+	out, err := runGetCaseBody(t, c, c.body)
+	if err != nil {
+		t.Fatalf("RunE: %v", err)
+	}
+	return out
+}
+
+// runGetCaseBody is runGetCase answering every request with body instead of
+// the case's own, returning RunE's error.
+func runGetCaseBody(t *testing.T, c getUnwrapCase, body string) (string, error) {
+	t.Helper()
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = fmt.Fprint(w, c.body)
+		_, _ = fmt.Fprint(w, body)
 	}))
 	defer srv.Close()
 
@@ -737,10 +748,51 @@ func runGetCase(t *testing.T, c getUnwrapCase) string {
 	c.cmd.SetOut(&out)
 	t.Cleanup(func() { c.cmd.SetOut(nil) })
 	c.cmd.SetContext(context.Background())
-	if err := c.cmd.RunE(c.cmd, c.args); err != nil {
-		t.Fatalf("RunE: %v", err)
+	err := c.cmd.RunE(c.cmd, c.args)
+	return out.String(), err
+}
+
+// TestGetRefusesMissingObject: a get answered 200 without its object exits 6
+// and prints nothing, as list rows without an id and app pre-reads without an
+// app already do. Exit 0 with {} would read as a resource whose id is null.
+func TestGetRefusesMissingObject(t *testing.T) {
+	for _, c := range getUnwrapCases() {
+		if name := c.cmd.Name(); name != "get" && !strings.HasPrefix(name, "get-") {
+			continue
+		}
+		t.Run(c.name, func(t *testing.T) {
+			if _, err := runGetCaseBody(t, c, c.body); err != nil {
+				t.Fatalf("real-shaped body: %v", err)
+			}
+			for _, body := range missingObjectBodies(c.payloadPath) {
+				out, err := runGetCaseBody(t, c, body)
+				if got := exitCode(err); got != exitServer {
+					t.Errorf("body %q: exit %d (err: %v), want %d; output %q", body, got, err, exitServer, out)
+				}
+				if out != "" {
+					t.Errorf("body %q: printed %q, want nothing", body, out)
+				}
+			}
+		})
 	}
-	return out.String()
+}
+
+// missingObjectBodies is every way a 200 can lack the object at payloadPath:
+// an empty body, no object at all, and each envelope level null, {} or a
+// scalar.
+func missingObjectBodies(payloadPath []string) []string {
+	bodies := []string{``, `{}`, `null`, `[]`, `"x"`}
+	for depth := 1; depth <= len(payloadPath); depth++ {
+		for _, leaf := range []string{`null`, `{}`, `"x"`} {
+			b := leaf
+			for i := depth - 1; i >= 0; i-- {
+				name, _ := json.Marshal(payloadPath[i])
+				b = "{" + string(name) + ":" + b + "}"
+			}
+			bodies = append(bodies, b)
+		}
+	}
+	return bodies
 }
 
 // TestTypedGetExposesTopLevelID is the guard: `jq -r .id` (or .connectorId for

@@ -40,7 +40,7 @@ Output is the API's "status" object itself.`,
 		appID, _ := cmd.Flags().GetString("app-id")
 		path := connectorPath(appID, args[0]) + "/sync_diagnostics/status"
 		return getConnectorResource(cmd, path, func(data []byte) error {
-			return writeNamedResource(cmd, data, "status")
+			return writeOptionalNamedResource(cmd, data, "status")
 		})
 	},
 }
