@@ -294,7 +294,7 @@ Prints the trust as pretty JSON, unwrapped like "trusts get".`,
 				return err
 			}
 		}
-		roles, err := trustRoleIDs(trust)
+		roles, err := trustRoleRefs(trust, usingBody)
 		if err != nil {
 			return err
 		}
@@ -302,7 +302,7 @@ Prints the trust as pretty JSON, unwrapped like "trusts get".`,
 		if len(roles) == 0 {
 			return sendMutation(cmd, m)
 		}
-		return sendMutation(cmd, m, withPreRead(existingRefsCheck(roleRefKind, scopedRoleRefs(roles))))
+		return sendMutation(cmd, m, withPreRead(existingRefsCheck(roleRefKind, roles)))
 	},
 }
 
@@ -317,13 +317,19 @@ var trustListFields = [][2]string{
 
 // checkTrustBodyMask refuses a mask that names a list field the --body-file
 // object leaves out or sets to null; an explicit [] is the way to clear one.
+// Paths are folded as the server folds them; "*" and "trust" name every field.
 func checkTrustBodyMask(trust map[string]any, mask string) error {
 	named := map[string]bool{}
+	all := false
 	for _, p := range strings.Split(mask, ",") {
-		named[strings.TrimPrefix(strings.TrimSpace(p), "trust.")] = true
+		f := foldMaskName(strings.TrimSpace(p))
+		if f == "*" || f == "trust" || f == "trust.*" {
+			all = true
+		}
+		named[strings.TrimPrefix(f, "trust.")] = true
 	}
 	for _, f := range trustListFields {
-		if !named[f[0]] && !named[f[1]] {
+		if !all && !named[foldMaskName(f[0])] {
 			continue
 		}
 		if trust[f[0]] == nil && trust[f[1]] == nil {
@@ -333,22 +339,32 @@ func checkTrustBodyMask(trust map[string]any, mask string) error {
 	return nil
 }
 
-// trustRoleIDs reads the scoped role ids from a trust object, whether a flag
-// or --body-file put them there, in either spelling.
-func trustRoleIDs(trust map[string]any) ([]string, error) {
-	var out []string
+// trustRoleRefs reads the scoped role ids from a trust object, in either
+// spelling, labeled by where they came from: --scoped-role, or the
+// --body-file key.
+func trustRoleRefs(trust map[string]any, fromBody bool) ([]labeledRef, error) {
+	var out []labeledRef
+	add := func(key, id string) {
+		label := fmt.Sprintf("--scoped-role %q", id)
+		if fromBody {
+			label = fmt.Sprintf("--body-file %s %q", key, id)
+		}
+		out = append(out, labeledRef{appRef{ID: id}, label})
+	}
 	for _, key := range trustListFields[0] {
 		switch v := trust[key].(type) {
 		case nil:
 		case []string:
-			out = append(out, v...)
+			for _, id := range v {
+				add(key, id)
+			}
 		case []any:
 			for i, e := range v {
-				s, ok := e.(string)
+				id, ok := e.(string)
 				if !ok {
 					return nil, &usageError{fmt.Errorf("--body-file: %s[%d] must be a string", key, i)}
 				}
-				out = append(out, s)
+				add(key, id)
 			}
 		default:
 			return nil, &usageError{fmt.Errorf("--body-file: %s must be an array of strings", key)}

@@ -306,6 +306,12 @@ func TestSPTrustsUpdateRefusesMaskedListTheBodyOmits(t *testing.T) {
 		{`{}`, "trust.scopedRoleIds"},
 		{`{}`, " allowSourceCidrs"},
 		{`{}`, "passthrough_claims"},
+		{`{}`, "ScopedRoleIds"},
+		{`{}`, "SCOPED_ROLE_IDS"},
+		{`{}`, "Trust.ScopedRoleIds"},
+		{`{}`, "Trust.scopedRoleIds"},
+		{`{}`, "*"},
+		{`{}`, "trust"},
 	} {
 		for _, dry := range []bool{false, true} {
 			s := newMutServer(t, fixedReply(200, tblTrust))
@@ -326,5 +332,15 @@ func TestSPTrustsUpdateRefusesMaskedListTheBodyOmits(t *testing.T) {
 		"--body-file", writeTempFile(t, `{"allow_source_cidrs":[]}`), "--update-mask", "allow_source_cidrs")
 	if r.exit != 0 || len(s.requests()) != 1 {
 		t.Errorf("explicit [] clear: exit %d after %d requests: %s", r.exit, len(s.requests()), r.stderr)
+	}
+}
+
+// A body-file role id is named by its key, not by a flag the user never gave.
+func TestSPTrustsUpdateLabelsBodyFileRoles(t *testing.T) {
+	s := newMutServer(t, fixedReply(404, `{"code":5}`))
+	r := runWF(t, s, "service-principals", "trusts", "update", "t-1", "--service-principal-id", "sp-1",
+		"--body-file", writeTempFile(t, `{"scoped_role_ids":["bad"]}`), "--update-mask", "scoped_role_ids")
+	if r.exit != exitNotFound || !strings.Contains(r.stderr, `--body-file scoped_role_ids "bad": no such role`) {
+		t.Errorf("exit %d stderr %q", r.exit, r.stderr)
 	}
 }
