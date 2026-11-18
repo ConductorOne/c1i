@@ -8,6 +8,18 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- `tasks escalate|retry-provisioning <task-id>` (current policy step resolved
+  like `approve`) and `tasks update-request-data <task-id> --data-file`, which
+  submits a form step's data. The server refuses an action the task's
+  `.actions` does not offer with `action not permitted` (exit `2`).
+- `tasks audits <task-id>` streams a task's audit trail as raw NDJSON events
+  (`--comments-only`, `--exclude-comments`, `--newest-first`). The task is read
+  first: the audit endpoint answers an unknown task with an empty list, so c1i
+  exits `4`. A `5xx` on this read is now retried like other list reads.
+- `requests create action` and `requests create resource-action` (`--action-id`,
+  `--form-values-file`; `action` also `--description`, `--group-only`). No API
+  route lists these actions; an unknown id exits `4` (`action not found`).
+
 - `apps search` filters applications server-side (`POST /api/v1/search/apps`)
   by `--query` (fuzzy on name and description), `--display-name`, repeatable
   `--app-id` / `--exclude-app-id` / `--policy-id`, and `--only-directories`.

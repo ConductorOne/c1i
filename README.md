@@ -1134,6 +1134,10 @@ c1i tasks reset <task-id> [--comment <text>]
 c1i tasks skip-step <task-id> [--policy-step-id <id>] [--comment <text>]
 c1i tasks process <task-id>
 c1i tasks update-grant-duration <task-id> --duration <duration>
+c1i tasks escalate <task-id> [--policy-step-id <id>] [--comment <text>]
+c1i tasks retry-provisioning <task-id> [--policy-step-id <id>] [--comment <text>]
+c1i tasks update-request-data <task-id> --data-file <path|->
+c1i tasks audits <task-id> [--comments-only | --exclude-comments] [--newest-first] [--page-size N] [--page-token TOKEN] [--limit N]
 ```
 
 `restart`, `reset` and `skip-step` each rotate the task's current policy step,
@@ -1164,8 +1168,25 @@ answers `cannot update grant duration for a ticket in a provision step`; the
 value lands at `.type.grant.grantDuration` (there is no top-level
 `.grantDuration`).
 
-`escalate`, `update-request-data` and `approve-with-step-up` are not wrapped;
-reach them through `c1i api`.
+`escalate` moves a grant task onto its entitlement's emergency-grant policy
+(afterwards `.emergencyAccess` is true); a task with no emergency-grant policy,
+or one already escalated, is refused with `action not permitted`.
+`retry-provisioning` re-drives a failed provision step and is refused the same
+way on a task that is not in one. Both look up the current step like `approve`.
+`update-request-data --data-file` submits a JSON object keyed by the form's
+field names (`.policy.current.form.form.fields[].name`) to a task at a form
+step; the server validates it (`request data does not match the required
+schema (field 'Reason' is required)`) and refuses a task at another step with
+`current policy step is not a form instance`.
+
+`audits` prints the task's audit trail as NDJSON, one raw event per row, oldest
+first (`--newest-first` reverses it). `--comments-only` and
+`--exclude-comments` filter comment events and together exit `2`. The task is
+read first, because the audit endpoint answers an unknown task with an empty
+list: an unknown id exits `4`.
+
+`approve-with-step-up` is not wrapped (it returns a browser `redirectUrl` to
+finish step-up authentication interactively); reach it through `c1i api`.
 
 `approve`/`deny`/`reassign`/`restart`/`skip-step` target a specific policy step, fetched
 when `--policy-step-id` is omitted. `approve`, `skip-step` and `reassign`
@@ -1617,6 +1638,8 @@ first and reports it on stderr as `Resolved catalog id: …`, also under
 ```sh
 c1i requests create grant --app-id <id> --entitlement-id <eid> [--user-id <uid> | --app-user-id <auid>] [--description <text>] [--duration <duration>] [--emergency] [--wait [--wait-min N] [--wait-stable N] [--wait-timeout D]]
 c1i requests create revoke --app-id <id> --entitlement-id <eid> [--user-id <uid> | --app-user-id <auid>] [--description <text>]
+c1i requests create action --action-id <id> [--description <text>] [--form-values-file <path|->] [--group-only]
+c1i requests create resource-action --action-id <id> [--form-values-file <path|->]
 c1i requests list [--user-id <id> | --all] [--app-id <id>] [--entitlement-id <id>] [--state open|closed] [--type grant|revoke] [--page-size N] [--page-token TOKEN] [--limit N]
 c1i requests get <request-id>
 ```
@@ -1631,6 +1654,15 @@ belong to the user (a mismatch is a 400).
 `requests create grant --duration` follows the [Durations](#durations) rule
 (`24h`, `86400s`); the server refuses `0s` with `value must be greater than
 0s`.
+
+`requests create action` requests a request action (requestable automation)
+and `requests create resource-action` runs a connector resource-create action
+(for example a group from a template); `--form-values-file` is a JSON object
+sent as `formValues`. The API has no route that lists or creates these
+actions, so c1i cannot look an id up; an unknown id exits `4` (`action not
+found`).
+`--group-only` asks the server to refuse unless the action is a current
+group-creation template.
 
 `requests create grant --wait` blocks until a new grant for the request shows
 up in `grants list` and the matching set stops changing — the same poll
