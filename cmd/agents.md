@@ -330,7 +330,9 @@ Rule of thumb: a product concept starts at `docs search` → `docs page`; a raw
   server's snapshot, not the outcome; re-read with `tasks get`.
 - Mutation output is never projected: an explicit `--fields` on a mutation
   (even `--fields ""`) exits 2 before anything is sent, and `C1I_FIELDS` is
-  ignored there.
+  ignored there. The raw reads `findings settings show`, `findings settings
+  edge show`, `settings ai-governance tenant-defaults` and `mcp gateway call`
+  refuse an explicit `--fields` too.
 - Casing differs by mode: list rows are snake_case (`app_id`,
   `display_name`); single-object reads carry the API's own camelCase
   (`displayName`, `createdAt`). `--fields` matches either casing at any

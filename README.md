@@ -675,7 +675,10 @@ APP_ID=$(c1i apps create --display-name "Example" | jq -er .id)
 - Missing fields are silently omitted, so requesting a superset is safe.
 - Also settable via `C1I_FIELDS`. Applies to read output — list commands, `api`,
   and single-object `get` commands. Mutation output is never projected, so a
-  session-wide `C1I_FIELDS` is ignored there.
+  session-wide `C1I_FIELDS` is ignored there. The raw reads `findings settings
+  show`, `findings settings edge show`, `settings ai-governance
+  tenant-defaults` and `mcp gateway call` are not projected either: an explicit
+  `--fields` there exits `2`.
 
 ### Errors & exit codes
 

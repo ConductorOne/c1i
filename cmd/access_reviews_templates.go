@@ -314,7 +314,9 @@ request object:
 
 The API documents: "Each call replaces the whole selection." To change only some
 entitlements, use "access-reviews templates entitlements add|remove". Prints
-the API's response, in the shape "access-reviews templates scope get" prints.`,
+the API's response: its "list" holds only the entitlements this call ADDED (the
+server returns the delta), not the resulting selection -- follow with
+"access-reviews templates scope get" to read that.`,
 	"/scope_and_entitlements", "entitlements", setupEntitlementShape, entitlementRefKind)
 
 var accessReviewTemplateScopeSetExcludedCmd = newSetupBodyCmd(templateSetup, "set-excluded",
