@@ -67,7 +67,8 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - `--resource-type` on `entitlements create` and `apps resource-types create`
   lists `SESSION_POLICY` and `CLAW_AGENT`, as the API spec now does.
 - `apps search` filters applications server-side (`POST /api/v1/search/apps`)
-  by `--query` (fuzzy on name and description), `--display-name`, repeatable
+  by `--query` (full-text on name and description, not a substring match),
+  `--display-name` (case-insensitive ILIKE pattern), repeatable
   `--app-id` / `--exclude-app-id` / `--policy-id`, and `--only-directories`.
   Rows match `apps list`; `apps list` help now points to it for filtering.
 - `docs map [--json]` prints the command tree this binary accepts, generated

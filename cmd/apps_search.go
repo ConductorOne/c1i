@@ -47,7 +47,7 @@ refused locally (exit 2); another malformed id is rejected by the server
 		if err != nil {
 			return err
 		}
-		for _, id := range dedupe(policyIDs) {
+		for _, id := range policyIDs {
 			if _, err := fetchBoundPolicyType(cmd.Context(), c, "policy-id", id); err != nil {
 				return err
 			}
