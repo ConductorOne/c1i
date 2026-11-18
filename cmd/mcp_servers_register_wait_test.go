@@ -21,7 +21,7 @@ func TestMCPServersRegisterWait(t *testing.T) {
 
 	t.Run("polls the list until the server appears", func(t *testing.T) {
 		lists := 0
-		s := newMutServer(t, func(r *http.Request, _ int) mutReply {
+		s := newMutServer(t, withLiveRefs(func(r *http.Request, _ int) mutReply {
 			if r.Method == http.MethodPost {
 				return mutReply{body: created}
 			}
@@ -30,7 +30,7 @@ func TestMCPServersRegisterWait(t *testing.T) {
 				return mutReply{body: `{"list":[{"connectorId":"other"}]}`}
 			}
 			return mutReply{body: `{"list":[{"connectorId":"other"},{"connectorId":"conn-9"}]}`}
-		})
+		}))
 		t.Setenv("C1I_URL", mutTestURL)
 		r := runMutationCLI(t, s.srv, 0, nil, registerWaitArgs("--wait")...)
 		if r.err != nil || lists != 3 || !strings.Contains(r.stdout, `"connectorId": "conn-9"`) {
@@ -42,7 +42,7 @@ func TestMCPServersRegisterWait(t *testing.T) {
 	})
 	t.Run("follows list pages", func(t *testing.T) {
 		var page2 atomic.Bool
-		s := newMutServer(t, func(r *http.Request, _ int) mutReply {
+		s := newMutServer(t, withLiveRefs(func(r *http.Request, _ int) mutReply {
 			if r.Method == http.MethodPost {
 				return mutReply{body: created}
 			}
@@ -51,7 +51,7 @@ func TestMCPServersRegisterWait(t *testing.T) {
 				return mutReply{body: `{"list":[{"connectorId":"conn-9"}]}`}
 			}
 			return mutReply{body: `{"list":[{"connectorId":"other"}],"nextPageToken":"p2"}`}
-		})
+		}))
 		t.Setenv("C1I_URL", mutTestURL)
 		r := runMutationCLI(t, s.srv, 0, nil, registerWaitArgs("--wait")...)
 		if r.err != nil {
@@ -62,12 +62,12 @@ func TestMCPServersRegisterWait(t *testing.T) {
 		}
 	})
 	t.Run("timeout is applied:true and keeps the document", func(t *testing.T) {
-		s := newMutServer(t, func(r *http.Request, _ int) mutReply {
+		s := newMutServer(t, withLiveRefs(func(r *http.Request, _ int) mutReply {
 			if r.Method == http.MethodPost {
 				return mutReply{body: created}
 			}
 			return mutReply{body: `{"list":[]}`}
-		})
+		}))
 		t.Setenv("C1I_URL", mutTestURL)
 		r := runMutationCLI(t, s.srv, 0, nil, registerWaitArgs("--wait", "--wait-timeout", "50ms", "--error-format", "json")...)
 		if r.exit != exitError || !strings.Contains(r.stdout, "conn-9") {
@@ -79,7 +79,7 @@ func TestMCPServersRegisterWait(t *testing.T) {
 		}
 	})
 	t.Run("response without connectorId exits 6, applied, and polls nothing", func(t *testing.T) {
-		s := newMutServer(t, fixedReply(200, `{"mcpServer":{"appId":"app-1"}}`))
+		s := newMutServer(t, withLiveRefs(fixedReply(200, `{"mcpServer":{"appId":"app-1"}}`)))
 		t.Setenv("C1I_URL", mutTestURL)
 		r := runMutationCLI(t, s.srv, 0, nil, registerWaitArgs("--wait", "--error-format", "json")...)
 		if r.exit != exitServer || r.errorObject(t)["applied"] != true {
@@ -91,7 +91,7 @@ func TestMCPServersRegisterWait(t *testing.T) {
 	})
 	t.Run("dry-run sends and polls nothing", func(t *testing.T) {
 		withDryRun(t)
-		s := newMutServer(t, fixedReply(200, created))
+		s := newMutServer(t, withLiveRefs(fixedReply(200, created)))
 		t.Setenv("C1I_URL", mutTestURL)
 		r := runMutationCLI(t, s.srv, 0, nil, registerWaitArgs("--wait")...)
 		if r.err != nil || len(nonGETRequests(s)) != 0 {

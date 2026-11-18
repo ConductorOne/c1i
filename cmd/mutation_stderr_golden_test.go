@@ -56,7 +56,7 @@ var stderrScenarios = []stderrScenario{
 		case strings.HasSuffix(r.URL.Path, "/ownerids"):
 			return 200, `{"userIds":["u1"]}`
 		case r.Method == http.MethodGet:
-			return 200, `{"user":{"id":"u1"}}`
+			return 200, `{"user":{"id":"u1"},"app":{"id":"app-1"}}`
 		}
 		return 200, `{}`
 	}},
@@ -84,6 +84,9 @@ func runStderrScenario(t *testing.T, sc stderrScenario) string {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_, _ = io.Copy(io.Discard, r.Body)
 		status, body := 200, `{}`
+		if live, ok := liveRefBody(r); ok {
+			body = live
+		}
 		if sc.route != nil {
 			status, body = sc.route(r)
 		}

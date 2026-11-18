@@ -43,7 +43,7 @@ func TestAppsAddOwnerDryRunPreviewsRequestWithoutSending(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case "/api/v1/apps/app1":
-			_, _ = w.Write([]byte(`{}`))
+			_, _ = w.Write([]byte(`{"app":{"id":"app1"}}`))
 		case "/api/v1/users/user1":
 			_, _ = w.Write([]byte(`{"user":{"id":"user1"}}`))
 		default:

@@ -92,7 +92,7 @@ func TestEveryPreviewPathRedactsSecrets(t *testing.T) {
 		check(t, r.stdout)
 	})
 	t.Run("register", func(t *testing.T) {
-		s := newMutServer(t, fixedReply(200, `{}`))
+		s := newMutServer(t, withLiveRefs(fixedReply(200, `{}`)))
 		t.Setenv("C1I_URL", mutTestURL)
 		withDryRun(t)
 		r := runMutationCLI(t, s.srv, 0, nil, "mcp", "servers", "register", "--app-id=app1", "--type=external",

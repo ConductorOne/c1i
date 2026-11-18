@@ -48,7 +48,7 @@ func TestEntitlementOwnerWire(t *testing.T) {
 		for _, tc := range cases {
 			t.Run(f.name+" "+tc.verb+" "+strings.Join(tc.extra, " "), func(t *testing.T) {
 				t.Setenv("C1I_URL", mutTestURL)
-				s := newMutServer(t, func(*http.Request, int) mutReply { return mutReply{body: `{}`} })
+				s := newMutServer(t, withLiveRefs(func(*http.Request, int) mutReply { return mutReply{body: `{}`} }))
 				r := runMutationCLI(t, s.srv, 0, nil, entOwnerArgs(f.prefix, tc.verb, f.args, tc.extra)...)
 				if r.exit != 0 {
 					t.Fatalf("exit = %d (%v)", r.exit, r.err)
@@ -78,12 +78,12 @@ func TestEntitlementOwnerWire(t *testing.T) {
 // --user-id list too, after the same user lookup as the v1 set.
 func TestSetOwnersEntitlementFormSendsUsers(t *testing.T) {
 	t.Setenv("C1I_URL", mutTestURL)
-	s := newMutServer(t, func(r *http.Request, _ int) mutReply {
+	s := newMutServer(t, withLiveRefs(func(r *http.Request, _ int) mutReply {
 		if r.Method == http.MethodGet {
 			return mutReply{body: `{"user":{"id":"u1"}}`}
 		}
 		return mutReply{body: `{}`}
-	})
+	}))
 	r := runMutationCLI(t, s.srv, 0, nil, "apps", "set-owners", "app-1", "--user-id", "u1", "--user-id", "u1", "--owner-entitlement-id", "e-9")
 	if r.exit != 0 {
 		t.Fatalf("exit = %d (%v)", r.exit, r.err)
@@ -121,7 +121,7 @@ func TestEntitlementOwnerModeUsage(t *testing.T) {
 		for _, tc := range cases {
 			t.Run(f.name+" "+tc.verb+" "+strings.Join(tc.extra, " "), func(t *testing.T) {
 				t.Setenv("C1I_URL", mutTestURL)
-				s := newMutServer(t, func(*http.Request, int) mutReply { return mutReply{body: `{}`} })
+				s := newMutServer(t, withLiveRefs(func(*http.Request, int) mutReply { return mutReply{body: `{}`} }))
 				r := runMutationCLI(t, s.srv, 0, nil, entOwnerArgs(f.prefix, tc.verb, f.args, tc.extra)...)
 				if r.exit != exitUsage {
 					t.Errorf("exit = %d, want %d (%v)", r.exit, exitUsage, r.err)
@@ -183,9 +183,9 @@ func TestAddEntitlementOwnerOutputUnwrapped(t *testing.T) {
 	for _, f := range entOwnerFamilies {
 		t.Run(f.name, func(t *testing.T) {
 			t.Setenv("C1I_URL", mutTestURL)
-			s := newMutServer(t, func(*http.Request, int) mutReply {
+			s := newMutServer(t, withLiveRefs(func(*http.Request, int) mutReply {
 				return mutReply{body: `{"` + envelopes[f.name] + `":{"appId":"app-1","appEntitlement":{"id":"e-9"},"roleSlug":"primary"}}`}
-			})
+			}))
 			r := runMutationCLI(t, s.srv, 0, nil, entOwnerArgs(f.prefix, "add-owner", f.args, []string{"--owner-entitlement-id", "e-9"})...)
 			if r.exit != 0 {
 				t.Fatalf("exit = %d (%v)", r.exit, r.err)
@@ -241,7 +241,7 @@ func TestSetOwnersEntitlementFormWait(t *testing.T) {
 // the v2 user list is already empty.
 func TestSetOwnersEntitlementFormWaitTimesOut(t *testing.T) {
 	t.Setenv("C1I_URL", mutTestURL)
-	s := newMutServer(t, func(r *http.Request, _ int) mutReply {
+	s := newMutServer(t, withLiveRefs(func(r *http.Request, _ int) mutReply {
 		switch {
 		case r.Method == http.MethodPut:
 			return mutReply{body: `{}`}
@@ -249,7 +249,7 @@ func TestSetOwnersEntitlementFormWaitTimesOut(t *testing.T) {
 			return mutReply{body: `{"userIds":["u-old"]}`}
 		}
 		return mutReply{body: `{"list":[{"appEntitlement":{"id":"e-9","appId":"app-1"}}]}`}
-	})
+	}))
 	r := runMutationCLI(t, s.srv, 0, nil, "apps", "resources", "set-owners", "r-1", "--app-id", "app-1", "--resource-type-id", "rt-1", "--owner-entitlement-id", "e-9", "--no-user-owners", "--wait", "--wait-timeout", "100ms")
 	if r.exit != 1 {
 		t.Fatalf("exit = %d, want 1 (%v)", r.exit, r.err)
@@ -284,12 +284,12 @@ func TestSetOwnersEntitlementFormNeedsUserDecision(t *testing.T) {
 				}
 				t.Run(name, func(t *testing.T) {
 					t.Setenv("C1I_URL", mutTestURL)
-					s := newMutServer(t, func(r *http.Request, _ int) mutReply {
+					s := newMutServer(t, withLiveRefs(func(r *http.Request, _ int) mutReply {
 						if r.Method == http.MethodGet && strings.HasPrefix(r.URL.Path, "/api/v1/users/") {
 							return mutReply{body: `{"user":{"id":"u1"}}`}
 						}
 						return mutReply{body: `{}`}
-					})
+					}))
 					args := entOwnerArgs(f.prefix, "set-owners", f.args, tc.extra)
 					if dry {
 						args = append(args, "--dry-run")

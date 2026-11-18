@@ -78,8 +78,8 @@ func TestSPTrustsCreateRefusesUnknownRefs(t *testing.T) {
 				if r.URL.Path == tc.missing {
 					return mutReply{status: tc.status, body: `{"code":5,"message":"not found"}`}
 				}
-				if r.Method == http.MethodGet {
-					return mutReply{body: `{"servicePrincipal":{"id":"sp-1"}}`}
+				if live, ok := liveRefBody(r); ok {
+					return mutReply{body: live}
 				}
 				return mutReply{body: tblTrust}
 			})
@@ -95,12 +95,12 @@ func TestSPTrustsCreateRefusesUnknownRefs(t *testing.T) {
 }
 
 func TestSPTrustsCreateSendsBody(t *testing.T) {
-	s := newMutServer(t, func(r *http.Request, _ int) mutReply {
+	s := newMutServer(t, withLiveRefs(func(r *http.Request, _ int) mutReply {
 		if r.Method == http.MethodGet {
 			return mutReply{body: `{}`}
 		}
 		return mutReply{body: tblTrust}
-	})
+	}))
 	r := runWF(t, s, "service-principals", "trusts", "create", "sp-1", "--provider-id", "pr-1", "--display-name", "zz",
 		"--condition", `claims.sub == "x"`, "--scoped-role", "r-1", "--allow-cidr", "10.0.0.0/24", "--passthrough-claim", "repository")
 	if r.exit != 0 {

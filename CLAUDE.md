@@ -289,6 +289,14 @@ tracked root file outside its allowlist. Stage explicit paths rather than `-A`.
   `emptyIsOmitted` flag counts as not given) and `pageTokenGiven` for
   `--page-token`; `TestNoPresenceAsContent` fails on `.Changed` or
   `TrimSpace(x) == ""` outside its reasoned allowlist.
+- **One "deleted" rule (enforced convention):** a pre-read decides soft
+  deletion with `deletedAtPath`/`isDeletedAt` (`cmd/deleted.go`): the object's
+  own `deletedAt`, present and neither `null` nor `""`, read at its envelope
+  path, never a scan of the response. A missing object exits 6. An app read
+  goes through `requireLiveApp`/`liveAppPreRead`; `TestAppPreReadCommands`
+  pins every user's exits and `TestAppPreReadCommandsAreListed` fails on one
+  it misses. A stub that answers `{}` to every GET wraps its route in
+  `withLiveRefs`.
 - **A guard covers every channel and sink, not a name.** Validate a value on
   every channel it can arrive by (flag, `C1I_*` env var, `--body-file`) and
   wherever it is used (path, body, query); `--dry-run` must refuse exactly what

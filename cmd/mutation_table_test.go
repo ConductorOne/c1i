@@ -433,6 +433,9 @@ const tblGet = `{"accessReviewTemplate":{"id":"t1","displayName":"zz","policyId"
 
 func tableRoute(body string) func(*http.Request, int) mutReply {
 	return func(r *http.Request, _ int) mutReply {
+		if live, ok := liveRefBody(r); ok {
+			return mutReply{body: live}
+		}
 		if r.Method == http.MethodGet {
 			return mutReply{body: tblGet}
 		}
@@ -670,12 +673,12 @@ func TestMutationTableNotFound(t *testing.T) {
 	for _, row := range mutationTable {
 		t.Run(row.cmd, func(t *testing.T) {
 			t.Setenv("C1I_URL", mutTestURL)
-			s := newMutServer(t, func(r *http.Request, n int) mutReply {
+			s := newMutServer(t, withLiveRefs(func(r *http.Request, n int) mutReply {
 				if r.Method == http.MethodGet {
 					return mutReply{body: tblGet}
 				}
 				return mutReply{status: 404, body: `{"code":5}`}
-			})
+			}))
 			r := runMutationCLI(t, s.srv, 0, nil, row.argv(t, "--error-format", "json")...)
 			if r.exit != exitNotFound || r.stdout != "" {
 				t.Errorf("exit %d stdout %q, want 4 and nothing on stdout", r.exit, r.stdout)

@@ -182,12 +182,12 @@ func TestAppsSetOwnersWait(t *testing.T) {
 	ownerWaitInterval = 5 * time.Millisecond
 	t.Cleanup(func() { ownerWaitInterval = orig })
 	t.Run("timeout", func(t *testing.T) {
-		s := newMutServer(t, func(r *http.Request, _ int) mutReply {
+		s := newMutServer(t, withLiveRefs(func(r *http.Request, _ int) mutReply {
 			if strings.HasSuffix(r.URL.Path, "/ownerids") {
 				return mutReply{body: `{"userIds":[]}`}
 			}
 			return mutReply{body: `{}`}
-		})
+		}))
 		t.Setenv("C1I_URL", mutTestURL)
 		r := runMutationCLI(t, s.srv, 0, nil, "apps", "set-owners", "app-1", "--user-id", "u1", "--wait", "--wait-timeout", "50ms", "--error-format", "json", "--debug")
 		if r.exit != exitError || r.stdout != "{}\n" {
@@ -210,12 +210,12 @@ func TestAppsSetOwnersWait(t *testing.T) {
 		}
 	})
 	t.Run("poll 404", func(t *testing.T) {
-		s := newMutServer(t, func(r *http.Request, _ int) mutReply {
+		s := newMutServer(t, withLiveRefs(func(r *http.Request, _ int) mutReply {
 			if strings.HasSuffix(r.URL.Path, "/ownerids") {
 				return mutReply{status: 404}
 			}
 			return mutReply{body: `{}`}
-		})
+		}))
 		t.Setenv("C1I_URL", mutTestURL)
 		r := runMutationCLI(t, s.srv, 0, nil, "apps", "set-owners", "app-1", "--user-id", "u1", "--wait", "--error-format", "json")
 		if r.exit != exitNotFound || r.errorObject(t)["applied"] != true {
@@ -223,12 +223,12 @@ func TestAppsSetOwnersWait(t *testing.T) {
 		}
 	})
 	t.Run("success lines on stderr", func(t *testing.T) {
-		s := newMutServer(t, func(r *http.Request, _ int) mutReply {
+		s := newMutServer(t, withLiveRefs(func(r *http.Request, _ int) mutReply {
 			if strings.HasSuffix(r.URL.Path, "/ownerids") {
 				return mutReply{body: `{"userIds":["u1"]}`}
 			}
 			return mutReply{body: `{}`}
-		})
+		}))
 		t.Setenv("C1I_URL", mutTestURL)
 		r := runMutationCLI(t, s.srv, 0, nil, "apps", "set-owners", "app-1", "--user-id", "u1", "--wait", "--error-format", "json")
 		objs := r.stderrObjects(t)

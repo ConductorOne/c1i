@@ -44,7 +44,7 @@ func TestResourceSetOwnersRefusesUnknownResource(t *testing.T) {
 		s := newMutServer(t, func(r *http.Request, _ int) mutReply {
 			switch {
 			case r.Method == http.MethodGet && r.URL.Path == "/api/v1/apps/app-1":
-				return mutReply{body: `{}`}
+				return mutReply{body: `{"app":{"id":"app-1"}}`}
 			case r.Method == http.MethodGet && strings.HasPrefix(r.URL.Path, "/api/v1/users/"):
 				return mutReply{body: `{"user":{"id":"u1"}}`}
 			case r.Method == http.MethodGet:
@@ -143,7 +143,7 @@ func TestResourceCommandsWire(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			s := newMutServer(t, func(r *http.Request, _ int) mutReply {
 				if r.Method == http.MethodGet {
-					return mutReply{body: `{"user":{"id":"u1"},"appResourceTypeView":{"appResourceType":{"id":"rt-1"}},"appResourceView":{"appResource":{"id":"r-1"}}}`}
+					return mutReply{body: `{"user":{"id":"u1"},"app":{"id":"app-1"},"appResourceTypeView":{"appResourceType":{"id":"rt-1"}},"appResourceView":{"appResource":{"id":"r-1"}}}`}
 				}
 				return mutReply{body: `{}`}
 			})

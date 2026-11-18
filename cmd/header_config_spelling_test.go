@@ -16,14 +16,14 @@ func TestConfigFieldKeysAreNotHeaderNames(t *testing.T) {
 	}
 	for name, base := range cmds {
 		for _, key := range []string{"a b", "a/b", "a:b", "ключ"} {
-			srv := newMutServer(t, fixedReply(200, "{}"))
+			srv := newMutServer(t, withLiveRefs(fixedReply(200, "{}")))
 			res := runMutationCLI(t, srv.srv, 0, nil, append(append([]string{}, base...), "--config-field", key+"=v", "--dry-run")...)
 			if res.exit != 0 {
 				t.Errorf("%s key %q: exit %d err %v, want accepted", name, key, res.exit, res.err)
 			}
 		}
 		for _, key := range []string{"a\nb", "a\tb", "a\x00b"} {
-			srv := newMutServer(t, fixedReply(200, "{}"))
+			srv := newMutServer(t, withLiveRefs(fixedReply(200, "{}")))
 			res := runMutationCLI(t, srv.srv, 0, nil, append(append([]string{}, base...), "--config-field", key+"=v", "--dry-run")...)
 			if res.exit != exitUsage || res.err == nil || !strings.Contains(res.err.Error(), "--config-field") ||
 				!strings.Contains(res.err.Error(), "control character") || strings.Contains(res.err.Error(), "header") {
@@ -69,7 +69,7 @@ func TestConfigFileHeaderFieldsEverySpelling(t *testing.T) {
 						if err := os.WriteFile(file, []byte(body), 0o600); err != nil {
 							t.Fatal(err)
 						}
-						srv := newMutServer(t, fixedReply(200, "{}"))
+						srv := newMutServer(t, withLiveRefs(fixedReply(200, "{}")))
 						res := runMutationCLI(t, srv.srv, 0, nil, append(append([]string{}, base...), file, "--dry-run")...)
 						out := res.stdout + res.stderr
 						if res.err != nil {

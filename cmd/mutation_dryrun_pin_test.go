@@ -213,7 +213,11 @@ func stubArgs(c *cobra.Command) []string {
 func TestDryRunPreviewSetMatchesRuleB(t *testing.T) {
 	ix := loadSrcIndex(t, nil)
 	readBody := `{}`
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if live, ok := liveRefBody(r); ok && readBody == `{}` {
+			_, _ = w.Write([]byte(live))
+			return
+		}
 		_, _ = w.Write([]byte(readBody))
 	}))
 	t.Cleanup(srv.Close)
