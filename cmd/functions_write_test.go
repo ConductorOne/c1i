@@ -252,3 +252,40 @@ func TestFunctionsInvocationsRoutes(t *testing.T) {
 		t.Errorf("row = %q (%v)", r.stdout, err)
 	}
 }
+
+// TestFunctionsInvokeWaitPollsThroughNonFinalStatuses: only SUCCESS ends the
+// wait at exit 0; RUNNING, UNKNOWN and CANCELLATION_REQUESTED keep it polling.
+func TestFunctionsInvokeWaitPollsThroughNonFinalStatuses(t *testing.T) {
+	t.Setenv("C1I_URL", mutTestURL)
+	statuses := []string{
+		"FUNCTION_INVOCATION_STATUS_RUNNING",
+		"FUNCTION_INVOCATION_STATUS_UNKNOWN",
+		"FUNCTION_INVOCATION_STATUS_CANCELLATION_REQUESTED",
+		"FUNCTION_INVOCATION_STATUS_SUCCESS",
+	}
+	s := newMutServer(t, func(r *http.Request, n int) mutReply {
+		switch {
+		case r.Method == http.MethodPost:
+			return mutReply{body: `{"invocationId":"inv-1"}`}
+		case strings.Contains(r.URL.Path, "/invocations/"):
+			// Requests 1 and 2 are the commit check and the invoke.
+			st := statuses[min(n-3, len(statuses)-1)]
+			return mutReply{body: `{"invocation":{"id":"inv-1","status":"` + st + `"}}`}
+		default:
+			return mutReply{body: `{}`}
+		}
+	})
+	r := runMutationCLI(t, s.srv, 0, nil, "functions", "invoke", "fn-1", "--commit-id", "c-1", "--wait", "--wait-timeout", "15s")
+	if r.exit != 0 {
+		t.Fatalf("exit %d: %v", r.exit, r.err)
+	}
+	polls := 0
+	for _, req := range s.requests() {
+		if strings.Contains(req.rawPath, "/invocations/") {
+			polls++
+		}
+	}
+	if polls != len(statuses) {
+		t.Errorf("polled %d times, want %d (one per status until SUCCESS)", polls, len(statuses))
+	}
+}

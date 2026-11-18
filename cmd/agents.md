@@ -610,10 +610,11 @@ resource with `--resource-id` likewise means you drop
   server-side. With `--page-token` (which turns off auto-pagination) a page
   can come back empty while unmapped accounts exist further along.
 - `functions invoke` is asynchronous: it prints `{"invocationId": ...}` and
-  exits 0 before the function runs. Add `--wait` to block until it finishes;
-  a run that ends `ERROR` or `CANCELLED` exits `1` after the id was printed,
-  with an error saying the invoke "was applied" -- the function ran and
-  failed. Its output and error are in `functions invocations get
+  exits 0 before the function runs. Add `--wait` to block until it finishes.
+  Any `--wait` failure exits `1` after the id was printed, with an error
+  saying the invoke "was applied" -- that only means the run was started. A
+  failed run is the error naming `ended in FUNCTION_INVOCATION_STATUS_ERROR`
+  (or `CANCELLED`); a timeout says so and is not necessarily a failure. Its output and error are in `functions invocations get
   <invocation-id> --function-id <function-id>`. Without `--commit-id` it runs
   the published commit, and an unpublished function exits `2`.
 - Code pushed with `functions create --file` or `functions update --file` is

@@ -32,19 +32,20 @@ var functionsInvokeCmd = &cobra.Command{
 error with "functions invocations get <invocation-id> --function-id <id>".
 
 Without --commit-id, c1i reads the function and runs its published commit; a
-function with nothing published exits 2 (the API itself requires a commit
-id). A --commit-id is checked first: one the function does not have exits 4,
+function with nothing published exits 2 (sent without a commit id, the API
+answers it with a 400, "commit_id is required"). A --commit-id is checked first: one the function does not have exits 4,
 since the server would otherwise accept it and leave the invocation running.
 Both reads also run on --dry-run.
 
 --input (or --input-file, "-" for stdin) is the handler's input and must be a
 JSON object; omit both to send none (a handler then receives {}).
 
-With --wait, c1i polls the invocation every 2s after printing the response:
-exit 0 once it succeeds; exit 1, naming the status and the function's error,
-if it ends in ERROR or CANCELLED. A non-zero exit after the error
-says "was applied" means the function ran and failed. Its output is in
-"functions invocations get".`,
+With --wait, c1i polls the invocation every 2s after printing the response and
+exits 0 once it succeeds. Any --wait failure exits 1 with an error saying the
+invoke "was applied", which means only that the invocation was started. A run
+that failed is the error naming "ended in FUNCTION_INVOCATION_STATUS_ERROR"
+(or CANCELLED) and the function's error; a timeout says it timed out and is
+not necessarily a failure. The run's output is in "functions invocations get".`,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		functionID := args[0]

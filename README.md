@@ -1286,8 +1286,10 @@ with `deletedAt` set, and a second delete exits `4`.
 when nothing is published; pass `--commit-id` to run another commit, which is
 checked first: one the function lacks exits `4`). `--input` must be a JSON
 object. It prints `{"invocationId": ...}`. With `--wait` it then polls until
-the run succeeds (exit `0`) or ends `ERROR`/`CANCELLED` (exit `1`); a non-zero
-exit whose error says "was applied" means the function ran and failed. Read
+the run succeeds (exit `0`). Any `--wait` failure exits `1` with an error
+saying the invoke "was applied", which only means the run was started: a failed
+run is the error naming `ended in FUNCTION_INVOCATION_STATUS_ERROR` (or
+`CANCELLED`), and a timeout says so and is not necessarily a failure. Read
 the input, output and error with `functions invocations get`.
 `functions invocations list` is newest first; a busy function can have tens of
 thousands of invocations, so pass `--limit`.
