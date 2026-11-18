@@ -46,9 +46,11 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `--resource-server-id` first, since the server stores an object under an
   unknown app or an unknown or deleted resource server: unknown exits `4`,
   deleted `2`. Updates read the object to fill the fields the server validates
-  on every update; the mask still decides what changes. `scopes update --state
-  removed` exits `2`. Scope bindings and client-audience mappings are not
-  covered yet.
+  on every update; the mask still decides what changes. A resource server's
+  `modifyClaimsHook` function and commit are looked up first (unknown exits
+  `4`). `scopes update --state removed` exits `2`. Scope bindings and
+  client-audience mappings are not covered yet.
+
 - `access-reviews templates get|create|update|delete <template-id>` and the
   template scope commands `scope get|set|set-excluded|set-by-resource-type`,
   `entitlements add|remove` and `excluded-entitlements add|remove`, shaped like
@@ -186,6 +188,9 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- `access-reviews templates update --body-file` treats a snake_case key
+  (`display_name`, `policy_id`) as set: the update no longer reads the
+  template and sends the camelCase field beside it.
 - `functions create|update --file` now refuses a path containing a control
   character, like every other file-valued flag (exit `2`, nothing sent).
 

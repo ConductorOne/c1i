@@ -2132,7 +2132,12 @@ c1i xaa access-profiles update <access-profile-id> --app-id <app-id> [--display-
   unset; the mask still decides what changes. A scope is approved with
   `scopes update --state enabled`; `--state removed` exits `2` (create refuses
   it server-side). The resource server's `modifyClaimsHook` and clearing a
-  field go through `--body-file` with `--update-mask`.
+  field go through `--body-file` with `--update-mask` (camelCase paths; the
+  server refused `*` and snake_case paths with exit `2`). A body key counts in
+  either spelling (`display_name` or `displayName`). A hook's `functionId`, and
+  `commitId` if given, are looked up first: unknown exits `4`, since the server
+  stores either. An update of a deleted scope or resource server exits `0` and
+  applies; `deletedAt` stays set.
 - `search --disabled=true` lists only disabled servers and `--disabled=false`
   only enabled ones; omit it for both. In the run checked, `--query` matched
   display names, not audiences, and a just-created server took a few seconds

@@ -305,3 +305,36 @@ func TestTemplateUpdateMaskedRequiredFieldNeedsBodyValue(t *testing.T) {
 		}
 	}
 }
+
+// TestTemplateUpdateMatchesSnakeCaseBodyKeys: the server reads display_name as
+// displayName, so a snake_case body key counts as set: no fill duplicates it,
+// and a mask naming it is not refused.
+func TestTemplateUpdateMatchesSnakeCaseBodyKeys(t *testing.T) {
+	t.Setenv("C1I_URL", mutTestURL)
+	cases := []struct {
+		name, file, mask, body string
+		reads                  int
+	}{
+		{"fill skips a snake_case key", `{"display_name":"n","description":"d"}`, "description",
+			`{"accessReviewTemplate":{"description":"d","display_name":"n","id":"t1","policyId":"pol0"},"updateMask":"description"}`, 1},
+		{"mask names a snake_case key the body sets", `{"display_name":"n","policy_id":"pol1"}`, "display_name",
+			`{"accessReviewTemplate":{"display_name":"n","id":"t1","policy_id":"pol1"},"updateMask":"display_name"}`, 0},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			s := newMutServer(t, templateRoute("POLICY_TYPE_CERTIFY"))
+			row := mutationRow{cmd: "access-reviews templates update", args: []string{"t1", "--body-file", "@" + tc.file, "--update-mask", tc.mask}}
+			r := runMutationCLI(t, s.srv, 0, nil, row.argv(t)...)
+			if r.err != nil {
+				t.Fatalf("exit %d: %v\n%s", r.exit, r.err, r.stderr)
+			}
+			w := writesOf(s)
+			if len(w) != 1 || len(s.requests()) != tc.reads+1 {
+				t.Fatalf("requests = %+v, want %d read(s) and one write", s.requests(), tc.reads)
+			}
+			if got := sortedJSON(t, w[0].body); got != tc.body {
+				t.Errorf("body\n got %s\nwant %s", got, tc.body)
+			}
+		})
+	}
+}

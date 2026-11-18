@@ -120,7 +120,7 @@ Prints the updated profile, unwrapped like "xaa access-profiles get".`,
 			return err
 		}
 		return sendMutation(cmd, mutation{Method: http.MethodPost, Path: xaaAccessProfiles.itemPath(appID, args[0]), Body: body, Unwrap: named("accessProfile")},
-			withPreRead(xaaAccessProfiles.xaaRequiredFill(appID, args[0], obj)))
+			withPreRead(xaaAccessProfiles.requiredFill(appID, args[0], obj)))
 	},
 }
 

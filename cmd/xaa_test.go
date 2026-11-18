@@ -135,20 +135,20 @@ func TestXAAUpdateUnknownIDExits4BeforeSend(t *testing.T) {
 }
 
 // TestXAAResourceServerBodyFileUpdate: a body that sets both validated fields
-// needs no read, and a mask naming one the body leaves out is refused.
+// needs no fill read, and a mask naming one the body leaves out is refused.
 func TestXAAResourceServerBodyFileUpdate(t *testing.T) {
 	t.Setenv("C1I_URL", mutTestURL)
 	clearViperOverrides(t, "dry_run")
 	base := []string{"xaa", "resource-servers", "update", "rs-1", "--app-id", "app-1"}
 
-	s := newMutServer(t, xaaRoute(nil, `{}`))
+	s := newMutServer(t, xaaRoute(map[string]string{"/functions/fn-1": `{"function":{"id":"fn-1"}}`}, `{}`))
 	full := `{"displayName":"n","normalizedAudience":"https://a.example.com","modifyClaimsHook":{"functionId":"fn-1"}}`
 	r := runMutationCLI(t, s.srv, 0, nil, append(base, "--body-file", writeTempFile(t, full), "--update-mask", "modifyClaimsHook")...)
 	if r.err != nil {
 		t.Fatalf("exit %d: %v\n%s", r.exit, r.err, r.stderr)
 	}
-	if sent := s.requests(); len(sent) != 1 || sent[0].method != http.MethodPost {
-		t.Errorf("requests = %+v, want the update alone", sent)
+	if sent := s.requests(); len(sent) != 2 || sent[0].rawPath != "/api/v1/functions/fn-1" || sent[1].method != http.MethodPost {
+		t.Errorf("requests = %+v, want the function lookup and the update, no fill read", sent)
 	}
 
 	s = newMutServer(t, xaaRoute(map[string]string{"/rs-1": xaaRSRead}, `{}`))
@@ -257,6 +257,82 @@ func TestXAAReadPaths(t *testing.T) {
 		}
 		if sent := s.requests(); len(sent) != 1 || sent[0].rawPath != tc.path {
 			t.Errorf("%v: requests %+v, want GET %s", tc.args, sent, tc.path)
+		}
+	}
+}
+
+// TestXAAUpdateMatchesSnakeCaseBodyKeys: a snake_case body key counts as set,
+// so the fill does not add its camelCase twin and a mask naming it is not
+// refused.
+func TestXAAUpdateMatchesSnakeCaseBodyKeys(t *testing.T) {
+	t.Setenv("C1I_URL", mutTestURL)
+	clearViperOverrides(t, "dry_run")
+	base := []string{"xaa", "resource-servers", "update", "rs-1", "--app-id", "app-1"}
+	cases := []struct {
+		name, file, mask, body string
+		reads                  int
+	}{
+		{"fill skips a snake_case key", `{"display_name":"n"}`, "description",
+			`{"resourceServer":{"display_name":"n","normalizedAudience":"https://a.example.com"},"updateMask":"description"}`, 1},
+		{"mask names a snake_case key the body sets", `{"display_name":"n","normalized_audience":"https://a.example.com"}`, "display_name",
+			`{"resourceServer":{"display_name":"n","normalized_audience":"https://a.example.com"},"updateMask":"display_name"}`, 0},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			s := newMutServer(t, xaaRoute(map[string]string{"/rs-1": xaaRSRead}, `{}`))
+			r := runMutationCLI(t, s.srv, 0, nil, append(base, "--body-file", writeTempFile(t, tc.file), "--update-mask", tc.mask)...)
+			if r.err != nil {
+				t.Fatalf("exit %d: %v\n%s", r.exit, r.err, r.stderr)
+			}
+			w := writes(s)
+			if len(w) != 1 || len(s.requests()) != tc.reads+1 {
+				t.Fatalf("requests = %+v, want %d read(s) and one write", s.requests(), tc.reads)
+			}
+			if got := sortedJSON(t, w[0].body); got != tc.body {
+				t.Errorf("body\n got %s\nwant %s", got, tc.body)
+			}
+		})
+	}
+}
+
+// TestXAAClaimsHookFunctionIsLookedUp: the server stores a hook naming an
+// unknown function or commit, so c1i looks both up first (exit 4, nothing
+// written, dry run included), in either spelling.
+func TestXAAClaimsHookFunctionIsLookedUp(t *testing.T) {
+	t.Setenv("C1I_URL", mutTestURL)
+	known := map[string]string{"/rs-1": xaaRSRead, "/apps/app-1": `{"app":{"id":"app-1"}}`, "/functions/fn-1": `{"function":{"id":"fn-1"}}`, "/functions/fn-1/commits/c-1": `{"commit":{"id":"c-1"}}`}
+	create := []string{"xaa", "resource-servers", "create", "--app-id", "app-1", "--body-file"}
+	update := []string{"xaa", "resource-servers", "update", "rs-1", "--app-id", "app-1", "--update-mask", "modifyClaimsHook", "--body-file"}
+	cases := []struct {
+		name string
+		args []string
+		file string
+		exit int
+		want string
+	}{
+		{"create unknown function", create, `{"displayName":"n","normalizedAudience":"https://a.example.com","modifyClaimsHook":{"functionId":"fn-x"}}`, exitNotFound, `modifyClaimsHook.functionId "fn-x": no such function`},
+		{"create snake_case unknown commit", create, `{"display_name":"n","normalized_audience":"https://a.example.com","modify_claims_hook":{"function_id":"fn-1","commit_id":"c-x"}}`, exitNotFound, `modifyClaimsHook.commitId "c-x": no such commit of function "fn-1"`},
+		{"update unknown function", update, `{"modifyClaimsHook":{"functionId":"fn-x"}}`, exitNotFound, `modifyClaimsHook.functionId "fn-x": no such function`},
+		{"update known function and commit", update, `{"modifyClaimsHook":{"functionId":"fn-1","commitId":"c-1"}}`, 0, ""},
+		{"update clears the hook", update, `{}`, 0, ""},
+	}
+	for _, tc := range cases {
+		for _, dry := range []bool{false, true} {
+			t.Run(tc.name, func(t *testing.T) {
+				clearViperOverrides(t, "dry_run")
+				s := newMutServer(t, xaaRoute(known, `{}`))
+				args := append(append([]string{}, tc.args...), writeTempFile(t, tc.file))
+				if dry {
+					args = append(args, "--dry-run")
+				}
+				r := runMutationCLI(t, s.srv, 0, nil, args...)
+				if r.exit != tc.exit || !strings.Contains(r.stderr, tc.want) {
+					t.Fatalf("dry=%v: exit %d stderr %q, want %d and %q", dry, r.exit, r.stderr, tc.exit, tc.want)
+				}
+				if w := writes(s); tc.exit != 0 && len(w) != 0 {
+					t.Errorf("dry=%v: sent %v", dry, w)
+				}
+			})
 		}
 	}
 }

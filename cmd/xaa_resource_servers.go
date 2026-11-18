@@ -117,7 +117,9 @@ scopeDiscoveryStatus in "xaa resource-servers get".
 
 For modifyClaimsHook (a tenant Function the API spec says runs before every
 grant is signed and can deny it), pass the whole request with --body-file
-instead of the field flags; it is sent verbatim.
+instead of the field flags; it is sent verbatim. Its functionId, and commitId
+if given, are looked up first: an unknown one exits 4 (the server would store
+it), --dry-run included.
 
 The app is looked up first: an unknown --app-id exits 4 (the server would
 store the server under it). --dry-run does the lookup too.
@@ -135,7 +137,7 @@ Example:
 		}
 		appID := xaaAppID(cmd)
 		return sendMutation(cmd, mutation{Method: http.MethodPost, Path: xaaResourceServers.collectionPath(appID), Body: body, Unwrap: named("resourceServer")},
-			withPreRead(xaaAppCheck(appID)))
+			withPreRead(xaaAppCheck(appID)), withPreRead(claimsHookCheck(body)))
 	},
 }
 
@@ -187,12 +189,16 @@ The audience is immutable: a mask naming it is refused by the server
 ("normalized_audience is immutable"). For modifyClaimsHook, or to clear a
 field (resourceUris, maxGrantLifetime, signingAlgorithm back to the tenant
 default), pass a resourceServer object via --body-file plus an explicit
---update-mask; a masked field the object leaves out is cleared.
+--update-mask; a masked field the object leaves out is cleared. Name mask
+paths in camelCase: the server refused a wildcard or snake_case path with 400
+(exit 2), "FieldMask.paths contains invalid path". A modifyClaimsHook
+functionId or commitId is looked up first; an unknown one exits 4.
 
 The server validates displayName and normalizedAudience on every update,
 whatever the mask names, so when the request leaves either unset c1i reads
 the server first and fills it in; the mask still decides what changes. That
 read makes an unknown id exit 4 before the update is sent, --dry-run included.
+An update of a deleted server exits 0 and applies; deletedAt stays set.
 
 Prints the updated server, unwrapped like "xaa resource-servers get".`,
 	Args: cobra.ExactArgs(1),
@@ -203,7 +209,7 @@ Prints the updated server, unwrapped like "xaa resource-servers get".`,
 			return err
 		}
 		return sendMutation(cmd, mutation{Method: http.MethodPost, Path: xaaResourceServers.itemPath(appID, args[0]), Body: body, Unwrap: named("resourceServer")},
-			withPreRead(xaaResourceServers.xaaRequiredFill(appID, args[0], obj)))
+			withPreRead(xaaResourceServers.requiredFill(appID, args[0], obj)), withPreRead(claimsHookCheck(obj)))
 	},
 }
 

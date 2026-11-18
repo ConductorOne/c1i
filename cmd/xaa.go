@@ -6,9 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"slices"
 	"strconv"
-	"strings"
 
 	"github.com/ConductorOne/c1i/internal/client"
 	"github.com/spf13/cobra"
@@ -38,7 +36,7 @@ type xaaKind struct {
 	listKey  string // List response key: "resourceServers"
 	row      listRowFn
 	// required are the object fields the server validates on every update,
-	// whatever the mask names; xaaRequiredFill copies them from a read.
+	// whatever the mask names; requiredFieldsFill copies them from a read.
 	required []string
 }
 
@@ -201,47 +199,44 @@ func xaaResourceServerCheck(appID, rsID string) preRead {
 	}}
 }
 
-// xaaRequiredFill copies k.required from the current object into obj where
-// the request leaves them unset: the server rejects an update without them,
-// even when the mask names none. The read also makes an unknown id exit 4
-// before the send, --dry-run included.
-func (k xaaKind) xaaRequiredFill(appID, id string, obj map[string]any) preRead {
+// claimsHookCheck refuses a modifyClaimsHook whose functionId, or commitId
+// under it, does not exist (exit 4): the server stores either, and the API
+// spec says the hook then denies every grant. It reads nothing when obj names
+// no function.
+func claimsHookCheck(obj map[string]any) preRead {
+	hookV, _ := bodyField(obj, "modifyClaimsHook")
+	hook, _ := hookV.(map[string]any)
+	fnV, _ := bodyField(hook, "functionId")
+	fnID, _ := fnV.(string)
+	commitV, _ := bodyField(hook, "commitId")
+	commitID, _ := commitV.(string)
 	return preRead{Run: func(ctx context.Context, c *client.Client, _ *mutation) ([]resolvedID, error) {
-		missing := slices.DeleteFunc(slices.Clone(k.required), func(key string) bool { _, set := obj[key]; return set })
-		if len(missing) == 0 {
+		if fnID == "" {
 			return nil, nil
 		}
-		data, err := c.Get(ctx, k.itemPath(appID, id), nil)
-		if err != nil {
-			return nil, fmt.Errorf("reading the %s before the update: %w", k.label, err)
-		}
-		var resp map[string]json.RawMessage
-		var cur map[string]any
-		if json.Unmarshal(data, &resp) != nil || json.Unmarshal(resp[k.envelope], &cur) != nil || cur == nil {
-			return nil, &nonJSONResponseError{fmt.Errorf("reading the %s before the update: the response held no %s", k.label, k.envelope)}
-		}
-		for _, key := range missing {
-			v, ok := cur[key].(string)
-			if !ok || v == "" {
-				return nil, &nonJSONResponseError{fmt.Errorf("reading the %s before the update: the response held no %s", k.label, key)}
+		check := func(path, label, id, what string) error {
+			if _, err := c.Get(ctx, path, nil); err != nil {
+				var apiErr *client.APIError
+				if errors.As(err, &apiErr) && apiErr.StatusCode == http.StatusNotFound {
+					return refNotFound(label, id, what, apiErr)
+				}
+				return fmt.Errorf("checking --%s %q: %w", label, id, err)
 			}
-			obj[key] = v
+			return nil
 		}
-		return nil, nil
+		if err := check(client.Path("/api/v1/functions/%s", fnID), "body-file modifyClaimsHook.functionId", fnID, "function"); err != nil {
+			return nil, err
+		}
+		if commitID == "" {
+			return nil, nil
+		}
+		return nil, check(client.Path("/api/v1/functions/%s/commits/%s", fnID, commitID), "body-file modifyClaimsHook.commitId", commitID, "commit of function "+strconv.Quote(fnID))
 	}}
 }
 
-// refuseMaskedRequiredWithoutValue refuses a mask that names a required field
-// the body does not set: the fill would send the current value, a silent no-op.
-func (k xaaKind) refuseMaskedRequiredWithoutValue(mask string, obj map[string]any) error {
-	for _, path := range strings.Split(mask, ",") {
-		for _, key := range k.required {
-			if _, set := obj[key]; !set && foldMaskName(path) == foldMaskName(key) {
-				return &usageError{fmt.Errorf("--update-mask names %s but --body-file sets no %s", path, key)}
-			}
-		}
-	}
-	return nil
+// requiredFill is requiredFieldsFill for one object of k.
+func (k xaaKind) requiredFill(appID, id string, obj map[string]any) preRead {
+	return requiredFieldsFill(k.itemPath(appID, id), k.envelope, k.label, k.required, obj)
 }
 
 // buildXAAUpdate returns the wrapped update request and the object inside it
@@ -258,7 +253,7 @@ func buildXAAUpdate(cmd *cobra.Command, k xaaKind, spec *updateSpec) (body, obj 
 			if obj, err = readJSONFile[map[string]any](cmd, "body-file", mustGetString(cmd, "body-file")); err != nil {
 				return nil, nil, err
 			}
-			if err := k.refuseMaskedRequiredWithoutValue(mask, obj); err != nil {
+			if err := refuseMaskedFieldWithoutValue(mask, obj, k.required); err != nil {
 				return nil, nil, err
 			}
 			return wrapUpdate(k.envelope, obj, mask), obj, nil

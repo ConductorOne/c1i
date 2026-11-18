@@ -988,12 +988,13 @@ resource with `--resource-id` likewise means you drop
   create --audience --display-name` (https, normalized, immutable, unique per
   tenant), plus `--description`, repeatable `--resource-uri`,
   `--max-grant-lifetime`, `--signing-algorithm`, `--require-proof-of-possession`,
-  `--disabled`; `modifyClaimsHook` only via `--body-file`. `scopes create
+  `--disabled`; `modifyClaimsHook` only via `--body-file` (its `functionId`
+  and `commitId` are looked up first; unknown exits 4). `scopes create
   --resource-server-id --scope-value --display-name`; approve with `scopes
   update --state enabled` (`--state removed` exits 2). Creates look up
   `--app-id`/`--resource-server-id` first (unknown exits 4, deleted 2) because
   the server stores either. Updates read the object to fill server-validated
-  fields. Deletes are soft and cascade from a resource server to its scopes,
+  fields; an update of a deleted object exits 0 and applies. Deletes are soft and cascade from a resource server to its scopes,
   profiles and their entitlements within seconds. `resource-servers search
   --disabled=false` means enabled only; omit for both. Scope bindings and
   client-audience mappings have no command yet (use `c1i api`).

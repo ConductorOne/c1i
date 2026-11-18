@@ -140,6 +140,7 @@ The server validates displayName, scopeValue and xaaResourceServerId on every
 update, whatever the mask names, so c1i reads the scope first and fills in
 the ones the request leaves unset; the mask still decides what changes. That
 read makes an unknown id exit 4 before the update is sent, --dry-run included.
+An update of a deleted scope exits 0 and applies; deletedAt stays set.
 
 Prints the updated scope, unwrapped like "xaa scopes get".`,
 	Args: cobra.ExactArgs(1),
@@ -153,7 +154,7 @@ Prints the updated scope, unwrapped like "xaa scopes get".`,
 			return err
 		}
 		return sendMutation(cmd, mutation{Method: http.MethodPost, Path: xaaScopes.itemPath(appID, args[0]), Body: body, Unwrap: named("scope")},
-			withPreRead(xaaScopes.xaaRequiredFill(appID, args[0], obj)))
+			withPreRead(xaaScopes.requiredFill(appID, args[0], obj)))
 	},
 }
 
