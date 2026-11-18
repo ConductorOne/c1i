@@ -360,6 +360,14 @@ var mutationTable = []mutationRow{
 	{cmd: "role-mining custom-analysis trigger", args: []string{"--body-file", "@{}"}, body: `{"id":"a1"}`, ids: idPath},
 	{cmd: "role-mining custom-analysis evaluate", args: []string{"a1", "--body-file", "@{}"}, body: `{"coverage":3}`},
 	{cmd: "role-mining access-profiles create", args: []string{"--body-file", "@{}"}, body: `{"accessProfileId":"ap1","celExpression":"true"}`, ids: []string{".accessProfileId"}},
+	// bridges
+	{cmd: "bridges create", args: []string{"--display-name", "zz"}, body: `{"bridge":{"id":"br-1","displayName":"zz","appliance":null}}`, want: `{"id":"br-1","displayName":"zz","appliance":null}`, ids: idPath, method: "POST", path: "/api/v1/iam/tunnel/bridges"},
+	{cmd: "bridges update", args: []string{"br-1", "--description", "d"}, body: `{"bridge":{"id":"br-1","description":"d"}}`, want: `{"id":"br-1","description":"d"}`, ids: idPath, method: "PATCH", path: "/api/v1/iam/tunnel/bridges/br-1"},
+	{cmd: "bridges delete", args: []string{"br-1"}, body: `{}`, method: "DELETE", path: "/api/v1/iam/tunnel/bridges/br-1"},
+	{cmd: "bridges credentials create", args: []string{"br-1"},
+		body: `{"credential":{"id":"word-slug-1","clientId":"cid","clientSecret":"s3","bridgeId":"br-1"}}`, want: `{"id":"word-slug-1","clientId":"cid","clientSecret":"s3","bridgeId":"br-1"}`,
+		ids: []string{".id", ".clientId", ".clientSecret"}, method: "POST", path: "/api/v1/iam/tunnel/bridges/br-1/credentials"},
+	{cmd: "bridges credentials revoke", args: []string{"word-slug-1"}, body: `{}`, method: "DELETE", path: "/api/v1/iam/tunnel/credentials/word-slug-1"},
 	// service-principals
 	{cmd: "service-principals create", args: []string{"--display-name", "zz"}, body: tblSP, want: tblSPDoc, ids: idPath, method: "POST", path: "/api/v1/service_principals"},
 	{cmd: "service-principals update", args: []string{"sp-1", "--display-name", "zz"}, body: tblSP, want: tblSPDoc, ids: idPath, method: "PATCH", path: "/api/v1/service_principals/sp-1"},

@@ -2619,6 +2619,33 @@ c1i service-principals bindings delete --service-principal-id <sp-id> --function
 `add` and `delete` are idempotent. `bindings list` and `delete` take the same
 subject flags as `add` (exactly one subject).
 
+### Tunnel bridges
+
+A tunnel bridge is the record a tunnel appliance authenticates against, with a
+client credential created on the bridge.
+
+```sh
+c1i bridges list [--page-size <n>] [--page-token <token>] [--limit <n>]
+c1i bridges get <bridge-id>
+c1i bridges create --display-name <name> [--description <text>]
+c1i bridges update <bridge-id> [--display-name <name>] [--description <text>]
+c1i bridges delete <bridge-id>
+c1i bridges services <bridge-id> [--limit <n>]
+c1i bridges credentials list <bridge-id>
+c1i bridges credentials create <bridge-id>
+c1i bridges credentials revoke <credential-id>
+```
+
+`create`, `update` and `credentials create` print the object unwrapped (`jq
+-er .id`); `delete` and `credentials revoke` print `{}`. `update --description
+""` clears the description. `credentials create` returns `.clientSecret` once;
+`credentials list` does not return it, and lists a revoked credential with
+`credential_status` `TUNNEL_CREDENTIAL_STATUS_REVOKED`. `services` lists what
+the bridge's appliance announces. An unknown bridge exits `4` on `get`,
+`update` and `credentials create`, but `delete` answers `{}` at exit `0`, and
+`services` and `credentials list` print nothing at exit `0`. A repeat `revoke`
+exits `0`; an unknown credential exits `4`.
+
 ### Workload federation
 
 Workload federation lets an external workload (a CI job, a SPIFFE workload)

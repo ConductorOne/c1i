@@ -805,6 +805,23 @@ func listPaginationCases() []listPaginationCase {
 			rowIDs:   idRows("id"),
 		},
 		{
+			name:     "bridges list",
+			cmd:      bridgesListCmd,
+			method:   http.MethodGet,
+			wantPath: "/api/v1/iam/tunnel/bridges",
+			page:     flatPage("list", "id"),
+			rowIDs:   idRows("id"),
+		},
+		{
+			name:     "bridges credentials list",
+			cmd:      bridgeCredentialsListCmd,
+			method:   http.MethodGet,
+			wantPath: "/api/v1/iam/tunnel/bridges/br1/credentials",
+			args:     []string{"br1"},
+			page:     flatPage("list", "id"),
+			rowIDs:   idRows("id"),
+		},
+		{
 			name:       "service-principals bindings list",
 			cmd:        spBindingsListCmd,
 			method:     http.MethodPost,

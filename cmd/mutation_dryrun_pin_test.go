@@ -47,6 +47,7 @@ var dryRunStubs = map[string][]string{
 	"c1i apps routing-rules update":                             {"x1", "--app-id=x1", "--description=d"},
 	"c1i attribute-mappings create":                             {"--body-file=@{}"},
 	"c1i attribute-mappings update":                             {"x1", "--key=k"},
+	"c1i bridges update":                                        {"x1", "--display-name=x1"},
 	"c1i export exporters update":                               {"x1", "--prefix=k"},
 	"c1i reports update":                                        {"x1", "--prompt=k"},
 	"c1i automations update":                                    {"x1", "--description=d"},

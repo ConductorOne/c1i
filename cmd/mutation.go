@@ -92,6 +92,7 @@ const (
 	secretAutomationWebhook
 	secretConnectorCredential
 	secretReportRun
+	secretBridgeCredential
 )
 
 type mutationOpts struct {
@@ -807,7 +808,7 @@ func jsonSyntaxErr(doc []byte) error {
 
 func secretWording(kind secretKind, doc []byte) string {
 	switch kind {
-	case secretSPCredential:
+	case secretSPCredential, secretBridgeCredential:
 		return "the clientSecret in this response cannot be retrieved again; revoke the credential and create a new one"
 	case secretConnectorCredential:
 		return "the clientSecret in this response cannot be retrieved again; run \"connectors credentials rotate\" again for a new one"
