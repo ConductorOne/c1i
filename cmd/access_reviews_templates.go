@@ -212,7 +212,7 @@ Prints the template unwrapped like "access-reviews templates get".
 		}
 		return sendMutation(cmd, mutation{Method: http.MethodPost, Path: templatePath(args[0]), Body: body},
 			withPreRead(templatePolicyCheck(policyLabel, policyID)),
-			withPreRead(requiredFieldsFill(templatePath(args[0]), "accessReviewTemplate", "template", templateRequiredFields, tpl)))
+			withPreRead(requiredFieldsFill(templatePath(args[0]), nil, "accessReviewTemplate", "template", templateRequiredFields, tpl)))
 	},
 }
 
