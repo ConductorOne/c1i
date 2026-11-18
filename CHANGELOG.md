@@ -15,10 +15,11 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   or a campaign's `accessReviewTemplateId`. `create` takes `--display-name`,
   `--policy-id` and repeatable `--owner-id` (plus `--description`,
   `--review-instructions`, `--scope-type`), or `--body-file`; owner and policy
-  ids are looked up first, so an unknown one exits `4` and a non-certify policy
-  exits `2` (the server stores either without complaint). `update` reads the
-  template first to fill the `displayName` and `policyId` the server demands on
-  every update; the mask still decides what changes.
+  ids are looked up first, so an unknown one exits `4`; a policy that is not a
+  certify policy exits `2`. The server alone stores either without complaint.
+  `update` reads the template to fill the `displayName` and `policyId` the
+  server demands on every update when the request leaves one unset; the mask
+  still decides what changes.
 
 - `attributes types|list|search|get|create|delete` for tenant attribute values
   (Compliance Framework, Risk Level), distinct from `attribute-types` and

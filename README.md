@@ -2128,9 +2128,14 @@ c1i access-reviews templates update <template-id> [--display-name <name>] [--des
   [--review-instructions <text>] [--policy-id <policy-id>] [--scope-type <type>]
 c1i access-reviews templates update <template-id> --body-file <file|-> --update-mask <paths>
 c1i access-reviews templates delete <template-id>
-c1i access-reviews templates scope get|set|set-excluded|set-by-resource-type <template-id> [--body-file <file|->]
-c1i access-reviews templates entitlements add|remove <template-id> --app-id <app-id> --entitlement-id <id>...
-c1i access-reviews templates excluded-entitlements add|remove <template-id> --app-id <app-id> --entitlement-id <id>...
+c1i access-reviews templates scope get <template-id>
+c1i access-reviews templates scope set <template-id> --body-file <file|->
+c1i access-reviews templates scope set-excluded <template-id> --body-file <file|->
+c1i access-reviews templates scope set-by-resource-type <template-id> --body-file <file|->
+c1i access-reviews templates entitlements add <template-id> --app-id <app-id> --entitlement-id <id>...
+c1i access-reviews templates entitlements remove <template-id> --app-id <app-id> --entitlement-id <id>...
+c1i access-reviews templates excluded-entitlements add <template-id> --app-id <app-id> --entitlement-id <id>...
+c1i access-reviews templates excluded-entitlements remove <template-id> --app-id <app-id> --entitlement-id <id>...
 ```
 
 The server requires a display name, a review policy and 1 to 10 owners. The
@@ -2138,15 +2143,17 @@ flags create a template with no scope and no schedule; schedule and recurrence
 fields (`isCampaignScheduleEnabled`, `autoStartCampaign`, `recurrenceRule`, ...)
 have no flags and go through `--body-file`, which is mutually exclusive with the
 other flags. Every owner id and the policy id, from flags or a body file, are
-looked up first: an unknown one exits `4`, and a deleted or non-certify policy
-exits `2`, before anything is sent, `--dry-run` included (the server stores an
-unknown owner id and a policy of any type without complaint).
+looked up first, before anything is sent, `--dry-run` included: an unknown one
+exits `4`. A policy that exists but is deleted or not a certify policy exits
+`2`. The server alone stores an unknown owner id and a policy of any type
+without complaint.
 
 `update` derives its mask from the flags; `--body-file` with `--update-mask`
 covers every other field. The server validates `displayName` and `policyId` on
-every update whatever the mask names, so `update` reads the template first and
-fills in either one the request leaves unset; the mask still decides what
-changes, and an unknown `<template-id>` exits `4`. `create` and `update` print
+every update whatever the mask names, so when the request leaves either unset,
+`update` reads the template first and fills it in (the mask still decides what
+changes); that read makes an unknown `<template-id>` exit `4`. A `policyId` is
+looked up only when the mask names it. `create` and `update` print
 the template unwrapped like `get` (`jq -er .id`).
 
 `delete` prints `{}`. The API says a deleted template "can no longer be used to
