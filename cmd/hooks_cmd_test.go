@@ -401,3 +401,22 @@ func TestHooksPriorityRangeIsChecked(t *testing.T) {
 		t.Errorf("priority 1000: %v", err)
 	}
 }
+
+// A --body-file priority is checked when the mask names it: create is
+// server-validated, update is not.
+func TestHooksBodyFilePriorityIsChecked(t *testing.T) {
+	withCatalogDryRun(t, false)
+	srv, _ := webhooksServer(t, hookEnvelope)
+	stubCatalogClient(t, srv)
+	for _, v := range []string{"-1", "1001"} {
+		file := writeTempFile(t, `{"priority":`+v+`,"displayName":"zz"}`)
+		_, err := runPairs(t, srv, hooksUpdateCmd, []string{"hk-1"}, "body-file", file, "update-mask", "priority")
+		if err == nil || !strings.Contains(err.Error(), "--body-file priority must be between 0 and 1000") {
+			t.Errorf("priority %s: err %v", v, err)
+		}
+	}
+	file := writeTempFile(t, `{"priority":5000,"displayName":"zz"}`)
+	if _, err := runPairs(t, srv, hooksUpdateCmd, []string{"hk-1"}, "body-file", file, "update-mask", "displayName"); err != nil {
+		t.Errorf("priority outside the mask: %v", err)
+	}
+}

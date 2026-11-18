@@ -214,9 +214,10 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   already promised; the server had stored the object anyway.
 - `xaa resource-servers create|update --signing-algorithm` reports that flag on
   an invalid value, not the settings command's `--default-signing-algorithm`.
-- Access-review setup commands refuse a soft-deleted referenced entitlement or
-  resource type (exit `2`) instead of approving it under `--dry-run` and
-  taking the server's `400`.
+- Commands that look a referenced entitlement or resource type up before a
+  write (access-review setup, entitlement automation) refuse a soft-deleted
+  one (exit `2`) instead of approving it under `--dry-run` and taking the
+  server's `400`.
 - `--dry-run` previews no longer mask an email-shaped value (a display name,
   `--security-email`); URL-shaped strings are still masked.
 - `hooks create|update --priority` is checked against `0`-`1000` before

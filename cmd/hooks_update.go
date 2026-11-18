@@ -18,7 +18,9 @@ built-in pattern or JSON patch config is edited with --body-file and
 --update-mask (the Hook object, and the paths it changes).
 
 Refused with exit 2 before a request is sent: no field flag at all, a blank
---display-name, and --clear-filter with --filter-cel.
+--display-name, --clear-filter with --filter-cel, and a --body-file priority
+outside 0-1000 when the mask names priority (create is server-validated,
+update is not).
 
 The server leaves a field alone when its path is not in the mask, and accepts
 an unknown mask path at exit 0 without changing anything. Updating a deleted
@@ -26,33 +28,38 @@ hook changes it (exit 0); it stays out of "hooks list". Prints the hook,
 unwrapped like "hooks get": the id is .id. Honors --dry-run.`,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		body, err := buildHookUpdateBody(cmd, args[0])
+		body, mask, err := buildHookUpdateBody(cmd, args[0])
 		if err != nil {
 			return err
+		}
+		if hook, ok := body["hook"].(map[string]any); ok {
+			if err := checkHookPriorityValue(mask, hook); err != nil {
+				return err
+			}
 		}
 		return sendMutation(cmd, mutation{Method: http.MethodPost, Path: hookPath(args[0]), Body: body}, hookFunctionPreRead(cmd)...)
 	},
 }
 
-func buildHookUpdateBody(cmd *cobra.Command, id string) (map[string]any, error) {
+func buildHookUpdateBody(cmd *cobra.Command, id string) (map[string]any, string, error) {
 	mask, usingBody, err := bodyFileMask(cmd, hookUpdateFields.flagNames()...)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 	var hook map[string]any
 	if usingBody {
 		path, _ := cmd.Flags().GetString("body-file")
 		if hook, err = readJSONFile[map[string]any](cmd, "body-file", path); err != nil {
-			return nil, err
+			return nil, "", err
 		}
 	} else {
 		hook = map[string]any{}
 		if mask, err = hookUpdateFields.buildUpdateMask(cmd, hook); err != nil {
-			return nil, err
+			return nil, "", err
 		}
 	}
 	hook["id"] = id
-	return wrapUpdate("hook", hook, mask), nil
+	return wrapUpdate("hook", hook, mask), mask, nil
 }
 
 func init() {

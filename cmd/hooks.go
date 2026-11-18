@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"strings"
 
 	"github.com/ConductorOne/c1i/internal/client"
 	"github.com/spf13/cobra"
@@ -180,6 +181,40 @@ func requireHookRef(ctx context.Context, c *client.Client, path, flag, id, what 
 			return refNotFound(flag, id, what, apiErr)
 		}
 		return fmt.Errorf("checking --%s %q: %w", flag, id, err)
+	}
+	return nil
+}
+
+// checkHookPriorityValue refuses an out-of-range priority in a --body-file
+// when the mask names it: Update does not validate it, so the server stores it.
+func checkHookPriorityValue(mask string, hook map[string]any) error {
+	named := false
+	for _, path := range strings.Split(mask, ",") {
+		if foldMaskName(path) == foldMaskName("priority") {
+			named = true
+		}
+	}
+	if !named {
+		return nil
+	}
+	v, ok := hook["priority"]
+	if !ok {
+		return nil
+	}
+	var n int64
+	switch x := v.(type) {
+	case float64:
+		n = int64(x)
+		if float64(n) != x {
+			return &usageError{fmt.Errorf("--body-file priority must be a whole number (got %v)", x)}
+		}
+	case int:
+		n = int64(x)
+	default:
+		return &usageError{fmt.Errorf("--body-file priority must be a number")}
+	}
+	if n < 0 || n > 1000 {
+		return &usageError{fmt.Errorf("--body-file priority must be between 0 and 1000 (got %d)", n)}
 	}
 	return nil
 }

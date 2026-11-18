@@ -127,7 +127,9 @@ func URLValue(s string) string {
 	if bareCredentialPathRE.MatchString(s) || bareUserinfoRE.MatchString(s) {
 		return urlText(s)
 	}
-	return s
+	// Not a URL, but a bare host/path can still carry secret-named query or
+	// ";" parameters, which stay masked.
+	return maskEncodedValues(maskSecretPairs(s), maxEscapeLevels)
 }
 
 // maskedUser keeps only the conventional non-secret "git" user.
