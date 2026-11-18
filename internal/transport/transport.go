@@ -399,7 +399,8 @@ func retrySafe(method, path string) bool {
 // read-only, per the spec: SystemLogService.ListEvents (systemlog/events),
 // TaskAudit.List (task/audits), RoleMiningManagementService.SearchCohortUsers
 // (role-mining/suggestions/{id}/users) and ExportService.ListEvents
-// (systemlog/exports/{id}/events).
+// (systemlog/exports/{id}/events), and the two POST reads under
+// apps/{id}/connectors/{id}/sync_diagnostics (change_timeline, compare_stats).
 func ReadOnlyPOST(path string) bool {
 	if !strings.HasPrefix(path, "/api/v1/") {
 		return false
@@ -416,7 +417,22 @@ func ReadOnlyPOST(path string) bool {
 		id, tail, _ := strings.Cut(rest, "/")
 		return id != "" && tail == "events"
 	}
-	return false
+	return isSyncDiagnosticsRead(path)
+}
+
+// isSyncDiagnosticsRead matches POST /api/v1/apps/{app}/connectors/{connector}/
+// sync_diagnostics/{change_timeline|compare_stats}: both only read, and the
+// ids are single non-empty segments.
+func isSyncDiagnosticsRead(path string) bool {
+	rest, ok := strings.CutPrefix(path, "/api/v1/apps/")
+	if !ok {
+		return false
+	}
+	parts := strings.Split(rest, "/")
+	if len(parts) != 5 || parts[0] == "" || parts[1] != "connectors" || parts[2] == "" || parts[3] != "sync_diagnostics" {
+		return false
+	}
+	return parts[4] == "change_timeline" || parts[4] == "compare_stats"
 }
 
 // isRetryableStatus reports whether a response status warrants a retry for the
