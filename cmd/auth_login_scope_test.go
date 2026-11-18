@@ -1182,3 +1182,37 @@ func TestOfferSaveURLWarnsOnUnparseableConfig(t *testing.T) {
 		t.Errorf("config = %q, want it unchanged", b)
 	}
 }
+
+// The device flow's user code and URL come from the server and are printed to
+// the terminal. url.Parse refuses ASCII controls in the URL, but bidi and C1
+// characters pass, so both values must print escaped.
+func TestLoginDeviceFlowEscapesServerText(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Path {
+		case "/auth/v1/device_authorization":
+			_, _ = fmt.Fprint(w, `{"device_code":"dc","user_code":"AB\u001b[2JCD","verification_uri_complete":"https://example.invalid/v\u202eerify","expires_in":60,"interval":1}`)
+		default:
+			w.WriteHeader(http.StatusBadRequest)
+			_, _ = fmt.Fprint(w, `{"error":"access_denied"}`)
+		}
+	}))
+	t.Cleanup(srv.Close)
+	origOpen := openBrowser
+	openBrowser = func(string) error { return nil }
+	t.Cleanup(func() { openBrowser = origOpen })
+
+	var out bytes.Buffer
+	authLoginCmd.SetOut(&out)
+	authLoginCmd.SetErr(io.Discard)
+	t.Cleanup(func() { authLoginCmd.SetOut(nil); authLoginCmd.SetErr(nil) })
+	freshContext(t)
+	_, _ = loginWithBrowser(authLoginCmd, scannerOf(""), srv.URL, loginScope{})
+	got := out.String()
+	if !strings.Contains(got, `AB\x1b[2JCD`) || !strings.Contains(got, `/v\u202eerify`) {
+		t.Errorf("device-flow text not escaped: %q", got)
+	}
+	if strings.ContainsAny(got, "\x1b\x07\u202e") {
+		t.Errorf("raw control byte on stdout: %q", got)
+	}
+}

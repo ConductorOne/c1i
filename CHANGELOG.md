@@ -113,6 +113,8 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Security
 
+- `auth login` prints the device-flow user code and verification URL from the
+  server with control characters escaped, as stderr already does.
 - Text-mode stderr (errors, notices, `--wait` progress, the `--debug`
   trace) prints control characters and invalid UTF-8 bytes from
   server-supplied text as visible escapes (`\x1b`, `\u202e`) instead of
