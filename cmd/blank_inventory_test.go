@@ -107,6 +107,8 @@ var wantEmptyAllowed = map[string]string{
 	"c1i mcp servers update-credentials --transport":            emptyIsOmitted,
 	"c1i mcp servers update-credentials --update-mask":          emptyIsOmitted,
 	"c1i mcp tools approve --state":                             emptyIsOmitted,
+	"c1i mcp prompts approve --state":                           emptyIsOmitted,
+	"c1i mcp resources approve --state":                         emptyIsOmitted,
 	"c1i mcp toolsets create --description":                     emptyIsOmitted,
 	"c1i mcp toolsets update --description":                     emptyIsSent,
 	"c1i automations create --description":                      emptyIsOmitted,

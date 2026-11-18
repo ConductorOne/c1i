@@ -19,6 +19,9 @@ type mcpItemKind struct {
 	state    enumFlag
 	// removedAdvice follows "--state=removed is system-managed by sync; ".
 	removedAdvice string
+	// historyMax is history's --page-size ceiling, raised above maxPageSize
+	// only where measured live (historyPageSizeCommands).
+	historyMax int
 }
 
 func (k mcpItemKind) itemPath(appID, connectorID, id string) string {
@@ -133,7 +136,7 @@ func (k mcpItemKind) approveCmd(short, long string) *cobra.Command {
 func (k mcpItemKind) registerGet(parent, c *cobra.Command) { k.attach(parent, c) }
 
 func (k mcpItemKind) registerHistory(parent, c *cobra.Command) {
-	addPaginationFlagsWithMax(c, defaultPageSize, maxHistoryPageSize)
+	addPaginationFlagsWithMax(c, defaultPageSize, k.historyMax)
 	k.attach(parent, c)
 }
 

@@ -14,7 +14,7 @@ func init() {
 }
 
 var toolItems = mcpItemKind{
-	noun: "tool", segment: "mcp_tools", envelope: "tool", state: toolStateFlag,
+	noun: "tool", segment: "mcp_tools", envelope: "tool", state: toolStateFlag, historyMax: maxHistoryPageSize,
 	removedAdvice: `use "mcp tools delete" to soft-delete a tool, or --state=disabled to block it`,
 }
 

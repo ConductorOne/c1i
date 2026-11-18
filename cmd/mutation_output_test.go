@@ -64,7 +64,9 @@ var outOfScopeSelectors = map[string]string{
 // batchCommands maps each command calling sendMutationBatch to the id key
 // every output line carries.
 var batchCommands = map[string]string{
-	"c1i mcp tools approve": "id",
+	"c1i mcp tools approve":     "id",
+	"c1i mcp prompts approve":   "id",
+	"c1i mcp resources approve": "id",
 }
 
 // nonMutatingOutputModes are declarations a mutating command reaches that
