@@ -261,6 +261,7 @@ Output and error text:
 
 ### Changed
 
+- docs clarify that a `--dry-run` preview does not check that an id exists
 - **Task actions that look up the current policy step** (`approve`, `deny`,
   `reassign`, `restart`, `skip-step`, `escalate`, `retry-provisioning`) send
   the task id that lookup returns, so the numeric id `tasks get` accepts works

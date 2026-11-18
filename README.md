@@ -48,8 +48,9 @@ Use this workflow for agent-driven and scripted operations:
    it needs no authentication.
 2. Pass `--url https://<tenant>` on every C1 command, then authenticate and run
    `c1i auth whoami` before doing anything else.
-3. Run every intended C1 REST write with `--dry-run` first. Gateway tool calls
-   reject it and are always live.
+3. Run every intended C1 REST write with `--dry-run` first (it does not prove
+   an id exists; see [Dry run](#dry-run)). Gateway tool calls reject it and are
+   always live.
 4. Prefer a first-class command. Use `c1i api` only when no command covers the
    public REST endpoint.
 
@@ -366,6 +367,8 @@ best-effort suffix rule), header values, a URL's username (except `git`) and pas
 secret-named URL parameters. Everything else is shown as sent, and a body that
 is not JSON prints as `"[redacted: not JSON]"`. A 0.9.2 preview showed them as
 typed.
+
+A preview checks the input shape and runs the pre-reads a command documents. An exit-0 preview does not prove an id exists: a command with no pre-read sends no `GET`, so an unknown id previews at exit `0` and exits `4` for real. To confirm an id exists, read it (`<family> get <id>`).
 
 It applies to every REST write command and to non-GET `api` calls, and never
 sends that mutation. `mcp gateway call` rejects both `--dry-run` and
