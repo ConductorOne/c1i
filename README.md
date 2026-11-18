@@ -2632,7 +2632,7 @@ c1i bridges create --display-name <name> [--description <text>]
 c1i bridges update <bridge-id> [--display-name <name>] [--description <text>]
 c1i bridges delete <bridge-id>
 c1i bridges services <bridge-id> [--limit <n>]
-c1i bridges credentials list <bridge-id>
+c1i bridges credentials list <bridge-id> [--page-size <n>] [--page-token <token>] [--limit <n>]
 c1i bridges credentials create <bridge-id>
 c1i bridges credentials revoke <credential-id>
 ```
