@@ -135,19 +135,7 @@ entitlements (list), the scope, excludedEntitlements and excludedResourceTypes.
 The response is not paginated.`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			baseURL, err := GetBaseURL()
-			if err != nil {
-				return err
-			}
-			c, err := newClient(cmd, baseURL)
-			if err != nil {
-				return fmt.Errorf("authentication failed: %w", err)
-			}
-			data, err := c.Get(cmd.Context(), o.path(args[0], "/scope_and_entitlements"), nil)
-			if err != nil {
-				return fmt.Errorf("API error: %w", err)
-			}
-			return writeResource(cmd, data, o.scopeKey)
+			return getResource(cmd, o.path(args[0], "/scope_and_entitlements"), nil, o.scopeKey)
 		},
 	}
 }

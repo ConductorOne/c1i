@@ -668,7 +668,7 @@ func writesToParam(fd *ast.FuncDecl, i int, ix *srcIndex, trusted func(*ast.Func
 
 func untrusted(*ast.FuncDecl) bool { return false }
 
-var outputFuncs = map[string]bool{"writeObject": true, "writeResource": true, "writeNamedResource": true, "writeRawObject": true, "newEmitter": true, "printDryRun": true}
+var outputFuncs = map[string]bool{"writeObject": true, "writeResource": true, "writeOptionalResource": true, "writeOptionalNamedResource": true, "writeRawObject": true, "newEmitter": true, "printDryRun": true}
 
 // forbiddenCall reports a §5.2 output form in call, and in modeDirect a
 // read too. An exempt declaration (nonMutatingOutputModes) may write stdout.

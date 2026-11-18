@@ -87,7 +87,7 @@ marks it revoked. "service-principals credentials list" omits it.`,
 		if err != nil {
 			return fmt.Errorf("API error: %w", err)
 		}
-		return writeResource(cmd, data, "id")
+		return writeResource(cmd, data, "id", "credential")
 	},
 }
 

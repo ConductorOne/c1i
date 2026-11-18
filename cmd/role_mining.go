@@ -1,7 +1,6 @@
 package cmd
 
 import (
-	"fmt"
 	"net/http"
 
 	"github.com/ConductorOne/c1i/internal/client"
@@ -57,7 +56,7 @@ var roleMiningSuggestionsGetCmd = &cobra.Command{
 	Short: "Get a role mining suggestion (pretty JSON)",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		return getRoleMiningResource(cmd, client.Path("/api/v1/role-mining/suggestions/%s", args[0]), "id")
+		return getResource(cmd, client.Path("/api/v1/role-mining/suggestions/%s", args[0]), nil, "id", "suggestion")
 	},
 }
 var roleMiningSuggestionsStateCmd = &cobra.Command{
@@ -91,7 +90,7 @@ var roleMiningConfigShowCmd = &cobra.Command{
 	Short: "Show role mining configuration (pretty JSON)",
 	Args:  cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, _ []string) error {
-		return getRoleMiningNamed(cmd, "/api/v1/role-mining/config", "config")
+		return getSingleton(cmd, "/api/v1/role-mining/config", "config")
 	},
 }
 var roleMiningConfigUpdateCmd = &cobra.Command{
@@ -121,7 +120,7 @@ var roleMiningRunsLatestCmd = &cobra.Command{
 	Short: "Get the latest role mining analysis run (pretty JSON)",
 	Args:  cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, _ []string) error {
-		return getRoleMiningResource(cmd, "/api/v1/role-mining/runs/latest", "id")
+		return getAndWrite(cmd, "/api/v1/role-mining/runs/latest", nil, func(data []byte) error { return writeOptionalResource(cmd, data, "id") })
 	},
 }
 
@@ -139,7 +138,7 @@ var roleMiningCustomAnalysisLatestCmd = &cobra.Command{
 	Short: "Get the latest personal custom analysis (pretty JSON)",
 	Args:  cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, _ []string) error {
-		return getRoleMiningResource(cmd, "/api/v1/role-mining/custom-analysis/latest", "id")
+		return getAndWrite(cmd, "/api/v1/role-mining/custom-analysis/latest", nil, func(data []byte) error { return writeOptionalResource(cmd, data, "id") })
 	},
 }
 var roleMiningCustomAnalysisGetCmd = &cobra.Command{
@@ -147,7 +146,7 @@ var roleMiningCustomAnalysisGetCmd = &cobra.Command{
 	Short: "Get a custom analysis result (pretty JSON)",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		return getRoleMiningResource(cmd, client.Path("/api/v1/role-mining/custom-analysis/%s", args[0]), "id")
+		return getResource(cmd, client.Path("/api/v1/role-mining/custom-analysis/%s", args[0]), nil, "id")
 	},
 }
 var roleMiningCustomAnalysisTriggerCmd = &cobra.Command{
@@ -187,30 +186,6 @@ var roleMiningAccessProfilesCreateCmd = &cobra.Command{
 		}
 		return sendMutation(cmd, mutation{Method: http.MethodPost, Path: "/api/v1/role-mining/access-profiles", Body: body})
 	},
-}
-
-func getRoleMiningResource(cmd *cobra.Command, path, key string) error {
-	return getRoleMining(cmd, path, func(data []byte) error { return writeResource(cmd, data, key) })
-}
-
-func getRoleMiningNamed(cmd *cobra.Command, path, key string) error {
-	return getRoleMining(cmd, path, func(data []byte) error { return writeNamedResource(cmd, data, key) })
-}
-
-func getRoleMining(cmd *cobra.Command, path string, write func([]byte) error) error {
-	baseURL, err := GetBaseURL()
-	if err != nil {
-		return err
-	}
-	c, err := newClient(cmd, baseURL)
-	if err != nil {
-		return fmt.Errorf("authentication failed: %w", err)
-	}
-	data, err := c.Get(cmd.Context(), path, nil)
-	if err != nil {
-		return fmt.Errorf("API error: %w", err)
-	}
-	return write(data)
 }
 
 func roleMiningSuggestionRow(item map[string]any) map[string]any {

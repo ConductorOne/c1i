@@ -31,7 +31,7 @@ deleted (2).`,
 		if err != nil {
 			return fmt.Errorf("API error: %w", err)
 		}
-		return writeNamedResource(cmd, data, "routingRule")
+		return writeResource(cmd, data, "id", "routingRule")
 	},
 }
 

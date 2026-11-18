@@ -31,7 +31,7 @@ func settingsUpdateSpec(fields ...updateField) *updateSpec {
 // newSettingsShowCmd reads a singleton at path and prints its key unwrapped.
 func newSettingsShowCmd(short, long, path, key string) *cobra.Command {
 	return &cobra.Command{Use: "show", Short: short, Long: long, RunE: func(cmd *cobra.Command, _ []string) error {
-		return getClassifierResource(cmd, path, key)
+		return getSingleton(cmd, path, key)
 	}}
 }
 

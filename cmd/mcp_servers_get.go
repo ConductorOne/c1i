@@ -38,7 +38,7 @@ emit as connector_id. So read "jq -r .connectorId" here, not ".id".`,
 			return fmt.Errorf("API error: %w", err)
 		}
 
-		return writeResource(cmd, data, "connectorId")
+		return writeResource(cmd, data, "connectorId", "mcpServer")
 	},
 }
 

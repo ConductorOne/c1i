@@ -43,7 +43,7 @@ set .expiresTime to a time in the past and left .deletedAt null.`,
 			if err := requireCredentialScope(cmd, data); err != nil {
 				return err
 			}
-			return writeResource(cmd, data, "id")
+			return writeResource(cmd, data, "id", "credential")
 		})
 	},
 }

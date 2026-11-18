@@ -32,7 +32,7 @@ var usersGetCmd = &cobra.Command{
 			return fmt.Errorf("API error: %w", err)
 		}
 
-		return writeResource(cmd, data, "id")
+		return writeResource(cmd, data, "id", "userView", "user")
 	},
 }
 

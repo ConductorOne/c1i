@@ -36,7 +36,7 @@ func runTaskGet(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("API error: %w", err)
 	}
 
-	return writeResource(cmd, data, "id")
+	return writeResource(cmd, data, "id", "taskView", "task")
 }
 
 func init() {

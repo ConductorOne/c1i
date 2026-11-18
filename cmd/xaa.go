@@ -86,7 +86,7 @@ func (k xaaKind) getCmd(short, long string) *cobra.Command {
 		Long:  long,
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return getNamedObject(cmd, k.itemPath(xaaAppID(cmd), args[0]), nil, k.envelope)
+			return getResource(cmd, k.itemPath(xaaAppID(cmd), args[0]), nil, "id", k.envelope)
 		},
 	}
 	addXAAAppFlag(c)

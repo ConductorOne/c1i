@@ -1,7 +1,6 @@
 package cmd
 
 import (
-	"fmt"
 	"net/http"
 
 	"github.com/ConductorOne/c1i/internal/client"
@@ -30,19 +29,7 @@ var entitlementsProxyBindingsGetCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		baseURL, err := GetBaseURL()
-		if err != nil {
-			return err
-		}
-		c, err := newClient(cmd, baseURL)
-		if err != nil {
-			return fmt.Errorf("authentication failed: %w", err)
-		}
-		data, err := c.Get(cmd.Context(), path, nil)
-		if err != nil {
-			return fmt.Errorf("API error: %w", err)
-		}
-		return writeResource(cmd, data, "srcAppId")
+		return getResource(cmd, path, nil, "srcAppId", "appProxyEntitlementView", "appProxyEntitlement")
 	},
 }
 

@@ -393,6 +393,17 @@ tracked root file outside its allowlist. Stage explicit paths rather than `-A`.
   to a subcommand — it silently disables the list-side check for that whole
   subtree (`TestNoSubcommandDefinesOwnPersistentPreRunE`,
   `...PostRunE`).
+- **A `get` refuses a `200` without its object (enforced convention):** a
+  get declares where its resource sits, `writeResource(cmd, data, idKey,
+  path...)` or `getResource(cmd, url, query, idKey, path...)`
+  (`cmd/unwrap.go`), and `resourceAt` both unwraps it and exits 6
+  (`nonJSONResponseError`) unless every path segment is an object and `idKey`
+  is non-null and, if a string, non-empty. An id elsewhere in the response
+  does not count. The `writeOptional*`/`getSingleton` variants skip the check,
+  only for a read whose object may be absent (a singleton, a `latest`, an
+  app's unset usage controls); `TestOptionalReadCallersArePinned` pins each
+  caller with its reason. `TestGetRefusesMissingObject` drives every get in
+  `getUnwrapCases` with the missing-object bodies.
 - **Row values keep their real JSON types.** A row is `map[string]any`: put
   `bool` and numeric values in as-is, never `strconv.FormatBool`/`Itoa`. NDJSON
   exists here so agents can pipe to `jq`, and stringifying breaks that
@@ -426,7 +437,7 @@ tracked root file outside its allowlist. Stage explicit paths rather than `-A`.
   | `3` | auth (`401`/`403`) |
   | `4` | not-found (`404`), or a referenced id that does not exist, whether the server or a client pre-check catches it |
   | `5` | rate-limited (`429`) |
-  | `6` | C1 failed (API `5xx`, a redirect loop, a `200` with a non-JSON body, a stuck pagination cursor, or a list page in a shape the command doesn't recognize) |
+  | `6` | C1 failed (API `5xx`, a redirect loop, a `200` with a non-JSON body, a stuck pagination cursor, a list page in a shape the command doesn't recognize, or a `get` answered `200` without the object it reads) |
   | `7` | tool-execution error (`mcp gateway call` result has `isError: true`) |
   | `8` | a system beyond C1 or the protocol layer failed (an unreachable gateway, an upstream connector failure, an EXTERNAL MCP server `test-connection` reports unreachable, or a protocol-level JSON-RPC error) |
 

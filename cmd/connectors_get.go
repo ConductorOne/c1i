@@ -23,7 +23,7 @@ returns it.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		appID, _ := cmd.Flags().GetString("app-id")
 		return getConnectorResource(cmd, connectorPath(appID, args[0]), func(data []byte) error {
-			return writeResource(cmd, data, "id")
+			return writeResource(cmd, data, "id", "connectorView", "connector")
 		})
 	},
 }
@@ -40,7 +40,7 @@ Output is the API's "status" object itself.`,
 		appID, _ := cmd.Flags().GetString("app-id")
 		path := connectorPath(appID, args[0]) + "/sync_diagnostics/status"
 		return getConnectorResource(cmd, path, func(data []byte) error {
-			return writeNamedResource(cmd, data, "status")
+			return writeOptionalNamedResource(cmd, data, "status")
 		})
 	},
 }

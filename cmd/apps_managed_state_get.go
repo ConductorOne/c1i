@@ -33,7 +33,7 @@ An unknown app, resource type or resource id exits 4.`,
 			return fmt.Errorf("API error: %w", err)
 		}
 
-		return writeResource(cmd, data, "resourceId")
+		return writeResource(cmd, data, "resourceId", "appManagementState", "appManagementStateBinding")
 	},
 }
 

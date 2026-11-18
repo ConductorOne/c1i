@@ -29,7 +29,7 @@ An unknown app or resource type exits 4.`,
 		if err != nil {
 			return fmt.Errorf("API error: %w", err)
 		}
-		return writeResource(cmd, data, "id")
+		return writeResource(cmd, data, "id", "appResourceTypeView", "appResourceType")
 	},
 }
 
