@@ -396,15 +396,15 @@ func retrySafe(method, path string) bool {
 // ReadOnlyPOST reports whether a POST to path only reads: every route in the
 // C1 API spec at /api/v1/search/*, .../search or .../list is a
 // Search/List/Count/Get RPC whose POST just carries the filter body. Also
-// read-only, per the spec: SystemLogService.ListEvents (systemlog/events) and
-// RoleMiningManagementService.SearchCohortUsers
+// read-only, per the spec: SystemLogService.ListEvents (systemlog/events),
+// TaskAudit.List (task/audits) and RoleMiningManagementService.SearchCohortUsers
 // (role-mining/suggestions/{id}/users).
 func ReadOnlyPOST(path string) bool {
 	if !strings.HasPrefix(path, "/api/v1/") {
 		return false
 	}
 	last := path[strings.LastIndex(path, "/")+1:]
-	if strings.HasPrefix(path, "/api/v1/search/") || last == "search" || last == "list" || path == "/api/v1/systemlog/events" {
+	if strings.HasPrefix(path, "/api/v1/search/") || last == "search" || last == "list" || path == "/api/v1/systemlog/events" || path == "/api/v1/task/audits" {
 		return true
 	}
 	if rest, ok := strings.CutPrefix(path, "/api/v1/role-mining/suggestions/"); ok {

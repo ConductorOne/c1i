@@ -8,6 +8,24 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- `tasks escalate|retry-provisioning <task-id>` (current policy step resolved
+  like `approve`) and `tasks update-request-data <task-id> --data-file`, which
+  the API describes as submitting the request form of a task at a form step.
+  Only `escalate` was seen to succeed; the server refused the others with
+  `action not permitted` (exit `2`) on the tasks tried, and rejects data that
+  does not fit the form with a schema error.
+- Task actions that look up the current policy step (`approve`, `deny`,
+  `reassign`, `restart`, `skip-step`, `escalate`, `retry-provisioning`) now
+  send the task id that lookup returns, so the numeric id `tasks get` accepts
+  works for them too.
+- `tasks audits <task-id>` streams a task's audit trail as raw NDJSON events
+  (`--comments-only`, `--exclude-comments`, `--newest-first`). The task is read
+  first: the audit endpoint answers an unknown task with an empty list, so c1i
+  exits `4`; that read also lets a numeric task id work. A `5xx` on this read is now retried like other list reads.
+- `requests create action` and `requests create resource-action` (`--action-id`,
+  `--form-values-file`; `action` also `--description`, `--group-only`). No API
+  route lists these actions; an unknown id exits `4` (`action not found`).
+
 - `apps search` filters applications server-side (`POST /api/v1/search/apps`)
   by `--query` (fuzzy on name and description), `--display-name`, repeatable
   `--app-id` / `--exclude-app-id` / `--policy-id`, and `--only-directories`.

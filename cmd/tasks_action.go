@@ -77,8 +77,16 @@ func (a taskAction) runTaskAction(cmd *cobra.Command, args []string) error {
 func (a taskAction) stepLookup(taskID string) preRead {
 	return preRead{Run: func(ctx context.Context, c *client.Client, m *mutation) ([]resolvedID, error) {
 		stepID, data, err := fetchCurrentPolicyStep(ctx, c, taskID, a.step == stepRequired)
-		if err != nil || stepID == "" {
+		if err != nil {
 			return nil, err
+		}
+		// The GET takes a numeric id too; the action route takes only the
+		// canonical one.
+		if id := taskViewID(data); id != "" {
+			m.Path = client.Path("/api/v1/tasks/%s/action/%s", id, a.verb)
+		}
+		if stepID == "" {
+			return nil, nil
 		}
 		if a.stepCheck != nil {
 			if err := a.stepCheck(taskID, data); err != nil {

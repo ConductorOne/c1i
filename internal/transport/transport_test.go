@@ -298,6 +298,7 @@ func TestRetrySafe(t *testing.T) {
 		{http.MethodPost, "/api/v1/classifier_templates/list"},
 		{http.MethodPost, "/api/v1/systemlog/events"},
 		{http.MethodPost, "/api/v1/role-mining/suggestions/s1/users"},
+		{http.MethodPost, "/api/v1/task/audits"},
 	}
 	for _, c := range safe {
 		if !retrySafe(c.method, c.path) {
@@ -307,6 +308,8 @@ func TestRetrySafe(t *testing.T) {
 	unsafe := []struct{ method, path string }{
 		{http.MethodPost, "/api/v1/apps"},
 		{http.MethodPost, "/api/v1/systemlog/exports"},
+		{http.MethodPost, "/api/v1/task/action"},
+		{http.MethodPost, "/api/v1/task/audits/x"},
 		{http.MethodPost, "/api/v1/role-mining/suggestions/s1/state"},
 		{http.MethodPost, "/api/v1/role-mining/suggestions//users"},
 		{http.MethodPost, "/api/v1/role-mining/suggestions/a/b/users"},
@@ -320,6 +323,29 @@ func TestRetrySafe(t *testing.T) {
 		if retrySafe(c.method, c.path) {
 			t.Errorf("retrySafe(%s, %s) = true, want false", c.method, c.path)
 		}
+	}
+}
+
+// The task audit list is a POST read outside /search: a 5xx is retried there,
+// while a sibling write under /api/v1/task is sent once.
+func TestDo_TaskAuditsPost5xxRetried(t *testing.T) {
+	deterministicBackoff(t)
+	srv, bodies := recordingServer(t, 1)
+	resp, err := post(t, newTestClient(srv, 3), srv.URL+"/api/v1/task/audits", `{"taskId":"t1"}`)
+	if err != nil {
+		t.Fatalf("Do: %v", err)
+	}
+	if resp.StatusCode != http.StatusOK || len(*bodies) != 2 {
+		t.Fatalf("status %d after %d calls, want 200 after 2 (audits POST retried on 503)", resp.StatusCode, len(*bodies))
+	}
+
+	srv, bodies = recordingServer(t, 1)
+	resp, err = post(t, newTestClient(srv, 3), srv.URL+"/api/v1/task/action", `{"actionId":"a1"}`)
+	if err != nil {
+		t.Fatalf("Do: %v", err)
+	}
+	if resp.StatusCode != http.StatusServiceUnavailable || len(*bodies) != 1 {
+		t.Fatalf("status %d after %d calls, want 503 after 1 (a write POST is not retried)", resp.StatusCode, len(*bodies))
 	}
 }
 

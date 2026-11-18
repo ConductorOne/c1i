@@ -674,6 +674,35 @@ resource with `--resource-id` likewise means you drop
   provisioning, after which the server says
   `cannot update grant duration for a ticket in a provision step`; the value
   lands at `.type.grant.grantDuration` (there is no top-level `.grantDuration`).
+- `tasks escalate <task-id>` moves a grant task onto its entitlement's
+  emergency-grant policy (then `.emergencyAccess` is true); it is refused with
+  `action not permitted` with no emergency-grant policy or when already
+  escalated. The API describes `tasks retry-provisioning <task-id>` as
+  re-driving a failed provision step; only its refusal was observed (`action
+  not permitted` at an approval step). Both resolve the current step like
+  `approve` and send the id that read returns, so a numeric task id works;
+  with `--policy-step-id` nothing is read and the 27-character id is needed.
+- The API describes `tasks update-request-data <task-id> --data-file <json>`
+  as submitting the request form of a task at a form step (keys:
+  `.policy.current.form.form.fields[].name`). Success was not observed: an
+  object that does not fit gets `request data does not match the required
+  schema (...)`, and a valid one on a self-requested form task (its `.actions`
+  lacked `TASK_ACTION_TYPE_UPDATE_REQUEST_DATA`) got `action not permitted`;
+  another step gets `current policy step is not a form instance`. Nothing is
+  read first, so pass the 27-character task id.
+- `tasks audits <task-id>` streams the task's audit events as NDJSON, raw,
+  oldest first (`--newest-first` reverses); each row has `.eventType`,
+  `.currentState`, `.created`, `.userId` and one event key such as `.comment`
+  or `.stateChange`. `--comments-only`/`--exclude-comments` filter comments
+  (both together exit 2). The task is read first, so an unknown id exits 4 (the
+  audit endpoint alone returns an empty list) and a numeric id works. `approve-with-step-up` is not
+  wrapped: it hands back a browser `redirectUrl`; use `c1i api`.
+- `requests create action --action-id` (request action; `--description`,
+  `--form-values-file`, `--group-only`) and `requests create resource-action
+  --action-id` (connector resource-create, e.g. a group template;
+  `--form-values-file`) create action tasks. The API has no route that lists
+  these actions, so an id cannot be looked up. An unknown id exits 4 (`action
+  not found`).
 - `requests create grant --duration` likewise takes `24h` or `86400s`; the
   server refuses `0s` with `value must be greater than 0s`. The value lands at
   that same `.type.grant.grantDuration` path.

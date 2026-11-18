@@ -85,10 +85,13 @@ var taskActionExpectations = map[string]struct {
 	"comment":               {verb: "comment", step: stepUnused, setup: func(c *cobra.Command) { _ = c.Flags().Set("comment", "zz") }},
 	"update-grant-duration": {verb: "update-grant-duration", step: stepUnused, setup: func(c *cobra.Command) { _ = c.Flags().Set("duration", "3600s") }},
 	"reassign":              {verb: "reassign", step: stepRequired, setup: func(c *cobra.Command) { _ = c.Flags().Set("to-user-id", "zz-user") }},
+	"escalate":              {verb: "escalate", step: stepRequired},
+	"retry-provisioning":    {verb: "retry-provisioning", step: stepRequired},
+	"update-request-data":   {verb: "update-request-data", step: stepUnused, setup: func(c *cobra.Command) { _ = c.Flags().Set("data-file", "testdata/task_request_data.json") }},
 }
 
 // nonActionTaskSubcommands are the tasks subcommands that are not action POSTs.
-var nonActionTaskSubcommands = map[string]bool{"list": true, "get": true}
+var nonActionTaskSubcommands = map[string]bool{"list": true, "get": true, "audits": true}
 
 // TestEveryTaskActionIsPinned requires a row for every action in the tree.
 func TestEveryTaskActionIsPinned(t *testing.T) {
@@ -567,3 +570,32 @@ func TestStepUnusedActionsPreviewWithoutCredentials(t *testing.T) {
 
 // errNoCredentialsForTest stands in for a credential-loading failure.
 var errNoCredentialsForTest = errors.New("authentication failed: no credentials found")
+
+// TestStepLookupSendsTheResolvedTaskID: GET /tasks/{id} accepts a numeric id
+// but the action routes take only the 27-character one, so an action that
+// already read the task sends the id that read returned.
+func TestStepLookupSendsTheResolvedTaskID(t *testing.T) {
+	const numeric = "28814"
+	for name, want := range taskActionExpectations {
+		if want.step == stepUnused {
+			continue
+		}
+		t.Run(name, func(t *testing.T) {
+			cmd := findTasksSubcommand(t, name)
+			resetCmds(t, cmd)
+			if want.setup != nil {
+				want.setup(cmd)
+			}
+			r := newTaskActionRecorder(t, "TASK_STATE_OPEN", "zz-step-1111111111111111111")
+			if _, err := runTaskActionCmd(t, cmd, r.srv, numeric); err != nil {
+				t.Fatalf("%s %s: %v", name, numeric, err)
+			}
+			if len(r.paths) != 1 {
+				t.Fatalf("posted %d times, want 1: %v", len(r.paths), r.paths)
+			}
+			if got, wantPath := r.paths[0], "/api/v1/tasks/"+actionTestTaskID+"/action/"+want.verb; got != wantPath {
+				t.Errorf("posted %q, want the resolved id in %q", got, wantPath)
+			}
+		})
+	}
+}
