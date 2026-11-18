@@ -25,6 +25,20 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `reports create` are not commands: the first is the same as `list` (the API
   returns UNIMPLEMENTED for a query or refs), the second needs a rendered
   reporting surface.
+- `workload-federation providers list|get|create|update|delete` (alias `wf`)
+  and `workload-federation test-cel` for workload federation issuers, and
+  `service-principals trusts list|search|get|create|update|delete|test-token`
+  for the per-principal trusts that let an external workload's JWT act as the
+  principal. `<trust-id>` takes the client id or its part before `@`.
+  `trusts create` looks up the service principal and each `--scoped-role`
+  first, and `trusts update` each `--scoped-role`: the API stores a trust for
+  either unknown id, so an unknown one now exits `4` unsent (body-file role
+  ids too, in either spelling). A `trusts update --body-file` whose mask names
+  a list the body omits exits `2` unsent: the API would clear it, and an empty
+  `scopedRoleIds` widens the trust; send `[]` to clear. `test-cel` exits
+  `0` on a match, `1` on no match and `2` on an evaluation error;
+  `test-token` exits `1`, naming the failed steps, when the trust would reject
+  the token.
 - `access-reviews templates get|create|update|delete <template-id>` and the
   template scope commands `scope get|set|set-excluded|set-by-resource-type`,
   `entitlements add|remove` and `excluded-entitlements add|remove`, shaped like

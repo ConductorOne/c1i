@@ -140,6 +140,10 @@ var wantEmptyAllowed = map[string]string{
 	"c1i webhooks update --description":                         emptyIsSent,
 	"c1i hooks create --description":                            emptyIsSent,
 	"c1i hooks update --description":                            emptyIsSent,
+
+	// workload federation
+	"c1i service-principals trusts update --description":     emptyIsSent,
+	"c1i workload-federation providers update --description": emptyIsSent,
 }
 
 func TestEmptyAllowedInventoryIsPinned(t *testing.T) {

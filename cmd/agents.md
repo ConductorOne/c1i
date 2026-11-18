@@ -225,7 +225,8 @@ checked, a partial notifications body on the user scope changed only the
 settings it named; org's partial-body behavior is unmeasured, so send back the
 whole `show` output for org. The email provider and identity-policy defaults have no command.
 
-Role ids for `service-principals credentials create --scoped-role` and
+Role ids for `service-principals credentials create --scoped-role`,
+`service-principals trusts create|update --scoped-role` and
 `auth login --scoped-role` come from `c1i roles list` (NDJSON; README lists the
 fields); `c1i roles get <role-id>` adds a role's `serviceRoles` and
 `permissions`.
@@ -912,6 +913,20 @@ resource with `--resource-id` likewise means you drop
   updates print the object unwrapped (`jq -er .id`); `credentials create` adds
   `.clientSecret`, shown once, so never log it. Deletes, `revoke` and
   `bindings add|delete` print `{}`.
+- Workload federation: `workload-federation providers` (alias `wf`)
+  registers JWT issuers (`--well-known-provider spiffe` requires
+  `--bundle-endpoint-url`; other kinds refuse it); `service-principals trusts`
+  binds one to a principal with a CEL `--condition`, plus repeatable
+  `--scoped-role`, `--allow-cidr` and `--passthrough-claim`. `<trust-id>` is
+  the row's `client_id` or its part before `@`; get/update/delete/test-token
+  need `--service-principal-id`. `trusts create` looks up `<sp-id>` and
+  `--scoped-role` first (the API stores unknown ones): unknown exits `4`.
+  Trust and provider deletes are soft (`get` still returns them, unmarked;
+  list/search omit them); deleting a principal deletes its trusts.
+  `test-cel --expression --claims|--claims-file` and `trusts test-token
+  --subject-token-file [--source-ip]` print the API's answer, then exit `0`
+  on a match/pass and `1` otherwise; `test-cel` exits `2` when the API reports
+  an evaluation error.
 - `automations update <automation-id> --enabled` succeeds on an automation
   with `isDraft: true`, and `isDraft` stays `true`. `--body-file` with
   `--update-mask triggers` replaces the published `triggers` and increments

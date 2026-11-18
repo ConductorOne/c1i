@@ -46,6 +46,9 @@ var readOnlyPOST = map[string]string{
 	"cmd/auth_status.go:authStatusCmd":                               "POST /search/users credential probe",
 	"cmd/connectors_sync_diag.go:postSyncDiag":                       "POST change_timeline and compare_stats: sync diagnostics reads, no state change",
 	"cmd/paginate.go:postPageBody":                                   "every paged POST list; a runtime transport.ReadOnlyPOST check refuses non-read paths before sending",
+
+	"cmd/service_principals_trusts.go:spTrustsTestTokenCmd": "POST trust test: validates a JWT, issues nothing",
+	"cmd/workload_federation.go:wfTestCelCmd":               "POST test-cel: evaluates an expression against the claims in the body",
 }
 
 // outOfScopeSelectors lists single calls ("file:decl selector") that are not

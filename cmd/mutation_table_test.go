@@ -386,6 +386,14 @@ var mutationTable = []mutationRow{
 	{cmd: "hooks update", args: []string{"hk-1", "--priority", "3"}, body: `{"hook":{"id":"hk-1","displayName":"zz"}}`, want: `{"id":"hk-1","displayName":"zz"}`, ids: idPath, method: "POST", path: "/api/v1/hooks/hk-1"},
 	{cmd: "hooks delete", args: []string{"hk-1"}, body: `{}`, method: "DELETE", path: "/api/v1/hooks/hk-1"},
 	{cmd: "users set-delegation", args: []string{"u-1", "--delegate-user-id", "u-2"}, body: `{"item":{"userId":"u-1","delegatedUserId":"u-2"}}`, want: `{"userId":"u-1","delegatedUserId":"u-2"}`, ids: []string{".userId"}, method: "POST", path: "/api/v1/users/u-1/set-delegation-by-admin"},
+
+	// workload federation
+	{cmd: "service-principals trusts create", args: []string{"sp-1", "--provider-id", "pr-1", "--display-name", "zz", "--condition", "true"}, body: tblTrust, want: tblTrustDoc, ids: []string{".clientId"}, method: "POST", path: "/api/v1/service_principals/sp-1/trusts", reads: 1},
+	{cmd: "service-principals trusts update", args: []string{"t-1@tenant.example.com/wfe", "--service-principal-id", "sp-1", "--disabled"}, body: tblTrust, want: tblTrustDoc, ids: []string{".clientId"}, method: "PATCH", path: "/api/v1/service_principals/sp-1/trusts/t-1"},
+	{cmd: "service-principals trusts delete", args: []string{"t-1", "--service-principal-id", "sp-1"}, body: `{}`, method: "DELETE", path: "/api/v1/service_principals/sp-1/trusts/t-1"},
+	{cmd: "workload-federation providers create", args: []string{"--display-name", "zz", "--issuer-url", "https://issuer.example.com", "--well-known-provider", "custom"}, body: tblWFProvider, want: tblWFProviderDoc, ids: idPath, method: "POST", path: "/api/v1/workload_federation/providers"},
+	{cmd: "workload-federation providers update", args: []string{"pr-1", "--disabled"}, body: tblWFProvider, want: tblWFProviderDoc, ids: idPath, method: "PATCH", path: "/api/v1/workload_federation/providers/pr-1"},
+	{cmd: "workload-federation providers delete", args: []string{"pr-1"}, body: `{}`, method: "DELETE", path: "/api/v1/workload_federation/providers/pr-1"},
 }
 
 // tblGet answers every pre-send read: the policy-step, user, catalog-id and

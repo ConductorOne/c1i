@@ -33,6 +33,11 @@ var userRefExemptions = map[string]string{
 	"c1i service-principals credentials create <sp-id>":                "the scope the credential is created under, not an added reference; the server decides",
 	"c1i service-principals update <sp-id>":                            "the command's own resource id, not a reference; the server decides",
 	"c1i service-principals delete <sp-id>":                            "the command's own resource id; removal never pre-checks",
+
+	// Workload federation trusts: the SP is the scope the trust lives under.
+	"c1i service-principals trusts create <sp-id>":                "checked by its own servicePrincipalRefKind pre-read (a service-principal lookup, not a user one)",
+	"c1i service-principals trusts update --service-principal-id": "the scope whose trust is updated, not an added reference; the server 404s a trust under the wrong one",
+	"c1i service-principals trusts delete --service-principal-id": "removal never pre-checks a reference; the server decides (documented --dry-run exception)",
 }
 
 // Detection is by name and by usage text. Ids inside a --*-file/--body-file

@@ -589,6 +589,10 @@ always exit `4`:
 - `service-principals credentials revoke`: `credentials get` on a revoked
   credential still returns the record, exit `0`, with no field marking it; only
   the lists omit it.
+- `service-principals trusts delete` and `workload-federation providers
+  delete`: `get` still returns the object, exit `0`, with no field marking it;
+  only list and search omit it. Deleting again prints `{}`. Deleting a service
+  principal deletes its trusts the same way.
 
 ### Field selection
 
@@ -2331,8 +2335,8 @@ empty when there are none, which list rows omit.
 ### Roles
 
 Role ids are what `--scoped-role` takes on `service-principals credentials
-create`; `auth login --scoped-role` also takes a role name (see
-[Authentication](#authentication)).
+create` and `service-principals trusts create|update`; `auth login
+--scoped-role` also takes a role name (see [Authentication](#authentication)).
 
 ```sh
 c1i roles list [--page-size <n>] [--page-token <token>] [--limit <n>]
@@ -2367,8 +2371,8 @@ c1i service-principals delete <sp-id>
 the new principal is printed as pretty JSON, unwrapped like
 `service-principals get`; read its id with `jq -er .id`. `delete` prints `{}`.
 
-**Delete is destructive:** `service-principals delete` removes the principal
-and every credential issued for it. Before deleting, inspect the principal with
+**Delete is destructive:** `service-principals delete` removes the principal,
+every credential issued for it, and its workload federation trusts. Before deleting, inspect the principal with
 `service-principals get <sp-id>`. Use `--dry-run` to preview the DELETE request
 and target path; it does not verify that the target exists.
 
@@ -2417,6 +2421,84 @@ c1i service-principals bindings delete --service-principal-id <sp-id> --function
 `bindings list` is by subject — it returns the principals a subject is bound to.
 `add` and `delete` are idempotent. `bindings list` and `delete` take the same
 subject flags as `add` (exactly one subject).
+
+### Workload federation
+
+Workload federation lets an external workload (a CI job, a SPIFFE workload)
+exchange its own JWT for a token that acts as a service principal. A
+**provider** registers the JWT issuer for the tenant; a **trust** on a service
+principal names a provider and a CEL condition over the token's claims.
+
+```sh
+c1i workload-federation providers list [--page-size <n>] [--page-token <token>] [--limit <n>]
+c1i workload-federation providers get <provider-id>
+c1i workload-federation providers create --display-name <name> --well-known-provider <kind> --issuer-url <url> [--bundle-endpoint-url <jwks-url>] [--description <text>]
+c1i workload-federation providers update <provider-id> [--display-name <name>] [--description <text>] [--disabled[=false]] [--bundle-endpoint-url <jwks-url>]
+c1i workload-federation providers delete <provider-id>
+c1i workload-federation test-cel --expression <cel> (--claims <json> | --claims-file <path|->)
+```
+
+`workload-federation` is aliased to `wf`. `--well-known-provider` is `custom`,
+`github-actions`, `gitlab-ci`, `hcp-terraform`, `aws-iam-outbound` or `spiffe`.
+`spiffe` takes a `spiffe://` trust-domain issuer and requires
+`--bundle-endpoint-url`, the HTTPS JWKS URL of its signing keys; every other
+kind takes an `https://` issuer, which the API checks by OIDC discovery, and
+refuses `--bundle-endpoint-url` (exit `2`, nothing sent). The API refuses an
+issuer it cannot reach, one that does not fit a named kind, and one already
+registered in the tenant (409, exit `2`); the kind and issuer are fixed after
+creation. `providers update --bundle-endpoint-url` on a non-SPIFFE provider
+answers 200 and changes nothing. `providers delete` is refused while a trust
+references the provider (find them with `trusts search --provider-id`, which
+can lag a just-created trust by about a second); `providers update` on a
+deleted provider answers 200 and applies, and the provider stays out of
+`providers list`. Rows carry `id`, `display_name`, `description`,
+`issuer_url`, `well_known_provider`, `disabled`, `created_at`, `updated_at`,
+and `bundle_endpoint_url` on a SPIFFE provider.
+
+`test-cel` evaluates an expression against sample claims without a token,
+provider or trust, prints `matched`, `error` and `expression`, then exits `0`
+when it matched, `1` when it evaluated to false, and `2` when the API reports
+an error (a syntax error, a non-bool result, claims that are neither JSON nor
+a JWT). Pass a JWT with `--claims-file`, not `--claims`, to keep it off the
+command line.
+
+```sh
+c1i service-principals trusts list <sp-id> [--page-size <n>] [--page-token <token>] [--limit <n>]
+c1i service-principals trusts search [--service-principal-id <sp-id>] [--provider-id <provider-id>] [--query <text>]
+c1i service-principals trusts get <trust-id> --service-principal-id <sp-id>
+c1i service-principals trusts create <sp-id> --provider-id <provider-id> --display-name <name> --condition <cel> [--description <text>] [--scoped-role <role-id>] [--allow-cidr <cidr>] [--passthrough-claim <claim>]
+c1i service-principals trusts update <trust-id> --service-principal-id <sp-id> [--display-name <name>] [--description <text>] [--condition <cel>] [--disabled[=false]] [--scoped-role <role-id>] [--allow-cidr <cidr>] [--passthrough-claim <claim>]
+c1i service-principals trusts update <trust-id> --service-principal-id <sp-id> --body-file <path|-> --update-mask <paths>
+c1i service-principals trusts delete <trust-id> --service-principal-id <sp-id>
+c1i service-principals trusts test-token <trust-id> --service-principal-id <sp-id> --subject-token-file <path|-> [--source-ip <ip>]
+```
+
+A trust's id is its client id (`word-word-12345@tenant.example.com/wfe`, as
+rows print it in `client_id`); `<trust-id>` takes that or the part before
+`@`, which is all c1i sends: the rest is not checked, and the trust is looked
+up under `--service-principal-id`. `--condition` is a CEL expression over `claims`
+that must return a bool; the API refuses an invalid one (exit `2`). The API
+stores a trust for an unknown service principal or `--scoped-role`, so
+`create` looks up `<sp-id>` and each `--scoped-role` first, and `update` each
+`--scoped-role`: an unknown one exits `4` before anything is sent,
+`--dry-run` included. A human user's id as `<sp-id>` is an API 500 (exit
+`6`). The API documents a trust's effective permissions as "min(SP roles,
+trust.scoped_role_ids)". `--scoped-role`, `--allow-cidr` and
+`--passthrough-claim` are repeatable and replace the whole list on `update`;
+to empty one, use `--body-file` with `--update-mask`, e.g.
+`{"scopedRoleIds":[]}` and `--update-mask scopedRoleIds`. A mask naming a list
+the body leaves out or sets to `null` exits `2` unsent, since the API would
+clear it (an empty `scopedRoleIds` gives the trust all the principal's roles);
+role ids in the body, in either spelling, are looked up like `--scoped-role`. An unknown
+`<sp-id>` on `list`, or an unknown `--service-principal-id` or
+`--provider-id` on `search`, lists nothing and exits `0`.
+
+`test-token` checks a workload JWT against a trust without issuing a token.
+The JWT comes only from `--subject-token-file` (`-` for stdin). It prints the
+API's per-step report (`overallResult`, `decodedClaimsJson`, `jwtDecode`,
+`issuerMatch`, `signatureValidation`, ...), then exits `0` when `overallResult`
+is true and `1`, naming the failed steps, when it is false. A disabled trust or
+provider is an API 500 (exit `6`).
 
 ### User attribute mappings
 

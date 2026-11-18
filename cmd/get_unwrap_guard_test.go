@@ -599,6 +599,27 @@ func getUnwrapCases() []getUnwrapCase {
 			payloadPath: []string{"result"},
 			wantKeys:    []string{"id", "status"},
 		},
+
+		// workload federation
+		{
+			name:        "service-principals trusts get",
+			cmd:         spTrustsGetCmd,
+			args:        []string{"t-1"},
+			flags:       map[string]string{"service-principal-id": "sp-1"},
+			idKey:       "clientId",
+			body:        `{"trust":{"clientId":"t-1@tenant.example.com/wfe","displayName":"zz","c1EdgeService":null}}`,
+			payloadPath: []string{"trust"},
+			wantKeys:    []string{"clientId", "displayName", "c1EdgeService"},
+		},
+		{
+			name:        "workload-federation providers get",
+			cmd:         wfProvidersGetCmd,
+			args:        []string{"pr-1"},
+			idKey:       "id",
+			body:        `{"provider":{"id":"pr-1","displayName":"zz","oidc":{}}}`,
+			payloadPath: []string{"provider"},
+			wantKeys:    []string{"id", "displayName", "oidc"},
+		},
 	}
 }
 
