@@ -209,12 +209,14 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - `mcp servers register` and `connectors create` read the app first: an
   unknown `--app-id` exits `4` and a soft-deleted one `2` (the server stored
   the objects anyway). `connectors create --body-file` refuses `appId`/`app_id`.
-- `apps resources update`, the app/resource owner verbs and `apps set-owners`
-  refuse a soft-deleted app (`2`); `apps set-owners` now pre-reads the app, so
+- `apps resources update`, the app/resource owner write verbs and `apps
+  set-owners` refuse a soft-deleted app (`2`); `apps set-owners` now pre-reads the app, so
   an unknown one exits `4` instead of the API's `200 {}`.
 - Access-review `scope set|set-excluded|set-by-resource-type` refuse a body
-  `accessReviewId`/`access_review_id` that differs from the positional, and
-  `service-principals trusts update` refuses `clientId`/`client_id`.
+  `accessReviewId`/`access_review_id` (campaigns) or
+  `accessReviewTemplateId`/`access_review_template_id` (templates) that
+  differs from the positional, and `service-principals trusts update` refuses
+  a different `clientId`/`client_id`.
 - `hooks create|update --function-id` refuses a soft-deleted function (`2`)
   instead of approving it under `--dry-run` and taking the server's `400`.
 - `docs endpoint --fields` now projects the returned schema like `docs

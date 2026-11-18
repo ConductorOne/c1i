@@ -2387,6 +2387,10 @@ c1i access-reviews templates excluded-entitlements add <template-id> --app-id <a
 c1i access-reviews templates excluded-entitlements remove <template-id> --app-id <app-id> --entitlement-id <id>...
 ```
 
+The three `templates scope set*` commands replace the same selection under
+`<template-id>`; their `--body-file` must not set
+`accessReviewTemplateId`/`access_review_template_id` (the positional owns it).
+
 The server requires a display name, a review policy and 1 to 10 owners. The
 flags create a template with no scope and no schedule; schedule and recurrence
 fields (`isCampaignScheduleEnabled`, `autoStartCampaign`, `recurrenceRule`, ...)

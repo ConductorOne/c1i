@@ -657,7 +657,7 @@ resource with `--resource-id` likewise means you drop
   A type or resource id repeats across apps, so key search rows on `app_id`
   (and `resource_type_id`) plus `id`. `apps resources owners|add-owner|
   remove-owner|set-owners <resource-id>` behave like the app and entitlement
-  owner verbs; all pre-read the app (deleted `2`) and `set-owners` also
+  owner write verbs; they pre-read the app (deleted `2`) and `set-owners` also
   pre-reads the resource (the API stores owners for an unknown one at 200). `owners` rows omit the response's `immutableUserIds`
   (owners the API says cannot be removed); read them with `c1i api`.
 - Owner changes are applied asynchronously and can take several minutes to

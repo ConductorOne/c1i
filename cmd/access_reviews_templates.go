@@ -11,7 +11,8 @@ import (
 	"github.com/spf13/cobra"
 )
 
-var templateSetup = setupOwner{pathFmt: "/api/v1/access_review_template/%s", use: "<template-id>", noun: "template", scopeKey: "scope"}
+var templateSetup = setupOwner{pathFmt: "/api/v1/access_review_template/%s", use: "<template-id>", noun: "template", scopeKey: "scope",
+	idKeys: []string{"accessReviewTemplateId", "access_review_template_id"}}
 
 func templatePath(id string) string { return client.Path("/api/v1/access_review_template/%s", id) }
 
