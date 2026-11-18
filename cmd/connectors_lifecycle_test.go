@@ -130,6 +130,11 @@ func TestConnectorsUpdateBody(t *testing.T) {
 	}
 	assertJSONEqual(t, reqs[0].body, `{"connector":{"id":"cn1","catalogId":"cat1","config":{"@type":"t"}},"updateMask":"config","justification":{"reason":"why"}}`)
 
+	r = runMutationCLI(t, s.srv, 0, nil, "connectors", "update", "cn1", "--app-id", "a1", "--update-mask", "config")
+	if r.exit != exitUsage || !strings.Contains(r.err.Error(), "pass --body-file with --update-mask") || strings.Contains(r.err.Error(), "derived") {
+		t.Errorf("mask without body: exit %d, err %v; want exit 2 naming --body-file with --update-mask", r.exit, r.err)
+	}
+
 	r = runMutationCLI(t, s.srv, 0, nil, "connectors", "update", "cn1", "--app-id", "a1")
 	if r.exit != exitUsage || !strings.Contains(r.err.Error(), "--body-file with --update-mask") {
 		t.Errorf("no body: exit %d, err %v; want exit 2 naming --body-file", r.exit, r.err)

@@ -522,7 +522,7 @@ resource with `--resource-id` likewise means you drop
   (a list read right after register can omit it for a second or two; a timeout
   exits 1). A register response with no server id exits 6, with or without
   `--wait`.
-- `connectors create` makes a connector without a config; set it with
+- `connectors create` makes a connector with an empty config; set it with
   `connectors update <id> --app-id A --body-file <file> --update-mask config`,
   the file being `connectors get` output with `.config` edited and `expanded`,
   `appPath`, `capabilitiesPath`, `usersPath` deleted (else 400). Update ignored

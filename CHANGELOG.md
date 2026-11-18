@@ -36,7 +36,7 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `--dry-run` included. Most of these API routes are marked draft in the spec.
 - `connectors get|create|update|delete|sync|sync-status|pause|resume|schedule`
   and `connectors credentials get|rotate|revoke`. `create` makes a connector
-  without a config; `update` takes the Connector object via `--body-file` with
+  with an empty config; `update` takes the Connector object via `--body-file` with
   `--update-mask` (e.g. `config`). `delete` refuses a connector that backs an
   MCP server (exit 2): use `mcp servers delete`, which also removes its
   toolsets.

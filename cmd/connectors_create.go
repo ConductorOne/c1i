@@ -10,14 +10,16 @@ import (
 
 var connectorsCreateCmd = &cobra.Command{
 	Use:   "create",
-	Short: "Create a connector that is pending configuration (pretty JSON)",
+	Short: "Create a connector with an empty config (pretty JSON)",
 	Long: `Create a connector on an app from a catalog entry. The connector is created
-without a config (the API's "delegated" create); set the config afterwards
+with an empty config (the API's "delegated" create); set the config afterwards
 with "c1i connectors update <connector-id> --body-file <file> --update-mask
 config".
 
 --catalog-id is required: the server answers a missing or unknown one with a
-500, "invalid connector catalog id" (exit 6). Omit --user-id and, in the run
+500, "invalid connector catalog id" (exit 6). An MCP catalog id is refused
+with a 400, "the MCP catalog is not installable; register an MCP server
+through the MCP server API" (exit 2); use "c1i mcp servers register". Omit --user-id and, in the run
 checked, the caller became the connector's only user id.
 
   --body-file   the full CreateDelegated request body, sent verbatim, for

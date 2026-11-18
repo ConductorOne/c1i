@@ -1215,8 +1215,8 @@ c1i connectors credentials get <credential-id> --app-id <id> --connector-id <id>
 c1i connectors credentials revoke <credential-id> --app-id <id> --connector-id <id>
 ```
 
-`connectors create` makes a connector without a config (the API's delegated
-create); set the config with `connectors update --body-file <file>
+`connectors create` makes a connector with an empty config (the API's
+delegated create; an MCP catalog id is a 400, use `mcp servers register`); set the config with `connectors update --body-file <file>
 --update-mask config`, where the file is a `connectors get` output with
 `.config` edited and the view keys removed (`jq 'del(.expanded, .appPath,
 .capabilitiesPath, .usersPath)'`; the server refuses them as unknown fields).
