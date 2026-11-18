@@ -42,7 +42,8 @@ var appsResourcesSetOwnersCmd = &cobra.Command{
 	Use:   "set-owners <resource-id>",
 	Short: "Set the owners of a resource (replaces the full owner list)",
 	Long: `Set the complete list of owners for an app resource via PUT .../owners,
-replacing any existing owners. Provide one or more --user-id.
+replacing any existing owners. Provide one or more --user-id, or
+--owner-entitlement-id (with --no-user-owners to keep no user owners).
 
 ` + setOwnersLookupNote + `
 The API answers an unknown resource, resource type or app 200 {} and stores

@@ -106,6 +106,8 @@ alike, naming the file and key. A `~/.c1i.yaml` that exists but can't be read
 or parsed exits 2 naming the file, even with `--url` (a missing one is fine; `docs`, `help` and
 `version` ignore it).
 
+In text mode, control characters and invalid UTF-8 from the server print on
+stderr as visible escapes (`\x1b`, `\u202e`); `\n` and `\t` are kept.
 `--error-format json` is the one worth setting by default if you parse
 failures: stderr becomes NDJSON. Error objects carry `"error"` (select them
 with `jq 'select(.error)'`) plus `status`, `method`, `path`, and the response
@@ -393,7 +395,7 @@ APP_ID=$(c1i apps create --display-name "Example" | jq -er .id)
 |---|---|---|
 | 0 | success | — |
 | 1 | generic / unclassified error | inspect the message; on a write, read `applied` (a `--wait` timeout or failed stdout write is `true`) before retrying |
-| 2 | usage error (bad flags/args, an empty, `.` or `..` id, a blank flag or positional, a control character in a path flag (`-o/--output`, `--out-dir`, `--*-file`) an invalid header name or a control character in a header value (`api --header`, MCP `--header-name`/`--header-value`/`--bearer-token`, and those fields plus `awsSigv4` `accessKeyId`/`sessionToken` in a `--*-config-file`, either JSON spelling), a control character in a `--config-field` key, a missing, malformed, `null` or wrong-shape `--*-file` input, a non-object element in an array `--*-file` or `--body-file`, a referenced id that exists but is soft-deleted or of the wrong kind (a deleted or wrong-type policy), a refused redirect (but `upgrade` and the `docs` commands exit `8`), or any API `4xx` other than `401`/`403`/`404`/`408`/`429`/`499`) | fix the invocation, don't retry as-is — but read the message first: an API `4xx` can also be a state rejection (e.g. `task is closed`) rather than a bad argument |
+| 2 | usage error (bad flags/args, an empty, `.` or `..` id, a blank flag or positional, a control character in a path flag (`-o/--output`, `--out-dir`, `--file`, `--*-file`), an invalid header name or a control character in a header value (`api --header`, MCP `--header-name`/`--header-value`/`--bearer-token`, and those fields plus `awsSigv4` `accessKeyId`/`sessionToken` in a `--*-config-file`, either JSON spelling), a control character in a `--config-field` key, a missing, malformed, `null` or wrong-shape `--*-file` input, a non-object element in an array `--*-file` or `--body-file`, a referenced id that exists but is soft-deleted or of the wrong kind (a deleted or wrong-type policy), a refused redirect (but `upgrade` and the `docs` commands exit `8`), or any API `4xx` other than `401`/`403`/`404`/`408`/`429`/`499`) | fix the invocation, don't retry as-is — but read the message first: an API `4xx` can also be a state rejection (e.g. `task is closed`) rather than a bad argument |
 | 3 | not authenticated, or API `401`/`403` (including a `400`/`401`/`403` from the token endpoint; any other token-endpoint failure exits like an API response: `404` 4, `429` 5, `5xx` or a `200` that is not a token 6) | re-authenticate (`c1i auth login`); a scoped credential needs a role that covers the call |
 | 4 | API `404`, or a referenced id that does not exist, whether the server or a c1i pre-check catches it | stop — the resource/path doesn't exist |
 | 5 | API `429` | back off and retry |
@@ -443,9 +445,10 @@ single page manually; a blank value is refused (exit 2, before any request),
 because supplying the flag at all turns auto-pagination off and an unset
 variable would otherwise silently truncate the list. The exceptions send one request:
 `role-mining suggestions|runs|custom-analysis list` and
-`findings routing-rules|transformation-rules list` print a stderr
-`partial result` warning if the server reports more pages, and `mcp bindings by-tools`
-and `mcp toolsets requestable-connectors` are not paginated.
+`findings routing-rules|transformation-rules list`, `apps routing-rules list`,
+`attribute-types list`, `grants accounts` and `settings ai-governance history`
+print a stderr `partial result` warning if the server reports more pages, and
+`mcp bindings by-tools` and `mcp toolsets requestable-connectors` are not paginated.
 A `--body-file` key that the command itself sets must be absent: any value,
 including `null`, exits 2 before any request, listing every offending key. A
 key set from a positional id is the one exception: it may be present when it
@@ -679,8 +682,10 @@ resource with `--resource-id` likewise means you drop
   A type or resource id repeats across apps, so key search rows on `app_id`
   (and `resource_type_id`) plus `id`. `apps resources owners|add-owner|
   remove-owner|set-owners <resource-id>` behave like the app and entitlement
-  owner write verbs; they pre-read the app (deleted `2`) and `set-owners` also
-  pre-reads the resource (the API stores owners for an unknown one at 200). `owners` rows omit the response's `immutableUserIds`
+  owner verbs. The write verbs pre-read the app (unknown `4`, deleted `2`) and
+  `set-owners` also pre-reads the resource (the API stores owners for an
+  unknown one at 200); `owners` reads nothing first (a wrong `--app-id` lists
+  zero rows). `owners` rows omit the response's `immutableUserIds`
   (owners the API says cannot be removed); read them with `c1i api`.
 - Owner changes are applied asynchronously and can take several minutes to
   appear; pass --wait to block until they do. Grant provisioning is
@@ -879,8 +884,9 @@ resource with `--resource-id` likewise means you drop
   approval**; prefer `requests create grant` unless that is what you want. One
   request carrying every user id; `--wait` blocks until each shows in `grants list`.
   `grants remove --app-id --entitlement-id --app-user-id` (remove-membership)
-  fails on a manual entitlement with `entitlement is not an SSO application
-  sign-in entitlement`, so remove those via `requests create revoke` (on a
+  refused manually managed entitlements of the custom and group resource types
+  in testing with `entitlement is not an SSO application sign-in entitlement`,
+  so remove those via `requests create revoke` (on a
   manual entitlement its task waits on a provisioning step; the grant stays
   until it is completed); its success path is untested. A non-empty
   `failedUsersErrorMap` in the response (users the server could not add) exits

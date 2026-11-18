@@ -275,7 +275,9 @@ retried depends on the request, to avoid duplicating side effects:
   idempotent reads and updates (GET/PUT/DELETE) and for the read-only search and
   list `POST`s behind list commands (`/api/v1/search/*`, any `/api/v1/` path
   ending in `/search` or `/list`, `/api/v1/systemlog/events` for `export
-  events`, and `role-mining suggestions users`). Other `POST` mutations
+  events`, `/api/v1/task/audits` for `tasks audits`, `export exporters
+  events`, `connectors sync-changes|sync-compare`, and `role-mining
+  suggestions users`). Other `POST` mutations
   (e.g. `requests create`, `tasks approve`) are **not** retried on these, since
   the server may have already applied the change before the failure.
   Non-transient 5xx (501 Not Implemented, 505, 511) are never retried.
@@ -436,9 +438,11 @@ $ cat trace.log
 - **`docs`** commands output NDJSON (`search`, `endpoints`), pretty JSON (`endpoint`), YAML (`openapi`), or plain text (`page`).
 - List commands auto-paginate by default, except the single-request ones the
   agent guide names under Pagination: `apps routing-rules list`,
-  `attribute-types list`, `grants accounts`, `settings ai-governance history`
-  and the fixed-size reads (`role-mining` and `findings …-rules` lists warn on
-  stderr when a result is partial). Pass `--page-token` with a
+  `attribute-types list`, `grants accounts`, `settings ai-governance history`,
+  `role-mining suggestions|runs|custom-analysis list` and `findings
+  routing-rules|transformation-rules list` (each warns on stderr when the
+  server reports more pages), and `mcp bindings by-tools` and `mcp toolsets
+  requestable-connectors`. Pass `--page-token` with a
   non-empty cursor to fetch a single page manually; supplying the flag at all
   disables auto-pagination, so a blank value is a usage error (exit 2) rather
   than an empty filter.
@@ -677,7 +681,7 @@ APP_ID=$(c1i apps create --display-name "Example" | jq -er .id)
     `functions usage` do the same, since their filters run after the fetch.
 - Missing fields are silently omitted, so requesting a superset is safe.
 - Also settable via `C1I_FIELDS`. Applies to read output — list commands, `api`,
-  single-object `get` commands, and `docs endpoint` Mutation output is never projected, so a
+  single-object `get` commands, and `docs endpoint`. Mutation output is never projected, so a
   session-wide `C1I_FIELDS` is ignored there. The raw reads `findings settings
   show`, `findings settings edge show`, `settings ai-governance
   tenant-defaults` and `mcp gateway call` are not projected either: an explicit
@@ -765,7 +769,8 @@ re-encoded compactly, key order kept.
 In JSON mode **stderr is NDJSON**: every line is one object. Errors carry
 `"error"` (select them with `jq 'select(.error)'`), warnings and other notices
 `"notice"` and `"kind"`, `--wait` progress `"progress"`, and `--debug` trace
-lines `"debug"`. Text mode is unchanged.
+lines `"debug"`. In text mode, control characters and invalid UTF-8 from the
+server print as visible escapes (`\x1b`, `\u202e`); `\n` and `\t` are kept.
 
 An error from a command that writes also carries `"applied"` (`api` does not:
 c1i can't tell whether an arbitrary call writes):
@@ -2877,9 +2882,10 @@ server did not paginate `list` when tried (`--page-size` had no effect).
 it) first, `--dry-run` included, so an unknown one exits `4`; without the check
 the server answers an unknown function with `400` and stores an unknown commit
 id at exit `0`. A soft-deleted function exits `2` on the pre-read. `--body-file`
-is sent verbatim except that a `priority`
-outside 0-1000, or one that is not a whole number, exits `2` when the mask
-names it, since update does not validate it.
+is sent verbatim, except that on `update`, when the mask names `priority`, a
+`priority` outside 0-1000 (a number or numeric string) or a non-integral
+number exits `2`, since update does not validate it; any other value is left
+to the server.
 
 `update` sends only the flags you pass and names exactly those in the mask.
 `--function-id` replaces the whole function reference (the commit goes back to
@@ -2977,8 +2983,8 @@ c1i api --path /api/v1/search/users --body '{"pageSize":10}'
 # Other methods — --method takes GET, POST, PUT, PATCH, or DELETE
 c1i api --path /api/v1/apps/<app>/connectors/<conn>/mcp_tools/<id> --method DELETE
 
-# DELETE normally refuses a body; some endpoints (e.g. remove-membership)
-# require one, so opt in explicitly
+# DELETE normally refuses a body; an endpoint that requires one needs an
+# explicit opt-in (this one is wrapped by "c1i grants remove")
 c1i api --path /api/v1/apps/<app>/entitlements/<ent>/remove-membership \
   --method DELETE --body '{"appUserId":"<app-user>"}' --allow-delete-body
 
@@ -3075,8 +3081,9 @@ c1i docs map --json
 
 `docs map` is generated from the binary's own command tree, so it matches the
 commands the running build accepts. Use it to check a README, guide, or public
-docs page against the installed version; `--json` includes the version and
-family/command/leaf counts.
+docs page against the installed version. The text outline opens with the
+version and family/command/leaf counts; `--json` carries them too, plus full
+paths and aliases. `-o/--output` writes to a file.
 
 `docs openapi`, `docs endpoints`, and `docs endpoint` use the current public API contract at `https://www.c1.ai/api/openapi.yaml`, including MCP server, tool, and toolset operations. The spec is cached for 24 hours at `~/.c1i/cache/api-openapi.yaml`; fetch failures fall back to that cache, however old, with a one-line warning on stderr naming its age. A response over 32 MiB counts as a failed fetch. With a cache to fall back on, a fetch makes one attempt unless you set `--max-retries` or `C1I_MAX_RETRIES`. With no cache, a failed fetch exits `4` for a `404`, `5` for a `429`, `6` for a `5xx`, and `8` for anything else, such as an unreachable host, a refused redirect or a redirect loop.
 

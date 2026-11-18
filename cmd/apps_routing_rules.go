@@ -9,7 +9,7 @@ var appsRoutingRulesCmd = &cobra.Command{
 	Use:   "routing-rules",
 	Short: "Manage an app's entitlement routing rules",
 	Long: `Manage an app's entitlement routing rules (the API's entitlement
-configuration rules): list, get, create, delete and reorder. Rules are
+configuration rules): list, get, create, update, delete and reorder. Rules are
 evaluated in priority order; the first enabled rule whose CEL condition
 matches supplies the entitlement's request settings (request policy, emergency
 grant policy, maximum grant duration, request schema). Each rule belongs to

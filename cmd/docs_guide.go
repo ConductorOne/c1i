@@ -673,12 +673,13 @@ Before you request anything: this guide covers access requested through
 "requests create grant" / "requests create revoke". C1 also supports binding a
 user to a manually managed entitlement directly, bypassing the request
 workflow: that is "c1i grants add" (see "c1i grants add --help"). Know how you
-would take it back first: the matching direct-removal endpoint
-(remove-membership) only works on an SSO application's own sign-in entitlement,
-or on a catalog/group/profile-type entitlement on the built-in C1 app. For an
-ordinary manual, role or custom entitlement it refuses with "entitlement is not
-an SSO application sign-in entitlement", and the policy-respecting undo is
-"requests create revoke", whose task waits on a provisioning step. Don't create
+would take it back first: the matching direct removal, "c1i grants remove"
+(remove-membership), never succeeded in testing. It refused manually managed
+entitlements of the custom and group resource types with "entitlement is not
+an SSO application sign-in entitlement", though the API describes it as
+covering manually managed entitlements (see "c1i grants remove --help"). The
+policy-respecting undo is "requests create revoke", whose task waits on a
+provisioning step. Don't create
 access that way unless you already know how you'd take it back.
 
 ## Prerequisites
@@ -1256,8 +1257,12 @@ mapping create searches tenant-wide and exits 4 when the server is missing.
 
 ## Notes
 
-- All xaa creates read --app-id and the resource server first; unknown exits 4,
-  soft-deleted 2, --dry-run included.
+- Lookups before a create, --dry-run included: resource-servers, scopes and
+  access-profiles create read --app-id (unknown exits 4, soft-deleted 2);
+  scopes and access-profiles create also read --resource-server-id (unknown 4,
+  soft-deleted 2); a resource server's claims-hook function and commit are
+  looked up (unknown 4). Mapping create takes no --app-id: it searches for
+  --resource-server-id tenant-wide, and an unknown or deleted server exits 4.
 - Updates read the object to fill server-validated fields; --state removed is
   refused on create and update.
 - Deletes are soft and cascade from a resource server to its scopes, profiles

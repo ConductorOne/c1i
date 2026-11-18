@@ -6,6 +6,50 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Upgrading from 0.11.0
+
+Exit codes:
+
+- **`apps update`, `apps set-owners`, `apps add-owner|remove-owner` and `mcp
+  servers register` read the app before sending**, `--dry-run` included (so a
+  preview needs credentials that can read it): an unknown app exits `4`, a
+  soft-deleted one `2`, and a `200` without an app `6`. `apps set-owners` (the
+  API answers `200 {}`) and `mcp servers register` (the server was stored)
+  used to exit `0` for an unknown app; `apps update` with a malformed id now
+  exits `2` (the read is refused) instead of the update's `404` (`4`).
+- **`--fields` on `mcp gateway call` and `findings settings show` exits `2`**:
+  their raw output was never projected, so the flag was silently ignored.
+  `docs endpoint --fields` now projects the schema, so a spec that matches
+  nothing exits `2`.
+- **`policies create|update --body-file` checks snake_case keys too.** A
+  snake_case body that breaks a policy guard used to be sent and now exits
+  `2`, and a checked field set in both spellings exits `2` before sending,
+  `--dry-run` included. Valid snake_case bodies c1i used to refuse are now
+  sent.
+
+Output and error text:
+
+- **`--dry-run` previews print an email-shaped value as sent** (an email-shaped
+  display name used to be masked); the user of an scp-form git remote
+  (`ghp_x@github.com:repo.git`) is now masked.
+- **Text-mode stderr and `auth login`'s device code and URL escape control
+  characters** from the server (`\x1b`, `‮`); `\n` and `\t` are kept. See
+  Security.
+- **`apps resource-types list` rows gain `app_id`**, and **the owner verbs'
+  missing-flag message names `--owner-entitlement-id`** (still exit `2`). See
+  Changed.
+
+### Security
+
+- `auth login` prints the device-flow user code and verification URL from the
+  server with control characters escaped, as stderr already does.
+- Text-mode stderr (errors, notices, `--wait` progress, the `--debug`
+  trace) prints control characters and invalid UTF-8 bytes from
+  server-supplied text as visible escapes (`\x1b`, `‮`) instead of
+  sending them to the terminal, so an API error body or MCP message cannot
+  rewrite the screen or title. `\n` and `\t` are kept; `--error-format json`
+  output is unchanged.
+
 ### Added
 
 - `apps routing-rules list|get|create|update|delete|reorder --app-id` manage an app's
@@ -24,16 +68,21 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `sync-changes` a metadata-only change timeline (`--since`), and
   `sync-compare --left --right` count deltas between two runs; `debuggable`
   lists, as NDJSON, the connectors you may diagnose. A negative `--runs` or
-  `--top-k` exits `2`; a larger one is clamped. The draft-test form of
-  `sync-compare` (`--body-file`) was not exercised live.
+  `--top-k` exits `2`; a larger one is clamped. `sync-changes` and
+  `sync-compare` retry a `5xx` like other read-only POSTs. The draft-test form
+  of `sync-compare` (`--body-file`) was not exercised live.
 - `hooks list|get|create|update|delete` for tool-call interception hooks (the
   `hooks` service). Flags build a function hook; a built-in pattern or JSON patch
   hook goes through `--body-file`. `update --clear-filter` removes the CEL
-  filter. `webhooks search`, `users profile-types`, `users set-delegation` and
-  `policies test-provision` cover four more operations. `hooks search` and
-  `reports create` are not commands: the first is the same as `list` (the API
-  returns UNIMPLEMENTED for a query or refs), the second needs a rendered
-  reporting surface.
+  filter. `create` and `update` look up `--function-id` and
+  `--function-commit-id` first, `--dry-run` included: an unknown one exits `4`
+  (the server stores an unknown commit at exit `0`) and a soft-deleted
+  function `2`. `--priority`, and an `update --body-file` priority the mask
+  names, must be `0`-`1000` (exit `2`). `webhooks search`, `users
+  profile-types`, `users set-delegation` and `policies test-provision` cover
+  four more operations. `hooks search` and `reports create` are not commands:
+  the first is the same as `list` (the API returns UNIMPLEMENTED for a query or
+  refs), the second needs a rendered reporting surface.
 - `workload-federation providers list|get|create|update|delete` (alias `wf`)
   and `workload-federation test-cel` for workload federation issuers, and
   `service-principals trusts list|search|get|create|update|delete|test-token`
@@ -44,7 +93,8 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   either unknown id, so an unknown one now exits `4` unsent (body-file role
   ids too, in either spelling). A `trusts update --body-file` whose mask names
   a list the body omits exits `2` unsent: the API would clear it, and an empty
-  `scopedRoleIds` widens the trust; send `[]` to clear. `test-cel` exits
+  `scopedRoleIds` widens the trust; send `[]` to clear. A body `clientId` that
+  differs from the positional exits `2`. `test-cel` exits
   `0` on a match, `1` on no match and `2` on an evaluation error;
   `test-token` exits `1`, naming the failed steps, when the trust would reject
   the token.
@@ -68,7 +118,6 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `create` searches the tenant's resource servers first, since the server
   stores a mapping under an unknown one: not found exits `4`, and so does a
   deleted server or one created about a second earlier.
-
 - `access-reviews templates get|create|update|delete <template-id>` and the
   template scope commands `scope get|set|set-excluded|set-by-resource-type`,
   `entitlements add|remove` and `excluded-entitlements add|remove`, shaped like
@@ -80,7 +129,9 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   certify policy exits `2`. The server alone stores either without complaint.
   `update` reads the template to fill the `displayName` and `policyId` the
   server demands on every update when the request leaves one unset; the mask
-  still decides what changes.
+  still decides what changes, and a masked field the `--body-file` omits exits
+  `2`. In the run checked, `delete` exited `0` but the template stayed readable
+  with `deletedAt` null.
 - `attributes types|list|search|get|create|delete` for tenant attribute values
   (Compliance Framework, Risk Level), distinct from `attribute-types` and
   `attribute-mappings`. `--type` takes a name or id and is looked up first, so
@@ -89,8 +140,11 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - `export exporters list|search|get|create|update|delete|events` manage
   continuous system-log exporters. `update` reads the exporter and sends its
   datasource back with only your flags masked; `events` reads the exporter
-  first so an unknown id exits `4`. `search` omits a name filter because the
-  API's `displayName` search was observed to ignore the name.
+  first so an unknown id exits `4`, and retries a `5xx` like other read-only
+  POSTs. `create` reports the API's 400 `datasource not found` as exit `4`.
+  `delete` is soft (`get` still returns the exporter, `list` omits it), and a
+  repeat delete exits `0`. `search` omits a name filter because the API's
+  `displayName` search was observed to ignore the name.
 - `reports list|get|update|delete|run|program|provenance` for saved reports
   (`provenance <run-id> --report-id`). There is no create or `--wait`; `run`
   returns when the run starts. A run's `artifactUrl` may be a signed URL (not
@@ -102,24 +156,17 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `set-owners --owner-entitlement-id ...`, which replaces user and entitlement
   owners together and so needs `--user-id` for each user owner to keep or
   `--no-user-owners`. They use the v2 owner routes under the role `primary`.
-  `--user-id` keeps its existing behavior, except the message when neither
-  flag is given: `add-owner` and `remove-owner` say "one of --user-id or
-  --owner-entitlement-id is required", `set-owners` says "at least one
-  --user-id or --owner-entitlement-id is required".
 - `tasks escalate|retry-provisioning <task-id>` (current policy step resolved
   like `approve`) and `tasks update-request-data <task-id> --data-file`, which
   the API describes as submitting the request form of a task at a form step.
   Only `escalate` was seen to succeed; the server refused the others with
   `action not permitted` (exit `2`) on the tasks tried, and rejects data that
   does not fit the form with a schema error.
-- Task actions that look up the current policy step (`approve`, `deny`,
-  `reassign`, `restart`, `skip-step`, `escalate`, `retry-provisioning`) now
-  send the task id that lookup returns, so the numeric id `tasks get` accepts
-  works for them too.
 - `tasks audits <task-id>` streams a task's audit trail as raw NDJSON events
   (`--comments-only`, `--exclude-comments`, `--newest-first`). The task is read
   first: the audit endpoint answers an unknown task with an empty list, so c1i
-  exits `4`; that read also lets a numeric task id work. A `5xx` on this read is now retried like other list reads.
+  exits `4`; that read also lets a numeric task id work. A `5xx` on this read
+  is retried like other list reads.
 - `requests create action` and `requests create resource-action` (`--action-id`,
   `--form-values-file`; `action` also `--description`, `--group-only`). No API
   route lists these actions; an unknown id exits `4` (`action not found`).
@@ -131,49 +178,52 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   an `update`. `mcp resources list` returns removed resources too; `search`
   shows them only with `--state removed`. A tenant without the prompts feature
   answers a well-formed prompts request with 403 `feature not enabled` (exit 3).
-
 - `settings` reads and updates tenant-wide singletons: `ai-governance
   show|update|history|tenant-defaults`, `session show|update|test-source-ip`,
   `sso show|update|history`, `cross-app-access show|update|history`, `contacts
   show|update`, `request show|update`, `domains list|set`, `notifications
   org|user show|update` and `aws-external-id show`. Masked updates take field
   flags (mask derived) or `--body-file` with `--update-mask`; `domains set`
-  replaces the whole domain set; `session test-source-ip` exits 0 for either
+  replaces the whole domain set, and a `newDomains` element that is not a
+  non-blank string exits `2`; `session test-source-ip` exits 0 for either
   answer. `findings settings edge show|update` covers the Edge finding
-  categories.
+  categories. `--fields` on the raw `findings settings edge show` and
+  `ai-governance tenant-defaults` exits `2`.
 - `entitlements grants <entitlement-id>` lists an entitlement's grants with the
   C1 user, `discovered_at` and `expires_at`. `grants accounts` shows which of a
-  user's accounts hold an entitlement. `grants remove` wraps remove-membership
-  (it refuses manually managed entitlements), and `grants update-duration
-  --deprovision-at` / `grants remove-duration` set or clear when an existing
-  grant is revoked.
+  user's accounts hold an entitlement. `grants remove` wraps remove-membership;
+  the API describes it as covering manually managed entitlements, but in
+  testing it refused manually managed custom and group entitlements and was
+  never seen to succeed. `grants update-duration --deprovision-at` / `grants
+  remove-duration` set or clear when an existing grant is revoked.
 - `entitlements automation get|create|update|delete` and `entitlements
   automation exclusions list|add|remove` manage an entitlement's membership
   automation (C1 app entitlements only). A condition is `--cel`, `--refs-file`
   or `--none`; unknown entitlement references and exclusion user ids exit `4`
-  before sending.
-
+  before sending, and a soft-deleted entitlement `2`.
 - `apps resource-types get|create|update|delete|search` and `apps resources
   list|get|create|update|delete|search`, for an app's resource types and
   resources, plus `apps resources owners|add-owner|remove-owner|set-owners`
   for a resource's owners. The resource's own id is positional; `--app-id` and
   `--resource-type-id` are its parent scope. `resources create` looks up the
   resource type (unknown: exit 4, deleted: exit 2) and each `--owner-id`
-  first; `resources set-owners` looks up the resource, since the API stores
-  owners for an unknown one at `200`. `apps resource-types list` rows gain
-  `app_id`, matching the new search rows.
-- `--resource-type` on `entitlements create` and `apps resource-types create`
-  lists `SESSION_POLICY` and `CLAW_AGENT`, as the API spec now does.
+  first, and its `--body-file` refuses `appId`/`app_id` and
+  `appResourceTypeId`/`app_resource_type_id`, which the flags own;
+  `resources set-owners` looks up the resource, since the API stores
+  owners for an unknown one at `200`. `resources update` and the resource
+  owner write verbs read the app first (unknown `4`, deleted `2`).
 - `apps search` filters applications server-side (`POST /api/v1/search/apps`)
   by `--query` (full-text on name and description, not a substring match),
   `--display-name` (case-insensitive ILIKE pattern), repeatable
   `--app-id` / `--exclude-app-id` / `--policy-id`, and `--only-directories`.
   Rows match `apps list`; `apps list` help now points to it for filtering.
-- `docs map [--json]` prints the command tree this binary accepts, generated
-  from the live Cobra tree. The default output is an indented outline with each
-  command's one-line description; `--json` adds full paths, aliases, version,
-  and family/command/leaf counts for scripts and docs verification. It needs no
-  credentials or network.
+- `docs map [--json] [-o <file>]` prints the command tree this binary accepts,
+  generated from the live Cobra tree. The default output is an indented
+  outline, headed by the version and family/command/leaf counts, with each
+  command's one-line description; `--json` adds full paths and aliases for
+  scripts and docs verification. It needs no credentials or network.
+- `docs guide` gains `run-access-review`, `diagnose-connector-sync`,
+  `configure-cross-app-access` and `configure-workload-federation`.
 - `automations create` (common fields as flags, or the full request through
   `--body-file`), `automations execute [--context-file] [--wait]`,
   `automations circuit-breaker clear|resolve-paused [--decision] [--reason]`,
@@ -189,120 +239,84 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `access-reviews entitlements add|remove` and `access-reviews
   excluded-entitlements add|remove` read and edit a campaign's scope,
   entitlement selection and exclusions. Each referenced entitlement or resource
-  type is looked up first, so an unknown one exits `4` before the send,
-  `--dry-run` included. Most of these API routes are marked draft in the spec.
+  type is looked up first, so an unknown one exits `4` and a soft-deleted one
+  `2` before the send, `--dry-run` included. A `scope set*` body
+  `accessReviewId` (a template's `accessReviewTemplateId`), in either
+  spelling, that differs from the positional exits `2`. Most of these API
+  routes are marked draft in the spec.
 - `connectors get|create|update|delete|sync|sync-status|pause|resume|schedule`
   and `connectors credentials get|rotate|revoke`. `create` makes a connector
-  with an empty config; `update` takes the Connector object via `--body-file` with
+  with an empty config; it reads `--app-id` first (unknown exits `4`, deleted
+  `2`; the server stored a connector anyway), and its `--body-file` refuses
+  `appId`/`app_id`. `update` takes the Connector object via `--body-file` with
   `--update-mask` (e.g. `config`). `delete` refuses a connector that backs an
   MCP server (exit 2): use `mcp servers delete`, which also removes its
-  toolsets.
+  toolsets. `credentials get` refuses a credential whose `appId` or
+  `connectorId` differs from its flags (exit `4`): the server resolves the id
+  globally.
 - `functions create`, `update`, `delete`, `invoke` and `invocations list|get`.
   `create` and `update --file` upload local files under their base names
-  (unpublished; publish with `update --publish-commit <commit-id>`); `--input`
-  and `--input-file` take the handler's JSON object input. `invoke --wait`
-  polls the invocation and exits `1` if it ends `ERROR` or `CANCELLED`.
-  `invocations list` reads newest first.
+  (unpublished; publish with `update --publish-commit <commit-id>`); two files
+  with the same base name, or a path with a control character, exit `2`.
+  `--input` and `--input-file` take the handler's JSON object input. `update
+  --body-file --update-mask displayName` without `displayName` in the object
+  exits `2`. `invoke --wait` polls the invocation and exits `1` if it ends
+  `ERROR` or `CANCELLED`. `invocations list` reads newest first.
+
+### Changed
+
+- **Task actions that look up the current policy step** (`approve`, `deny`,
+  `reassign`, `restart`, `skip-step`, `escalate`, `retry-provisioning`) send
+  the task id that lookup returns, so the numeric id `tasks get` accepts works
+  for them too.
+- **`apps resource-types list` rows gain `app_id`**, matching the new search
+  rows.
+- **`--resource-type` on `entitlements create` and `apps resource-types create`
+  lists `SESSION_POLICY` and `CLAW_AGENT`** in help and completion, as the API
+  spec now does.
+- **The owner verbs' missing-flag message names `--owner-entitlement-id`.**
+  `--user-id` keeps its behavior; with neither flag, `add-owner` and
+  `remove-owner` say "one of --user-id or --owner-entitlement-id is required",
+  and `set-owners` "at least one --user-id or --owner-entitlement-id is
+  required".
+- **Help and guide corrections from live testing.** `policies validate-cel`
+  shows the `--` a condition starting with `-` needs. The existing guides now
+  give the `mcp tools get` key for a tool's protocol name (`toolName`), the
+  exit of a `set-owners --wait` timeout, and entitlement owners.
 
 ### Fixed
 
-- `mcp servers register` and `connectors create` read the app first: an
-  unknown `--app-id` exits `4` and a soft-deleted one `2` (the server stored
-  the objects anyway). `connectors create --body-file` refuses `appId`/`app_id`.
-- `apps resources update`, the app/resource owner write verbs and `apps
-  set-owners` refuse a soft-deleted app (`2`); `apps set-owners` now pre-reads the app, so
-  an unknown one exits `4` instead of the API's `200 {}`.
-- Access-review `scope set|set-excluded|set-by-resource-type` refuse a body
-  `accessReviewId`/`access_review_id` (campaigns) or
-  `accessReviewTemplateId`/`access_review_template_id` (templates) that
-  differs from the positional, and `service-principals trusts update` refuses
-  a different `clientId`/`client_id`.
-- `hooks create|update --function-id` refuses a soft-deleted function (`2`)
-  instead of approving it under `--dry-run` and taking the server's `400`.
+- `apps update`, `apps set-owners`, `apps add-owner|remove-owner` and `mcp
+  servers register` read the app first, `--dry-run` included: an unknown app
+  exits `4`, a soft-deleted one `2`, a `200` without an app `6`. `apps update`
+  refuses a malformed id as a usage error (the API 404s the update path); `apps
+  set-owners` and `mcp servers register` no longer exit `0` on an unknown app.
+  Every pre-send lookup of an app, entitlement, resource type, role, service
+  principal, function or commit reads the object it asked for: it is deleted
+  only when its own `deletedAt` is set (`null` and `""` are live), and a
+  response without it exits `6`.
 - `docs endpoint --fields` now projects the returned schema like `docs
   endpoints`, instead of silently ignoring the flag.
-- `apps update` reads the app first: a malformed id is a usage error (the API
-  404s the update path), an unknown app exits `4` and a soft-deleted one `2`,
-  before anything is sent, `--dry-run` included.
-- `xaa resource-servers create`, `scopes create` and `access-profiles create`
-  refuse a soft-deleted `--app-id` (exit `2`), as their documented lookup
-  already promised; the server had stored the object anyway.
-- `xaa resource-servers create|update --signing-algorithm` reports that flag on
-  an invalid value, not the settings command's `--default-signing-algorithm`.
-- Commands that look a referenced entitlement or resource type up before a
-  write (access-review setup, entitlement automation) refuse a soft-deleted
-  one (exit `2`) instead of approving it under `--dry-run` and taking the
-  server's `400`.
-- `--dry-run` previews no longer mask an email-shaped value (a display name,
-  `--security-email`); URL-shaped strings are still masked.
-- `hooks create|update --priority` is checked against `0`-`1000` before
-  sending. Create was server-validated; update stored an out-of-range value at
-  exit `0`.
-- `functions update --body-file --update-mask displayName` with no
-  `displayName` in the object exits `2`: it used to resend the current name
-  and change nothing at exit `0`.
-- `settings domains set --body-file` refuses a `newDomains` element that is
-  not a string or is blank (the `--domain` channel already did), and
-  `apps resources create --body-file` refuses `appId`/`app_id` and
-  `appResourceTypeId`/`app_resource_type_id`, which `--app-id` and
-  `--resource-type-id` own (the server silently ignored them).
-- `service-principals trusts` rows print an absent `scoped_role_ids`,
-  `allow_source_cidrs` or `passthrough_claims` as `null` instead of `[]`.
-- `connectors credentials get` refuses a credential whose `appId` or
-  `connectorId` differs from its flags (exit `4`): the server resolves the id
-  globally and ignored both path segments.
-- `access-reviews templates update --body-file` treats a snake_case key
-  (`display_name`, `policy_id`) as set: the update no longer reads the
-  template and sends the camelCase field beside it. A masked `policy_id` is
-  looked up like `policyId` (unknown exits `4`, a non-certify policy `2`), and
-  a blank value exits `2` in either spelling.
-- Every check c1i makes on a `--*-file` JSON object now reads a field in either
-  spelling the API accepts (`policyId` or `policy_id`), nested fields included.
-  A snake_case key used to skip the check and send the request: the id lookups
-  in `access-reviews templates create`, `connectors create`, `entitlements
-  automation create` and the six `scope set*` commands, and the policy guards
-  in `policies create|update` (an empty or missing baseline step, an
-  unspecified type, approver fallback and agent rules, rule outcomes). Valid
-  snake_case bodies that c1i refused with exit `2` are now sent, and fills no
-  longer add a second spelling of a field the file sets (`functions update`,
-  `mcp servers update-credentials`, `api --paginate`). A file that sets a
-  field c1i checks in both spellings exits `2` before anything is sent; the
-  API refuses any field sent in both with 400 "duplicate field". Only those
-  two spellings name a field: the API refuses `PageSize` or `PAGE_SIZE` as an
-  unknown field, and c1i does not read them as one.
-- `functions create|update --file` now refuses a path containing a control
-  character, like every other file-valued flag (exit `2`, nothing sent).
-- `--fields` on `mcp gateway call`, `findings settings show`, `findings
-  settings edge show` and `settings ai-governance tenant-defaults` is a usage
+- `--fields` on `mcp gateway call` and `findings settings show` is a usage
   error: they print a raw API/MCP object that was never projected, so the flag
   used to be silently ignored.
-- Every command that checks a referenced object for soft deletion before a
-  write now applies one rule: the object is deleted when its own `deletedAt`
-  is set (`null` and `""` are live). The app-reading commands (`apps update`,
-  the app and resource owner verbs, `apps resources update`, `connectors
-  create`, `mcp servers register`, `apps routing-rules create|update|reorder`,
-  `xaa resource-servers|scopes|access-profiles create`, `apps usage-controls
-  get`) exit `4` for an unknown app, `2` for a deleted one and `6` when the
-  lookup answers `200` without an app; some used to let that last case
-  through, and others refused an app whose `deletedAt` was `""`. The
-  entitlement, resource-type, role, service-principal, function and commit lookups
-  read the object they asked for: a `deletedAt` elsewhere in the response no
-  longer refuses the write, and a response without that object exits `6`.
-  `--dry-run` refuses the same.
-- `--dry-run` now masks the user of an scp-form git remote in any field
-  (`ghp_x@github.com:repo.git` prints `[redacted]@github.com:repo.git`), with
-  or without a `/` in the path; the `git` user and a plain email stay as sent.
-
-### Security
-
-- `auth login` prints the device-flow user code and verification URL from the
-  server with control characters escaped, as stderr already does.
-- Text-mode stderr (errors, notices, `--wait` progress, the `--debug`
-  trace) prints control characters and invalid UTF-8 bytes from
-  server-supplied text as visible escapes (`\x1b`, `\u202e`) instead of
-  sending them to the terminal, so an API error body or MCP message cannot
-  rewrite the screen or title. `\n` and `\t` are kept; `--error-format json`
-  output is unchanged.
+- `--dry-run` previews no longer mask an email-shaped value (a display name);
+  URL-shaped strings are still masked. They now mask the user of an scp-form
+  git remote in any field (`ghp_x@github.com:repo.git` prints
+  `[redacted]@github.com:repo.git`), with or without a `/` in the path; the
+  `git` user and a plain email stay as sent.
+- Every check c1i makes on a `--*-file` JSON object reads a field in either
+  spelling the API accepts (`policyId` or `policy_id`), nested fields included.
+  A snake_case key used to skip the check and send the request, as in the
+  policy guards of `policies create|update` (an empty or missing baseline step,
+  an unspecified type, approver fallback and agent rules, rule outcomes).
+  Valid snake_case bodies that c1i refused with exit `2` are now sent, and
+  fills no longer add a second spelling of a field the file sets (`mcp servers
+  update-credentials`, `api --paginate`). A file that sets a field c1i checks
+  in both spellings exits `2` before anything is sent; the API refuses any
+  field sent in both with 400 "duplicate field". Only those two spellings name
+  a field: the API refuses `PageSize` or `PAGE_SIZE` as an unknown field, and
+  c1i does not read them as one.
 
 ## [0.11.0] - 2026-11-17
 
