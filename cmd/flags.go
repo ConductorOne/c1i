@@ -674,7 +674,7 @@ func normalizeUpdateMask(mask string) (string, error) {
 func requireMaskCoversConfig(mask string, cfg map[string]any) error {
 	var uncovered []string
 	for key := range cfg {
-		if key == "mcpServerCatalogId" {
+		if foldMaskName(key) == foldMaskName("mcpServerCatalogId") {
 			continue
 		}
 		if !hasVisibleRune(key) {

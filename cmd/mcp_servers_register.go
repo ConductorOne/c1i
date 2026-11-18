@@ -203,7 +203,7 @@ func buildRegisterBody(cmd *cobra.Command) (map[string]any, error) {
 			return nil, err
 		}
 		if !flagGiven(cmd, "hosted-config-file") {
-			if _, ok := cfg["mcpServerCatalogId"]; !ok {
+			if !bodySetsField(cfg, "mcpServerCatalogId") {
 				return nil, fmt.Errorf("--catalog-id is required for --type hosted (or pass --hosted-config-file)")
 			}
 		}

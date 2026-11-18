@@ -88,58 +88,67 @@ Prints the template unwrapped like "access-reviews templates get": the id is
 
 ` + templatePolicyHelp,
 	RunE: func(cmd *cobra.Command, _ []string) error {
-		body, ownerFlag, err := buildTemplateCreateBody(cmd)
+		body, fromFile, err := buildTemplateCreateBody(cmd)
 		if err != nil {
 			return err
 		}
-		owners, err := campaignOwnerIDs(body)
+		owners, ownerKey, err := campaignOwnerIDs(body)
 		if err != nil {
 			return err
 		}
-		policyID, _ := body["policyId"].(string)
+		policyV, policyKey, _ := bodyField(body, "policyId")
+		policyID, _ := policyV.(string)
+		ownerLabel, policyLabel := "owner-id", "policy-id"
+		if fromFile {
+			ownerLabel, policyLabel = "body-file "+ownerKey, "body-file "+policyKey
+		}
 		return sendMutation(cmd, mutation{Method: http.MethodPost, Path: "/api/v1/access_review_template", Body: body},
-			withPreRead(templatePolicyCheck(policyFlagLabel(ownerFlag), policyID)),
-			withPreRead(existingUsersCheck(ownerFlag, owners)))
+			withPreRead(templatePolicyCheck(policyLabel, policyID)),
+			withPreRead(existingUsersCheck(ownerLabel, owners)))
 	},
 }
 
 var templateCreateFieldFlags = []string{"display-name", "description", "policy-id", "owner-id", "scope-type", "review-instructions"}
 
-// buildTemplateCreateBody returns the body and the channel its ownerIds came
-// from, so an error names the flag or body key the caller wrote.
-func buildTemplateCreateBody(cmd *cobra.Command) (map[string]any, string, error) {
+// buildTemplateCreateBody returns the body and whether it came from
+// --body-file, so an error names the flag or body key the caller wrote.
+func buildTemplateCreateBody(cmd *cobra.Command) (map[string]any, bool, error) {
 	if flagGiven(cmd, "body-file") {
 		for _, f := range templateCreateFieldFlags {
 			if flagGiven(cmd, f) {
-				return nil, "", &usageError{fmt.Errorf("--body-file is mutually exclusive with --%s", f)}
+				return nil, true, &usageError{fmt.Errorf("--body-file is mutually exclusive with --%s", f)}
 			}
 		}
 		body, err := readJSONFile[map[string]any](cmd, "body-file", mustGetString(cmd, "body-file"))
 		if err != nil {
-			return nil, "", err
+			return nil, true, err
 		}
-		if v, ok := body["policyId"]; ok {
+		v, key, err := bodyField(body, "policyId")
+		if err != nil {
+			return nil, true, err
+		}
+		if key != "" {
 			if s, ok := v.(string); !ok || !hasVisibleRune(s) {
-				return nil, "", &usageError{errors.New("--body-file policyId must be a non-blank policy id string")}
+				return nil, true, &usageError{fmt.Errorf("--body-file %s must be a non-blank policy id string", key)}
 			}
 		}
-		return body, "body-file ownerIds", nil
+		return body, true, nil
 	}
 	for _, f := range []string{"display-name", "policy-id"} {
 		if !flagGiven(cmd, f) {
-			return nil, "", &usageError{fmt.Errorf("--%s is required (or pass --body-file)", f)}
+			return nil, false, &usageError{fmt.Errorf("--%s is required (or pass --body-file)", f)}
 		}
 	}
 	owners, err := repeatableStringFlag(cmd, "owner-id")
 	if err != nil {
-		return nil, "", err
+		return nil, false, err
 	}
 	if len(owners) == 0 {
-		return nil, "", &usageError{errors.New("--owner-id is required (or pass --body-file)")}
+		return nil, false, &usageError{errors.New("--owner-id is required (or pass --body-file)")}
 	}
 	body := map[string]any{"displayName": mustGetString(cmd, "display-name"), "ownerIds": owners}
 	if err := applyPolicyIDs(cmd, []policyKind{templatePolicyKind}, body); err != nil {
-		return nil, "", err
+		return nil, false, err
 	}
 	for flag, key := range map[string]string{"description": "description", "review-instructions": "reviewInstructions"} {
 		if v := mustGetString(cmd, flag); v != "" {
@@ -149,18 +158,11 @@ func buildTemplateCreateBody(cmd *cobra.Command) (map[string]any, string, error)
 	if flagGiven(cmd, "scope-type") {
 		v, err := templateScopeTypeFlag.parse(mustGetString(cmd, "scope-type"))
 		if err != nil {
-			return nil, "", err
+			return nil, false, err
 		}
 		body["scopeType"] = v
 	}
-	return body, "owner-id", nil
-}
-
-func policyFlagLabel(ownerFlag string) string {
-	if ownerFlag == "owner-id" {
-		return "policy-id"
-	}
-	return "body-file policyId"
+	return body, false, nil
 }
 
 // templatePolicyCheck looks up a policy id from either channel; "" checks nothing.
@@ -241,9 +243,13 @@ func buildTemplateUpdate(cmd *cobra.Command, id string) (body, tpl map[string]an
 			return nil, nil, "", "", err
 		}
 		for _, key := range templateRequiredFields {
-			if v, ok := bodyField(tpl, key); ok {
+			v, got, err := bodyField(tpl, key)
+			if err != nil {
+				return nil, nil, "", "", err
+			}
+			if got != "" {
 				if s, ok := v.(string); !ok || !hasVisibleRune(s) {
-					return nil, nil, "", "", &usageError{fmt.Errorf("--body-file %s must be a non-blank string; omit it to keep the current value", key)}
+					return nil, nil, "", "", &usageError{fmt.Errorf("--body-file %s must be a non-blank string; omit it to keep the current value", got)}
 				}
 			}
 		}
@@ -256,8 +262,7 @@ func buildTemplateUpdate(cmd *cobra.Command, id string) (body, tpl map[string]an
 	}
 	for _, p := range strings.Split(mask, ",") {
 		if foldMaskName(p) == foldMaskName("policyId") {
-			v, _ := bodyField(tpl, "policyId")
-			policyID, _ = v.(string)
+			policyID, _, _ = bodyFieldAs[string](tpl, "policyId")
 		}
 	}
 	tpl["id"] = id

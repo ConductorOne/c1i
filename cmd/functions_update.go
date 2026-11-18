@@ -43,7 +43,11 @@ as the sibling .commit (null without --file). Honors --dry-run.`,
 			return err
 		}
 		m := mutation{Method: http.MethodPost, Path: "/api/v1/functions/update", Body: body, Unwrap: named("function")}
-		if _, ok := body["function"].(map[string]any)["displayName"]; ok {
+		_, nameKey, err := bodyField(body["function"].(map[string]any), "displayName")
+		if err != nil {
+			return err
+		}
+		if nameKey != "" {
 			return sendMutation(cmd, m)
 		}
 		return sendMutation(cmd, m, functionDisplayNamePreRead(args[0]))

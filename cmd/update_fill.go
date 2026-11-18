@@ -9,22 +9,6 @@ import (
 	"github.com/ConductorOne/c1i/internal/client"
 )
 
-// The server reads a field's camelCase and snake_case spellings as one field,
-// so a body key is matched to an API field name the way mask paths are
-// (foldMaskName). Matching exact camelCase would fill a field the body already
-// sets as snake_case and send it twice (a 400, "duplicate field").
-
-// bodySetsField reports whether obj sets field in any spelling.
-func bodySetsField(obj map[string]any, field string) bool {
-	want := foldMaskName(field)
-	for k := range obj {
-		if foldMaskName(k) == want {
-			return true
-		}
-	}
-	return false
-}
-
 // requiredFieldsFill copies each of fields from the object a GET of path holds
 // under envelope into obj, where obj leaves it unset: the server rejects an
 // update without them, even when the mask names none. label names the object
@@ -63,8 +47,13 @@ func requiredFieldsFill(path, envelope, label string, fields []string, obj map[s
 
 // refuseMaskedFieldWithoutValue refuses a mask that names one of fields the
 // body does not set: requiredFieldsFill would send the current value, a silent
-// no-op.
+// no-op. A field set in two spellings is refused too.
 func refuseMaskedFieldWithoutValue(mask string, obj map[string]any, fields []string) error {
+	for _, f := range fields {
+		if _, _, err := bodyField(obj, f); err != nil {
+			return err
+		}
+	}
 	for _, path := range strings.Split(mask, ",") {
 		for _, f := range fields {
 			if foldMaskName(path) == foldMaskName(f) && !bodySetsField(obj, f) {
@@ -73,15 +62,4 @@ func refuseMaskedFieldWithoutValue(mask string, obj map[string]any, fields []str
 		}
 	}
 	return nil
-}
-
-// bodyField returns obj's value for field in any spelling.
-func bodyField(obj map[string]any, field string) (any, bool) {
-	want := foldMaskName(field)
-	for k, v := range obj {
-		if foldMaskName(k) == want {
-			return v, true
-		}
-	}
-	return nil, false
 }

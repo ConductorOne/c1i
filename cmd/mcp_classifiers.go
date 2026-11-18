@@ -359,8 +359,11 @@ func readClassifierUpdateBody(cmd *cobra.Command, id string) (map[string]any, er
 	if err != nil {
 		return nil, err
 	}
-	classifier := body["classifier"].(map[string]any)
-	if _, ok := classifier["displayName"].(string); !ok {
+	_, ok, err := bodyFieldAs[string](body["classifier"].(map[string]any), "displayName")
+	if err != nil {
+		return nil, err
+	}
+	if !ok {
 		return nil, &usageError{fmt.Errorf("classifier update body must include displayName")}
 	}
 	return body, nil

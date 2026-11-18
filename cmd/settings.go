@@ -122,7 +122,11 @@ const settingsDurationForm = "as a protobuf duration, e.g. 3600s, or a Go durati
 // empty object or array.
 func requireNonEmptyBodyKey(body map[string]any, keys ...string) error {
 	for _, k := range keys {
-		switch v := body[k].(type) {
+		raw, _, err := bodyField(body, k)
+		if err != nil {
+			return err
+		}
+		switch v := raw.(type) {
 		case map[string]any:
 			if len(v) > 0 {
 				return nil

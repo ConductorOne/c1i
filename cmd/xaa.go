@@ -204,13 +204,13 @@ func xaaResourceServerCheck(appID, rsID string) preRead {
 // spec says the hook then denies every grant. It reads nothing when obj names
 // no function.
 func claimsHookCheck(obj map[string]any) preRead {
-	hookV, _ := bodyField(obj, "modifyClaimsHook")
-	hook, _ := hookV.(map[string]any)
-	fnV, _ := bodyField(hook, "functionId")
-	fnID, _ := fnV.(string)
-	commitV, _ := bodyField(hook, "commitId")
-	commitID, _ := commitV.(string)
+	hook, _, hookErr := bodyFieldAs[map[string]any](obj, "modifyClaimsHook")
+	fnID, _, fnErr := bodyFieldAs[string](hook, "functionId")
+	commitID, _, commitErr := bodyFieldAs[string](hook, "commitId")
 	return preRead{Run: func(ctx context.Context, c *client.Client, _ *mutation) ([]resolvedID, error) {
+		if err := errors.Join(hookErr, fnErr, commitErr); err != nil {
+			return nil, &usageError{err}
+		}
 		if fnID == "" {
 			return nil, nil
 		}

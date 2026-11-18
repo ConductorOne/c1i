@@ -97,11 +97,11 @@ func flagRefs(refs []appRef) []labeledRef {
 	return out
 }
 
-// bodyFileRefs parses body[key] when present and non-null.
-func bodyFileRefs(body map[string]any, key string, shape appRefShape) ([]labeledRef, error) {
-	v, ok := body[key]
-	if !ok || v == nil {
-		return nil, nil
+// bodyFileRefs parses body's field, in either spelling, when present and non-null.
+func bodyFileRefs(body map[string]any, field string, shape appRefShape) ([]labeledRef, error) {
+	v, key, err := bodyField(body, field)
+	if err != nil || v == nil {
+		return nil, err
 	}
 	arr, ok := v.([]any)
 	if !ok {

@@ -232,10 +232,15 @@ func validatePolicyStepsNonEmpty(policyType string, policySteps map[string]any, 
 // check just saves the round trip and gives a clearer message).
 func validateRuleOutcomes(rules []map[string]any) error {
 	for i, rule := range rules {
-		_, hasStepKey := rule["stepKey"]
-		_, hasPolicyID := rule["policyId"]
-		_, hasLegacyKey := rule["policyKey"]
-		hasOutcome := hasStepKey || hasPolicyID
+		var has [3]bool
+		for j, field := range []string{"stepKey", "policyId", "policyKey"} {
+			_, key, err := bodyField(rule, field)
+			if err != nil {
+				return &usageError{fmt.Errorf("rules[%d]: %w", i, err)}
+			}
+			has[j] = key != ""
+		}
+		hasOutcome, hasLegacyKey := has[0] || has[1], has[2]
 		switch {
 		case hasOutcome && hasLegacyKey:
 			return &usageError{fmt.Errorf("rules[%d]: cannot set both the deprecated policyKey field and stepKey/policyId; clear policyKey when writing the new shape", i)}
@@ -263,7 +268,10 @@ func validateRuleStepKeys(rules []map[string]any, policySteps map[string]any) er
 		return nil
 	}
 	for i, rule := range rules {
-		stepKey, _ := rule["stepKey"].(string)
+		stepKey, _, err := bodyFieldAs[string](rule, "stepKey")
+		if err != nil {
+			return &usageError{fmt.Errorf("rules[%d]: %w", i, err)}
+		}
 		if stepKey == "" {
 			continue // policyId outcome, or the deprecated policyKey — not checked here
 		}
@@ -393,26 +401,33 @@ func validateApprovalFallback(policySteps map[string]any, policyType string) err
 				return &usageError{fmt.Errorf("policySteps[%q].steps[%d].approval.assigned must not be true — it's a read-only, server-computed field", ptype, i)}
 			}
 			for _, arm := range approvalArms {
-				armObj, ok := approval[arm].(map[string]any)
+				armObj, ok, err := bodyFieldAs[map[string]any](approval, arm)
+				if err != nil {
+					return &usageError{fmt.Errorf("policySteps[%q].steps[%d].approval: %w", ptype, i, err)}
+				}
 				if !ok {
 					continue
 				}
+				f, err := approvalArmFields(armObj)
+				if err != nil {
+					return &usageError{fmt.Errorf("policySteps[%q].steps[%d].approval.%s: %w", ptype, i, arm, err)}
+				}
 				_, hasFallback := armObj["fallback"]
-				_, hasFallbackUserIDs := armObj["fallbackUserIds"]
+				hasFallbackUserIDs := f.has("fallbackUserIds")
 				if approverArmsWithoutFallback[arm] && (hasFallback || hasFallbackUserIDs) {
 					return &usageError{fmt.Errorf("policySteps[%q].steps[%d].approval.%s does not support fallback/fallbackUserIds (only manager, group, self, expression, entitlementOwners, and resourceOwners do) — the server rejects it as an unknown field", ptype, i, arm)}
 				}
 				if approverArmsWithFallback[arm] {
 					fallback, _ := armObj["fallback"].(bool)
 					if fallback {
-						groupFallbackEnabled, _ := armObj["isGroupFallbackEnabled"].(bool)
+						groupFallbackEnabled, _ := f.get("isGroupFallbackEnabled").(bool)
 						if groupFallbackEnabled {
-							groupIDs, _ := armObj["fallbackGroupIds"].([]any)
+							groupIDs, _ := f.get("fallbackGroupIds").([]any)
 							if len(groupIDs) == 0 {
 								return &usageError{fmt.Errorf("policySteps[%q].steps[%d].approval.%s has fallback:true and isGroupFallbackEnabled:true but fallbackGroupIds is empty — the server returns HTTP 500 for this instead of a 400", ptype, i, arm)}
 							}
 						} else {
-							userIDs, _ := armObj["fallbackUserIds"].([]any)
+							userIDs, _ := f.get("fallbackUserIds").([]any)
 							if len(userIDs) == 0 {
 								return &usageError{fmt.Errorf("policySteps[%q].steps[%d].approval.%s has fallback:true but fallbackUserIds is empty — the server returns HTTP 500 for this instead of a 400", ptype, i, arm)}
 							}
@@ -420,19 +435,19 @@ func validateApprovalFallback(policySteps map[string]any, policyType string) err
 					}
 				}
 				if arm == "manager" {
-					if ids, _ := armObj["assignedUserIds"].([]any); len(ids) > 0 {
+					if ids, _ := f.get("assignedUserIds").([]any); len(ids) > 0 {
 						return &usageError{fmt.Errorf("policySteps[%q].steps[%d].approval.manager.assignedUserIds must be empty — it's set by the task workflow at runtime, not on the policy definition", ptype, i)}
 					}
 				}
 				if arm == "agent" {
-					if uid, _ := armObj["agentUserId"].(string); uid != "" {
+					if uid, _ := f.get("agentUserId").(string); uid != "" {
 						return &usageError{fmt.Errorf("policySteps[%q].steps[%d].approval.agent.agentUserId must be empty — agent approval steps are system-driven and cannot reference an agent user (deprecated field)", ptype, i)}
 					}
 					if policyType != "" && policyType != "POLICY_TYPE_UNSPECIFIED" &&
 						policyType != "POLICY_TYPE_GRANT" && policyType != "POLICY_TYPE_CERTIFY" {
 						return &usageError{fmt.Errorf("policySteps[%q].steps[%d].approval.agent: agent approval steps are only allowed in grant and certify policies (this policy is %s) — server error: \"agent approval steps are only allowed in grant and certify policies\" (HTTP 500, not 400)", ptype, i, policyType)}
 					}
-					agentMode, _ := armObj["agentMode"].(string)
+					agentMode, _ := f.get("agentMode").(string)
 					if agentMode == "" || agentMode == "APPROVAL_AGENT_MODE_UNSPECIFIED" {
 						return &usageError{fmt.Errorf("policySteps[%q].steps[%d].approval.agent.agentMode is required — server error: \"agent mode is required\" (HTTP 500, not 400)", ptype, i)}
 					}
@@ -440,19 +455,19 @@ func validateApprovalFallback(policySteps map[string]any, policyType string) err
 						return &usageError{fmt.Errorf(`policySteps[%q].steps[%d].approval.agent.agentMode must be APPROVAL_AGENT_MODE_COMMENT_ONLY in a certify policy — server error: agent mode can only be "Comment only" in certify policies (HTTP 500, not 400)`, ptype, i)}
 					}
 					if agentMode == "APPROVAL_AGENT_MODE_CHANGE_POLICY_ONLY" {
-						if ids, _ := armObj["policyIds"].([]any); len(ids) == 0 {
+						if ids, _ := f.get("policyIds").([]any); len(ids) == 0 {
 							return &usageError{fmt.Errorf(`policySteps[%q].steps[%d].approval.agent.policyIds is required when agentMode is APPROVAL_AGENT_MODE_CHANGE_POLICY_ONLY — server error: policy ids are required when agent mode is "Change policy" (HTTP 500, not 400)`, ptype, i)}
 						}
 						// The sibling rule — no policyIds entry may equal the
 						// policy's own id — isn't checked: this function is never
 						// given the policy's own id (see the doc comment above).
 					}
-					agentFailureAction, _ := armObj["agentFailureAction"].(string)
+					agentFailureAction, _ := f.get("agentFailureAction").(string)
 					if agentFailureAction == "" || agentFailureAction == "APPROVAL_AGENT_FAILURE_ACTION_UNSPECIFIED" {
 						return &usageError{fmt.Errorf("policySteps[%q].steps[%d].approval.agent.agentFailureAction is required — server error: \"agent failure action is required\" (HTTP 500, not 400)", ptype, i)}
 					}
 					if agentFailureAction == "APPROVAL_AGENT_FAILURE_ACTION_REASSIGN_TO_USERS" {
-						if ids, _ := armObj["reassignToUserIds"].([]any); len(ids) == 0 {
+						if ids, _ := f.get("reassignToUserIds").([]any); len(ids) == 0 {
 							return &usageError{fmt.Errorf(`policySteps[%q].steps[%d].approval.agent.reassignToUserIds is required when agentFailureAction is APPROVAL_AGENT_FAILURE_ACTION_REASSIGN_TO_USERS — server error: reassign to user ids is required when agent failure action is "Reassign to users" (HTTP 500, not 400)`, ptype, i)}
 						}
 					}
@@ -468,11 +483,17 @@ func validateApprovalFallback(policySteps map[string]any, policyType string) err
 // always checked (a create always needs both, absent --allow-deny-all for
 // the latter); rules are only checked when present, since they're optional.
 func validateCreateBody(body map[string]any, allowDenyAll bool) error {
-	policyType, _ := body["policyType"].(string)
+	policyType, _, err := bodyFieldAs[string](body, "policyType")
+	if err != nil {
+		return err
+	}
 	if err := validatePolicyType(policyType); err != nil {
 		return err
 	}
-	policySteps, _ := body["policySteps"].(map[string]any)
+	policySteps, _, err := bodyFieldAs[map[string]any](body, "policySteps")
+	if err != nil {
+		return err
+	}
 	if err := validatePolicyStepsNonEmpty(policyType, policySteps, allowDenyAll); err != nil {
 		return err
 	}
@@ -505,7 +526,10 @@ func validateCreateBody(body map[string]any, allowDenyAll bool) error {
 // policySteps guard can still resolve the right baseline key when
 // --steps-file is supplied without --policy-type on an update.
 func validateUpdatePatch(policy map[string]any, fallbackPolicyType string, allowDenyAll bool) error {
-	policyType, hasPolicyType := policy["policyType"].(string)
+	policyType, hasPolicyType, err := bodyFieldAs[string](policy, "policyType")
+	if err != nil {
+		return err
+	}
 	if hasPolicyType {
 		if err := validatePolicyType(policyType); err != nil {
 			return err
@@ -513,7 +537,10 @@ func validateUpdatePatch(policy map[string]any, fallbackPolicyType string, allow
 	} else {
 		policyType = fallbackPolicyType
 	}
-	ps, hasSteps := policy["policySteps"].(map[string]any)
+	ps, hasSteps, err := bodyFieldAs[map[string]any](policy, "policySteps")
+	if err != nil {
+		return err
+	}
 	if hasSteps {
 		if err := validatePolicyStepsNonEmpty(policyType, ps, allowDenyAll); err != nil {
 			return err
@@ -540,4 +567,34 @@ func validateUpdatePatch(policy map[string]any, fallbackPolicyType string, allow
 		}
 	}
 	return nil
+}
+
+// approvalArmFieldNames are the multi-word approver-arm fields the guards
+// above read; approvalArmFields matches each in either spelling.
+var approvalArmFieldNames = []string{
+	"fallbackUserIds", "fallbackGroupIds", "isGroupFallbackEnabled", "assignedUserIds",
+	"agentUserId", "agentMode", "policyIds", "agentFailureAction", "reassignToUserIds",
+}
+
+// armFields holds an approver arm's approvalArmFieldNames by camelCase name.
+type armFields struct {
+	present map[string]bool
+	values  map[string]any
+}
+
+func (f armFields) has(name string) bool { return f.present[name] }
+func (f armFields) get(name string) any  { return f.values[name] }
+
+// approvalArmFields reads approvalArmFieldNames from an approver arm in
+// whatever spelling the caller used.
+func approvalArmFields(arm map[string]any) (armFields, error) {
+	f := armFields{present: map[string]bool{}, values: map[string]any{}}
+	for _, name := range approvalArmFieldNames {
+		v, key, err := bodyField(arm, name)
+		if err != nil {
+			return f, err
+		}
+		f.present[name], f.values[name] = key != "", v
+	}
+	return f, nil
 }

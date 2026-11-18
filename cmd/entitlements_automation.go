@@ -194,15 +194,19 @@ func conditionRefs(obj map[string]any) []appRef {
 // bodyAutomationRefs parses a --body-file's entitlements.entitlementRefs, so
 // each can be looked up before the send.
 func bodyAutomationRefs(obj map[string]any) ([]appRef, error) {
-	ents, ok := obj["entitlements"].(map[string]any)
+	ents, ok, err := bodyFieldAs[map[string]any](obj, "entitlements")
+	if err != nil || !ok {
+		return nil, err
+	}
+	rawV, key, err := bodyField(ents, "entitlementRefs")
+	if err != nil {
+		return nil, err
+	}
+	raw, ok := rawV.([]any)
 	if !ok {
 		return nil, nil
 	}
-	raw, ok := ents["entitlementRefs"].([]any)
-	if !ok {
-		return nil, nil
-	}
-	return parseAppRefs(raw, "--body-file entitlements.entitlementRefs", appEntitlementRefShape)
+	return parseAppRefs(raw, "--body-file entitlements."+key, appEntitlementRefShape)
 }
 
 func automationRefLabels(refs []appRef) []labeledRef {
