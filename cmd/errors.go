@@ -358,7 +358,7 @@ func writeError(w io.Writer, err error, format string, ran *cobra.Command) {
 			return
 		}
 	}
-	_, _ = fmt.Fprintf(w, "Error: %v\n", displayError(err))
+	_, _ = fmt.Fprintf(w, "Error: %s\n", escapeControl(displayError(err).Error()))
 }
 
 // errorObject is err's JSON form, without `applied`.
@@ -389,7 +389,7 @@ func writeBatchItemError(cmd *cobra.Command, noun, id string, err error, applied
 		return
 	}
 	if many {
-		_, _ = fmt.Fprintf(w, "%s %s: %v\n", noun, id, displayError(err))
+		_, _ = fmt.Fprintf(w, "%s\n", escapeControl(fmt.Sprintf("%s %s: %v", noun, id, displayError(err))))
 	}
 }
 
