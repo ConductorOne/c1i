@@ -25,6 +25,14 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - `requests create action` and `requests create resource-action` (`--action-id`,
   `--form-values-file`; `action` also `--description`, `--group-only`). No API
   route lists these actions; an unknown id exits `4` (`action not found`).
+- `mcp resources` and `mcp prompts`: `list`, `search` (`--query`, repeatable
+  `--state`, `--kind static|template` for resources, `--include-grant-status`
+  to add `entitlement_active` and `grant_count`), `get`, `history`, and
+  `approve <id>... [--state approved|disabled|pending]`, which works like `mcp
+  tools approve`. State is the only field either API can change, so neither has
+  an `update`. `mcp resources list` returns removed resources too; `search`
+  shows them only with `--state removed`. A tenant without the prompts feature
+  answers every prompts command with 403 `feature not enabled` (exit 3).
 
 - `apps search` filters applications server-side (`POST /api/v1/search/apps`)
   by `--query` (fuzzy on name and description), `--display-name`, repeatable
