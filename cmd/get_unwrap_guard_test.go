@@ -429,6 +429,15 @@ func getUnwrapCases() []getUnwrapCase {
 			wantKeys:    []string{"id", "displayName", "deletedAt"},
 		},
 		{
+			name:        "attributes get",
+			cmd:         attributesGetCmd,
+			args:        []string{"av-1"},
+			idKey:       "id",
+			body:        `{"value":{"id":"av-1","attributeTypeId":"ty-1","value":"zz","deletedAt":null}}`,
+			payloadPath: []string{"value"},
+			wantKeys:    []string{"id", "attributeTypeId", "value", "deletedAt"},
+		},
+		{
 			name:        "attribute-mappings get",
 			cmd:         attributeMappingsGetCmd,
 			args:        []string{"map-1"},

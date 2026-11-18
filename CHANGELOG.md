@@ -8,6 +8,11 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- `attributes types|list|search|get|create|delete` for tenant attribute values
+  (Compliance Framework, Risk Level), distinct from `attribute-types` and
+  `attribute-mappings`. `--type` takes a name or id and is looked up first, so
+  an unknown type exits `4` (the server returns an empty list for `list` and
+  `search` and creates the value anyway on `create`). `delete` is soft.
 - `tasks escalate|retry-provisioning <task-id>` (current policy step resolved
   like `approve`) and `tasks update-request-data <task-id> --data-file`, which
   the API describes as submitting the request form of a task at a form step.
