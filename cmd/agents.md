@@ -607,6 +607,25 @@ resource with `--resource-id` likewise means you drop
   `.state.managed.appId` (top-level `appId` is the connector). Without
   `--user-id` the new app's owners were the connector app's; `docs guide
   promote-idp-app-to-managed` has the timings and the full flow.
+- `apps routing-rules list|get|create|delete|reorder` manage an app's
+  entitlement routing rules (`--app-id` scope; `get`/`delete` take
+  `<rule-id>`). The first enabled rule (by `priority`, 1 first) whose CEL
+  `--condition` matches supplies the request settings (`--request-policy-id`,
+  `--emergency-grant-policy-id` + `--emergency-grant-enabled`,
+  `--max-grant-duration`, `--request-schema-id`). Enabled rules route real
+  requests; `create` is disabled unless `--enabled`. `create --priority` is
+  an insertion slot (omit to append). `reorder --rule-id` (repeatable) must
+  name every active rule exactly once, else 400 (exit 2). `delete` is soft;
+  repeating it exits 4. Cap was 10 rules per app (400, exit 2, "This app
+  already has the maximum of 10 entitlement configuration rules"). `list` has
+  no paging and lists nothing for an unknown app (exit 0); other commands
+  exit 4 for an unknown app or rule, or an unknown policy or schema id.
+  No `update` yet.
+- `apps usage-controls get <app-id>` shows the notify/revoke-on-non-use
+  controls beside `hasUsageData`; never-set controls print only
+  `hasUsageData`. c1i reads the app first, so an unknown app exits 4 (the
+  endpoint itself answers 200). No `update`: it answered 501 "feature is
+  disabled" on the tenant tested.
 - `apps resource-types get|create|update|delete <resource-type-id> --app-id`
   and `apps resources get|create|update|delete <resource-id> --app-id
   --resource-type-id` manage an app's manually managed types and resources;
