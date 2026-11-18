@@ -42,6 +42,7 @@ var bodyKeyReadExemptions = map[string]bodyKeyReadExemption{
 	"flags.go:protoDurationFlag":                                 {[]string{"c1i_proto_duration"}, "a cobra flag annotation, not JSON"},
 	"flags.go:validateHeaderFlags":                               {[]string{"c1i_header_text"}, "a cobra flag annotation, not JSON"},
 	"root.go:validateBlankFlags":                                 {[]string{"c1i_blank_hint", "c1i_empty_allowed"}, "a cobra flag annotation, not JSON"},
+	"apps_usage_controls.go:dropNullUsageControls":               {[]string{"appUsageControls"}, "a server response, which is always camelCase"},
 	"api.go:nextPageTokenFromMap":                                {[]string{"nextPageToken"}, "a server response, which is always camelCase"},
 	"attribute_mappings.go:attributeMappingOf":                   {[]string{"userAttributeMapping"}, "a server response, which is always camelCase"},
 	"attribute_mappings.go:attributeMappingRow":                  {[]string{"attributeType", "evaluationErrorCount", "userAttributeMapping"}, "a server response, which is always camelCase"},
