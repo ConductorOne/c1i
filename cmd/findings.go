@@ -251,6 +251,9 @@ func getFindingResource(cmd *cobra.Command, path, idKey string) error {
 }
 
 func getFindingsRaw(cmd *cobra.Command, path string) error {
+	if err := refuseMutationFields(cmd); err != nil {
+		return err
+	}
 	baseURL, err := GetBaseURL()
 	if err != nil {
 		return err

@@ -50,7 +50,7 @@ const webhooksSearchPath = "/api/v1/search/webhooks"
 
 func init() {
 	f := webhooksSearchCmd.Flags()
-	f.String("query", "", "Text to match against webhook names and descriptions")
+	f.String("query", "", "Text to match against webhook names (a word only in a description matched nothing when tried)")
 	addRepeatableStringFlag(webhooksSearchCmd, "webhook-id", "Restrict the search to this webhook id (repeatable)")
 	addPaginationFlags(webhooksSearchCmd)
 	webhooksCmd.AddCommand(webhooksSearchCmd)

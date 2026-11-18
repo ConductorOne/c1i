@@ -13,7 +13,9 @@ var appsRoutingRulesGetCmd = &cobra.Command{
 rule's own keys are at the top level and its id is .id. A deleted rule is
 still returned, with deletedAt set.
 
-An unknown app or rule exits 4.`,
+An unknown app or rule exits 4. A soft-deleted app is reported as unknown
+here (4), as the API answers the read; create/update/reorder refuse it as
+deleted (2).`,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		baseURL, err := GetBaseURL()

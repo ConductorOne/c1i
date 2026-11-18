@@ -16,11 +16,15 @@ content array and isError flag). Pass arguments as a JSON object via --args.
 
 Find tool names and their input schemas with "c1i mcp gateway list-tools --full".
 Tool invocations are always live; this command rejects --dry-run because it
-cannot safely preview or suppress a tool's side effects.
+cannot safely preview or suppress a tool's side effects, and --fields because
+the raw MCP result is never projected (extract with jq).
 
   c1i mcp gateway call my_tool --args '{"id":"abc"}'`,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
+		if err := refuseMutationFields(cmd); err != nil {
+			return err
+		}
 		if dryRunActive() {
 			return &usageError{fmt.Errorf("--dry-run is unsupported for mcp gateway call: it cannot preview or suppress an MCP tool invocation")}
 		}

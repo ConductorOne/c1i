@@ -206,6 +206,9 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- `--fields` on `mcp gateway call` and `findings settings show` is a usage
+  error: both print a raw API/MCP object that was never projected, so the flag
+  used to be silently ignored.
 - `access-reviews templates update --body-file` treats a snake_case key
   (`display_name`, `policy_id`) as set: the update no longer reads the
   template and sends the camelCase field beside it. A masked `policy_id` is

@@ -16,7 +16,7 @@ trait id (the trait_ids of a row). Repeatable flags may be given more than
 once; several values of one flag match any of them.
 
 Rows have the same shape as "apps resource-types list"; a deleted type is not
-returned. One resource type id can appear on several apps (a row per app), so
+returned, though search trails a delete by a few seconds. One resource type id can appear on several apps (a row per app), so
 key rows on app_id and id.
 
 An id that matches nothing returns zero rows and exit 0; an id that is not 27

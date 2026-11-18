@@ -221,9 +221,8 @@ array; `[]` empties the set). `settings notifications org|user update` and
 `findings settings edge update` take the whole request in `--body-file` with
 no mask, so a body that names nothing (no non-empty `channelSettings`, or
 neither `settings` nor `subcategorySettings`) exits 2 unsent. In the run
-checked, a partial notifications body on the user scope changed only the
-settings it named; org's partial-body behavior is unmeasured, so send back the
-whole `show` output for org. The email provider and identity-policy defaults have no command.
+checked, a partial notifications body on either scope changed only the
+settings it named (one of 86 leaves on org). The email provider and identity-policy defaults have no command.
 
 Role ids for `service-principals credentials create --scoped-role`,
 `service-principals trusts create|update --scoped-role` and

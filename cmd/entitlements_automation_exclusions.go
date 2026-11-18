@@ -27,8 +27,8 @@ var entitlementsAutomationExclusionsListCmd = &cobra.Command{
 display_name, email, status.
 
 An unknown entitlement exits 4 (the server answers 404). Auto-paginates to
-completion like every other list command; the server refuses a page size
-over 100.`,
+completion like every other list command; c1i clamps --page-size to the
+server's 100.`,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		path := entitlementAutomationExclusionsPath(cmd, args[0])

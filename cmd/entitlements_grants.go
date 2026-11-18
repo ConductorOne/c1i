@@ -76,8 +76,8 @@ exit 0, not a 404 -- the endpoint answers 200 with an empty list. An empty
 result here is either "no grants" or "wrong id"; "entitlements get" on the
 same ids exits 4 and can tell you which.
 
-Auto-paginates to completion like every other list command; the server
-refuses a page size over 100.
+Auto-paginates to completion like every other list command; c1i clamps
+--page-size to the server's 100.
 
 Example:
   c1i entitlements grants <entitlement-id> --app-id <app-id>`,

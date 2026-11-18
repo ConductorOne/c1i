@@ -804,8 +804,10 @@ empty list at exit `0`).
 the delegation (it sends an empty delegate id, which the API describes as removing it). Tried against a tenant: an unknown delegate
 or user id was `404` (exit `4`), an expiry before the start `400` (exit `2`), and
 a past start or expiry and a self-delegation were accepted at exit `0`.
-Clearing printed `{"item": null}`, repeatedly; on a user who had never had a
-delegation it was `404` `provided delegated user id is empty`. `users get`
+Clearing printed `{"item": null}`; a second clear, or one on a user who never
+had a delegation, was `404` `provided delegated user id is empty`. Immediately
+after a set, the clear's lookup missed the new binding for a few seconds in one
+run. `users get`
 showed `delegatedUserId` empty while the start was still in the future.
 
 ### Apps
@@ -941,7 +943,7 @@ zero rows (exit `0`); the other commands exit `4` for an unknown app or rule.
 before anything is sent, `--dry-run` included. The update API has no mask and
 replaces the whole rule, so `update` reads the rule and sends every writable
 field with only your flags changed; a change made between that read and the
-write is overwritten. `update` refuses a deleted rule (exit `2`), cannot
+write is overwritten. Priority is server-assigned on update and is preserved. `update` refuses a deleted rule (exit `2`), cannot
 change the order (use `reorder`), and cannot unset a policy or schema id.
 `apps usage-controls get <app-id>` shows the
 notify and revoke-on-non-use controls beside `hasUsageData`; an app whose
@@ -983,6 +985,9 @@ under several apps, so key search rows on `app_id` (and `resource_type_id`)
 plus `id`. `apps resources owners`, `add-owner`, `remove-owner` and
 `set-owners` follow the app and entitlement owner commands below, on the
 `.../resource_types/{resource-type-id}/resource/{resource-id}/owners` route.
+The server resolves the resource id on its own, so `owners` ignores a bogus
+`--resource-type-id` (it still returns that resource's owners); use `resources
+get` with the same ids to validate them.
 The API answers `set-owners` on an unknown resource `200 {}` and stores the
 owners anyway, so c1i looks the resource up first (exit `4`). The owners
 response also carries `immutableUserIds` (owners the API says cannot be
@@ -2085,7 +2090,8 @@ c1i findings settings edge update --body-file <file|->
   change one `defaultClientLifecycle` duration each and leave the other two.
 - The server bounds some values and says so when it refuses one (exit `2`):
   `--max-session-length` must be one of the lengths it lists, and
-  `--max-bulk-entitlement-selection` must be in `[0, 50]`. Contact addresses
+  `--max-bulk-entitlement-selection` must be in `[0, 50]` (0 reads back as
+  the server default 10). Contact addresses
   must be valid email addresses. `sso update` on a tenant without the SSO
   provider feature is a 403, `feature not enabled` (exit `3`).
 - `ai-governance history` is one read (the endpoint takes no paging); the `sso`
@@ -2103,11 +2109,9 @@ c1i findings settings edge update --body-file <file|->
 - `notifications org|user update` sends `--body-file` as the whole request
   (`{"channelSettings": {...}}`, what `show` prints); there is no mask, so a
   body without a non-empty `channelSettings` object exits `2` and nothing is
-  sent. In the run checked, a partial body on the user scope changed only the
-  settings it named. The org scope's partial-body behavior is unmeasured: for
-  org, send back the whole `show` output with your edits. Sending settings
-  back can turn an event `show` printed as `null` (such as `system`) into its
-  default.
+  sent. In the runs checked, a partial body on either scope changed only the
+  settings it named (one of 86 leaves on org). Sending settings back can turn
+  an event `show` printed as `null` (such as `system`) into its default.
 - `findings settings edge update` takes `{"settings": [{"category": ...,
   "enabled": ...}], "subcategorySettings": [...]}` and prints the resulting
   `{"list", "subcategories"}`. A body with neither list non-empty exits `2`
@@ -2319,7 +2323,9 @@ delete also takes the campaign's "dependent objects" with it. Prints `{}`.
 `scope get` prints a campaign's `scopeV2`, its selected entitlements (`list`)
 and its exclusions in one object; it is not paginated. The three `scope set*`
 commands replace the scope and the whole selection, excluded set, or
-resource-type selection from `--body-file`. To change part of a selection, use
+resource-type selection from `--body-file`; `scope set` prints the server's
+response, whose `list` holds only what that call added (follow with `scope
+get`), while `set-excluded` returns the whole excluded set. To change part of a selection, use
 `entitlements add|remove` or `excluded-entitlements add|remove`. The first pair
 works only while `scopeV2` sets `specificResources`, which `add` sets on a
 campaign with no scope yet; the server takes 1 to 200 per `add`, skips

@@ -37,7 +37,9 @@ An invalid condition prints its markers and then exits 2, so
 compiles. Exit 0 means valid.
 
 Quote the condition as a single shell argument, or pass several unquoted
-words (like "docs search") — they're joined with spaces either way:
+words (like "docs search") — they're joined with spaces either way. Put --
+before a condition that starts with "-" (e.g. "-1 + 1"), or pflag reads it
+as a flag:
   c1i policies validate-cel 'subject.role == "admin"'
   c1i policies validate-cel true`,
 	Args: cobra.MinimumNArgs(1),

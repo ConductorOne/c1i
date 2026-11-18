@@ -43,8 +43,8 @@ The condition is one of:
   --none           no condition
 Each --refs-file entitlement is looked up first: the server stores an unknown
 one without complaint, so c1i exits 4 instead, --dry-run included. Test a CEL
-expression with "c1i automations validate-cel" first; the server refuses a
-malformed one with a 400.
+expression with "c1i policies validate-cel <condition>" first; the server
+refuses a malformed one with a 400.
 
 An automation acts on real users as soon as it exists; start with a
 condition that matches the users you mean.`,
