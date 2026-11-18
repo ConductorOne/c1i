@@ -32,7 +32,7 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   tools approve`. State is the only field either API can change, so neither has
   an `update`. `mcp resources list` returns removed resources too; `search`
   shows them only with `--state removed`. A tenant without the prompts feature
-  answers every prompts command with 403 `feature not enabled` (exit 3).
+  answers a well-formed prompts request with 403 `feature not enabled` (exit 3).
 
 - `apps search` filters applications server-side (`POST /api/v1/search/apps`)
   by `--query` (fuzzy on name and description), `--display-name`, repeatable

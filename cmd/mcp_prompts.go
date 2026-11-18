@@ -10,8 +10,9 @@ connector's MCP server exposes. Prompt metadata comes from discovery; the API
 spec says "Only state is editable", so the only change c1i can make is the
 approval state, with "mcp prompts approve".
 
-A tenant without the prompts feature answers every prompts route with 403
-"feature not enabled" (exit 3).`,
+A tenant without the prompts feature answers a well-formed prompts request
+with 403 "feature not enabled" (exit 3); a malformed id gets the server's 400
+first (exit 2).`,
 }
 
 var promptItems = mcpItemKind{

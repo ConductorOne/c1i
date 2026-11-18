@@ -1519,7 +1519,7 @@ c1i mcp resources search  --app-id <id> --connector-id <id> [--query <text>] [--
 c1i mcp resources get     <resource-id> --app-id <id> --connector-id <id>
 c1i mcp resources approve <resource-id>... --app-id <id> --connector-id <id> [--state approved|disabled|pending]
 c1i mcp resources history <resource-id> --app-id <id> --connector-id <id> [--page-size N] [--limit N]
-c1i mcp prompts list    --app-id <id> --connector-id <id> [--page-size N] [--limit N]   # 403 "feature not enabled" (exit 3) where the tenant lacks prompts
+c1i mcp prompts list    --app-id <id> --connector-id <id> [--page-size N] [--limit N]   # well-formed requests get 403 "feature not enabled" (exit 3) where the tenant lacks prompts
 c1i mcp prompts search  --app-id <id> --connector-id <id> [--query <text>] [--state ...] [--include-grant-status] [--limit N]
 c1i mcp prompts get     <prompt-id> --app-id <id> --connector-id <id>
 c1i mcp prompts approve <prompt-id>... --app-id <id> --connector-id <id> [--state approved|disabled|pending]
