@@ -50,6 +50,7 @@ var dryRunStubs = map[string][]string{
 	"c1i connectors create":                               {"--app-id=x1", "--catalog-id=x1"},
 	"c1i connectors schedule":                             {"x1", "--app-id=x1", "--clear"},
 	"c1i connectors update":                               {"x1", "--app-id=x1", "--body-file=@{}", "--update-mask=config"},
+	"c1i functions update":                                {"x1", "--display-name=x1"},
 	"c1i entitlements update":                             {"x1", "--app-id=x1", "--description=d"},
 	"c1i findings assignee":                               {"x1", "--body-file=@{}"},
 	"c1i findings bulk-create-tasks":                      {"--body-file=@{}"},
@@ -98,6 +99,7 @@ var dryRunStubs = map[string][]string{
 // `{}` cannot be built on (update reads the mapping it replaces).
 var dryRunReadBodies = map[string]string{
 	"c1i connectors delete":         `{"connectorView":{"connector":{"id":"x1","config":{"@type":"type.googleapis.com/c1.api.app.v1.EnvConfig"}}}}`,
+	"c1i functions invoke":          `{"function":{"publishedCommitId":"c1"}}`,
 	"c1i attribute-mappings update": `{"attribute":{"userAttributeMapping":{"attributeType":{"id":"t","displayName":"n","appUserProfile":{"appId":"a","appUserProfileAttributeKey":"k"}}}}}`,
 }
 

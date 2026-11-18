@@ -436,7 +436,8 @@ including one carried only in a request body (`--grant-policy-id`,
 needs no credentials unless c1i must look something up (reads only; a preview
 sends no write): the pre-send existence checks (user and policy ids, `policies
 update`'s current type), which refuse as a real run does, a
-task action's current policy step without `--policy-step-id`, a hosted MCP
+task action's current policy step without `--policy-step-id`, `functions invoke`'s commit (`--commit-id` checked, or the published one
+looked up), `functions update`'s current display name, a hosted MCP
 server's catalog id (`mcp servers update-credentials` without `--catalog-id`), or the caller for
 `requests create` without `--user-id`. `mcp gateway call` rejects it: c1i
 cannot preview or suppress a tool's side effects, so inspect the tool first
@@ -608,6 +609,18 @@ resource with `--resource-id` likewise means you drop
 - `accounts list --unmapped-only` filters after each page is fetched, not
   server-side. With `--page-token` (which turns off auto-pagination) a page
   can come back empty while unmapped accounts exist further along.
+- `functions invoke` is asynchronous: it prints `{"invocationId": ...}` and
+  exits 0 before the function runs. Add `--wait` to block until it finishes;
+  a run that ends `ERROR` or `CANCELLED` exits `1` after the id was printed,
+  with an error saying the invoke "was applied" -- the function ran and
+  failed. Its output and error are in `functions invocations get
+  <invocation-id> --function-id <function-id>`. Without `--commit-id` it runs
+  the published commit, and an unpublished function exits `2`.
+- Code pushed with `functions create --file` or `functions update --file` is
+  not published, so `functions invoke` keeps running the old commit until you
+  pass the printed `.commit.id` to `functions update --publish-commit`.
+- `functions invocations list <function-id>` is newest first and a busy
+  function can have tens of thousands of invocations: pass `--limit`.
 - `functions usage` filters automations client-side by
   `callFunction.functionId`, same as `accounts list --unmapped-only` above.
   With `--page-token` a page can come back with zero rows while a matching

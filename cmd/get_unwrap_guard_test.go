@@ -100,6 +100,16 @@ func getUnwrapCases() []getUnwrapCase {
 			wantKeys:    []string{"id", "displayName"},
 		},
 		{
+			name:        "functions invocations get",
+			cmd:         functionsInvocationsGetCmd,
+			args:        []string{"inv-1"},
+			flags:       map[string]string{"function-id": "fn-1"},
+			idKey:       "id",
+			body:        `{"invocation":{"id":"inv-1","status":"FUNCTION_INVOCATION_STATUS_SUCCESS"}}`,
+			payloadPath: []string{"invocation"},
+			wantKeys:    []string{"id", "status"},
+		},
+		{
 			name:        "users get",
 			cmd:         usersGetCmd,
 			args:        []string{"usr-1"},
