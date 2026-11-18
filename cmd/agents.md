@@ -907,6 +907,17 @@ resource with `--resource-id` likewise means you drop
   bulk action, so exit `0` means accepted. `cancel-pending` can be off per tenant:
   `400` `cancelling queued automation runs is not enabled for this tenant`
   (exit `2`).
+- `attributes` manages tenant attribute VALUES (Compliance Framework, Risk
+  Level), not user attribute types: that is `attribute-types`/`attribute-mappings`.
+  `attributes types` lists types; `list --type`, `search --type` and
+  `create --type` take a type name or id and look it up first (`--dry-run`
+  too), so an unknown type exits `4` (the server returns an empty list for
+  `list`/`search` and creates the value anyway on `create`); a name shared by
+  several types exits `2`. Rows are `id`, `type_id`, `value`, `created_at`,
+  `updated_at`, `deleted_at`. `delete <value-id>` is soft (`get` still returns
+  it with `deleted_at`; repeat delete exits `0`); there is no update. The
+  per-type routes (`/api/v1/attributes/compliance_frameworks`, `.../risk_levels`)
+  have no commands; use `api`.
 - `webhooks create` and `webhooks update` take the endpoint as
   `--destination-url` (`--url` is the global tenant flag), and it must be an
   absolute `https://` URL with a host (an IPv6 literal host is refused); a

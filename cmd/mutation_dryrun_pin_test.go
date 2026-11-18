@@ -120,6 +120,7 @@ var dryRunReadBodies = map[string]string{
 	"c1i connectors delete":              `{"connectorView":{"connector":{"id":"x1","config":{"@type":"type.googleapis.com/c1.api.app.v1.EnvConfig"}}}}`,
 	"c1i functions invoke":               `{"function":{"publishedCommitId":"c1"}}`,
 	"c1i entitlements automation update": `{"AppEntitlementAutomation":{"displayName":"x1"}}`,
+	"c1i attributes create":              `{"list":[{"id":"x1","name":"x1"}]}`,
 	"c1i attribute-mappings update":      `{"attribute":{"userAttributeMapping":{"attributeType":{"id":"t","displayName":"n","appUserProfile":{"appId":"a","appUserProfileAttributeKey":"k"}}}}}`,
 	"c1i apps resources create":          `{"appResourceTypeView":{"appResourceType":{"id":"x1"}}}`,
 }

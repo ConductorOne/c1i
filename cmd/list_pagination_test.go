@@ -296,6 +296,14 @@ func listPaginationCases() []listPaginationCase {
 			rowIDs:   idRows("id"),
 		},
 		{
+			name:     "attributes types",
+			cmd:      attributesTypesCmd,
+			method:   http.MethodGet,
+			wantPath: "/api/v1/attributes/types",
+			page:     flatPage("list", "id"),
+			rowIDs:   idRows("id"),
+		},
+		{
 			name:     "attribute-mappings list",
 			cmd:      attributeMappingsListCmd,
 			method:   http.MethodGet,

@@ -2365,6 +2365,35 @@ Traps:
 deleting again exits `0`. `--body-file` sends a full request verbatim, mutually
 exclusive with the flags.
 
+### Attribute values
+
+Tenant attribute values are the values of the tenant's attribute types, such as
+Compliance Framework (SOC2, HIPAA, ...) and Risk Level (Low, High, ...). This is
+a different resource from `attribute-types`/`attribute-mappings` above, which
+map an app's profile keys onto user fields.
+
+```sh
+c1i attributes types [--page-size <n>] [--page-token <token>] [--limit <n>]
+c1i attributes list --type <name-or-id> [--page-size <n>] [--page-token <token>] [--limit <n>]
+c1i attributes search [--type <name-or-id>]... [--id <value-id>]... [--exclude-id <value-id>]... [--value <v>] [--query <text>] [--limit <n>]
+c1i attributes get <value-id>
+c1i attributes create --type <name-or-id> --value <value>
+c1i attributes delete <value-id>
+```
+
+Rows are `id`, `type_id`, `value`, `created_at`, `updated_at` and `deleted_at`
+(`null` for a live value); `types` rows are `id` and `name`. `--type` takes a
+type's name or id and is looked up first, also on `--dry-run`: an unknown type
+exits `4` (the server answers it with an empty list on `list` and `search`, and
+accepts it on `create`), and a name shared by several types exits `2` listing
+their ids. `create` prints the new value unwrapped (`jq -er .id`); the server
+accepted a repeated value, even one differing only in case, as a new value with
+its own id, and rejects an empty one. `delete` is a soft delete: `list` and
+`search` stop returning the value, `get` still does with `deleted_at` set, and
+deleting it again exits `0`. There is no update. The API's per-type routes
+(`/api/v1/attributes/compliance_frameworks`, `/api/v1/attributes/risk_levels`)
+repeat these operations for one type and have no commands; use `c1i api`.
+
 ### Webhooks
 
 Outbound webhooks are the registered https endpoints C1.ai calls, for example
