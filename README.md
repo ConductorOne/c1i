@@ -989,8 +989,9 @@ plus `id`. `apps resources owners`, `add-owner`, `remove-owner` and
 `set-owners` follow the app and entitlement owner commands below, on the
 `.../resource_types/{resource-type-id}/resource/{resource-id}/owners` route.
 The server resolves the resource id on its own, so `owners` ignores a bogus
-`--resource-type-id` (it still returns that resource's owners); use `resources
-get` with the same ids to validate them.
+`--resource-type-id` (it still returns that resource's owners); a wrong or
+unknown `--app-id` instead returns zero rows. Use `resources get` with the same
+ids to validate them.
 The API answers `set-owners` on an unknown resource `200 {}` and stores the
 owners anyway, so c1i looks the resource up first (exit `4`). The owners
 response also carries `immutableUserIds` (owners the API says cannot be
@@ -2606,8 +2607,9 @@ kind takes an `https://` issuer, which the API checks by OIDC discovery, and
 refuses `--bundle-endpoint-url` (exit `2`, nothing sent). The API refuses an
 issuer it cannot reach, one that does not fit a named kind, and one already
 registered in the tenant (409, exit `2`); the kind and issuer are fixed after
-creation. `providers update --bundle-endpoint-url` on a non-SPIFFE provider
-answers 200 and changes nothing. `providers delete` is refused while a trust
+creation. `providers update --bundle-endpoint-url` on a non-SPIFFE provider still
+fetches and validates the URL (an unfetchable one is a 400, exit 2) and then
+discards it. `providers delete` is refused while a trust
 references the provider (find them with `trusts search --provider-id`, which
 can lag a just-created trust by about a second); `providers update` on a
 deleted provider answers 200 and applies, and the provider stays out of
