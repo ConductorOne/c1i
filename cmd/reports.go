@@ -151,9 +151,10 @@ var reportUpdateSpec = &updateSpec{fields: []updateField{
 var reportsUpdateCmd = &cobra.Command{
 	Use:   "update <report-id>",
 	Short: "Update a report's name, description or prompt (pretty JSON)",
-	Long: `Update --display-name, --description or --prompt. Per the API an empty field
-leaves the stored value alone and at least one must be set, so an empty value
-is a usage error here. Editing --prompt does not re-plan the report; it may
+	Long: `Update --display-name, --description or --prompt. The API rejects a request
+whose fields are all empty with 400 "reporting: update requires display_name,
+prompt, description, or parameter_values"; here an empty flag counts as unset
+(a blank value exits 2) and at least one flag is required. Editing --prompt does not re-plan the report; it may
 drift from the program's planned prompt. Parameter values are not editable
 here. Prints the report unwrapped: the id is .id. The response's runs may
 carry a signed artifactUrl (not observed).`,

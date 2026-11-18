@@ -3,8 +3,10 @@ package cmd
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
+	"strings"
 
 	"github.com/ConductorOne/c1i/internal/client"
 	"github.com/spf13/cobra"
@@ -111,7 +113,8 @@ var exportExportersEventsCmd = &cobra.Command{
 	Short: "List the events one exporter has delivered (NDJSON output)",
 	Long: `List the OCSF events belonging to one system log exporter, one JSON event per
 line, auto-paginating. c1i first reads the exporter so an unknown id exits 4:
-the API answers a well-formed unknown id with an empty 200.`,
+the API answers a well-formed unknown id with an empty 200. A soft-deleted
+exporter's events are still listed (check deletedAt with "exporters get").`,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		c, err := listClientFor(cmd)
@@ -139,8 +142,8 @@ var exportExportersCreateCmd = &cobra.Command{
 it begins writing to the datasource, so choose --prefix deliberately.
 
 --datasource-id must name an existing datasource; the API answers an unknown
-one with a 400, "datasource not found". No datasource API is exposed, so c1i
-cannot check it first. Omitting --format leaves it
+one with a 400, "datasource not found", which c1i reports as an unknown
+reference (exit 4); no datasource API is exposed to check it first. Omitting --format leaves it
 EXPORT_FORMAT_UNSPECIFIED, as the API accepted it.
 
 Prints the exporter unwrapped like "exporters get": the id is .exportId.`,
@@ -149,8 +152,21 @@ Prints the exporter unwrapped like "exporters get": the id is .exportId.`,
 		if err != nil {
 			return &usageError{err}
 		}
-		return sendMutation(cmd, mutation{Method: http.MethodPost, Path: "/api/v1/systemlog/exports", Body: body, Unwrap: byID("exportId")})
+		dsID := mustGetString(cmd, "datasource-id")
+		return sendMutation(cmd, mutation{Method: http.MethodPost, Path: "/api/v1/systemlog/exports", Body: body, Unwrap: byID("exportId")},
+			withErrorMap(func(err error) error { return datasourceNotFound(dsID, err) }))
 	},
+}
+
+// datasourceNotFound turns the API's 400 "datasource not found" into an
+// unknown-reference error (exit 4); no datasource read exists to check first.
+// Any other error is left as it was.
+func datasourceNotFound(id string, err error) error {
+	var apiErr *client.APIError
+	if errors.As(err, &apiErr) && apiErr.StatusCode == http.StatusBadRequest && strings.Contains(apiErr.Body, "datasource not found") {
+		return refNotFound("datasource-id", id, "datasource", nil)
+	}
+	return nil
 }
 
 func buildExporterCreateBody(cmd *cobra.Command) (map[string]any, error) {
@@ -172,8 +188,8 @@ var exportExportersDeleteCmd = &cobra.Command{
 	Use:   "delete <export-id>",
 	Short: "Delete a system log exporter",
 	Long: `Delete an exporter by id. The delete is soft: "exporters get" still returns it
-with deletedAt set and "exporters list" omits it. A repeat delete exits 0.
-Prints the API's response, {}. Honors --dry-run.`,
+with deletedAt set and "exporters list" omits it. A repeat delete exits 0 and
+stamps deletedAt again. Prints the API's response, {}. Honors --dry-run.`,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		return sendMutation(cmd, mutation{Method: http.MethodDelete, Path: exporterPath(args[0])})
@@ -218,7 +234,9 @@ The mask is derived from the flags you pass; an omitted flag is left alone.
 The API refuses an update whose exporter has no datasource ("value is
 required"), so c1i first reads the exporter and sends its current datasource
 back with only your flags changed; --dry-run does the read too. The read and
-the write are not atomic. With the mask set, the API changed only the masked
+the write are not atomic. "update" and "events" also succeed on a soft-deleted
+exporter (update changes it, exit 0, deletedAt kept): check deletedAt, do not
+read exit 0 as live. With the mask set, the API changed only the masked
 fields (a differing unmasked name, prefix or format in the same request was
 ignored). The datasource id cannot be changed here.
 

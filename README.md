@@ -2482,10 +2482,12 @@ An exporter continuously writes the tenant's audit events to a datasource; a
 new one starts in `EXPORT_STATE_EXPORTING` and begins writing under `--prefix`
 at once. No datasource API is exposed: take `--datasource-id` from an existing
 exporter's `.datasource.datasourceId`. An unknown datasource id is a `400`,
-`datasource not found`. `update` reads the exporter first and sends its
+`datasource not found`, which c1i reports as an unknown reference (exit `4`). `update` reads the exporter first and sends its
 datasource back (the API refuses an update without one); the datasource id
 cannot be changed. `delete` is soft (`get` still returns the exporter with
-`deletedAt` set; `list` omits it) and repeatable. `search` has no `--name`: the
+`deletedAt` set; `list` omits it); a repeat delete exits `0` and stamps
+`deletedAt` again. `update` and `events` also succeed on a deleted exporter
+(`update` changes it, exit `0`): check `deletedAt`. `search` has no `--name`: the
 API's `displayName` filter returned an exporter whatever the name. `events`
 reads the exporter first, so an unknown id exits `4` (the API answers it with an
 empty `200`).

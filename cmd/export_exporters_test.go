@@ -168,3 +168,21 @@ func TestExporterSearchBody(t *testing.T) {
 		t.Errorf("blank --export-id: exit %d, want 2", r.exit)
 	}
 }
+
+func TestExporterCreateUnknownDatasourceExits4(t *testing.T) {
+	t.Setenv("C1I_URL", mutTestURL)
+	args := []string{"export", "exporters", "create", "--display-name", "zz", "--datasource-id", "ds-9", "--error-format", "json"}
+	s := newMutServer(t, fixedReply(400, `{"code":3,"message":"datasource not found"}`))
+	r := runMutationCLI(t, s.srv, 0, nil, args...)
+	if r.exit != exitNotFound || r.errorObject(t)["applied"] != false {
+		t.Errorf("exit %d, error %v; want 4 with applied:false", r.exit, r.errorObject(t))
+	}
+	s = newMutServer(t, fixedReply(400, `{"code":3,"message":"invalid ExportServiceCreateRequest.ExportTo: value is required"}`))
+	if r := runMutationCLI(t, s.srv, 0, nil, args...); r.exit != exitUsage {
+		t.Errorf("other 400: exit %d, want 2", r.exit)
+	}
+	s = newMutServer(t, fixedReply(404, `{"code":5,"message":"datasource not found"}`))
+	if r := runMutationCLI(t, s.srv, 0, nil, args...); r.exit != exitNotFound {
+		t.Errorf("404: exit %d, want 4", r.exit)
+	}
+}

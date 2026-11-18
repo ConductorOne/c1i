@@ -99,6 +99,7 @@ type mutationOpts struct {
 	respond     func(c *client.Client, resp []byte) writeOutcome
 	waitEnabled bool
 	secret      secretKind
+	mapErr      func(error) error
 	batchVerb   string
 	batchNoun   string
 }
@@ -128,6 +129,13 @@ func withResponse(f func(c *client.Client, resp []byte) writeOutcome, waitEnable
 // no Poll is skipped.
 func withWait(build func(c *client.Client) waitOp[[]string], enabled bool) mutationOpt {
 	return withResponse(func(c *client.Client, _ []byte) writeOutcome { return writeOutcome{Wait: build(c)} }, enabled)
+}
+
+// withErrorMap lets a command reclassify the server's refusal of the send. A
+// returned error replaces it as is; the applied state still comes from the
+// original.
+func withErrorMap(f func(error) error) mutationOpt {
+	return func(o *mutationOpts) { o.mapErr = f }
 }
 
 // secretBearing adds the R22 wording to a failed stdout write.
@@ -181,7 +189,13 @@ func sendMutation(cmd *cobra.Command, m mutation, opts ...mutationOpt) error {
 	}
 	data, err := c.Request(cmd.Context(), m.Method, m.Path, req.Body, nil)
 	if err != nil {
-		return &mutationError{err: fmt.Errorf("API error: %w", err), applied: classifyApplied(err)}
+		wrapped := fmt.Errorf("API error: %w", err)
+		if o.mapErr != nil {
+			if mapped := o.mapErr(err); mapped != nil {
+				wrapped = mapped
+			}
+		}
+		return &mutationError{err: wrapped, applied: classifyApplied(err)}
 	}
 	if err := writeMutationResult(cmd, m, data, o.secret, false); err != nil {
 		return err

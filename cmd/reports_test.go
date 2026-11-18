@@ -2,7 +2,7 @@ package cmd
 
 import (
 	"net/http"
-	"strings"
+	"net/http/httptest"
 	"testing"
 )
 
@@ -39,20 +39,26 @@ func TestReportsRunSendsEmptyBody(t *testing.T) {
 func TestReportsReadPaths(t *testing.T) {
 	t.Setenv("C1I_URL", mutTestURL)
 	for _, tc := range []struct {
-		args []string
-		path string
-		body string
+		args  []string
+		path  string
+		query string
+		body  string
 	}{
-		{[]string{"reports", "program", "rp-1", "--program-id", "pg-1"}, "/api/v1/reporting/reports/rp-1/program?program_id=pg-1", `{"programId":"pg-1","files":{"a":"b"}}`},
-		{[]string{"reports", "provenance", "run-1", "--report-id", "rp-1"}, "/api/v1/reporting/reports/rp-1/runs/run-1/provenance", `{"programId":"pg-1","sources":[]}`},
+		{[]string{"reports", "program", "rp-1", "--program-id", "pg-1"}, "/api/v1/reporting/reports/rp-1/program", "program_id=pg-1", `{"programId":"pg-1","files":{"a":"b"}}`},
+		{[]string{"reports", "provenance", "run-1", "--report-id", "rp-1"}, "/api/v1/reporting/reports/rp-1/runs/run-1/provenance", "", `{"programId":"pg-1","sources":[]}`},
 	} {
-		s := newMutServer(t, fixedReply(200, tc.body))
-		r := runListCLI(t, s.srv, tc.args...)
+		var method, path, query string
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			method, path, query = r.Method, r.URL.EscapedPath(), r.URL.RawQuery
+			_, _ = w.Write([]byte(tc.body))
+		}))
+		t.Cleanup(srv.Close)
+		r := runListCLI(t, srv, tc.args...)
 		if r.err != nil {
 			t.Fatalf("%v: exit %d: %v", tc.args, r.exit, r.err)
 		}
-		if got := s.requests()[0]; got.method != http.MethodGet || !strings.HasSuffix(got.rawPath+"", strings.SplitN(tc.path, "?", 2)[0]) {
-			t.Errorf("%v: request %+v, want GET %s", tc.args, got, tc.path)
+		if method != http.MethodGet || path != tc.path || query != tc.query {
+			t.Errorf("%v: request %s %s?%s, want GET %s?%s", tc.args, method, path, query, tc.path, tc.query)
 		}
 	}
 	// A required flag is enforced by cobra before any request.
