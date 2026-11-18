@@ -21,10 +21,10 @@ Rows are the same shape "apps list" emits.
 
 ` + userCountNote + `
 
-An --app-id the tenant doesn't have simply matches nothing (observed: an empty
-result, exit 0), and an unknown --policy-id was observed to be ignored rather
-than rejected, so check a policy id with "policies get" first. An id that is
-not 27 letters and digits is rejected by the server (exit 2).`,
+Each --policy-id is looked up first: an unknown id exits 4 and a deleted one
+exits 2, before the search is sent. An --app-id the tenant doesn't have simply
+matches nothing (observed: an empty result, exit 0). An id that is not 27
+letters and digits is rejected by the server (exit 2).`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		appIDs, err := repeatableStringFlag(cmd, "app-id")
 		if err != nil {
@@ -41,6 +41,11 @@ not 27 letters and digits is rejected by the server (exit 2).`,
 		c, err := listClientFor(cmd)
 		if err != nil {
 			return err
+		}
+		for _, id := range dedupe(policyIDs) {
+			if _, err := fetchBoundPolicyType(cmd.Context(), c, "policy-id", id); err != nil {
+				return err
+			}
 		}
 		query, _ := cmd.Flags().GetString("query")
 		displayName, _ := cmd.Flags().GetString("display-name")

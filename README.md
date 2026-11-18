@@ -809,7 +809,7 @@ c1i apps managed-state promote <resource-id> --app-id <app-id> --resource-type-i
 
 `user_count` is the platform's stored count, not a live tally: on some apps it differs from the number of `accounts list --app-id <app-id>` rows. To size a change, count those rows, not `user_count`.
 
-`apps list` takes no filters; to narrow by name, id, policy or directory use `apps search` (`POST /api/v1/search/apps`), which emits the same rows. `--query` is a fuzzy match on name and description, `--display-name` a case-insensitive name match, and `--only-directories` sets the server's `onlyDirectories` filter. Observed: an `--app-id` the tenant lacks matches nothing (empty result, exit `0`), an unknown `--policy-id` is ignored rather than rejected, and a malformed id is rejected by the server (exit `2`).
+`apps list` takes no filters; to narrow by name, id, policy or directory use `apps search` (`POST /api/v1/search/apps`), which emits the same rows. `--query` is a fuzzy match on name and description, `--display-name` a case-insensitive name match, and `--only-directories` sets the server's `onlyDirectories` filter. Each `--policy-id` is looked up first (unknown: exit `4`, deleted: exit `2`, nothing searched). Observed: an `--app-id` the tenant lacks matches nothing (empty result, exit `0`), and a malformed id is rejected by the server (exit `2`).
 
 `apps create` needs only `--display-name`; it makes a plain, unmanaged
 container app — the zero state for "make an app, then register MCP servers

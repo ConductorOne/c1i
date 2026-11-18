@@ -2,6 +2,8 @@ package cmd
 
 import (
 	"encoding/json"
+	"fmt"
+	"net/http"
 	"strings"
 	"testing"
 
@@ -62,7 +64,12 @@ func TestAppsSearchWire(t *testing.T) {
 	clearViperOverrides(t, "fields")
 	reply := `{"list":[{"id":"a1","displayName":"A","userCount":"3"}]}`
 	run := func(args ...string) (*mutServer, mutResult) {
-		s := newMutServer(t, fixedReply(200, reply))
+		s := newMutServer(t, func(r *http.Request, _ int) mutReply {
+			if strings.HasPrefix(r.URL.Path, "/api/v1/policies/") {
+				return mutReply{status: 200, body: `{"policy":{"policyType":"POLICY_TYPE_GRANT"}}`}
+			}
+			return mutReply{status: 200, body: reply}
+		})
 		stub := func() {
 			orig := newListClient
 			newListClient = func(_ *cobra.Command, _ string) (*client.Client, error) {
@@ -77,11 +84,11 @@ func TestAppsSearchWire(t *testing.T) {
 	if r.err != nil {
 		t.Fatalf("exit %d: %v", r.exit, r.err)
 	}
-	if len(s.seen) != 1 || s.seen[0].method != "POST" || s.seen[0].rawPath != "/api/v1/search/apps" {
-		t.Fatalf("requests: %+v", s.seen)
+	if len(s.seen) != 3 || s.seen[2].method != "POST" || s.seen[2].rawPath != "/api/v1/search/apps" {
+		t.Fatalf("requests (2 policy reads, then the search): %+v", s.seen)
 	}
 	var got map[string]any
-	if err := json.Unmarshal([]byte(s.seen[0].body), &got); err != nil {
+	if err := json.Unmarshal([]byte(s.seen[2].body), &got); err != nil {
 		t.Fatal(err)
 	}
 	want := `{"appIds":["i1","i2"],"displayName":"D","excludeAppIds":["x1"],"onlyDirectories":true,` +
@@ -96,5 +103,58 @@ func TestAppsSearchWire(t *testing.T) {
 	s, r = run("--limit", "1")
 	if r.err != nil || strings.Contains(s.seen[0].body, "query") || strings.Contains(s.seen[0].body, "Ids") {
 		t.Errorf("bare search sent filters: %v %q", r.err, s.seen[0].body)
+	}
+}
+
+// An unknown or deleted --policy-id is refused before any search is sent: the
+// server ignores an unknown policy ref and would return every app.
+func TestAppsSearchPolicyIDIsChecked(t *testing.T) {
+	t.Setenv("C1I_URL", mutTestURL)
+	clearViperOverrides(t, "fields")
+	cases := []struct {
+		name   string
+		status int
+		body   string
+		exit   int
+		search bool
+	}{
+		{"unknown", 404, `{"code":5,"message":"not found"}`, exitNotFound, false},
+		{"deleted", 200, `{"policy":{"policyType":"POLICY_TYPE_GRANT","deletedAt":"2024-01-01T00:00:00Z"}}`, exitUsage, false},
+		{"exists", 200, `{"policy":{"policyType":"POLICY_TYPE_GRANT"}}`, 0, true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			s := newMutServer(t, func(r *http.Request, _ int) mutReply {
+				if strings.HasPrefix(r.URL.Path, "/api/v1/policies/") {
+					return mutReply{status: tc.status, body: tc.body}
+				}
+				return mutReply{status: 200, body: `{"list":[]}`}
+			})
+			stub := func() {
+				orig := newListClient
+				newListClient = func(_ *cobra.Command, _ string) (*client.Client, error) {
+					return client.NewForTesting(s.srv.URL, s.srv.Client()), nil
+				}
+				t.Cleanup(func() { newListClient = orig })
+			}
+			r := runCLI(t, stub, nil, "apps", "search", "--policy-id", "p1", "--policy-id", "p1")
+			if r.exit != tc.exit {
+				t.Errorf("exit %d (%v), want %d", r.exit, r.err, tc.exit)
+			}
+			var searched, gets int
+			for _, q := range s.seen {
+				if q.rawPath == "/api/v1/search/apps" {
+					searched++
+				} else {
+					gets++
+				}
+			}
+			if (searched > 0) != tc.search || gets != 1 {
+				t.Errorf("searches %d (want sent=%v), policy reads %d (want 1, deduped)", searched, tc.search, gets)
+			}
+			if tc.exit != 0 && !strings.Contains(r.stderr+fmt.Sprint(r.err), `--policy-id "p1"`) {
+				t.Errorf("message does not name flag and id: %q %v", r.stderr, r.err)
+			}
+		})
 	}
 }
