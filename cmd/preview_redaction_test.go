@@ -154,6 +154,8 @@ func TestPreviewRedactsUrlsHeadersAndKeyNames(t *testing.T) {
 			nil, []string{"zz12l4@example.com"}},
 		{"a bare token URL stays masked", map[string]any{"url": "TOKENleak@h.example/p"},
 			[]string{"TOKENleak"}, []string{"h.example/p"}},
+		{"userinfo embedded in text", map[string]any{"note": "u=//svc:PWleak@h.example/x"},
+			[]string{"PWleak"}, []string{"h.example/x"}},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

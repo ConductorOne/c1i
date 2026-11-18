@@ -256,14 +256,27 @@ func assertJSONEqual(t *testing.T, got, want string) {
 // path segments, so c1i refuses a credential that belongs to another one.
 func TestConnectorCredentialGetRefusesForeignScope(t *testing.T) {
 	t.Setenv("C1I_URL", mutTestURL)
-	body := `{"credential":{"id":"cred-1","appId":"other-app","connectorId":"other-connector","displayName":"zz"}}`
+	for _, body := range []string{
+		`{"credential":{"id":"cred-1","appId":"other-app","connectorId":"other-connector","displayName":"zz"}}`,
+		`{"credential":{"id":"cred-1","appId":"other-app","connectorId":"cn-1","displayName":"zz"}}`,
+		`{"credential":{"id":"cred-1","appId":"app-1","connectorId":"other-connector","displayName":"zz"}}`,
+	} {
+		s := newMutServer(t, fixedReply(200, body))
+		r := runMutationCLI(t, s.srv, 0, nil, "connectors", "credentials", "get", "cred-1", "--app-id", "app-1", "--connector-id", "cn-1")
+		if r.exit != exitNotFound || !strings.Contains(r.stderr, "belongs to app") {
+			t.Fatalf("body %s: exit %d stderr %q", body, r.exit, r.stderr)
+		}
+		if r.stdout != "" {
+			t.Errorf("body %s: stdout = %q, want empty", body, r.stdout)
+		}
+	}
+
+	// An older credential may omit the ids; print it rather than refuse.
+	body := `{"credential":{"id":"cred-1","displayName":"zz"}}`
 	s := newMutServer(t, fixedReply(200, body))
 	r := runMutationCLI(t, s.srv, 0, nil, "connectors", "credentials", "get", "cred-1", "--app-id", "app-1", "--connector-id", "cn-1")
-	if r.exit != exitNotFound || !strings.Contains(r.stderr, "belongs to app") {
-		t.Fatalf("exit %d stderr %q", r.exit, r.stderr)
-	}
-	if r.stdout != "" {
-		t.Errorf("stdout = %q, want empty", r.stdout)
+	if r.exit != 0 || !strings.Contains(r.stdout, `"displayName": "zz"`) {
+		t.Fatalf("missing ids: exit %d stdout %q stderr %q", r.exit, r.stdout, r.stderr)
 	}
 
 	body = `{"credential":{"id":"cred-1","appId":"app-1","connectorId":"cn-1","displayName":"zz"}}`

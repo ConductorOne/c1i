@@ -228,8 +228,9 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   and change nothing at exit `0`.
 - `settings domains set --body-file` refuses a `newDomains` element that is
   not a string or is blank (the `--domain` channel already did), and
-  `apps resources create --body-file` refuses `appId`/`app_id`, which
-  `--app-id` owns (the server silently ignored it).
+  `apps resources create --body-file` refuses `appId`/`app_id` and
+  `appResourceTypeId`/`app_resource_type_id`, which `--app-id` and
+  `--resource-type-id` own (the server silently ignored them).
 - `service-principals trusts` rows print an absent `scoped_role_ids`,
   `allow_source_cidrs` or `passthrough_claims` as `null` instead of `[]`.
 - `connectors credentials get` refuses a credential whose `appId` or

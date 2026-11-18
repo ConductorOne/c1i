@@ -763,6 +763,8 @@ func TestURLValueMasksOnlyURLShaped(t *testing.T) {
 		"h.example/cb?token=Qleak":                    "Qleak",
 		"h.example/x;api_key=Qleak":                   "Qleak",
 		"x?client_secret=Qleak":                       "Qleak",
+		"note u=//svc:Qleak@egress.example/x":         "Qleak",
+		"see //TOKENleak@host.example/p":              "TOKENleak",
 	}
 	for in, leak := range redacted {
 		if got := URLValue(in); strings.Contains(got, leak) || !strings.Contains(got, Placeholder) {

@@ -975,7 +975,8 @@ sends only the flags you pass; `--custom-description ""` clears that field, whil
 the server ignores an empty name or description, so those exit `2` when
 blank. Other fields (such as `annotations`, which were merged rather than
 replaced) go through `--body-file` with `--update-mask`; `resources create
---body-file` likewise sends a full request verbatim.
+--body-file` sends a full request, except that it must not set `appId`/
+`app_id` (exit `2`): `--app-id` owns it, and the server ignored the body value.
 Search rows have the same shape as the matching `list`. The id filters
 (`--resource-type-id`, `--exclude-resource-type-id`, `--resource-id`,
 `--exclude-resource-id`, `--trait-id` and `--exclude-trait-id`, which match the
@@ -1210,7 +1211,8 @@ have. Only entitlements of the C1 app take one; any other is refused with
 `only the C1 app can have entitlement automation` (exit `2`). The condition is
 one of `--cel`, `--refs-file` (a JSON array of `{"appId","id"}`; the server
 takes 1 to 32, and c1i looks each up first because the server stores an unknown
-one, so it exits `4`) or `--none`; `create --body-file` sends a whole
+one, so an unknown reference exits `4` and a soft-deleted one `2`) or
+`--none`; `create --body-file` sends a whole
 `AppEntitlementAutomation` object and is the only way to set `basic`. `update`
 derives its mask from the flags; the server needs a display name on every
 update, so without `--display-name` c1i reads the automation and sends its
@@ -1493,9 +1495,12 @@ call but queue nothing, so resume the connector first. `pause` and `resume` exit
 `--justification` is sent as `justification.reason`.
 
 There is no list of a connector's credentials: an id comes from `credentials
-rotate`, which prints `.clientSecret` once. In the run checked, rotating left
-the previous credential valid for seven more days (`.expiresTime`), and revoke
-set `.expiresTime` in the past while `credentials get` still returned it.
+rotate`, which prints `.clientSecret` once. The server resolves the credential
+id globally and ignores the path's app and connector, so `credentials get`
+refuses one whose `appId`/`connectorId` differ from the flags (exit `4`). In
+the run checked, rotating left the previous credential valid for seven more
+days (`.expiresTime`), and revoke set `.expiresTime` in the past while
+`credentials get` still returned it.
 
 ### Functions
 
@@ -2182,10 +2187,10 @@ c1i xaa client-audience-mappings history <client-key> --resource-server-id <id> 
   exit `2`) and must not be the tenant's own issuer. Registering a server
   starts a scope discovery run; `get` shows its outcome as
   `scopeDiscoveryStatus`, and `resync-scopes` starts another.
-- Creates look up their references first, because the server accepts an
-  unknown app on `resource-servers create` and an unknown or deleted
-  resource server on `scopes create` and `access-profiles create`: unknown
-  exits `4`, deleted exits `2`, `--dry-run` included.
+- All three creates look up `--app-id` and (for scopes and access profiles)
+  the resource server first, because the server stores an object under an
+  unknown or deleted one: unknown exits `4`, deleted exits `2`, `--dry-run`
+  included.
 - Updates fill the fields the server validates on every update (display name,
   audience, scope value, resource server id) from a read when you leave them
   unset; the mask still decides what changes. A scope is approved with
@@ -2337,8 +2342,8 @@ is "superseded and scheduled for removal", so it has no command; exclude by
 resource type with `scope set-excluded` and
 `scopeV2.excludedAppSelectionCriteria`. Every command that names an
 entitlement or resource type looks each one up first, so an unknown one exits
-`4` before anything is sent, `--dry-run` included; the server alone would
-answer `400`, `500` or a silent skip.
+`4` and a soft-deleted one `2`, before anything is sent, `--dry-run` included;
+the server alone would answer `400`, `500` or a silent skip.
 
 #### Access-review templates
 
@@ -2841,7 +2846,9 @@ server did not paginate `list` when tried (`--page-size` had no effect).
 `create` and `update` look up `--function-id` (and `--function-commit-id` under
 it) first, `--dry-run` included, so an unknown one exits `4`; without the check
 the server answers an unknown function with `400` and stores an unknown commit
-id at exit `0`. `--body-file` is sent verbatim and not checked.
+id at exit `0`. `--body-file` is sent verbatim except that a `priority`
+outside 0-1000 exits `2` when the mask names it, since update does not
+validate it.
 
 `update` sends only the flags you pass and names exactly those in the mask.
 `--function-id` replaces the whole function reference (the commit goes back to

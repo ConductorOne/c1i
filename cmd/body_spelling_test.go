@@ -405,7 +405,7 @@ func TestBodyFileRefusesBothSpellings(t *testing.T) {
 var spellingExempt = map[string]string{
 	"access-reviews reports generate --body-file":               "sent verbatim, no guard reads it",
 	"access-reviews update --body-file":                         "sent verbatim; the owned id key is covered by findings state",
-	"apps resources create --body-file":                         "sent verbatim, no guard reads it",
+	"apps resources create --body-file":                         "owned appId is guarded in both spellings by ownBodyKeys",
 	"apps resources update --body-file":                         "sent verbatim; the owned id key is covered by findings state",
 	"attribute-mappings create --body-file":                     "sent verbatim, no guard reads it",
 	"attribute-mappings create --fallbacks-file":                "sent verbatim, no guard reads it",

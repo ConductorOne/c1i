@@ -127,8 +127,15 @@ func URLValue(s string) string {
 	if bareCredentialPathRE.MatchString(s) || bareUserinfoRE.MatchString(s) {
 		return urlText(s)
 	}
-	// Not a URL, but a bare host/path can still carry secret-named query or
-	// ";" parameters, which stay masked.
+	// Not a URL, but the string can still embed a "//user:pass@" or
+	// "//token@" run, and a bare host/path can carry secret-named query or
+	// ";" parameters. Both stay masked; a bare "local@domain.tld" does not.
+	s = urlPasswordRE.ReplaceAllStringFunc(s, func(m string) string {
+		return "//" + maskedUser(m[2:strings.Index(m, ":")]) + ":" + Placeholder + "@"
+	})
+	s = urlUsernameRE.ReplaceAllStringFunc(s, func(m string) string {
+		return "//" + maskedUser(m[2:len(m)-1]) + "@"
+	})
 	return maskEncodedValues(maskSecretPairs(s), maxEscapeLevels)
 }
 

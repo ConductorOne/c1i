@@ -324,7 +324,7 @@ func hasJSONField(raw json.RawMessage, field string, depth int) bool {
 	if json.Unmarshal(raw, &obj) != nil {
 		return false
 	}
-	if v, ok := obj[field]; ok && string(v) != "null" {
+	if v, ok := obj[field]; ok && string(v) != "null" && string(v) != `""` {
 		return true
 	}
 	for _, v := range obj {

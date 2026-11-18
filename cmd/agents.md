@@ -179,7 +179,8 @@ entitlement-to-entitlement links, `access-reviews` for campaign lists,
 lifecycle calls (`delete` included), reports, and a campaign's scope and
 entitlement selection (`scope get|set|set-excluded|set-by-resource-type`,
 `entitlements add|remove`, `excluded-entitlements add|remove`; an unknown
-`--entitlement-id` or body-file reference exits 4 before the send; the API's
+`--entitlement-id` or body-file reference exits 4 (a soft-deleted one 2)
+before the send; the API's
 `scope_by_excluded_resource_type` route is "superseded and scheduled for
 removal" and has no command), `access-reviews templates` for reusable campaign
 templates (`get|create|update|delete` plus the same scope commands; no route
@@ -592,7 +593,8 @@ resource with `--resource-id` likewise means you drop
   `connectors schedule --cron X [--timezone Z] [--justification R]` or
   `--clear`. `connectors credentials rotate` prints `.clientSecret` once and
   leaves the previous credential valid for days; end it with `credentials
-  revoke`.
+  revoke`. `credentials get` refuses a credential whose `appId`/`connectorId`
+  differ from the flags (exit `4`): the server ignores both path segments.
 - Promote a connector-discovered app to a managed one with `apps managed-state
   list|get|promote` (`--app-id` the connector app, `--resource-type-id` its
   resource type named `app`, from `apps resource-types list --app-id`;
@@ -867,7 +869,7 @@ resource with `--resource-id` likewise means you drop
 - `entitlements automation get|create|update|delete <entitlement-id> --app-id`
   works only on C1 app entitlements and acts on real users once it exists.
   Pick one condition: `--cel`, `--refs-file` (each ref looked up, unknown exits
-  4) or `--none`; `create --body-file` for the full object. `get` exits 4 with
+  4, deleted 2) or `--none`; `create --body-file` for the full object. `get` exits 4 with
   no automation; delete is soft (`deletedAt` set), and `update` and
   `exclusions add|remove` still exit 0 on a deleted one, so check `deletedAt`.
   `exclusions

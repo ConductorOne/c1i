@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"strconv"
 	"strings"
 
 	"github.com/ConductorOne/c1i/internal/client"
@@ -203,6 +204,8 @@ func checkHookPriorityValue(mask string, hook map[string]any) error {
 	}
 	var n int64
 	switch x := v.(type) {
+	case nil:
+		return nil // the server clears it to 0
 	case float64:
 		n = int64(x)
 		if float64(n) != x {
@@ -210,8 +213,15 @@ func checkHookPriorityValue(mask string, hook map[string]any) error {
 		}
 	case int:
 		n = int64(x)
+	case string:
+		// The server coerces a numeric string, so range-check it too.
+		parsed, err := strconv.ParseInt(strings.TrimSpace(x), 10, 64)
+		if err != nil {
+			return nil // not a number; the server decides
+		}
+		n = parsed
 	default:
-		return &usageError{fmt.Errorf("--body-file priority must be a number")}
+		return nil // the server decides
 	}
 	if n < 0 || n > 1000 {
 		return &usageError{fmt.Errorf("--body-file priority must be between 0 and 1000 (got %d)", n)}
