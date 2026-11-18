@@ -1070,7 +1070,9 @@ one, so it exits `4`) or `--none`; `create --body-file` sends a whole
 derives its mask from the flags; the server needs a display name on every
 update, so without `--display-name` c1i reads the automation and sends its
 current name. `get` exits `4` for an entitlement without an automation. Delete
-is soft: `get` then returns it with `deletedAt` set. In testing the server
+is soft: `get` then returns it with `deletedAt` set, and `update` and
+`exclusions add|remove` still exit `0` against it (the printed automation keeps
+`deletedAt`), so exit `0` does not mean the rule is live. In testing the server
 refused a second `create` on the same entitlement with a 409, `conflicting
 concurrent write, retry the request`, even after the first was deleted.
 `exclusions add|remove` take C1 user ids; the server answers an unknown one with
@@ -1167,9 +1169,10 @@ the app hold the entitlement (zero rows at exit `0` for an unknown id). The
 other three address one grant by its account, the `app_user_id` of `grants
 list`.
 
-`grants remove` (`DELETE .../remove-membership`) prints the API's
-`{"revokeTaskId": ...}`. In testing it refused manually managed entitlements
-(custom and group resource types) with `entitlement is not an SSO application
+`grants remove` (`DELETE .../remove-membership`) prints the API's response;
+per the API, its `revokeTaskId` is set only for an access profile. Only refusals
+were observed, never a successful removal: in testing it refused manually
+managed entitlements (custom and group resource types) with `entitlement is not an SSO application
 sign-in entitlement` (exit `2`), an unknown `--app-user-id` included; use
 `requests create revoke` there, whose task on a manual entitlement waits on a
 provisioning step. An unknown entitlement or app exits `4`.

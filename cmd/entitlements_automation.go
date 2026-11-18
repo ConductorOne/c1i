@@ -225,6 +225,9 @@ change it, so without --display-name c1i first reads the automation and sends
 its current name (an entitlement without one exits 4 there, --dry-run
 included). Setting "basic" is not supported here; use "c1i api".
 
+The server also updates a deleted automation at exit 0: the printed object
+keeps deletedAt set, so check it before reading exit 0 as "the rule is live".
+
 Prints the updated automation as pretty JSON, unwrapped like "get".
 
 Example:

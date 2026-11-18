@@ -31,9 +31,9 @@ checks the entitlement before the account: on a refused entitlement an
 unknown --app-user-id gets the same 400. --app-user-id is the app_user_id
 column of "grants list".
 
-Prints the API's response, {"revokeTaskId": ...}: the removal runs through
-that revoke task, so the grant may stay visible until the task completes;
-follow it with "c1i tasks get <task-id>".
+Prints the API's response. Per the API, its revokeTaskId is set only when
+the entitlement is an access profile. Only the refusals above were observed;
+a successful removal has not been exercised.
 
 Example:
   c1i grants remove --app-id <app-id> --entitlement-id <entitlement-id> --app-user-id <app-user-id>`,

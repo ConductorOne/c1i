@@ -11,7 +11,8 @@ var entitlementsAutomationExclusionsCmd = &cobra.Command{
 	Short: "Manage the users an entitlement's automation leaves alone",
 	Long: `Manage an entitlement automation's exclusion list: per the API, "excluded
 users are not affected by the automation rule". The list can be read and
-changed whether or not the entitlement has a live automation.`,
+changed whether or not the entitlement has a live automation; in testing,
+list, add and remove all exited 0 against a deleted one.`,
 }
 
 func entitlementAutomationExclusionsPath(cmd *cobra.Command, entitlementID string) string {

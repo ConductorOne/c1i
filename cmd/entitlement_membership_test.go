@@ -253,3 +253,35 @@ func TestAutomationExclusionsListRows(t *testing.T) {
 		}
 	}
 }
+
+func TestGrantsRemoveSendsTheAppUserInADeleteBody(t *testing.T) {
+	t.Setenv("C1I_URL", mutTestURL)
+	srv := newMutServer(t, fixedReply(200, `{"revokeTaskId":"t1"}`))
+	r := runMutationCLI(t, srv.srv, 0, nil, "grants", "remove", "--app-id", "a1", "--entitlement-id", "e1", "--app-user-id", "au1")
+	if r.err != nil {
+		t.Fatalf("exit %d: %v", r.exit, r.err)
+	}
+	sent := srv.requests()
+	if len(sent) != 1 || sent[0].method != http.MethodDelete || sent[0].rawPath != "/api/v1/apps/a1/entitlements/e1/remove-membership" || sent[0].body != `{"appUserId":"au1"}` {
+		t.Errorf("requests = %+v", sent)
+	}
+	if compactRaw(t, r.stdout) != `{"revokeTaskId":"t1"}` {
+		t.Errorf("stdout = %s", r.stdout)
+	}
+}
+
+func TestGrantsRemoveDurationSendsAnEmptyBodyAndPrintsTheBinding(t *testing.T) {
+	t.Setenv("C1I_URL", mutTestURL)
+	srv := newMutServer(t, fixedReply(200, `{"binding":{"appUserId":"au1","deprovisionAt":null}}`))
+	r := runMutationCLI(t, srv.srv, 0, nil, "grants", "remove-duration", "--app-id", "a1", "--entitlement-id", "e1", "--app-user-id", "au1")
+	if r.err != nil {
+		t.Fatalf("exit %d: %v", r.exit, r.err)
+	}
+	sent := srv.requests()
+	if len(sent) != 1 || sent[0].method != http.MethodPost || sent[0].rawPath != "/api/v1/apps/a1/entitlements/e1/users/au1/remove-grant-duration" || sent[0].body != `{}` {
+		t.Errorf("requests = %+v", sent)
+	}
+	if compactRaw(t, r.stdout) != `{"appUserId":"au1","deprovisionAt":null}` {
+		t.Errorf("stdout = %s", r.stdout)
+	}
+}

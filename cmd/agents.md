@@ -768,9 +768,9 @@ resource with `--resource-id` likewise means you drop
   fails on a manual entitlement with `entitlement is not an SSO application
   sign-in entitlement`, so remove those via `requests create revoke` (on a
   manual entitlement its task waits on a provisioning step; the grant stays
-  until it is completed). A non-empty `failedUsersErrorMap` in the response
-  (users the server could not add) exits 1 after printing it; `--wait` waits
-  only for the others.
+  until it is completed); its success path is untested. A non-empty
+  `failedUsersErrorMap` in the response (users the server could not add) exits
+  1 after printing it; `--wait` waits only for the others.
 - `grants update-duration --deprovision-at <RFC3339>` / `grants remove-duration`
   (both `--app-id --entitlement-id --app-user-id`) set or clear when an existing
   grant is revoked; the server refuses a past time. `grants accounts --app-id
@@ -782,7 +782,9 @@ resource with `--resource-id` likewise means you drop
   works only on C1 app entitlements and acts on real users once it exists.
   Pick one condition: `--cel`, `--refs-file` (each ref looked up, unknown exits
   4) or `--none`; `create --body-file` for the full object. `get` exits 4 with
-  no automation; delete is soft (`deletedAt` set). `exclusions
+  no automation; delete is soft (`deletedAt` set), and `update` and
+  `exclusions add|remove` still exit 0 on a deleted one, so check `deletedAt`.
+  `exclusions
   list|add|remove <entitlement-id> --app-id [--user-id ...]` manages users the
   automation leaves alone.
 - A user id on a write is looked up before anything is sent, so an unknown one
