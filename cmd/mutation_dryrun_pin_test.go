@@ -123,6 +123,15 @@ var dryRunStubs = map[string][]string{
 	"c1i access-reviews templates scope set":                    {"x1", "--body-file=@{}"},
 	"c1i access-reviews templates scope set-by-resource-type":   {"x1", "--body-file=@{}"},
 	"c1i access-reviews templates scope set-excluded":           {"x1", "--body-file=@{}"},
+	"c1i apps add-owner":                                        {"x1", "--user-id=x1"},
+	"c1i apps remove-owner":                                     {"x1", "--user-id=x1"},
+	"c1i apps set-owners":                                       {"x1", "--user-id=x1"},
+	"c1i entitlements add-owner":                                {"x1", "--app-id=x1", "--user-id=x1"},
+	"c1i entitlements remove-owner":                             {"x1", "--app-id=x1", "--user-id=x1"},
+	"c1i entitlements set-owners":                               {"x1", "--app-id=x1", "--user-id=x1"},
+	"c1i apps resources add-owner":                              {"x1", "--app-id=x1", "--resource-type-id=x1", "--user-id=x1"},
+	"c1i apps resources remove-owner":                           {"x1", "--app-id=x1", "--resource-type-id=x1", "--user-id=x1"},
+	"c1i apps resources set-owners":                             {"x1", "--app-id=x1", "--resource-type-id=x1", "--user-id=x1"},
 }
 
 // dryRunReadBodies is the answer to a leaf's pre-send GET where the generic

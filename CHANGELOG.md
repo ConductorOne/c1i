@@ -35,6 +35,16 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   returns when the run starts. A run's `artifactUrl` may be a signed URL (not
   observed), so a failed response write says it was not delivered. Checked
   live only on unknown-id paths: the tenant used had no reports.
+- Entitlement owners on `apps`, `entitlements` and `apps resources`:
+  `add-owner|remove-owner --owner-entitlement-id <id>
+  [--owner-entitlement-app-id <id>]`, `owners --entitlements`, and
+  `set-owners --owner-entitlement-id ...`, which replaces user and entitlement
+  owners together and so needs `--user-id` for each user owner to keep or
+  `--no-user-owners`. They use the v2 owner routes under the role `primary`.
+  `--user-id` keeps its existing behavior, except the message when neither
+  flag is given: `add-owner` and `remove-owner` say "one of --user-id or
+  --owner-entitlement-id is required", `set-owners` says "at least one
+  --user-id or --owner-entitlement-id is required".
 - `tasks escalate|retry-provisioning <task-id>` (current policy step resolved
   like `approve`) and `tasks update-request-data <task-id> --data-file`, which
   the API describes as submitting the request form of a task at a form step.

@@ -26,10 +26,17 @@ Verify with "c1i apps owners <app-id>".
 Prints the API's response, which is {}; exit 0 is the success signal.
 Honors --dry-run.
 
-One owner per call; to change several at once use "apps set-owners".`,
+One owner per call; to change several at once use "apps set-owners".
+
+` + entitlementOwnerRemoveNote,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-
+		if ref, ok, err := ownerEntitlement(cmd, appOwnerV2(args[0])); err != nil || ok {
+			if err != nil {
+				return err
+			}
+			return removeEntitlementOwner(cmd, appOwnerV2(args[0]), ref)
+		}
 		userID, _ := cmd.Flags().GetString("user-id")
 		return sendMutation(cmd, mutation{
 			Method: http.MethodDelete,
@@ -39,9 +46,9 @@ One owner per call; to change several at once use "apps set-owners".`,
 }
 
 func init() {
-	addOnceStringFlag(appsRemoveOwnerCmd, "user-id", "C1 user ID to remove as owner",
+	addOnceStringFlag(appsRemoveOwnerCmd, "user-id", "C1 user ID to remove as owner; this or --owner-entitlement-id is required",
 		"use \"apps set-owners\" to set several owners")
-	markRequired(appsRemoveOwnerCmd, "user-id")
+	addEntitlementOwnerFlags(appsRemoveOwnerCmd, false)
 	markMutating(appsRemoveOwnerCmd)
 	appsCmd.AddCommand(appsRemoveOwnerCmd)
 }

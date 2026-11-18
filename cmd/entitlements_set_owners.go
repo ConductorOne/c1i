@@ -25,12 +25,14 @@ answers a repeated id with a 500, so ids are sent once.
 ` + ownerAsyncWaitNote + `
 Verify with "c1i entitlements owners <entitlement-id> --app-id <app-id>".
 
+` + entitlementOwnerSetNote + `
+
 ` + setOwnersWaitNote,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		appID, _ := cmd.Flags().GetString("app-id")
 		entitlementID := args[0]
-		return runOwnerSetPut(cmd, client.Path("/api/v1/apps/%s/entitlements/%s/owners", appID, entitlementID),
+		return runOwnerSetPut(cmd, client.Path("/api/v1/apps/%s/entitlements/%s/owners", appID, entitlementID), entitlementOwnerV2(appID, entitlementID),
 			func(c *client.Client, done func([]string) bool, timeout time.Duration) waitOp[[]string] {
 				return entitlementOwnersWaitOp(c, appID, entitlementID, done, timeout)
 			})

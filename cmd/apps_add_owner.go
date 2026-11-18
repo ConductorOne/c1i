@@ -29,10 +29,17 @@ Verify with "c1i apps owners <app-id>".
 Prints the API's response, which is {}; exit 0 is the success signal.
 Honors --dry-run.
 
-One owner per call; to change several at once use "apps set-owners".`,
+One owner per call; to change several at once use "apps set-owners".
+
+` + entitlementOwnerAddNote,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-
+		if ref, ok, err := ownerEntitlement(cmd, appOwnerV2(args[0])); err != nil || ok {
+			if err != nil {
+				return err
+			}
+			return addEntitlementOwner(cmd, appOwnerV2(args[0]), ref)
+		}
 		userID, _ := cmd.Flags().GetString("user-id")
 		// Everything the endpoint needs is in the path, but it still parses
 		// the body as a protobuf message: a `null` body earns a 400
@@ -46,9 +53,9 @@ One owner per call; to change several at once use "apps set-owners".`,
 }
 
 func init() {
-	addOnceStringFlag(appsAddOwnerCmd, "user-id", "C1 user ID to add as owner",
+	addOnceStringFlag(appsAddOwnerCmd, "user-id", "C1 user ID to add as owner; this or --owner-entitlement-id is required",
 		"use \"apps set-owners\" to set several owners")
-	markRequired(appsAddOwnerCmd, "user-id")
+	addEntitlementOwnerFlags(appsAddOwnerCmd, false)
 	markMutating(appsAddOwnerCmd)
 	markUserRefChecked(appsAddOwnerCmd, "user-id")
 	appsCmd.AddCommand(appsAddOwnerCmd)

@@ -798,10 +798,10 @@ c1i apps search [--query <text>] [--display-name <name>] [--app-id <id> ...] [--
 c1i apps get <app-id>
 c1i apps create --display-name <name> [--description <text>] [--grant-policy-id <id>] [--revoke-policy-id <id>] [--certify-policy-id <id>] [--identity-matching strict|display-name|custom]
 c1i apps update <app-id> [--display-name <name>] [--description <text>] [--grant-policy-id <id>] [--revoke-policy-id <id>] [--certify-policy-id <id>] [--unbind-policy grant|revoke|certify]... [--identity-matching strict|display-name|custom] [--app-user-mapper-file <path|->]
-c1i apps owners <app-id> [--page-size N] [--page-token TOKEN] [--limit N]
-c1i apps add-owner <app-id> --user-id <id>
-c1i apps remove-owner <app-id> --user-id <id>
-c1i apps set-owners <app-id> --user-id <id> [--user-id <id> ...] [--wait] [--wait-timeout 4m]
+c1i apps owners <app-id> [--entitlements] [--page-size N] [--page-token TOKEN] [--limit N]
+c1i apps add-owner <app-id> (--user-id <id> | --owner-entitlement-id <id> [--owner-entitlement-app-id <id>])
+c1i apps remove-owner <app-id> (--user-id <id> | --owner-entitlement-id <id> [--owner-entitlement-app-id <id>])
+c1i apps set-owners <app-id> [--user-id <id> ...] [--owner-entitlement-id <id> ... [--no-user-owners]] [--owner-entitlement-app-id <id>] [--wait] [--wait-timeout 4m]
 c1i apps delete <app-id>
 c1i apps resource-types list --app-id <app-id> [--page-size N] [--page-token TOKEN] [--limit N]
 c1i apps resource-types search [--query <text>] [--display-name <name>] [--app-id <id> ...] [--resource-type-id <id> ...] [--exclude-resource-type-id <id> ...] [--trait-id <id> ...] [--exclude-trait-id <id> ...] [--page-size N] [--page-token TOKEN] [--limit N]
@@ -815,10 +815,10 @@ c1i apps resources get <resource-id> --app-id <app-id> --resource-type-id <id>
 c1i apps resources create --app-id <app-id> --resource-type-id <id> (--display-name <name> [--description <text>] [--owner-id <id> ...] | --body-file <path|->)
 c1i apps resources update <resource-id> --app-id <app-id> --resource-type-id <id> ([--display-name <name>] [--description <text>] [--custom-description <text>] | --body-file <path|-> --update-mask <paths>)
 c1i apps resources delete <resource-id> --app-id <app-id> --resource-type-id <id>
-c1i apps resources owners <resource-id> --app-id <app-id> --resource-type-id <id> [--page-size N] [--page-token TOKEN] [--limit N]
-c1i apps resources add-owner <resource-id> --app-id <app-id> --resource-type-id <id> --user-id <id> [--wait] [--wait-timeout 4m]
-c1i apps resources remove-owner <resource-id> --app-id <app-id> --resource-type-id <id> --user-id <id>
-c1i apps resources set-owners <resource-id> --app-id <app-id> --resource-type-id <id> --user-id <id> [--user-id <id> ...] [--wait] [--wait-timeout 4m]
+c1i apps resources owners <resource-id> --app-id <app-id> --resource-type-id <id> [--entitlements] [--page-size N] [--page-token TOKEN] [--limit N]
+c1i apps resources add-owner <resource-id> --app-id <app-id> --resource-type-id <id> (--user-id <id> | --owner-entitlement-id <id> [--owner-entitlement-app-id <id>]) [--wait] [--wait-timeout 4m]
+c1i apps resources remove-owner <resource-id> --app-id <app-id> --resource-type-id <id> (--user-id <id> | --owner-entitlement-id <id> [--owner-entitlement-app-id <id>])
+c1i apps resources set-owners <resource-id> --app-id <app-id> --resource-type-id <id> [--user-id <id> ...] [--owner-entitlement-id <id> ... [--no-user-owners]] [--owner-entitlement-app-id <id>] [--wait] [--wait-timeout 4m]
 c1i apps managed-state list --app-id <app-id> --resource-type-id <id> [--page-size N] [--page-token TOKEN] [--limit N]
 c1i apps managed-state get <resource-id> --app-id <app-id> --resource-type-id <id>
 c1i apps managed-state promote <resource-id> --app-id <app-id> --resource-type-id <id> [--user-id <id> ...]
@@ -952,6 +952,36 @@ API would otherwise accept an unknown id at exit `0`, so a set naming only
 unknown ids would leave no real owners: an app stores the id (`GET .../ownerids`
 lists it, `apps owners` does not), an entitlement drops it.
 
+**Entitlement owners.** An owner can also be an entitlement, whose grantees own
+the app, entitlement or resource. `add-owner` and `remove-owner` take
+`--owner-entitlement-id` instead of `--user-id` (exactly one of the two), and
+`--owner-entitlement-app-id` when the entitlement is in another app than the
+owned object. `owners --entitlements` lists them (rows: `id` of the owning
+entitlement, `app_id`, `display_name`, `slug`, `alias`, `role_slug`,
+`added_at`, `deleted_at`). These go through the v2 owner routes
+(`/api/v2/.../owners/entitlements/primary/{app-id}/{entitlement-id}`) under
+the role `primary`, the only role the API supports. Adding an entitlement that
+is already an owner, or removing one a second time, exits `0`; an unknown
+entitlement or owned object exits `4`, and so does `owners --entitlements` on
+an unknown id. `add-owner --owner-entitlement-id` refuses `--wait` (exit `2`):
+the owner is in place when it returns.
+
+`set-owners` with any `--owner-entitlement-id` sends the v2 set, which
+replaces the entitlement owners and is meant to replace the user owners with
+the `--user-id` values. c1i refuses it (exit `2`, nothing sent, `--dry-run`
+included) unless you repeat `--user-id` for each user owner to keep or pass
+`--no-user-owners` to remove them all; `--no-user-owners` needs
+`--owner-entitlement-id` and excludes `--user-id`. The user part was not
+reliably reflected by the v1 owner reads: for an app, `apps owners` and `GET
+.../ownerids` caught up 1-2 minutes later; for a resource, a user owner the
+set removed was still listed more than 8 minutes later. So `--wait` in this
+form polls `GET .../ownerids` for the users and the v2 entitlement owner list
+until both equal the request, and a timeout exits `1` (the write was
+applied). Without `--owner-entitlement-id`, `set-owners` replaces user owners
+only and leaves entitlement owners in place. The v2 connector, account and
+user owner routes have no commands: on the tenant tried, each answered
+`ownership v2 is not enabled`.
+
 ### Accounts
 
 ```sh
@@ -972,10 +1002,10 @@ reads: `jq -er .id` is the account and `.identityUserId` its owner.
 c1i entitlements list [--app-id <id>] [--query <text>] [--page-size N] [--page-token TOKEN] [--limit N]
 c1i entitlements get <entitlement-id> --app-id <id>
 c1i entitlements delete <entitlement-id> --app-id <id>
-c1i entitlements owners <entitlement-id> --app-id <id> [--page-size N] [--page-token TOKEN] [--limit N]
-c1i entitlements add-owner <entitlement-id> --app-id <id> --user-id <id> [--wait] [--wait-timeout 4m]
-c1i entitlements remove-owner <entitlement-id> --app-id <id> --user-id <id>
-c1i entitlements set-owners <entitlement-id> --app-id <id> --user-id <id> [--user-id <id> ...] [--wait] [--wait-timeout 4m]
+c1i entitlements owners <entitlement-id> --app-id <id> [--entitlements] [--page-size N] [--page-token TOKEN] [--limit N]
+c1i entitlements add-owner <entitlement-id> --app-id <id> (--user-id <id> | --owner-entitlement-id <id> [--owner-entitlement-app-id <id>]) [--wait] [--wait-timeout 4m]
+c1i entitlements remove-owner <entitlement-id> --app-id <id> (--user-id <id> | --owner-entitlement-id <id> [--owner-entitlement-app-id <id>])
+c1i entitlements set-owners <entitlement-id> --app-id <id> [--user-id <id> ...] [--owner-entitlement-id <id> ... [--no-user-owners]] [--owner-entitlement-app-id <id>] [--wait] [--wait-timeout 4m]
 c1i entitlements grants <entitlement-id> --app-id <id> [--page-size N] [--page-token TOKEN] [--limit N]
 
 # Membership automation (C1 app entitlements only)
