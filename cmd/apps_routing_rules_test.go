@@ -186,11 +186,18 @@ func TestRoutingRulesUpdateKeepsUnchangedFields(t *testing.T) {
 			`{"condition":"c == 1","description":"keep me","displayName":"new","enabled":true,"settings":{"emergencyGrantEnabled":true,"emergencyGrantPolicyId":"pol-2","maxGrantDuration":"3600s","requestPolicyId":"pol-1","requestSchemaId":"rs-1"}}`},
 		{"one setting", []string{"--max-grant-duration", "8h"},
 			`{"condition":"c == 1","description":"keep me","displayName":"old","enabled":true,"settings":{"emergencyGrantEnabled":true,"emergencyGrantPolicyId":"pol-2","maxGrantDuration":"28800s","requestPolicyId":"pol-1","requestSchemaId":"rs-1"}}`},
+		{"null duration stays null", []string{"--description", "d2", "--request-policy-id", "pol-1"}, ""},
 		{"disable and clear", []string{"--enabled=false", "--condition", ""},
 			`{"condition":"","description":"keep me","displayName":"old","enabled":false,"settings":{"emergencyGrantEnabled":true,"emergencyGrantPolicyId":"pol-2","maxGrantDuration":"3600s","requestPolicyId":"pol-1","requestSchemaId":"rs-1"}}`},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			s := newMutServer(t, routingRuleRoute(cur, cur))
+			read, want := cur, tc.want
+			if want == "" {
+				read = `{"routingRule":{"id":"rr-1","displayName":"old","description":"","enabled":false,"condition":"",` +
+					`"settings":{"requestPolicyId":"","emergencyGrantPolicyId":"","emergencyGrantEnabled":false,"maxGrantDuration":null,"requestSchemaId":""},"deletedAt":null}}`
+				want = `{"condition":"","description":"d2","displayName":"old","enabled":false,"settings":{"emergencyGrantEnabled":false,"emergencyGrantPolicyId":"","maxGrantDuration":null,"requestPolicyId":"pol-1","requestSchemaId":""}}`
+			}
+			s := newMutServer(t, routingRuleRoute(read, read))
 			args := append([]string{"apps", "routing-rules", "update", "rr-1", "--app-id", "app-1"}, tc.args...)
 			r := runMutationCLI(t, s.srv, 0, nil, args...)
 			if r.exit != 0 {
@@ -200,8 +207,8 @@ func TestRoutingRulesUpdateKeepsUnchangedFields(t *testing.T) {
 			if len(w) != 1 || w[0].method != http.MethodPost || w[0].rawPath != "/api/v1/apps/app-1/entitlement_configuration_rules/rr-1" {
 				t.Fatalf("writes = %v", w)
 			}
-			if w[0].body != tc.want {
-				t.Errorf("body = %s\nwant   %s", w[0].body, tc.want)
+			if w[0].body != want {
+				t.Errorf("body = %s\nwant   %s", w[0].body, want)
 			}
 		})
 	}

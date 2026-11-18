@@ -23,8 +23,8 @@ that read and the write is overwritten.
 
 --enabled=false disables the rule; --enabled makes it route real requests.
 --description "" and --condition "" clear those fields (an empty condition
-matches every target no earlier rule matched). A policy or schema id can be
-replaced but not unset here.
+matches every target no earlier rule matched). A policy or schema id, and
+--max-grant-duration, can be changed but not unset here.
 The order is not changed here: use "apps routing-rules reorder".
 
 c1i reads the app and the rule before sending, --dry-run included: an unknown
