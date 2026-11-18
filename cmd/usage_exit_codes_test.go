@@ -79,6 +79,12 @@ func TestValidationGuardsExitUsage(t *testing.T) {
 			cmds:    []*cobra.Command{policiesSearchCmd},
 		},
 		{
+			name:    "apps search: --policy-id empty",
+			args:    []string{"apps", "search", "--policy-id", ""},
+			wantMsg: "--policy-id requires a non-empty value",
+			cmds:    []*cobra.Command{appsSearchCmd},
+		},
+		{
 			name:    "mcp tools search: --state empty",
 			args:    []string{"mcp", "tools", "search", "--app-id", "a", "--connector-id", "c", "--state", ""},
 			wantMsg: "--state requires a non-empty value",

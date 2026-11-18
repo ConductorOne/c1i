@@ -311,6 +311,9 @@ c1i users list --fields id,email
 # Conditional selection: jq is appropriate
 APPS_WITH_USERS="$(c1i apps list | jq -c 'if .user_count > 0 then . else empty end')"
 
+# Filtering apps: `apps list` has no filters; use `apps search`
+c1i apps search --query okta --exclude-app-id <app-id> --policy-id <policy-id>
+
 # Mutation output: never projected; extract the id with jq -er
 APP_ID=$(c1i apps create --display-name "Example" | jq -er .id)
 ```

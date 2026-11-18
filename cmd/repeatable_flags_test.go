@@ -147,6 +147,7 @@ var repeatableFlagsByCommand = map[string][]string{
 	"c1i mcp servers update-credentials": {"config-field"},
 	"c1i mcp tools search":               {"state", "classification"},
 	"c1i policies search":                {"policy-type", "exclude-policy-id"},
+	"c1i apps search":                    {"app-id", "exclude-app-id", "policy-id"},
 }
 
 func TestPinnedRepeatableFlagsAreStringArrays(t *testing.T) {

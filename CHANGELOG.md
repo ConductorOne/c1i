@@ -8,6 +8,10 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- `apps search` filters applications server-side (`POST /api/v1/search/apps`)
+  by `--query` (fuzzy on name and description), `--display-name`, repeatable
+  `--app-id` / `--exclude-app-id` / `--policy-id`, and `--only-directories`.
+  Rows match `apps list`; `apps list` help now points to it for filtering.
 - `docs map [--json]` prints the command tree this binary accepts, generated
   from the live Cobra tree. The default output is an indented outline with each
   command's one-line description; `--json` adds full paths, aliases, version,

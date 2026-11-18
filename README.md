@@ -792,6 +792,7 @@ c1i users get <user-id>
 
 ```sh
 c1i apps list [--page-size N] [--page-token TOKEN] [--limit N]
+c1i apps search [--query <text>] [--display-name <name>] [--app-id <id> ...] [--exclude-app-id <id> ...] [--policy-id <id> ...] [--only-directories] [--page-size N] [--page-token TOKEN] [--limit N]
 c1i apps get <app-id>
 c1i apps create --display-name <name> [--description <text>] [--grant-policy-id <id>] [--revoke-policy-id <id>] [--certify-policy-id <id>] [--identity-matching strict|display-name|custom]
 c1i apps update <app-id> [--display-name <name>] [--description <text>] [--grant-policy-id <id>] [--revoke-policy-id <id>] [--certify-policy-id <id>] [--unbind-policy grant|revoke|certify]... [--identity-matching strict|display-name|custom] [--app-user-mapper-file <path|->]
@@ -807,6 +808,8 @@ c1i apps managed-state promote <resource-id> --app-id <app-id> --resource-type-i
 ```
 
 `user_count` is the platform's stored count, not a live tally: on some apps it differs from the number of `accounts list --app-id <app-id>` rows. To size a change, count those rows, not `user_count`.
+
+`apps list` takes no filters; to narrow by name, id, policy or directory use `apps search` (`POST /api/v1/search/apps`), which emits the same rows. `--query` is a fuzzy match on name and description, `--display-name` a case-insensitive name match, and `--only-directories` sets the server's `onlyDirectories` filter. Each `--policy-id` is looked up first (unknown: exit `4`, deleted: exit `2`, nothing searched). Observed: an `--app-id` the tenant lacks matches nothing (empty result, exit `0`), and a malformed id is rejected by the server (exit `2`).
 
 `apps create` needs only `--display-name`; it makes a plain, unmanaged
 container app — the zero state for "make an app, then register MCP servers
