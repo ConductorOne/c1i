@@ -2448,7 +2448,10 @@ issuer it cannot reach, one that does not fit a named kind, and one already
 registered in the tenant (409, exit `2`); the kind and issuer are fixed after
 creation. `providers update --bundle-endpoint-url` on a non-SPIFFE provider
 answers 200 and changes nothing. `providers delete` is refused while a trust
-references the provider. Rows carry `id`, `display_name`, `description`,
+references the provider (find them with `trusts search --provider-id`, which
+can lag a just-created trust by about a second); `providers update` on a
+deleted provider answers 200 and applies, and the provider stays out of
+`providers list`. Rows carry `id`, `display_name`, `description`,
 `issuer_url`, `well_known_provider`, `disabled`, `created_at`, `updated_at`,
 and `bundle_endpoint_url` on a SPIFFE provider.
 
@@ -2456,7 +2459,8 @@ and `bundle_endpoint_url` on a SPIFFE provider.
 provider or trust, prints `matched`, `error` and `expression`, then exits `0`
 when it matched, `1` when it evaluated to false, and `2` when the API reports
 an error (a syntax error, a non-bool result, claims that are neither JSON nor
-a JWT).
+a JWT). Pass a JWT with `--claims-file`, not `--claims`, to keep it off the
+command line.
 
 ```sh
 c1i service-principals trusts list <sp-id> [--page-size <n>] [--page-token <token>] [--limit <n>]
@@ -2471,7 +2475,8 @@ c1i service-principals trusts test-token <trust-id> --service-principal-id <sp-i
 
 A trust's id is its client id (`word-word-12345@tenant.example.com/wfe`, as
 rows print it in `client_id`); `<trust-id>` takes that or the part before
-`@`, which is all c1i sends. `--condition` is a CEL expression over `claims`
+`@`, which is all c1i sends: the rest is not checked, and the trust is looked
+up under `--service-principal-id`. `--condition` is a CEL expression over `claims`
 that must return a bool; the API refuses an invalid one (exit `2`). The API
 stores a trust for an unknown service principal or `--scoped-role`, so
 `create` looks up `<sp-id>` and each `--scoped-role` first, and `update` each
@@ -2481,7 +2486,10 @@ stores a trust for an unknown service principal or `--scoped-role`, so
 trust.scoped_role_ids)". `--scoped-role`, `--allow-cidr` and
 `--passthrough-claim` are repeatable and replace the whole list on `update`;
 to empty one, use `--body-file` with `--update-mask`, e.g.
-`{"scopedRoleIds":[]}` and `--update-mask scopedRoleIds`. An unknown
+`{"scopedRoleIds":[]}` and `--update-mask scopedRoleIds`. A mask naming a list
+the body leaves out or sets to `null` exits `2` unsent, since the API would
+clear it (an empty `scopedRoleIds` gives the trust all the principal's roles);
+role ids in the body, in either spelling, are looked up like `--scoped-role`. An unknown
 `<sp-id>` on `list`, or an unknown `--service-principal-id` or
 `--provider-id` on `search`, lists nothing and exits `0`.
 

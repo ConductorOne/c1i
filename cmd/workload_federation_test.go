@@ -122,6 +122,8 @@ func TestSPTrustsUpdateChecksScopedRoles(t *testing.T) {
 	for _, args := range [][]string{
 		{"--scoped-role", "r-9"},
 		{"--body-file", writeTempFile(t, `{"scopedRoleIds":["r-9"]}`), "--update-mask", "scopedRoleIds"},
+		{"--body-file", writeTempFile(t, `{"scoped_role_ids":["r-9"]}`), "--update-mask", "scoped_role_ids"},
+		{"--body-file", writeTempFile(t, `{"scoped_role_ids":["r-9"]}`), "--update-mask", "scopedRoleIds", "--dry-run"},
 	} {
 		s := newMutServer(t, func(r *http.Request, _ int) mutReply {
 			if r.Method == http.MethodGet {
@@ -291,5 +293,38 @@ func TestWFListRowsKeepTypes(t *testing.T) {
 	lines := strings.Split(strings.TrimSpace(r.stdout), "\n")
 	if r.exit != 0 || len(lines) != 2 || !strings.Contains(lines[0], `"bundle_endpoint_url":"https://td.example.com/keys"`) || !strings.Contains(lines[0], `"disabled":true`) || strings.Contains(lines[1], "bundle_endpoint_url") {
 		t.Errorf("exit %d rows:\n%s", r.exit, r.stdout)
+	}
+}
+
+// A mask naming a list the body omits would make the API clear it; an empty
+// scopedRoleIds widens the trust to the principal's roles.
+func TestSPTrustsUpdateRefusesMaskedListTheBodyOmits(t *testing.T) {
+	for _, tc := range []struct{ body, mask string }{
+		{`{"displayName":"zz"}`, "displayName,scopedRoleIds"},
+		{`{}`, "scoped_role_ids"},
+		{`{"scopedRoleIds":null}`, "scopedRoleIds"},
+		{`{}`, "trust.scopedRoleIds"},
+		{`{}`, " allowSourceCidrs"},
+		{`{}`, "passthrough_claims"},
+	} {
+		for _, dry := range []bool{false, true} {
+			s := newMutServer(t, fixedReply(200, tblTrust))
+			args := []string{"service-principals", "trusts", "update", "t-1", "--service-principal-id", "sp-1",
+				"--body-file", writeTempFile(t, tc.body), "--update-mask", tc.mask}
+			if dry {
+				args = append(args, "--dry-run")
+			}
+			r := runWF(t, s, args...)
+			if r.exit != exitUsage || len(s.requests()) != 0 || !strings.Contains(r.stderr, "explicit []") {
+				t.Errorf("%s / %q dry=%v: exit %d after %d requests, stderr %q; want 2, none, naming the explicit []", tc.body, tc.mask, dry, r.exit, len(s.requests()), r.stderr)
+			}
+		}
+	}
+	// The snake_case clear is allowed too.
+	s := newMutServer(t, fixedReply(200, tblTrust))
+	r := runWF(t, s, "service-principals", "trusts", "update", "t-1", "--service-principal-id", "sp-1",
+		"--body-file", writeTempFile(t, `{"allow_source_cidrs":[]}`), "--update-mask", "allow_source_cidrs")
+	if r.exit != 0 || len(s.requests()) != 1 {
+		t.Errorf("explicit [] clear: exit %d after %d requests: %s", r.exit, len(s.requests()), r.stderr)
 	}
 }

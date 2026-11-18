@@ -32,7 +32,10 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   principal. `<trust-id>` takes the client id or its part before `@`.
   `trusts create` looks up the service principal and each `--scoped-role`
   first, and `trusts update` each `--scoped-role`: the API stores a trust for
-  either unknown id, so an unknown one now exits `4` unsent. `test-cel` exits
+  either unknown id, so an unknown one now exits `4` unsent (body-file role
+  ids too, in either spelling). A `trusts update --body-file` whose mask names
+  a list the body omits exits `2` unsent: the API would clear it, and an empty
+  `scopedRoleIds` widens the trust; send `[]` to clear. `test-cel` exits
   `0` on a match, `1` on no match and `2` on an evaluation error;
   `test-token` exits `1`, naming the failed steps, when the trust would reject
   the token.

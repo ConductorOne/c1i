@@ -27,8 +27,9 @@ effective permissions as "min(SP roles, trust.scoped_role_ids)".
 
 A trust is addressed by its client id, as list and search print it
 (e.g. "word-word-12345@tenant.example.com/wfe"). <trust-id> takes either that
-full id or the part before "@"; c1i sends the part before "@", the only form
-the API routes.
+full id or the part before "@"; c1i sends only the part before "@", the only
+form the API routes, and the rest is not checked. The trust is still looked up
+under --service-principal-id.
 
   service-principals trusts list <sp-id>
   service-principals trusts create <sp-id> --provider-id <provider-id> \
@@ -259,10 +260,14 @@ you pass; an omitted flag is left alone. The provider is fixed at creation.
 --scoped-role, --allow-cidr and --passthrough-claim replace the whole list.
 To empty a list, pass a trust object via --body-file with an explicit
 --update-mask (both required together, mutually exclusive with the field
-flags), e.g. {"scopedRoleIds":[]} with --update-mask scopedRoleIds.
+flags), e.g. {"scopedRoleIds":[]} with --update-mask scopedRoleIds. A mask
+that names a list the object leaves out (or sets to null) exits 2, nothing
+sent: the API would clear it, and an empty scopedRoleIds gives the trust all
+of the principal's roles.
 --disabled turns the trust off; --disabled=false turns it back on.
 
-Each --scoped-role is looked up first: the API stores an unknown role id. An
+Each scoped role id, from --scoped-role or --body-file (scopedRoleIds or
+scoped_role_ids), is looked up first: the API stores an unknown role id. An
 unknown one exits 4 before anything is sent, --dry-run included. A trust that
 was deleted still accepts an update.
 
@@ -278,6 +283,9 @@ Prints the trust as pretty JSON, unwrapped like "trusts get".`,
 		if usingBody {
 			bodyFile, _ := cmd.Flags().GetString("body-file")
 			if trust, err = readJSONFile[map[string]any](cmd, "body-file", bodyFile); err != nil {
+				return err
+			}
+			if err := checkTrustBodyMask(trust, mask); err != nil {
 				return err
 			}
 		} else {
@@ -298,27 +306,55 @@ Prints the trust as pretty JSON, unwrapped like "trusts get".`,
 	},
 }
 
-// trustRoleIDs reads scopedRoleIds from a trust object, whether a flag or
-// --body-file put it there.
-func trustRoleIDs(trust map[string]any) ([]string, error) {
-	switch v := trust["scopedRoleIds"].(type) {
-	case nil:
-		return nil, nil
-	case []string:
-		return v, nil
-	case []any:
-		out := make([]string, len(v))
-		for i, e := range v {
-			s, ok := e.(string)
-			if !ok {
-				return nil, &usageError{fmt.Errorf("--body-file: scopedRoleIds[%d] must be a string", i)}
-			}
-			out[i] = s
-		}
-		return out, nil
-	default:
-		return nil, &usageError{errors.New("--body-file: scopedRoleIds must be an array of strings")}
+// trustListFields are the trust's list fields in both spellings the API
+// accepts. A mask naming one that the body omits makes the server clear it;
+// clearing scopedRoleIds widens the trust to all of the principal's roles.
+var trustListFields = [][2]string{
+	{"scopedRoleIds", "scoped_role_ids"},
+	{"allowSourceCidrs", "allow_source_cidrs"},
+	{"passthroughClaims", "passthrough_claims"},
+}
+
+// checkTrustBodyMask refuses a mask that names a list field the --body-file
+// object leaves out or sets to null; an explicit [] is the way to clear one.
+func checkTrustBodyMask(trust map[string]any, mask string) error {
+	named := map[string]bool{}
+	for _, p := range strings.Split(mask, ",") {
+		named[strings.TrimPrefix(strings.TrimSpace(p), "trust.")] = true
 	}
+	for _, f := range trustListFields {
+		if !named[f[0]] && !named[f[1]] {
+			continue
+		}
+		if trust[f[0]] == nil && trust[f[1]] == nil {
+			return &usageError{fmt.Errorf("--update-mask names %s but --body-file sets no %s; send an explicit [] to clear it", f[0], f[0])}
+		}
+	}
+	return nil
+}
+
+// trustRoleIDs reads the scoped role ids from a trust object, whether a flag
+// or --body-file put them there, in either spelling.
+func trustRoleIDs(trust map[string]any) ([]string, error) {
+	var out []string
+	for _, key := range trustListFields[0] {
+		switch v := trust[key].(type) {
+		case nil:
+		case []string:
+			out = append(out, v...)
+		case []any:
+			for i, e := range v {
+				s, ok := e.(string)
+				if !ok {
+					return nil, &usageError{fmt.Errorf("--body-file: %s[%d] must be a string", key, i)}
+				}
+				out = append(out, s)
+			}
+		default:
+			return nil, &usageError{fmt.Errorf("--body-file: %s must be an array of strings", key)}
+		}
+	}
+	return out, nil
 }
 
 var spTrustsDeleteCmd = &cobra.Command{

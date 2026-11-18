@@ -195,6 +195,9 @@ re-enables it. --bundle-endpoint-url is for SPIFFE providers: the API re-checks
 it by fetching its JWKS and refuses one it cannot fetch (exit 2). On any other
 provider the API answers 200 and ignores it.
 
+A deleted provider still accepts an update (200) and stays out of "providers
+list".
+
 Prints the provider as pretty JSON, unwrapped like "providers get".`,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
@@ -214,12 +217,13 @@ var wfProvidersDeleteCmd = &cobra.Command{
 
 The API refuses while a trust references it ("cannot delete provider: an
 active trust references this provider; delete trusts first", exit 2); find
-them with "c1i service-principals trusts search --provider-id <provider-id>".
+them with "c1i service-principals trusts search --provider-id <provider-id>"
+(search can lag a just-created trust by about a second).
 
 Prints the API's response, which is {}; exit 0 is the success signal.
 Deleting it again also answers {}. A deleted provider leaves "providers list"
 at once, but "providers get" still returns it, with no field marking it
-deleted.`,
+deleted, and "providers update" still changes it.`,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		return sendMutation(cmd, mutation{Method: http.MethodDelete, Path: wfProviderPath(args[0])})
@@ -233,8 +237,9 @@ var wfTestCelCmd = &cobra.Command{
 --condition would be, without a token, provider or trust. Changes nothing.
 
 --claims (or --claims-file, "-" for stdin) is a JSON object of claims. The
-API also accepts a signed JWT there and evaluates its claims; in the runs
-checked it did not verify the signature, and refused "alg": "none".
+API also accepts a signed JWT and evaluates its claims; in the runs checked it
+did not verify the signature, and refused "alg": "none". Pass a JWT with
+--claims-file, not --claims, to keep it off the command line.
 
 Prints the API's answer: "matched", "error" and "expression". The answer
 always prints; then the command exits 0 when the expression matched, 1 when it
