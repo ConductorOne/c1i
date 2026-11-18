@@ -61,6 +61,8 @@ var dryRunStubs = map[string][]string{
 	"c1i mcp servers update":                              {"x1", "--app-id=x1", "--display-name=x1"},
 	"c1i mcp servers update-credentials":                  {"x1", "--app-id=x1", "--type=external", "--server-url=https://mcp.example.invalid"},
 	"c1i mcp toolsets update":                             {"x1", "--app-id=x1", "--connector-id=x1", "--display-name=x1"},
+	"c1i automations create":                              {"--display-name=x1"},
+	"c1i automations circuit-breaker resolve-paused":      {"x1", "--decision=run"},
 	"c1i policies create":                                 {"--display-name=x1", "--policy-type=grant", "--allow-deny-all"},
 	"c1i policies update":                                 {"x1", "--display-name=x1"},
 	"c1i requests create grant":                           {"--app-id=x1", "--entitlement-id=x1", "--user-id=x1"},

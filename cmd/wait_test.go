@@ -412,6 +412,7 @@ func TestWaitForOwnersAPIErrorOverHTTP(t *testing.T) {
 // pinned by name here; a new --wait caller has to add itself.
 var wantWaitTimeoutDefaults = map[string]time.Duration{
 	"c1i apps set-owners":         4 * time.Minute,
+	"c1i automations execute":     4 * time.Minute,
 	"c1i entitlements add-owner":  4 * time.Minute,
 	"c1i entitlements set-owners": 4 * time.Minute,
 	"c1i grants add":              4 * time.Minute,

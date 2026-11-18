@@ -749,6 +749,23 @@ resource with `--resource-id` likewise means you drop
   not a `404`. `automations update` prints the automation unwrapped
   (`jq -er .id`) with `webhookCapabilityUrl`/`webhookHmacSecret` as top-level
   siblings; `automations delete` prints `{}`.
+- `automations create` takes `--display-name`, `--description`, `--enabled`,
+  `--steps-file` (array, sent as `automationSteps`) and `--triggers-file` (array,
+  sent as `triggers`). `--body-file` sends the full request and excludes every
+  other flag. It prints the automation unwrapped (`jq -er .id`).
+  `automations execute <automation-id>` starts a run, even of a disabled
+  automation, and prints `{"executionId"}`. `--context-file` is a JSON object
+  sent as the run's context. With `--wait`, an end state of ERROR or TERMINATE,
+  or a circuit-breaker pause, exits `1` with `applied: true`; so does a timeout.
+  `automations executions get <execution-id>` reads one execution (`.state`);
+  `executions terminate` prints `{}`, and the state becomes
+  `AUTOMATION_EXECUTION_STATE_TERMINATE` shortly after. `automations
+  circuit-breaker clear [--decision run|cancel]`, `circuit-breaker
+  resolve-paused --decision run|cancel` and `cancel-pending`, each with optional
+  `--reason`, print `{"bulkActionId"}` and run asynchronously. c1i cannot read a
+  bulk action, so exit `0` means accepted. `cancel-pending` can be off per tenant:
+  `400` `cancelling queued automation runs is not enabled for this tenant`
+  (exit `2`).
 - `webhooks create` and `webhooks update` take the endpoint as
   `--destination-url` (`--url` is the global tenant flag), and it must be an
   absolute `https://` URL with a host (an IPv6 literal host is refused); a

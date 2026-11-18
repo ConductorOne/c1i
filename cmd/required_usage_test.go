@@ -110,8 +110,9 @@ var requiredFlagSkips = map[string]string{
 // conditionalRequiredFlags demand a flag in the command's default mode only;
 // their usage must say so ("(required unless ...)") instead of "(required)".
 var conditionalRequiredFlags = map[string]string{
-	"c1i policies create --display-name": "unless --body-file",
-	"c1i policies create --policy-type":  "unless --body-file",
+	"c1i automations create --display-name": "unless --body-file",
+	"c1i policies create --display-name":    "unless --body-file",
+	"c1i policies create --policy-type":     "unless --body-file",
 }
 
 func skippedRequiredFlagCommand(c *cobra.Command) bool {
