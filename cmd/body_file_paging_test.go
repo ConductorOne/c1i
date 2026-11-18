@@ -207,6 +207,14 @@ var ownedBodyKeyCommands = []struct {
 	{name: "c1i functions update", args: []string{"functions", "update", "f1", "--update-mask", "description"}, keys: []string{"id"}, positionals: []string{"f1"}, extra: `"description":"d","displayName":"n"`},
 	{name: "c1i apps resources update", args: []string{"apps", "resources", "update", "r1", "--app-id", "a1", "--resource-type-id", "t1", "--update-mask", "displayName"}, keys: []string{"id"}, positionals: []string{"r1"}, extra: `"displayName":"d"`},
 	{name: "c1i apps resources create", args: []string{"apps", "resources", "create", "--app-id", "a1", "--resource-type-id", "t1"}, keys: []string{"appId", "app_id", "appResourceTypeId", "app_resource_type_id"}, extra: `"displayName":"d"`},
+	{name: "c1i connectors create", args: []string{"connectors", "create", "--app-id", "a1"}, keys: []string{"appId", "app_id"}},
+	{name: "c1i access-reviews scope set", args: []string{"access-reviews", "scope", "set", "c1"}, keys: []string{"accessReviewId", "access_review_id"}, positionals: []string{"c1"}},
+	{name: "c1i access-reviews scope set-excluded", args: []string{"access-reviews", "scope", "set-excluded", "c1"}, keys: []string{"accessReviewId", "access_review_id"}, positionals: []string{"c1"}},
+	{name: "c1i access-reviews scope set-by-resource-type", args: []string{"access-reviews", "scope", "set-by-resource-type", "c1"}, keys: []string{"accessReviewId", "access_review_id"}, positionals: []string{"c1"}},
+	{name: "c1i access-reviews templates scope set", args: []string{"access-reviews", "templates", "scope", "set", "t1"}, keys: []string{"accessReviewId", "access_review_id"}, positionals: []string{"t1"}},
+	{name: "c1i access-reviews templates scope set-excluded", args: []string{"access-reviews", "templates", "scope", "set-excluded", "t1"}, keys: []string{"accessReviewId", "access_review_id"}, positionals: []string{"t1"}},
+	{name: "c1i access-reviews templates scope set-by-resource-type", args: []string{"access-reviews", "templates", "scope", "set-by-resource-type", "t1"}, keys: []string{"accessReviewId", "access_review_id"}, positionals: []string{"t1"}},
+	{name: "c1i service-principals trusts update", args: []string{"service-principals", "trusts", "update", "tr1", "--service-principal-id", "sp1", "--update-mask", "displayName"}, keys: []string{"clientId", "client_id"}, positionals: []string{"tr1"}, extra: `"displayName":"zz"`},
 	{name: "c1i automations update", args: []string{"automations", "update", "a1", "--update-mask", "enabled"}, keys: []string{"id"}, positionals: []string{"a1"}, extra: `"enabled":true`},
 	{name: "c1i access-reviews templates update", args: []string{"access-reviews", "templates", "update", "t1", "--update-mask", "description"}, keys: []string{"id"}, positionals: []string{"t1"}, extra: `"description":"d","displayName":"n","policyId":"p"`},
 	{name: "c1i access-reviews update", args: []string{"access-reviews", "update", "c1", "--update-mask", "displayName"}, keys: []string{"id"}, positionals: []string{"c1"}, extra: `"displayName":"d"`},
@@ -409,7 +417,9 @@ func onePageStub(t *testing.T) (*httptest.Server, func() []map[string]any) {
 		body := map[string]any{}
 		_ = json.Unmarshal(raw, &body)
 		mu.Lock()
-		seen = append(seen, body)
+		if len(body) > 0 {
+			seen = append(seen, body)
+		}
 		mu.Unlock()
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = fmt.Fprint(w, `{"list":[{"id":"r1","findingId":"f1","eventId":"e1"}],"nextPageToken":""}`)

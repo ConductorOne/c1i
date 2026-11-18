@@ -81,9 +81,13 @@ func entOwnerServerUsers(t *testing.T, ownerIDs []string, userStatus map[string]
 func withoutUserLookups(reqs []entOwnerRequest) []entOwnerRequest {
 	var out []entOwnerRequest
 	for _, r := range reqs {
-		if !strings.HasPrefix(r.rawPath, "/api/v1/users/") {
-			out = append(out, r)
+		if strings.HasPrefix(r.rawPath, "/api/v1/users/") {
+			continue
 		}
+		if rest, ok := strings.CutPrefix(r.rawPath, "/api/v1/apps/"); ok && r.method == http.MethodGet && !strings.Contains(rest, "/") {
+			continue // the app pre-read
+		}
+		out = append(out, r)
 	}
 	return out
 }

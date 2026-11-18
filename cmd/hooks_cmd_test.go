@@ -444,3 +444,30 @@ func TestHooksBodyFilePriorityIsChecked(t *testing.T) {
 		t.Errorf("priority outside the mask: %v", err)
 	}
 }
+
+// A soft-deleted function is refused by the pre-read (exit 2), on --dry-run
+// too, instead of approving a write the server 400s.
+func TestHooksDeletedFunctionRefIsRefused(t *testing.T) {
+	withCatalogDryRun(t, false)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method == http.MethodGet && r.URL.Path == "/api/v1/functions/fn-del" {
+			_, _ = w.Write([]byte(`{"function":{"id":"fn-del","deletedAt":"2026-01-01T00:00:00Z"}}`))
+			return
+		}
+		if r.Method == http.MethodGet {
+			w.WriteHeader(http.StatusNotFound)
+			_, _ = w.Write([]byte(`{"code":5,"message":"not found"}`))
+			return
+		}
+		_, _ = w.Write([]byte(hookEnvelope))
+	}))
+	t.Cleanup(srv.Close)
+	stubCatalogClient(t, srv)
+	for _, dry := range []bool{false, true} {
+		withCatalogDryRun(t, dry)
+		if _, err := runPairs(t, srv, hooksCreateCmd, nil, "display-name", "zz", "event", "pre-output", "function-id", "fn-del"); exitCode(err) != exitUsage {
+			t.Errorf("dry=%v: err %v, want exit 2", dry, err)
+		}
+	}
+}

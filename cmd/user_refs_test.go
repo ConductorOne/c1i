@@ -336,7 +336,12 @@ func TestUserLookupFailures(t *testing.T) {
 	args := []string{"apps", "add-owner", "app1", "--user-id", "zz-x"}
 	t.Setenv("C1I_URL", mutTestURL)
 
-	miss := newMutServer(t, fixedReply(http.StatusNotFound, `{"code":5,"message":"not found"}`))
+	miss := newMutServer(t, func(r *http.Request, _ int) mutReply {
+		if r.Method == http.MethodGet && r.URL.Path == "/api/v1/apps/app1" {
+			return mutReply{body: `{}`}
+		}
+		return mutReply{status: http.StatusNotFound, body: `{"code":5,"message":"not found"}`}
+	})
 	r := runMutationCLI(t, miss.srv, 0, nil, args...)
 	if r.exit != exitNotFound || strings.TrimSpace(r.stderr) != `Error: --user-id "zz-x": no such user` {
 		t.Errorf("text: exit %d stderr %q", r.exit, r.stderr)

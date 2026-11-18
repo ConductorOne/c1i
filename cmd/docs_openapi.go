@@ -160,12 +160,11 @@ Examples:
 
 		resolved := resolveRefs(pathObj, spec, 0, nil)
 
-		out, err := json.MarshalIndent(resolved, "", "  ")
+		out, err := json.Marshal(resolved)
 		if err != nil {
 			return err
 		}
-		_, err = fmt.Fprintln(cmd.OutOrStdout(), string(out))
-		return wrapOutputErr(err)
+		return writeObject(cmd, out)
 	},
 }
 

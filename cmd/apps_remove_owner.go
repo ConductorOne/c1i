@@ -20,7 +20,7 @@ owner you know about can still leave the app owned by someone you never
 chose -- its creator. Check "c1i apps owners <app-id>" first if that matters.
 
 ` + ownerAsyncNote + `
-An unknown app id exits 4.
+An unknown app id exits 4, and a deleted one 2.
 Verify with "c1i apps owners <app-id>".
 
 Prints the API's response, which is {}; exit 0 is the success signal.
@@ -35,13 +35,13 @@ One owner per call; to change several at once use "apps set-owners".
 			if err != nil {
 				return err
 			}
-			return removeEntitlementOwner(cmd, appOwnerV2(args[0]), ref)
+			return removeEntitlementOwner(cmd, appOwnerV2(args[0]), ref, deletedAppPreRead(args[0], "<app-id>"))
 		}
 		userID, _ := cmd.Flags().GetString("user-id")
 		return sendMutation(cmd, mutation{
 			Method: http.MethodDelete,
 			Path:   client.Path("/api/v1/apps/%s/owners/%s", args[0], userID),
-		})
+		}, deletedAppPreRead(args[0], "<app-id>"))
 	},
 }
 

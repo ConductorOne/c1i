@@ -175,6 +175,7 @@ func newSetupBodyCmd(o setupOwner, use, short, long, suffix, refKey string, shap
 		},
 	}
 	cmd.Flags().String("body-file", "", "Full request JSON object (file or \"-\" for stdin)")
+	ownBodyKeys(cmd, "body-file", argBodyKeys(0, o.use, "accessReviewId", "access_review_id"))
 	annotateRequired(cmd, "body-file")
 	markMutating(cmd)
 	return cmd

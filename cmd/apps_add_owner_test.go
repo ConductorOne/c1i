@@ -41,10 +41,14 @@ func TestAppsAddOwnerDryRunPreviewsRequestWithoutSending(t *testing.T) {
 	t.Setenv("C1I_URL", "https://example.invalid")
 	// The preview looks the user up (a read), so the stub must answer it.
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodGet || r.URL.Path != "/api/v1/users/user1" {
+		switch r.URL.Path {
+		case "/api/v1/apps/app1":
+			_, _ = w.Write([]byte(`{}`))
+		case "/api/v1/users/user1":
+			_, _ = w.Write([]byte(`{"user":{"id":"user1"}}`))
+		default:
 			t.Errorf("unexpected request under --dry-run: %s %s", r.Method, r.URL.Path)
 		}
-		_, _ = w.Write([]byte(`{"user":{"id":"user1"}}`))
 	}))
 	defer srv.Close()
 	stubNewGrantClient(t, srv)

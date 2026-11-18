@@ -17,7 +17,9 @@ with an empty config (the API's "delegated" create); set the config afterwards
 with "c1i connectors update <connector-id> --body-file <file> --update-mask
 config".
 
---catalog-id is required. A malformed id is a 400 regex error (exit 2); a
+The app is looked up first: an unknown --app-id exits 4 and a deleted one 2
+(the server would store the connector under either). --catalog-id is required.
+A malformed id is a 400 regex error (exit 2); a
 well-formed id the catalog lacks can answer 500 "invalid connector catalog
 id" (exit 6). An MCP catalog id is refused with a 400, "the MCP catalog is not
 installable; register an MCP server through the MCP server API" (exit 2); use
@@ -27,7 +29,8 @@ checked, the caller became the connector's only user id.
   --body-file   the full CreateDelegated request body, sent verbatim, for
                 fields with no flag (appEntitlementOwnerRefs,
                 appManagedStateBindingRef); mutually exclusive with the
-                other flags except --app-id
+                other flags except --app-id, and must not set appId/app_id
+                (the path owns it)
 
 Prints the created connector as pretty JSON, unwrapped like "connectors get":
 the id is .id.`,
@@ -42,7 +45,8 @@ the id is .id.`,
 		if len(userIDs) > 0 {
 			opts = append(opts, withPreRead(existingUsersCheck(userFlag, userIDs)))
 		}
-		return sendMutation(cmd, mutation{Method: http.MethodPost, Path: path, Body: body}, opts...)
+		return sendMutation(cmd, mutation{Method: http.MethodPost, Path: path, Body: body},
+			append(opts, deletedAppPreRead(appID, "--app-id"))...)
 	},
 }
 
@@ -120,6 +124,7 @@ func init() {
 	f.String("body-file", "", "Full CreateDelegated request JSON, verbatim (file, or \"-\" for stdin); mutually exclusive with the flags above except --app-id")
 	markRequired(connectorsCreateCmd, "app-id")
 	markMutating(connectorsCreateCmd)
+	ownBodyKeys(connectorsCreateCmd, "body-file", []ownedKey{{key: "appId", owner: "--app-id"}, {key: "app_id", owner: "--app-id"}})
 	markUserRefChecked(connectorsCreateCmd, "user-id")
 	connectorsCmd.AddCommand(connectorsCreateCmd)
 }

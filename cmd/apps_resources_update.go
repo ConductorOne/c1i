@@ -24,8 +24,8 @@ camelCase and comma-separated; a path the server does not know is a 400,
 "invalid update_mask" (exit 2). Annotations sent this way were merged into the
 existing ones, not replaced.
 
-An unknown app, resource type or resource exits 4. The server accepts an
-update to a deleted resource.
+An unknown app, resource type or resource exits 4, and a deleted app 2. The
+server accepts an update to a deleted resource.
 
 Prints the updated resource, unwrapped like "apps resources get": the id is
 .id. Honors --dry-run.`,
@@ -35,7 +35,9 @@ Prints the updated resource, unwrapped like "apps resources get": the id is
 		if err != nil {
 			return err
 		}
-		return sendMutation(cmd, mutation{Method: http.MethodPost, Path: resourceScopeOf(cmd).resourcePath(args[0]), Body: body})
+		s := resourceScopeOf(cmd)
+		return sendMutation(cmd, mutation{Method: http.MethodPost, Path: s.resourcePath(args[0]), Body: body},
+			deletedAppPreRead(s.appID, "--app-id"))
 	},
 }
 

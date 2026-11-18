@@ -893,12 +893,13 @@ API's response, `{}`; exit `0` is the success signal.
 
 `apps set-owners` replaces the whole list with exactly the ids you pass, so an
 owner added between your read and your write is silently removed. It prints the
-API's JSON response and returns as soon as the `PUT` is accepted. An unknown
-but well-formed app id is answered `200 {}` too (measured; `apps get` and
-`apps add-owner` 404 on the same id), so confirm the app first.
+API's JSON response and returns as soon as the `PUT` is accepted. c1i reads
+the app first: an unknown app id exits `4` and a deleted one `2`, before
+anything is sent, `--dry-run` included.
 
-`apps owners` is the read that reflects what `apps add-owner`,
-`apps remove-owner` and `apps set-owners` write. It returns zero rows at exit 0
+`apps add-owner`/`remove-owner` also refuse a deleted app (`2`). `apps owners`
+is the read that reflects what `apps add-owner`, `apps remove-owner` and
+`apps set-owners` write. It returns zero rows at exit 0
 for a well-formed but nonexistent app id, so an empty result can also mean
 "wrong id". `apps add-owner` and `apps remove-owner` change one owner at a time
 (a single `--user-id`; use `set-owners` for many). A repeated `--user-id` exits
@@ -1486,7 +1487,9 @@ run them on. An unknown well-formed id exits `4`, a malformed one `2`.
 `connectors create` makes a connector with an empty config (the API's
 delegated create; a malformed catalog id is a 400 (exit 2), a well-formed id
 the catalog lacks can be a 500 (exit 6), and an MCP catalog id is a 400 — use
-`mcp servers register`); set the config with `connectors update --body-file <file>
+`mcp servers register`). c1i reads the app first: an unknown `--app-id` exits
+`4` and a deleted one `2`, and a `--body-file` must not set `appId`/`app_id`
+(the path owns it). Set the config with `connectors update --body-file <file>
 --update-mask config`, where the file is a `connectors get` output with
 `.config` edited and the view keys removed (`jq 'del(.expanded, .appPath,
 .capabilitiesPath, .usersPath)'`; the server refuses them as unknown fields).
@@ -1763,6 +1766,7 @@ c1i mcp servers register           --app-id <id> --type external --display-name 
 # --wait polls `mcp servers list` until the new server is listed (observed trailing register by a second or two)
 c1i mcp servers update             <connector-id> --app-id <id> [--display-name <name>] [--description <text>] [--data-sensitivity ...] [--tool-prefix <p>] [--require-tool-approval]
 c1i mcp servers update-credentials <connector-id> --app-id <id> --type hosted|external [--auth ...] [--update-mask <paths>]
+# register/create read the app first: unknown 4, deleted 2
 c1i mcp servers delete             <connector-id> --app-id <id>
 c1i mcp servers resync-tools       <connector-id> --app-id <id>   # EXTERNAL only; 400 on HOSTED
 c1i mcp servers test-connection    (--server-url <url> [--transport ...] [--auth ...] | <connector-id> --app-id <id>)   # EXTERNAL only; 400 on HOSTED; exits 8 when unreachable (JSON still printed)
@@ -2351,7 +2355,8 @@ with `scope set-excluded` first. In the run checked, removing the last excluded
 entitlement also cleared it. The API's `scope_by_excluded_resource_type` route
 is "superseded and scheduled for removal", so it has no command; exclude by
 resource type with `scope set-excluded` and
-`scopeV2.excludedAppSelectionCriteria`. Every command that names an
+`scopeV2.excludedAppSelectionCriteria`. A `--body-file` must not set
+`accessReviewId`/`access_review_id` (the positional owns it). Every command that names an
 entitlement or resource type looks each one up first, so an unknown one exits
 `4` and a soft-deleted one `2`, before anything is sent, `--dry-run` included;
 the server alone would answer `400`, `500` or a silent skip.
@@ -2858,7 +2863,8 @@ server did not paginate `list` when tried (`--page-size` had no effect).
 `create` and `update` look up `--function-id` (and `--function-commit-id` under
 it) first, `--dry-run` included, so an unknown one exits `4`; without the check
 the server answers an unknown function with `400` and stores an unknown commit
-id at exit `0`. `--body-file` is sent verbatim except that a `priority`
+id at exit `0`. A soft-deleted function exits `2` on the pre-read. `--body-file`
+is sent verbatim except that a `priority`
 outside 0-1000, or one that is not a whole number, exits `2` when the mask
 names it, since update does not validate it.
 
