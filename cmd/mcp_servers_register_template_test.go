@@ -84,6 +84,7 @@ func TestPrintConfigTemplateHosted(t *testing.T) {
 	cmd := newTemplateCmd()
 	_ = cmd.Flags().Set("auth", "oauth2")
 	var out, errOut bytes.Buffer
+	restoreCmdWriters(t)
 	cmd.SetOut(&out)
 	cmd.SetErr(&errOut)
 
@@ -120,6 +121,7 @@ func TestPrintConfigTemplateExternal(t *testing.T) {
 	_ = cmd.Flags().Set("type", "external")
 	_ = cmd.Flags().Set("auth", "bearer-token")
 	var out bytes.Buffer
+	restoreCmdWriters(t)
 	cmd.SetOut(&out)
 	cmd.SetErr(&bytes.Buffer{})
 
@@ -147,6 +149,7 @@ func TestPrintConfigTemplateNoHTMLEscape(t *testing.T) {
 	cmd := newTemplateCmd()
 	_ = cmd.Flags().Set("auth", "oauth2")
 	var out bytes.Buffer
+	restoreCmdWriters(t)
 	cmd.SetOut(&out)
 	cmd.SetErr(&bytes.Buffer{})
 	if err := printConfigTemplate(cmd); err != nil {
@@ -186,6 +189,7 @@ func TestTemplateRoundTripsThroughRegister(t *testing.T) {
 			wantArm:   "bearerToken",
 		},
 	}
+	restoreCmdWriters(t)
 	for _, c := range cases {
 		// 1. Generate the template.
 		gen := newTemplateCmd()
@@ -246,6 +250,7 @@ func TestPrintConfigTemplateBadInput(t *testing.T) {
 		{"auth", "bogus"},
 		{"type", "sideways"},
 	}
+	restoreCmdWriters(t)
 	for _, c := range cases {
 		cmd := newTemplateCmd()
 		_ = cmd.Flags().Set(c.flag, c.val)

@@ -100,6 +100,7 @@ func TestTasksListLimitWithSparseFieldsContinuesPastFilteredPage(t *testing.T) {
 	}
 
 	var out bytes.Buffer
+	restoreCmdWriters(t)
 	tasksListCmd.SetOut(&out)
 	tasksListCmd.SetContext(context.Background())
 	err := tasksListCmd.RunE(tasksListCmd, []string{})
@@ -173,6 +174,7 @@ func TestTasksListPageSizeStaysFullDuringSparseFieldsScan(t *testing.T) {
 	}
 
 	var out bytes.Buffer
+	restoreCmdWriters(t)
 	tasksListCmd.SetOut(&out)
 	tasksListCmd.SetContext(context.Background())
 	if err := tasksListCmd.RunE(tasksListCmd, []string{}); err != nil {

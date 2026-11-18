@@ -23,6 +23,7 @@ func newEntitlementCreateCmd(t *testing.T, args ...string) *cobra.Command {
 	cmd := &cobra.Command{Use: "create", RunE: func(*cobra.Command, []string) error { return nil }}
 	addEntitlementCreateFlags(cmd)
 	cmd.SetArgs(args)
+	restoreCmdWriters(t)
 	cmd.SetOut(new(bytes.Buffer))
 	cmd.SetErr(new(bytes.Buffer))
 	cmd.SetContext(context.Background())
@@ -287,6 +288,7 @@ func previewPlan(t *testing.T, p *entitlementCreatePlan) (stdout, stderr string)
 	t.Setenv("C1I_URL", mutTestURL)
 	var out, errOut bytes.Buffer
 	cmd := &cobra.Command{}
+	restoreCmdWriters(t)
 	cmd.SetOut(&out)
 	cmd.SetErr(&errOut)
 	cmd.SetContext(context.Background())
@@ -318,6 +320,7 @@ func TestEntitlementCreateRunChainsIDs(t *testing.T) {
 
 	var out bytes.Buffer
 	cmd := &cobra.Command{}
+	restoreCmdWriters(t)
 	cmd.SetOut(&out)
 	cmd.SetContext(context.Background())
 
@@ -350,6 +353,7 @@ func TestEntitlementCreateRunReportsPartialCreates(t *testing.T) {
 	p := mustPlan(t, "--app-id", "app1", "--display-name", "Payroll admin")
 
 	cmd := &cobra.Command{}
+	restoreCmdWriters(t)
 	cmd.SetOut(new(bytes.Buffer))
 	cmd.SetContext(context.Background())
 
@@ -376,6 +380,7 @@ func TestEntitlementCreateRunReusedObjectsAreNotClaimed(t *testing.T) {
 	p := mustPlan(t, "--app-id", "app1", "--display-name", "e", "--resource-type-id", "rt-mine", "--resource-id", "res-mine")
 
 	cmd := &cobra.Command{}
+	restoreCmdWriters(t)
 	cmd.SetOut(new(bytes.Buffer))
 	cmd.SetContext(context.Background())
 
@@ -610,6 +615,7 @@ func TestEntitlementCreateRetryRemediationIsAccepted(t *testing.T) {
 	}
 
 	cmd := &cobra.Command{}
+	restoreCmdWriters(t)
 	cmd.SetOut(new(bytes.Buffer))
 	cmd.SetContext(context.Background())
 	runErr := runPlan(t, mustPlan(t, args...), s.srv, cmd)
@@ -726,6 +732,7 @@ func TestRemediationOnResourceFailureKeepsResourceName(t *testing.T) {
 		"--resource-display-name", "res name",
 	}
 	cmd := &cobra.Command{}
+	restoreCmdWriters(t)
 	cmd.SetOut(new(bytes.Buffer))
 	cmd.SetContext(context.Background())
 	runErr := runPlan(t, mustPlan(t, args...), s.srv, cmd)

@@ -66,6 +66,7 @@ func TestAPIGuardsExitUsage(t *testing.T) {
 			t.Setenv("C1I_URL", "https://example.invalid")
 
 			var out bytes.Buffer
+			restoreCmdWriters(t)
 			apiCmd.SetOut(&out)
 			apiCmd.SetErr(&out)
 			rootCmd.SetArgs(tc.args)
@@ -96,6 +97,7 @@ func TestAPIInvalidJSONBodyExitsUsage(t *testing.T) {
 		viper.Set("dry_run", true)
 
 		var out bytes.Buffer
+		restoreCmdWriters(t)
 		apiCmd.SetOut(&out)
 		apiCmd.SetErr(&out)
 		rootCmd.SetArgs([]string{"api", "--path", "/api/v1/apps", "--method", "POST", "--body", "not json"})
@@ -121,6 +123,7 @@ func TestAPIInvalidJSONBodyExitsUsage(t *testing.T) {
 		stubNewAPIClient(t, srv)
 
 		var out bytes.Buffer
+		restoreCmdWriters(t)
 		apiCmd.SetOut(&out)
 		apiCmd.SetErr(&out)
 		rootCmd.SetArgs([]string{"api", "--path", "/api/v1/apps", "--method", "POST", "--body", "not json"})
@@ -146,6 +149,7 @@ func TestAPIInvalidJSONBodyExitsUsage(t *testing.T) {
 		stubNewAPIClient(t, srv)
 
 		var out bytes.Buffer
+		restoreCmdWriters(t)
 		apiCmd.SetOut(&out)
 		apiCmd.SetErr(&out)
 		rootCmd.SetArgs([]string{"api", "--path", "/api/v1/apps", "--method", "DELETE", "--allow-delete-body", "--body", "not json"})

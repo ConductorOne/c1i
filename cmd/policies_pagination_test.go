@@ -35,6 +35,7 @@ func runPoliciesListCmd(t *testing.T, srv *httptest.Server) (string, error) {
 	stubPoliciesClient(t, srv)
 	t.Setenv("C1I_URL", "https://example.invalid")
 	var out bytes.Buffer
+	restoreCmdWriters(t)
 	policiesListCmd.SetOut(&out)
 	policiesListCmd.SetContext(context.Background())
 	err := policiesListCmd.RunE(policiesListCmd, []string{})
@@ -46,6 +47,7 @@ func runPoliciesSearchCmd(t *testing.T, srv *httptest.Server) (string, error) {
 	stubPoliciesClient(t, srv)
 	t.Setenv("C1I_URL", "https://example.invalid")
 	var out bytes.Buffer
+	restoreCmdWriters(t)
 	policiesSearchCmd.SetOut(&out)
 	policiesSearchCmd.SetContext(context.Background())
 	err := policiesSearchCmd.RunE(policiesSearchCmd, []string{})

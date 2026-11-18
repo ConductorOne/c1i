@@ -88,6 +88,7 @@ func TestParseRoleSelection(t *testing.T) {
 
 func TestPromptForRolesRepromptsOnBlankAndInvalid(t *testing.T) {
 	var out bytes.Buffer
+	restoreCmdWriters(t)
 	authLoginCmd.SetOut(&out)
 	authLoginCmd.SetContext(context.Background())
 	t.Cleanup(func() { authLoginCmd.SetOut(nil) })
@@ -114,6 +115,7 @@ func TestPromptForRolesRepromptsOnBlankAndInvalid(t *testing.T) {
 }
 
 func TestPromptForRolesEOFIsUsageError(t *testing.T) {
+	restoreCmdWriters(t)
 	authLoginCmd.SetOut(io.Discard)
 	authLoginCmd.SetContext(context.Background())
 	t.Cleanup(func() { authLoginCmd.SetOut(nil) })
@@ -129,6 +131,7 @@ func TestPromptForRolesEOFIsUsageError(t *testing.T) {
 func TestPromptsReturnOnCancel(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
+	restoreCmdWriters(t)
 	authLoginCmd.SetOut(io.Discard)
 	authLoginCmd.SetContext(ctx)
 	t.Cleanup(func() { authLoginCmd.SetOut(nil); authLoginCmd.SetContext(context.Background()) })
@@ -167,6 +170,7 @@ func TestAskToChooseRoles(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(fmt.Sprintf("%q", tt.input), func(t *testing.T) {
+			restoreCmdWriters(t)
 			authLoginCmd.SetOut(io.Discard)
 			authLoginCmd.SetContext(context.Background())
 			t.Cleanup(func() { authLoginCmd.SetOut(nil) })
@@ -595,6 +599,7 @@ func runLogin(t *testing.T, tenant *stubTenant, scope loginScope, stdin string, 
 	t.Cleanup(func() { _, _ = keychain.Delete(config.KeychainService(srv.URL)) })
 
 	var out, errOut bytes.Buffer
+	restoreCmdWriters(t)
 	authLoginCmd.SetOut(&out)
 	authLoginCmd.SetErr(&errOut)
 	t.Cleanup(func() { authLoginCmd.SetOut(nil); authLoginCmd.SetErr(nil) })
@@ -904,6 +909,7 @@ func TestLoginVerifiesWithTheNewCredential(t *testing.T) {
 	}
 
 	var out bytes.Buffer
+	restoreCmdWriters(t)
 	authLoginCmd.SetOut(&out)
 	t.Cleanup(func() { authLoginCmd.SetOut(nil) })
 	noteEnvCredentials(authLoginCmd)
@@ -1170,6 +1176,7 @@ func TestOfferSaveURLWarnsOnUnparseableConfig(t *testing.T) {
 		t.Fatal(err)
 	}
 	var out bytes.Buffer
+	restoreCmdWriters(t)
 	authLoginCmd.SetOut(&out)
 	authLoginCmd.SetContext(t.Context())
 	t.Cleanup(func() { authLoginCmd.SetOut(nil) })

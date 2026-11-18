@@ -35,6 +35,7 @@ func runTestConnection(t *testing.T, status int, body string) (stdout, errJSON s
 
 	resetCmds(t, rootCmd, mcpServersTestConnectionCmd)
 	var out bytes.Buffer
+	restoreCmdWriters(t)
 	rootCmd.SetOut(&out)
 	rootCmd.SetErr(&out)
 	t.Cleanup(func() { rootCmd.SetOut(nil); rootCmd.SetErr(nil) })

@@ -41,6 +41,7 @@ func TestAppsRemoveOwnerDryRunPreviewsRequestWithoutSending(t *testing.T) {
 	_ = appsRemoveOwnerCmd.Flags().Set("user-id", "user1")
 
 	var out bytes.Buffer
+	restoreCmdWriters(t)
 	appsRemoveOwnerCmd.SetOut(&out)
 	appsRemoveOwnerCmd.SetContext(context.Background())
 

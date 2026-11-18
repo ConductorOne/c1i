@@ -139,6 +139,7 @@ func TestRequestsCreateGrantDefaultsUserIDToSelf(t *testing.T) {
 	// --user-id intentionally left unset.
 
 	var out bytes.Buffer
+	restoreCmdWriters(t)
 	requestsCreateGrantCmd.SetOut(&out)
 	requestsCreateGrantCmd.SetContext(context.Background())
 
@@ -193,6 +194,7 @@ func TestRequestsCreateGrantDurationConvertsGoForm(t *testing.T) {
 			_ = requestsCreateGrantCmd.Flags().Set("entitlement-id", "ent1")
 			_ = requestsCreateGrantCmd.Flags().Set("user-id", "zz-user")
 			_ = requestsCreateGrantCmd.Flags().Set("duration", tc.in)
+			restoreCmdWriters(t)
 			requestsCreateGrantCmd.SetOut(io.Discard)
 			requestsCreateGrantCmd.SetContext(context.Background())
 
@@ -238,6 +240,7 @@ func TestRequestsCreateGrantDryRunPreviewsZeroDuration(t *testing.T) {
 	_ = requestsCreateGrantCmd.Flags().Set("user-id", "zz-user")
 	_ = requestsCreateGrantCmd.Flags().Set("duration", "0s")
 	var out bytes.Buffer
+	restoreCmdWriters(t)
 	requestsCreateGrantCmd.SetOut(&out)
 	requestsCreateGrantCmd.SetContext(context.Background())
 
@@ -290,6 +293,7 @@ func TestRequestsCreateGrantExplicitUserIDSkipsSelfResolution(t *testing.T) {
 	_ = requestsCreateGrantCmd.Flags().Set("user-id", explicitUserID)
 
 	var out bytes.Buffer
+	restoreCmdWriters(t)
 	requestsCreateGrantCmd.SetOut(&out)
 	requestsCreateGrantCmd.SetContext(context.Background())
 
@@ -346,6 +350,7 @@ func TestRequestsCreateGrantDryRunPreviewsResolvedSelf(t *testing.T) {
 	// --user-id intentionally left unset.
 
 	var out bytes.Buffer
+	restoreCmdWriters(t)
 	requestsCreateGrantCmd.SetOut(&out)
 	requestsCreateGrantCmd.SetContext(context.Background())
 
@@ -399,6 +404,7 @@ func TestRequestsCreateGrantDryRunExplicitUserIDSkipsSelfResolution(t *testing.T
 	_ = requestsCreateGrantCmd.Flags().Set("user-id", explicitUserID)
 
 	var out bytes.Buffer
+	restoreCmdWriters(t)
 	requestsCreateGrantCmd.SetOut(&out)
 	requestsCreateGrantCmd.SetContext(context.Background())
 
@@ -438,6 +444,7 @@ func TestRequestsCreateGrantDryRunUnauthenticatedFailsLegibly(t *testing.T) {
 	_ = requestsCreateGrantCmd.Flags().Set("entitlement-id", "ent1")
 
 	var out bytes.Buffer
+	restoreCmdWriters(t)
 	requestsCreateGrantCmd.SetOut(&out)
 	requestsCreateGrantCmd.SetContext(context.Background())
 
@@ -497,6 +504,7 @@ func TestRequestsCreateGrantDryRunIntrospectServerFailureClassifies(t *testing.T
 	// --user-id intentionally left unset, so self-resolution runs.
 
 	var out bytes.Buffer
+	restoreCmdWriters(t)
 	requestsCreateGrantCmd.SetOut(&out)
 	requestsCreateGrantCmd.SetContext(context.Background())
 
@@ -539,6 +547,7 @@ func TestRequestsCreateGrantDryRunIntrospectNetworkFailureExitsGenerically(t *te
 	_ = requestsCreateGrantCmd.Flags().Set("entitlement-id", "ent1")
 
 	var out bytes.Buffer
+	restoreCmdWriters(t)
 	requestsCreateGrantCmd.SetOut(&out)
 	// 50ms is comfortably under the client's minimum jittered backoff
 	// (250-500ms for the first retry), so ctx cancellation -- not the
@@ -658,6 +667,7 @@ func TestRequestsCreateRevokeDefaultsUserIDToSelf(t *testing.T) {
 	// --user-id intentionally left unset.
 
 	var out bytes.Buffer
+	restoreCmdWriters(t)
 	requestsCreateRevokeCmd.SetOut(&out)
 	requestsCreateRevokeCmd.SetContext(context.Background())
 
@@ -714,6 +724,7 @@ func TestRequestsCreateRevokeExplicitUserIDSkipsSelfResolution(t *testing.T) {
 	_ = requestsCreateRevokeCmd.Flags().Set("user-id", explicitUserID)
 
 	var out bytes.Buffer
+	restoreCmdWriters(t)
 	requestsCreateRevokeCmd.SetOut(&out)
 	requestsCreateRevokeCmd.SetContext(context.Background())
 
@@ -763,6 +774,7 @@ func TestRequestsCreateRevokeDryRunPreviewsResolvedSelf(t *testing.T) {
 	// --user-id intentionally left unset.
 
 	var out bytes.Buffer
+	restoreCmdWriters(t)
 	requestsCreateRevokeCmd.SetOut(&out)
 	requestsCreateRevokeCmd.SetContext(context.Background())
 
@@ -814,6 +826,7 @@ func TestRequestsCreateRevokeDryRunExplicitUserIDSkipsSelfResolution(t *testing.
 	_ = requestsCreateRevokeCmd.Flags().Set("user-id", explicitUserID)
 
 	var out bytes.Buffer
+	restoreCmdWriters(t)
 	requestsCreateRevokeCmd.SetOut(&out)
 	requestsCreateRevokeCmd.SetContext(context.Background())
 
@@ -849,6 +862,7 @@ func TestRequestsCreateRevokeDryRunUnauthenticatedFailsLegibly(t *testing.T) {
 	_ = requestsCreateRevokeCmd.Flags().Set("entitlement-id", "ent1")
 
 	var out bytes.Buffer
+	restoreCmdWriters(t)
 	requestsCreateRevokeCmd.SetOut(&out)
 	requestsCreateRevokeCmd.SetContext(context.Background())
 
@@ -897,6 +911,7 @@ func TestRequestsCreateRevokeDryRunIntrospectServerFailureClassifies(t *testing.
 	_ = requestsCreateRevokeCmd.Flags().Set("entitlement-id", "ent1")
 
 	var out bytes.Buffer
+	restoreCmdWriters(t)
 	requestsCreateRevokeCmd.SetOut(&out)
 	requestsCreateRevokeCmd.SetContext(context.Background())
 
@@ -933,6 +948,7 @@ func TestRequestsCreateRevokeDryRunIntrospectNetworkFailureExitsGenerically(t *t
 	_ = requestsCreateRevokeCmd.Flags().Set("entitlement-id", "ent1")
 
 	var out bytes.Buffer
+	restoreCmdWriters(t)
 	requestsCreateRevokeCmd.SetOut(&out)
 	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
 	defer cancel()

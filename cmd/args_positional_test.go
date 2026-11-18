@@ -434,6 +434,7 @@ func TestStrayPositionalRejectedOnCollectionCommand(t *testing.T) {
 		t.Run(strings.Join(args, " "), func(t *testing.T) {
 			t.Setenv("C1I_URL", "https://example.invalid")
 			var out bytes.Buffer
+			restoreCmdWriters(t)
 			rootCmd.SetOut(&out)
 			rootCmd.SetErr(&out)
 			rootCmd.SetArgs(args)

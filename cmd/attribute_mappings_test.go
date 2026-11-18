@@ -280,6 +280,7 @@ func amListPages(t *testing.T, appID string, flags map[string]string, pages map[
 		}
 	}
 	var out bytes.Buffer
+	restoreCmdWriters(t)
 	cmd.SetOut(&out)
 	cmd.SetErr(&bytes.Buffer{})
 	cmd.SetContext(context.Background())

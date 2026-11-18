@@ -417,6 +417,7 @@ func TestTaskActionsDryRunNeverSends(t *testing.T) {
 			withDryRun(t)
 
 			var out bytes.Buffer
+			restoreCmdWriters(t)
 			cmd.SetOut(&out)
 			// Package-level singleton: a left-attached buffer swallows this
 			// command's output in every later test.
@@ -497,6 +498,7 @@ func TestTaskActionsDryRunStillResolvesTheURL(t *testing.T) {
 			withDryRun(t)
 
 			var out bytes.Buffer
+			restoreCmdWriters(t)
 			rootCmd.SetOut(&out)
 			rootCmd.SetErr(&out)
 			rootCmd.SetArgs([]string{"tasks", name, actionTestTaskID, "--dry-run", "--url", "not a url"})
@@ -545,6 +547,7 @@ func TestStepUnusedActionsPreviewWithoutCredentials(t *testing.T) {
 			withDryRun(t)
 
 			var out bytes.Buffer
+			restoreCmdWriters(t)
 			cmd.SetOut(&out)
 			t.Cleanup(func() { cmd.SetOut(nil) })
 			cmd.SetContext(context.Background())

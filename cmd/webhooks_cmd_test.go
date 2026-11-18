@@ -53,6 +53,7 @@ func runWebhookCmd(t *testing.T, srv *httptest.Server, cmd *cobra.Command, args 
 		}
 	}
 	var out bytes.Buffer
+	restoreCmdWriters(t)
 	cmd.SetOut(&out)
 	t.Cleanup(func() { cmd.SetOut(nil) })
 	cmd.SetContext(context.Background())

@@ -421,6 +421,7 @@ func TestGatewayCallIsErrorExitCode(t *testing.T) {
 
 		cmd := &cobra.Command{}
 		var buf bytes.Buffer
+		restoreCmdWriters(t)
 		cmd.SetOut(&buf)
 
 		if callErr != nil {

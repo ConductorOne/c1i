@@ -164,6 +164,7 @@ func runListPaginationCaseTo(t *testing.T, tc listPaginationCase, srv *httptest.
 	}
 
 	var errOut bytes.Buffer
+	restoreCmdWriters(t)
 	tc.cmd.SetOut(out)
 	tc.cmd.SetErr(&errOut)
 	t.Cleanup(func() { tc.cmd.SetOut(nil); tc.cmd.SetErr(nil) })

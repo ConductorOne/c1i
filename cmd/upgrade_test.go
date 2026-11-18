@@ -153,6 +153,7 @@ func runUpgrade(t *testing.T, args ...string) (string, error) {
 	t.Helper()
 	resetCmds(t, upgradeCmd)
 	var out bytes.Buffer
+	restoreCmdWriters(t)
 	rootCmd.SetOut(&out)
 	rootCmd.SetErr(&out)
 	t.Cleanup(func() { rootCmd.SetOut(nil); rootCmd.SetErr(nil); rootCmd.SetIn(nil) })
@@ -362,6 +363,7 @@ func TestUpgradeConfirmReadsCommandInput(t *testing.T) {
 			origTerm := isTerminal
 			isTerminal = func() bool { return true }
 			t.Cleanup(func() { isTerminal = origTerm })
+			restoreCmdWriters(t)
 			rootCmd.SetIn(strings.NewReader(tc.answer))
 			if out, err := runUpgrade(t); err != nil {
 				t.Fatalf("upgrade: %v\n%s", err, out)
@@ -572,6 +574,7 @@ func TestUpgradeSourceBuildDoesNotReplace(t *testing.T) {
 
 func TestUpgradeChannelCompletesChannels(t *testing.T) {
 	var out bytes.Buffer
+	restoreCmdWriters(t)
 	rootCmd.SetOut(&out)
 	rootCmd.SetErr(&bytes.Buffer{})
 	t.Cleanup(func() { rootCmd.SetOut(nil); rootCmd.SetErr(nil) })
@@ -605,6 +608,7 @@ func runUpgradeDryRun(t *testing.T, args ...string) (upgradePreviewOut, string, 
 	resetCmds(t, upgradeCmd)
 	resetCmdFlags(t, rootCmd)
 	var stdout, stderr bytes.Buffer
+	restoreCmdWriters(t)
 	rootCmd.SetOut(&stdout)
 	rootCmd.SetErr(&stderr)
 	t.Cleanup(func() { rootCmd.SetOut(nil); rootCmd.SetErr(nil) })
@@ -721,6 +725,7 @@ func TestUpgradeDryRunRedactsAssetURL(t *testing.T) {
 
 // --fields never applies to a preview or a real run; --check still takes it.
 func TestUpgradeRefusesFieldsOutsideCheck(t *testing.T) {
+	restoreCmdWriters(t)
 	for _, args := range [][]string{{"--dry-run", "--fields", "upgrade"}, {"-y", "--fields", "upgrade"}} {
 		d := newFakeDist(t)
 		publishIndex(t, d, idxStable06Latest07)
@@ -746,6 +751,7 @@ func runUpgradeRaw(t *testing.T, args ...string) (stdout, stderr string, err err
 	resetCmds(t, upgradeCmd)
 	resetCmdFlags(t, rootCmd)
 	var o, e bytes.Buffer
+	restoreCmdWriters(t)
 	rootCmd.SetOut(&o)
 	rootCmd.SetErr(&e)
 	t.Cleanup(func() { rootCmd.SetOut(nil); rootCmd.SetErr(nil) })

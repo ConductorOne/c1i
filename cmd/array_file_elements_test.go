@@ -199,6 +199,7 @@ func TestRulesFileFromStdinElementsMustBeObjects(t *testing.T) {
 	t.Setenv("C1I_URL", mutTestURL)
 	srv := newMutServer(t, fixedReply(200, `{}`))
 	steps := writeTempFile(t, `[{"approval":{"users":{"userIds":["u1"]}}}]`)
+	restoreCmdWriters(t)
 	policiesCreateCmd.SetIn(strings.NewReader(`[null]`))
 	t.Cleanup(func() { policiesCreateCmd.SetIn(nil) })
 	res := runMutationCLI(t, srv.srv, 0, nil, "policies", "create", "--display-name", "x", "--policy-type", "grant", "--steps-file", steps, "--rules-file", "-")

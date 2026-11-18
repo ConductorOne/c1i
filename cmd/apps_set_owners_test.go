@@ -85,6 +85,7 @@ func TestAppsSetOwnersFailsOnOutputWriteError(t *testing.T) {
 	if err := appsSetOwnersCmd.Flags().Set("user-id", "u1"); err != nil {
 		t.Fatal(err)
 	}
+	restoreCmdWriters(t)
 	appsSetOwnersCmd.SetOut(failingWriter{})
 	appsSetOwnersCmd.SetErr(io.Discard)
 	appsSetOwnersCmd.SetContext(context.Background())

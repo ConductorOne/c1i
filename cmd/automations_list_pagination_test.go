@@ -24,6 +24,7 @@ func runAutomationsListCmd(t *testing.T, srv *httptest.Server) (stdout, stderr s
 	t.Setenv("C1I_URL", "https://example.invalid")
 
 	var out, errOut bytes.Buffer
+	restoreCmdWriters(t)
 	automationsListCmd.SetOut(&out)
 	automationsListCmd.SetErr(&errOut)
 	automationsListCmd.SetContext(context.Background())

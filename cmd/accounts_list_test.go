@@ -82,6 +82,7 @@ func TestAccountsListUnmappedOnlyScansFullPagesUnderLimit(t *testing.T) {
 	}
 
 	var out strings.Builder
+	restoreCmdWriters(t)
 	accountsListCmd.SetOut(&out)
 	accountsListCmd.SetContext(context.Background())
 	t.Cleanup(func() {

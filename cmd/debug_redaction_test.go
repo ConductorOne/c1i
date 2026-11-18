@@ -235,6 +235,7 @@ func TestFindingsNoticeAndGatewayErrorRedact(t *testing.T) {
 	stubMutationClient(t, s.srv, 0)
 	var errBuf bytes.Buffer
 	cmd := &cobra.Command{Use: "x"}
+	restoreCmdWriters(t)
 	cmd.SetOut(&bytes.Buffer{})
 	cmd.SetErr(&errBuf)
 	cmd.SetContext(t.Context())

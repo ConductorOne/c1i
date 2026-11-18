@@ -109,6 +109,7 @@ func runEntOwnerCmd(t *testing.T, cmd *cobra.Command, flags map[string][]string,
 		}
 	}
 	var out, errOut bytes.Buffer
+	restoreCmdWriters(t)
 	cmd.SetOut(&out)
 	cmd.SetErr(&errOut)
 	cmd.SetContext(context.Background())

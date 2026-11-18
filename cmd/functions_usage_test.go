@@ -36,6 +36,7 @@ func runFunctionsUsage(t *testing.T, listJSON string, flags map[string]string) (
 		}
 	}
 	var out, errOut strings.Builder
+	restoreCmdWriters(t)
 	functionsUsageCmd.SetOut(&out)
 	functionsUsageCmd.SetErr(&errOut)
 	functionsUsageCmd.SetContext(context.Background())

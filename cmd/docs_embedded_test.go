@@ -13,6 +13,7 @@ import (
 func runEmbeddedDoc(t *testing.T, c *cobra.Command, args []string) (stdout, stderr string, err error) {
 	t.Helper()
 	outBuf, errBuf := &bytes.Buffer{}, &bytes.Buffer{}
+	restoreCmdWriters(t)
 	c.SetOut(outBuf)
 	c.SetErr(errBuf)
 	resetCmdFlags(t, c)
@@ -127,6 +128,7 @@ func TestEmbeddedDocWriteFailureIsAnErrorWithoutFooter(t *testing.T) {
 	for _, c := range []*cobra.Command{docsReadmeCmd, docsChangelogCmd} {
 		t.Run(c.Name(), func(t *testing.T) {
 			var errBuf bytes.Buffer
+			restoreCmdWriters(t)
 			c.SetOut(failingWriter{})
 			c.SetErr(&errBuf)
 			t.Cleanup(func() { c.SetOut(nil); c.SetErr(nil) })

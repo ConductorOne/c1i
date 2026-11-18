@@ -428,6 +428,7 @@ func stubSearchClient(t *testing.T, srv *httptest.Server) {
 func runSearchCmd(t *testing.T) string {
 	t.Helper()
 	var out bytes.Buffer
+	restoreCmdWriters(t)
 	mcpServersSearchCmd.SetOut(&out)
 	mcpServersSearchCmd.SetContext(context.Background())
 	if err := mcpServersSearchCmd.RunE(mcpServersSearchCmd, nil); err != nil {

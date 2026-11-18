@@ -156,6 +156,7 @@ func runGrantsWait(t *testing.T, srv *httptest.Server, stableReads, minGrants in
 	c := client.NewForTesting(srv.URL, srv.Client())
 	cmd := &cobra.Command{Use: "list"}
 	var out, errOut bytes.Buffer
+	restoreCmdWriters(t)
 	cmd.SetOut(&out)
 	cmd.SetErr(&errOut)
 	cmd.SetContext(context.Background())
@@ -321,6 +322,7 @@ func TestGrantsListWaitEndToEnd(t *testing.T) {
 			}
 
 			var out, errOut bytes.Buffer
+			restoreCmdWriters(t)
 			grantsListCmd.SetOut(&out)
 			grantsListCmd.SetErr(&errOut)
 			grantsListCmd.SetContext(ctx)

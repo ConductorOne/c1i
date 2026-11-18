@@ -59,6 +59,7 @@ func runWhoami(t *testing.T, args []string) (string, error) {
 	resetCmdFlags(t, authWhoamiCmd)
 
 	var out bytes.Buffer
+	restoreCmdWriters(t)
 	rootCmd.SetOut(&out)
 	rootCmd.SetErr(&out)
 	t.Cleanup(func() {

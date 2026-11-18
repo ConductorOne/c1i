@@ -199,6 +199,7 @@ func TestDryRunPreviewSetMatchesRuleB(t *testing.T) {
 			resetCmdFlags(t, rootCmd)
 			resetCmdFlags(t, l.cmd)
 			var out, errOut bytes.Buffer
+			restoreCmdWriters(t)
 			for _, c := range []*cobra.Command{rootCmd, l.cmd} {
 				c.SetOut(&out)
 				c.SetErr(&errOut)

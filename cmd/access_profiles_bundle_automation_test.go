@@ -109,6 +109,7 @@ func TestBundleAutomationMutationsDryRun(t *testing.T) {
 			}
 
 			var out bytes.Buffer
+			restoreCmdWriters(t)
 			tt.cmd.SetOut(&out)
 			tt.cmd.SetContext(context.Background())
 			if err := tt.cmd.RunE(tt.cmd, []string{accessProfileID}); err != nil {
@@ -259,6 +260,7 @@ func TestBundleAutomationGetEscapesAccessProfileID(t *testing.T) {
 	t.Setenv("C1I_URL", "https://example.invalid")
 
 	var out bytes.Buffer
+	restoreCmdWriters(t)
 	accessProfilesBundleAutomationGetCmd.SetOut(&out)
 	accessProfilesBundleAutomationGetCmd.SetContext(context.Background())
 	if err := accessProfilesBundleAutomationGetCmd.RunE(accessProfilesBundleAutomationGetCmd, []string{accessProfileID}); err != nil {
