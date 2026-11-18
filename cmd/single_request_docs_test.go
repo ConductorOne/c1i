@@ -47,7 +47,9 @@ func TestSingleRequestListsDocumented(t *testing.T) {
 }
 
 // reachesFixedList reports whether root calls a fixedListHelpers function,
-// directly or through a package-level function it calls.
+// directly or through a package-level func, var or method it reaches (the
+// same edges walkWith follows). Not followed: a fetch function passed in as a
+// parameter; no command builds its RunE that way.
 func reachesFixedList(ix *srcIndex, root ast.Node, seen map[ast.Node]bool) bool {
 	if seen[root] {
 		return false
@@ -55,10 +57,22 @@ func reachesFixedList(ix *srcIndex, root ast.Node, seen map[ast.Node]bool) bool 
 	seen[root] = true
 	found := false
 	ast.Inspect(root, func(n ast.Node) bool {
-		if id, ok := n.(*ast.Ident); ok && !found {
-			if fixedListHelpers[id.Name] {
+		if found {
+			return false
+		}
+		switch x := n.(type) {
+		case *ast.SelectorExpr:
+			for _, m := range ix.methods[x.Sel.Name] {
+				if reachesFixedList(ix, m, seen) {
+					found = true
+				}
+			}
+		case *ast.Ident:
+			if fixedListHelpers[x.Name] {
 				found = true
-			} else if fd, ok := ix.funcs[id.Name]; ok && reachesFixedList(ix, fd, seen) {
+			} else if fd, ok := ix.funcs[x.Name]; ok && reachesFixedList(ix, fd, seen) {
+				found = true
+			} else if v, ok := ix.vars[x.Name]; ok && reachesFixedList(ix, v, seen) {
 				found = true
 			}
 		}
