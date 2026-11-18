@@ -234,8 +234,8 @@ func loginWithBrowser(cmd *cobra.Command, in *lineReader, baseURL string, scope 
 	}
 
 	_, _ = fmt.Fprintf(out, "Opening browser to authenticate...\n\n")
-	_, _ = fmt.Fprintf(out, "If your browser does not open, visit:\n  %s\n\n", code.VerificationURI)
-	_, _ = fmt.Fprintf(out, "Verify this code matches: %s\n\n", code.UserCode)
+	_, _ = fmt.Fprintf(out, "If your browser does not open, visit:\n  %s\n\n", escapeControl(code.VerificationURI))
+	_, _ = fmt.Fprintf(out, "Verify this code matches: %s\n\n", escapeControl(code.UserCode))
 
 	_ = openBrowser(code.VerificationURI)
 
