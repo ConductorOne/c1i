@@ -56,7 +56,7 @@ with no profile exits 4; so did a profile created seconds earlier, in the run
 checked.`,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		return getXAAObject(cmd, client.Path("/api/v1/apps/%s/xaa/access_profiles/by_app_entitlement_id/%s", xaaAppID(cmd), args[0]), nil, "accessProfile")
+		return getNamedObject(cmd, client.Path("/api/v1/apps/%s/xaa/access_profiles/by_app_entitlement_id/%s", xaaAppID(cmd), args[0]), nil, "accessProfile")
 	},
 }
 

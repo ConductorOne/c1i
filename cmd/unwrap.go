@@ -3,6 +3,7 @@ package cmd
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"sort"
 
 	"github.com/spf13/cobra"
@@ -185,4 +186,21 @@ func decodeJSONObject(data []byte) (map[string]any, bool) {
 	}
 	m, ok := v.(map[string]any)
 	return m, ok
+}
+
+// getNamedObject GETs path and prints the object under envelope, unwrapped.
+func getNamedObject(cmd *cobra.Command, path string, query map[string]string, envelope string) error {
+	baseURL, err := GetBaseURL()
+	if err != nil {
+		return err
+	}
+	c, err := newClient(cmd, baseURL)
+	if err != nil {
+		return fmt.Errorf("authentication failed: %w", err)
+	}
+	data, err := c.Get(cmd.Context(), path, query)
+	if err != nil {
+		return fmt.Errorf("API error: %w", err)
+	}
+	return writeNamedResource(cmd, data, envelope)
 }

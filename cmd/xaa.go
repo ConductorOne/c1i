@@ -86,27 +86,11 @@ func (k xaaKind) getCmd(short, long string) *cobra.Command {
 		Long:  long,
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return getXAAObject(cmd, k.itemPath(xaaAppID(cmd), args[0]), nil, k.envelope)
+			return getNamedObject(cmd, k.itemPath(xaaAppID(cmd), args[0]), nil, k.envelope)
 		},
 	}
 	addXAAAppFlag(c)
 	return c
-}
-
-func getXAAObject(cmd *cobra.Command, path string, query map[string]string, envelope string) error {
-	baseURL, err := GetBaseURL()
-	if err != nil {
-		return err
-	}
-	c, err := newClient(cmd, baseURL)
-	if err != nil {
-		return fmt.Errorf("authentication failed: %w", err)
-	}
-	data, err := c.Get(cmd.Context(), path, query)
-	if err != nil {
-		return fmt.Errorf("API error: %w", err)
-	}
-	return writeNamedResource(cmd, data, envelope)
 }
 
 func (k xaaKind) deleteCmd(short, long string) *cobra.Command {

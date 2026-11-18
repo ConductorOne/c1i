@@ -1,7 +1,6 @@
 package cmd
 
 import (
-	"fmt"
 	"net/http"
 
 	"github.com/ConductorOne/c1i/internal/client"
@@ -128,19 +127,7 @@ var bridgesGetCmd = &cobra.Command{
 	Long:  `Get a single tunnel bridge (pretty JSON). A deleted or unknown bridge exits 4.`,
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		baseURL, err := GetBaseURL()
-		if err != nil {
-			return err
-		}
-		c, err := newClient(cmd, baseURL)
-		if err != nil {
-			return fmt.Errorf("authentication failed: %w", err)
-		}
-		data, err := c.Get(cmd.Context(), bridgePath(args[0]), nil)
-		if err != nil {
-			return fmt.Errorf("API error: %w", err)
-		}
-		return writeNamedResource(cmd, data, "bridge")
+		return getNamedObject(cmd, bridgePath(args[0]), nil, "bridge")
 	},
 }
 
@@ -207,7 +194,7 @@ name, port, service_type, service_path and transport_type.
 ` + unknownBridgeListNote,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		return getFixedList(cmd, client.Path(bridgesPath+"/%s/announced_services", args[0]), announcedServiceRow)
+		return getFixedList(cmd, bridgePath(args[0])+"/announced_services", announcedServiceRow)
 	},
 }
 
