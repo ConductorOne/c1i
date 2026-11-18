@@ -16,7 +16,9 @@ import (
 // (labels, configFields, a --context-file): its keys are data.
 
 // fieldSpellings returns the two spellings the server accepts for a field
-// named in either: its camelCase and snake_case forms.
+// named in either: its camelCase and snake_case forms. From camelCase it
+// cannot tell a digit that starts a proto segment ("rejected_401" from
+// "rejected401"); name such a field in snake_case.
 func fieldSpellings(name string) (camel, snake string) {
 	if strings.Contains(name, "_") {
 		parts := strings.Split(name, "_")

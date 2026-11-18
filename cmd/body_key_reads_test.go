@@ -18,8 +18,9 @@ import (
 // multi-word key READ by literal or package const (m["fooBar"], m[keyConst],
 // incl. comma-ok and type assertions), and on a multi-word `case` or `==`
 // against a ranged map key, anywhere in cmd/ outside bodyKeyReadExemptions.
-// Writes (m["k"] = v) are not reads. Not caught: a key in a local variable
-// or table (m[k]). Inline JSON flags (api --body, functions invoke --input,
+// Writes (m["k"] = v) are not reads. Not caught: a key in a local variable,
+// alias or table (m[k]), a function-local const, a range value, EqualFold or a
+// folded switch, or a literal passed to a helper. Inline JSON flags (api --body, functions invoke --input,
 // --claims) are out of scope: api is the raw escape hatch, the others are
 // free-form.
 
