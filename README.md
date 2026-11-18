@@ -438,7 +438,8 @@ $ cat trace.log
 - **`docs`** commands output NDJSON (`search`, `endpoints`), pretty JSON (`endpoint`), YAML (`openapi`), or plain text (`page`).
 - List commands auto-paginate by default, except the single-request ones the
   agent guide names under Pagination: `apps routing-rules list`,
-  `attribute-types list`, `grants accounts`, `settings ai-governance history`,
+  `attribute-types list`, `bridges services`, `grants accounts`, `settings
+  ai-governance history`,
   `role-mining suggestions|runs|custom-analysis list` and `findings
   routing-rules|transformation-rules list`, each of which warns on stderr
   when the server reports more pages, and `mcp bindings by-tools` and `mcp
