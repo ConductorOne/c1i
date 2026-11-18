@@ -27,7 +27,9 @@ Prints the API's JSON response; --wait's progress lines go to stderr.
 Honors --dry-run (with --wait, dry-run still only previews the POST; it never
 polls).
 
-One owner per call; to change several at once use "entitlements set-owners".`,
+One owner per call; to change several at once use "entitlements set-owners".
+
+` + entitlementOwnerAddNote,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		wait, waitTimeout, err := waitFlagValues(cmd)
@@ -36,8 +38,14 @@ One owner per call; to change several at once use "entitlements set-owners".`,
 		}
 
 		appID, _ := cmd.Flags().GetString("app-id")
-		userID, _ := cmd.Flags().GetString("user-id")
 		entitlementID := args[0]
+		if ref, ok, err := ownerEntitlement(cmd, entitlementOwnerV2(appID, entitlementID)); err != nil || ok {
+			if err != nil {
+				return err
+			}
+			return addEntitlementOwner(cmd, entitlementOwnerV2(appID, entitlementID), ref, wait, waitTimeout)
+		}
+		userID, _ := cmd.Flags().GetString("user-id")
 
 		path := client.Path("/api/v1/apps/%s/entitlements/%s/owners", appID, entitlementID)
 		return sendMutation(cmd, mutation{Method: http.MethodPost, Path: path, Body: map[string]any{"userId": userID}},
@@ -50,9 +58,10 @@ One owner per call; to change several at once use "entitlements set-owners".`,
 
 func init() {
 	entitlementsAddOwnerCmd.Flags().String("app-id", "", "Application ID the entitlement belongs to")
-	addOnceStringFlag(entitlementsAddOwnerCmd, "user-id", "C1 user ID to add as owner",
+	addOnceStringFlag(entitlementsAddOwnerCmd, "user-id", "C1 user ID to add as owner; this or --owner-entitlement-id is required",
 		"use \"entitlements set-owners\" to set several owners")
-	markRequired(entitlementsAddOwnerCmd, "app-id", "user-id")
+	addEntitlementOwnerFlags(entitlementsAddOwnerCmd, false)
+	markRequired(entitlementsAddOwnerCmd, "app-id")
 	addWaitFlags(entitlementsAddOwnerCmd, "GET .../ownerids until the owner appears", 4*time.Minute)
 	markMutating(entitlementsAddOwnerCmd)
 	markUserRefChecked(entitlementsAddOwnerCmd, "user-id")

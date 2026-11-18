@@ -26,9 +26,14 @@ Auto-paginates to completion like every other list command.
 A well-formed resource, resource type or app id that does not exist returns
 zero rows and exit 0, not a 404. An empty result here is either "no owners" or
 "wrong id"; "apps resources get" on the same ids exits 4 and can tell you
-which.`,
+which.
+
+` + entitlementOwnersListNote,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
+		if entitlementsFlag(cmd) {
+			return listEntitlementOwners(cmd, resourceScopeOf(cmd).ownerV2(args[0]))
+		}
 		return listOwners(cmd, resourceScopeOf(cmd).ownersPath(args[0]))
 	},
 }
@@ -49,11 +54,13 @@ resource.
 Verify with "c1i apps resources owners <resource-id> --app-id <app-id>
 --resource-type-id <resource-type-id>".
 
+` + entitlementOwnerSetNote + `
+
 ` + setOwnersWaitNote,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		s, id := resourceScopeOf(cmd), args[0]
-		return runOwnerSetPut(cmd, s.ownersPath(id),
+		return runOwnerSetPut(cmd, s.ownersPath(id), s.ownerV2(id),
 			func(c *client.Client, done func([]string) bool, timeout time.Duration) waitOp[[]string] {
 				return resourceOwnersWaitOp(c, s, id, done, timeout)
 			},
@@ -81,7 +88,9 @@ Prints the API's JSON response; --wait's progress lines go to stderr.
 Honors --dry-run (with --wait, dry-run still only previews the POST; it never
 polls).
 
-One owner per call; to change several at once use "apps resources set-owners".`,
+One owner per call; to change several at once use "apps resources set-owners".
+
+` + entitlementOwnerAddNote,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		wait, waitTimeout, err := waitFlagValues(cmd)
@@ -89,6 +98,12 @@ One owner per call; to change several at once use "apps resources set-owners".`,
 			return err
 		}
 		s, id := resourceScopeOf(cmd), args[0]
+		if ref, ok, err := ownerEntitlement(cmd, s.ownerV2(id)); err != nil || ok {
+			if err != nil {
+				return err
+			}
+			return addEntitlementOwner(cmd, s.ownerV2(id), ref, wait, waitTimeout)
+		}
 		userID := mustGetString(cmd, "user-id")
 		return sendMutation(cmd, mutation{Method: http.MethodPost, Path: s.ownersPath(id), Body: map[string]any{"userId": userID}},
 			withPreRead(existingUsersCheck("user-id", []string{userID})),
@@ -113,9 +128,17 @@ Verify with "c1i apps resources owners <resource-id> --app-id <app-id>
 Prints the API's response, which is {}; exit 0 is the success signal.
 Honors --dry-run.
 
-One owner per call; to change several at once use "apps resources set-owners".`,
+One owner per call; to change several at once use "apps resources set-owners".
+
+` + entitlementOwnerRemoveNote,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
+		if ref, ok, err := ownerEntitlement(cmd, resourceScopeOf(cmd).ownerV2(args[0])); err != nil || ok {
+			if err != nil {
+				return err
+			}
+			return removeEntitlementOwner(cmd, resourceScopeOf(cmd).ownerV2(args[0]), ref)
+		}
 		return sendMutation(cmd, mutation{
 			Method: http.MethodDelete,
 			Path:   resourceScopeOf(cmd).ownersPath(args[0]),
@@ -127,6 +150,7 @@ One owner per call; to change several at once use "apps resources set-owners".`,
 func init() {
 	addResourceScopeFlags(appsResourcesOwnersCmd)
 	addPaginationFlags(appsResourcesOwnersCmd)
+	addEntitlementsListFlag(appsResourcesOwnersCmd)
 	appsResourcesCmd.AddCommand(appsResourcesOwnersCmd)
 
 	addResourceScopeFlags(appsResourcesSetOwnersCmd)
@@ -136,18 +160,18 @@ func init() {
 	appsResourcesCmd.AddCommand(appsResourcesSetOwnersCmd)
 
 	addResourceScopeFlags(appsResourcesAddOwnerCmd)
-	addOnceStringFlag(appsResourcesAddOwnerCmd, "user-id", "C1 user ID to add as owner",
+	addOnceStringFlag(appsResourcesAddOwnerCmd, "user-id", "C1 user ID to add as owner; this or --owner-entitlement-id is required",
 		"use \"apps resources set-owners\" to set several owners")
-	markRequired(appsResourcesAddOwnerCmd, "user-id")
+	addEntitlementOwnerFlags(appsResourcesAddOwnerCmd, false)
 	addWaitFlags(appsResourcesAddOwnerCmd, "GET .../ownerids until the owner appears", 4*time.Minute)
 	markMutating(appsResourcesAddOwnerCmd)
 	markUserRefChecked(appsResourcesAddOwnerCmd, "user-id")
 	appsResourcesCmd.AddCommand(appsResourcesAddOwnerCmd)
 
 	addResourceScopeFlags(appsResourcesRemoveOwnerCmd)
-	addOnceStringFlag(appsResourcesRemoveOwnerCmd, "user-id", "C1 user ID to remove as owner",
+	addOnceStringFlag(appsResourcesRemoveOwnerCmd, "user-id", "C1 user ID to remove as owner; this or --owner-entitlement-id is required",
 		"use \"apps resources set-owners\" to set several owners")
-	markRequired(appsResourcesRemoveOwnerCmd, "user-id")
+	addEntitlementOwnerFlags(appsResourcesRemoveOwnerCmd, false)
 	markMutating(appsResourcesRemoveOwnerCmd)
 	appsResourcesCmd.AddCommand(appsResourcesRemoveOwnerCmd)
 }

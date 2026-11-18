@@ -22,10 +22,15 @@ Auto-paginates to completion like every other list command.
 A well-formed entitlement or app id that does not exist returns zero rows and
 exit 0, not a 404 -- the endpoint answers 200 with an empty list. An empty
 result here is either "no owners" or "wrong id"; "entitlements get" on the
-same ids exits 4 and can tell you which.`,
+same ids exits 4 and can tell you which.
+
+` + entitlementOwnersListNote,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		appID, _ := cmd.Flags().GetString("app-id")
+		if entitlementsFlag(cmd) {
+			return listEntitlementOwners(cmd, entitlementOwnerV2(appID, args[0]))
+		}
 		return listOwners(cmd, client.Path("/api/v1/apps/%s/entitlements/%s/owners", appID, args[0]))
 	},
 }
@@ -44,5 +49,6 @@ func init() {
 	entitlementsOwnersCmd.Flags().String("app-id", "", "Application ID the entitlement belongs to")
 	markRequired(entitlementsOwnersCmd, "app-id")
 	addPaginationFlags(entitlementsOwnersCmd)
+	addEntitlementsListFlag(entitlementsOwnersCmd)
 	entitlementsCmd.AddCommand(entitlementsOwnersCmd)
 }

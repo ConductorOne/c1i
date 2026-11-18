@@ -29,11 +29,19 @@ Verify with "c1i entitlements owners <entitlement-id> --app-id <app-id>".
 Prints the API's response, which is {}; exit 0 is the success signal.
 Honors --dry-run.
 
-One owner per call; to change several at once use "entitlements set-owners".`,
+One owner per call; to change several at once use "entitlements set-owners".
+
+` + entitlementOwnerRemoveNote,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 
 		appID, _ := cmd.Flags().GetString("app-id")
+		if ref, ok, err := ownerEntitlement(cmd, entitlementOwnerV2(appID, args[0])); err != nil || ok {
+			if err != nil {
+				return err
+			}
+			return removeEntitlementOwner(cmd, entitlementOwnerV2(appID, args[0]), ref)
+		}
 		userID, _ := cmd.Flags().GetString("user-id")
 		path := client.Path("/api/v1/apps/%s/entitlements/%s/owners/%s", appID, args[0], userID)
 		return sendMutation(cmd, mutation{Method: http.MethodDelete, Path: path})
@@ -42,9 +50,10 @@ One owner per call; to change several at once use "entitlements set-owners".`,
 
 func init() {
 	entitlementsRemoveOwnerCmd.Flags().String("app-id", "", "Application ID the entitlement belongs to")
-	addOnceStringFlag(entitlementsRemoveOwnerCmd, "user-id", "C1 user ID to remove as owner",
+	addOnceStringFlag(entitlementsRemoveOwnerCmd, "user-id", "C1 user ID to remove as owner; this or --owner-entitlement-id is required",
 		"use \"entitlements set-owners\" to set several owners")
-	markRequired(entitlementsRemoveOwnerCmd, "app-id", "user-id")
+	addEntitlementOwnerFlags(entitlementsRemoveOwnerCmd, false)
+	markRequired(entitlementsRemoveOwnerCmd, "app-id")
 	markMutating(entitlementsRemoveOwnerCmd)
 	entitlementsCmd.AddCommand(entitlementsRemoveOwnerCmd)
 }
