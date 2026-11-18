@@ -523,7 +523,8 @@ U+200B) exits 2 on every create and update, before any request is sent.
 ### Durations
 
 Every duration flag (`--duration-grant`, `requests create grant --duration`,
-`tasks update-grant-duration --duration`, `--expires`, `--callback-timeout`)
+`tasks update-grant-duration --duration`, `--expires`, `--callback-timeout`, and
+the `settings ... update` lifetimes, intervals and timeouts)
 takes a whole-number Go (`8h`, `1h30m`) or protobuf (`3600s`) duration and sends
 it in seconds. There is no sign, no decimal and no `d` unit: `-1h`, `1.5h` and
 `7d` exit `2`, as does an empty value. `0s` is accepted by c1i and sent as is;
@@ -1784,6 +1785,87 @@ the API's shape: `bulk-state`/`bulk-create-tasks` print `{"bulkActionId"}`,
 The public API intentionally excludes its internal summary, app-NHI, and
 shadow-MCP notification RPCs. `FindingSearchService.GetSearchTerms` is also not
 routed through public REST.
+
+### Settings
+
+`settings` reads and updates tenant-wide singletons. Each has no id: `show`
+prints it as pretty JSON, unwrapped from its envelope, and `update` prints the
+updated object the same way.
+
+```sh
+c1i settings ai-governance show
+c1i settings ai-governance update [--default-tool-classification read|write|destructive|sensitive|dangerous] \
+  [--audit-verbosity minimal|standard|full] [--auto-discovery[=false]] [--discovery-interval 1h] \
+  [--prefer-code-mode[=false]] [--surface-requestable-tools[=false]] [--untrusted-judge-disable[=false]] \
+  [--allowed-client-type personal|shared|service|ephemeral ...] \
+  [--inactivity-hide-after 24h] [--inactivity-close-after 168h] [--retention-delete-after 2160h]
+c1i settings ai-governance history [--limit N]
+c1i settings ai-governance tenant-defaults
+c1i settings session show
+c1i settings session update [--max-session-length 8h] [--enable-idle-timeout[=false]] [--idle-timeout 30m] \
+  [--external-clients-enabled[=false]] [--client-id-metadata-document-policy allow-all|requestable|allowlist-only]
+c1i settings session test-source-ip --ip <address> [--allow-cidr <cidr> ...]
+c1i settings sso show
+c1i settings sso update [--enabled[=false]] [--default-subject-type pairwise|public|compatibility] \
+  [--default-assertion-lifetime 5m] [--default-id-token-alg eddsa|es256|rs256]
+c1i settings sso history [--page-size N] [--page-token TOKEN] [--limit N]
+c1i settings cross-app-access show
+c1i settings cross-app-access update [--enabled[=false]] [--default-grant-lifetime 1h] \
+  [--allow-refresh-token-subjects[=false]] [--default-signing-algorithm eddsa|rs256|es256] \
+  [--enabled-signing-algorithm <alg> ...] [--xaa-id-token-lifetime 5m]
+c1i settings cross-app-access history [--page-size N] [--page-token TOKEN] [--limit N]
+c1i settings contacts show
+c1i settings contacts update [--security-email <email> ...] [--billing-email <email> ...] [--operations-email <email> ...]
+c1i settings request show
+c1i settings request update [--skip-justification[=false]] [--max-bulk-entitlement-selection N]
+c1i settings domains list [--page-size N] [--page-token TOKEN] [--limit N]
+c1i settings domains set --domain <domain> ... | --body-file <file|->
+c1i settings notifications org show
+c1i settings notifications org update --body-file <file|->
+c1i settings notifications user show
+c1i settings notifications user update --body-file <file|->
+c1i settings aws-external-id show
+c1i findings settings edge show
+c1i findings settings edge update --body-file <file|->
+```
+
+- **Masked updates** (`ai-governance`, `session`, `sso`, `cross-app-access`,
+  `contacts`, `request`) derive the mask from the flags you pass; anything else
+  goes through `--body-file` (the object `show` prints) with an explicit
+  `--update-mask`, as in [Update masks](#update-masks). To clear a field, mask
+  it and leave it out of the body: `{}` with `--update-mask
+  defaultGrantLifetime` sets that lifetime back to `null`. A repeatable list
+  flag (`--allowed-client-type`, `--enabled-signing-algorithm`, the contact
+  email flags) replaces the whole list. The ai-governance lifecycle flags
+  change one `defaultClientLifecycle` duration each and leave the other two.
+- The server bounds some values and says so when it refuses one (exit `2`):
+  `--max-session-length` must be one of the lengths it lists, and
+  `--max-bulk-entitlement-selection` must be in `[0, 50]`. Contact addresses
+  must be valid email addresses. `sso update` on a tenant without the SSO
+  provider feature is a 403, `feature not enabled` (exit `3`).
+- `ai-governance history` is one read (the endpoint takes no paging); the `sso`
+  and `cross-app-access` histories page like any list. Each record is the
+  change metadata plus the full settings snapshot, as returned.
+- `session test-source-ip` asks whether `--ip` passes the `--allow-cidr` rules
+  you give it; it changes nothing and exits `0` for either answer (read
+  `.allowed`). With no `--allow-cidr` the answer is `false`. The source-IP
+  allowlists themselves have no flags: send them with `--body-file` and
+  `--update-mask`, and test first, since a list that leaves out your address
+  can lock you out.
+- `domains set` replaces the whole set with exactly the `--domain` values; list
+  first and pass every domain you keep. `--body-file '{"newDomains": []}'`
+  empties it. The server does not check that a value looks like a domain.
+- `notifications org|user update` sends `--body-file` as the whole request
+  (`{"channelSettings": {...}}`, what `show` prints); there is no mask. On the
+  user scope a partial body changed only what it named. Sending settings back
+  can turn an event `show` printed as `null` (such as `system`) into its
+  default.
+- `findings settings edge update` takes `{"settings": [{"category": ...,
+  "enabled": ...}], "subcategorySettings": [...]}` and prints the resulting
+  `{"list", "subcategories"}`.
+
+Not covered: the tenant email provider, identity-policy defaults, onboarding
+state and per-user developer preferences (use `c1i api`).
 
 ### Role mining
 
