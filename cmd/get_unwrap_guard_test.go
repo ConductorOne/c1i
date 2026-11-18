@@ -339,6 +339,15 @@ func getUnwrapCases() []getUnwrapCase {
 			wantKeys:    []string{"id", "displayName"},
 		},
 		{
+			name:              "access-reviews scope get",
+			cmd:               accessReviewScopeGetCmd,
+			args:              []string{"ar1"},
+			idKey:             "scopeV2",
+			allowNonStringKey: true,
+			body:              `{"list":[],"expanded":[],"scopeV2":{"appAccess":{}},"excludedEntitlements":[],"excludedResourceTypes":[]}`,
+			wantKeys:          []string{"list", "expanded", "scopeV2", "excludedEntitlements", "excludedResourceTypes"},
+		},
+		{
 			name:              "role mining config show",
 			cmd:               roleMiningConfigShowCmd,
 			idKey:             "minCohortSize",
