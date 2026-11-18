@@ -32,7 +32,7 @@ const userCountNote = "`user_count` is the platform's stored count, not a live t
 var appsListCmd = &cobra.Command{
 	Use:   "list",
 	Short: "List applications (NDJSON output)",
-	Long:  "List applications (NDJSON output).\n\n" + userCountNote,
+	Long:  "List applications (NDJSON output). To filter by name, id, policy or directory, use \"apps search\".\n\n" + userCountNote,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		c, err := listClientFor(cmd)
 		if err != nil {

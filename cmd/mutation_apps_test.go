@@ -305,7 +305,7 @@ func TestAppsMutationsMarked(t *testing.T) {
 				visit(c)
 				continue
 			}
-			mutating := !slices.Contains([]string{"get", "list", "owners"}, c.Name())
+			mutating := !slices.Contains([]string{"get", "list", "owners", "search"}, c.Name())
 			if isMutating(c) != mutating {
 				t.Errorf("%s: isMutating = %v, want %v", c.CommandPath(), isMutating(c), mutating)
 			}

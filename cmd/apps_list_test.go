@@ -54,3 +54,47 @@ func TestAppsListRowsHaveNoDeletedAt(t *testing.T) {
 		t.Errorf("--fields deleted_at: exit %d (%v), want %d (matched no keys)", r.exit, r.err, exitUsage)
 	}
 }
+
+// TestAppsSearchWire pins the request body each filter flag produces, that
+// rows match `apps list`, and that no filter set sends no filter keys.
+func TestAppsSearchWire(t *testing.T) {
+	t.Setenv("C1I_URL", mutTestURL)
+	clearViperOverrides(t, "fields")
+	reply := `{"list":[{"id":"a1","displayName":"A","userCount":"3"}]}`
+	run := func(args ...string) (*mutServer, mutResult) {
+		s := newMutServer(t, fixedReply(200, reply))
+		stub := func() {
+			orig := newListClient
+			newListClient = func(_ *cobra.Command, _ string) (*client.Client, error) {
+				return client.NewForTesting(s.srv.URL, s.srv.Client()), nil
+			}
+			t.Cleanup(func() { newListClient = orig })
+		}
+		return s, runCLI(t, stub, nil, append([]string{"apps", "search"}, args...)...)
+	}
+	s, r := run("--query", "q", "--display-name", "D", "--app-id", "i1", "--app-id", "i2",
+		"--exclude-app-id", "x1", "--policy-id", "p1", "--policy-id", "p2", "--only-directories", "--limit", "1")
+	if r.err != nil {
+		t.Fatalf("exit %d: %v", r.exit, r.err)
+	}
+	if len(s.seen) != 1 || s.seen[0].method != "POST" || s.seen[0].rawPath != "/api/v1/search/apps" {
+		t.Fatalf("requests: %+v", s.seen)
+	}
+	var got map[string]any
+	if err := json.Unmarshal([]byte(s.seen[0].body), &got); err != nil {
+		t.Fatal(err)
+	}
+	want := `{"appIds":["i1","i2"],"displayName":"D","excludeAppIds":["x1"],"onlyDirectories":true,` +
+		`"pageSize":1,"policyRefs":[{"id":"p1"},{"id":"p2"}],"query":"q"}`
+	gb, _ := json.Marshal(got)
+	if string(gb) != want {
+		t.Errorf("body\n got %s\nwant %s", gb, want)
+	}
+	if !strings.Contains(r.stdout, `"user_count":3`) || !strings.Contains(r.stdout, `"display_name":"A"`) {
+		t.Errorf("row shape: %q", r.stdout)
+	}
+	s, r = run("--limit", "1")
+	if r.err != nil || strings.Contains(s.seen[0].body, "query") || strings.Contains(s.seen[0].body, "Ids") {
+		t.Errorf("bare search sent filters: %v %q", r.err, s.seen[0].body)
+	}
+}
