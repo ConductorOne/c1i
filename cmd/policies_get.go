@@ -32,7 +32,7 @@ out here. Verified live: delete a policy, then get it — 200, not 404.`,
 			return fmt.Errorf("API error: %w", err)
 		}
 
-		return writeResource(cmd, data, "id")
+		return writeResource(cmd, data, "id", "policy")
 	},
 }
 

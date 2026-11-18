@@ -105,7 +105,7 @@ unwrapped. A deleted mapping is still returned, with deletedAt set. An unknown
 key exits 4.`,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		return getNamedObject(cmd, xaaClientMappingsPath(xaaResourceServerID(cmd))+"/by_client_key", clientKeyQuery(args[0]), "clientAudienceMapping")
+		return getResource(cmd, xaaClientMappingsPath(xaaResourceServerID(cmd))+"/by_client_key", clientKeyQuery(args[0]), "clientKey", "clientAudienceMapping")
 	},
 }
 

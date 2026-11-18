@@ -23,7 +23,7 @@ returns it.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		appID, _ := cmd.Flags().GetString("app-id")
 		return getConnectorResource(cmd, connectorPath(appID, args[0]), func(data []byte) error {
-			return writeResource(cmd, data, "id")
+			return writeResource(cmd, data, "id", "connectorView", "connector")
 		})
 	},
 }

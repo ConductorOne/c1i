@@ -764,7 +764,7 @@ func TestGetRefusesMissingObject(t *testing.T) {
 			if _, err := runGetCaseBody(t, c, c.body); err != nil {
 				t.Fatalf("real-shaped body: %v", err)
 			}
-			for _, body := range missingObjectBodies(c.payloadPath) {
+			for _, body := range missingObjectBodies(c.payloadPath, c.idKey) {
 				out, err := runGetCaseBody(t, c, body)
 				if got := exitCode(err); got != exitServer {
 					t.Errorf("body %q: exit %d (err: %v), want %d; output %q", body, got, err, exitServer, out)
@@ -778,19 +778,33 @@ func TestGetRefusesMissingObject(t *testing.T) {
 }
 
 // missingObjectBodies is every way a 200 can lack the object at payloadPath:
-// an empty body, no object at all, and each envelope level null, {} or a
-// scalar.
-func missingObjectBodies(payloadPath []string) []string {
-	bodies := []string{``, `{}`, `null`, `[]`, `"x"`}
+// an empty body, no object at all, each envelope level null, {} or a scalar,
+// the object with a null or "" id, and an id that sits only in an unrelated
+// object (beside an empty payload, or under a key that is not the envelope).
+func missingObjectBodies(payloadPath []string, idKey string) []string {
+	key, _ := json.Marshal(idKey)
+	wrap := func(depth int, leaf string) string {
+		for i := depth - 1; i >= 0; i-- {
+			name, _ := json.Marshal(payloadPath[i])
+			leaf = "{" + string(name) + ":" + leaf + "}"
+		}
+		return leaf
+	}
+	other := `"other":{` + string(key) + `:"u-9"}`
+	bodies := []string{``, `{}`, `null`, `[]`, `"x"`,
+		wrap(len(payloadPath), "{"+string(key)+":null}"),
+		wrap(len(payloadPath), "{"+string(key)+`:""}`),
+		`{` + other + `}`,
+		`{"x":{` + string(key) + `:"u-9"}}`,
+	}
 	for depth := 1; depth <= len(payloadPath); depth++ {
 		for _, leaf := range []string{`null`, `{}`, `"x"`} {
-			b := leaf
-			for i := depth - 1; i >= 0; i-- {
-				name, _ := json.Marshal(payloadPath[i])
-				b = "{" + string(name) + ":" + b + "}"
-			}
-			bodies = append(bodies, b)
+			bodies = append(bodies, wrap(depth, leaf))
 		}
+	}
+	if len(payloadPath) > 0 {
+		empty := wrap(len(payloadPath), `{}`)
+		bodies = append(bodies, empty[:len(empty)-1]+","+other+"}")
 	}
 	return bodies
 }

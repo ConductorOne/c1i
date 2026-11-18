@@ -29,7 +29,7 @@ list" omits it.`,
 			return fmt.Errorf("API error: %w", err)
 		}
 
-		return writeResource(cmd, data, "id")
+		return writeResource(cmd, data, "id", "webhook")
 	},
 }
 

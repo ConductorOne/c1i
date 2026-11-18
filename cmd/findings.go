@@ -46,7 +46,7 @@ to --page-size and --page-token; a pageToken or pageSize in the file is refused.
 var findingsGetCmd = &cobra.Command{
 	Use: "get <finding-id>", Short: "Get a finding (pretty JSON)", Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		return getFindingResource(cmd, client.Path("/api/v1/findings/%s", args[0]), "id")
+		return getResource(cmd, client.Path("/api/v1/findings/%s", args[0]), nil, "id", "finding")
 	},
 }
 
@@ -133,7 +133,7 @@ func newFindingRulesCmd(name, short, path, key string, row listRowFn) *cobra.Com
 	}}
 	addLimitFlag(list)
 	get := &cobra.Command{Use: "get <rule-id>", Short: "Get a rule (pretty JSON)", Args: cobra.ExactArgs(1), RunE: func(cmd *cobra.Command, args []string) error {
-		return getFindingResource(cmd, client.Path(path+"/%s", args[0]), "id")
+		return getResource(cmd, client.Path(path+"/%s", args[0]), nil, "id", key)
 	}}
 	create := &cobra.Command{Use: "create", Short: "Create a rule from JSON (pretty JSON)", Args: cobra.NoArgs, RunE: func(cmd *cobra.Command, _ []string) error {
 		object, err := readRequiredJSONObject(cmd, "body-file")
@@ -236,22 +236,6 @@ or pageSize in the body is refused (exit 2).`, RunE: func(cmd *cobra.Command, _ 
 		}
 		return postBodyList(cmd, "/api/v1/search/shadow_mcp_occurrences", body, shadowMCPOccurrenceRow)
 	}}
-
-func getFindingResource(cmd *cobra.Command, path, idKey string) error {
-	baseURL, err := GetBaseURL()
-	if err != nil {
-		return err
-	}
-	c, err := newClient(cmd, baseURL)
-	if err != nil {
-		return fmt.Errorf("authentication failed: %w", err)
-	}
-	data, err := c.Get(cmd.Context(), path, nil)
-	if err != nil {
-		return fmt.Errorf("API error: %w", err)
-	}
-	return writeResource(cmd, data, idKey)
-}
 
 func getFindingsRaw(cmd *cobra.Command, path string) error {
 	if err := refuseMutationFields(cmd); err != nil {

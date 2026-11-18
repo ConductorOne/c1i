@@ -62,19 +62,7 @@ deletedAt set. The condition is under exactly one of .cel, .entitlements,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		appID, _ := cmd.Flags().GetString("app-id")
-		baseURL, err := GetBaseURL()
-		if err != nil {
-			return err
-		}
-		c, err := newClient(cmd, baseURL)
-		if err != nil {
-			return fmt.Errorf("authentication failed: %w", err)
-		}
-		data, err := c.Get(cmd.Context(), entitlementAutomationPath(appID, args[0]), nil)
-		if err != nil {
-			return fmt.Errorf("API error: %w", err)
-		}
-		return writeNamedResource(cmd, data, automationResponseKey)
+		return getResource(cmd, entitlementAutomationPath(appID, args[0]), nil, "appEntitlementId", automationResponseKey)
 	},
 }
 

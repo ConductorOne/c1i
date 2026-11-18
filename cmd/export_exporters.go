@@ -88,7 +88,7 @@ set. Prints the exporter unwrapped: the id is .exportId.`,
 		if err != nil {
 			return err
 		}
-		return writeResource(cmd, data, "exportId")
+		return writeResource(cmd, data, "exportId", "exporter")
 	},
 }
 

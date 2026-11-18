@@ -162,7 +162,7 @@ var spTrustsGetCmd = &cobra.Command{
 		if err != nil {
 			return fmt.Errorf("API error: %w", err)
 		}
-		return writeNamedResource(cmd, data, "trust")
+		return writeResource(cmd, data, "clientId", "trust")
 	},
 }
 

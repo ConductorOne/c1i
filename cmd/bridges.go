@@ -127,7 +127,7 @@ var bridgesGetCmd = &cobra.Command{
 	Long:  `Get a single tunnel bridge (pretty JSON). A deleted or unknown bridge exits 4.`,
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		return getNamedObject(cmd, bridgePath(args[0]), nil, "bridge")
+		return getResource(cmd, bridgePath(args[0]), nil, "id", "bridge")
 	},
 }
 

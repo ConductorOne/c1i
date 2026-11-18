@@ -31,7 +31,7 @@ A deleted principal is reflected immediately: this command exits 4 and
 			return fmt.Errorf("API error: %w", err)
 		}
 
-		return writeResource(cmd, data, "id")
+		return writeResource(cmd, data, "id", "servicePrincipal")
 	},
 }
 

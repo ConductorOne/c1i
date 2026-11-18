@@ -64,7 +64,7 @@ func (k mcpItemKind) getCmd(short, long string) *cobra.Command {
 			if err != nil {
 				return fmt.Errorf("API error: %w", err)
 			}
-			return writeResource(cmd, data, "id")
+			return writeResource(cmd, data, "id", k.envelope)
 		},
 	}
 }

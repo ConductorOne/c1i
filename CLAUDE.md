@@ -393,15 +393,17 @@ tracked root file outside its allowlist. Stage explicit paths rather than `-A`.
   to a subcommand — it silently disables the list-side check for that whole
   subtree (`TestNoSubcommandDefinesOwnPersistentPreRunE`,
   `...PostRunE`).
-- **A `get` refuses a `200` without its object (enforced convention):**
-  `writeResource`, `writeNamedResource` and `getNamedObject` (`cmd/unwrap.go`)
-  exit 6 (`nonJSONResponseError`) when the object is missing, `null`, `{}` or
-  not an object; `writeResource` reads that as no `idKey` key outside
-  `expanded`. The `writeOptional*`/`getSingleton` variants skip it, only for a
-  read whose object may be absent (a singleton, a `latest`, an app's unset
-  usage controls).
-  `TestGetRefusesMissingObject` drives every get in `getUnwrapCases` with those
-  bodies.
+- **A `get` refuses a `200` without its object (enforced convention):** a
+  get declares where its resource sits, `writeResource(cmd, data, idKey,
+  path...)` or `getResource(cmd, url, query, idKey, path...)`
+  (`cmd/unwrap.go`), and `resourceAt` both unwraps it and exits 6
+  (`nonJSONResponseError`) unless every path segment is an object and `idKey`
+  is non-null and, if a string, non-empty. An id elsewhere in the response
+  does not count. The `writeOptional*`/`getSingleton` variants skip the check,
+  only for a read whose object may be absent (a singleton, a `latest`, an
+  app's unset usage controls); `TestOptionalReadCallersArePinned` pins each
+  caller with its reason. `TestGetRefusesMissingObject` drives every get in
+  `getUnwrapCases` with the missing-object bodies.
 - **Row values keep their real JSON types.** A row is `map[string]any`: put
   `bool` and numeric values in as-is, never `strconv.FormatBool`/`Itoa`. NDJSON
   exists here so agents can pipe to `jq`, and stringifying breaks that

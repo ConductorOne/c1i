@@ -41,7 +41,7 @@ var mcpClassifiersGetCmd = &cobra.Command{
 	Short: "Get a classifier (pretty JSON)",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		return getClassifierResource(cmd, client.Path("/api/v1/classifiers/%s", args[0]), "classifier")
+		return getResource(cmd, client.Path("/api/v1/classifiers/%s", args[0]), nil, "id", "classifier")
 	},
 }
 
@@ -171,7 +171,7 @@ var mcpClassifierTemplatesGetCmd = &cobra.Command{
 		if version, _ := cmd.Flags().GetString("template-version"); version != "" {
 			params["template_version"] = version
 		}
-		return getClassifierResourceWithParams(cmd, client.Path("/api/v1/classifier_templates/%s", args[0]), params, "template")
+		return getResource(cmd, client.Path("/api/v1/classifier_templates/%s", args[0]), params, "id", "template")
 	},
 }
 
@@ -279,7 +279,7 @@ var mcpClassifierToolGatesGetCmd = &cobra.Command{
 	Short: "Get a tool gate (pretty JSON)",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		return getClassifierResource(cmd, client.Path("/api/v1/tool_gates/%s", args[0]), "toolGate")
+		return getResource(cmd, client.Path("/api/v1/tool_gates/%s", args[0]), nil, "id", "toolGate")
 	},
 }
 
@@ -324,14 +324,6 @@ var mcpClassifierToolGatesDeleteCmd = &cobra.Command{
 	RunE: func(cmd *cobra.Command, args []string) error {
 		return sendMutation(cmd, mutation{Method: http.MethodPost, Path: client.Path("/api/v1/tool_gates/%s/delete", args[0]), Body: map[string]any{}, Unwrap: byID("id")})
 	},
-}
-
-func getClassifierResource(cmd *cobra.Command, path, key string) error {
-	return getClassifierResourceWithParams(cmd, path, nil, key)
-}
-
-func getClassifierResourceWithParams(cmd *cobra.Command, path string, params map[string]string, key string) error {
-	return getNamedObject(cmd, path, params, key)
 }
 
 func readOptionalClassifierJSONObject(cmd *cobra.Command, flag string) (map[string]any, error) {

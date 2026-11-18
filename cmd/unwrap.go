@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"sort"
+	"strings"
 
 	"github.com/spf13/cobra"
 )
@@ -13,65 +14,56 @@ import (
 // resource itself.
 const expandedKey = "expanded"
 
-// writeResource is writeObject for a single-resource read: it unwraps the
-// envelope first, so --fields and the caller's jq see the resource's own keys
-// at the top level, as list rows already do. idKey names the resource's
-// identity field ("id" for most). A response with no idKey key outside
-// `expanded` holds no resource and exits 6: printing it would hand the caller
-// a null id at exit 0. The server emits unset fields, so the key is present
-// whenever the object is.
-func writeResource(cmd *cobra.Command, data []byte, idKey string) error {
-	if !holdsKey(data, idKey) {
-		return &nonJSONResponseError{fmt.Errorf("the response held no object with a %q", idKey)}
+// writeResource prints a get's resource, the object at path in the response
+// (the response itself when path is empty), unwrapped: its keys at the top
+// level beside every envelope key passed on the way down, as list rows have.
+// resourceAt decides both what is printed and whether anything is.
+func writeResource(cmd *cobra.Command, data []byte, idKey string, path ...string) error {
+	out, err := resourceAt(data, idKey, path)
+	if err != nil {
+		return err
 	}
-	return writeOptionalResource(cmd, data, idKey)
+	return writeObject(cmd, out)
 }
 
-// writeNamedResource is writeObject for an endpoint whose response envelope
-// names its sole resource explicitly. It keeps envelope siblings while
-// avoiding a heuristic search for a property that a singleton may not have.
-// A resourceKey that is missing, null, {} or not an object exits 6.
-func writeNamedResource(cmd *cobra.Command, data []byte, resourceKey string) error {
-	if !holdsObject(data, resourceKey) {
-		return &nonJSONResponseError{fmt.Errorf("the response held no %q object", resourceKey)}
+// resourceAt returns the resource at path, unwrapped, or exits 6 when the
+// response does not hold it: each path segment must be an object and the
+// resource's idKey must be non-null, and a non-empty string if a string. A
+// 200 without its object would otherwise print a null id at exit 0. A
+// sibling key that collides with a resource key leaves the response as sent.
+func resourceAt(data []byte, idKey string, path []string) ([]byte, error) {
+	payload, siblings, ok := splitEnvelope(data, path)
+	var obj map[string]json.RawMessage
+	if ok && json.Unmarshal(payload, &obj) == nil && validID(obj[idKey]) {
+		if merged, ok := mergeSiblings(payload, siblings); ok {
+			return merged, nil
+		}
+		return data, nil
 	}
-	return writeOptionalNamedResource(cmd, data, resourceKey)
+	where := "the response"
+	if len(path) > 0 {
+		where = fmt.Sprintf("the response's %q", strings.Join(path, "."))
+	}
+	return nil, &nonJSONResponseError{fmt.Errorf("%s held no object with a %s", where, idKey)}
 }
 
-// writeOptionalResource and writeOptionalNamedResource skip that check, for a
-// read whose object may legitimately be absent: a singleton (settings, a
-// config, an app's usage controls) or a "latest" lookup.
+// validID reports whether an id value is present: not missing, not null, and
+// not "" (a non-string id, such as a scope object, counts when present).
+func validID(raw json.RawMessage) bool {
+	s := bytes.TrimSpace(raw)
+	return len(s) > 0 && string(s) != "null" && string(s) != `""`
+}
+
+// writeOptionalResource and writeOptionalNamedResource print a read whose
+// object may legitimately be absent (a singleton, a config, an app's usage
+// controls, a "latest" lookup) without resourceAt's check. Every caller is
+// pinned in TestOptionalReadCallersArePinned.
 func writeOptionalResource(cmd *cobra.Command, data []byte, idKey string) error {
 	return writeObject(cmd, unwrapEnvelope(data, idKey))
 }
 
 func writeOptionalNamedResource(cmd *cobra.Command, data []byte, resourceKey string) error {
 	return writeObject(cmd, unwrapNamedEnvelope(data, resourceKey))
-}
-
-// holdsKey reports whether data is one JSON object with key at its top level
-// or in an object nested outside `expanded`, whatever key's value.
-func holdsKey(data []byte, key string) bool {
-	root, ok := decodeJSONObject(data)
-	if !ok {
-		return false
-	}
-	if _, _, ok := lookupPath(root, []string{key}); ok {
-		return true
-	}
-	delete(root, expandedKey)
-	return len(matchesPathAnyDepth(root, []string{key})) > 0
-}
-
-// holdsObject reports whether data is a JSON object whose key is a non-empty
-// object.
-func holdsObject(data []byte, key string) bool {
-	var root, obj map[string]json.RawMessage
-	if json.Unmarshal(data, &root) != nil {
-		return false
-	}
-	raw, ok := root[key]
-	return ok && json.Unmarshal(raw, &obj) == nil && len(obj) > 0
 }
 
 func unwrapNamedEnvelope(data []byte, resourceKey string) []byte {
@@ -234,14 +226,14 @@ func decodeJSONObject(data []byte) (map[string]any, bool) {
 	return m, ok
 }
 
-// getNamedObject GETs path and prints the object under envelope, unwrapped.
-func getNamedObject(cmd *cobra.Command, path string, query map[string]string, envelope string) error {
-	return getAndWrite(cmd, path, query, func(data []byte) error { return writeNamedResource(cmd, data, envelope) })
+// getResource GETs urlPath and prints the resource at path, as writeResource.
+func getResource(cmd *cobra.Command, urlPath string, query map[string]string, idKey string, path ...string) error {
+	return getAndWrite(cmd, urlPath, query, func(data []byte) error { return writeResource(cmd, data, idKey, path...) })
 }
 
-// getSingleton is getNamedObject for a singleton, whose object may be absent.
-func getSingleton(cmd *cobra.Command, path, envelope string) error {
-	return getAndWrite(cmd, path, nil, func(data []byte) error { return writeOptionalNamedResource(cmd, data, envelope) })
+// getSingleton GETs a singleton and prints it as writeOptionalNamedResource.
+func getSingleton(cmd *cobra.Command, urlPath, envelope string) error {
+	return getAndWrite(cmd, urlPath, nil, func(data []byte) error { return writeOptionalNamedResource(cmd, data, envelope) })
 }
 
 func getAndWrite(cmd *cobra.Command, path string, query map[string]string, write func([]byte) error) error {
