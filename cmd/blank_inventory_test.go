@@ -169,7 +169,7 @@ func TestEmptyAllowedFlagsAcceptEmpty(t *testing.T) {
 	for key, reason := range wantEmptyAllowed {
 		c, flag := commandForInventoryKey(t, key)
 		t.Run(key, func(t *testing.T) {
-			srv := newMutServer(t, fixedReply(200, "{}"))
+			srv := newMutServer(t, withTemplateReads(fixedReply(200, "{}")))
 			extra := extraArgsFor(c, flag)
 			if override, ok := inventoryKeyArgs[key]; ok {
 				extra = override

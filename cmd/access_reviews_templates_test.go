@@ -235,3 +235,29 @@ func TestTemplateSetupCommandsWire(t *testing.T) {
 		})
 	}
 }
+
+// withTemplateReads answers the template read "templates update" makes before
+// its write, so a tree test's fixed reply still reaches the write.
+func withTemplateReads(route func(*http.Request, int) mutReply) func(*http.Request, int) mutReply {
+	return func(r *http.Request, n int) mutReply {
+		if r.Method == http.MethodGet && strings.HasPrefix(r.URL.Path, "/api/v1/access_review_template/") {
+			return mutReply{body: `{"accessReviewTemplate":{"id":"t1","displayName":"cur","policyId":"pol0"}}`}
+		}
+		return route(r, n)
+	}
+}
+
+// A body that sets both fields the server validates needs no read, and a
+// policyId the mask does not name is not stored, so it is not looked up.
+func TestTemplateUpdateReadsOnlyWhatItNeeds(t *testing.T) {
+	t.Setenv("C1I_URL", mutTestURL)
+	s := newMutServer(t, templateRoute("POLICY_TYPE_GRANT"))
+	row := mutationRow{cmd: "access-reviews templates update", args: []string{"t1", "--body-file", `@{"displayName":"n","policyId":"pol1","description":"d"}`, "--update-mask", "description"}}
+	r := runMutationCLI(t, s.srv, 0, nil, row.argv(t)...)
+	if r.err != nil {
+		t.Fatalf("exit %d: %v\n%s", r.exit, r.err, r.stderr)
+	}
+	if sent := s.requests(); len(sent) != 1 || sent[0].method != http.MethodPost {
+		t.Errorf("requests = %+v, want the update alone", sent)
+	}
+}

@@ -161,8 +161,8 @@ var mutationTable = []mutationRow{
 		method: "POST", path: "/api/v1/access_review/ar1/excluded_entitlements/add_delete", reads: 1},
 	{cmd: "access-reviews excluded-entitlements remove", args: cat([]string{"ar1"}, ent), body: `{}`,
 		method: "POST", path: "/api/v1/access_review/ar1/excluded_entitlements/add_delete", reads: 1},
-	{cmd: "access-reviews templates create", args: []string{"--body-file", `@{"displayName":"zz","ownerIds":["u1"]}`}, body: tblTemplate, want: tblTemplateDoc, ids: idPath,
-		method: "POST", path: "/api/v1/access_review_template", reads: 1},
+	{cmd: "access-reviews templates create", args: []string{"--display-name", "zz", "--policy-id", "pol1", "--owner-id", "u1"}, body: tblTemplate, want: tblTemplateDoc, ids: idPath,
+		method: "POST", path: "/api/v1/access_review_template", reads: 2},
 	{cmd: "access-reviews templates update", args: []string{"t1", "--description", "d"}, body: tblTemplate, want: tblTemplateDoc, ids: idPath,
 		method: "POST", path: "/api/v1/access_review_template/t1", reads: 1},
 	{cmd: "access-reviews templates delete", args: []string{"t1"}, body: `{}`, method: "DELETE", path: "/api/v1/access_review_template/t1"},
@@ -385,7 +385,7 @@ var mutationTable = []mutationRow{
 
 // tblGet answers every pre-send read: the policy-step, user, catalog-id and
 // self lookups.
-const tblGet = `{"accessReviewTemplate":{"id":"t1","displayName":"zz","policyId":"pol1"},"appResourceTypeView":{"appResourceType":{"id":"rt-1"}},"connectorView":{"connector":{"id":"cn1","config":{"@type":"type.googleapis.com/c1.api.app.v1.EnvConfig"}}},"taskView":{"task":{"id":"task-1","policy":{"current":{"id":"step-9"}}}},"user":{"id":"u1"},"userId":"self-1",` +
+const tblGet = `{"accessReviewTemplate":{"id":"t1","displayName":"zz","policyId":"pol1"},"policy":{"id":"pol1","policyType":"POLICY_TYPE_CERTIFY"},"appResourceTypeView":{"appResourceType":{"id":"rt-1"}},"connectorView":{"connector":{"id":"cn1","config":{"@type":"type.googleapis.com/c1.api.app.v1.EnvConfig"}}},"taskView":{"task":{"id":"task-1","policy":{"current":{"id":"step-9"}}}},"user":{"id":"u1"},"userId":"self-1",` +
 	`"list":[{"id":"ty-1","displayName":"Department","name":"Risk Level","appUserProfile":{}}],` +
 	`"attribute":{"userAttributeMapping":{"id":"map-1","attributeType":{"id":"ty-1","displayName":"Department","appUserProfile":{"appId":"app-1","appUserProfileAttributeKey":"department"}}}},` +
 	`"exporter":{"exportId":"ex-1","displayName":"zz","datasource":{"datasourceId":"ds-1","prefix":"zz/","format":"EXPORT_FORMAT_OCSF_JSON_GZIP"}}}`

@@ -6,6 +6,8 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"slices"
+	"strings"
 
 	"github.com/ConductorOne/c1i/internal/client"
 	"github.com/spf13/cobra"
@@ -193,20 +195,20 @@ AccessReviewTemplate object via --body-file plus an explicit --update-mask
 is sent with "id" set to <template-id>.
 
 The server validates displayName and policyId on every update, whatever the
-mask names, so c1i reads the template first and fills in either one the
-request does not set. The mask still decides what changes. An unknown
-<template-id> therefore exits 4 before the update is sent, --dry-run included.
+mask names, so when the request leaves either unset c1i reads the template
+first and fills it in; the mask still decides what changes. That read makes an
+unknown <template-id> exit 4 before the update is sent, --dry-run included. A
+policyId is looked up only when the mask names it.
 
 Prints the template unwrapped like "access-reviews templates get".
 
 ` + templatePolicyHelp,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		body, tpl, policyLabel, err := buildTemplateUpdate(cmd, args[0])
+		body, tpl, policyLabel, policyID, err := buildTemplateUpdate(cmd, args[0])
 		if err != nil {
 			return err
 		}
-		policyID, _ := tpl["policyId"].(string)
 		return sendMutation(cmd, mutation{Method: http.MethodPost, Path: templatePath(args[0]), Body: body},
 			withPreRead(templatePolicyCheck(policyLabel, policyID)),
 			withPreRead(templateRequiredFieldsFill(args[0], tpl)))
@@ -226,31 +228,35 @@ var templateUpdateSpec = &updateSpec{
 }
 
 // buildTemplateUpdate returns the wrapped request, the template object inside
-// it (for the pre-reads to complete) and the channel a policy id came from.
-func buildTemplateUpdate(cmd *cobra.Command, id string) (map[string]any, map[string]any, string, error) {
+// it (for the fill to complete), and the policy id to look up with the channel
+// it came from: only one the mask names, since the mask decides what is stored.
+func buildTemplateUpdate(cmd *cobra.Command, id string) (body, tpl map[string]any, policyLabel, policyID string, err error) {
 	mask, usingBody, err := bodyFileMask(cmd, templateUpdateSpec.flagNames()...)
 	if err != nil {
-		return nil, nil, "", err
+		return nil, nil, "", "", err
 	}
-	tpl := map[string]any{}
-	policyLabel := "policy-id"
+	tpl = map[string]any{}
+	policyLabel = "policy-id"
 	if usingBody {
 		if tpl, err = readJSONFile[map[string]any](cmd, "body-file", mustGetString(cmd, "body-file")); err != nil {
-			return nil, nil, "", err
+			return nil, nil, "", "", err
 		}
 		for _, key := range []string{"displayName", "policyId"} {
 			if v, ok := tpl[key]; ok {
 				if s, ok := v.(string); !ok || !hasVisibleRune(s) {
-					return nil, nil, "", &usageError{fmt.Errorf("--body-file %s must be a non-blank string; omit it to keep the current value", key)}
+					return nil, nil, "", "", &usageError{fmt.Errorf("--body-file %s must be a non-blank string; omit it to keep the current value", key)}
 				}
 			}
 		}
 		policyLabel = "body-file policyId"
 	} else if mask, err = templateUpdateSpec.buildUpdateMask(cmd, tpl); err != nil {
-		return nil, nil, "", err
+		return nil, nil, "", "", err
+	}
+	if slices.Contains(strings.Split(mask, ","), "policyId") {
+		policyID, _ = tpl["policyId"].(string)
 	}
 	tpl["id"] = id
-	return wrapUpdate("accessReviewTemplate", tpl, mask), tpl, policyLabel, nil
+	return wrapUpdate("accessReviewTemplate", tpl, mask), tpl, policyLabel, policyID, nil
 }
 
 // templateRequiredFieldsFill copies the current displayName and policyId into
@@ -258,6 +264,11 @@ func buildTemplateUpdate(cmd *cobra.Command, id string) (map[string]any, map[str
 // without both, even when the mask names neither.
 func templateRequiredFieldsFill(id string, tpl map[string]any) preRead {
 	return preRead{Run: func(ctx context.Context, c *client.Client, _ *mutation) ([]resolvedID, error) {
+		_, hasName := tpl["displayName"]
+		_, hasPolicy := tpl["policyId"]
+		if hasName && hasPolicy {
+			return nil, nil
+		}
 		data, err := c.Get(ctx, templatePath(id), nil)
 		if err != nil {
 			return nil, fmt.Errorf("reading the template before the update: %w", err)
@@ -405,7 +416,7 @@ func init() {
 	c.Flags().String("review-instructions", "", "Instructions shown to reviewers")
 	allowEmpty(c, emptyIsOmitted, "description", "review-instructions")
 	c.Flags().String("policy-id", "", "Review policy ID; must exist and be a certify policy (required unless --body-file)")
-	addRepeatableStringFlag(c, "owner-id", "Owner user ID (repeatable; at least one required unless --body-file)")
+	addRepeatableStringFlag(c, "owner-id", "Owner user ID, repeatable (required unless --body-file)")
 	c.Flags().String("scope-type", "", "Scope type: "+templateScopeTypeFlag.usage())
 	c.Flags().String("body-file", "", "Full Create request JSON body, verbatim (file, or \"-\" for stdin); mutually exclusive with the flags above")
 	markUserRefChecked(c, "owner-id")
