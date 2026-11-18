@@ -1246,6 +1246,13 @@ c1i functions get <function-id>
 c1i functions source <function-id> [--commit <id>] [--out-dir <path>]
 c1i functions commits <function-id> [--page-size N] [--page-token TOKEN] [--limit N]
 c1i functions usage <function-id> [--page-size N] [--page-token TOKEN] [--limit N]
+c1i functions create --display-name NAME [--description TEXT] [--file main.ts]... [--commit-message MSG]
+c1i functions update <function-id> [--display-name NAME] [--description TEXT] [--publish-commit <commit-id>] [--file main.ts]... [--commit-message MSG]
+c1i functions update <function-id> --body-file function.json --update-mask outboundNetworkAllowlist
+c1i functions delete <function-id>
+c1i functions invoke <function-id> [--commit-id <id>] [--input JSON | --input-file F] [--wait [--wait-timeout 5m]]
+c1i functions invocations list <function-id> [--page-size N] [--page-token TOKEN] [--limit N]
+c1i functions invocations get <invocation-id> --function-id <function-id>
 ```
 
 Every file-valued flag (`-o/--output`, `--out-dir`, `--*-file`) refuses a path
@@ -1262,6 +1269,30 @@ mode.
 
 `functions usage` scans every automation and emits one row per step that calls
 the given function — useful before deleting a draft.
+
+`functions create` and `functions update --file` upload each local file under
+its base name (`--file src/main.ts` becomes `main.ts`, the entry file), so
+`functions source --out-dir` output uploads back unchanged. The pushed commit
+is not published: `functions create` leaves the function unpublished, and
+`--file` on update moves only its head. Publish by passing the commit id the
+command printed (`.commit.id`) to `functions update <function-id>
+--publish-commit`. `functions update` without `--display-name` first reads the
+function to resend its current name, which the server validates on every
+update. Other fields go through `--body-file` with a camelCase `--update-mask`.
+`functions delete` is a soft delete: `functions get` still returns the function
+with `deletedAt` set, and a second delete exits `4`.
+
+`functions invoke` starts an asynchronous run of the published commit (exit `2`
+when nothing is published; pass `--commit-id` to run another commit, which is
+checked first: one the function lacks exits `4`). `--input` must be a JSON
+object. It prints `{"invocationId": ...}`. With `--wait` it then polls until
+the run succeeds (exit `0`). Any `--wait` failure exits `1` with an error
+saying the invoke "was applied", which only means the run was started: a failed
+run is the error naming `ended in FUNCTION_INVOCATION_STATUS_ERROR` (or
+`CANCELLED`), and a timeout says so and is not necessarily a failure. Read
+the input, output and error with `functions invocations get`.
+`functions invocations list` is newest first; a busy function can have tens of
+thousands of invocations, so pass `--limit`.
 
 `functions list` and `functions commits` read routes whose pagination cursor
 stops advancing on large result sets; the guard described under

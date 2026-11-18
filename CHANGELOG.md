@@ -40,6 +40,12 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `--update-mask` (e.g. `config`). `delete` refuses a connector that backs an
   MCP server (exit 2): use `mcp servers delete`, which also removes its
   toolsets.
+- `functions create`, `update`, `delete`, `invoke` and `invocations list|get`.
+  `create` and `update --file` upload local files under their base names
+  (unpublished; publish with `update --publish-commit <commit-id>`); `--input`
+  and `--input-file` take the handler's JSON object input. `invoke --wait`
+  polls the invocation and exits `1` if it ends `ERROR` or `CANCELLED`.
+  `invocations list` reads newest first.
 
 ## [0.11.0] - 2026-11-17
 

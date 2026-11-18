@@ -24,37 +24,39 @@ type mutationRow struct {
 }
 
 const (
-	tblCatalog    = `{"requestCatalogView":{"requestCatalog":{"id":"cat-1","displayName":"zz <x>"},"accessEntitlementsPath":"a","createdByUserPath":"c","memberCount":"2"},"expanded":[]}`
-	tblCatalogDoc = `{"id":"cat-1","displayName":"zz <x>","expanded":[],"accessEntitlementsPath":"a","createdByUserPath":"c","memberCount":"2"}`
-	tblBundle     = `{"requestCatalogId":"cat-1","enabled":true}`
-	tblReview     = `{"accessReview":{"accessReview":{"id":"ar1"},"createdByUserPath":"c","objectPermissions":{},"policyPath":""},"expanded":[{"id":"p1"}]}`
-	tblScope      = `{"list":[],"expanded":[],"scopeV2":{"specificResources":{}},"excludedEntitlements":[],"excludedResourceTypes":[]}`
-	tblReviewDoc  = `{"id":"ar1","expanded":[{"id":"p1"}],"createdByUserPath":"c","objectPermissions":{},"policyPath":""}`
-	tblApp        = `{"app":{"id":"app-1","displayName":"zz <x>","appOwners":[]}}`
-	tblAppDoc     = `{"id":"app-1","displayName":"zz <x>","appOwners":[]}`
-	tblBinding    = `{"appManagementState":{"appManagementStateBinding":{"resourceId":"res-1","displayName":"zz","state":{"managed":{"appId":"app-9"}}},"appPath":"","resourcePath":""},"expanded":[]}`
-	tblBindingDoc = `{"resourceId":"res-1","displayName":"zz","state":{"managed":{"appId":"app-9"}},"expanded":[],"appPath":"","resourcePath":""}`
-	tblEnt        = `{"appEntitlementView":{"appEntitlement":{"id":"e-1","appResourceTypeId":"rt-1","appResourceId":"r-1"},"appPath":"p","appResourcePath":"r","appResourceTypePath":"t","objectPermissions":{}},"expanded":[]}`
-	tblEntDoc     = `{"id":"e-1","appResourceTypeId":"rt-1","appResourceId":"r-1","expanded":[],"appPath":"p","appResourcePath":"r","appResourceTypePath":"t","objectPermissions":{}}`
-	tblProxy      = `{"appProxyEntitlementView":{"appProxyEntitlement":{"srcAppId":"sa","srcAppEntitlementId":"se","dstAppId":"da","dstAppEntitlementId":"de"},"dstAppEntitlementPath":"a","dstAppPath":"b","srcAppEntitlementPath":"c","srcAppPath":"d"},"expanded":[]}`
-	tblProxyDoc   = `{"srcAppId":"sa","srcAppEntitlementId":"se","dstAppId":"da","dstAppEntitlementId":"de","expanded":[],"dstAppEntitlementPath":"a","dstAppPath":"b","srcAppEntitlementPath":"c","srcAppPath":"d"}`
-	tblClassifier = `{"classifier":{"id":"cl1","displayName":"zz"}}`
-	tblClassDoc   = `{"id":"cl1","displayName":"zz"}`
-	tblGate       = `{"toolGate":{"id":"g1","displayName":"zz"}}`
-	tblGateDoc    = `{"id":"g1","displayName":"zz"}`
-	tblToolset    = `{"profile":{"id":"ts1","displayName":"zz"}}`
-	tblToolsetDoc = `{"id":"ts1","displayName":"zz"}`
-	tblServer     = `{"mcpServer":{"connectorId":"cn1","displayName":"zz"}}`
-	tblServerDoc  = `{"connectorId":"cn1","displayName":"zz"}`
-	tblPolicy     = `{"policy":{"id":"pol1","displayName":"zz"}}`
-	tblPolicyDoc  = `{"id":"pol1","displayName":"zz"}`
-	tblSP         = `{"servicePrincipal":{"id":"sp-1","displayName":"zz"}}`
-	tblSPDoc      = `{"id":"sp-1","displayName":"zz"}`
-	tblWebhook    = `{"webhook":{"id":"wh-1","displayName":"zz"}}`
-	tblWebhookDoc = `{"id":"wh-1","displayName":"zz"}`
-	tblMapping    = `{"attribute":{"userAttributeMapping":{"id":"map-1","appId":"app-1","attributeType":{"id":"ty-1","displayName":"Department"}},"appPath":"a","fallbacksPath":"f"},"expanded":[]}`
-	tblMappingDoc = `{"id":"map-1","appId":"app-1","attributeType":{"id":"ty-1","displayName":"Department"},"expanded":[],"appPath":"a","fallbacksPath":"f"}`
-	tblStep       = "Resolved policy step: step-9\n"
+	tblCatalog     = `{"requestCatalogView":{"requestCatalog":{"id":"cat-1","displayName":"zz <x>"},"accessEntitlementsPath":"a","createdByUserPath":"c","memberCount":"2"},"expanded":[]}`
+	tblCatalogDoc  = `{"id":"cat-1","displayName":"zz <x>","expanded":[],"accessEntitlementsPath":"a","createdByUserPath":"c","memberCount":"2"}`
+	tblBundle      = `{"requestCatalogId":"cat-1","enabled":true}`
+	tblReview      = `{"accessReview":{"accessReview":{"id":"ar1"},"createdByUserPath":"c","objectPermissions":{},"policyPath":""},"expanded":[{"id":"p1"}]}`
+	tblScope       = `{"list":[],"expanded":[],"scopeV2":{"specificResources":{}},"excludedEntitlements":[],"excludedResourceTypes":[]}`
+	tblReviewDoc   = `{"id":"ar1","expanded":[{"id":"p1"}],"createdByUserPath":"c","objectPermissions":{},"policyPath":""}`
+	tblApp         = `{"app":{"id":"app-1","displayName":"zz <x>","appOwners":[]}}`
+	tblAppDoc      = `{"id":"app-1","displayName":"zz <x>","appOwners":[]}`
+	tblBinding     = `{"appManagementState":{"appManagementStateBinding":{"resourceId":"res-1","displayName":"zz","state":{"managed":{"appId":"app-9"}}},"appPath":"","resourcePath":""},"expanded":[]}`
+	tblBindingDoc  = `{"resourceId":"res-1","displayName":"zz","state":{"managed":{"appId":"app-9"}},"expanded":[],"appPath":"","resourcePath":""}`
+	tblEnt         = `{"appEntitlementView":{"appEntitlement":{"id":"e-1","appResourceTypeId":"rt-1","appResourceId":"r-1"},"appPath":"p","appResourcePath":"r","appResourceTypePath":"t","objectPermissions":{}},"expanded":[]}`
+	tblEntDoc      = `{"id":"e-1","appResourceTypeId":"rt-1","appResourceId":"r-1","expanded":[],"appPath":"p","appResourcePath":"r","appResourceTypePath":"t","objectPermissions":{}}`
+	tblProxy       = `{"appProxyEntitlementView":{"appProxyEntitlement":{"srcAppId":"sa","srcAppEntitlementId":"se","dstAppId":"da","dstAppEntitlementId":"de"},"dstAppEntitlementPath":"a","dstAppPath":"b","srcAppEntitlementPath":"c","srcAppPath":"d"},"expanded":[]}`
+	tblProxyDoc    = `{"srcAppId":"sa","srcAppEntitlementId":"se","dstAppId":"da","dstAppEntitlementId":"de","expanded":[],"dstAppEntitlementPath":"a","dstAppPath":"b","srcAppEntitlementPath":"c","srcAppPath":"d"}`
+	tblClassifier  = `{"classifier":{"id":"cl1","displayName":"zz"}}`
+	tblClassDoc    = `{"id":"cl1","displayName":"zz"}`
+	tblGate        = `{"toolGate":{"id":"g1","displayName":"zz"}}`
+	tblGateDoc     = `{"id":"g1","displayName":"zz"}`
+	tblToolset     = `{"profile":{"id":"ts1","displayName":"zz"}}`
+	tblToolsetDoc  = `{"id":"ts1","displayName":"zz"}`
+	tblServer      = `{"mcpServer":{"connectorId":"cn1","displayName":"zz"}}`
+	tblServerDoc   = `{"connectorId":"cn1","displayName":"zz"}`
+	tblPolicy      = `{"policy":{"id":"pol1","displayName":"zz"}}`
+	tblPolicyDoc   = `{"id":"pol1","displayName":"zz"}`
+	tblSP          = `{"servicePrincipal":{"id":"sp-1","displayName":"zz"}}`
+	tblSPDoc       = `{"id":"sp-1","displayName":"zz"}`
+	tblWebhook     = `{"webhook":{"id":"wh-1","displayName":"zz"}}`
+	tblWebhookDoc  = `{"id":"wh-1","displayName":"zz"}`
+	tblMapping     = `{"attribute":{"userAttributeMapping":{"id":"map-1","appId":"app-1","attributeType":{"id":"ty-1","displayName":"Department"}},"appPath":"a","fallbacksPath":"f"},"expanded":[]}`
+	tblMappingDoc  = `{"id":"map-1","appId":"app-1","attributeType":{"id":"ty-1","displayName":"Department"},"expanded":[],"appPath":"a","fallbacksPath":"f"}`
+	tblStep        = "Resolved policy step: step-9\n"
+	tblFunction    = `{"function":{"id":"fn-1","displayName":"zz"},"commit":{"id":"c-1","functionId":"fn-1"}}`
+	tblFunctionDoc = `{"id":"fn-1","displayName":"zz","commit":{"id":"c-1","functionId":"fn-1"}}`
 )
 
 const (
@@ -185,6 +187,13 @@ var mutationTable = []mutationRow{
 		body: `{"credential":{"id":"cr-1","clientId":"cid","clientSecret":"s3"}}`, want: `{"id":"cr-1","clientId":"cid","clientSecret":"s3"}`,
 		ids: []string{".id", ".clientId", ".clientSecret"}, method: "POST", path: "/api/v1/apps/connectors/credentials"},
 	{cmd: "connectors credentials revoke", args: []string{"cr-1", "--app-id", "a1", "--connector-id", "cn1"}, body: `{}`, method: "POST", path: "/api/v1/apps/a1/connectors/cn1/credentials/cr-1"},
+
+	// functions
+	{cmd: "functions create", args: []string{"--display-name", "zz"}, body: tblFunction, want: tblFunctionDoc, ids: idPath, method: "POST", path: "/api/v1/functions"},
+	{cmd: "functions update", args: []string{"fn-1", "--display-name", "zz"}, body: tblFunction, want: tblFunctionDoc, ids: idPath, method: "POST", path: "/api/v1/functions/update"},
+	{cmd: "functions delete", args: []string{"fn-1"}, body: `{}`, method: "DELETE", path: "/api/v1/functions/fn-1"},
+	{cmd: "functions invoke", args: []string{"fn-1", "--commit-id", "c-1"}, body: `{"invocationId":"inv-1"}`, ids: []string{".invocationId"},
+		method: "POST", path: "/api/v1/functions/fn-1/invoke", reads: 1},
 	// entitlements
 	{cmd: "entitlements create", args: []string{"--app-id", "app-1", "--display-name", "e", "--resource-type-id", "rt-1", "--resource-id", "r-1"},
 		body: tblEnt, want: tblEntDoc, ids: []string{".id", ".appResourceTypeId", ".appResourceId"}, method: "POST", path: "/api/v1/apps/app-1/entitlements"},

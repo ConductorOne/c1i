@@ -1,5 +1,6 @@
 // Package timing holds the one test-only knob for real-time waits: login's
-// poll interval and the transport's retry backoff.
+// poll interval, the transport's retry backoff and functions invoke's --wait
+// poll.
 package timing
 
 import (

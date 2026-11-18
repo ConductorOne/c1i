@@ -49,6 +49,8 @@ var wantEmptyAllowed = map[string]string{
 	"c1i apps update --description":                             emptyIsSent,
 	"c1i auth login --client-secret":                            emptyIsOmitted,
 	"c1i automations update --description":                      emptyIsSent,
+	"c1i functions create --description":                        emptyIsSent,
+	"c1i functions update --description":                        emptyIsSent,
 	"c1i docs agents --output":                                  emptyIsOmitted,
 	"c1i docs changelog --output":                               emptyIsOmitted,
 	"c1i docs map --output":                                     emptyIsOmitted,
@@ -199,6 +201,7 @@ func TestEmptyAllowedFlagsAcceptEmpty(t *testing.T) {
 var inventoryExtraArgs = map[string][]string{
 	"c1i api":                            {"--path=/api/v1/users"},
 	"c1i webhooks create":                {"--destination-url=https://hooks.example.com/x"},
+	"c1i functions update":               {"--display-name=n"},
 	"c1i policies create":                {"--display-name=x", "--policy-type=grant", "--allow-deny-all=true"},
 	"c1i automations create":             {"--display-name=x"},
 	"c1i requests create grant":          {"--user-id=u1"},

@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"context"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
@@ -43,33 +44,13 @@ named exactly as the function has them — usually main.ts and main.test.ts).`,
 		outDir, _ := cmd.Flags().GetString("out-dir")
 
 		if commitID == "" {
-			fnData, err := c.Get(cmd.Context(), client.Path("/api/v1/functions/%s", functionID), nil)
+			published, head, err := functionCommits(cmd.Context(), c, functionID)
 			if err != nil {
-				return fmt.Errorf("API error fetching function metadata: %w", err)
+				return err
 			}
-			// Single-resource GET wraps the body under "function"; list responses
-			// don't wrap. Accept both shapes so the parser doesn't silently miss
-			// the commit ID if the API ever flattens.
-			var wrapper struct {
-				Function struct {
-					PublishedCommitID string `json:"publishedCommitId"`
-					Head              string `json:"head"`
-				} `json:"function"`
-				PublishedCommitID string `json:"publishedCommitId"`
-				Head              string `json:"head"`
-			}
-			if err := json.Unmarshal(fnData, &wrapper); err != nil {
-				return fmt.Errorf("failed to parse function response: %w", err)
-			}
-			commitID = wrapper.Function.PublishedCommitID
+			commitID = published
 			if commitID == "" {
-				commitID = wrapper.PublishedCommitID
-			}
-			if commitID == "" {
-				commitID = wrapper.Function.Head
-			}
-			if commitID == "" {
-				commitID = wrapper.Head
+				commitID = head
 			}
 			if commitID == "" {
 				return fmt.Errorf("function %s has no published commit or head; nothing to fetch", functionID)
@@ -234,4 +215,34 @@ func init() {
 	functionsSourceCmd.Flags().String("out-dir", "", "Write files to this directory instead of stdout. Files are written 0600 and the directory is created (or tightened, never widened, special bits stripped) to at most 0700 — fetched source may inline credentials")
 	allowEmpty(functionsSourceCmd, emptyIsOmitted, "commit", "out-dir")
 	functionsCmd.AddCommand(functionsSourceCmd)
+}
+
+// functionCommits reads a function's published and head commit ids.
+func functionCommits(ctx context.Context, c *client.Client, functionID string) (published, head string, err error) {
+	fnData, err := c.Get(ctx, client.Path("/api/v1/functions/%s", functionID), nil)
+	if err != nil {
+		return "", "", fmt.Errorf("API error fetching function metadata: %w", err)
+	}
+	// Single-resource GET wraps the body under "function"; list responses
+	// don't wrap. Accept both shapes so the parser doesn't silently miss
+	// the commit ID if the API ever flattens.
+	var wrapper struct {
+		Function struct {
+			PublishedCommitID string `json:"publishedCommitId"`
+			Head              string `json:"head"`
+		} `json:"function"`
+		PublishedCommitID string `json:"publishedCommitId"`
+		Head              string `json:"head"`
+	}
+	if err := json.Unmarshal(fnData, &wrapper); err != nil {
+		return "", "", fmt.Errorf("failed to parse function response: %w", err)
+	}
+	published, head = wrapper.Function.PublishedCommitID, wrapper.Function.Head
+	if published == "" {
+		published = wrapper.PublishedCommitID
+	}
+	if head == "" {
+		head = wrapper.Head
+	}
+	return published, head, nil
 }
