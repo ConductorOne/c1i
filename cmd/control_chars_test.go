@@ -93,6 +93,8 @@ var pathFlagNotPaths = map[string]string{
 	"c1i api --path": "an API URL path, not a file",
 	"c1i access-reviews reports generate --format": "help mentions --body-file; the value is a format name",
 	"c1i automations update --update-mask":         "help mentions --body-file; the value is a field mask",
+	"c1i connectors update --update-mask":          "help mentions --body-file; the value is a field mask",
+	"c1i connectors create --catalog-id":           "help mentions --body-file; the value is a catalog id",
 	"c1i policies update --update-mask":            "help mentions --body-file; the value is a field mask",
 	"c1i automations create --display-name":        "help mentions --body-file; the value is a name",
 	"c1i policies create --display-name":           "help mentions --body-file; the value is a name",

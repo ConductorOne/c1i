@@ -139,6 +139,7 @@ func TestEveryUserRefFlagIsCheckedOrExempt(t *testing.T) {
 var userRefCases = map[string][]string{
 	"c1i accounts set-owner --user-id":         {"accounts", "set-owner", "au1", "--app-id", "app1", "--user-id"},
 	"c1i apps add-owner --user-id":             {"apps", "add-owner", "app1", "--user-id"},
+	"c1i connectors create --user-id":          {"connectors", "create", "--app-id", "app1", "--catalog-id", "cat1", "--user-id"},
 	"c1i apps set-owners --user-id":            {"apps", "set-owners", "app1", "--user-id"},
 	"c1i entitlements add-owner --user-id":     {"entitlements", "add-owner", "ent1", "--app-id", "app1", "--user-id"},
 	"c1i entitlements set-owners --user-id":    {"entitlements", "set-owners", "ent1", "--app-id", "app1", "--user-id"},

@@ -522,6 +522,17 @@ resource with `--resource-id` likewise means you drop
   (a list read right after register can omit it for a second or two; a timeout
   exits 1). A register response with no server id exits 6, with or without
   `--wait`.
+- `connectors create` makes a connector without a config; set it with
+  `connectors update <id> --app-id A --body-file <file> --update-mask config`,
+  the file being `connectors get` output with `.config` edited and `expanded`,
+  `appPath`, `capabilitiesPath`, `usersPath` deleted (else 400). Update ignored
+  a displayName/description mask in the runs checked. `connectors delete` refuses a connector backing an MCP
+  server (exit 2; use `mcp servers delete`, which also removes its toolsets).
+  `connectors sync` only queues a sync; poll `connectors sync-status`.
+  `connectors schedule --cron X [--timezone Z] [--justification R]` or
+  `--clear`. `connectors credentials rotate` prints `.clientSecret` once and
+  leaves the previous credential valid for days; end it with `credentials
+  revoke`.
 - Promote a connector-discovered app to a managed one with `apps managed-state
   list|get|promote` (`--app-id` the connector app, `--resource-type-id` its
   resource type named `app`, from `apps resource-types list --app-id`;

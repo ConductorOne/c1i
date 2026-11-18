@@ -57,6 +57,11 @@ const (
 	tblStep       = "Resolved policy step: step-9\n"
 )
 
+const (
+	tblConnector    = `{"connectorView":{"connector":{"id":"cn1","appId":"a1","displayName":"zz"},"appPath":"","capabilitiesPath":"","usersPath":""},"expanded":[]}`
+	tblConnectorDoc = `{"id":"cn1","appId":"a1","displayName":"zz","expanded":[],"appPath":"","capabilitiesPath":"","usersPath":""}`
+)
+
 // tblTask is a TaskView envelope with the given action-id sibling ("" for
 // none), and tblTaskDoc what it unwraps to.
 func tblTask(action string) string {
@@ -168,6 +173,18 @@ var mutationTable = []mutationRow{
 	{cmd: "automations circuit-breaker resolve-paused", args: []string{"a-1", "--decision", "cancel", "--reason", "r"}, body: `{"bulkActionId":"b1"}`, ids: []string{".bulkActionId"},
 		method: "POST", path: "/api/v1/automations/a-1/circuit_breaker/resolve_paused"},
 	{cmd: "automations executions terminate", args: []string{"7"}, body: `{}`, method: "POST", path: "/api/v1/automation_executions/7/actions/terminate"},
+	// connectors
+	{cmd: "connectors create", args: []string{"--app-id", "a1", "--catalog-id", "cat1"}, body: tblConnector, want: tblConnectorDoc, ids: idPath, method: "POST", path: "/api/v1/apps/a1/connectors"},
+	{cmd: "connectors update", args: []string{"cn1", "--app-id", "a1", "--body-file", `@{"config":{}}`, "--update-mask", "config"}, body: tblConnector, want: tblConnectorDoc, ids: idPath, method: "POST", path: "/api/v1/apps/a1/connectors/cn1"},
+	{cmd: "connectors delete", args: []string{"cn1", "--app-id", "a1"}, body: `{}`, method: "DELETE", path: "/api/v1/apps/a1/connectors/cn1", reads: 1},
+	{cmd: "connectors sync", args: []string{"cn1", "--app-id", "a1"}, body: `{}`, method: "POST", path: "/api/v1/apps/a1/connectors/cn1/force_sync"},
+	{cmd: "connectors pause", args: []string{"cn1", "--app-id", "a1"}, body: `{}`, method: "POST", path: "/api/v1/apps/a1/connectors/cn1/pause"},
+	{cmd: "connectors resume", args: []string{"cn1", "--app-id", "a1"}, body: `{}`, method: "POST", path: "/api/v1/apps/a1/connectors/cn1/resume"},
+	{cmd: "connectors schedule", args: []string{"cn1", "--app-id", "a1", "--cron", "0 3 * * *"}, body: `{}`, method: "POST", path: "/api/v1/apps/a1/connectors/cn1/schedule"},
+	{cmd: "connectors credentials rotate", args: []string{"--app-id", "a1", "--connector-id", "cn1"},
+		body: `{"credential":{"id":"cr-1","clientId":"cid","clientSecret":"s3"}}`, want: `{"id":"cr-1","clientId":"cid","clientSecret":"s3"}`,
+		ids: []string{".id", ".clientId", ".clientSecret"}, method: "POST", path: "/api/v1/apps/connectors/credentials"},
+	{cmd: "connectors credentials revoke", args: []string{"cr-1", "--app-id", "a1", "--connector-id", "cn1"}, body: `{}`, method: "POST", path: "/api/v1/apps/a1/connectors/cn1/credentials/cr-1"},
 	// entitlements
 	{cmd: "entitlements create", args: []string{"--app-id", "app-1", "--display-name", "e", "--resource-type-id", "rt-1", "--resource-id", "r-1"},
 		body: tblEnt, want: tblEntDoc, ids: []string{".id", ".appResourceTypeId", ".appResourceId"}, method: "POST", path: "/api/v1/apps/app-1/entitlements"},
@@ -268,7 +285,7 @@ var mutationTable = []mutationRow{
 
 // tblGet answers every pre-send read: the policy-step, user, catalog-id and
 // self lookups.
-const tblGet = `{"taskView":{"task":{"id":"task-1","policy":{"current":{"id":"step-9"}}}},"user":{"id":"u1"},"userId":"self-1",` +
+const tblGet = `{"connectorView":{"connector":{"id":"cn1","config":{"@type":"type.googleapis.com/c1.api.app.v1.EnvConfig"}}},"taskView":{"task":{"id":"task-1","policy":{"current":{"id":"step-9"}}}},"user":{"id":"u1"},"userId":"self-1",` +
 	`"list":[{"id":"ty-1","displayName":"Department","appUserProfile":{}}],` +
 	`"attribute":{"userAttributeMapping":{"id":"map-1","attributeType":{"id":"ty-1","displayName":"Department","appUserProfile":{"appId":"app-1","appUserProfileAttributeKey":"department"}}}}}`
 
