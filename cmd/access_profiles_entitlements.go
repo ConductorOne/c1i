@@ -228,8 +228,14 @@ func parseAppRefs(raw []any, field string, shape appRefShape) ([]appRef, error) 
 		if len(ref) != 2 {
 			return nil, &usageError{fmt.Errorf("%s[%d] must be %s %s with exactly appId and %s", field, i, shape.article, shape.name, shape.idKey)}
 		}
-		appID, appOK := ref["appId"].(string)
-		id, idOK := ref[shape.idKey].(string)
+		appID, appOK, err := bodyFieldAs[string](ref, "appId")
+		if err != nil {
+			return nil, err
+		}
+		id, idOK, err := bodyFieldAs[string](ref, shape.idKey)
+		if err != nil {
+			return nil, err
+		}
 		if !appOK || !idOK || appID == "" || id == "" {
 			return nil, &usageError{fmt.Errorf("%s[%d] must be %s %s with non-empty appId and %s", field, i, shape.article, shape.name, shape.idKey)}
 		}

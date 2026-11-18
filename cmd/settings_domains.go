@@ -46,7 +46,11 @@ Prints the response as pretty JSON: {"list": [...]} with the resulting set.`,
 			}
 			// A missing or null list must not read as "empty the set"; only an
 			// explicit [] does.
-			if _, ok := body["newDomains"].([]any); !ok {
+			_, ok, err := bodyFieldAs[[]any](body, "newDomains")
+			if err != nil {
+				return err
+			}
+			if !ok {
 				return &usageError{fmt.Errorf(`--body-file must set "newDomains" to an array; send {"newDomains": []} to empty the set`)}
 			}
 		} else {

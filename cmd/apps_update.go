@@ -74,7 +74,10 @@ func readAppUserMapperFile(cmd *cobra.Command, path string) (map[string]any, err
 	if err := json.Unmarshal(data, &mapper); err != nil || mapper == nil {
 		return nil, fmt.Errorf(`--app-user-mapper-file must be a JSON object like {"mappingCases":[{"userKeyCel":"...","appUserKeyCel":"..."}]}`)
 	}
-	cases, ok := mapper["mappingCases"].([]any)
+	cases, ok, err := bodyFieldAs[[]any](mapper, "mappingCases")
+	if err != nil {
+		return nil, err
+	}
 	if !ok || len(cases) == 0 {
 		// The server accepts an empty mapper with exit 0 and keeps the old one.
 		return nil, fmt.Errorf("--app-user-mapper-file: mappingCases must be a non-empty array (an empty mapper does not remove the existing one)")
@@ -85,10 +88,12 @@ func readAppUserMapperFile(cmd *cobra.Command, path string) (map[string]any, err
 	}
 	for i, obj := range objs {
 		for _, k := range []string{"userKeyCel", "appUserKeyCel"} {
-			if v, present := obj[k]; present {
-				if _, isStr := v.(string); !isStr {
-					return nil, fmt.Errorf("--app-user-mapper-file: mappingCases[%d].%s must be a string", i, k)
-				}
+			v, key, err := bodyField(obj, k)
+			if err != nil {
+				return nil, err
+			}
+			if _, isStr := v.(string); key != "" && !isStr {
+				return nil, fmt.Errorf("--app-user-mapper-file: mappingCases[%d].%s must be a string", i, key)
 			}
 		}
 	}

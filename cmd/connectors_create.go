@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"errors"
+	"fmt"
 	"net/http"
 
 	"github.com/ConductorOne/c1i/internal/client"
@@ -63,8 +64,8 @@ func buildConnectorCreateBody(cmd *cobra.Command) (map[string]any, string, []str
 		if err != nil {
 			return nil, "", nil, err
 		}
-		ids, err := bodyUserIDs(body)
-		return body, "body-file userIds", ids, err
+		ids, key, err := bodyUserIDs(body)
+		return body, "body-file " + key, ids, err
 	}
 	if !flagGiven(cmd, "catalog-id") {
 		return nil, "", nil, &usageError{errors.New("--catalog-id is required (or pass --body-file)")}
@@ -87,25 +88,26 @@ func buildConnectorCreateBody(cmd *cobra.Command) (map[string]any, string, []str
 	return body, "user-id", ids, nil
 }
 
-// bodyUserIDs reads a body file's userIds, which must be an array of strings.
-func bodyUserIDs(body map[string]any) ([]string, error) {
-	raw, ok := body["userIds"]
-	if !ok {
-		return nil, nil
+// bodyUserIDs reads a body file's userIds, which must be an array of strings,
+// and the key they were under.
+func bodyUserIDs(body map[string]any) ([]string, string, error) {
+	raw, key, err := bodyField(body, "userIds")
+	if err != nil || key == "" {
+		return nil, "userIds", err
 	}
 	arr, ok := raw.([]any)
 	if !ok {
-		return nil, &usageError{errors.New("--body-file userIds must be an array of user id strings")}
+		return nil, key, &usageError{fmt.Errorf("--body-file %s must be an array of user id strings", key)}
 	}
 	ids := make([]string, 0, len(arr))
 	for _, v := range arr {
 		s, ok := v.(string)
 		if !ok || !hasVisibleRune(s) {
-			return nil, &usageError{errors.New("--body-file userIds must be an array of non-blank user id strings")}
+			return nil, key, &usageError{fmt.Errorf("--body-file %s must be an array of non-blank user id strings", key)}
 		}
 		ids = append(ids, s)
 	}
-	return ids, nil
+	return ids, key, nil
 }
 
 func init() {

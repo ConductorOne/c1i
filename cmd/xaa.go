@@ -202,14 +202,20 @@ func xaaResourceServerCheck(appID, rsID string) preRead {
 // claimsHookCheck refuses a modifyClaimsHook whose functionId, or commitId
 // under it, does not exist (exit 4): the server stores either, and the API
 // spec says the hook then denies every grant. It reads nothing when obj names
-// no function.
-func claimsHookCheck(obj map[string]any) preRead {
-	hookV, _ := bodyField(obj, "modifyClaimsHook")
-	hook, _ := hookV.(map[string]any)
-	fnV, _ := bodyField(hook, "functionId")
-	fnID, _ := fnV.(string)
-	commitV, _ := bodyField(hook, "commitId")
-	commitID, _ := commitV.(string)
+// no function. A field set in both spellings is an error before any request.
+func claimsHookCheck(obj map[string]any) (preRead, error) {
+	hook, _, err := bodyFieldAs[map[string]any](obj, "modifyClaimsHook")
+	if err != nil {
+		return preRead{}, err
+	}
+	fnID, _, err := bodyFieldAs[string](hook, "functionId")
+	if err != nil {
+		return preRead{}, err
+	}
+	commitID, _, err := bodyFieldAs[string](hook, "commitId")
+	if err != nil {
+		return preRead{}, err
+	}
 	return preRead{Run: func(ctx context.Context, c *client.Client, _ *mutation) ([]resolvedID, error) {
 		if fnID == "" {
 			return nil, nil
@@ -231,7 +237,7 @@ func claimsHookCheck(obj map[string]any) preRead {
 			return nil, nil
 		}
 		return nil, check(client.Path("/api/v1/functions/%s/commits/%s", fnID, commitID), "body-file modifyClaimsHook.commitId", commitID, "commit of function "+strconv.Quote(fnID))
-	}}
+	}}, nil
 }
 
 // requiredFill is requiredFieldsFill for one object of k.

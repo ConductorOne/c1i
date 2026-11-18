@@ -206,6 +206,11 @@ intended non-GET REST write.`,
 				if bodyObj == nil {
 					return errNullBody
 				}
+				if paginate {
+					if _, _, err := bodyField(bodyObj, "pageToken"); err != nil {
+						return err
+					}
+				}
 			}
 		default:
 			return fmt.Errorf("unsupported method: %s (use GET, POST, PUT, PATCH, or DELETE)", method)
@@ -222,7 +227,9 @@ intended non-GET REST write.`,
 				obj := bodyObj
 				if paginate && token != "" {
 					obj = cloneJSONObject(bodyObj)
-					obj["pageToken"] = token
+					if err := setBodyField(obj, "pageToken", token); err != nil {
+						return nil, err
+					}
 				}
 				b, err := json.Marshal(obj)
 				if err != nil {

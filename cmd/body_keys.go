@@ -89,7 +89,9 @@ func ownBodyKeys(cmd *cobra.Command, flag string, groups ...[]ownedKey) {
 // refuseCLIOwnedBodyKeys fails with a usage error naming every key of body
 // that the command owns on `flag` and may not carry: any value of a flag-owned
 // key (null included), and any value of a positional-owned key other than
-// that positional as a string.
+// that positional as a string. A key matches in either spelling the server
+// accepts (fieldSpellings), so declaring one covers both; a body carrying
+// both is refused.
 func refuseCLIOwnedBodyKeys(cmd *cobra.Command, flag string, body map[string]any) error {
 	f := cmd.Flags().Lookup(flag)
 	if f == nil {
@@ -102,37 +104,41 @@ func refuseCLIOwnedBodyKeys(cmd *cobra.Command, flag string, body map[string]any
 	// first-declared one.
 	canonical := map[int]string{}
 	equal := map[int][]string{}
+	claimed := map[string]bool{}
 	for _, e := range f.Annotations[ownedBodyFieldsAnnotation] {
 		p := strings.Split(e, "\x1f")
-		key, owner, arg := p[0], p[1], p[2]
+		declared, owner, arg := p[0], p[1], p[2]
 		var pos int
 		if arg != "" {
 			pos, _ = strconv.Atoi(p[3])
 			if _, seen := canonical[pos]; !seen {
-				canonical[pos] = key
+				canonical[pos] = declared
 			}
 		}
-		value, ok := body[key]
-		if !ok {
-			continue
-		}
-		if arg == "" {
-			keys = append(keys, key)
-			owners = appendUnique(owners, owner)
-			continue
-		}
-		if pos < len(positionals) {
-			if s, isString := value.(string); isString && s == positionals[pos] {
-				equal[pos] = append(equal[pos], key)
+		for _, key := range bodyKeys(body, declared) {
+			if claimed[key] {
 				continue
 			}
+			claimed[key] = true
+			if arg == "" {
+				keys = append(keys, key)
+				owners = appendUnique(owners, owner)
+				continue
+			}
+			value := body[key]
+			if pos < len(positionals) {
+				if s, isString := value.(string); isString && s == positionals[pos] {
+					equal[pos] = append(equal[pos], key)
+					continue
+				}
+			}
+			given, _ := json.Marshal(value)
+			want := "(unavailable)"
+			if pos < len(positionals) {
+				want = strconv.Quote(positionals[pos])
+			}
+			mismatches = append(mismatches, fmt.Sprintf("--%s %s is %s but %s is %s; remove it or set it to the argument", flag, key, given, owner, want))
 		}
-		given, _ := json.Marshal(value)
-		want := "(unavailable)"
-		if pos < len(positionals) {
-			want = strconv.Quote(positionals[pos])
-		}
-		mismatches = append(mismatches, fmt.Sprintf("--%s %s is %s but %s is %s; remove it or set it to the argument", flag, key, given, owner, want))
 	}
 	var msgs []string
 	if len(keys) > 0 {
@@ -145,6 +151,12 @@ func refuseCLIOwnedBodyKeys(cmd *cobra.Command, flag string, body map[string]any
 	msgs = append(msgs, mismatches...)
 	if len(msgs) > 0 {
 		return &usageError{errors.New(strings.Join(msgs, "; "))}
+	}
+	for _, present := range equal {
+		if len(present) > 1 { // both spellings, each equal to the positional
+			_, _, err := bodyField(body, present[0])
+			return err
+		}
 	}
 	for pos, present := range equal {
 		for _, k := range present {

@@ -193,6 +193,20 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   template and sends the camelCase field beside it. A masked `policy_id` is
   looked up like `policyId` (unknown exits `4`, a non-certify policy `2`), and
   a blank value exits `2` in either spelling.
+- Every check c1i makes on a `--*-file` JSON object now reads a field in either
+  spelling the API accepts (`policyId` or `policy_id`), nested fields included.
+  A snake_case key used to skip the check and send the request: the id lookups
+  in `access-reviews templates create`, `connectors create`, `entitlements
+  automation create` and the six `scope set*` commands, and the policy guards
+  in `policies create|update` (an empty or missing baseline step, an
+  unspecified type, approver fallback and agent rules, rule outcomes). Valid
+  snake_case bodies that c1i refused with exit `2` are now sent, and fills no
+  longer add a second spelling of a field the file sets (`functions update`,
+  `mcp servers update-credentials`, `api --paginate`). A file that sets a
+  field c1i checks in both spellings exits `2` before anything is sent; the
+  API refuses any field sent in both with 400 "duplicate field". Only those
+  two spellings name a field: the API refuses `PageSize` or `PAGE_SIZE` as an
+  unknown field, and c1i does not read them as one.
 - `functions create|update --file` now refuses a path containing a control
   character, like every other file-valued flag (exit `2`, nothing sent).
 

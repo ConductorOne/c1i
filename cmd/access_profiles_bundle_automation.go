@@ -132,40 +132,53 @@ func validateBundleAutomationBody(body map[string]any) error {
 		return &usageError{fmt.Errorf("bundle automation body must be a JSON object")}
 	}
 
-	for key, value := range body {
-		switch key {
-		case "createTasks", "disableCircuitBreaker", "enabled":
-			if _, ok := value.(bool); !ok {
-				return &usageError{fmt.Errorf("%s must be a JSON boolean", key)}
-			}
-		case "entitlements":
-			if value == nil {
-				continue
-			}
-			entitlements, ok := value.(map[string]any)
-			if !ok {
-				return &usageError{fmt.Errorf("entitlements must be a JSON object")}
-			}
-			for nestedKey, nestedValue := range entitlements {
-				if nestedKey != "entitlementRefs" {
-					return &usageError{fmt.Errorf("entitlements contains unsupported field %q", nestedKey)}
-				}
-				if nestedValue == nil {
-					continue
-				}
-				refs, ok := nestedValue.([]any)
-				if !ok {
-					return &usageError{fmt.Errorf("entitlements.entitlementRefs must be a JSON array")}
-				}
-				if err := validateAppEntitlementRefs(refs, "--body-file entitlements.entitlementRefs"); err != nil {
-					return err
-				}
-			}
-		default:
+	for key := range body {
+		known := false
+		for _, field := range []string{"createTasks", "disableCircuitBreaker", "enabled", "entitlements"} {
+			known = known || isFieldSpelling(key, field)
+		}
+		if !known {
 			return &usageError{fmt.Errorf("unsupported bundle automation field %q", key)}
 		}
 	}
-	if v, ok := body["entitlements"]; !ok || v == nil {
+	for _, field := range []string{"createTasks", "disableCircuitBreaker", "enabled"} {
+		value, key, err := bodyField(body, field)
+		if err != nil {
+			return err
+		}
+		if _, ok := value.(bool); key != "" && !ok {
+			return &usageError{fmt.Errorf("%s must be a JSON boolean", key)}
+		}
+	}
+	value, _, err := bodyField(body, "entitlements")
+	if err != nil {
+		return err
+	}
+	if value != nil {
+		entitlements, ok := value.(map[string]any)
+		if !ok {
+			return &usageError{fmt.Errorf("entitlements must be a JSON object")}
+		}
+		for nestedKey := range entitlements {
+			if !isFieldSpelling(nestedKey, "entitlementRefs") {
+				return &usageError{fmt.Errorf("entitlements contains unsupported field %q", nestedKey)}
+			}
+		}
+		nestedValue, nestedKey, err := bodyField(entitlements, "entitlementRefs")
+		if err != nil {
+			return err
+		}
+		if nestedValue != nil {
+			refs, ok := nestedValue.([]any)
+			if !ok {
+				return &usageError{fmt.Errorf("entitlements.%s must be a JSON array", nestedKey)}
+			}
+			if err := validateAppEntitlementRefs(refs, "--body-file entitlements."+nestedKey); err != nil {
+				return err
+			}
+		}
+	}
+	if value == nil {
 		return &usageError{fmt.Errorf("entitlements is required: it carries the automation's conditions, which the server demands even to disable it (pass {\"entitlementRefs\":[]} for none)")}
 	}
 	return nil

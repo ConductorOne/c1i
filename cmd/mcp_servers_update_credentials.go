@@ -146,7 +146,11 @@ For a hosted server without --catalog-id, c1i first looks the catalog id up
 		// authenticates, including on --dry-run.
 		var opts []mutationOpt
 		if wrapperKey == "hostedConfig" && len(cfg) > 0 {
-			if _, ok := cfg["mcpServerCatalogId"]; !ok {
+			_, catKey, err := bodyField(cfg, "mcpServerCatalogId")
+			if err != nil {
+				return err
+			}
+			if catKey == "" {
 				opts = append(opts, withPreRead(preRead{Run: func(ctx context.Context, c *client.Client, _ *mutation) ([]resolvedID, error) {
 					catID, err := resolveMCPServerCatalogID(ctx, c, appID, connectorID)
 					if err != nil {

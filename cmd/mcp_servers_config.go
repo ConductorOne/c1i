@@ -309,43 +309,46 @@ func sharedAuthFlagsChanged(cmd *cobra.Command) bool {
 	return false
 }
 
-// configHeaderSpec lists the auth-arm fields that reach an HTTP header, with
-// both spellings protobuf JSON accepts for the arm and for each field.
+// configHeaderSpec lists the auth-arm fields that reach an HTTP header.
 var configHeaderSpec = []struct {
-	arm    [2]string
+	arm    string
 	fields []struct {
-		name   [2]string
+		name   string
 		isName bool
 	}
 }{
-	{[2]string{"customHeader", "custom_header"}, []struct {
-		name   [2]string
+	{"customHeader", []struct {
+		name   string
 		isName bool
-	}{{[2]string{"headerName", "header_name"}, true}, {[2]string{keyHeaderValue, "header_value"}, false}}},
-	{[2]string{"bearerToken", "bearer_token"}, []struct {
-		name   [2]string
+	}{{"headerName", true}, {keyHeaderValue, false}}},
+	{"bearerToken", []struct {
+		name   string
 		isName bool
-	}{{[2]string{keyToken, keyToken}, false}}},
-	{[2]string{"awsSigv4", "aws_sigv4"}, []struct {
-		name   [2]string
+	}{{keyToken, false}}},
+	{"awsSigv4", []struct {
+		name   string
 		isName bool
-	}{{[2]string{"accessKeyId", "access_key_id"}, false}, {[2]string{keySessionToken, "session_token"}, false}}},
+	}{{"accessKeyId", false}, {keySessionToken, false}}},
 }
 
 // checkConfigHeaders applies checkHeaderText to the header-bound auth fields of
-// a config read from a file, which bypasses the flag checks, in every arm and
-// field spelling. wrapper names the config in the error path.
+// a config read from a file, which bypasses the flag checks, in either
+// spelling. wrapper names the config in the error path.
 func checkConfigHeaders(wrapper string, cfg map[string]any) error {
 	for _, spec := range configHeaderSpec {
-		for _, armName := range spec.arm {
-			arm, _ := cfg[armName].(map[string]any)
-			for _, f := range spec.fields {
-				for _, fieldName := range f.name {
-					if text, ok := arm[fieldName].(string); ok {
-						if err := checkHeaderText(wrapper+"."+armName+"."+fieldName, "", text, f.isName); err != nil {
-							return err
-						}
-					}
+		armV, armKey, err := bodyField(cfg, spec.arm)
+		if err != nil {
+			return err
+		}
+		arm, _ := armV.(map[string]any)
+		for _, f := range spec.fields {
+			v, key, err := bodyField(arm, f.name)
+			if err != nil {
+				return err
+			}
+			if text, ok := v.(string); ok {
+				if err := checkHeaderText(wrapper+"."+armKey+"."+key, "", text, f.isName); err != nil {
+					return err
 				}
 			}
 		}

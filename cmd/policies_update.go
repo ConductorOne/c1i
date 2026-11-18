@@ -140,9 +140,16 @@ func buildPolicyUpdateBody(cmd *cobra.Command, id string, in policyUpdateInputs,
 		return nil, &usageError{err}
 	}
 
-	effectivePolicyType, _ := policy["policyType"].(string)
+	effectivePolicyType, _, err := bodyFieldAs[string](policy, "policyType")
+	if err != nil {
+		return nil, err
+	}
 	if effectivePolicyType == "" {
-		if _, hasSteps := policy["policySteps"].(map[string]any); hasSteps {
+		_, hasSteps, err := bodyFieldAs[map[string]any](policy, "policySteps")
+		if err != nil {
+			return nil, err
+		}
+		if hasSteps {
 			effectivePolicyType, err = resolve()
 			if err != nil {
 				return nil, err
@@ -231,9 +238,11 @@ func policyUpdateSpecFor(in policyUpdateInputs, typeOf func() (string, error)) *
 				if !cmd.Flags().Changed("steps-file") {
 					return nil, nil
 				}
-				policyType, _ := policy["policyType"].(string)
+				policyType, _, err := bodyFieldAs[string](policy, "policyType")
+				if err != nil {
+					return nil, err
+				}
 				if policyType == "" {
-					var err error
 					if policyType, err = typeOf(); err != nil {
 						return nil, err
 					}
