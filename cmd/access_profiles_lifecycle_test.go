@@ -146,6 +146,7 @@ func TestAccessProfilesUpdateSendsEscapedWrappedPatch(t *testing.T) {
 	_ = accessProfilesUpdateCmd.Flags().Set("visible-to-everyone", "false")
 
 	var out bytes.Buffer
+	restoreCmdWriters(t)
 	accessProfilesUpdateCmd.SetOut(&out)
 	accessProfilesUpdateCmd.SetContext(context.Background())
 	if err := accessProfilesUpdateCmd.RunE(accessProfilesUpdateCmd, []string{catalogID}); err != nil {
@@ -186,6 +187,7 @@ func TestAccessProfilesDeleteSendsEscapedDelete(t *testing.T) {
 	t.Setenv("C1I_URL", "https://example.invalid")
 
 	var out bytes.Buffer
+	restoreCmdWriters(t)
 	accessProfilesDeleteCmd.SetOut(&out)
 	accessProfilesDeleteCmd.SetContext(context.Background())
 	if err := accessProfilesDeleteCmd.RunE(accessProfilesDeleteCmd, []string{catalogID}); err != nil {

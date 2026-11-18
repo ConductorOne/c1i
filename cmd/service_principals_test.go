@@ -233,6 +233,7 @@ func TestServicePrincipalsCreateSendsBody(t *testing.T) {
 	_ = servicePrincipalsCreateCmd.Flags().Set("display-name", "payments")
 
 	var out bytes.Buffer
+	restoreCmdWriters(t)
 	servicePrincipalsCreateCmd.SetOut(&out)
 	t.Cleanup(func() { servicePrincipalsCreateCmd.SetOut(nil) })
 	servicePrincipalsCreateCmd.SetContext(context.Background())
@@ -270,6 +271,7 @@ func TestServicePrincipalsCredentialsCreateHitsNestedPath(t *testing.T) {
 	_ = spCredentialsCreateCmd.Flags().Set("display-name", "ci")
 
 	var out bytes.Buffer
+	restoreCmdWriters(t)
 	spCredentialsCreateCmd.SetOut(&out)
 	t.Cleanup(func() { spCredentialsCreateCmd.SetOut(nil) })
 	spCredentialsCreateCmd.SetContext(context.Background())
@@ -306,6 +308,7 @@ func TestServicePrincipalsListAutoPaginates(t *testing.T) {
 	t.Setenv("C1I_URL", "https://example.invalid")
 
 	var out bytes.Buffer
+	restoreCmdWriters(t)
 	servicePrincipalsListCmd.SetOut(&out)
 	t.Cleanup(func() { servicePrincipalsListCmd.SetOut(nil) })
 	servicePrincipalsListCmd.SetContext(context.Background())

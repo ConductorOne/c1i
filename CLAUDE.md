@@ -37,6 +37,13 @@ go test -count=1 -shuffle=on ./...     # CI gates on this; catches tests that
                                        # leak package-level command state
 ```
 
+A test that sets a command's out/err/in writer directly (`SetOut` etc.) must
+call `restoreCmdWriters(t)` (`cmd/writer_guard_test.go`): cobra keeps the writer
+on the shared command, so a later test running it writes into a dead buffer.
+`TestMain` fails the run if any writer is still set after all tests
+(`checkWritersAfterRun`); it runs once, so a leak a later test happens to clear is
+not caught — the restore is the real fix.
+
 One shuffled run proves only its own seed. Before pushing, sweep seeds in a
 clean environment (no `C1I_*` variables, an empty HOME), as CI runs. Build the
 `./cmd` test binary once and run each seed from `cmd/` against it; each run is

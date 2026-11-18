@@ -171,6 +171,7 @@ func TestAppsUpdateWire(t *testing.T) {
 	stubCatalogClient(t, srv)
 	withCatalogDryRun(t, false)
 	t.Setenv("C1I_URL", "https://example.invalid")
+	restoreCmdWriters(t)
 	appsUpdateCmd.SetIn(strings.NewReader(testMapperJSON))
 	t.Cleanup(func() { appsUpdateCmd.SetIn(nil) })
 
@@ -212,6 +213,7 @@ func TestAppsUpdateDryRunSendsNothing(t *testing.T) {
 	t.Setenv("C1I_URL", "https://example.invalid")
 
 	var out bytes.Buffer
+	restoreCmdWriters(t)
 	appsUpdateCmd.SetOut(&out)
 	appsUpdateCmd.SetContext(context.Background())
 	t.Cleanup(func() { appsUpdateCmd.SetOut(nil) })

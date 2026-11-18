@@ -108,6 +108,7 @@ func TestGuideRegistryLookup(t *testing.T) {
 func TestDocsGuideCmdKnownName(t *testing.T) {
 	cmd := docsGuideCmd
 	buf := &bytes.Buffer{}
+	restoreCmdWriters(t)
 	cmd.SetOut(buf)
 	cmd.SetErr(&bytes.Buffer{})
 
@@ -124,6 +125,7 @@ func TestDocsGuideCmdKnownName(t *testing.T) {
 func TestDocsGuideCmdNoArgListsNames(t *testing.T) {
 	cmd := docsGuideCmd
 	buf := &bytes.Buffer{}
+	restoreCmdWriters(t)
 	cmd.SetOut(buf)
 	cmd.SetErr(&bytes.Buffer{})
 
@@ -146,6 +148,7 @@ func TestDocsGuideCmdNoArgListsNames(t *testing.T) {
 // and its message must name the requested guide.
 func TestDocsGuideCmdUnknownName(t *testing.T) {
 	cmd := docsGuideCmd
+	restoreCmdWriters(t)
 	cmd.SetOut(&bytes.Buffer{})
 	cmd.SetErr(&bytes.Buffer{})
 

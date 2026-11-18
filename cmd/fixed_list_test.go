@@ -52,6 +52,7 @@ func runFixedList(t *testing.T, cmd *cobra.Command, body string, flags map[strin
 		}
 	}
 	var out, errOut bytes.Buffer
+	restoreCmdWriters(t)
 	cmd.SetOut(&out)
 	cmd.SetErr(&errOut)
 	t.Cleanup(func() { cmd.SetOut(nil); cmd.SetErr(nil) })

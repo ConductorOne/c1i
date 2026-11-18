@@ -35,6 +35,7 @@ func runTaskActionCmd(t *testing.T, cmd *cobra.Command, srv *httptest.Server, ta
 	t.Setenv("C1I_URL", "https://example.invalid")
 
 	var out bytes.Buffer
+	restoreCmdWriters(t)
 	cmd.SetOut(&out)
 	cmd.SetContext(context.Background())
 	err := cmd.RunE(cmd, []string{taskID})
@@ -373,6 +374,7 @@ func TestTasksReassignDryRunLooksUpUsers(t *testing.T) {
 	withDryRun(t)
 
 	var out bytes.Buffer
+	restoreCmdWriters(t)
 	tasksReassignCmd.SetOut(&out)
 	t.Cleanup(func() { tasksReassignCmd.SetOut(nil) })
 	tasksReassignCmd.SetContext(context.Background())

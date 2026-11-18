@@ -72,6 +72,7 @@ func TestPoliciesUpdateSendsWrappedBody(t *testing.T) {
 	_ = policiesUpdateCmd.Flags().Set("display-name", "new name")
 
 	var out bytes.Buffer
+	restoreCmdWriters(t)
 	policiesUpdateCmd.SetOut(&out)
 	policiesUpdateCmd.SetContext(context.Background())
 
@@ -123,6 +124,7 @@ func TestPoliciesUpdateDryRunPreviewsWrappedBodyWithoutSending(t *testing.T) {
 	_ = policiesUpdateCmd.Flags().Set("description", "new desc")
 
 	var out bytes.Buffer
+	restoreCmdWriters(t)
 	policiesUpdateCmd.SetOut(&out)
 	policiesUpdateCmd.SetContext(context.Background())
 
@@ -180,6 +182,7 @@ func TestPoliciesUpdateGuardFiresOnEmptyStepsFile(t *testing.T) {
 	_ = policiesUpdateCmd.Flags().Set("steps-file", stepsPath)
 
 	var out bytes.Buffer
+	restoreCmdWriters(t)
 	policiesUpdateCmd.SetOut(&out)
 	policiesUpdateCmd.SetContext(context.Background())
 
@@ -224,6 +227,7 @@ func TestPoliciesUpdateAllowDenyAllBypassesGuardAndSendsRequest(t *testing.T) {
 	_ = policiesUpdateCmd.Flags().Set("allow-deny-all", "true")
 
 	var out bytes.Buffer
+	restoreCmdWriters(t)
 	policiesUpdateCmd.SetOut(&out)
 	policiesUpdateCmd.SetContext(context.Background())
 
@@ -260,6 +264,7 @@ func TestPoliciesUpdateWithoutAllowDenyAllIsRefused(t *testing.T) {
 	// deliberately NOT setting --allow-deny-all
 
 	var out bytes.Buffer
+	restoreCmdWriters(t)
 	policiesUpdateCmd.SetOut(&out)
 	policiesUpdateCmd.SetContext(context.Background())
 
@@ -336,6 +341,7 @@ func TestPoliciesUpdateBodyFileResolvesPolicyTypeForAgentStepGuard(t *testing.T)
 	_ = policiesUpdateCmd.Flags().Set("update-mask", "policySteps")
 
 	var out bytes.Buffer
+	restoreCmdWriters(t)
 	policiesUpdateCmd.SetOut(&out)
 	policiesUpdateCmd.SetContext(context.Background())
 
@@ -379,6 +385,7 @@ func TestPoliciesUpdateBodyFileWithoutPolicyStepsNeverFetchesPolicyType(t *testi
 	_ = policiesUpdateCmd.Flags().Set("update-mask", "displayName")
 
 	var out bytes.Buffer
+	restoreCmdWriters(t)
 	policiesUpdateCmd.SetOut(&out)
 	policiesUpdateCmd.SetContext(context.Background())
 
@@ -508,6 +515,7 @@ func TestPoliciesNullArrayFilesExitUsage(t *testing.T) {
 				_ = tc.cmd.Flags().Set("allow-deny-all", "true")
 			}
 			_ = tc.cmd.Flags().Set(tc.flag, writeTempJSON(t, "null.json", `null`))
+			restoreCmdWriters(t)
 			tc.cmd.SetOut(&bytes.Buffer{})
 			tc.cmd.SetContext(context.Background())
 

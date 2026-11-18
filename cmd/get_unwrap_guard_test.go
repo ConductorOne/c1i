@@ -589,6 +589,7 @@ func runGetCase(t *testing.T, c getUnwrapCase) string {
 	}
 
 	var out bytes.Buffer
+	restoreCmdWriters(t)
 	c.cmd.SetOut(&out)
 	t.Cleanup(func() { c.cmd.SetOut(nil) })
 	c.cmd.SetContext(context.Background())
@@ -673,6 +674,7 @@ func TestTypedGetZeroMatchFieldsStillExitsUsage(t *testing.T) {
 	setFieldsFlag(t, "totally_bogus_field")
 
 	var out bytes.Buffer
+	restoreCmdWriters(t)
 	c.cmd.SetOut(&out)
 	t.Cleanup(func() { c.cmd.SetOut(nil) })
 	c.cmd.SetContext(context.Background())

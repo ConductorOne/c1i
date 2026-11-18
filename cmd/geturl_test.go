@@ -17,6 +17,7 @@ import (
 func runRootWithArgs(t *testing.T, args []string) error {
 	t.Helper()
 	var out bytes.Buffer
+	restoreCmdWriters(t)
 	rootCmd.SetOut(&out)
 	rootCmd.SetErr(&out)
 	rootCmd.SetArgs(args)
@@ -137,6 +138,7 @@ func TestPromptForURLBareTokenNamesInteractivePrompt(t *testing.T) {
 	cmd := &cobra.Command{Use: "test"}
 	cmd.SetContext(context.Background())
 	var out bytes.Buffer
+	restoreCmdWriters(t)
 	cmd.SetOut(&out)
 
 	_, err := promptForURL(cmd, newLineReader(strings.NewReader("acme\n")))
@@ -160,6 +162,7 @@ func TestPromptForURLValidInputUnaffected(t *testing.T) {
 	cmd := &cobra.Command{Use: "test"}
 	cmd.SetContext(context.Background())
 	var out bytes.Buffer
+	restoreCmdWriters(t)
 	cmd.SetOut(&out)
 
 	got, err := promptForURL(cmd, newLineReader(strings.NewReader("acme.conductor.one\n")))
@@ -178,6 +181,7 @@ func TestAuthLoginPromptDoesNotAdvertiseShortcut(t *testing.T) {
 	cmd := &cobra.Command{Use: "test"}
 	cmd.SetContext(context.Background())
 	var out bytes.Buffer
+	restoreCmdWriters(t)
 	cmd.SetOut(&out)
 	_, _ = promptForURL(cmd, newLineReader(strings.NewReader("acme.conductor.one\n")))
 

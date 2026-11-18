@@ -50,6 +50,7 @@ func TestProxyBindingMutationsDryRunUseEscapedDirectionalPath(t *testing.T) {
 			setProxyBindingFlags(t, tt.cmd, proxyBindingTestValues())
 
 			var out bytes.Buffer
+			restoreCmdWriters(t)
 			tt.cmd.SetOut(&out)
 			t.Cleanup(func() { tt.cmd.SetOut(nil) })
 			tt.cmd.SetContext(context.Background())
@@ -94,6 +95,7 @@ func TestProxyBindingGetUnwrapsResponseAndUsesDirectionalPath(t *testing.T) {
 	setProxyBindingFlags(t, entitlementsProxyBindingsGetCmd, proxyBindingTestValues())
 	t.Setenv("C1I_URL", "https://example.invalid")
 	var out bytes.Buffer
+	restoreCmdWriters(t)
 	entitlementsProxyBindingsGetCmd.SetOut(&out)
 	t.Cleanup(func() { entitlementsProxyBindingsGetCmd.SetOut(nil) })
 	entitlementsProxyBindingsGetCmd.SetContext(context.Background())

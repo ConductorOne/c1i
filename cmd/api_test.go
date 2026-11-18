@@ -215,6 +215,7 @@ func TestAPIDeleteBodyRefusedByDefault(t *testing.T) {
 	t.Setenv("C1I_URL", "https://example.invalid")
 
 	var out bytes.Buffer
+	restoreCmdWriters(t)
 	apiCmd.SetOut(&out)
 	apiCmd.SetErr(&out)
 	rootCmd.SetArgs([]string{
@@ -248,6 +249,7 @@ func TestAPIGetBodyRefused(t *testing.T) {
 	t.Setenv("C1I_URL", "https://example.invalid")
 
 	var out bytes.Buffer
+	restoreCmdWriters(t)
 	apiCmd.SetOut(&out)
 	apiCmd.SetErr(&out)
 	rootCmd.SetArgs([]string{
@@ -294,6 +296,7 @@ func TestAPIDeleteBodyOptInSendsBodyOnWire(t *testing.T) {
 	t.Setenv("C1I_URL", srv.URL)
 
 	var out bytes.Buffer
+	restoreCmdWriters(t)
 	apiCmd.SetOut(&out)
 	apiCmd.SetErr(&out)
 	rootCmd.SetArgs([]string{
@@ -341,6 +344,7 @@ func TestAPIDeleteBodyOptInDryRunPreviewsWithoutSending(t *testing.T) {
 	viper.Set("dry_run", true)
 
 	var out bytes.Buffer
+	restoreCmdWriters(t)
 	apiCmd.SetOut(&out)
 	apiCmd.SetErr(&out)
 	rootCmd.SetArgs([]string{
@@ -420,6 +424,7 @@ func TestAPIPaginateFieldsZeroMatchAcrossAllPagesErrors(t *testing.T) {
 	viper.Set("fields", "id")
 
 	var out bytes.Buffer
+	restoreCmdWriters(t)
 	apiCmd.SetOut(&out)
 	apiCmd.SetErr(&out)
 	rootCmd.SetArgs([]string{
@@ -464,6 +469,7 @@ func TestAPIPaginateFieldsPartialMatchAcrossPagesSucceeds(t *testing.T) {
 	viper.Set("fields", "id")
 
 	var out bytes.Buffer
+	restoreCmdWriters(t)
 	apiCmd.SetOut(&out)
 	apiCmd.SetErr(&out)
 	rootCmd.SetArgs([]string{
@@ -523,6 +529,7 @@ func TestAPIPaginateLimitWithSparseFieldsContinuesPastFilteredPage(t *testing.T)
 	viper.Set("fields", "id")
 
 	var out bytes.Buffer
+	restoreCmdWriters(t)
 	apiCmd.SetOut(&out)
 	apiCmd.SetErr(&out)
 	rootCmd.SetArgs([]string{
@@ -558,6 +565,7 @@ func TestAPIPathWithoutLeadingSlashIsUsageError(t *testing.T) {
 	t.Setenv("C1I_URL", "https://example.invalid")
 
 	var out bytes.Buffer
+	restoreCmdWriters(t)
 	apiCmd.SetOut(&out)
 	apiCmd.SetErr(&out)
 	rootCmd.SetArgs([]string{"api", "--path", "api/v1/users"})
@@ -591,6 +599,7 @@ func TestAPIPathWithLeadingSlashStillWorks(t *testing.T) {
 	t.Setenv("C1I_URL", srv.URL)
 
 	var out bytes.Buffer
+	restoreCmdWriters(t)
 	apiCmd.SetOut(&out)
 	apiCmd.SetErr(&out)
 	rootCmd.SetArgs([]string{"api", "--path", "/api/v1/users"})
@@ -624,6 +633,7 @@ func TestAPINonJSON200BodyIsError(t *testing.T) {
 	t.Setenv("C1I_URL", srv.URL)
 
 	var out bytes.Buffer
+	restoreCmdWriters(t)
 	apiCmd.SetOut(&out)
 	apiCmd.SetErr(&out)
 	rootCmd.SetArgs([]string{"api", "--path", "/api/v1/../../etc/passwd"})
@@ -654,6 +664,7 @@ func TestAPIEmpty200BodySucceeds(t *testing.T) {
 	t.Setenv("C1I_URL", srv.URL)
 
 	var out bytes.Buffer
+	restoreCmdWriters(t)
 	apiCmd.SetOut(&out)
 	apiCmd.SetErr(&out)
 	rootCmd.SetArgs([]string{"api", "--path", "/api/v1/things/1", "--method", "DELETE"})
@@ -680,6 +691,7 @@ func TestAPINormalJSONBodyStillWorks(t *testing.T) {
 	t.Setenv("C1I_URL", srv.URL)
 
 	var out bytes.Buffer
+	restoreCmdWriters(t)
 	apiCmd.SetOut(&out)
 	apiCmd.SetErr(&out)
 	rootCmd.SetArgs([]string{"api", "--path", "/api/v1/things/1"})
@@ -732,6 +744,7 @@ func TestAPITruncatedPageWarns(t *testing.T) {
 			t.Setenv("C1I_URL", srv.URL)
 
 			var out, errOut bytes.Buffer
+			restoreCmdWriters(t)
 			apiCmd.SetOut(&out)
 			apiCmd.SetErr(&errOut)
 			rootCmd.SetArgs([]string{"api", "--path", "/api/v1/catalogs"})
@@ -783,6 +796,7 @@ func TestAPIPaginateDrainsCursorWithoutWarning(t *testing.T) {
 	t.Setenv("C1I_URL", srv.URL)
 
 	var out, errOut bytes.Buffer
+	restoreCmdWriters(t)
 	apiCmd.SetOut(&out)
 	apiCmd.SetErr(&errOut)
 	rootCmd.SetArgs([]string{"api", "--path", "/api/v1/catalogs", "--paginate"})
@@ -824,6 +838,7 @@ func TestAPIPaginateSameTokenTwiceReturnsExitServer(t *testing.T) {
 	t.Setenv("C1I_URL", srv.URL)
 
 	var out, errOut bytes.Buffer
+	restoreCmdWriters(t)
 	apiCmd.SetOut(&out)
 	apiCmd.SetErr(&errOut)
 	rootCmd.SetArgs([]string{"api", "--path", "/api/v1/automations", "--paginate"})
@@ -866,6 +881,7 @@ func TestAPIPaginateKeepsItemsSharingAnIdentity(t *testing.T) {
 	t.Setenv("C1I_URL", srv.URL)
 
 	var out, errOut bytes.Buffer
+	restoreCmdWriters(t)
 	apiCmd.SetOut(&out)
 	apiCmd.SetErr(&errOut)
 	rootCmd.SetArgs([]string{"api", "--path", "/api/v1/x", "--paginate"})
@@ -908,6 +924,7 @@ func TestAPIPaginatePrintsIsolatedAllSeenPage(t *testing.T) {
 			t.Setenv("C1I_URL", srv.URL)
 
 			var out, errOut bytes.Buffer
+			restoreCmdWriters(t)
 			apiCmd.SetOut(&out)
 			apiCmd.SetErr(&errOut)
 			rootCmd.SetArgs([]string{"api", "--path", "/api/v1/x", "--paginate"})
@@ -951,6 +968,7 @@ func TestAPIPaginateChangingTokenSameRowsReturnsExitServer(t *testing.T) {
 	t.Setenv("C1I_URL", srv.URL)
 
 	var out, errOut bytes.Buffer
+	restoreCmdWriters(t)
 	apiCmd.SetOut(&out)
 	apiCmd.SetErr(&errOut)
 	rootCmd.SetArgs([]string{"api", "--path", "/api/v1/automations", "--paginate"})
@@ -1006,6 +1024,7 @@ func TestAPIPaginateStuckCursorWithoutIDFallsBackToCanonicalJSON(t *testing.T) {
 	t.Setenv("C1I_URL", srv.URL)
 
 	var out, errOut bytes.Buffer
+	restoreCmdWriters(t)
 	apiCmd.SetOut(&out)
 	apiCmd.SetErr(&errOut)
 	rootCmd.SetArgs([]string{"api", "--path", "/api/v1/decoys", "--paginate"})
@@ -1054,6 +1073,7 @@ func TestAPIPaginateSingleRepeatedPageIsNotStuck(t *testing.T) {
 	t.Setenv("C1I_URL", srv.URL)
 
 	var out, errOut bytes.Buffer
+	restoreCmdWriters(t)
 	apiCmd.SetOut(&out)
 	apiCmd.SetErr(&errOut)
 	rootCmd.SetArgs([]string{"api", "--path", "/api/v1/things", "--paginate"})
@@ -1121,6 +1141,7 @@ func TestAPIPaginateStuckCycleShapesReturnExitServer(t *testing.T) {
 			t.Setenv("C1I_URL", srv.URL)
 
 			var out, errOut bytes.Buffer
+			restoreCmdWriters(t)
 			apiCmd.SetOut(&out)
 			apiCmd.SetErr(&errOut)
 			args := []string{"api", "--path", "/api/v1/things", "--paginate"}
@@ -1168,6 +1189,7 @@ func TestAPIPaginateListKeyAbsent(t *testing.T) {
 			t.Setenv("C1I_URL", srv.URL)
 
 			var out, errOut bytes.Buffer
+			restoreCmdWriters(t)
 			apiCmd.SetOut(&out)
 			apiCmd.SetErr(&errOut)
 			rootCmd.SetArgs([]string{"api", "--path", "/api/v1/automations", "--paginate", "--list-key", "nope"})
@@ -1213,6 +1235,7 @@ func TestAPIPaginateListKeyOmittedOnLaterPage(t *testing.T) {
 	t.Setenv("C1I_URL", srv.URL)
 
 	var out, errOut bytes.Buffer
+	restoreCmdWriters(t)
 	apiCmd.SetOut(&out)
 	apiCmd.SetErr(&errOut)
 	rootCmd.SetArgs([]string{"api", "--path", "/api/v1/automations", "--paginate", "--list-key", "list"})
@@ -1315,6 +1338,7 @@ func runAPIHeldPageThenFail(t *testing.T, out io.Writer, fail func(http.Response
 	t.Setenv("C1I_URL", srv.URL)
 
 	var errOut bytes.Buffer
+	restoreCmdWriters(t)
 	apiCmd.SetOut(out)
 	apiCmd.SetErr(&errOut)
 	rootCmd.SetArgs(append([]string{"api", "--path", "/api/v1/things", "--paginate"}, extraArgs...))
@@ -1361,6 +1385,7 @@ func TestAPIPaginateNonJSONFirstPageIsExitServer(t *testing.T) {
 			t.Setenv("C1I_URL", srv.URL)
 
 			var out, errOut bytes.Buffer
+			restoreCmdWriters(t)
 			apiCmd.SetOut(&out)
 			apiCmd.SetErr(&errOut)
 			rootCmd.SetArgs([]string{"api", "--path", "/api/v1/things", "--paginate"})
@@ -1394,6 +1419,7 @@ func TestAPIPaginateListKeyNotArrayIsUsageError(t *testing.T) {
 			t.Setenv("C1I_URL", srv.URL)
 
 			var out, errOut bytes.Buffer
+			restoreCmdWriters(t)
 			apiCmd.SetOut(&out)
 			apiCmd.SetErr(&errOut)
 			rootCmd.SetArgs([]string{"api", "--path", "/api/v1/things", "--paginate", "--list-key", "foo"})
@@ -1429,6 +1455,7 @@ func TestAPINullBodyIsUsageError(t *testing.T) {
 			stubNewAPIClient(t, srv)
 			t.Setenv("C1I_URL", srv.URL)
 			var out, errOut bytes.Buffer
+			restoreCmdWriters(t)
 			apiCmd.SetOut(&out)
 			apiCmd.SetErr(&errOut)
 			rootCmd.SetArgs(append([]string{"api", "--method", "POST", "--path", "/api/v1/search/catalogs", "--body", "null"}, extra...))

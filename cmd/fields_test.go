@@ -21,6 +21,7 @@ func TestFieldPathsAndEmitterReadViper(t *testing.T) {
 
 	var buf bytes.Buffer
 	cmd := &cobra.Command{}
+	restoreCmdWriters(t)
 	cmd.SetOut(&buf)
 	if err := newEmitter(cmd).Encode(map[string]any{
 		"id": "1", "user": map[string]any{"email": "x@y.z", "name": "n"}, "drop": "gone",
@@ -226,6 +227,7 @@ func TestWriteObjectProjects(t *testing.T) {
 	t.Setenv("C1I_FIELDS", "")
 	cmd := &cobra.Command{}
 	var buf bytes.Buffer
+	restoreCmdWriters(t)
 	cmd.SetOut(&buf)
 
 	// No projection: full pretty JSON.
@@ -381,6 +383,7 @@ func TestWriteObjectFailsLoudlyOnNoMatch(t *testing.T) {
 
 	cmd := &cobra.Command{}
 	var buf bytes.Buffer
+	restoreCmdWriters(t)
 	cmd.SetOut(&buf)
 
 	err := writeObject(cmd, []byte(`{"userView":{"user":{"id":"1","displayName":"n"}}}`))
@@ -419,6 +422,7 @@ func TestWriteObjectPartialMatchStillSucceeds(t *testing.T) {
 
 	cmd := &cobra.Command{}
 	var buf bytes.Buffer
+	restoreCmdWriters(t)
 	cmd.SetOut(&buf)
 
 	if err := writeObject(cmd, []byte(`{"function":{"id":"1","name":"n"}}`)); err != nil {
@@ -442,6 +446,7 @@ func TestWriteRawObjectIgnoresFields(t *testing.T) {
 
 	cmd := &cobra.Command{}
 	var buf bytes.Buffer
+	restoreCmdWriters(t)
 	cmd.SetOut(&buf)
 	if err := writeRawObject(cmd, []byte(`{"deleted":3,"toolset_id":"t1"}`)); err != nil {
 		t.Fatalf("writeRawObject: %v", err)

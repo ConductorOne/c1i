@@ -53,6 +53,7 @@ func TestRoleMiningMutationsDryRun(t *testing.T) {
 				}
 			}
 			var out bytes.Buffer
+			restoreCmdWriters(t)
 			tt.cmd.SetOut(&out)
 			t.Cleanup(func() { tt.cmd.SetOut(nil) })
 			tt.cmd.SetContext(context.Background())

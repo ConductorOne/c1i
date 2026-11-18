@@ -92,6 +92,7 @@ func TestNonUTF8PositionalArgIsUsageError(t *testing.T) {
 	t.Setenv("C1I_URL", "https://example.invalid")
 
 	var out bytes.Buffer
+	restoreCmdWriters(t)
 	rootCmd.SetOut(&out)
 	rootCmd.SetErr(&out)
 	rootCmd.SetArgs([]string{"users", "get", invalidUTF8Arg})
@@ -119,6 +120,7 @@ func TestValidUTF8PositionalArgUnaffected(t *testing.T) {
 	t.Setenv("C1I_CLIENT_SECRET", "")
 
 	var out bytes.Buffer
+	restoreCmdWriters(t)
 	rootCmd.SetOut(&out)
 	rootCmd.SetErr(&out)
 	rootCmd.SetArgs([]string{"users", "get", "a-perfectly-normal-id"})
@@ -146,6 +148,7 @@ func TestNonUTF8FlagValueIsUsageError(t *testing.T) {
 	t.Setenv("C1I_URL", "https://example.invalid")
 
 	var out bytes.Buffer
+	restoreCmdWriters(t)
 	rootCmd.SetOut(&out)
 	rootCmd.SetErr(&out)
 	rootCmd.SetArgs([]string{"mcp", "servers", "get", "someid", "--app-id", invalidUTF8Arg})
@@ -174,6 +177,7 @@ func TestValidUTF8FlagValueUnaffected(t *testing.T) {
 	t.Setenv("C1I_CLIENT_SECRET", "")
 
 	var out bytes.Buffer
+	restoreCmdWriters(t)
 	rootCmd.SetOut(&out)
 	rootCmd.SetErr(&out)
 	rootCmd.SetArgs([]string{"mcp", "servers", "get", "someid", "--app-id", "a-perfectly-normal-app-id"})

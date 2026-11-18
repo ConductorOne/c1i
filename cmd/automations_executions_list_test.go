@@ -81,6 +81,7 @@ func TestAutomationsExecutionsListUnwrapsSearchItems(t *testing.T) {
 		t.Fatal(err)
 	}
 	var out strings.Builder
+	restoreCmdWriters(t)
 	automationsExecutionsListCmd.SetOut(&out)
 	automationsExecutionsListCmd.SetContext(context.Background())
 	if err := automationsExecutionsListCmd.RunE(automationsExecutionsListCmd, nil); err != nil {
@@ -120,6 +121,7 @@ func TestAutomationsExecutionsListSkipsMissingWrapper(t *testing.T) {
 
 	resetCmdFlags(t, automationsExecutionsListCmd)
 	var out strings.Builder
+	restoreCmdWriters(t)
 	automationsExecutionsListCmd.SetOut(&out)
 	automationsExecutionsListCmd.SetContext(context.Background())
 	if err := automationsExecutionsListCmd.RunE(automationsExecutionsListCmd, nil); err != nil {

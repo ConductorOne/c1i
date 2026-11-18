@@ -76,6 +76,7 @@ func runItemSearch(t *testing.T, c *cobra.Command, resp string, args ...string) 
 	resetCmdFlags(t, rootCmd)
 	resetCmds(t, c)
 	var out bytes.Buffer
+	restoreCmdWriters(t)
 	rootCmd.SetOut(&out)
 	rootCmd.SetErr(&bytes.Buffer{})
 	t.Cleanup(func() { rootCmd.SetOut(nil); rootCmd.SetErr(nil) })
@@ -197,6 +198,7 @@ func previewItemApprove(t *testing.T, group string, extra ...string) (itemPrevie
 	t.Setenv("C1I_URL", "")
 	withDryRun(t)
 	var out bytes.Buffer
+	restoreCmdWriters(t)
 	rootCmd.SetOut(&out)
 	rootCmd.SetErr(&bytes.Buffer{})
 	t.Cleanup(func() { rootCmd.SetOut(nil); rootCmd.SetErr(nil) })

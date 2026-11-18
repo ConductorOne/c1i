@@ -37,6 +37,7 @@ func automationsUpdateServer(t *testing.T, escapedPath string, got *map[string]a
 func runAutomationsUpdate(t *testing.T, id string) (string, error) {
 	t.Helper()
 	var out bytes.Buffer
+	restoreCmdWriters(t)
 	automationsUpdateCmd.SetOut(&out)
 	automationsUpdateCmd.SetContext(context.Background())
 	err := runEAfterBlankCheck(automationsUpdateCmd, []string{id})
@@ -296,6 +297,7 @@ func TestAutomationsDeleteSendsEscapedDelete(t *testing.T) {
 	t.Setenv("C1I_URL", "https://example.invalid")
 
 	var out bytes.Buffer
+	restoreCmdWriters(t)
 	automationsDeleteCmd.SetOut(&out)
 	automationsDeleteCmd.SetContext(context.Background())
 	if err := automationsDeleteCmd.RunE(automationsDeleteCmd, []string{"auto/id ?#"}); err != nil {
@@ -320,6 +322,7 @@ func TestAutomationsDeleteDryRunSendsNothing(t *testing.T) {
 	t.Setenv("C1I_URL", "https://example.invalid")
 
 	var out bytes.Buffer
+	restoreCmdWriters(t)
 	automationsDeleteCmd.SetOut(&out)
 	automationsDeleteCmd.SetContext(context.Background())
 	if err := automationsDeleteCmd.RunE(automationsDeleteCmd, []string{"a1"}); err != nil {

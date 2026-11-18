@@ -602,6 +602,7 @@ func TestRunOwnerIDsWaitWritesToStderr(t *testing.T) {
 	op.Interval = 5 * time.Millisecond
 	cmd := &cobra.Command{Use: "test"}
 	var stdout, stderr bytes.Buffer
+	restoreCmdWriters(t)
 	cmd.SetOut(&stdout)
 	cmd.SetErr(&stderr)
 	cmd.SetContext(context.Background())

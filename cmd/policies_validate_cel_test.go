@@ -27,6 +27,7 @@ func TestPoliciesValidateCelReturnsUsageErrorAndPrintsMarkers(t *testing.T) {
 	t.Setenv("C1I_URL", "https://example.invalid")
 
 	var out bytes.Buffer
+	restoreCmdWriters(t)
 	policiesValidateCelCmd.SetOut(&out)
 	policiesValidateCelCmd.SetContext(context.Background())
 
@@ -58,6 +59,7 @@ func TestPoliciesValidateCelEmptyMarkersIsValid(t *testing.T) {
 	t.Setenv("C1I_URL", "https://example.invalid")
 
 	var out bytes.Buffer
+	restoreCmdWriters(t)
 	policiesValidateCelCmd.SetOut(&out)
 	policiesValidateCelCmd.SetContext(context.Background())
 
@@ -85,6 +87,7 @@ func TestPoliciesValidateCelNullMarkersIsValid(t *testing.T) {
 	t.Setenv("C1I_URL", "https://example.invalid")
 
 	var out bytes.Buffer
+	restoreCmdWriters(t)
 	policiesValidateCelCmd.SetOut(&out)
 	policiesValidateCelCmd.SetContext(context.Background())
 

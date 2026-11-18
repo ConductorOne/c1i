@@ -10,6 +10,7 @@ import (
 
 func TestEmitGatewayToolsLimit(t *testing.T) {
 	tools := []mcpgateway.Tool{{Name: "a"}, {Name: "b"}, {Name: "c"}}
+	restoreCmdWriters(t)
 	for _, tc := range []struct {
 		limit, want int
 	}{{0, 3}, {2, 2}, {5, 3}} {

@@ -44,6 +44,7 @@ func TestFunctionsUsagePageTokenNoMatchNotice(t *testing.T) {
 				}
 			}
 			var out, errOut strings.Builder
+			restoreCmdWriters(t)
 			functionsUsageCmd.SetOut(&out)
 			functionsUsageCmd.SetErr(&errOut)
 			functionsUsageCmd.SetContext(context.Background())

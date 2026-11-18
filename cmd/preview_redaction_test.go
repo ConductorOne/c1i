@@ -25,6 +25,7 @@ func TestEveryPreviewPathRedactsSecrets(t *testing.T) {
 		t.Setenv("C1I_URL", mutTestURL)
 		var out bytes.Buffer
 		cmd := &cobra.Command{Use: "x"}
+		restoreCmdWriters(t)
 		cmd.SetOut(&out)
 		cmd.SetErr(&bytes.Buffer{})
 		cmd.SetContext(t.Context())
@@ -45,6 +46,7 @@ func TestEveryPreviewPathRedactsSecrets(t *testing.T) {
 		t.Setenv("C1I_URL", mutTestURL)
 		var out bytes.Buffer
 		cmd := &cobra.Command{Use: "x"}
+		restoreCmdWriters(t)
 		cmd.SetOut(&out)
 		cmd.SetErr(&bytes.Buffer{})
 		if err := sendMutation(cmd, mutation{Method: http.MethodPost, Path: "/api/v1/x", Body: secretBody()}); err != nil {
@@ -57,6 +59,7 @@ func TestEveryPreviewPathRedactsSecrets(t *testing.T) {
 		t.Setenv("C1I_URL", mutTestURL)
 		var out bytes.Buffer
 		cmd := &cobra.Command{Use: "x"}
+		restoreCmdWriters(t)
 		cmd.SetOut(&out)
 		cmd.SetErr(&bytes.Buffer{})
 		steps := []mutationStep{{Build: func([]string) mutation {
@@ -154,6 +157,7 @@ func TestPreviewRedactsUrlsHeadersAndKeyNames(t *testing.T) {
 			t.Setenv("C1I_URL", mutTestURL)
 			var out bytes.Buffer
 			cmd := &cobra.Command{Use: "x"}
+			restoreCmdWriters(t)
 			cmd.SetOut(&out)
 			cmd.SetErr(&bytes.Buffer{})
 			if err := sendMutation(cmd, mutation{Method: http.MethodPost, Path: "/api/v1/x", Body: tc.body}); err != nil {

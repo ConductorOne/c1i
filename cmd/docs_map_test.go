@@ -11,6 +11,7 @@ func runDocsMap(t *testing.T, args ...string) string {
 	t.Helper()
 	resetCmds(t, docsMapCmd)
 	var out bytes.Buffer
+	restoreCmdWriters(t)
 	docsMapCmd.SetOut(&out)
 	t.Cleanup(func() { docsMapCmd.SetOut(nil) })
 	if err := docsMapCmd.ParseFlags(args); err != nil {

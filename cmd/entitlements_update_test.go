@@ -31,6 +31,7 @@ func runEntitlementsUpdate(t *testing.T, srv *httptest.Server, dryRun bool, id s
 		}
 	}
 	var out bytes.Buffer
+	restoreCmdWriters(t)
 	entitlementsUpdateCmd.SetOut(&out)
 	entitlementsUpdateCmd.SetContext(context.Background())
 	err := runEAfterBlankCheck(entitlementsUpdateCmd, []string{id})

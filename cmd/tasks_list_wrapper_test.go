@@ -45,6 +45,7 @@ func TestTaskListsSkipMissingTaskWrapper(t *testing.T) {
 				}
 			}
 			var out strings.Builder
+			restoreCmdWriters(t)
 			tc.cmd.SetOut(&out)
 			tc.cmd.SetContext(context.Background())
 			if err := tc.cmd.RunE(tc.cmd, nil); err != nil {
@@ -90,6 +91,7 @@ func TestTaskListsAllMissingWrappersIsUnrecognizedShape(t *testing.T) {
 				}
 			}
 			var out strings.Builder
+			restoreCmdWriters(t)
 			tc.cmd.SetOut(&out)
 			tc.cmd.SetErr(&out)
 			tc.cmd.SetContext(context.Background())

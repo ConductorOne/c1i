@@ -21,6 +21,7 @@ func TestGetFixedListUnreadablePageExitsServerError(t *testing.T) {
 			s := newMutServer(t, fixedReply(200, body))
 			stubMutationClient(t, s.srv, 0)
 			cmd := &cobra.Command{Use: "x"}
+			restoreCmdWriters(t)
 			cmd.SetOut(&bytes.Buffer{})
 			cmd.SetErr(&bytes.Buffer{})
 			cmd.SetContext(t.Context())

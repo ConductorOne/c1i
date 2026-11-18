@@ -55,6 +55,7 @@ func TestAppsAddOwnerDryRunPreviewsRequestWithoutSending(t *testing.T) {
 	_ = appsAddOwnerCmd.Flags().Set("user-id", "user1")
 
 	var out bytes.Buffer
+	restoreCmdWriters(t)
 	appsAddOwnerCmd.SetOut(&out)
 	appsAddOwnerCmd.SetContext(context.Background())
 

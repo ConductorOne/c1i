@@ -18,6 +18,7 @@ func runDocsAgents(t *testing.T, args []string) (stdout, stderr string) {
 	cmd := docsAgentsCmd
 	outBuf := &bytes.Buffer{}
 	errBuf := &bytes.Buffer{}
+	restoreCmdWriters(t)
 	cmd.SetOut(outBuf)
 	cmd.SetErr(errBuf)
 	resetCmdFlags(t, cmd)
@@ -75,6 +76,7 @@ func TestDocsAgentsOutputFileMatchesStdout(t *testing.T) {
 	cmd := docsAgentsCmd
 	outBuf := &bytes.Buffer{}
 	errBuf := &bytes.Buffer{}
+	restoreCmdWriters(t)
 	cmd.SetOut(outBuf)
 	cmd.SetErr(errBuf)
 	resetCmdFlags(t, cmd)
@@ -159,6 +161,7 @@ func runThroughRoot(t *testing.T, args ...string) string {
 	// buffer instead of this one.
 	docsAgentsCmd.SetOut(nil)
 	docsAgentsCmd.SetErr(nil)
+	restoreCmdWriters(t)
 	rootCmd.SetOut(&out)
 	rootCmd.SetErr(&out)
 	rootCmd.SetArgs(args)

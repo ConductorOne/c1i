@@ -87,6 +87,7 @@ func TestGetBaseURLWithSourceSilentForExplicitFlag(t *testing.T) {
 
 	var stdout bytes.Buffer
 	stderr := captureStderr(t, func() {
+		restoreCmdWriters(t)
 		rootCmd.SetOut(&stdout)
 		rootCmd.SetErr(&stdout)
 		rootCmd.SetArgs([]string{"users", "get", "someid", "--url", "acme.conductor.one"})
@@ -108,6 +109,7 @@ func TestGetBaseURLWithSourceSilentForEnvSource(t *testing.T) {
 
 	var stdout bytes.Buffer
 	stderr := captureStderr(t, func() {
+		restoreCmdWriters(t)
 		rootCmd.SetOut(&stdout)
 		rootCmd.SetErr(&stdout)
 		rootCmd.SetArgs([]string{"users", "get", "someid"})
@@ -135,6 +137,7 @@ func TestGetBaseURLWithSourceWarnsForConfigSource(t *testing.T) {
 
 	var stdout bytes.Buffer
 	stderr := captureStderr(t, func() {
+		restoreCmdWriters(t)
 		rootCmd.SetOut(&stdout)
 		rootCmd.SetErr(&stdout)
 		rootCmd.SetArgs([]string{"users", "get", "someid"})
@@ -167,6 +170,7 @@ func TestGetBaseURLWithSourceWarnsOnceForPaginatedList(t *testing.T) {
 
 	var stdout bytes.Buffer
 	stderr := captureStderr(t, func() {
+		restoreCmdWriters(t)
 		rootCmd.SetOut(&stdout)
 		rootCmd.SetErr(&stdout)
 		rootCmd.SetArgs([]string{"apps", "list"})

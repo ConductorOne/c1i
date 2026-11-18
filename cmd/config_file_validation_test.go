@@ -167,6 +167,7 @@ func TestPartialEnvCredentialsNotice(t *testing.T) {
 			t.Setenv("C1I_CLIENT_ID", tc.id)
 			t.Setenv("C1I_CLIENT_SECRET", tc.secret)
 			var errBuf bytes.Buffer
+			restoreCmdWriters(t)
 			authLogoutCmd.SetErr(&errBuf)
 			t.Cleanup(func() { authLogoutCmd.SetErr(nil) })
 			warnPartialEnvCredentials(authLogoutCmd)

@@ -52,6 +52,7 @@ func runDocsOpenapi(t *testing.T, rt stubRoundTripper) (string, string, error) {
 
 	out, errOut := &bytes.Buffer{}, &bytes.Buffer{}
 	prevCtx := docsOpenapiCmd.Context()
+	restoreCmdWriters(t)
 	docsOpenapiCmd.SetOut(out)
 	docsOpenapiCmd.SetErr(errOut)
 	docsOpenapiCmd.SetContext(context.Background())
@@ -370,6 +371,7 @@ func runDocsOpenapiRoot(t *testing.T, rt http.RoundTripper, args ...string) (str
 	stubOpenAPIBase(t, rt)
 	resetCmdFlags(t, rootCmd)
 	var out bytes.Buffer
+	restoreCmdWriters(t)
 	rootCmd.SetOut(&out)
 	rootCmd.SetErr(&out)
 	prevCtx := docsOpenapiCmd.Context()

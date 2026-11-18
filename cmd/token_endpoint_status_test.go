@@ -88,6 +88,7 @@ func runAgainst(t *testing.T, hits *int32, h http.HandlerFunc, args ...string) (
 
 	resetCmds(t, rootCmd, authTokenCmd, apiCmd)
 	var out bytes.Buffer
+	restoreCmdWriters(t)
 	rootCmd.SetOut(&out)
 	rootCmd.SetErr(&out)
 	rootCmd.SetArgs(args)

@@ -47,6 +47,7 @@ func runDocsEndpoints(t *testing.T, filter string) (stdout, stderr string) {
 	cmd := docsEndpointsCmd
 	outBuf := &bytes.Buffer{}
 	errBuf := &bytes.Buffer{}
+	restoreCmdWriters(t)
 	cmd.SetOut(outBuf)
 	cmd.SetErr(errBuf)
 	resetCmdFlags(t, cmd)

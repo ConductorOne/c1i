@@ -150,6 +150,7 @@ func TestCatalogEntitlementDeleteSendsJSONBodyAndEscapedProfileID(t *testing.T) 
 	}
 
 	var out bytes.Buffer
+	restoreCmdWriters(t)
 	accessProfilesRequestableEntitlementsRemoveCmd.SetOut(&out)
 	accessProfilesRequestableEntitlementsRemoveCmd.SetContext(context.Background())
 	if err := accessProfilesRequestableEntitlementsRemoveCmd.RunE(accessProfilesRequestableEntitlementsRemoveCmd, []string{profileID}); err != nil {

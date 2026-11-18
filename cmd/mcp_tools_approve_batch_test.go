@@ -19,6 +19,7 @@ func TestMcpToolsApproveBatchesOnePostPerId(t *testing.T) {
 	withDryRun(t)
 
 	var out bytes.Buffer
+	restoreCmdWriters(t)
 	rootCmd.SetOut(&out)
 	rootCmd.SetErr(&bytes.Buffer{})
 	t.Cleanup(func() { rootCmd.SetOut(nil); rootCmd.SetErr(nil) })

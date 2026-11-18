@@ -64,6 +64,7 @@ func TestAccessReviewMutationsDryRun(t *testing.T) {
 			t.Setenv("C1I_URL", "https://example.invalid")
 			tt.setFlags(t)
 			var out bytes.Buffer
+			restoreCmdWriters(t)
 			tt.cmd.SetOut(&out)
 			t.Cleanup(func() { tt.cmd.SetOut(nil) })
 			tt.cmd.SetContext(context.Background())

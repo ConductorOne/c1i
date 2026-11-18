@@ -110,6 +110,7 @@ func TestGetCommandsFailOnOutputWriteError(t *testing.T) {
 						t.Fatalf("set --%s: %v", name, err)
 					}
 				}
+				restoreCmdWriters(t)
 				c.cmd.SetOut(failingWriter{})
 				t.Cleanup(func() { c.cmd.SetOut(nil) })
 				c.cmd.SetContext(context.Background())
@@ -177,6 +178,7 @@ func TestTextOutputFailsOnOutputWriteError(t *testing.T) {
 			t.Setenv("C1I_URL", "https://example.invalid")
 
 			var errOut bytes.Buffer
+			restoreCmdWriters(t)
 			rootCmd.SetOut(failingWriter{})
 			rootCmd.SetErr(&errOut)
 			t.Cleanup(func() { rootCmd.SetOut(nil); rootCmd.SetErr(nil) })
@@ -214,6 +216,7 @@ func runUpgradeToDeadStdout(t *testing.T, args ...string) error {
 	resetCmds(t, upgradeCmd)
 	resetCmdFlags(t, rootCmd)
 	var errOut bytes.Buffer
+	restoreCmdWriters(t)
 	rootCmd.SetOut(failingWriter{})
 	rootCmd.SetErr(&errOut)
 	upgradeCmd.SetOut(failingWriter{})
@@ -279,6 +282,7 @@ func TestMcpToolsApproveOutputFailureKeepsSummary(t *testing.T) {
 	t.Setenv("C1I_URL", "https://example.invalid")
 
 	var errOut bytes.Buffer
+	restoreCmdWriters(t)
 	rootCmd.SetOut(failingWriter{})
 	rootCmd.SetErr(&errOut)
 	mcpToolsApproveCmd.SetOut(failingWriter{})
@@ -323,6 +327,7 @@ func TestOutputWriteContractDocumented(t *testing.T) {
 
 func TestWriteRawObjectFailsOnOutputWriteError(t *testing.T) {
 	cmd := &cobra.Command{}
+	restoreCmdWriters(t)
 	cmd.SetOut(failingWriter{})
 	assertOutputWriteFailure(t, writeRawObject(cmd, []byte(`{"deleted":true}`)))
 }
@@ -330,6 +335,7 @@ func TestWriteRawObjectFailsOnOutputWriteError(t *testing.T) {
 // --limit compares against Written, so a failed row must not count.
 func TestEmitterCountsOnlyWrittenRows(t *testing.T) {
 	cmd := &cobra.Command{}
+	restoreCmdWriters(t)
 	cmd.SetOut(failingWriter{})
 	cmd.SetContext(context.Background())
 	enc := newEmitter(cmd)

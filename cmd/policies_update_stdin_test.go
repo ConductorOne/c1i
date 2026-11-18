@@ -49,6 +49,7 @@ func TestPoliciesUpdateStdinInputsSurviveTypeLookup(t *testing.T) {
 				_ = policiesUpdateCmd.Flags().Set(k, v)
 			}
 			var out bytes.Buffer
+			restoreCmdWriters(t)
 			policiesUpdateCmd.SetOut(&out)
 			policiesUpdateCmd.SetIn(strings.NewReader(tc.stdin))
 			t.Cleanup(func() { policiesUpdateCmd.SetIn(nil) })
@@ -86,6 +87,7 @@ func TestPoliciesCreateRefusesTwoStdinInputs(t *testing.T) {
 	_ = policiesCreateCmd.Flags().Set("steps-file", "-")
 	_ = policiesCreateCmd.Flags().Set("rules-file", "-")
 	policiesCreateCmd.SetContext(context.Background())
+	restoreCmdWriters(t)
 	policiesCreateCmd.SetIn(strings.NewReader("must not be read"))
 	err := policiesCreateCmd.RunE(policiesCreateCmd, nil)
 	if exitCode(err) != exitUsage || err == nil || !strings.Contains(err.Error(), "only one of") {

@@ -71,6 +71,7 @@ func TestFunctionsUsagePageSizeStaysFixedUnderLimit(t *testing.T) {
 	}
 
 	var out strings.Builder
+	restoreCmdWriters(t)
 	functionsUsageCmd.SetOut(&out)
 	functionsUsageCmd.SetContext(context.Background())
 	if err := functionsUsageCmd.RunE(functionsUsageCmd, []string{functionID}); err != nil {

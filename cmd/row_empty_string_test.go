@@ -94,6 +94,7 @@ func TestOtherListCommandsNeverEmitEmptyString(t *testing.T) {
 			stubNewClient(t, srv)
 			t.Setenv("C1I_URL", "https://example.invalid")
 			var out bytes.Buffer
+			restoreCmdWriters(t)
 			for _, c := range []*cobra.Command{mcpToolsetsRequestableConnectorsCmd, mcpBindingsByToolsCmd} {
 				c.SetOut(&out)
 				c.SetContext(context.Background())
@@ -130,6 +131,7 @@ func TestServerCountRowNeverEmitsEmptyString(t *testing.T) {
 
 func TestGatewayToolRowsNeverContainEmptyString(t *testing.T) {
 	var out bytes.Buffer
+	restoreCmdWriters(t)
 	mcpGatewayListToolsCmd.SetOut(&out)
 	t.Cleanup(func() { mcpGatewayListToolsCmd.SetOut(nil) })
 	if err := emitGatewayTools(mcpGatewayListToolsCmd, []mcpgateway.Tool{{Name: "t1"}}, false, 0); err != nil {
@@ -149,6 +151,7 @@ func TestDocsRowsNeverContainEmptyString(t *testing.T) {
 		t.Cleanup(func() { mintlifySearchURL = orig })
 		var out bytes.Buffer
 		resetCmdFlags(t, docsSearchCmd)
+		restoreCmdWriters(t)
 		docsSearchCmd.SetOut(&out)
 		docsSearchCmd.SetContext(context.Background())
 		if err := docsSearchCmd.RunE(docsSearchCmd, []string{"q"}); err != nil {
@@ -160,6 +163,7 @@ func TestDocsRowsNeverContainEmptyString(t *testing.T) {
 		primeOpenAPICacheWith(t, "paths:\n  /api/v1/x:\n    get: {}\n")
 		var out bytes.Buffer
 		resetCmdFlags(t, docsEndpointsCmd)
+		restoreCmdWriters(t)
 		docsEndpointsCmd.SetOut(&out)
 		docsEndpointsCmd.SetContext(context.Background())
 		if err := docsEndpointsCmd.RunE(docsEndpointsCmd, nil); err != nil {

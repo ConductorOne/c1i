@@ -96,6 +96,7 @@ func runHelperCmd(t *testing.T, c *cobra.Command, srv *mutServer, ctx context.Co
 	if out == nil {
 		out = &stdout
 	}
+	restoreCmdWriters(t)
 	c.SetOut(out)
 	c.SetErr(&stderr)
 	c.SetContext(ctx)

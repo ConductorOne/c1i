@@ -374,6 +374,7 @@ func TestCompletionUnknownShellIsUsageError(t *testing.T) {
 	root.AddCommand(&cobra.Command{Use: "thing", RunE: func(*cobra.Command, []string) error { return nil }})
 	root.InitDefaultCompletionCmd()
 	attachSubcommandGuards(root)
+	restoreCmdWriters(t)
 	root.SetOut(io.Discard)
 	root.SetErr(io.Discard)
 
@@ -393,6 +394,7 @@ func TestCompletionUnknownShellIsUsageError(t *testing.T) {
 // The test above proves the two-line sequence works on a tree shaped like
 // rootCmd; only this one fails if Run() stops applying it.
 func TestRunWiresCompletionUnderTheGuards(t *testing.T) {
+	restoreCmdWriters(t)
 	rootCmd.SetOut(io.Discard)
 	rootCmd.SetErr(io.Discard)
 	t.Cleanup(func() {

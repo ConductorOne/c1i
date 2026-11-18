@@ -53,6 +53,7 @@ func runUsersList(t *testing.T, origin string, origins ...string) ([]map[string]
 		}
 	}
 	var out strings.Builder
+	restoreCmdWriters(t)
 	usersListCmd.SetOut(&out)
 	usersListCmd.SetErr(io.Discard)
 	usersListCmd.SetContext(context.Background())

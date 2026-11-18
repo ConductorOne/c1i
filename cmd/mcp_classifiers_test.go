@@ -102,6 +102,7 @@ func TestClassifierMutationsDryRunUsePublicRequestShapes(t *testing.T) {
 				setClassifierFlag(t, tt.cmd, "update-mask", tt.mask)
 			}
 			var out bytes.Buffer
+			restoreCmdWriters(t)
 			tt.cmd.SetOut(&out)
 			t.Cleanup(func() { tt.cmd.SetOut(nil) })
 			tt.cmd.SetContext(context.Background())
@@ -170,6 +171,7 @@ func TestClassifierListPaginatesWithClassifierEnvelope(t *testing.T) {
 	t.Setenv("C1I_URL", "https://example.invalid")
 	resetCmdFlags(t, mcpClassifiersListCmd)
 	var out bytes.Buffer
+	restoreCmdWriters(t)
 	mcpClassifiersListCmd.SetOut(&out)
 	t.Cleanup(func() { mcpClassifiersListCmd.SetOut(nil) })
 	mcpClassifiersListCmd.SetContext(context.Background())

@@ -108,6 +108,7 @@ func runStderrScenario(t *testing.T, sc stderrScenario) string {
 	}
 	resetCmdFlags(t, leaf)
 	var stdout, stderr bytes.Buffer
+	restoreCmdWriters(t)
 	for _, c := range []*cobra.Command{rootCmd, leaf} {
 		c.SetOut(&stdout)
 		c.SetErr(&stderr)
