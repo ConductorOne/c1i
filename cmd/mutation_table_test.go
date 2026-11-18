@@ -57,6 +57,12 @@ const (
 	tblStep        = "Resolved policy step: step-9\n"
 	tblFunction    = `{"function":{"id":"fn-1","displayName":"zz"},"commit":{"id":"c-1","functionId":"fn-1"}}`
 	tblFunctionDoc = `{"id":"fn-1","displayName":"zz","commit":{"id":"c-1","functionId":"fn-1"}}`
+	tblResType     = `{"appResourceType":{"id":"rt-1","appId":"app-1","displayName":"zz"},"expanded":[]}`
+	tblResTypeDoc  = `{"id":"rt-1","appId":"app-1","displayName":"zz","expanded":[]}`
+	tblResource    = `{"appResource":{"id":"r-1","appId":"app-1","appResourceTypeId":"rt-1","displayName":"zz"}}`
+	tblResourceDoc = `{"id":"r-1","appId":"app-1","appResourceTypeId":"rt-1","displayName":"zz"}`
+	tblResView     = `{"appResourceView":{"appResource":{"id":"r-1","displayName":"zz"},"appPath":"","objectPermissions":{}},"expanded":[]}`
+	tblResViewDoc  = `{"id":"r-1","displayName":"zz","expanded":[],"appPath":"","objectPermissions":{}}`
 )
 
 const (
@@ -93,6 +99,7 @@ var (
 	idPath   = []string{".id"}
 	ent      = []string{"--app-id", "app-1", "--entitlement-id", "ent-1"}
 	mcpScope = []string{"--app-id=a1", "--connector-id=cn1"}
+	resScope = []string{"--app-id", "app-1", "--resource-type-id", "rt-1"}
 )
 
 func cat(parts ...[]string) []string {
@@ -149,6 +156,15 @@ var mutationTable = []mutationRow{
 	{cmd: "apps add-owner", args: []string{"app-1", "--user-id", "u1"}, body: `{}`, reads: 1},
 	{cmd: "apps remove-owner", args: []string{"app-1", "--user-id", "u1"}, body: `{}`},
 	{cmd: "apps set-owners", args: []string{"app-1", "--user-id", "u1"}, body: `{}`, method: "PUT", path: "/api/v1/apps/app-1/owners", reads: 1},
+	{cmd: "apps resource-types create", args: []string{"--app-id", "app-1", "--display-name", "zz", "--resource-type", "custom"}, body: tblResType, want: tblResTypeDoc, ids: idPath, method: "POST", path: "/api/v1/apps/app-1/resource_types"},
+	{cmd: "apps resource-types update", args: []string{"rt-1", "--app-id", "app-1", "--display-name", "zz"}, body: tblResType, want: tblResTypeDoc, ids: idPath, method: "POST", path: "/api/v1/apps/app-1/resource_types/rt-1"},
+	{cmd: "apps resource-types delete", args: []string{"rt-1", "--app-id", "app-1"}, body: `{}`, method: "DELETE", path: "/api/v1/apps/app-1/resource_types/rt-1"},
+	{cmd: "apps resources create", args: cat([]string{"--display-name", "zz"}, resScope), body: tblResource, want: tblResourceDoc, ids: idPath, method: "POST", path: "/api/v1/apps/app-1/resource_types/rt-1/resources", reads: 1},
+	{cmd: "apps resources update", args: cat([]string{"r-1", "--description", "d"}, resScope), body: tblResView, want: tblResViewDoc, ids: idPath, method: "POST", path: "/api/v1/apps/app-1/resource_types/rt-1/resources/r-1"},
+	{cmd: "apps resources delete", args: cat([]string{"r-1"}, resScope), body: `{}`, method: "DELETE", path: "/api/v1/apps/app-1/resource_types/rt-1/resources/r-1"},
+	{cmd: "apps resources add-owner", args: cat([]string{"r-1", "--user-id", "u1"}, resScope), body: `{}`, method: "POST", path: "/api/v1/apps/app-1/resource_types/rt-1/resource/r-1/owners", reads: 1},
+	{cmd: "apps resources remove-owner", args: cat([]string{"r-1", "--user-id", "u1"}, resScope), body: `{}`, method: "DELETE", path: "/api/v1/apps/app-1/resource_types/rt-1/resource/r-1/owners"},
+	{cmd: "apps resources set-owners", args: cat([]string{"r-1", "--user-id", "u1"}, resScope), body: `{}`, method: "PUT", path: "/api/v1/apps/app-1/resource_types/rt-1/resource/r-1/owners", reads: 2},
 	{cmd: "apps managed-state promote", args: []string{"res-1", "--app-id", "app-1", "--resource-type-id", "rt-1"},
 		body: tblBinding, want: tblBindingDoc, ids: []string{".resourceId", ".state.managed.appId"}, method: "POST",
 		path: "/api/v1/apps/app-1/resource_types/rt-1/managed_state_bindings/res-1/promote", reads: 1},
@@ -330,7 +346,7 @@ var mutationTable = []mutationRow{
 
 // tblGet answers every pre-send read: the policy-step, user, catalog-id and
 // self lookups.
-const tblGet = `{"connectorView":{"connector":{"id":"cn1","config":{"@type":"type.googleapis.com/c1.api.app.v1.EnvConfig"}}},"taskView":{"task":{"id":"task-1","policy":{"current":{"id":"step-9"}}}},"user":{"id":"u1"},"userId":"self-1",` +
+const tblGet = `{"appResourceTypeView":{"appResourceType":{"id":"rt-1"}},"connectorView":{"connector":{"id":"cn1","config":{"@type":"type.googleapis.com/c1.api.app.v1.EnvConfig"}}},"taskView":{"task":{"id":"task-1","policy":{"current":{"id":"step-9"}}}},"user":{"id":"u1"},"userId":"self-1",` +
 	`"list":[{"id":"ty-1","displayName":"Department","appUserProfile":{}}],` +
 	`"attribute":{"userAttributeMapping":{"id":"map-1","attributeType":{"id":"ty-1","displayName":"Department","appUserProfile":{"appId":"app-1","appUserProfileAttributeKey":"department"}}}}}`
 

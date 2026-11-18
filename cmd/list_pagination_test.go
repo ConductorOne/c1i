@@ -222,7 +222,61 @@ func listPaginationCases() []listPaginationCase {
 		return fmt.Sprintf(`{"list":[%s],"nextPageToken":%s}`, strings.Join(items, ","), jstr(next))
 	}
 
+	// resourceTypeSearchPage and resourceSearchPage scope each row to an app
+	// (and type), since a resource type or resource id repeats across apps.
+	resourceTypeSearchPage := func(ids []string, next string) string {
+		items := make([]string, 0, len(ids))
+		for _, id := range ids {
+			items = append(items, fmt.Sprintf(`{"id":%s,"appId":"app1"}`, jstr(id)))
+		}
+		return fmt.Sprintf(`{"list":[%s],"nextPageToken":%s}`, strings.Join(items, ","), jstr(next))
+	}
+	resourceSearchPage := func(ids []string, next string) string {
+		items := make([]string, 0, len(ids))
+		for _, id := range ids {
+			items = append(items, fmt.Sprintf(`{"appResource":{"id":%s,"appId":"app1","appResourceTypeId":"rt1"}}`, jstr(id)))
+		}
+		return fmt.Sprintf(`{"list":[%s],"nextPageToken":%s}`, strings.Join(items, ","), jstr(next))
+	}
+
 	return []listPaginationCase{
+		{
+			name:        "apps resource-types search",
+			compositeID: true,
+			cmd:         appsResourceTypesSearchCmd,
+			method:      http.MethodPost,
+			wantPath:    "/api/v1/search/app_resource_types",
+			page:        resourceTypeSearchPage,
+			rowIDs:      idRows("id"),
+		},
+		{
+			name:       "apps resources list",
+			cmd:        appsResourcesListCmd,
+			method:     http.MethodGet,
+			wantPath:   "/api/v1/apps/app1/resource_types/rt1/resources",
+			extraFlags: map[string]string{"app-id": "app1", "resource-type-id": "rt1"},
+			page:       nestedPage("list", "appResource", "id"),
+			rowIDs:     idRows("id"),
+		},
+		{
+			name:        "apps resources search",
+			compositeID: true,
+			cmd:         appsResourcesSearchCmd,
+			method:      http.MethodPost,
+			wantPath:    "/api/v1/search/app_resources",
+			page:        resourceSearchPage,
+			rowIDs:      idRows("id"),
+		},
+		{
+			name:       "apps resources owners",
+			cmd:        appsResourcesOwnersCmd,
+			method:     http.MethodGet,
+			wantPath:   "/api/v1/apps/app1/resource_types/rt1/resource/res1/owners",
+			args:       []string{"res1"},
+			extraFlags: map[string]string{"app-id": "app1", "resource-type-id": "rt1"},
+			page:       flatPage("list", "id"),
+			rowIDs:     idRows("id"),
+		},
 		{
 			name:       "accounts list",
 			cmd:        accountsListCmd,

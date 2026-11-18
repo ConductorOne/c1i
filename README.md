@@ -803,6 +803,21 @@ c1i apps remove-owner <app-id> --user-id <id>
 c1i apps set-owners <app-id> --user-id <id> [--user-id <id> ...] [--wait] [--wait-timeout 4m]
 c1i apps delete <app-id>
 c1i apps resource-types list --app-id <app-id> [--page-size N] [--page-token TOKEN] [--limit N]
+c1i apps resource-types search [--query <text>] [--display-name <name>] [--app-id <id> ...] [--resource-type-id <id> ...] [--exclude-resource-type-id <id> ...] [--trait-id <id> ...] [--exclude-trait-id <id> ...] [--page-size N] [--page-token TOKEN] [--limit N]
+c1i apps resource-types get <resource-type-id> --app-id <app-id>
+c1i apps resource-types create --app-id <app-id> --display-name <name> --resource-type <kind>
+c1i apps resource-types update <resource-type-id> --app-id <app-id> --display-name <name>
+c1i apps resource-types delete <resource-type-id> --app-id <app-id>
+c1i apps resources list --app-id <app-id> --resource-type-id <id> [--page-size N] [--page-token TOKEN] [--limit N]
+c1i apps resources search [--query <text>] [--app-id <id> ...] [--resource-type-id <id> ...] [--resource-id <id> ...] [--exclude-resource-id <id> ...] [--trait-id <id> ...] [--exclude-trait-id <id> ...] [--owner-user-id <id> ...] [--unowned-only] [--page-size N] [--page-token TOKEN] [--limit N]
+c1i apps resources get <resource-id> --app-id <app-id> --resource-type-id <id>
+c1i apps resources create --app-id <app-id> --resource-type-id <id> (--display-name <name> [--description <text>] [--owner-id <id> ...] | --body-file <path|->)
+c1i apps resources update <resource-id> --app-id <app-id> --resource-type-id <id> ([--display-name <name>] [--description <text>] [--custom-description <text>] | --body-file <path|-> --update-mask <paths>)
+c1i apps resources delete <resource-id> --app-id <app-id> --resource-type-id <id>
+c1i apps resources owners <resource-id> --app-id <app-id> --resource-type-id <id> [--page-size N] [--page-token TOKEN] [--limit N]
+c1i apps resources add-owner <resource-id> --app-id <app-id> --resource-type-id <id> --user-id <id> [--wait] [--wait-timeout 4m]
+c1i apps resources remove-owner <resource-id> --app-id <app-id> --resource-type-id <id> --user-id <id>
+c1i apps resources set-owners <resource-id> --app-id <app-id> --resource-type-id <id> --user-id <id> [--user-id <id> ...] [--wait] [--wait-timeout 4m]
 c1i apps managed-state list --app-id <app-id> --resource-type-id <id> [--page-size N] [--page-token TOKEN] [--limit N]
 c1i apps managed-state get <resource-id> --app-id <app-id> --resource-type-id <id>
 c1i apps managed-state promote <resource-id> --app-id <app-id> --resource-type-id <id> [--user-id <id> ...]
@@ -878,9 +893,49 @@ promote creates a new app. A binding's top-level `appId` is the connector app;
 the managed app is `.state.managed.appId`. `c1i docs guide
 promote-idp-app-to-managed` walks the whole workflow and has the timings.
 
-**Owner commands (apps and entitlements).** Owner changes are applied
+`apps resource-types` and `apps resources` manage an app's resource types and
+the resources under them; `entitlements create` builds the same objects in one
+call when you also want an entitlement. The resource's own id is positional;
+`--app-id` (and `--resource-type-id` for a resource) is its parent scope.
+`create`, `update` and `delete` act on manually managed objects. Both `delete`s
+are soft (see [Soft delete](#soft-delete)); a deleted resource stays in
+`resources list` with `deleted_at` set but leaves `resources search`, and a
+deleted type leaves both `resource-types list` and `search`. Search can trail
+a write by a few seconds. The API spec says a type delete also deletes its
+resources, but a resource of a deleted type was still live ten minutes later, so
+delete resources first if they must go. `resource-types create --resource-type`
+has no default and takes the API spec's kinds (`ROLE`, `GROUP`, `LICENSE`,
+`PROJECT`, `CATALOG`, `CUSTOM`, `VAULT`, `PROFILE_TYPE`, `SESSION_POLICY`,
+`CLAW_AGENT`); only `CUSTOM` can repeat on one app (otherwise a 500,
+`app resource type already exists`, exit `6`). `resource-types update` renames
+only: the API answered a `traitIds` change `200` and left it unchanged.
+`resources create` looks up each `--owner-id` first, and an unknown one exits
+`4` where the server would 500. It looks up the resource type too: a type that
+does not exist exits `4`. A deleted type exits `2` where the server would 500. `resources update`
+sends only the flags you pass; `--custom-description ""` clears that field, while
+the server ignores an empty name or description, so those exit `2` when
+blank. Other fields (such as `annotations`, which were merged rather than
+replaced) go through `--body-file` with `--update-mask`; `resources create
+--body-file` likewise sends a full request verbatim.
+Search rows have the same shape as the matching `list`. The id filters
+(`--resource-type-id`, `--exclude-resource-type-id`, `--resource-id`,
+`--exclude-resource-id`, `--trait-id` and `--exclude-trait-id`, which match the
+`trait_ids` of a type) keep or drop rows; `--owner-user-id` keeps resources any
+given user owns and `--unowned-only` those with none. Every unknown filter id
+tried matched nothing (exit `0`). One resource type or resource id can appear
+under several apps, so key search rows on `app_id` (and `resource_type_id`)
+plus `id`. `apps resources owners`, `add-owner`, `remove-owner` and
+`set-owners` follow the app and entitlement owner commands below, on the
+`.../resource_types/{resource-type-id}/resource/{resource-id}/owners` route.
+The API answers `set-owners` on an unknown resource `200 {}` and stores the
+owners anyway, so c1i looks the resource up first (exit `4`). The owners
+response also carries `immutableUserIds` (owners the API says cannot be
+removed), which the rows leave out; read it with `c1i api`.
+
+**Owner commands (apps, entitlements and resources).** Owner changes are applied
 asynchronously and can take several minutes to appear; pass --wait to block
-until they do. `--wait` (on `set-owners`, and on `entitlements add-owner`)
+until they do. `--wait` (on `set-owners`, and on `entitlements add-owner` and
+`apps resources add-owner`)
 polls `GET .../ownerids` until the change lands (`add-owner`: the owner
 appears; `set-owners`: the owner set equals the requested ids, removals
 included) or `--wait-timeout` (default `4m`) elapses. Its progress lines go to
@@ -1008,7 +1063,8 @@ required, so `--resource-id` without `--resource-type-id` is rejected at exit
 `2` before anything is sent.
 
 `--resource-type` is `ROLE`, `GROUP`, `LICENSE`, `PROJECT`, `CATALOG`,
-`CUSTOM`, `VAULT` or `PROFILE_TYPE` (case-insensitive here, uppercase on the
+`CUSTOM`, `VAULT`, `PROFILE_TYPE`, `SESSION_POLICY` or `CLAW_AGENT` (the API
+spec's kinds; case-insensitive here, uppercase on the
 wire; defaults to `CUSTOM`) and describes the resource type this command creates, so passing it
 together with `--resource-type-id` is a usage error rather than a silently
 ignored flag. Only `CUSTOM` can repeat on one app: a second resource type of

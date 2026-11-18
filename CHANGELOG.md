@@ -55,6 +55,17 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   or `--none`; unknown entitlement references and exclusion user ids exit `4`
   before sending.
 
+- `apps resource-types get|create|update|delete|search` and `apps resources
+  list|get|create|update|delete|search`, for an app's resource types and
+  resources, plus `apps resources owners|add-owner|remove-owner|set-owners`
+  for a resource's owners. The resource's own id is positional; `--app-id` and
+  `--resource-type-id` are its parent scope. `resources create` looks up the
+  resource type (unknown: exit 4, deleted: exit 2) and each `--owner-id`
+  first; `resources set-owners` looks up the resource, since the API stores
+  owners for an unknown one at `200`. `apps resource-types list` rows gain
+  `app_id`, matching the new search rows.
+- `--resource-type` on `entitlements create` and `apps resource-types create`
+  lists `SESSION_POLICY` and `CLAW_AGENT`, as the API spec now does.
 - `apps search` filters applications server-side (`POST /api/v1/search/apps`)
   by `--query` (fuzzy on name and description), `--display-name`, repeatable
   `--app-id` / `--exclude-app-id` / `--policy-id`, and `--only-directories`.

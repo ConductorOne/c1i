@@ -444,9 +444,9 @@ type per entitlement:
       --resource-type-id "$RT_ID" --resource-id "$RES_ID"   # entitlement only
 
 --resource-type (the kind of resource type to create, default CUSTOM) is one
-of ROLE, GROUP, LICENSE, PROJECT, CATALOG, CUSTOM, VAULT, PROFILE_TYPE. Only
-CUSTOM can repeat on one app: a second resource type of any other kind fails
-with a 500,
+of ROLE, GROUP, LICENSE, PROJECT, CATALOG, CUSTOM, VAULT, PROFILE_TYPE,
+SESSION_POLICY, CLAW_AGENT. Only CUSTOM can repeat on one app: a second
+resource type of any other kind fails with a 500,
   app resource type already exists
 which maps to exit 6 even though retrying never helps. Reuse the one that
 exists by passing --resource-type-id and drop both --resource-type and
