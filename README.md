@@ -1199,7 +1199,44 @@ stderr (`Resolved policy step: <id>`), never in the document.
 
 ```sh
 c1i connectors list --app-id <id> [--page-size N] [--page-token TOKEN] [--limit N]
+c1i connectors get <connector-id> --app-id <id>
+c1i connectors create --app-id <id> --catalog-id <id> [--display-name NAME] [--description TEXT] [--user-id <id>]...
+c1i connectors create --app-id <id> --body-file <file>
+c1i connectors update <connector-id> --app-id <id> --body-file <file> --update-mask config [--justification TEXT]
+c1i connectors delete <connector-id> --app-id <id>
+c1i connectors sync <connector-id> --app-id <id>
+c1i connectors sync-status <connector-id> --app-id <id>
+c1i connectors pause <connector-id> --app-id <id>
+c1i connectors resume <connector-id> --app-id <id>
+c1i connectors schedule <connector-id> --app-id <id> --cron "0 */6 * * *" [--timezone America/Chicago] [--justification TEXT]
+c1i connectors schedule <connector-id> --app-id <id> --clear
+c1i connectors credentials rotate --app-id <id> --connector-id <id>
+c1i connectors credentials get <credential-id> --app-id <id> --connector-id <id>
+c1i connectors credentials revoke <credential-id> --app-id <id> --connector-id <id>
 ```
+
+`connectors create` makes a connector with an empty config (the API's
+delegated create; an MCP catalog id is a 400, use `mcp servers register`); set the config with `connectors update --body-file <file>
+--update-mask config`, where the file is a `connectors get` output with
+`.config` edited and the view keys removed (`jq 'del(.expanded, .appPath,
+.capabilitiesPath, .usersPath)'`; the server refuses them as unknown fields).
+In the runs checked, Update required the object to carry
+`config` and `catalogId`, and a mask of `displayName` or `description` returned
+200 without changing either. `connectors delete` reads the connector first (an
+unknown id exits 4, `--dry-run` included) and refuses one that backs an MCP
+server (exit 2): deleting that through this route left its toolsets and their
+entitlements live, so use `mcp servers delete`.
+
+`sync` queues a sync and exits 0 when it is accepted, not when it finishes;
+follow it with `sync-status`. `pause` and `resume` exit 0 when repeated.
+`schedule --clear` removes the schedule; c1i does not validate `--cron` or
+`--timezone`, and the server accepted invalid values in the run checked.
+`--justification` is sent as `justification.reason`.
+
+There is no list of a connector's credentials: an id comes from `credentials
+rotate`, which prints `.clientSecret` once. In the run checked, rotating left
+the previous credential valid for seven more days (`.expiresTime`), and revoke
+set `.expiresTime` in the past while `credentials get` still returned it.
 
 ### Functions
 

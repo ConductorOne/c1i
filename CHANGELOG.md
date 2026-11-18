@@ -34,6 +34,12 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   entitlement selection and exclusions. Each referenced entitlement or resource
   type is looked up first, so an unknown one exits `4` before the send,
   `--dry-run` included. Most of these API routes are marked draft in the spec.
+- `connectors get|create|update|delete|sync|sync-status|pause|resume|schedule`
+  and `connectors credentials get|rotate|revoke`. `create` makes a connector
+  with an empty config; `update` takes the Connector object via `--body-file` with
+  `--update-mask` (e.g. `config`). `delete` refuses a connector that backs an
+  MCP server (exit 2): use `mcp servers delete`, which also removes its
+  toolsets.
 
 ## [0.11.0] - 2026-11-17
 

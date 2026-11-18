@@ -606,6 +606,10 @@ func bodyFileMask(cmd *cobra.Command, exclusive ...string) (mask string, usingBo
 	mask, _ = f.GetString("update-mask")
 	if !f.Changed("body-file") {
 		if f.Changed("update-mask") {
+			// With no field flags there is nothing to derive a mask from.
+			if len(exclusive) == 0 {
+				return "", false, &usageError{fmt.Errorf("--update-mask requires --body-file; pass --body-file with --update-mask")}
+			}
 			return "", false, &usageError{fmt.Errorf("--update-mask requires --body-file; the mask is derived from the other flags")}
 		}
 		return "", false, nil

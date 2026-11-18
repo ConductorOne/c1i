@@ -210,6 +210,7 @@ var ownedBodyKeyCommands = []struct {
 	{name: "c1i mcp classifiers update", args: []string{"mcp", "classifiers", "update", "k1", "--update-mask", "displayName"}, keys: []string{"id"}, positionals: []string{"k1"}, extra: `"displayName":"d"`},
 	{name: "c1i mcp classifiers tool-gates update", args: []string{"mcp", "classifiers", "tool-gates", "update", "g1", "--update-mask", "displayName"}, keys: []string{"id"}, positionals: []string{"g1"}, extra: `"displayName":"d"`},
 	{name: "c1i mcp classifiers templates add-rule", args: []string{"mcp", "classifiers", "templates", "add-rule", "k1", "t1"}, keys: []string{"templateId", "template_id"}, positionals: []string{"k1", "t1"}},
+	{name: "c1i connectors update", args: []string{"connectors", "update", "cn1", "--app-id", "a1", "--update-mask", "config"}, keys: []string{"id"}, positionals: []string{"cn1"}, extra: `"config":{}`},
 	{name: "c1i mcp classifiers templates instantiate", args: []string{"mcp", "classifiers", "templates", "instantiate", "t1"}, keys: []string{"templateId", "template_id"}, positionals: []string{"t1"}},
 }
 

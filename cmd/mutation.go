@@ -90,6 +90,7 @@ const (
 	secretNone secretKind = iota
 	secretSPCredential
 	secretAutomationWebhook
+	secretConnectorCredential
 )
 
 type mutationOpts struct {
@@ -793,6 +794,8 @@ func secretWording(kind secretKind, doc []byte) string {
 	switch kind {
 	case secretSPCredential:
 		return "the clientSecret in this response cannot be retrieved again; revoke the credential and create a new one"
+	case secretConnectorCredential:
+		return "the clientSecret in this response cannot be retrieved again; run \"connectors credentials rotate\" again for a new one"
 	case secretAutomationWebhook:
 		var v map[string]any
 		if json.Unmarshal(doc, &v) == nil {
