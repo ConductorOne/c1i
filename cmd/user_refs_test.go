@@ -200,7 +200,7 @@ func TestUserRefChecksRefuseUnknownUsers(t *testing.T) {
 		// Another test's viper override would beat the --dry-run flag.
 		clearViperOverrides(t, "dry_run")
 		viper.Set("dry_run", dry)
-		s := newMutServer(t, func(r *http.Request, _ int) mutReply {
+		s := newMutServer(t, withLiveRefs(func(r *http.Request, _ int) mutReply {
 			if r.Method == http.MethodGet && strings.HasPrefix(r.URL.Path, "/api/v1/users/") {
 				if userStatus == http.StatusNotFound {
 					return mutReply{status: userStatus, body: `{"code":5,"message":"not found"}`}
@@ -214,7 +214,7 @@ func TestUserRefChecksRefuseUnknownUsers(t *testing.T) {
 				return mutReply{body: `{"appResourceTypeView":{"appResourceType":{"id":"rt1"}}}`}
 			}
 			return mutReply{body: `{}`}
-		})
+		}))
 		args := append(append([]string{}, userRefCases[key]...), "zz-unknown-user-id")
 		if dry {
 			args = append(args, "--dry-run")
@@ -338,7 +338,7 @@ func TestUserLookupFailures(t *testing.T) {
 
 	miss := newMutServer(t, func(r *http.Request, _ int) mutReply {
 		if r.Method == http.MethodGet && r.URL.Path == "/api/v1/apps/app1" {
-			return mutReply{body: `{}`}
+			return mutReply{body: `{"app":{"id":"app1"}}`}
 		}
 		return mutReply{status: http.StatusNotFound, body: `{"code":5,"message":"not found"}`}
 	})

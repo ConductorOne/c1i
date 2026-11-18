@@ -174,14 +174,11 @@ func (k xaaKind) refCheck(appID, flag, id string, refuseDeleted bool) preRead {
 			}
 			return nil, fmt.Errorf("checking --%s %q: %w", flag, id, err)
 		}
-		var resp map[string]json.RawMessage
-		var obj *struct {
-			DeletedAt *string `json:"deletedAt"`
-		}
-		if json.Unmarshal(data, &resp) != nil || json.Unmarshal(resp[k.envelope], &obj) != nil || obj == nil {
+		deleted, _, ok := deletedAtPath(data, k.envelope)
+		if !ok {
 			return nil, &nonJSONResponseError{fmt.Errorf("checking --%s %q: the lookup did not return a %s", flag, id, k.label)}
 		}
-		if refuseDeleted && obj.DeletedAt != nil {
+		if refuseDeleted && deleted {
 			return nil, &usageError{fmt.Errorf("--%s %q: the %s is deleted", flag, id, k.label)}
 		}
 		return nil, nil

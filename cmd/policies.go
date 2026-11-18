@@ -294,6 +294,5 @@ func fetchPolicyMeta(ctx context.Context, c *client.Client, id string) (policyMe
 	if resp.Policy == nil {
 		return policyMeta{}, nil
 	}
-	d := string(resp.Policy.DeletedAt)
-	return policyMeta{policyType: resp.Policy.PolicyType, deleted: d != "" && d != "null", found: true}, nil
+	return policyMeta{policyType: resp.Policy.PolicyType, deleted: isDeletedAt(resp.Policy.DeletedAt), found: true}, nil
 }

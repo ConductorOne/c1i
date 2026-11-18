@@ -147,7 +147,7 @@ func TestAutomationCreateWireShapes(t *testing.T) {
 		{[]string{"--none"}, `{"automation":{"displayName":"zz-a","none":{}}}`},
 		{[]string{"--refs-file", refs}, `{"automation":{"displayName":"zz-a","entitlements":{"entitlementRefs":[{"appId":"a2","id":"e2"}]}}}`},
 	} {
-		srv := newMutServer(t, fixedReply(200, `{"automation":{"appEntitlementId":"e1"}}`))
+		srv := newMutServer(t, withLiveRefs(fixedReply(200, `{"automation":{"appEntitlementId":"e1"}}`)))
 		args := append([]string{"entitlements", "automation", "create", "e1", "--app-id", "a1", "--display-name", "zz-a"}, tc.extra...)
 		r := runMutationCLI(t, srv.srv, 0, nil, args...)
 		if r.err != nil {

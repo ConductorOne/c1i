@@ -177,29 +177,3 @@ func TestAccessReviewSetupDeletedRefIsRefused(t *testing.T) {
 		}
 	}
 }
-
-// hasJSONField must see a nested deletedAt, ignore null/empty/absent ones,
-// and stop at its depth bound.
-func TestHasJSONField(t *testing.T) {
-	cases := []struct {
-		name string
-		raw  string
-		want bool
-	}{
-		{"top level", `{"deletedAt":"2026-01-01T00:00:00Z"}`, true},
-		{"nested view", `{"appEntitlementView":{"appEntitlement":{"deletedAt":"x"}}}`, true},
-		{"three deep", `{"a":{"b":{"c":{"deletedAt":"x"}}}}`, true},
-		{"four deep", `{"a":{"b":{"c":{"d":{"deletedAt":"x"}}}}}`, false},
-		{"null", `{"appEntitlement":{"deletedAt":null}}`, false},
-		{"empty string", `{"appEntitlement":{"deletedAt":""}}`, false},
-		{"absent", `{"appEntitlement":{"id":"x"}}`, false},
-		{"array payload", `{"list":[{"deletedAt":"x"}]}`, false},
-	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			if got := hasJSONField([]byte(tc.raw), "deletedAt", 3); got != tc.want {
-				t.Errorf("hasJSONField(%s) = %v, want %v", tc.raw, got, tc.want)
-			}
-		})
-	}
-}

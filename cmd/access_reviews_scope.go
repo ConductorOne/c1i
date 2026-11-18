@@ -2,7 +2,6 @@ package cmd
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -37,19 +36,21 @@ var (
 	resourceTypeRefShape     = appRefShape{name: "ResourceTypeIdRef", idKey: "resourceTypeId", article: "a"}
 )
 
-// refKind is what a referenced id names and how to look it up.
+// refKind is what a referenced id names, how to look it up, and where in the
+// lookup's response the object (and its deletedAt) sits.
 type refKind struct {
-	what string
-	path func(r appRef) string
+	what     string
+	path     func(r appRef) string
+	envelope []string
 }
 
 var (
 	entitlementRefKind = refKind{"entitlement", func(r appRef) string {
 		return client.Path("/api/v1/apps/%s/entitlements/%s", r.AppID, r.ID)
-	}}
+	}, []string{"appEntitlementView", "appEntitlement"}}
 	resourceTypeRefKind = refKind{"resource type", func(r appRef) string {
 		return client.Path("/api/v1/apps/%s/resource_types/%s", r.AppID, r.ID)
-	}}
+	}, []string{"appResourceTypeView", "appResourceType"}}
 )
 
 const setupRefHelp = "Looks up each referenced %s first: an unknown one exits 4 and a deleted one 2, before anything is sent, --dry-run included."
@@ -85,17 +86,12 @@ func requireExistingRefs(ctx context.Context, c *client.Client, kind refKind, re
 			}
 			return fmt.Errorf("checking %s: %w", r.label, err)
 		}
-		if !json.Valid(data) {
-			return &nonJSONResponseError{fmt.Errorf("checking %s: the %s lookup did not return JSON", r.label, kind.what)}
+		deleted, _, ok := deletedAtPath(data, kind.envelope...)
+		if !ok {
+			return &nonJSONResponseError{fmt.Errorf("checking %s: the %s lookup did not return a %s", r.label, kind.what, kind.what)}
 		}
-		var resp map[string]json.RawMessage
-		if json.Unmarshal(data, &resp) != nil {
-			return &nonJSONResponseError{fmt.Errorf("checking %s: the %s lookup did not return an object", r.label, kind.what)}
-		}
-		for _, raw := range resp {
-			if hasJSONField(raw, "deletedAt", 3) {
-				return &usageError{fmt.Errorf("%s: the %s is deleted", r.label, kind.what)}
-			}
+		if deleted {
+			return &usageError{fmt.Errorf("%s: the %s is deleted", r.label, kind.what)}
 		}
 	}
 	return nil
@@ -318,25 +314,4 @@ func init() {
 	accessReviewEntitlementsCmd.AddCommand(accessReviewEntitlementsAddCmd, accessReviewEntitlementsRemoveCmd)
 	accessReviewExcludedEntitlementsCmd.AddCommand(accessReviewExcludedEntitlementsAddCmd, accessReviewExcludedEntitlementsRemoveCmd)
 	accessReviewsCmd.AddCommand(accessReviewScopeCmd, accessReviewEntitlementsCmd, accessReviewExcludedEntitlementsCmd)
-}
-
-// hasJSONField reports whether raw (an object, possibly nested under the
-// response's view envelope) carries the named field with a non-null value.
-func hasJSONField(raw json.RawMessage, field string, depth int) bool {
-	if depth < 0 {
-		return false
-	}
-	var obj map[string]json.RawMessage
-	if json.Unmarshal(raw, &obj) != nil {
-		return false
-	}
-	if v, ok := obj[field]; ok && string(v) != "null" && string(v) != `""` {
-		return true
-	}
-	for _, v := range obj {
-		if len(v) > 0 && v[0] == '{' && hasJSONField(v, field, depth-1) {
-			return true
-		}
-	}
-	return false
 }

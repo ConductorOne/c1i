@@ -114,7 +114,8 @@ func URL(s string) string {
 const gitUser = "git"
 
 // URLValue redacts s only when it is URL-shaped: an absolute URL, a
-// network-path reference, or a bare "token@host.tld/path" / "user:pass@host"
+// network-path reference, or a bare "token@host.tld/path",
+// "token@host.tld:path" (an scp-form git remote) or "user:pass@host"
 // credential. Plain text is returned unchanged, so a preview shows the value
 // that will be sent (an email-shaped display name is not a credential).
 func URLValue(s string) string {
@@ -124,7 +125,7 @@ func URLValue(s string) string {
 	if u, err := url.Parse(s); err == nil && u.Host != "" {
 		return URL(s)
 	}
-	if bareCredentialPathRE.MatchString(s) || bareUserinfoRE.MatchString(s) {
+	if bareCredentialPathRE.MatchString(s) || bareSCPRE.MatchString(s) || bareUserinfoRE.MatchString(s) {
 		return urlText(s)
 	}
 	// Not a URL, but the string can still embed a "//user:pass@" or
@@ -154,6 +155,7 @@ var (
 	bareTokenRE    = regexp.MustCompile(`^([^/@\s:]+)@([^/@\s]*\.[^/@\s]*)`)
 	// A bare token@host URL has a path; a plain email does not.
 	bareCredentialPathRE = regexp.MustCompile(`^[^/@\s:]+@[^/@\s]*\.[^/@\s]*/`)
+	bareSCPRE            = regexp.MustCompile(`^[^/@\s:]+@[^/@\s:]*\.[^/@\s:]*:\S`)
 	pathParamRE          = regexp.MustCompile(`(?i)(;|%3B)([^=;/?#\s]+)(?:=|%3D)([^;/?#\s]*)`)
 )
 

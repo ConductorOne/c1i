@@ -95,7 +95,7 @@ func TestMcpAuthFlagsCompleteValuesPass(t *testing.T) {
 					args = append(args, "--"+n+"="+c.values[n])
 				}
 				t.Setenv("C1I_URL", mutTestURL)
-				s := newMutServer(t, fixedReply(200, m.reply))
+				s := newMutServer(t, withLiveRefs(fixedReply(200, m.reply)))
 				r := runMutationCLI(t, s.srv, 0, nil, args...)
 				if r.err != nil {
 					t.Fatalf("exit %d: %v", r.exit, r.err)
@@ -127,7 +127,7 @@ func TestMcpAuthFlagsCompleteValuesPass(t *testing.T) {
 				}
 				withDryRun(t)
 				t.Setenv("C1I_URL", mutTestURL)
-				s := newMutServer(t, fixedReply(200, `{}`))
+				s := newMutServer(t, withLiveRefs(fixedReply(200, `{}`)))
 				r := runMutationCLI(t, s.srv, 0, nil, args...)
 				if r.err != nil {
 					t.Fatalf("exit %d: %v", r.exit, r.err)
@@ -167,7 +167,7 @@ func TestMcpAuthPerUserLeavesSecretToTheUser(t *testing.T) {
 					args = append(args, "--"+n+"="+v)
 				}
 				t.Setenv("C1I_URL", mutTestURL)
-				s := newMutServer(t, fixedReply(200, m.reply))
+				s := newMutServer(t, withLiveRefs(fixedReply(200, m.reply)))
 				r := runMutationCLI(t, s.srv, 0, nil, args...)
 				if r.err != nil {
 					t.Fatalf("exit %d: %v", r.exit, r.err)
@@ -308,7 +308,7 @@ func TestMcpAuthUnchangedShapes(t *testing.T) {
 	t.Run("auth none", func(t *testing.T) {
 		withDryRun(t)
 		t.Setenv("C1I_URL", mutTestURL)
-		s := newMutServer(t, fixedReply(200, `{}`))
+		s := newMutServer(t, withLiveRefs(fixedReply(200, `{}`)))
 		r := runMutationCLI(t, s.srv, 0, nil,
 			"mcp", "servers", "register", "--app-id=app1", "--type=external", "--display-name=S", "--server-url=https://mcp.example.com/sse", "--auth=none")
 		if r.err != nil {
@@ -334,7 +334,7 @@ func TestMcpAuthUnchangedShapes(t *testing.T) {
 	t.Run("external config file", func(t *testing.T) {
 		withDryRun(t)
 		t.Setenv("C1I_URL", mutTestURL)
-		s := newMutServer(t, fixedReply(200, `{}`))
+		s := newMutServer(t, withLiveRefs(fixedReply(200, `{}`)))
 		r := runMutationCLI(t, s.srv, 0, nil,
 			"mcp", "servers", "register", "--app-id=app1", "--type=external", "--display-name=S",
 			"--external-config-file", writeTempJSON(t, "ext.json", `{"url":"https://mcp.example.com/sse","basicAuth":{"username":"u","password":"p"}}`))

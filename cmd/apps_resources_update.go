@@ -37,7 +37,7 @@ Prints the updated resource, unwrapped like "apps resources get": the id is
 		}
 		s := resourceScopeOf(cmd)
 		return sendMutation(cmd, mutation{Method: http.MethodPost, Path: s.resourcePath(args[0]), Body: body},
-			deletedAppPreRead(s.appID, "--app-id"))
+			liveAppPreRead(s.appID, "--app-id"))
 	},
 }
 

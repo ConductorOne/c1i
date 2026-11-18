@@ -43,6 +43,10 @@ func entOwnerServerUsers(t *testing.T, ownerIDs []string, userStatus map[string]
 		seen = append(seen, entOwnerRequest{r.Method, r.URL.EscapedPath(), string(b)})
 		mu.Unlock()
 		w.Header().Set("Content-Type", "application/json")
+		if body, ok := liveRefBody(r); ok {
+			_, _ = w.Write([]byte(body))
+			return
+		}
 		if id, ok := strings.CutPrefix(r.URL.Path, "/api/v1/users/"); ok && r.Method == http.MethodGet {
 			if code, set := userStatus[id]; set && code != http.StatusOK {
 				w.WriteHeader(code)

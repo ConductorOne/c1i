@@ -46,7 +46,7 @@ the id is .id.`,
 			opts = append(opts, withPreRead(existingUsersCheck(userFlag, userIDs)))
 		}
 		return sendMutation(cmd, mutation{Method: http.MethodPost, Path: path, Body: body},
-			append(opts, deletedAppPreRead(appID, "--app-id"))...)
+			append(opts, liveAppPreRead(appID, "--app-id"))...)
 	},
 }
 

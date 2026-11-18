@@ -771,4 +771,20 @@ func TestURLValueMasksOnlyURLShaped(t *testing.T) {
 			t.Errorf("URLValue(%q) = %q", in, got)
 		}
 	}
+	// scp-form git remotes: the user is masked with or without a "/" in the
+	// path, "git" stays; an email (nothing after the host) is kept.
+	exact := map[string]string{
+		"ghp_x@github.com:repo.git":     "[redacted]@github.com:repo.git",
+		"ghp_x@github.com:org/repo.git": "[redacted]@github.com:org/repo.git",
+		"git@github.com:repo.git":       "git@github.com:repo.git",
+		"git@github.com:org/repo.git":   "git@github.com:org/repo.git",
+		"zz@example.com":                "zz@example.com",
+		"zz+tag@example.com":            "zz+tag@example.com",
+		"a@b.c:":                        "a@b.c:",
+	}
+	for in, want := range exact {
+		if got := URLValue(in); got != want {
+			t.Errorf("URLValue(%q) = %q, want %q", in, got, want)
+		}
+	}
 }

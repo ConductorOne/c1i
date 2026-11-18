@@ -194,7 +194,7 @@ func TestConnectorsCreateBody(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Setenv("C1I_URL", mutTestURL)
-			s := newMutServer(t, userOK)
+			s := newMutServer(t, withLiveRefs(userOK))
 			args := []string{"connectors", "create", "--app-id", "a1"}
 			for _, a := range tc.args {
 				if strings.HasPrefix(a, "@") {

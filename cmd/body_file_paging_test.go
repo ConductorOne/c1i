@@ -411,7 +411,7 @@ func onePageStub(t *testing.T) (*httptest.Server, func() []map[string]any) {
 	t.Helper()
 	var mu sync.Mutex
 	var seen []map[string]any
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	srv := httptest.NewServer(liveRefHandler(func(w http.ResponseWriter, r *http.Request) {
 		raw, _ := io.ReadAll(r.Body)
 		body := map[string]any{}
 		_ = json.Unmarshal(raw, &body)

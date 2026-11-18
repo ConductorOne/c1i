@@ -374,6 +374,10 @@ func hookRefServer(t *testing.T, notFound string) (*httptest.Server, *[]webhookR
 			_, _ = io.WriteString(w, `{"code":5,"message":"not found"}`)
 			return
 		}
+		if body, ok := liveRefBody(r); ok {
+			_, _ = io.WriteString(w, body)
+			return
+		}
 		_, _ = io.WriteString(w, `{"hook":{"id":"hk-1"}}`)
 	}))
 	t.Cleanup(srv.Close)

@@ -276,6 +276,22 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   settings edge show` and `settings ai-governance tenant-defaults` is a usage
   error: they print a raw API/MCP object that was never projected, so the flag
   used to be silently ignored.
+- Every command that checks a referenced object for soft deletion before a
+  write now applies one rule: the object is deleted when its own `deletedAt`
+  is set (`null` and `""` are live). The app-reading commands (`apps update`,
+  the app and resource owner verbs, `apps resources update`, `connectors
+  create`, `mcp servers register`, `apps routing-rules create|update|reorder`,
+  `xaa resource-servers|scopes|access-profiles create`, `apps usage-controls
+  get`) exit `4` for an unknown app, `2` for a deleted one and `6` when the
+  lookup answers `200` without an app; some used to let that last case
+  through, and others refused an app whose `deletedAt` was `""`. The
+  entitlement, resource-type, role, service-principal, function and commit lookups
+  read the object they asked for: a `deletedAt` elsewhere in the response no
+  longer refuses the write, and a response without that object exits `6`.
+  `--dry-run` refuses the same.
+- `--dry-run` now masks the user of an scp-form git remote in any field
+  (`ghp_x@github.com:repo.git` prints `[redacted]@github.com:repo.git`), with
+  or without a `/` in the path; the `git` user and a plain email stay as sent.
 
 ### Security
 

@@ -35,13 +35,13 @@ One owner per call; to change several at once use "apps set-owners".
 			if err != nil {
 				return err
 			}
-			return removeEntitlementOwner(cmd, appOwnerV2(args[0]), ref, deletedAppPreRead(args[0], "<app-id>"))
+			return removeEntitlementOwner(cmd, appOwnerV2(args[0]), ref, liveAppPreRead(args[0], "<app-id>"))
 		}
 		userID, _ := cmd.Flags().GetString("user-id")
 		return sendMutation(cmd, mutation{
 			Method: http.MethodDelete,
 			Path:   client.Path("/api/v1/apps/%s/owners/%s", args[0], userID),
-		}, deletedAppPreRead(args[0], "<app-id>"))
+		}, liveAppPreRead(args[0], "<app-id>"))
 	},
 }
 

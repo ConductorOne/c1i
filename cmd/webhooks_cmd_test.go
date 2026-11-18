@@ -35,6 +35,10 @@ func webhooksServer(t *testing.T, respBody string) (*httptest.Server, *[]webhook
 		}
 		reqs = append(reqs, webhookReq{method: r.Method, path: r.URL.EscapedPath(), body: body})
 		w.Header().Set("Content-Type", "application/json")
+		if body, ok := liveRefBody(r); ok {
+			_, _ = io.WriteString(w, body)
+			return
+		}
 		_, _ = fmt.Fprint(w, respBody)
 	}))
 	t.Cleanup(srv.Close)

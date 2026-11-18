@@ -35,6 +35,7 @@ type bodyKeyReadExemption struct {
 // a closure in its initializer, "Type.method" for a method). A new key in an
 // exempt function fails like a new function does.
 var bodyKeyReadExemptions = map[string]bodyKeyReadExemption{
+	"deleted.go:deletedAtPath":                                   {[]string{"deletedAt"}, "a server response, which is always camelCase"},
 	"api.go:extractListAndToken":                                 {[]string{"nextPageToken"}, "a server response, which is always camelCase"},
 	"body_keys.go:refuseCLIOwnedBodyKeys":                        {[]string{"c1i_owned_body_fields"}, "a cobra flag annotation, not JSON"},
 	"flags.go:flagGiven":                                         {[]string{"c1i_empty_allowed"}, "a cobra flag annotation, not JSON"},

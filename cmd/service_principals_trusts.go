@@ -168,9 +168,9 @@ var spTrustsGetCmd = &cobra.Command{
 
 // servicePrincipalRefKind checks a trust's owner: the trust routes accept any
 // id, and an unknown one stores an orphan trust.
-var servicePrincipalRefKind = refKind{"service principal", func(r appRef) string { return spPath(r.ID) }}
+var servicePrincipalRefKind = refKind{"service principal", func(r appRef) string { return spPath(r.ID) }, []string{"servicePrincipal"}}
 
-var roleRefKind = refKind{"role", func(r appRef) string { return client.Path("/api/v1/iam/roles/%s", r.ID) }}
+var roleRefKind = refKind{"role", func(r appRef) string { return client.Path("/api/v1/iam/roles/%s", r.ID) }, []string{"role"}}
 
 // scopedRoleRefs labels each --scoped-role for existingRefsCheck: the API
 // stores an unknown role id as is.

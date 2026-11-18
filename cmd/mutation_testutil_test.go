@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"sync"
 	"testing"
@@ -71,6 +72,64 @@ func (m *mutServer) requests() []entOwnerRequest {
 
 func fixedReply(status int, body string) func(*http.Request, int) mutReply {
 	return func(*http.Request, int) mutReply { return mutReply{status: status, body: body} }
+}
+
+// liveRefBody is a live object for a GET of an id a command looks up before
+// a write (app, entitlement, resource type, function, commit, role, service
+// principal), in the server's envelope; ok is false for any other request.
+// It is for stubs that would otherwise answer {}, which a pre-read refuses.
+func liveRefBody(r *http.Request) (body string, ok bool) {
+	if r.Method != http.MethodGet {
+		return "", false
+	}
+	seg := strings.Split(strings.TrimPrefix(r.URL.EscapedPath(), "/api/v1/"), "/")
+	for i, s := range seg {
+		u, err := url.PathUnescape(s)
+		if err != nil {
+			return "", false
+		}
+		seg[i] = u
+	}
+	q := func(s string) string { b, _ := json.Marshal(s); return string(b) }
+	switch {
+	case len(seg) == 2 && seg[0] == "apps":
+		return `{"app":{"id":` + q(seg[1]) + `,"deletedAt":null}}`, true
+	case len(seg) == 4 && seg[0] == "apps" && seg[2] == "entitlements":
+		return `{"appEntitlementView":{"appEntitlement":{"id":` + q(seg[3]) + `,"appId":` + q(seg[1]) + `,"deletedAt":null}}}`, true
+	case len(seg) == 4 && seg[0] == "apps" && seg[2] == "resource_types":
+		return `{"appResourceTypeView":{"appResourceType":{"id":` + q(seg[3]) + `,"appId":` + q(seg[1]) + `,"deletedAt":null}}}`, true
+	case len(seg) == 2 && seg[0] == "functions":
+		return `{"function":{"id":` + q(seg[1]) + `,"deletedAt":null}}`, true
+	case len(seg) == 4 && seg[0] == "functions" && seg[2] == "commits":
+		return `{"commit":{"id":` + q(seg[3]) + `,"functionId":` + q(seg[1]) + `},"files":{}}`, true
+	case len(seg) == 3 && seg[0] == "iam" && seg[1] == "roles":
+		return `{"role":{"id":` + q(seg[2]) + `,"deletedAt":null}}`, true
+	case len(seg) == 2 && seg[0] == "service_principals":
+		return `{"servicePrincipal":{"id":` + q(seg[1]) + `}}`, true
+	}
+	return "", false
+}
+
+// withLiveRefs answers liveRefBody's GETs and passes every other request to
+// route.
+func withLiveRefs(route func(*http.Request, int) mutReply) func(*http.Request, int) mutReply {
+	return func(r *http.Request, n int) mutReply {
+		if body, ok := liveRefBody(r); ok {
+			return mutReply{body: body}
+		}
+		return route(r, n)
+	}
+}
+
+// liveRefHandler is withLiveRefs for a plain httptest handler.
+func liveRefHandler(next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if body, ok := liveRefBody(r); ok {
+			_, _ = io.WriteString(w, body)
+			return
+		}
+		next(w, r)
+	}
 }
 
 type mutResult struct {

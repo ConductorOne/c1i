@@ -68,7 +68,7 @@ those GET .../ownerids reported owners for.
 			func(c *client.Client, done func([]string) bool, timeout time.Duration) waitOp[[]string] {
 				return appOwnersWaitOp(c, appID, done, timeout)
 			},
-			deletedAppPreRead(appID, "<app-id>"))
+			liveAppPreRead(appID, "<app-id>"))
 	},
 }
 

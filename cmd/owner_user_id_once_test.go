@@ -17,7 +17,7 @@ func TestOwnerCommandsRefuseRepeatedUserID(t *testing.T) {
 	}
 	for name, base := range cases {
 		t.Run(name, func(t *testing.T) {
-			s := newMutServer(t, fixedReply(200, `{}`))
+			s := newMutServer(t, withLiveRefs(fixedReply(200, `{}`)))
 			args := append(append([]string{}, base...), "--user-id", "u1", "--user-id", "u2")
 			r := runMutationCLI(t, s.srv, 0, nil, args...)
 			if r.exit != exitUsage {

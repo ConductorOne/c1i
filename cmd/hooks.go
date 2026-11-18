@@ -165,17 +165,19 @@ func hookFunctionPreRead(cmd *cobra.Command) []mutationOpt {
 		commit = mustGetString(cmd, "function-commit-id")
 	}
 	return []mutationOpt{withPreRead(preRead{Run: func(ctx context.Context, c *client.Client, _ *mutation) ([]resolvedID, error) {
-		if err := requireHookRef(ctx, c, client.Path("/api/v1/functions/%s", fn), "function-id", fn, "function"); err != nil {
+		if err := requireHookRef(ctx, c, client.Path("/api/v1/functions/%s", fn), "function", "function-id", fn, "function"); err != nil {
 			return nil, err
 		}
 		if commit == "" {
 			return nil, nil
 		}
-		return nil, requireHookRef(ctx, c, client.Path("/api/v1/functions/%s/commits/%s", fn, commit), "function-commit-id", commit, "commit of that function")
+		return nil, requireHookRef(ctx, c, client.Path("/api/v1/functions/%s/commits/%s", fn, commit), "commit", "function-commit-id", commit, "commit of that function")
 	}})}
 }
 
-func requireHookRef(ctx context.Context, c *client.Client, path, flag, id, what string) error {
+// requireHookRef refuses an unknown or deleted object; envelope is the
+// response key holding it.
+func requireHookRef(ctx context.Context, c *client.Client, path, envelope, flag, id, what string) error {
 	data, err := c.Get(ctx, path, nil)
 	if err != nil {
 		var apiErr *client.APIError
@@ -184,7 +186,11 @@ func requireHookRef(ctx context.Context, c *client.Client, path, flag, id, what 
 		}
 		return fmt.Errorf("checking --%s %q: %w", flag, id, err)
 	}
-	if hasJSONField(data, "deletedAt", 2) {
+	deleted, _, ok := deletedAtPath(data, envelope)
+	if !ok {
+		return &nonJSONResponseError{fmt.Errorf("checking --%s %q: the lookup did not return a %s", flag, id, what)}
+	}
+	if deleted {
 		return &usageError{fmt.Errorf("--%s %q: the %s is deleted", flag, id, what)}
 	}
 	return nil

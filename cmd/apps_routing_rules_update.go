@@ -68,19 +68,19 @@ func mergedRoutingRule(ctx context.Context, c *client.Client, path, id string) (
 	}
 	var resp struct {
 		Rule *struct {
-			DisplayName string         `json:"displayName"`
-			Description string         `json:"description"`
-			Enabled     bool           `json:"enabled"`
-			Condition   string         `json:"condition"`
-			Settings    map[string]any `json:"settings"`
-			DeletedAt   *string        `json:"deletedAt"`
+			DisplayName string          `json:"displayName"`
+			Description string          `json:"description"`
+			Enabled     bool            `json:"enabled"`
+			Condition   string          `json:"condition"`
+			Settings    map[string]any  `json:"settings"`
+			DeletedAt   json.RawMessage `json:"deletedAt"`
 		} `json:"routingRule"`
 	}
 	if err := json.Unmarshal(data, &resp); err != nil || resp.Rule == nil {
 		return nil, &nonJSONResponseError{fmt.Errorf("reading rule %s before the update: the response held no routingRule", id)}
 	}
 	r := resp.Rule
-	if r.DeletedAt != nil {
+	if isDeletedAt(r.DeletedAt) {
 		return nil, &usageError{fmt.Errorf("rule %q is deleted", id)}
 	}
 	settings := r.Settings

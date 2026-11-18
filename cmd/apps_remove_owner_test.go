@@ -38,7 +38,7 @@ func TestAppsRemoveOwnerDryRunPreviewsRequestWithoutSending(t *testing.T) {
 	t.Setenv("C1I_URL", "https://example.invalid")
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodGet && r.URL.Path == "/api/v1/apps/app1" {
-			_, _ = w.Write([]byte(`{}`))
+			_, _ = w.Write([]byte(`{"app":{"id":"app1"}}`))
 			return
 		}
 		t.Errorf("unexpected request under --dry-run: %s %s", r.Method, r.URL.Path)
