@@ -2,7 +2,6 @@ package cmd
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -22,15 +21,11 @@ func requireLiveApp(ctx context.Context, c *client.Client, appID, label string) 
 		}
 		return fmt.Errorf("checking %s %q: %w", label, appID, err)
 	}
-	var resp struct {
-		App *struct {
-			DeletedAt *string `json:"deletedAt"`
-		} `json:"app"`
-	}
-	if err := json.Unmarshal(data, &resp); err != nil || resp.App == nil {
+	deleted, _, ok := deletedAtPath(data, "app")
+	if !ok {
 		return &nonJSONResponseError{fmt.Errorf("checking %s %q: the response held no app", label, appID)}
 	}
-	if resp.App.DeletedAt != nil {
+	if deleted {
 		return &usageError{fmt.Errorf("%s %q: the app is deleted", label, appID)}
 	}
 	return nil
@@ -41,26 +36,5 @@ func requireLiveApp(ctx context.Context, c *client.Client, appID, label string) 
 func liveAppPreRead(appID, label string) mutationOpt {
 	return withPreRead(preRead{Run: func(ctx context.Context, c *client.Client, _ *mutation) ([]resolvedID, error) {
 		return nil, requireLiveApp(ctx, c, appID, label)
-	}})
-}
-
-// deletedAppPreRead refuses an unknown or soft-deleted app before a write.
-// Unlike requireLiveApp it tolerates a 200 whose body has no app object, so a
-// command that historically let the server decide the write keeps working
-// against a proxy that answers a bare {}.
-func deletedAppPreRead(appID, label string) mutationOpt {
-	return withPreRead(preRead{Run: func(ctx context.Context, c *client.Client, _ *mutation) ([]resolvedID, error) {
-		data, err := c.Get(ctx, client.Path("/api/v1/apps/%s", appID), nil)
-		if err != nil {
-			var apiErr *client.APIError
-			if errors.As(err, &apiErr) && apiErr.StatusCode == http.StatusNotFound {
-				return nil, &refNotFoundError{fmt.Sprintf("%s %q: no such app", label, appID), apiErr}
-			}
-			return nil, fmt.Errorf("checking %s %q: %w", label, appID, err)
-		}
-		if hasJSONField(data, "deletedAt", 2) {
-			return nil, &usageError{fmt.Errorf("%s %q: the app is deleted", label, appID)}
-		}
-		return nil, nil
 	}})
 }

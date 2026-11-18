@@ -64,7 +64,7 @@ Verify with "c1i apps resources owners <resource-id> --app-id <app-id>
 			func(c *client.Client, done func([]string) bool, timeout time.Duration) waitOp[[]string] {
 				return resourceOwnersWaitOp(c, s, id, done, timeout)
 			},
-			deletedAppPreRead(s.appID, "--app-id"),
+			liveAppPreRead(s.appID, "--app-id"),
 			withPreRead(resourceExistsCheck(s, id)))
 	},
 }
@@ -103,11 +103,11 @@ One owner per call; to change several at once use "apps resources set-owners".
 			if err != nil {
 				return err
 			}
-			return addEntitlementOwner(cmd, s.ownerV2(id), ref, deletedAppPreRead(s.appID, "--app-id"))
+			return addEntitlementOwner(cmd, s.ownerV2(id), ref, liveAppPreRead(s.appID, "--app-id"))
 		}
 		userID := mustGetString(cmd, "user-id")
 		return sendMutation(cmd, mutation{Method: http.MethodPost, Path: s.ownersPath(id), Body: map[string]any{"userId": userID}},
-			deletedAppPreRead(s.appID, "--app-id"),
+			liveAppPreRead(s.appID, "--app-id"),
 			withPreRead(existingUsersCheck("user-id", []string{userID})),
 			withWait(func(c *client.Client) waitOp[[]string] {
 				return resourceOwnersWaitOp(c, s, id, untilPresent([]string{userID}), waitTimeout)
@@ -139,13 +139,13 @@ One owner per call; to change several at once use "apps resources set-owners".
 			if err != nil {
 				return err
 			}
-			return removeEntitlementOwner(cmd, resourceScopeOf(cmd).ownerV2(args[0]), ref, deletedAppPreRead(resourceScopeOf(cmd).appID, "--app-id"))
+			return removeEntitlementOwner(cmd, resourceScopeOf(cmd).ownerV2(args[0]), ref, liveAppPreRead(resourceScopeOf(cmd).appID, "--app-id"))
 		}
 		return sendMutation(cmd, mutation{
 			Method: http.MethodDelete,
 			Path:   resourceScopeOf(cmd).ownersPath(args[0]),
 			Body:   map[string]any{"userId": mustGetString(cmd, "user-id")},
-		}, deletedAppPreRead(resourceScopeOf(cmd).appID, "--app-id"))
+		}, liveAppPreRead(resourceScopeOf(cmd).appID, "--app-id"))
 	},
 }
 

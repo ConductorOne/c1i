@@ -2,7 +2,6 @@ package cmd
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -94,18 +93,12 @@ func liveResourceTypeCheck(s resourceScope) preRead {
 			}
 			return nil, fmt.Errorf("checking --resource-type-id %q: %w", s.typeID, err)
 		}
-		var resp struct {
-			View struct {
-				Type *struct {
-					DeletedAt *string `json:"deletedAt"`
-				} `json:"appResourceType"`
-			} `json:"appResourceTypeView"`
-		}
-		if err := json.Unmarshal(data, &resp); err != nil || resp.View.Type == nil {
+		deleted, at, ok := deletedAtPath(data, "appResourceTypeView", "appResourceType")
+		if !ok {
 			return nil, &nonJSONResponseError{fmt.Errorf("checking --resource-type-id %q: the resource type lookup did not return a resource type", s.typeID)}
 		}
-		if d := resp.View.Type.DeletedAt; d != nil && *d != "" {
-			return nil, &usageError{fmt.Errorf("--resource-type-id %q is deleted (at %s); create the resource under a live type", s.typeID, *d)}
+		if deleted {
+			return nil, &usageError{fmt.Errorf("--resource-type-id %q is deleted (at %s); create the resource under a live type", s.typeID, at)}
 		}
 		return nil, nil
 	}}

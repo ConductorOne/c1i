@@ -38,7 +38,7 @@ One owner per call; to change several at once use "apps set-owners".
 			if err != nil {
 				return err
 			}
-			return addEntitlementOwner(cmd, appOwnerV2(args[0]), ref, deletedAppPreRead(args[0], "<app-id>"))
+			return addEntitlementOwner(cmd, appOwnerV2(args[0]), ref, liveAppPreRead(args[0], "<app-id>"))
 		}
 		userID, _ := cmd.Flags().GetString("user-id")
 		// Everything the endpoint needs is in the path, but it still parses
@@ -48,7 +48,7 @@ One owner per call; to change several at once use "apps set-owners".
 			Method: http.MethodPost,
 			Path:   client.Path("/api/v1/apps/%s/owners/%s", args[0], userID),
 			Body:   addOwnerEmptyBody(),
-		}, deletedAppPreRead(args[0], "<app-id>"), withPreRead(existingUsersCheck("user-id", []string{userID})))
+		}, liveAppPreRead(args[0], "<app-id>"), withPreRead(existingUsersCheck("user-id", []string{userID})))
 	},
 }
 

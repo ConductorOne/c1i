@@ -113,7 +113,7 @@ requires --app-id. Approve discovered tools afterward with
 			return writeOutcome{Wait: serverListedWaitOp(c, appID, id, waitTimeout)}
 		}, wait))
 		return sendMutation(cmd, mutation{Method: http.MethodPost, Path: path, Body: body, Unwrap: byID("connectorId")},
-			append(opts, deletedAppPreRead(appID, "--app-id"))...)
+			append(opts, liveAppPreRead(appID, "--app-id"))...)
 	},
 }
 
