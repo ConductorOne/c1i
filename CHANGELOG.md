@@ -318,6 +318,13 @@ Output and error text:
 
 ### Fixed
 
+- `automations create|update` refuses a step using `evaluateExpressions` or
+  `createRevokeTasks` in `automationSteps`/`draftAutomationSteps` (either
+  spelling, `--steps-file` or `--body-file`), naming the step index and, for
+  `createRevokeTasks`, its replacement `createRevokeTasksV2`. Exit `2` before
+  any request is sent, `--dry-run` included; the server now 400s both ("the
+  evaluate expressions step is no longer supported"; "CreateRevokeTasks step
+  is deprecated and no longer allowed. It is replaced by CreateRevokeTasksV2").
 - `apps update`, `apps set-owners`, `apps add-owner|remove-owner` and `mcp
   servers register` read the app first, `--dry-run` included: an unknown app
   exits `4`, a soft-deleted one `2`, a `200` without an app `6`. `apps update`
