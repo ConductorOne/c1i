@@ -618,7 +618,13 @@ resource with `--resource-id` likewise means you drop
   `appPath`, `capabilitiesPath`, `usersPath` deleted (else 400). Update ignored
   a displayName/description mask in the runs checked. `connectors delete` refuses a connector backing an MCP
   server (exit 2; use `mcp servers delete`, which also removes its toolsets).
-  `connectors sync` only queues a sync; poll `connectors sync-status`.
+  `connectors sync` only queues a sync; poll `connectors sync-status`, or pass
+  `connectors sync --wait [--wait-timeout 15m]` to block until a sync started
+  after the command ran reaches a terminal `.status` (its object then prints
+  as a second document on stdout). A `.status.lastError`, or the timeout,
+  exits 1 with `applied: true`; the sync was still queued.
+  `.status.errorKind` is not checked: live it was `"ERROR_KIND_UNSPECIFIED"`
+  (the enum's zero value) on a clean DONE too, not `""`.
   Why did a sync fail: `connectors debuggable` (NDJSON: `appId`,
   `connectorId`, `syncStatus`) finds targets; then `sync-history <id>
   --app-id A [--runs N]` (runs + `.streak`; each `.lifecycleId`),

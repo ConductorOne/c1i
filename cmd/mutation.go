@@ -96,13 +96,14 @@ const (
 )
 
 type mutationOpts struct {
-	preReads    []preRead
-	respond     func(c *client.Client, resp []byte) writeOutcome
-	waitEnabled bool
-	secret      secretKind
-	mapErr      func(error) error
-	batchVerb   string
-	batchNoun   string
+	preReads        []preRead
+	respond         func(c *client.Client, resp []byte) writeOutcome
+	waitEnabled     bool
+	printWaitResult bool
+	secret          secretKind
+	mapErr          func(error) error
+	batchVerb       string
+	batchNoun       string
 }
 
 type mutationOpt func(*mutationOpts)
@@ -130,6 +131,15 @@ func withResponse(f func(c *client.Client, resp []byte) writeOutcome, waitEnable
 // no Poll is skipped.
 func withWait(build func(c *client.Client) waitOp[[]string], enabled bool) mutationOpt {
 	return withResponse(func(c *client.Client, _ []byte) writeOutcome { return writeOutcome{Wait: build(c)} }, enabled)
+}
+
+// withWaitResultOutput prints --wait's final satisfying value (Wait's last
+// Poll result) as a pretty JSON document on stdout once the wait succeeds.
+// Opt-in: most --wait ops carry a bare state string, not a document worth
+// printing (executionDoneWaitOp's AUTOMATION_EXECUTION_STATE_DONE isn't
+// valid JSON), so this only runs for a command that asks for it.
+func withWaitResultOutput() mutationOpt {
+	return func(o *mutationOpts) { o.printWaitResult = true }
 }
 
 // withErrorMap lets a command reclassify the server's refusal of the send. A
@@ -206,13 +216,22 @@ func sendMutation(cmd *cobra.Command, m mutation, opts ...mutationOpt) error {
 	}
 	out := o.respond(c, data)
 	var waitErr error
+	var waitResult []string
 	if o.waitEnabled && out.Wait.Poll != nil {
-		if _, err := runWait(cmd, out.Wait); err != nil {
-			waitErr = fmt.Errorf("%s %s was applied; waiting for %s failed: %w", m.Method, redact.URL(m.Path), out.Wait.Subject, err)
+		got, werr := runWait(cmd, out.Wait)
+		if werr != nil {
+			waitErr = fmt.Errorf("%s %s was applied; waiting for %s failed: %w", m.Method, redact.URL(m.Path), out.Wait.Subject, werr)
+		} else {
+			waitResult = got
 		}
 	}
 	if err := errors.Join(waitErr, out.Err); err != nil {
 		return &mutationError{err: err, applied: appliedTrue}
+	}
+	if o.printWaitResult && len(waitResult) > 0 {
+		if err := writeRawObject(cmd, []byte(waitResult[len(waitResult)-1])); err != nil {
+			return err
+		}
 	}
 	return nil
 }
