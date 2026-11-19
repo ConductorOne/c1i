@@ -2,8 +2,10 @@ package cmd
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
+	"strings"
 
 	"github.com/ConductorOne/c1i/internal/client"
 	"github.com/spf13/cobra"
@@ -83,8 +85,40 @@ var accessProfilesRequestableEntitlementsAddCmd = &cobra.Command{
 		}
 		body := buildRequestableEntitlementsBody(cmd, refs)
 		path := client.Path("/api/v1/catalogs/%s/requestable_entries", args[0])
-		return sendMutation(cmd, mutation{Method: http.MethodPost, Path: path, Body: body})
+		return sendMutation(cmd, mutation{Method: http.MethodPost, Path: path, Body: body},
+			withErrorMap(mapRequestableEntitlementAddErr(args[0])))
 	},
+}
+
+// mapRequestableEntitlementAddErr maps known entitlement-type/profile-type
+// mismatch 400s to cleaner c1i-terminology messages. The API returns opaque
+// messages that use internal terminology ("catalog"); this translates them.
+func mapRequestableEntitlementAddErr(profileID string) func(error) error {
+	return func(err error) error {
+		var apiErr *client.APIError
+		if !errors.As(err, &apiErr) || apiErr.StatusCode != http.StatusBadRequest {
+			return nil
+		}
+		body := apiErr.Body
+		switch {
+		case strings.Contains(body, "cannot add C1 app entitlements to a catalog"):
+			return &usageError{fmt.Errorf(
+				"entitlement type mismatch: C1 app entitlements cannot be added to this access profile type; check the profile type with \"access-profiles get %s\"",
+				profileID,
+			)}
+		case strings.Contains(body, "Role membership entitlements can only be added to Catalog profiles"):
+			return &usageError{fmt.Errorf(
+				"entitlement type mismatch: Role membership entitlements can only be added to Catalog access profiles; check the profile type with \"access-profiles get %s\"",
+				profileID,
+			)}
+		case strings.Contains(body, "membership entitlements of Catalog and Hybrid access profiles cannot be added to a Catalog profile"):
+			return &usageError{fmt.Errorf(
+				"entitlement type mismatch: Catalog and Hybrid membership entitlements cannot be added to this access profile; they require a Role access profile — check the profile type with \"access-profiles get %s\"",
+				profileID,
+			)}
+		}
+		return nil
+	}
 }
 
 var accessProfilesRequestableEntitlementsRemoveCmd = &cobra.Command{

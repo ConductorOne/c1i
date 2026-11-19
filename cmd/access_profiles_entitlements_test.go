@@ -121,6 +121,104 @@ func TestCatalogEntitlementSetRejectsNullReferenceFile(t *testing.T) {
 	}
 }
 
+func TestRequestableEntitlementsAddMapsTypeMismatch400s(t *testing.T) {
+	cases := []struct {
+		name       string
+		apiBody    string
+		wantSubstr string
+		wantAbsent string
+	}{
+		{
+			name:       "C1AppEntitlements",
+			apiBody:    `{"message":"cannot add C1 app entitlements to a catalog","code":3}`,
+			wantSubstr: "entitlement type mismatch",
+			wantAbsent: "to a catalog",
+		},
+		{
+			name:       "RoleMembership",
+			apiBody:    `{"message":"Role membership entitlements can only be added to Catalog profiles","code":3}`,
+			wantSubstr: "Catalog access profiles",
+			wantAbsent: "Catalog profiles",
+		},
+		{
+			name:       "CatalogHybridMembership",
+			apiBody:    `{"message":"membership entitlements of Catalog and Hybrid access profiles cannot be added to a Catalog profile; access profile is not a Role profile","code":3}`,
+			wantSubstr: "Role access profile",
+			wantAbsent: "is not a Role profile",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusBadRequest)
+				_, _ = w.Write([]byte(tc.apiBody))
+			}))
+			defer srv.Close()
+
+			stubAccessProfileEntitlementsClient(t, srv)
+			resetCmdFlags(t, accessProfilesRequestableEntitlementsAddCmd)
+			t.Setenv("C1I_URL", "https://example.invalid")
+			clearViperOverrides(t, "dry_run")
+			viper.Set("dry_run", false)
+			if err := accessProfilesRequestableEntitlementsAddCmd.Flags().Set("app-id", "app-1"); err != nil {
+				t.Fatal(err)
+			}
+			if err := accessProfilesRequestableEntitlementsAddCmd.Flags().Set("entitlement-id", "ent-1"); err != nil {
+				t.Fatal(err)
+			}
+			accessProfilesRequestableEntitlementsAddCmd.SetContext(context.Background())
+			err := accessProfilesRequestableEntitlementsAddCmd.RunE(accessProfilesRequestableEntitlementsAddCmd, []string{"profile-1"})
+			if err == nil {
+				t.Fatal("expected an error, got nil")
+			}
+			var ue *usageError
+			if !errors.As(err, &ue) {
+				t.Errorf("error is not a usageError: %v", err)
+			}
+			if !strings.Contains(err.Error(), tc.wantSubstr) {
+				t.Errorf("error = %q, want it to contain %q", err.Error(), tc.wantSubstr)
+			}
+			if strings.Contains(err.Error(), tc.wantAbsent) {
+				t.Errorf("error = %q, should NOT contain raw API text %q", err.Error(), tc.wantAbsent)
+			}
+			if !strings.Contains(err.Error(), "access-profiles get profile-1") {
+				t.Errorf("error = %q, want it to suggest 'access-profiles get profile-1'", err.Error())
+			}
+		})
+	}
+}
+
+func TestRequestableEntitlementsAddPassesThroughUnknown400s(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		_, _ = w.Write([]byte(`{"message":"some other validation error","code":3}`))
+	}))
+	defer srv.Close()
+
+	stubAccessProfileEntitlementsClient(t, srv)
+	resetCmdFlags(t, accessProfilesRequestableEntitlementsAddCmd)
+	t.Setenv("C1I_URL", "https://example.invalid")
+	clearViperOverrides(t, "dry_run")
+	viper.Set("dry_run", false)
+	if err := accessProfilesRequestableEntitlementsAddCmd.Flags().Set("app-id", "app-1"); err != nil {
+		t.Fatal(err)
+	}
+	if err := accessProfilesRequestableEntitlementsAddCmd.Flags().Set("entitlement-id", "ent-1"); err != nil {
+		t.Fatal(err)
+	}
+	accessProfilesRequestableEntitlementsAddCmd.SetContext(context.Background())
+	err := accessProfilesRequestableEntitlementsAddCmd.RunE(accessProfilesRequestableEntitlementsAddCmd, []string{"profile-1"})
+	if err == nil {
+		t.Fatal("expected an error, got nil")
+	}
+	// The raw API error should pass through unchanged for unknown 400s.
+	if !strings.Contains(err.Error(), "some other validation error") {
+		t.Errorf("error = %q, want it to contain the raw API message for unknown 400s", err.Error())
+	}
+}
+
 func TestCatalogEntitlementDeleteSendsJSONBodyAndEscapedProfileID(t *testing.T) {
 	const profileID = "profile /?#"
 	const wantEscapedPath = "/api/v1/catalogs/profile%20%2F%3F%23/requestable_entries"

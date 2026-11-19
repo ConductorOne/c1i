@@ -332,6 +332,14 @@ Output and error text:
 
 ### Fixed
 
+- `access-profiles requestable-entitlements add` now translates known
+  entitlement-type/profile-type mismatch 400s into actionable c1i-terminology
+  messages instead of passing through opaque API text. Three mappings: "cannot
+  add C1 app entitlements to a catalog", "Role membership entitlements can only
+  be added to Catalog profiles", and the Catalog/Hybrid membership mismatch.
+  Each message names the access profile id and suggests
+  `access-profiles get <id>` to check the profile type. Unknown 400s pass
+  through unchanged.
 - `automations create|update` refuses a step using `evaluateExpressions` or
   `createRevokeTasks` in `automationSteps`/`draftAutomationSteps` (either
   spelling, `--steps-file` or `--body-file`), naming the step index and, for
