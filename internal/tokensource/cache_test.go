@@ -3,6 +3,7 @@ package tokensource
 import (
 	"context"
 	"errors"
+	"github.com/ConductorOne/c1i/internal/keychain"
 	"github.com/zalando/go-keyring"
 	"golang.org/x/oauth2"
 	"os"
@@ -554,7 +555,12 @@ func TestStoreSweepKeepsTokenJustWritten(t *testing.T) {
 }
 
 func TestStoreSweepLeavesCredentialsDir(t *testing.T) {
-	dir := useTempConfig(t)
+	useTempConfig(t)
+	// The config root, not HOME: on darwin it is ~/Library/Application Support.
+	dir, err := keychain.ConfigDir()
+	if err != nil {
+		t.Fatal(err)
+	}
 	creds := filepath.Join(dir, "c1i", "credentials")
 	if err := os.MkdirAll(creds, 0o700); err != nil {
 		t.Fatal(err)

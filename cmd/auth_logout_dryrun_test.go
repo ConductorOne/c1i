@@ -5,12 +5,20 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/ConductorOne/c1i/internal/keychain"
 )
 
 // plantCredential writes a 0600 credential file for host and returns its path.
 func plantCredential(t *testing.T, host string) string {
 	t.Helper()
-	dir := filepath.Join(os.Getenv("HOME"), ".config", "c1i", "credentials")
+	// keychain.ConfigDir, not ~/.config: on darwin the file backend lives
+	// under ~/Library/Application Support.
+	cfg, err := keychain.ConfigDir()
+	if err != nil {
+		t.Fatal(err)
+	}
+	dir := filepath.Join(cfg, "c1i", "credentials")
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		t.Fatal(err)
 	}
