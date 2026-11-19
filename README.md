@@ -1644,6 +1644,13 @@ automation with no steps; create it disabled, add steps, then enable it with
 `automations update --enabled`. An automation with no triggers runs only
 through `automations execute`, which also starts a disabled automation.
 
+`automations create|update` refuse a step naming `evaluateExpressions` or
+`createRevokeTasks` in `automationSteps`/`draftAutomationSteps` (any
+spelling, `--steps-file` or `--body-file`) before sending anything,
+`--dry-run` included: the server 400s both ("the evaluate expressions step
+is no longer supported"; "CreateRevokeTasks step is deprecated and no longer
+allowed. It is replaced by CreateRevokeTasksV2") rather than running them.
+
 `automations execute` prints `{"executionId": "..."}`; `--context-file` is a
 JSON object sent as the execution's context. `--wait` polls
 `automations executions get` until the execution ends, printing the id first and
