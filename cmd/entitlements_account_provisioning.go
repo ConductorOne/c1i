@@ -39,8 +39,9 @@ var entitlementsAccountProvisioningShowCmd = &cobra.Command{
 Prints .provisionerPolicy alone, not the whole entitlement ("entitlements
 get" prints that); named "show", not "get", because the policy has no id of
 its own to guarantee at the top level. An entitlement with no provisioning
-configured prints "{}", or the explicit {"unconfigured": {}} the API stores
-once a policy is wiped; the policy is printed as stored, not normalized. A 200
+configured prints "{}" (the field absent or null), or the explicit
+{"unconfigured": {}} the API stores once a policy is wiped; the policy is
+printed as stored, not normalized. A 200
 whose response does not hold the entitlement exits 6, so a broken response
 cannot pass for "nothing configured". --fields projects within this object,
 the same rule as every other read.`,
@@ -70,8 +71,8 @@ the same rule as every other read.`,
 // entitlementProvisionerPolicy extracts .provisionerPolicy from a GET
 // entitlement response. The read declares where the entitlement sits, so a
 // response without it exits 6 like "entitlements get" (a broken envelope must
-// not print the "{}" that means "nothing configured"). A field absent
-// entirely (its proto3 zero value) prints as "{}"; the API also stores an
+// not print the "{}" that means "nothing configured"). A field absent or
+// null (its proto3 zero value) prints as "{}"; the API also stores an
 // explicit {"unconfigured":{}} (an empty policy update produces it), which
 // prints as sent. Both mean no provisioning; this command does not normalize
 // one into the other.
