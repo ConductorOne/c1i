@@ -78,6 +78,13 @@ c1i docs endpoints --filter task
 > **Upgrading from 0.10.1?** Read "Upgrading from 0.10.1" there too: `.`/`..`
 > ids exit `2` everywhere, unknown referenced ids exit `4`, error text masks
 > secrets, and `tasks skip-step` refuses a provision step.
+>
+> **Upgrading from 0.11.0?** Read "Upgrading from 0.11.0" there too: a typed
+> `get` answered `200` without its object exits `6`; app pre-reads on `apps
+> set-owners`, `apps update`, `apps add-owner|remove-owner` and `mcp servers
+> register` exit `4` (unknown) or `2` (deleted) and run under `--dry-run`, so
+> a preview needs credentials; several raw reads refuse `--fields` with exit
+> `2`; and a checked `--*-file` field in both spellings is refused.
 
 ## Authentication
 
@@ -361,12 +368,13 @@ the `upgrade --check` report: always `current`, `latest`, `channel`,
 (the binary it would replace) only when `update_available` is true on a
 standalone install. `--fields` is a usage error on a preview.
 
-Every preview, `.upgrade` included, prints credential fields as `[redacted]`: fields whose name ends
-in `token`, `secret`, `password`, `signature`, `apikey` and the like (a
-best-effort suffix rule), header values, a URL's username (except `git`) and password, and
-secret-named URL parameters. Everything else is shown as sent, and a body that
-is not JSON prints as `"[redacted: not JSON]"`. A 0.9.2 preview showed them as
-typed.
+Every preview, `.upgrade` included, prints credential fields as `[redacted]`:
+fields whose name ends in `token`, `secret`, `password`, `signature`, `apikey`
+and the like (a best-effort suffix rule), header values, a URL's username
+(except `git`) and password, the user of an scp-form git remote (unless it is
+`git`), and secret-named URL parameters. Everything else is shown as sent, and
+a body that is not JSON prints as `"[redacted: not JSON]"`. A 0.9.2 preview
+showed them as typed.
 
 A preview checks the input shape and runs the pre-reads a command documents.
 An exit-0 preview does not prove an id exists: a command with no pre-read sends
@@ -1232,14 +1240,15 @@ array naming each attempted request.
 `remove-owner` and `set-owners`; for the provisioning lag, `--wait` and the
 `set-owners` user lookup, see **Owner commands** under Apps.
 
-`set-owners` replaces the whole list and needs at least one `--user-id`, since
-the API takes an empty list as "remove every owner"; `remove-owner` can still
-remove the last owner. A repeated `--user-id` is sent once because the API
-answers a duplicate with a 500. An unknown user, entitlement or app exits `4`
-on `add-owner` (c1i looks the user up first, so `--dry-run` refuses it too). `remove-owner` exits `4` on a user who was never an owner as
-well as on an unknown one, so `4` cannot tell those apart; a user who was an
-owner and is already removed exits `0`. `owners` returns zero rows at exit `0`
-for a nonexistent entitlement or app.
+`set-owners` replaces the whole list and needs at least one `--user-id`, or
+`--owner-entitlement-id` with `--no-user-owners`, since the API takes an empty
+list as "remove every owner"; `remove-owner` can still remove the last owner.
+A repeated `--user-id` is sent once because the API answers a duplicate with a
+500. An unknown user, entitlement or app exits `4` on `add-owner` (c1i looks
+the user up first, so `--dry-run` refuses it too). `remove-owner` exits `4` on
+a user who was never an owner as well as on an unknown one, so `4` cannot tell
+those apart; a user who was an owner and is already removed exits `0`. `owners`
+returns zero rows at exit `0` for a nonexistent entitlement or app.
 
 `entitlements grants` lists one entitlement's grants (`GET .../grants`) with
 the account, the C1 user (`user_display_name`, `user_email`), `discovered_at`,

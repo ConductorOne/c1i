@@ -727,8 +727,9 @@ resource with `--resource-id` likewise means you drop
   --app-id --user-id` (one user per call; a repeated `--user-id` exits 2, as on
   `apps add-owner|remove-owner` and `accounts set-owner`) or `entitlements set-owners <entitlement-id> --app-id
   --user-id ...`. `set-owners` replaces the list and needs at least one
-  `--user-id`; an unknown user exits 4 before the write, because the API
-  would silently drop it and could leave no owners. `remove-owner` exits 4
+  `--user-id`, or `--owner-entitlement-id` with `--no-user-owners`; an
+  unknown user exits 4 before the write, because the API would silently drop
+  it and could leave no owners. `remove-owner` exits 4
   both for an unknown user and for one who was never an owner. Pass `--wait`
   on `add-owner` (waits until the owner appears) or `set-owners` (waits until
   the owner set equals the request, removals included). A timeout exits 1,
