@@ -180,10 +180,10 @@ func connectorSyncWaitOp(c *client.Client, path, connectorID, appID string, base
 			}
 			st := read.status
 			if !completedAtAdvanced(*baseline, st.CompletedAt) {
-				// A connector that never records a completion time (an
-				// unconfigured one stays DONE with null timestamps) is
-				// indistinguishable on the first polls from one whose queued
-				// sync has not started yet, so it ends at the timeout.
+				// A status whose completedAt never advances (an unconfigured
+				// connector stays DONE with null timestamps) looks the same at
+				// every poll as one whose queued sync has not started, so the
+				// wait can only end at the timeout.
 				return []string{}, nil
 			}
 			if st.Status == connectorSyncStatusError || st.LastError != "" {

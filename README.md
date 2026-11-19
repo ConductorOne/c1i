@@ -1530,8 +1530,9 @@ waited on either way). A sync that ends in `SYNC_STATUS_ERROR` or with
 with null timestamps, and a sync the server refuses before it starts stays
 `RUNNING` -- is reported at the timeout, not as a sync error: the wait cannot
 tell it from a sync that has not started yet, so `connectors get` (which shows
-`.status.lastError`) is the way to see why. `.status.errorKind` is not checked: it is `"ERROR_KIND_UNSPECIFIED"`, its
-enum's zero value, on a clean DONE too, not `""`. On a paused connector the
+`.status.lastError`) is the way to see why. `.status.errorKind` is not
+checked: it is `"ERROR_KIND_UNSPECIFIED"`, its enum's zero value, on a clean
+DONE too, not `""`. On a paused connector the
 server can accept the call but queue nothing, so resume the connector first.
 `pause` and `resume` exit 0 when repeated.
 `schedule --clear` removes the schedule; c1i does not validate `--cron` or

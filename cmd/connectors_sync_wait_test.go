@@ -197,6 +197,30 @@ func TestConnectorsSyncWait(t *testing.T) {
 		}
 	})
 
+	t.Run("a never-synced connector's UNSPECIFIED status still advances", func(t *testing.T) {
+		// The shape live at creation: SYNC_STATUS_UNSPECIFIED with null
+		// timestamps. It is an empty baseline, and this sync's completion ends
+		// the wait.
+		s := newMutServer(t, connSyncRoute(
+			`{"connectorView":{"connector":{"id":"cn1","status":{"status":"SYNC_STATUS_UNSPECIFIED","completedAt":null,"lastError":"","errorKind":"ERROR_KIND_UNSPECIFIED"}}}}`,
+			connSyncEnvelope("SYNC_STATUS_DONE", "2024-01-01T00:05:00Z", "", "ERROR_KIND_UNSPECIFIED"),
+		))
+		r := runMutationCLI(t, s.srv, 0, nil, "connectors", "sync", "cn1", "--app-id", "a1", "--wait", "--wait-timeout", "2s")
+		if r.err != nil {
+			t.Fatalf("exit %d err %v, want the first sync waited on", r.exit, r.err)
+		}
+		var got map[string]any
+		if err := json.Unmarshal([]byte(r.stdout), &got); err != nil {
+			t.Fatalf("stdout is not one JSON document: %v\n%s", err, r.stdout)
+		}
+		if got["completedAt"] != "2024-01-01T00:05:00Z" {
+			t.Errorf("completedAt = %v, want the first sync's", got["completedAt"])
+		}
+		if reqs := s.requests(); len(reqs) != 3 || reqs[0].method != http.MethodGet || reqs[1].method != http.MethodPost {
+			t.Errorf("requests = %+v, want baseline GET, POST, one poll", reqs)
+		}
+	})
+
 	t.Run("DONE without a completion time keeps waiting", func(t *testing.T) {
 		// Live: a connector created with an empty config stays SYNC_STATUS_DONE
 		// with null timestamps, because its syncs record NOT_CONNECTED. Ending
