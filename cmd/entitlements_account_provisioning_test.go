@@ -66,6 +66,15 @@ func TestEntitlementsAccountProvisioningShow(t *testing.T) {
 			wantExit: 0,
 			want:     "{}\n",
 		},
+		{
+			// The API stores this arm once a policy is wiped; it is printed as
+			// sent rather than normalized into "{}".
+			name:     "explicitly unconfigured",
+			status:   200,
+			get:      `{"appEntitlementView":{"appEntitlement":{"id":"e-1","provisionerPolicy":{"unconfigured":{}}}}}`,
+			wantExit: 0,
+			want:     indentJSON(t, `{"unconfigured":{}}`),
+		},
 		{name: "unknown entitlement", status: 404, get: acctProvNotFound, wantExit: exitNotFound},
 
 		// A 200 whose response does not hold the entitlement is a C1 failure:

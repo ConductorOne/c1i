@@ -916,7 +916,9 @@ resource with `--resource-id` likewise means you drop
   list|add|remove <entitlement-id> --app-id [--user-id ...]` manages users the
   automation leaves alone.
 - `entitlements account-provisioning show <entitlement-id> --app-id` prints
-  `.provisionerPolicy` alone ("{}" when unset). `set <entitlement-id> --app-id
+  `.provisionerPolicy` alone ("{}" when unset, or the explicit
+  `{"unconfigured": {}}` the API stores once a policy is wiped; printed as
+  stored, not normalized). `set <entitlement-id> --app-id
   --connector-id --field key=CEL... (--save-to-vault-id... | --do-not-save)
   [--test]` always sends the complete `connector.account` policy with
   `updateMask=provisionerPolicy`, since a request that omits it under that

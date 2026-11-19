@@ -1282,7 +1282,9 @@ stored policy, so `set` always builds and sends the complete policy (every
 `updateMask=provisionerPolicy`, and cannot send that empty body. `show`
 (not `get`: the policy has no id of its own to guarantee at the top level)
 prints just `.provisionerPolicy`, not the whole entitlement (`"{}"` when
-nothing is configured); use `entitlements get` for the rest.
+nothing is configured, or the explicit `{"unconfigured": {}}` the API stores
+once a policy is wiped -- it prints the policy as stored); use
+`entitlements get` for the rest.
 `set` reads `--connector-id` first, `--dry-run` included: an unknown one
 exits `4`, a deleted one `2`. Exactly one of the repeatable
 `--save-to-vault-id` or `--do-not-save` is required. `--test` evaluates every
