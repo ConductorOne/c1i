@@ -1129,6 +1129,12 @@ c1i entitlements proxy-bindings delete \
   --source-app-id <id> --source-entitlement-id <id> \
   --destination-app-id <id> --destination-entitlement-id <id>
 
+# Account-provisioning policy (provisionerPolicy.connector.account)
+c1i entitlements account-provisioning show <entitlement-id> --app-id <id>
+c1i entitlements account-provisioning set <entitlement-id> --app-id <id> --connector-id <id> \
+  --field key=CEL [--field key=CEL ...] \
+  (--save-to-vault-id <id> [--save-to-vault-id <id> ...] | --do-not-save) [--test]
+
 # Create one on a manually-managed app, with its resource type and resource
 c1i entitlements create --app-id <id> --display-name "Payroll admin" \
   [--description <text>] [--slug member] [--alias payroll_admin] [--owner-id <user-id>] \
@@ -1273,6 +1279,32 @@ workflow that configures delegation on the destination entitlement. The public
 REST API has no proxy-binding list endpoint; the C1 Console's binding browser
 uses an internal gRPC-web search service that is outside the public API
 contract.
+
+`entitlements account-provisioning` manages `provisionerPolicy.connector.account`
+on an app entitlement: the account-provisioning config the Console shows under
+App > Accounts management > Provisioning, provisioning through this app's own
+connector. `entitlements proxy-bindings` plus the `delegate-entitlement-provisioning`
+guide above cover the separate `delegated` arm, which has no first-class
+command. The entitlement update endpoint takes the whole entitlement plus an
+`updateMask`; a request that sends `provisionerPolicy` under that mask but
+omits the account-provisioning object still answers `200` and **wipes** the
+stored policy, so `set` always builds and sends the complete policy (every
+`--field`, the fixed `schemaId: ""`, and the chosen storage mode) with
+`updateMask=provisionerPolicy`, and cannot send that empty body. `show`
+(not `get`: the policy has no id of its own to guarantee at the top level)
+prints just `.provisionerPolicy`, not the whole entitlement (`"{}"` when
+nothing is configured, or the explicit `{"unconfigured": {}}` the API stores
+once a policy is wiped -- it prints the policy as stored); use
+`entitlements get` for the rest.
+`set` reads `--connector-id` first, `--dry-run` included: an unknown one
+exits `4`, a deleted one `2`. Exactly one of the repeatable
+`--save-to-vault-id` or `--do-not-save` is required. `--test` evaluates every
+`--field` expression with `c1i policies test-provision` (the same
+`test-account-provision-policy` route), in the order given, before anything
+is written — `--dry-run` included — and stops at the first one the server
+rejects, naming its key; the server answers a CEL expression that does not
+compile with a `500` (exit `6`), not a `4xx`. `set` prints the updated
+entitlement, unwrapped like `entitlements get`.
 
 ### Grants ("who has access")
 

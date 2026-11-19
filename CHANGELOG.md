@@ -65,6 +65,17 @@ Output and error text:
   started yet. `.status.errorKind` is not checked: it reads
   `"ERROR_KIND_UNSPECIFIED"`, its enum's zero value, on a clean DONE too, not
   `""`. Without `--wait`, behavior is unchanged.
+- `entitlements account-provisioning show|set <entitlement-id> --app-id`
+  manages `provisionerPolicy.connector.account`. `show` (not `get`: the
+  policy has no id of its own) prints `.provisionerPolicy` alone. `set
+  --connector-id --field key=CEL... (--save-to-vault-id... | --do-not-save)
+  [--test]` always sends the whole policy with
+  `updateMask=provisionerPolicy`: a request that sends that mask without the
+  policy object still answers `200` and wipes it, so this command cannot
+  send that empty body. `--connector-id` is checked first, `--dry-run`
+  included (unknown exits `4`, deleted `2`); `--test` evaluates every
+  `--field` with `policies test-provision` first and aborts on the first one
+  the server rejects, naming it.
 - `bridges list|get|create|update|delete|services` and `bridges credentials
   list|create|revoke` manage tunnel bridges and their client credentials.
 - `apps routing-rules list|get|create|update|delete|reorder --app-id` manage an app's

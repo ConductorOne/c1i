@@ -263,6 +263,8 @@ var mutationTable = []mutationRow{
 	{cmd: "entitlements create", args: []string{"--app-id", "app-1", "--display-name", "e", "--resource-type-id", "rt-1", "--resource-id", "r-1"},
 		body: tblEnt, want: tblEntDoc, ids: []string{".id", ".appResourceTypeId", ".appResourceId"}, method: "POST", path: "/api/v1/apps/app-1/entitlements"},
 	{cmd: "entitlements update", args: []string{"e-1", "--app-id", "app-1", "--description", "d"}, body: tblEnt, want: tblEntDoc, ids: idPath, method: "POST", path: "/api/v1/apps/app-1/entitlements/e-1"},
+	{cmd: "entitlements account-provisioning set", args: []string{"e-1", "--app-id", "app-1", "--connector-id", "cn1", "--field", "email=subject.email", "--save-to-vault-id", "v1"},
+		body: tblEnt, want: tblEntDoc, ids: idPath, method: "POST", path: "/api/v1/apps/app-1/entitlements/e-1", reads: 1},
 	{cmd: "entitlements delete", args: []string{"e-1", "--app-id", "app-1"}, body: `{}`, method: "DELETE", path: "/api/v1/apps/app-1/entitlements/e-1"},
 	{cmd: "entitlements add-owner", args: []string{"e-1", "--app-id", "app-1", "--user-id", "u1"}, body: `{}`, method: "POST", path: "/api/v1/apps/app-1/entitlements/e-1/owners", reads: 1},
 	{cmd: "entitlements remove-owner", args: []string{"e-1", "--app-id", "app-1", "--user-id", "u1"}, body: `{}`, method: "DELETE", path: "/api/v1/apps/app-1/entitlements/e-1/owners/u1"},
