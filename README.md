@@ -1074,8 +1074,19 @@ user owner routes have no commands: on the tenant tried, each answered
 ```sh
 c1i accounts list --app-id <id> [--status enabled|disabled|deleted] [--type user|service-account|system-account] [--unmapped-only] [--query <text>] [--page-size N] [--page-token TOKEN] [--limit N]
 
+c1i accounts get <app-user-id> --app-id <id>
+
 c1i accounts set-owner <app-user-id> --app-id <id> --user-id <id>
 ```
+
+There is no GET-by-id route for app users: `accounts get` runs the same
+`POST /api/v1/search/app_users` `accounts list` does, filtered to the one id,
+and prints the app user unwrapped (pretty JSON) -- including `profile`, which
+`accounts list` rows also carry now (`--fields profile.<key>` reaches a
+specific attribute). An id that exists under a different app is not found
+here on purpose: zero matches exits `4`; a search that somehow returns more
+than one row for the same id is treated as a C1 failure (exit `6`), not a
+usage error.
 
 `accounts set-owner` looks the `--user-id` user up first: an unknown one exits `4`
 and nothing is sent (`--dry-run` looks it up too, so the lookup needs user read).

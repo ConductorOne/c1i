@@ -774,6 +774,12 @@ resource with `--resource-id` likewise means you drop
 - `accounts list --unmapped-only` filters after each page is fetched, not
   server-side. With `--page-token` (which turns off auto-pagination) a page
   can come back empty while unmapped accounts exist further along.
+- `accounts get <app-user-id> --app-id <id>` has no GET-by-id route to call:
+  it runs the same `search/app_users` `list` does, filtered to the one id,
+  and prints the app user unwrapped -- `profile` included, which `list` rows
+  also now carry (`--fields profile.<key>`). Zero matches, or a result whose
+  id doesn't actually equal the one asked for, exits `4` like any other
+  not-found; more than one row claiming that id exits `6`.
 - `functions invoke` is asynchronous: it prints `{"invocationId": ...}` and
   exits 0 before the function runs. Add `--wait` to block until it finishes.
   Any `--wait` failure exits `1` after the id was printed, with an error

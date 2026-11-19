@@ -45,6 +45,20 @@ type getUnwrapCase struct {
 func getUnwrapCases() []getUnwrapCase {
 	return []getUnwrapCase{
 		{
+			// A search-shaped get: the body is a one-element "list", which the
+			// command itself unwraps (there is no GET-by-id route for app
+			// users) before routing the single match through writeResource.
+			// flattenEnvelope pierces the one-element array transparently.
+			name:        "accounts get",
+			cmd:         accountsGetCmd,
+			args:        []string{"au-1"},
+			flags:       map[string]string{"app-id": "app-1"},
+			idKey:       "id",
+			body:        `{"list":[{"appUser":{"id":"au-1","appId":"app-1","displayName":"Ada","profile":{"department":"Eng"}}}]}`,
+			payloadPath: []string{"list", "appUser"},
+			wantKeys:    []string{"id", "appId", "displayName", "profile"},
+		},
+		{
 			name:        "apps get",
 			cmd:         appsGetCmd,
 			args:        []string{"app-1"},
@@ -945,7 +959,11 @@ func sortedKeys(m map[string]any) []string {
 }
 
 // flattenEnvelope returns what unwrapping c.body must produce: the payload's
-// keys plus every key sitting beside a level of c.payloadPath.
+// keys plus every key sitting beside a level of c.payloadPath. A segment
+// whose value is a one-element array (a search response's "list") is pierced
+// transparently into that element, with no siblings of its own -- the
+// command's own match-one-row logic, not the generic envelope unwrap, is
+// what produced that element in the first place.
 func flattenEnvelope(t *testing.T, c getUnwrapCase) map[string]any {
 	t.Helper()
 	var level map[string]any
@@ -959,11 +977,17 @@ func flattenEnvelope(t *testing.T, c getUnwrapCase) map[string]any {
 				want[k] = v
 			}
 		}
-		next, ok := level[seg].(map[string]any)
-		if !ok {
-			t.Fatalf("fixture payloadPath %v does not resolve at segment %d", c.payloadPath, i)
+		if next, ok := level[seg].(map[string]any); ok {
+			level = next
+			continue
 		}
-		level = next
+		if arr, ok := level[seg].([]any); ok && len(arr) == 1 {
+			if obj, ok := arr[0].(map[string]any); ok {
+				level = obj
+				continue
+			}
+		}
+		t.Fatalf("fixture payloadPath %v does not resolve at segment %d", c.payloadPath, i)
 	}
 	for k, v := range level {
 		want[k] = v
