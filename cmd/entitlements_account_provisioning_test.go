@@ -67,6 +67,18 @@ func TestEntitlementsAccountProvisioningShow(t *testing.T) {
 			want:     "{}\n",
 		},
 		{name: "unknown entitlement", status: 404, get: acctProvNotFound, wantExit: exitNotFound},
+
+		// A 200 whose response does not hold the entitlement is a C1 failure:
+		// printing "{}" would make a broken response look like "unconfigured".
+		{name: "empty envelope", status: 200, get: `{}`, wantExit: exitServer},
+		{name: "empty view", status: 200, get: `{"appEntitlementView":{}}`, wantExit: exitServer},
+		{name: "null entitlement", status: 200, get: `{"appEntitlementView":{"appEntitlement":null}}`, wantExit: exitServer},
+		{
+			name:     "entitlement without an id",
+			status:   200,
+			get:      `{"appEntitlementView":{"appEntitlement":{"provisionerPolicy":{"connector":{"account":{"connectorId":"cn1"}}}}}}`,
+			wantExit: exitServer,
+		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Setenv("C1I_URL", mutTestURL)
@@ -75,8 +87,14 @@ func TestEntitlementsAccountProvisioningShow(t *testing.T) {
 			if r.exit != tc.wantExit {
 				t.Fatalf("exit %d (err %v), want %d\n%s", r.exit, r.err, tc.wantExit, r.stderr)
 			}
-			if tc.wantExit == 0 && r.stdout != tc.want {
-				t.Errorf("stdout = %q, want %q", r.stdout, tc.want)
+			if tc.wantExit == 0 {
+				if r.stdout != tc.want {
+					t.Errorf("stdout = %q, want %q", r.stdout, tc.want)
+				}
+				return
+			}
+			if r.stdout != "" {
+				t.Errorf("stdout = %q, want nothing on exit %d", r.stdout, tc.wantExit)
 			}
 		})
 	}

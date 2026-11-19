@@ -39,8 +39,9 @@ var entitlementsAccountProvisioningShowCmd = &cobra.Command{
 Prints .provisionerPolicy alone, not the whole entitlement ("entitlements
 get" prints that); named "show", not "get", because the policy has no id of
 its own to guarantee at the top level. An entitlement with no provisioning
-configured prints "{}". --fields projects within this object, the same rule
-as every other read.`,
+configured prints "{}"; a 200 whose response does not hold the entitlement
+exits 6, so a broken response cannot pass for "nothing configured".
+--fields projects within this object, the same rule as every other read.`,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		appID, _ := cmd.Flags().GetString("app-id")
@@ -65,12 +66,17 @@ as every other read.`,
 }
 
 // entitlementProvisionerPolicy extracts .provisionerPolicy from a GET
-// entitlement response, after the same unwrap "entitlements get" uses. The
-// field absent entirely (its proto3 zero value) prints as "{}" here; this
-// command has not observed the server send an explicit {"unconfigured":{}}
-// in that case, so the two are not distinguished.
+// entitlement response. The read declares where the entitlement sits, so a
+// response without it exits 6 like "entitlements get" (a broken envelope must
+// not print the "{}" that means "nothing configured"). The field absent
+// entirely (its proto3 zero value) prints as "{}" here; this command has not
+// observed the server send an explicit {"unconfigured":{}} in that case, so
+// the two are not distinguished.
 func entitlementProvisionerPolicy(data []byte) ([]byte, error) {
-	ent := unwrapEnvelope(data, "id")
+	ent, err := resourceAt(data, "id", []string{"appEntitlementView", "appEntitlement"})
+	if err != nil {
+		return nil, err
+	}
 	var obj map[string]json.RawMessage
 	if err := json.Unmarshal(ent, &obj); err != nil || obj == nil {
 		return nil, &nonJSONResponseError{fmt.Errorf("reading entitlement: the response held no entitlement")}
