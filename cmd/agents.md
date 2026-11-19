@@ -618,7 +618,21 @@ resource with `--resource-id` likewise means you drop
   `appPath`, `capabilitiesPath`, `usersPath` deleted (else 400). Update ignored
   a displayName/description mask in the runs checked. `connectors delete` refuses a connector backing an MCP
   server (exit 2; use `mcp servers delete`, which also removes its toolsets).
-  `connectors sync` only queues a sync; poll `connectors sync-status`.
+  `connectors sync` only queues a sync; poll `connectors sync-status`, or pass
+  `connectors sync --wait [--wait-timeout 15m]` to block until a sync started
+  after the command ran reaches a terminal `.status`, then print the
+  connector's whole `.status` object in place of the API's empty `{}` (a 200
+  without `connectorView.connector` exits 6; a never-synced connector reports
+  `SYNC_STATUS_UNSPECIFIED` with null timestamps, or omits `.status`, and is
+  waited on either way). `SYNC_STATUS_ERROR`, a
+  `.status.lastError`, or the timeout exits 1 with `applied: true`; the sync
+  was still queued. A status that never advances `.status.completedAt` (an
+  unconfigured connector stays `SYNC_STATUS_DONE` with null timestamps; a
+  refused sync stays `RUNNING`) is reported at the timeout, not as a sync
+  error -- it cannot be told from a sync that has not started yet, so
+  `connectors get` (which shows `.status.lastError`) is where the reason is.
+  `.status.errorKind` is not checked: live it was `"ERROR_KIND_UNSPECIFIED"`
+  (the enum's zero value) on a clean DONE too, not `""`.
   Why did a sync fail: `connectors debuggable` (NDJSON: `appId`,
   `connectorId`, `syncStatus`) finds targets; then `sync-history <id>
   --app-id A [--runs N]` (runs + `.streak`; each `.lifecycleId`),
@@ -774,6 +788,12 @@ resource with `--resource-id` likewise means you drop
 - `accounts list --unmapped-only` filters after each page is fetched, not
   server-side. With `--page-token` (which turns off auto-pagination) a page
   can come back empty while unmapped accounts exist further along.
+- `accounts get <app-user-id> --app-id <id>` has no GET-by-id route to call:
+  it runs the same `search/app_users` `list` does, filtered to the one id,
+  and prints the app user unwrapped -- `profile` included, which `list` rows
+  also now carry (`--fields profile.<key>`). Zero matches, or a result whose
+  id doesn't actually equal the one asked for, exits `4` like any other
+  not-found; more than one row claiming that id exits `6`.
 - `functions invoke` is asynchronous: it prints `{"invocationId": ...}` and
   exits 0 before the function runs. Add `--wait` to block until it finishes.
   Any `--wait` failure exits `1` after the id was printed, with an error
@@ -1030,6 +1050,14 @@ resource with `--resource-id` likewise means you drop
   `--steps-file` (array, sent as `automationSteps`) and `--triggers-file` (array,
   sent as `triggers`). `--body-file` sends the full request and excludes every
   other flag. It prints the automation unwrapped (`jq -er .id`).
+  `automations create|update` refuse a step naming `evaluateExpressions` or
+  `createRevokeTasks` in `automationSteps`/`draftAutomationSteps` (any
+  spelling, `--steps-file` or `--body-file`), exit `2` before sending
+  anything (`--dry-run` included; a JSON `null` value means unset, not a
+  use), naming the step index and, for `createRevokeTasks`, its replacement
+  `createRevokeTasksV2`: the server 400s both ("the evaluate expressions step
+  is no longer supported"; "CreateRevokeTasks step is deprecated and no
+  longer allowed. It is replaced by CreateRevokeTasksV2").
   `automations execute <automation-id>` starts a run, even of a disabled
   automation, and prints `{"executionId"}`. `--context-file` is a JSON object
   sent as the run's context. With `--wait`, an end state of ERROR or TERMINATE,

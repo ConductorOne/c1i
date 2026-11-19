@@ -48,7 +48,23 @@ Output and error text:
   output is unchanged.
 
 ### Added
-
+- `connectors sync --wait [--wait-timeout 15m]` polls the connector (the same
+  read as `connectors get`) until a sync started after the command ran
+  reaches a terminal status, comparing `.status.completedAt` against a
+  baseline read before the request so a sync already DONE cannot end the wait
+  early. On success it prints the connector's whole `.status` object in place
+  of the API's empty `{}`; a 200 without `connectorView.connector` exits `6`
+  rather than waiting, while a connector that has never synced reports
+  `SYNC_STATUS_UNSPECIFIED` with null timestamps (or omits `.status`) and is
+  waited on either way. `SYNC_STATUS_ERROR`, a terminal
+  `.status.lastError`, or the timeout exits `1` with `applied: true`; the
+  sync was still queued. A status that never advances
+  `.status.completedAt` (an unconfigured connector stays `SYNC_STATUS_DONE`
+  with null timestamps; a refused sync stays `RUNNING`) is reported at the
+  timeout, not as a sync error: it cannot be told from a sync that has not
+  started yet. `.status.errorKind` is not checked: it reads
+  `"ERROR_KIND_UNSPECIFIED"`, its enum's zero value, on a clean DONE too, not
+  `""`. Without `--wait`, behavior is unchanged.
 - `entitlements account-provisioning show|set <entitlement-id> --app-id`
   manages `provisionerPolicy.connector.account`. `show` (not `get`: the
   policy has no id of its own) prints `.provisionerPolicy` alone. `set
@@ -272,6 +288,11 @@ Output and error text:
   --body-file --update-mask displayName` without `displayName` in the object
   exits `2`. `invoke --wait` polls the invocation and exits `1` if it ends
   `ERROR` or `CANCELLED`. `invocations list` reads newest first.
+- `accounts get <app-user-id> --app-id <id>`: there is no GET-by-id route for
+  app users, so it runs the same `search/app_users` `accounts list` does,
+  filtered to the one id, and prints the app user unwrapped, `profile`
+  included. Zero matches (or a result whose id doesn't match the one asked
+  for) exits `4`; more than one row for the same id exits `6`.
 
 ### Changed
 
@@ -290,6 +311,9 @@ Output and error text:
   `docs agents` state the rule; read the target to confirm it.
 - **`apps resource-types list` rows gain `app_id`**, matching the new search
   rows.
+- **`accounts list` rows gain `profile`** (its real JSON object, or `null`
+  when absent), so `--fields profile.<key>` reaches a specific attribute
+  without a round trip through `accounts get`.
 - **`--resource-type` on `entitlements create` and `apps resource-types create`
   lists `SESSION_POLICY` and `CLAW_AGENT`** in help and completion, as the API
   spec now does.
@@ -305,6 +329,13 @@ Output and error text:
 
 ### Fixed
 
+- `automations create|update` refuses a step using `evaluateExpressions` or
+  `createRevokeTasks` in `automationSteps`/`draftAutomationSteps` (either
+  spelling, `--steps-file` or `--body-file`), naming the step index and, for
+  `createRevokeTasks`, its replacement `createRevokeTasksV2`. Exit `2` before
+  any request is sent, `--dry-run` included; the server now 400s both ("the
+  evaluate expressions step is no longer supported"; "CreateRevokeTasks step
+  is deprecated and no longer allowed. It is replaced by CreateRevokeTasksV2").
 - `apps update`, `apps set-owners`, `apps add-owner|remove-owner` and `mcp
   servers register` read the app first, `--dry-run` included: an unknown app
   exits `4`, a soft-deleted one `2`, a `200` without an app `6`. `apps update`
