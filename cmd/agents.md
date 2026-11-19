@@ -622,12 +622,17 @@ resource with `--resource-id` likewise means you drop
   `connectors sync --wait [--wait-timeout 15m]` to block until a sync started
   after the command ran reaches a terminal `.status`, then print the
   connector's whole `.status` object in place of the API's empty `{}` (a 200
-  without `connectorView.connector` exits 6; a never-synced connector has no
-  `.status` yet and is waited on normally). `SYNC_STATUS_ERROR`, a
-  `.status.lastError`, or the timeout exits 1 with
-  `applied: true`; the sync was still queued. `.status.errorKind` is not
-  checked: live it was `"ERROR_KIND_UNSPECIFIED"` (the enum's zero value) on a
-  clean DONE too, not `""`.
+  without `connectorView.connector` exits 6; a never-synced connector reports
+  `SYNC_STATUS_UNSPECIFIED` with null timestamps, or omits `.status`, and is
+  waited on either way). `SYNC_STATUS_ERROR`, a
+  `.status.lastError`, or the timeout exits 1 with `applied: true`; the sync
+  was still queued. A status that never advances `.status.completedAt` (an
+  unconfigured connector stays `SYNC_STATUS_DONE` with null timestamps; a
+  refused sync stays `RUNNING`) is reported at the timeout, not as a sync
+  error -- it cannot be told from a sync that has not started yet, so
+  `connectors get` (which shows `.status.lastError`) is where the reason is.
+  `.status.errorKind` is not checked: live it was `"ERROR_KIND_UNSPECIFIED"`
+  (the enum's zero value) on a clean DONE too, not `""`.
   Why did a sync fail: `connectors debuggable` (NDJSON: `appId`,
   `connectorId`, `syncStatus`) finds targets; then `sync-history <id>
   --app-id A [--runs N]` (runs + `.streak`; each `.lifecycleId`),

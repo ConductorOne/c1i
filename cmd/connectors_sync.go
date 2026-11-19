@@ -30,9 +30,14 @@ was already done when this command ran, and hasn't advanced yet, cannot look
 like this sync finished. It then prints the connector's whole .status object
 as this command's document, in place of the API's empty {}; a 200 that does
 not hold connectorView.connector exits 6 rather than waiting (a connector
-that has never synced has no .status yet and is waited on normally). A sync
+that has never synced reports SYNC_STATUS_UNSPECIFIED with null timestamps, or
+omits .status; either way it is waited on normally). A sync
 that ends in SYNC_STATUS_ERROR or with .status.lastError set exits 1 naming
-it; the sync was still accepted (applied: true). A timeout also exits 1 with
+it; the sync was still accepted (applied: true). A status that never advances
+.status.completedAt (an unconfigured connector stays SYNC_STATUS_DONE with
+null timestamps, and a sync the server refuses before it starts stays
+RUNNING) is reported at the timeout, not as a sync error: the wait cannot
+tell it from a sync that has not started yet. A timeout also exits 1 with
 applied: true, and the sync may still be running. --dry-run never polls or
 reads the baseline.`,
 	Args: cobra.ExactArgs(1),
@@ -175,6 +180,10 @@ func connectorSyncWaitOp(c *client.Client, path, connectorID, appID string, base
 			}
 			st := read.status
 			if !completedAtAdvanced(*baseline, st.CompletedAt) {
+				// A connector that never records a completion time (an
+				// unconfigured one stays DONE with null timestamps) is
+				// indistinguishable on the first polls from one whose queued
+				// sync has not started yet, so it ends at the timeout.
 				return []string{}, nil
 			}
 			if st.Status == connectorSyncStatusError || st.LastError != "" {

@@ -54,10 +54,15 @@ Output and error text:
   baseline read before the request so a sync already DONE cannot end the wait
   early. On success it prints the connector's whole `.status` object in place
   of the API's empty `{}`; a 200 without `connectorView.connector` exits `6`
-  rather than waiting, while a connector that has never synced has no
-  `.status` yet and is waited on normally. `SYNC_STATUS_ERROR`, a terminal
+  rather than waiting, while a connector that has never synced reports
+  `SYNC_STATUS_UNSPECIFIED` with null timestamps (or omits `.status`) and is
+  waited on either way. `SYNC_STATUS_ERROR`, a terminal
   `.status.lastError`, or the timeout exits `1` with `applied: true`; the
-  sync was still queued. `.status.errorKind` is not checked: it reads
+  sync was still queued. A status that never advances
+  `.status.completedAt` (an unconfigured connector stays `SYNC_STATUS_DONE`
+  with null timestamps; a refused sync stays `RUNNING`) is reported at the
+  timeout, not as a sync error: it cannot be told from a sync that has not
+  started yet. `.status.errorKind` is not checked: it reads
   `"ERROR_KIND_UNSPECIFIED"`, its enum's zero value, on a clean DONE too, not
   `""`. Without `--wait`, behavior is unchanged.
 - `bridges list|get|create|update|delete|services` and `bridges credentials

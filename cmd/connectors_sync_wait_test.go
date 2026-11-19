@@ -197,6 +197,31 @@ func TestConnectorsSyncWait(t *testing.T) {
 		}
 	})
 
+	t.Run("DONE without a completion time keeps waiting", func(t *testing.T) {
+		// Live: a connector created with an empty config stays SYNC_STATUS_DONE
+		// with null timestamps, because its syncs record NOT_CONNECTED. Ending
+		// the wait on that state would be wrong: a connector whose config was
+		// just fixed looks the same until its queued sync starts. So this ends
+		// at the timeout, and the status error (if any) stays visible through
+		// "connectors get".
+		doneNoTime := `{"connectorView":{"connector":{"id":"cn1","status":{"status":"SYNC_STATUS_DONE","completedAt":null,"lastError":"","errorKind":"ERROR_KIND_UNSPECIFIED"}}}}`
+		s := newMutServer(t, connSyncRoute(doneNoTime, doneNoTime))
+		r := runMutationCLI(t, s.srv, 0, nil, "connectors", "sync", "cn1", "--app-id", "a1", "--wait", "--wait-timeout", "200ms", "--error-format", "json")
+		if r.exit != exitError || r.errorObject(t)["applied"] != true {
+			t.Fatalf("exit %d (%v), want %d applied:true", r.exit, r.err, exitError)
+		}
+		msg, _ := r.errorObject(t)["error"].(string)
+		if !strings.Contains(msg, "timed out") {
+			t.Errorf("error = %q, want the timeout to report it", msg)
+		}
+		if r.stdout != "" {
+			t.Errorf("stdout = %q, want no document (the wait did not succeed)", r.stdout)
+		}
+		if reqs := s.requests(); len(reqs) < 3 {
+			t.Errorf("requests = %+v, want the baseline GET, the POST, and at least one poll", reqs)
+		}
+	})
+
 	t.Run("timeout exits 1, applied true, no error status reached", func(t *testing.T) {
 		s := newMutServer(t, connSyncRoute(
 			connSyncEnvelope("SYNC_STATUS_DONE", "2024-01-01T00:00:00Z", "", "ERROR_KIND_UNSPECIFIED"),
