@@ -1485,7 +1485,7 @@ c1i connectors create --app-id <id> --catalog-id <id> [--display-name NAME] [--d
 c1i connectors create --app-id <id> --body-file <file>
 c1i connectors update <connector-id> --app-id <id> --body-file <file> --update-mask config [--justification TEXT]
 c1i connectors delete <connector-id> --app-id <id>
-c1i connectors sync <connector-id> --app-id <id>
+c1i connectors sync <connector-id> --app-id <id> [--wait [--wait-timeout 15m]]
 c1i connectors sync-status <connector-id> --app-id <id>
 c1i connectors sync-history <connector-id> --app-id <id> [--runs N]
 c1i connectors sync-errors <connector-id> --app-id <id> [--top-k N]
@@ -1528,8 +1528,24 @@ server (exit 2): deleting that through this route left its toolsets and their
 entitlements live, so use `mcp servers delete`.
 
 `sync` queues a sync and exits 0 when it is accepted, not when it finishes;
-follow it with `sync-status`. On a paused connector the server can accept the
-call but queue nothing, so resume the connector first. `pause` and `resume` exit 0 when repeated.
+follow it with `sync-status`, or pass `--wait` to poll the connector (the same
+read as `connectors get`) until a sync started after the command ran
+completes, then print the connector's whole `.status` object in place of the
+API's empty `{}` (a 200 without `connectorView.connector` exits `6` rather
+than waiting; a connector that has never synced reports
+`SYNC_STATUS_UNSPECIFIED` with null timestamps, or omits `.status`, and is
+waited on either way). A sync that ends in `SYNC_STATUS_ERROR` or with
+`.status.lastError` set, or a `--wait-timeout` (default 15m), exits `1` with
+`applied: true` -- the sync was still queued. A status that never advances
+`.status.completedAt` -- an unconfigured connector stays `SYNC_STATUS_DONE`
+with null timestamps, and a sync the server refuses before it starts stays
+`RUNNING` -- is reported at the timeout, not as a sync error: the wait cannot
+tell it from a sync that has not started yet, so `connectors get` (which shows
+`.status.lastError`) is the way to see why. `.status.errorKind` is not
+checked: it is `"ERROR_KIND_UNSPECIFIED"`, its enum's zero value, on a clean
+DONE too, not `""`. On a paused connector the
+server can accept the call but queue nothing, so resume the connector first.
+`pause` and `resume` exit 0 when repeated.
 `schedule --clear` removes the schedule; c1i does not validate `--cron` or
 `--timezone`, and the server accepted invalid values in the run checked.
 `--justification` is sent as `justification.reason`.
