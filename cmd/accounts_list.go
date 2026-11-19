@@ -56,6 +56,7 @@ var accountsListCmd = &cobra.Command{
 					"identity_user_id": nilIfEmpty(a.IdentityUserID),
 					"app_user_type":    nilIfEmpty(a.AppUserType),
 					"status":           nilIfEmpty(a.Status.Status),
+					"profile":          nilIfEmptyMap(a.Profile),
 				}}
 			},
 		})
@@ -75,7 +76,20 @@ type appUserSearchItem struct {
 		Status         struct {
 			Status string `json:"status"`
 		} `json:"status"`
+		// Profile keeps its real JSON types (CLAUDE.md): a row needs it for
+		// --fields profile.<key>, which "status"/"app_user_type" above don't.
+		Profile map[string]any `json:"profile"`
 	} `json:"appUser"`
+}
+
+// nilIfEmptyMap is nilIfEmpty for a map field: an absent or empty profile
+// must round-trip as JSON null, not "{}", so a --fields selection and a jq
+// truthiness check both see "no profile" the same way.
+func nilIfEmptyMap(m map[string]any) any {
+	if len(m) == 0 {
+		return nil
+	}
+	return m
 }
 
 func init() {

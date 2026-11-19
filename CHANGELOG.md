@@ -261,6 +261,11 @@ Output and error text:
   --body-file --update-mask displayName` without `displayName` in the object
   exits `2`. `invoke --wait` polls the invocation and exits `1` if it ends
   `ERROR` or `CANCELLED`. `invocations list` reads newest first.
+- `accounts get <app-user-id> --app-id <id>`: there is no GET-by-id route for
+  app users, so it runs the same `search/app_users` `accounts list` does,
+  filtered to the one id, and prints the app user unwrapped, `profile`
+  included. Zero matches (or a result whose id doesn't match the one asked
+  for) exits `4`; more than one row for the same id exits `6`.
 
 ### Changed
 
@@ -279,6 +284,9 @@ Output and error text:
   `docs agents` state the rule; read the target to confirm it.
 - **`apps resource-types list` rows gain `app_id`**, matching the new search
   rows.
+- **`accounts list` rows gain `profile`** (its real JSON object, or `null`
+  when absent), so `--fields profile.<key>` reaches a specific attribute
+  without a round trip through `accounts get`.
 - **`--resource-type` on `entitlements create` and `apps resource-types create`
   lists `SESSION_POLICY` and `CLAW_AGENT`** in help and completion, as the API
   spec now does.

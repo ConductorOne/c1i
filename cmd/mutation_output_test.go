@@ -37,6 +37,7 @@ var chokepointFiles = []string{"cmd/mutation.go", "internal/client/", "internal/
 // readOnlyPOST lists declarations (file:decl) whose POSTs only read: searches
 // and lists that carry their filter in the body.
 var readOnlyPOST = map[string]string{
+	"cmd/accounts_get.go:accountsGetCmd":                             "POST /search/app_users filtered to the one id: there is no GET-by-id route for app users",
 	"cmd/mcp_bindings_by_tools.go:mcpBindingsByToolsCmd":             "POST bindings by-tools lookup",
 	"cmd/mcp_servers_discover_oidc.go:mcpServersDiscoverOIDCCmd":     "POST discover-oidc probe",
 	"cmd/mcp_servers_test_connection.go:mcpServersTestConnectionCmd": "POST test-connection probe",

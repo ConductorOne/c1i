@@ -117,3 +117,50 @@ func TestAccountsListUnmappedOnlyScansFullPagesUnderLimit(t *testing.T) {
 		}
 	}
 }
+
+// `accounts list` rows carry the app user's whole profile with its real JSON
+// types, so --fields reaches one attribute without a round trip through
+// "accounts get".
+func TestAccountsListRowsCarryProfile(t *testing.T) {
+	t.Setenv("C1I_URL", mutTestURL)
+	clearViperOverrides(t, "fields")
+	s := newMutServer(t, fixedReply(200,
+		`{"list":[{"appUser":{"id":"a1","appId":"app1","displayName":"Ada","profile":{"department":"Eng","headcount":12,"contractor":true}}}]}`))
+	stub := func() {
+		orig := newListClient
+		newListClient = func(_ *cobra.Command, _ string) (*client.Client, error) {
+			return client.NewForTesting(s.srv.URL, s.srv.Client()), nil
+		}
+		t.Cleanup(func() { newListClient = orig })
+	}
+
+	r := runCLI(t, stub, nil, "accounts", "list", "--app-id", "app1")
+	if r.err != nil {
+		t.Fatalf("exit %d: %v", r.exit, r.err)
+	}
+	rows := decodeNDJSONRows(t, r.stdout)
+	if len(rows) != 1 {
+		t.Fatalf("got %d rows, want 1: %q", len(rows), r.stdout)
+	}
+	profile, ok := rows[0]["profile"].(map[string]any)
+	if !ok {
+		t.Fatalf("profile = %v (%T), want the decoded object", rows[0]["profile"], rows[0]["profile"])
+	}
+	if profile["department"] != "Eng" {
+		t.Errorf("profile.department = %v, want Eng", profile["department"])
+	}
+	if profile["headcount"] != float64(12) {
+		t.Errorf("profile.headcount = %v (%T), want the JSON number 12", profile["headcount"], profile["headcount"])
+	}
+	if profile["contractor"] != true {
+		t.Errorf("profile.contractor = %v, want true", profile["contractor"])
+	}
+
+	r = runCLI(t, stub, nil, "accounts", "list", "--app-id", "app1", "--fields", "profile.department")
+	if r.err != nil {
+		t.Fatalf("--fields: exit %d: %v", r.exit, r.err)
+	}
+	if got, want := strings.TrimSpace(r.stdout), `{"profile":{"department":"Eng"}}`; got != want {
+		t.Errorf("--fields profile.department = %s, want %s", got, want)
+	}
+}
