@@ -37,15 +37,16 @@ var chokepointFiles = []string{"cmd/mutation.go", "internal/client/", "internal/
 // readOnlyPOST lists declarations (file:decl) whose POSTs only read: searches
 // and lists that carry their filter in the body.
 var readOnlyPOST = map[string]string{
-	"cmd/mcp_bindings_by_tools.go:mcpBindingsByToolsCmd":             "POST bindings by-tools lookup",
-	"cmd/mcp_servers_discover_oidc.go:mcpServersDiscoverOIDCCmd":     "POST discover-oidc probe",
-	"cmd/mcp_servers_test_connection.go:mcpServersTestConnectionCmd": "POST test-connection probe",
-	"cmd/policies_validate_cel.go:policiesValidateCelCmd":            "POST validate-cel",
-	"cmd/policies_test_provision.go:policiesTestProvisionCmd":        "POST test-account-provision-policy: evaluates the CEL in the body",
-	"cmd/settings_session.go:settingsSessionTestSourceIPCmd":         "POST test-source-ip: evaluates an IP against the CIDRs in the body",
-	"cmd/auth_status.go:authStatusCmd":                               "POST /search/users credential probe",
-	"cmd/connectors_sync_diag.go:postSyncDiag":                       "POST change_timeline and compare_stats: sync diagnostics reads, no state change",
-	"cmd/paginate.go:postPageBody":                                   "every paged POST list; a runtime transport.ReadOnlyPOST check refuses non-read paths before sending",
+	"cmd/mcp_bindings_by_tools.go:mcpBindingsByToolsCmd":                   "POST bindings by-tools lookup",
+	"cmd/mcp_servers_discover_oidc.go:mcpServersDiscoverOIDCCmd":           "POST discover-oidc probe",
+	"cmd/mcp_servers_test_connection.go:mcpServersTestConnectionCmd":       "POST test-connection probe",
+	"cmd/policies_validate_cel.go:policiesValidateCelCmd":                  "POST validate-cel",
+	"cmd/policies_test_provision.go:policiesTestProvisionCmd":              "POST test-account-provision-policy: evaluates the CEL in the body",
+	"cmd/entitlements_account_provisioning.go:accountProvisionTestPreRead": "POST test-account-provision-policy: same CEL probe as policies test-provision, run as a --test pre-read",
+	"cmd/settings_session.go:settingsSessionTestSourceIPCmd":               "POST test-source-ip: evaluates an IP against the CIDRs in the body",
+	"cmd/auth_status.go:authStatusCmd":                                     "POST /search/users credential probe",
+	"cmd/connectors_sync_diag.go:postSyncDiag":                             "POST change_timeline and compare_stats: sync diagnostics reads, no state change",
+	"cmd/paginate.go:postPageBody":                                         "every paged POST list; a runtime transport.ReadOnlyPOST check refuses non-read paths before sending",
 
 	"cmd/service_principals_trusts.go:spTrustsTestTokenCmd": "POST trust test: validates a JWT, issues nothing",
 	"cmd/workload_federation.go:wfTestCelCmd":               "POST test-cel: evaluates an expression against the claims in the body",

@@ -915,6 +915,17 @@ resource with `--resource-id` likewise means you drop
   `exclusions
   list|add|remove <entitlement-id> --app-id [--user-id ...]` manages users the
   automation leaves alone.
+- `entitlements account-provisioning show <entitlement-id> --app-id` prints
+  `.provisionerPolicy` alone ("{}" when unset). `set <entitlement-id> --app-id
+  --connector-id --field key=CEL... (--save-to-vault-id... | --do-not-save)
+  [--test]` always sends the complete `connector.account` policy with
+  `updateMask=provisionerPolicy`, since a request that omits it under that
+  mask still 200s and wipes the stored policy. `--connector-id` is read
+  first (unknown exits 4, deleted 2); `--test` runs each `--field` through
+  `policies test-provision` first and stops at the first one the server
+  rejects. The separate `delegated` arm has no command; see
+  `entitlements proxy-bindings` and the `delegate-entitlement-provisioning`
+  guide.
 - A user id on a write is looked up before anything is sent, so an unknown one
   exits 4 with no write (`--dry-run` refuses it too; the lookup needs user
   read, else exit 3): `accounts set-owner`, `apps add-owner|set-owners`,
