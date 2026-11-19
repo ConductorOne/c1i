@@ -32,8 +32,9 @@ draftTriggers stay as they were. An unknown camelCase path is a 400,
 "invalid update_mask"; a snake_case path is a 400, "FieldMask.paths contains
 invalid path" (both exit 2). A step naming evaluateExpressions or
 createRevokeTasks (either spelling) in automationSteps or
-draftAutomationSteps exits 2 before anything is sent: the server 400s both
-as no longer supported, the latter in favor of createRevokeTasksV2.
+draftAutomationSteps exits 2 before anything is sent (a JSON "null" value
+means unset, not a use): the server 400s both as no longer supported, the
+latter in favor of createRevokeTasksV2.
 
 Prints the automation as pretty JSON, unwrapped like "automations get": the
 id is .id. The response's webhookCapabilityUrl and webhookHmacSecret stay

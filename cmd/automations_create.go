@@ -18,8 +18,9 @@ array sent as triggers. Each element is one AutomationStep or AutomationTrigger
 object (see "c1i docs endpoint /api/v1/automations"). An automation with no
 triggers runs only through "automations execute". A step naming
 evaluateExpressions or createRevokeTasks (either spelling, here or in
---body-file) exits 2 before anything is sent: the server 400s both as no
-longer supported, the latter in favor of createRevokeTasksV2.
+--body-file) exits 2 before anything is sent (a JSON "null" value means
+unset, not a use): the server 400s both as no longer supported, the latter in
+favor of createRevokeTasksV2.
 
 --body-file is the full CreateAutomationRequest, sent verbatim, for fields the
 flags don't cover (circuitBreakerMax/circuitBreakerPeriod, draft steps and

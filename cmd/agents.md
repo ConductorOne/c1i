@@ -1020,11 +1020,11 @@ resource with `--resource-id` likewise means you drop
   `automations create|update` refuse a step naming `evaluateExpressions` or
   `createRevokeTasks` in `automationSteps`/`draftAutomationSteps` (any
   spelling, `--steps-file` or `--body-file`), exit `2` before sending
-  anything (`--dry-run` included), naming the step index and, for
-  `createRevokeTasks`, its replacement `createRevokeTasksV2`: the server 400s
-  both ("the evaluate expressions step is no longer supported";
-  "CreateRevokeTasks step is deprecated and no longer allowed. It is
-  replaced by CreateRevokeTasksV2").
+  anything (`--dry-run` included; a JSON `null` value means unset, not a
+  use), naming the step index and, for `createRevokeTasks`, its replacement
+  `createRevokeTasksV2`: the server 400s both ("the evaluate expressions step
+  is no longer supported"; "CreateRevokeTasks step is deprecated and no
+  longer allowed. It is replaced by CreateRevokeTasksV2").
   `automations execute <automation-id>` starts a run, even of a disabled
   automation, and prints `{"executionId"}`. `--context-file` is a JSON object
   sent as the run's context. With `--wait`, an end state of ERROR or TERMINATE,

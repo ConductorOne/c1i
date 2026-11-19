@@ -130,3 +130,52 @@ func TestAutomationsValidStepsStillSend(t *testing.T) {
 		t.Errorf("requests = %+v, want exactly one", got)
 	}
 }
+
+// TestAutomationsAllowNullDeprecatedArms: a null arm is the API's "unset",
+// not a use of the step (protojson skips a null oneof member), so the guard
+// must let that body reach the server instead of refusing it client-side.
+func TestAutomationsAllowNullDeprecatedArms(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		args []string
+		// sent is the null arm as it must appear in the request body: the
+		// body has to reach the server verbatim, not be dropped or rewritten.
+		sent string
+	}{
+		{
+			"create --steps-file camelCase null",
+			[]string{"automations", "create", "--display-name", "zz",
+				"--steps-file", writeTempFile(t, `[{"waitForDuration":{"duration":"1s"}},{"evaluateExpressions":null}]`)},
+			`"evaluateExpressions":null`,
+		},
+		{
+			"create --body-file snake_case null",
+			[]string{"automations", "create",
+				"--body-file", writeTempFile(t, `{"displayName":"zz","automation_steps":[{"create_revoke_tasks":null}]}`)},
+			`"create_revoke_tasks":null`,
+		},
+		{
+			"update --body-file null draft step",
+			[]string{"automations", "update", "a-1",
+				"--body-file", writeTempFile(t, `{"draft_automation_steps":[{"evaluateExpressions":null}]}`),
+				"--update-mask", "draftAutomationSteps"},
+			`"evaluateExpressions":null`,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Setenv("C1I_URL", mutTestURL)
+			s := newMutServer(t, fixedReply(200, `{"automation":{"id":"a-1"}}`))
+			r := runMutationCLI(t, s.srv, 0, nil, tc.args...)
+			if r.err != nil {
+				t.Fatalf("exit %d err %v, want the body sent", r.exit, r.err)
+			}
+			reqs := s.requests()
+			if len(reqs) != 1 {
+				t.Fatalf("requests = %+v, want exactly one", reqs)
+			}
+			if !strings.Contains(reqs[0].body, tc.sent) {
+				t.Errorf("request body = %s, want it to carry %s", reqs[0].body, tc.sent)
+			}
+		})
+	}
+}

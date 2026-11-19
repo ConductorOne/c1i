@@ -51,11 +51,13 @@ func refuseDeprecatedAutomationSteps(body map[string]any) error {
 				continue
 			}
 			for _, d := range deprecatedAutomationStepArms {
-				_, stepKey, err := bodyField(step, d.arm)
+				v, stepKey, err := bodyField(step, d.arm)
 				if err != nil {
 					return &usageError{fmt.Errorf("%s[%d]: %w", key, i, err)}
 				}
-				if stepKey == "" {
+				// null is the API's "unset", not a use of the arm: protojson
+				// skips a null oneof member, so the server never sees it.
+				if stepKey == "" || v == nil {
 					continue
 				}
 				msg := fmt.Sprintf("%s[%d].%s is no longer accepted by the server", key, i, stepKey)
