@@ -68,7 +68,7 @@ func runAccountsGet(t *testing.T, srv *httptest.Server, appUserID, appID string)
 }
 
 // A single match prints the appUser object unwrapped, profile included --
-// the field "accounts list" rows drop.
+// the field "accounts list" rows carry too.
 func TestAccountsGetPrintsUnwrappedAppUserWithProfile(t *testing.T) {
 	srv := accountsGetServer(t, "app1", "au1", `{"list":[{"appUser":{"id":"au1","appId":"app1","displayName":"Ada","profile":{"department":"Eng"}}}]}`)
 	out, err := runAccountsGet(t, srv, "au1", "app1")
@@ -84,7 +84,7 @@ func TestAccountsGetPrintsUnwrappedAppUserWithProfile(t *testing.T) {
 	}
 	profile, _ := got["profile"].(map[string]any)
 	if profile["department"] != "Eng" {
-		t.Errorf("profile.department = %v, want Eng (profile should be unwrapped, not dropped like a list row)", got["profile"])
+		t.Errorf("profile.department = %v, want Eng (profile should be unwrapped and decoded)", got["profile"])
 	}
 }
 

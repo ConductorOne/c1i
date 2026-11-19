@@ -15,8 +15,8 @@ var accountsGetCmd = &cobra.Command{
 There is no public GET-by-id route for app users (see "accounts list"); this
 runs the same POST /api/v1/search/app_users the server exposes, filtered to
 the one id under --app-id, and prints the appUser object unwrapped like the
-other reads -- including "profile", which "accounts list" rows drop. An id
-that belongs to a different app is not found here on purpose: zero matches
+other reads -- including "profile", which "accounts list" rows carry too. An
+id that belongs to a different app is not found here on purpose: zero matches
 exits 4, and more than one match for the same id is a C1 failure (exit 6).`,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
