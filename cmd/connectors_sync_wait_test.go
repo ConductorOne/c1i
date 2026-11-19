@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"strings"
@@ -16,8 +17,10 @@ func fastConnectorSyncWait(t *testing.T) {
 }
 
 // connSyncEnvelope builds the connector GET envelope one status read answers.
+// step and objectsSynced stand in for the status fields c1i does not read, so
+// a test can tell the server's whole object from a re-encoded subset.
 func connSyncEnvelope(status, completedAt, lastError, errorKind string) string {
-	return fmt.Sprintf(`{"connectorView":{"connector":{"id":"cn1","status":{"status":%q,"completedAt":%q,"lastError":%q,"errorKind":%q}}},"expanded":[]}`,
+	return fmt.Sprintf(`{"connectorView":{"connector":{"id":"cn1","status":{"status":%q,"completedAt":%q,"lastError":%q,"errorKind":%q,"step":"STEP_DONE","objectsSynced":1234}}},"expanded":[]}`,
 		status, completedAt, lastError, errorKind)
 }
 
@@ -40,7 +43,7 @@ func TestConnectorsSyncWait(t *testing.T) {
 	fastConnectorSyncWait(t)
 	t.Setenv("C1I_URL", mutTestURL)
 
-	t.Run("polls past a stale completedAt and prints the final status as a second document", func(t *testing.T) {
+	t.Run("polls past a stale completedAt and prints the whole final status as the document", func(t *testing.T) {
 		s := newMutServer(t, connSyncRoute(
 			connSyncEnvelope("SYNC_STATUS_DONE", "2024-01-01T00:00:00Z", "", "ERROR_KIND_UNSPECIFIED"), // baseline: already done
 			connSyncEnvelope("SYNC_STATUS_RUNNING", "2024-01-01T00:00:00Z", "", "ERROR_KIND_UNSPECIFIED"),
@@ -50,15 +53,22 @@ func TestConnectorsSyncWait(t *testing.T) {
 		if r.err != nil {
 			t.Fatalf("exit %d err %v stderr %q", r.exit, r.err, r.stderr)
 		}
-		if !strings.Contains(r.stdout, "{}") {
-			t.Errorf("stdout = %q, want the force_sync accept document first", r.stdout)
+		// Exactly one JSON document: the empty accept response is replaced,
+		// not printed beside the status.
+		var got map[string]any
+		if err := json.Unmarshal([]byte(r.stdout), &got); err != nil {
+			t.Fatalf("stdout is not one JSON document: %v\n%s", err, r.stdout)
 		}
-		if !strings.Contains(r.stdout, `"completedAt": "2024-01-01T00:05:00Z"`) {
-			t.Errorf("stdout = %q, want the final status object printed", r.stdout)
+		if got["completedAt"] != "2024-01-01T00:05:00Z" {
+			t.Errorf("completedAt = %v, want the finished sync's", got["completedAt"])
 		}
-		got := s.requests()
-		if len(got) != 4 || got[0].method != http.MethodGet || got[1].method != http.MethodPost {
-			t.Fatalf("requests = %+v, want baseline GET, POST, then polling GETs", got)
+		// The server's whole .status object, not the fields c1i reads to decide.
+		if got["step"] != "STEP_DONE" || got["objectsSynced"] != float64(1234) {
+			t.Errorf("status document = %v, want the server's whole .status object", got)
+		}
+		reqs := s.requests()
+		if len(reqs) != 4 || reqs[0].method != http.MethodGet || reqs[1].method != http.MethodPost {
+			t.Fatalf("requests = %+v, want baseline GET, POST, then polling GETs", reqs)
 		}
 		if !strings.Contains(r.stderr, "Connector cn1 sync finished") {
 			t.Errorf("stderr = %q, want the success line", r.stderr)
@@ -78,6 +88,112 @@ func TestConnectorsSyncWait(t *testing.T) {
 		msg, _ := obj["error"].(string)
 		if obj["applied"] != true || !strings.Contains(msg, "connector unreachable") || !strings.Contains(msg, "SYNC_STATUS_ERROR") {
 			t.Errorf("error object = %v", obj)
+		}
+	})
+
+	t.Run("a terminal ERROR status with no lastError still fails", func(t *testing.T) {
+		s := newMutServer(t, connSyncRoute(
+			connSyncEnvelope("SYNC_STATUS_DONE", "2024-01-01T00:00:00Z", "", "ERROR_KIND_UNSPECIFIED"),
+			connSyncEnvelope("SYNC_STATUS_ERROR", "2024-01-01T00:05:00Z", "", "ERROR_KIND_UNSPECIFIED"),
+		))
+		r := runMutationCLI(t, s.srv, 0, nil, "connectors", "sync", "cn1", "--app-id", "a1", "--wait", "--wait-timeout", "2s", "--error-format", "json")
+		if r.exit != exitError {
+			t.Fatalf("exit %d, want %d (%v)", r.exit, exitError, r.err)
+		}
+		obj := r.errorObject(t)
+		msg, _ := obj["error"].(string)
+		if obj["applied"] != true || !strings.Contains(msg, "SYNC_STATUS_ERROR") {
+			t.Errorf("error object = %v, want applied true naming SYNC_STATUS_ERROR", obj)
+		}
+	})
+
+	t.Run("a response without connectorView.connector fails fast", func(t *testing.T) {
+		// Baseline first: the read cannot establish a baseline, so nothing is
+		// sent -- exit 6, the same contract as any other 200 without its object.
+		s := newMutServer(t, connSyncRoute(`{}`))
+		r := runMutationCLI(t, s.srv, 0, nil, "connectors", "sync", "cn1", "--app-id", "a1", "--wait", "--wait-timeout", "2s")
+		if r.exit != exitServer || r.err == nil || !strings.Contains(r.err.Error(), "connectorView.connector") {
+			t.Fatalf("exit %d err %v, want %d naming the missing connector", r.exit, r.err, exitServer)
+		}
+		if got := s.requests(); len(got) != 1 || got[0].method != http.MethodGet {
+			t.Errorf("requests = %+v, want only the baseline GET", got)
+		}
+
+		// After the write: the wait cannot decide, so it stops at once -- exit
+		// 6 (the response broke the contract), applied true, no timeout loop.
+		s = newMutServer(t, connSyncRoute(
+			connSyncEnvelope("SYNC_STATUS_DONE", "2024-01-01T00:00:00Z", "", "ERROR_KIND_UNSPECIFIED"),
+			`{}`,
+		))
+		r = runMutationCLI(t, s.srv, 0, nil, "connectors", "sync", "cn1", "--app-id", "a1", "--wait", "--wait-timeout", "2s", "--error-format", "json")
+		if r.exit != exitServer || r.errorObject(t)["applied"] != true {
+			t.Fatalf("exit %d (%v), want %d applied:true", r.exit, r.err, exitServer)
+		}
+		msg, _ := r.errorObject(t)["error"].(string)
+		if !strings.Contains(msg, "connectorView.connector") {
+			t.Errorf("error = %q, want it to name the missing connector", msg)
+		}
+		if got := s.requests(); len(got) != 3 {
+			t.Errorf("requests = %+v, want baseline GET, POST, one poll (no timeout loop)", got)
+		}
+	})
+
+	t.Run("a never-synced connector with no status is waited on", func(t *testing.T) {
+		// The connector holds connectorView.connector but no .status yet, as
+		// before its first sync: that is an empty baseline, not a failure, and
+		// this sync's completion still ends the wait.
+		s := newMutServer(t, connSyncRoute(
+			`{"connectorView":{"connector":{"id":"cn1"}}}`,
+			connSyncEnvelope("SYNC_STATUS_DONE", "2024-01-01T00:05:00Z", "", "ERROR_KIND_UNSPECIFIED"),
+		))
+		r := runMutationCLI(t, s.srv, 0, nil, "connectors", "sync", "cn1", "--app-id", "a1", "--wait", "--wait-timeout", "2s")
+		if r.err != nil {
+			t.Fatalf("exit %d err %v, want the first sync waited on", r.exit, r.err)
+		}
+		var got map[string]any
+		if err := json.Unmarshal([]byte(r.stdout), &got); err != nil {
+			t.Fatalf("stdout is not one JSON document: %v\n%s", err, r.stdout)
+		}
+		if got["completedAt"] != "2024-01-01T00:05:00Z" {
+			t.Errorf("completedAt = %v, want the first sync's", got["completedAt"])
+		}
+		reqs := s.requests()
+		if len(reqs) != 3 || reqs[0].method != http.MethodGet || reqs[1].method != http.MethodPost {
+			t.Errorf("requests = %+v, want baseline GET, POST, one poll", reqs)
+		}
+	})
+
+	t.Run("a non-JSON accept response is still a mutation error", func(t *testing.T) {
+		// --wait replaces the response document, but the response is still
+		// validated: a broken 2xx must not pass as success.
+		s := newMutServer(t, func(r *http.Request, _ int) mutReply {
+			if r.Method == http.MethodPost {
+				return mutReply{body: `<html>not JSON</html>`}
+			}
+			return mutReply{body: connSyncEnvelope("SYNC_STATUS_DONE", "2024-01-01T00:05:00Z", "", "ERROR_KIND_UNSPECIFIED")}
+		})
+		r := runMutationCLI(t, s.srv, 0, nil, "connectors", "sync", "cn1", "--app-id", "a1", "--wait", "--wait-timeout", "2s", "--error-format", "json")
+		if r.exit != exitServer || r.errorObject(t)["applied"] != true {
+			t.Fatalf("exit %d (%v), want %d applied:true", r.exit, r.err, exitServer)
+		}
+		if r.stdout != "" {
+			t.Errorf("stdout = %q, want nothing", r.stdout)
+		}
+	})
+
+	t.Run("a failed status write reports applied", func(t *testing.T) {
+		s := newMutServer(t, connSyncRoute(
+			connSyncEnvelope("SYNC_STATUS_DONE", "2024-01-01T00:00:00Z", "", "ERROR_KIND_UNSPECIFIED"),
+			connSyncEnvelope("SYNC_STATUS_DONE", "2024-01-01T00:05:00Z", "", "ERROR_KIND_UNSPECIFIED"),
+		))
+		r := runMutationCLI(t, s.srv, 0, failingWriter{}, "connectors", "sync", "cn1", "--app-id", "a1", "--wait", "--wait-timeout", "2s", "--error-format", "json")
+		if r.exit != exitError {
+			t.Fatalf("exit %d, want %d (%v)", r.exit, exitError, r.err)
+		}
+		obj := r.errorObject(t)
+		msg, _ := obj["error"].(string)
+		if obj["applied"] != true || !strings.Contains(msg, "was applied but writing its status failed") {
+			t.Errorf("error object = %v, want applied true naming the status write", obj)
 		}
 	})
 

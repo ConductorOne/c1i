@@ -121,8 +121,8 @@ type writeOutcome struct {
 	Err error
 }
 
-// withResponse reads the write's raw response once it is printed. waitEnabled
-// says whether Wait is polled. withWait also sets respond; the last one passed wins.
+// withResponse reads the write's raw 2xx response. waitEnabled says whether
+// Wait is polled. withWait also sets respond; the last one passed wins.
 func withResponse(f func(c *client.Client, resp []byte) writeOutcome, waitEnabled bool) mutationOpt {
 	return func(o *mutationOpts) { o.respond, o.waitEnabled = f, waitEnabled }
 }
@@ -133,8 +133,11 @@ func withWait(build func(c *client.Client) waitOp[[]string], enabled bool) mutat
 	return withResponse(func(c *client.Client, _ []byte) writeOutcome { return writeOutcome{Wait: build(c)} }, enabled)
 }
 
-// withWaitResultOutput prints --wait's final satisfying value (Wait's last
-// Poll result) as a pretty JSON document on stdout once the wait succeeds.
+// withWaitResultOutput makes --wait's final satisfying value (Wait's last Poll
+// result) the command's document: printed as pretty JSON in place of the
+// write's response, which for these commands is an empty acknowledgement, and
+// two documents on stdout would break json.Unmarshal and `jq '.[0]'`. Without
+// --wait the response prints as usual; the response is validated either way.
 // Opt-in: most --wait ops carry a bare state string, not a document worth
 // printing (executionDoneWaitOp's AUTOMATION_EXECUTION_STATE_DONE isn't
 // valid JSON), so this only runs for a command that asks for it.
@@ -208,13 +211,20 @@ func sendMutation(cmd *cobra.Command, m mutation, opts ...mutationOpt) error {
 		}
 		return &mutationError{err: wrapped, applied: classifyApplied(err)}
 	}
-	if err := writeMutationResult(cmd, m, data, o.secret, false); err != nil {
-		return err
-	}
 	if o.respond == nil {
-		return nil
+		return writeMutationResult(cmd, m, data, o.secret, false)
 	}
 	out := o.respond(c, data)
+	// A command printing --wait's result as its document (withWaitResultOutput)
+	// suppresses the write's response, an empty acknowledgement there. The
+	// response is still checked, so a non-JSON 2xx stays a mutation error.
+	if o.printWaitResult && o.waitEnabled && out.Wait.Poll != nil {
+		if _, err := mutationResponseDoc(m, data); err != nil {
+			return err
+		}
+	} else if err := writeMutationResult(cmd, m, data, o.secret, false); err != nil {
+		return err
+	}
 	var waitErr error
 	var waitResult []string
 	if o.waitEnabled && out.Wait.Poll != nil {
@@ -230,7 +240,10 @@ func sendMutation(cmd *cobra.Command, m mutation, opts ...mutationOpt) error {
 	}
 	if o.printWaitResult && len(waitResult) > 0 {
 		if err := writeRawObject(cmd, []byte(waitResult[len(waitResult)-1])); err != nil {
-			return err
+			return &mutationError{
+				err:     fmt.Errorf("%s %s was applied but writing its status failed: %w", m.Method, redact.URL(m.Path), err),
+				applied: appliedTrue,
+			}
 		}
 	}
 	return nil
@@ -778,23 +791,32 @@ func emptyJSONValue(v any) bool {
 	return false
 }
 
-// writeMutationResult prints U(data): pretty for a single target, compact for
-// a batch line. Failures here are after the change was applied.
-func writeMutationResult(cmd *cobra.Command, m mutation, data []byte, secret secretKind, compact bool) error {
+// mutationResponseDoc validates a write's 2xx body and unwraps it: the
+// document writeMutationResult prints. A non-JSON body is a mutation error
+// (applied) because the change may have landed.
+func mutationResponseDoc(m mutation, data []byte) ([]byte, error) {
 	doc := bytes.TrimSpace(data)
 	if len(doc) == 0 {
 		doc = []byte("{}")
 	}
 	if !json.Valid(doc) {
-		return &mutationError{
+		return nil, &mutationError{
 			err: &nonJSONResponseError{fmt.Errorf("%s %s returned 2xx with a non-JSON body; the change may have been applied: %w",
 				m.Method, redact.URL(m.Path), jsonSyntaxErr(doc))},
 			applied: appliedTrue,
 		}
 	}
-	doc = m.Unwrap.apply(doc)
+	return m.Unwrap.apply(doc), nil
+}
+
+// writeMutationResult prints U(data): pretty for a single target, compact for
+// a batch line. Failures here are after the change was applied.
+func writeMutationResult(cmd *cobra.Command, m mutation, data []byte, secret secretKind, compact bool) error {
+	doc, err := mutationResponseDoc(m, data)
+	if err != nil {
+		return err
+	}
 	var out bytes.Buffer
-	var err error
 	if compact {
 		err = json.Compact(&out, doc)
 	} else {

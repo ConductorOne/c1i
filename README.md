@@ -1519,12 +1519,15 @@ entitlements live, so use `mcp servers delete`.
 `sync` queues a sync and exits 0 when it is accepted, not when it finishes;
 follow it with `sync-status`, or pass `--wait` to poll the connector (the same
 read as `connectors get`) until a sync started after the command ran
-completes, printing its `.status` object as a second document on stdout. A
-sync that ends with `.status.lastError` set, or a `--wait-timeout` (default
-15m), exits `1` with `applied: true` -- the sync was still queued.
-`.status.errorKind` is not checked: it is `"ERROR_KIND_UNSPECIFIED"`, its
-enum's zero value, on a clean DONE too, not `""`. On a paused connector the
-server can accept the call but queue nothing, so resume the connector first.
+completes, then print the connector's whole `.status` object in place of the
+API's empty `{}` (a 200 without `connectorView.connector` exits `6` rather
+than waiting; a connector that has never synced has no `.status` yet and is
+waited on normally). A sync that ends in `SYNC_STATUS_ERROR` or with
+`.status.lastError` set, or a `--wait-timeout` (default 15m), exits `1` with
+`applied: true` -- the sync was still queued. `.status.errorKind` is not
+checked: it is `"ERROR_KIND_UNSPECIFIED"`, its enum's zero value, on a clean
+DONE too, not `""`. On a paused connector the server can accept the call but
+queue nothing, so resume the connector first.
 `pause` and `resume` exit 0 when repeated.
 `schedule --clear` removes the schedule; c1i does not validate `--cron` or
 `--timezone`, and the server accepted invalid values in the run checked.

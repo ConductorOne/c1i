@@ -52,12 +52,14 @@ Output and error text:
   read as `connectors get`) until a sync started after the command ran
   reaches a terminal status, comparing `.status.completedAt` against a
   baseline read before the request so a sync already DONE cannot end the wait
-  early. The connector's `.status` object is then printed as a second
-  document on stdout. A terminal `.status.lastError`, or the timeout, exits
-  `1` with `applied: true`; the sync was still queued. `.status.errorKind` is
-  not checked: it reads `"ERROR_KIND_UNSPECIFIED"`, its enum's zero value, on
-  a clean DONE too, not `""`. Without `--wait`, behavior is unchanged.
-
+  early. On success it prints the connector's whole `.status` object in place
+  of the API's empty `{}`; a 200 without `connectorView.connector` exits `6`
+  rather than waiting, while a connector that has never synced has no
+  `.status` yet and is waited on normally. `SYNC_STATUS_ERROR`, a terminal
+  `.status.lastError`, or the timeout exits `1` with `applied: true`; the
+  sync was still queued. `.status.errorKind` is not checked: it reads
+  `"ERROR_KIND_UNSPECIFIED"`, its enum's zero value, on a clean DONE too, not
+  `""`. Without `--wait`, behavior is unchanged.
 - `bridges list|get|create|update|delete|services` and `bridges credentials
   list|create|revoke` manage tunnel bridges and their client credentials.
 - `apps routing-rules list|get|create|update|delete|reorder --app-id` manage an app's

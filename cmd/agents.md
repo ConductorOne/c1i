@@ -620,11 +620,14 @@ resource with `--resource-id` likewise means you drop
   server (exit 2; use `mcp servers delete`, which also removes its toolsets).
   `connectors sync` only queues a sync; poll `connectors sync-status`, or pass
   `connectors sync --wait [--wait-timeout 15m]` to block until a sync started
-  after the command ran reaches a terminal `.status` (its object then prints
-  as a second document on stdout). A `.status.lastError`, or the timeout,
-  exits 1 with `applied: true`; the sync was still queued.
-  `.status.errorKind` is not checked: live it was `"ERROR_KIND_UNSPECIFIED"`
-  (the enum's zero value) on a clean DONE too, not `""`.
+  after the command ran reaches a terminal `.status`, then print the
+  connector's whole `.status` object in place of the API's empty `{}` (a 200
+  without `connectorView.connector` exits 6; a never-synced connector has no
+  `.status` yet and is waited on normally). `SYNC_STATUS_ERROR`, a
+  `.status.lastError`, or the timeout exits 1 with
+  `applied: true`; the sync was still queued. `.status.errorKind` is not
+  checked: live it was `"ERROR_KIND_UNSPECIFIED"` (the enum's zero value) on a
+  clean DONE too, not `""`.
   Why did a sync fail: `connectors debuggable` (NDJSON: `appId`,
   `connectorId`, `syncStatus`) finds targets; then `sync-history <id>
   --app-id A [--runs N]` (runs + `.streak`; each `.lifecycleId`),

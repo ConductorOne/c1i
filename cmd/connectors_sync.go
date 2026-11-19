@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -26,11 +27,14 @@ Prints the API's response, which is {}. Honors --dry-run.
 sync status reaches a terminal state with a .status.completedAt later than the
 moment this command read it, just before sending the request -- so a sync that
 was already done when this command ran, and hasn't advanced yet, cannot look
-like this sync finished. The connector's status object is then printed as a
-second document on stdout. A sync that ends with .status.lastError set exits 1
-naming it; the sync was still accepted (applied: true). A timeout also exits 1
-with applied: true, and the sync may still be running. --dry-run never polls
-or reads the baseline.`,
+like this sync finished. It then prints the connector's whole .status object
+as this command's document, in place of the API's empty {}; a 200 that does
+not hold connectorView.connector exits 6 rather than waiting (a connector
+that has never synced has no .status yet and is waited on normally). A sync
+that ends in SYNC_STATUS_ERROR or with .status.lastError set exits 1 naming
+it; the sync was still accepted (applied: true). A timeout also exits 1 with
+applied: true, and the sync may still be running. --dry-run never polls or
+reads the baseline.`,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		wait, waitTimeout, err := waitFlagValues(cmd)
@@ -58,34 +62,66 @@ or reads the baseline.`,
 // the connector. A var so a test can poll fast.
 var connectorSyncWaitInterval = 5 * time.Second
 
-// connectorSyncStatus is a connector's .status object
-// (connectorView.connector.status): the sync run this command cares about.
+// connectorSyncStatus is what the wait reads from a connector's .status
+// (connectorView.connector.status) to decide whether the sync this command
+// started has finished. The printed document is the server's whole .status
+// object, not this struct.
 type connectorSyncStatus struct {
 	Status      string `json:"status"`
-	StartedAt   string `json:"startedAt"`
 	CompletedAt string `json:"completedAt"`
 	LastError   string `json:"lastError"`
-	ErrorKind   string `json:"errorKind"`
 }
 
-// readConnectorSyncStatus GETs the connector at path and returns its status
-// object, the same read "connectors get" prints as .status.
-func readConnectorSyncStatus(ctx context.Context, c *client.Client, path string) (connectorSyncStatus, error) {
+// connectorSyncStatusError is a terminal failure even when lastError is
+// empty. errorKind cannot stand in for it: the API sends
+// "ERROR_KIND_UNSPECIFIED" (its enum's zero value) on a clean DONE, not "".
+const connectorSyncStatusError = "SYNC_STATUS_ERROR"
+
+// connectorSyncRead is one --wait read: the fields the wait decides on, and
+// the server's .status object as sent, which --wait prints on success.
+type connectorSyncRead struct {
+	status connectorSyncStatus
+	raw    json.RawMessage
+}
+
+// readConnectorSyncStatus GETs the connector at path and returns its .status
+// object, the same read "connectors get" prints as .status. A response that
+// does not hold connectorView.connector is a C1 failure, not "still syncing":
+// otherwise a changed envelope would pass for a 15-minute wait. A connector
+// with no .status yet (never synced) reads as nothing completed, so the first
+// sync can still be waited on.
+func readConnectorSyncStatus(ctx context.Context, c *client.Client, path string) (connectorSyncRead, error) {
 	data, err := c.Get(ctx, path, nil)
 	if err != nil {
-		return connectorSyncStatus{}, fmt.Errorf("reading the connector: %w", err)
+		return connectorSyncRead{}, fmt.Errorf("reading the connector: %w", err)
 	}
 	var env struct {
 		ConnectorView struct {
-			Connector struct {
-				Status connectorSyncStatus `json:"status"`
-			} `json:"connector"`
+			Connector json.RawMessage `json:"connector"`
 		} `json:"connectorView"`
 	}
 	if err := json.Unmarshal(data, &env); err != nil {
-		return connectorSyncStatus{}, &nonJSONResponseError{fmt.Errorf("the connector response has no connectorView.connector: %w", err)}
+		return connectorSyncRead{}, &nonJSONResponseError{fmt.Errorf("the connector response is not the expected shape: %w", err)}
 	}
-	return env.ConnectorView.Connector.Status, nil
+	rawConnector := bytes.TrimSpace(env.ConnectorView.Connector)
+	if len(rawConnector) == 0 || string(rawConnector) == "null" {
+		return connectorSyncRead{}, &nonJSONResponseError{fmt.Errorf("the connector response held no connectorView.connector")}
+	}
+	var conn struct {
+		Status json.RawMessage `json:"status"`
+	}
+	if err := json.Unmarshal(rawConnector, &conn); err != nil {
+		return connectorSyncRead{}, &nonJSONResponseError{fmt.Errorf("connectorView.connector is not an object: %w", err)}
+	}
+	raw := bytes.TrimSpace(conn.Status)
+	if len(raw) == 0 || string(raw) == "null" {
+		return connectorSyncRead{}, nil
+	}
+	var st connectorSyncStatus
+	if err := json.Unmarshal(raw, &st); err != nil {
+		return connectorSyncRead{}, &nonJSONResponseError{fmt.Errorf("the connector's status is not JSON: %w", err)}
+	}
+	return connectorSyncRead{status: st, raw: raw}, nil
 }
 
 // completedAtAdvanced reports whether next is a later completedAt than base.
@@ -113,39 +149,38 @@ func completedAtAdvanced(base, next string) bool {
 // sync rather than one already on the connector.
 func connectorSyncBaselinePreRead(path string, dst *string) preRead {
 	return preRead{Run: func(ctx context.Context, c *client.Client, _ *mutation) ([]resolvedID, error) {
-		st, err := readConnectorSyncStatus(ctx, c, path)
+		read, err := readConnectorSyncStatus(ctx, c, path)
 		if err != nil {
 			return nil, fmt.Errorf("reading the connector's current sync status before the request: %w", err)
 		}
-		*dst = st.CompletedAt
+		*dst = read.status.CompletedAt
 		return nil, nil
 	}}
 }
 
 // connectorSyncWaitOp polls the connector until a sync started after
-// *baseline completes. A terminal LastError stops the wait with that error
-// immediately -- ErrorKind is never a reliable signal on its own: the API
-// sends "ERROR_KIND_UNSPECIFIED" (its enum zero value) on a clean DONE, not
-// "". A terminal success's status object is returned as the satisfying value
-// so sendMutation's withWaitResultOutput can print it.
+// *baseline completes. A terminal failure stops the wait with that error
+// immediately: a non-empty lastError names what went wrong, and
+// SYNC_STATUS_ERROR is terminal even without one. The satisfying value is the
+// server's .status object as sent, which sendMutation's withWaitResultOutput
+// prints as the command's document. A failure the server records without
+// advancing completedAt is indistinguishable from a stale one and surfaces at
+// the timeout instead.
 func connectorSyncWaitOp(c *client.Client, path, connectorID, appID string, baseline *string, timeout time.Duration) waitOp[[]string] {
 	return waitOp[[]string]{
 		Poll: func(ctx context.Context) ([]string, error) {
-			st, err := readConnectorSyncStatus(ctx, c, path)
+			read, err := readConnectorSyncStatus(ctx, c, path)
 			if err != nil {
 				return nil, err
 			}
+			st := read.status
 			if !completedAtAdvanced(*baseline, st.CompletedAt) {
 				return []string{}, nil
 			}
-			if st.LastError != "" {
-				return nil, fmt.Errorf("connector %s sync ended in status %s: %s", connectorID, st.Status, st.LastError)
+			if st.Status == connectorSyncStatusError || st.LastError != "" {
+				return nil, fmt.Errorf("connector %s sync ended in status %s%s", connectorID, st.Status, lastErrorSuffix(st.LastError))
 			}
-			doc, err := json.Marshal(st)
-			if err != nil {
-				return nil, fmt.Errorf("encoding connector %s status: %w", connectorID, err)
-			}
-			return []string{string(doc)}, nil
+			return []string{string(read.raw)}, nil
 		},
 		Done:     func(v []string) bool { return len(v) == 1 },
 		Interval: connectorSyncWaitInterval,
@@ -155,6 +190,14 @@ func connectorSyncWaitOp(c *client.Client, path, connectorID, appID string, base
 		Slow:     "a full sync can take minutes depending on the app's size",
 		Recheck:  "c1i connectors get " + connectorID + " --app-id " + appID,
 	}
+}
+
+// lastErrorSuffix appends the server's error text when it reported one.
+func lastErrorSuffix(lastError string) string {
+	if lastError == "" {
+		return ""
+	}
+	return ": " + lastError
 }
 
 var connectorsPauseCmd = &cobra.Command{
