@@ -6,6 +6,8 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.12.0] - 2026-11-20
+
 ### Upgrading from 0.11.0
 
 Exit codes:
@@ -32,9 +34,10 @@ Output and error text:
 - **Text-mode stderr and `auth login`'s device code and URL escape control
   characters** from the server (`\x1b`, `\u202e`); `\n` and `\t` are kept. See
   Security.
-- **`apps resource-types list` rows gain `app_id`**, and **the owner verbs'
-  missing-flag message names `--owner-entitlement-id`** (still exit `2`). See
-  Changed.
+- **`apps resource-types list` rows gain `app_id`**, and **`accounts list`
+  rows gain `profile`** (its JSON object, or `null`). Either one adds a key to
+  NDJSON output. **The owner verbs' missing-flag message names
+  `--owner-entitlement-id`** (still exit `2`). See Changed.
 
 ### Security
 
@@ -3236,7 +3239,8 @@ First changelog entry; releases through v0.1.5 predate this file (see the
 
 - CI enforces `gofmt` via golangci-lint; module-wide formatting normalized.
 
-[Unreleased]: https://github.com/ConductorOne/c1i/compare/v0.11.0...HEAD
+[Unreleased]: https://github.com/ConductorOne/c1i/compare/v0.12.0...HEAD
+[0.12.0]: https://github.com/ConductorOne/c1i/compare/v0.11.0...v0.12.0
 [0.11.0]: https://github.com/ConductorOne/c1i/compare/v0.10.1...v0.11.0
 [0.10.1]: https://github.com/ConductorOne/c1i/releases/tag/v0.10.1
 [0.9.2]: https://github.com/ConductorOne/c1i/releases/tag/v0.9.2
