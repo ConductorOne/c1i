@@ -14,10 +14,11 @@ var accessProfilesBundleAutomationCmd = &cobra.Command{
 	Long: `Manage the automation that grants an access profile's bundled entitlements.
 
 Create and set take a JSON object through --body-file (or "-" for stdin). The
-supported fields are createTasks, disableCircuitBreaker, enabled, and
-entitlements, containing entitlementRefs (an array of objects with exactly
-appId and id). entitlements is required: the server refuses a body without
-conditions, so pass an empty entitlementRefs list to disable the automation.
+supported fields are createTasks, disableCircuitBreaker, enabled, entitlements,
+and cel. entitlements contains entitlementRefs (an array of objects with exactly
+appId and id). cel is a CEL expression string. Either entitlements or cel is
+required: the server refuses a body without conditions, so pass an empty
+entitlementRefs list ({"entitlementRefs":[]}) to disable via entitlements.
 Run optionally takes --refs-file with the entitlement reference array.`,
 }
 
@@ -121,7 +122,7 @@ func validateBundleAutomationBody(body map[string]any) error {
 
 	for key := range body {
 		known := false
-		for _, field := range []string{"createTasks", "disableCircuitBreaker", "enabled", "entitlements"} {
+		for _, field := range []string{"createTasks", "disableCircuitBreaker", "enabled", "entitlements", "cel"} {
 			known = known || isFieldSpelling(key, field)
 		}
 		if !known {
@@ -137,12 +138,21 @@ func validateBundleAutomationBody(body map[string]any) error {
 			return &usageError{fmt.Errorf("%s must be a JSON boolean", key)}
 		}
 	}
-	value, _, err := bodyField(body, "entitlements")
+	celValue, celKey, err := bodyField(body, "cel")
 	if err != nil {
 		return err
 	}
-	if value != nil {
-		entitlements, ok := value.(map[string]any)
+	if celValue != nil {
+		if _, ok := celValue.(string); !ok {
+			return &usageError{fmt.Errorf("%s must be a JSON string", celKey)}
+		}
+	}
+	entValue, _, err := bodyField(body, "entitlements")
+	if err != nil {
+		return err
+	}
+	if entValue != nil {
+		entitlements, ok := entValue.(map[string]any)
 		if !ok {
 			return &usageError{fmt.Errorf("entitlements must be a JSON object")}
 		}
@@ -165,8 +175,8 @@ func validateBundleAutomationBody(body map[string]any) error {
 			}
 		}
 	}
-	if value == nil {
-		return &usageError{fmt.Errorf("entitlements is required: it carries the automation's conditions, which the server demands even to disable it (pass {\"entitlementRefs\":[]} for none)")}
+	if entValue == nil && celValue == nil {
+		return &usageError{fmt.Errorf("entitlements or cel is required: the server requires conditions to create or set bundle automation (pass {\"entitlementRefs\":[]} for no entitlements)")}
 	}
 	return nil
 }

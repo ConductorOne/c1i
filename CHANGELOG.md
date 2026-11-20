@@ -6,6 +6,13 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- `access-profiles bundle-automation create|set` now accept a `cel` field in
+  the `--body-file` body (a CEL expression string), mirroring the API's
+  `conditions.cel` oneof. Either `cel` or `entitlements` satisfies the
+  conditions requirement; both may be present. Non-string `cel` values exit `2`.
+
 ## [0.12.0] - 2026-11-20
 
 ### Upgrading from 0.11.0
