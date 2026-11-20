@@ -6,7 +6,7 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
-## [0.12.0] - 2026-11-19
+## [0.12.0] - 2026-11-20
 
 ### Upgrading from 0.11.0
 
@@ -34,9 +34,10 @@ Output and error text:
 - **Text-mode stderr and `auth login`'s device code and URL escape control
   characters** from the server (`\x1b`, `\u202e`); `\n` and `\t` are kept. See
   Security.
-- **`apps resource-types list` rows gain `app_id`**, and **the owner verbs'
-  missing-flag message names `--owner-entitlement-id`** (still exit `2`). See
-  Changed.
+- **`apps resource-types list` rows gain `app_id`**, and **`accounts list`
+  rows gain `profile`** (its JSON object, or `null`). Either one adds a key to
+  NDJSON output. **The owner verbs' missing-flag message names
+  `--owner-entitlement-id`** (still exit `2`). See Changed.
 
 ### Security
 
