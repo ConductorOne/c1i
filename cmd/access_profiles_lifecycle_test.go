@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/ConductorOne/c1i/internal/client"
@@ -21,6 +22,7 @@ func newCatalogLifecycleFlagCmd() *cobra.Command {
 	f := cmd.Flags()
 	f.String("display-name", "", "")
 	f.String("description", "", "")
+	f.String("type", "", "")
 	f.Bool("published", false, "")
 	f.Bool("visible-to-everyone", false, "")
 	f.Bool("request-bundle", false, "")
@@ -162,6 +164,45 @@ func TestAccessProfilesUpdateSendsEscapedWrappedPatch(t *testing.T) {
 	}
 	if gotBody["updateMask"] != "description,visibleToEveryone" {
 		t.Errorf("updateMask = %#v, want exact changed fields", gotBody["updateMask"])
+	}
+}
+
+// TestBuildAccessProfileUpdateBodyTypeSetsTypeInMask pins that --type birthright
+// lands in the catalog object and appears in the update mask.
+func TestBuildAccessProfileUpdateBodyTypeSetsTypeInMask(t *testing.T) {
+	cmd := newCatalogLifecycleFlagCmd()
+	if err := cmd.Flags().Set("type", "birthright"); err != nil {
+		t.Fatalf("set --type: %v", err)
+	}
+	got, err := buildAccessProfileUpdateBody(cmd, "cat-1")
+	if err != nil {
+		t.Fatalf("buildAccessProfileUpdateBody: %v", err)
+	}
+	catalog, ok := got["catalog"].(map[string]any)
+	if !ok {
+		t.Fatalf("catalog key missing or wrong type: %#v", got["catalog"])
+	}
+	if catalog["type"] != "REQUEST_CATALOG_TYPE_BUNDLE" {
+		t.Errorf("catalog.type = %v, want REQUEST_CATALOG_TYPE_BUNDLE", catalog["type"])
+	}
+	if got["updateMask"] != "type" {
+		t.Errorf("updateMask = %v, want type", got["updateMask"])
+	}
+}
+
+// TestBuildAccessProfileUpdateBodyBirthrightRejectsPublished pins that
+// --type birthright + --published is rejected (exit 2 path) in update too.
+func TestBuildAccessProfileUpdateBodyBirthrightRejectsPublished(t *testing.T) {
+	cmd := newCatalogLifecycleFlagCmd()
+	_ = cmd.Flags().Set("type", "birthright")
+	_ = cmd.Flags().Set("published", "true")
+
+	_, err := buildAccessProfileUpdateBody(cmd, "cat-1")
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	if !strings.Contains(err.Error(), "--published") {
+		t.Errorf("error = %q, want it to mention --published", err)
 	}
 }
 

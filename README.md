@@ -2541,8 +2541,8 @@ user can request, derived from the access profiles they belong to.
 ```sh
 c1i access-profiles list [--page-size N] [--page-token TOKEN] [--limit N]
 c1i access-profiles get <access-profile-id>
-c1i access-profiles create --display-name <name> [--description <text>] [--published] [--visible-to-everyone] [--request-bundle] [--enrollment-behavior bypass|enforce] [--unenrollment-behavior leave-access-as-is|revoke-all|revoke-unjustified] [--unenrollment-entitlement-behavior bypass|enforce]
-c1i access-profiles update <access-profile-id> [--display-name <name>] [--description <text>] [--published] [--visible-to-everyone] [--request-bundle] [--enrollment-behavior bypass|enforce] [--unenrollment-behavior leave-access-as-is|revoke-all|revoke-unjustified] [--unenrollment-entitlement-behavior bypass|enforce]
+c1i access-profiles create --display-name <name> [--description <text>] [--type birthright|catalog|hybrid] [--published] [--visible-to-everyone] [--request-bundle] [--enrollment-behavior bypass|enforce] [--unenrollment-behavior leave-access-as-is|revoke-all|revoke-unjustified] [--unenrollment-entitlement-behavior bypass|enforce]
+c1i access-profiles update <access-profile-id> [--display-name <name>] [--description <text>] [--type birthright|catalog|hybrid] [--published] [--visible-to-everyone] [--request-bundle] [--enrollment-behavior bypass|enforce] [--unenrollment-behavior leave-access-as-is|revoke-all|revoke-unjustified] [--unenrollment-entitlement-behavior bypass|enforce]
 c1i access-profiles delete <access-profile-id>
 
 c1i access-profiles requestable-entitlements list <access-profile-id> [--page-size N] [--page-token TOKEN] [--limit N]
@@ -2568,6 +2568,18 @@ omitted unless explicitly passed; explicit `false` still reaches the API.
 `update` derives its field mask from the flags supplied, so an explicit
 `--description ""` clears it while omitted fields remain untouched. Behavior
 flags accept short values shown above or the full `REQUEST_CATALOG_*` API enum.
+
+`--type` sets the access profile type: `catalog` (Catalog in the UI),
+`birthright` or `role` (displayed as Role; `role` is an alias), or `hybrid`
+(the default when omitted). Your tenant must have access profile types enabled.
+Birthright profiles do not support entitlement request settings: the server
+returns `400 "access profile type Birthright does not support entitlement
+request settings"` when `--published`, `--enrollment-behavior`,
+`--unenrollment-behavior`, or `--unenrollment-entitlement-behavior` is set
+alongside `--type birthright`; c1i rejects those combinations client-side
+(exit 2). Changing an existing profile to `--type birthright` while it has
+active requests returns `400 "turn off requests before changing the profile type
+to Birthright"`; disable requests on the profile first.
 
 `delete` is a soft delete (see [Soft delete](#soft-delete)).
 

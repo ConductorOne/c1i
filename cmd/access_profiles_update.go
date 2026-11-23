@@ -22,6 +22,13 @@ nothing sent. Sent as is, the server stores "" as an empty name and keeps
 Behavior flags accept their short values (for example, "bypass", "enforce",
 "revoke-all") or the full REQUEST_CATALOG_* enum value.
 
+--type changes the access profile type (catalog, birthright/role, or hybrid).
+Changing type requires access profile types to be enabled for your tenant.
+Changing to birthright while the profile has active requests returns 400
+"turn off requests before changing the profile type to Birthright"; disable
+requests on the profile first. Birthright profiles reject --published and
+enrollment/unenrollment behavior flags (exit 2 client-side).
+
 Prints the updated profile as pretty JSON, unwrapped like "access-profiles
 get" (the id is .id). --fields is a usage error on a mutation.`,
 	Args: cobra.ExactArgs(1),
@@ -44,6 +51,9 @@ func buildAccessProfileUpdateBody(cmd *cobra.Command, id string) (map[string]any
 	if err != nil {
 		return nil, err
 	}
+	if err := validateBirthrightConstraints(cmd, catalog); err != nil {
+		return nil, err
+	}
 	return wrapUpdate("catalog", catalog, mask), nil
 }
 
@@ -52,12 +62,13 @@ func init() {
 	f.String("display-name", "", "New display name (omit to leave unchanged; "+displayNameRule+")")
 	f.String("description", "", `New description; "" clears it (omit to leave unchanged)`)
 	allowEmpty(accessProfilesUpdateCmd, emptyIsSent, "description")
-	f.Bool("published", false, "Publish or unpublish the access profile (omit to leave unchanged)")
+	f.String("type", "", "New access profile type: "+catalogTypeFlag.usage()+" (omit to leave unchanged; not supported by all tenants; birthright profiles reject --published and enrollment/unenrollment behavior flags)")
+	f.Bool("published", false, "Publish or unpublish the access profile (omit to leave unchanged; not allowed with --type birthright)")
 	f.Bool("visible-to-everyone", false, "Set whether every user can see the access profile (omit to leave unchanged)")
 	f.Bool("request-bundle", false, "Set whether all profile entitlements can be requested together (omit to leave unchanged)")
-	f.String("enrollment-behavior", "", "Enrollment request-policy behavior: "+catalogEnrollmentFlag.usage()+` (omit to leave unchanged; "" is sent and the server rejects it as an invalid enum)`)
-	f.String("unenrollment-behavior", "", "Unenrollment behavior: "+catalogUnenrollmentFlag.usage()+` (omit to leave unchanged; "" is sent and the server rejects it as an invalid enum)`)
-	f.String("unenrollment-entitlement-behavior", "", "Unenrollment entitlement revoke-policy behavior: "+catalogUnenrollmentEntitlementFlag.usage()+` (omit to leave unchanged; "" is sent and the server rejects it as an invalid enum)`)
+	f.String("enrollment-behavior", "", "Enrollment request-policy behavior: "+catalogEnrollmentFlag.usage()+` (omit to leave unchanged; "" is sent and the server rejects it as an invalid enum; not allowed with --type birthright)`)
+	f.String("unenrollment-behavior", "", "Unenrollment behavior: "+catalogUnenrollmentFlag.usage()+` (omit to leave unchanged; "" is sent and the server rejects it as an invalid enum; not allowed with --type birthright)`)
+	f.String("unenrollment-entitlement-behavior", "", "Unenrollment entitlement revoke-policy behavior: "+catalogUnenrollmentEntitlementFlag.usage()+` (omit to leave unchanged; "" is sent and the server rejects it as an invalid enum; not allowed with --type birthright)`)
 	allowEmpty(accessProfilesUpdateCmd, emptyIsSent, "enrollment-behavior", "unenrollment-behavior", "unenrollment-entitlement-behavior")
 	registerUpdateSpec(accessProfilesUpdateCmd, catalogFields)
 	accessProfilesUpdateCmd.Long += `
