@@ -191,9 +191,13 @@ func TestBundleAutomationBodyFileValidatesPublishedRequestFields(t *testing.T) {
 		},
 		{name: "reject null body", body: `null`, wantErr: "JSON object"},
 		{
-			name:    "reject unsupported CEL condition",
+			name: "accept cel string with no entitlements",
+			body: `{"cel":"size(direct_groups) > 0"}`,
+		},
+		{
+			name:    "reject cel non-string value",
 			body:    `{"cel":{"expression":"true"}}`,
-			wantErr: "unsupported bundle automation field",
+			wantErr: "cel must be a JSON string",
 		},
 		{
 			name:    "reject unsupported circuit breaker option",

@@ -2599,12 +2599,13 @@ LEAVE_ACCESS_AS_IS; the reset value for
 
 `bundle-automation` drives automatic bundled-entitlement grants. `create` and
 `set` take a JSON object via `--body-file` (or `-` for stdin). The CLI validates
-and sends `createTasks`, `disableCircuitBreaker`, `enabled`, and `entitlements`,
-which contains an `entitlementRefs` array of `{"appId":"…","id":"…"}` objects.
-`entitlements` is required even to disable the automation: the server refuses a
-body without conditions, and an empty `entitlementRefs` list is how you say
-"none" (exit 2 client-side if it is missing). `run --refs-file` takes that
-entitlement reference array and limits a run to those references.
+and sends `createTasks`, `disableCircuitBreaker`, `enabled`, `entitlements`, and
+`cel` (a CEL expression string). `entitlements` contains an `entitlementRefs`
+array of `{"appId":"…","id":"…"}` objects. Either `entitlements` or `cel` is
+required: the server refuses a body without conditions; pass
+`{"entitlementRefs":[]}` to disable via entitlements (exit 2 client-side if
+neither is present). `run --refs-file` takes that entitlement reference array
+and limits a run to those references.
 
 `access-profiles list` rows do **not** carry a member count: the list endpoint reports
 `memberCount` as `0` for every catalog while `access-profiles get` on the same id

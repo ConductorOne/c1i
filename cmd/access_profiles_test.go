@@ -12,8 +12,8 @@ func TestBundleAutomationBodyRequiresEntitlements(t *testing.T) {
 	body := writeTempJSON(t, "body.json", `{"enabled":false}`)
 	srv := newMutServer(t, fixedReply(200, `{}`))
 	res := runMutationCLI(t, srv.srv, 0, nil, "access-profiles", "bundle-automation", "set", "cat-1", "--body-file", body)
-	if res.exit != exitUsage || res.err == nil || !strings.Contains(res.err.Error(), "entitlements is required") {
-		t.Fatalf("exit %d err %v, want exit %d with the entitlements message", res.exit, res.err, exitUsage)
+	if res.exit != exitUsage || res.err == nil || !strings.Contains(res.err.Error(), "entitlements or cel is required") {
+		t.Fatalf("exit %d err %v, want exit %d with the conditions message", res.exit, res.err, exitUsage)
 	}
 	if n := len(srv.requests()); n != 0 {
 		t.Errorf("%d request(s) sent, want none", n)
@@ -33,8 +33,8 @@ func TestBundleAutomationNullEntitlementsRefused(t *testing.T) {
 	body := writeTempJSON(t, "null.json", `{"enabled":false,"entitlements":null}`)
 	srv := newMutServer(t, fixedReply(200, `{}`))
 	res := runMutationCLI(t, srv.srv, 0, nil, "access-profiles", "bundle-automation", "set", "cat-1", "--body-file", body, "--dry-run")
-	if res.exit != exitUsage || res.err == nil || !strings.Contains(res.err.Error(), "entitlements is required") {
-		t.Fatalf("exit %d err %v, want exit %d with the entitlements message", res.exit, res.err, exitUsage)
+	if res.exit != exitUsage || res.err == nil || !strings.Contains(res.err.Error(), "entitlements or cel is required") {
+		t.Fatalf("exit %d err %v, want exit %d with the conditions message", res.exit, res.err, exitUsage)
 	}
 	if n := len(srv.requests()); n != 0 {
 		t.Errorf("%d request(s) sent, want none", n)
