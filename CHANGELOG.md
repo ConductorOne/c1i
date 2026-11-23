@@ -6,6 +6,18 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+- `access-profiles create` and `access-profiles update` accept `--type
+  birthright|catalog|hybrid` (also `role` as an alias for `birthright`),
+  mapping to the `type` field on the `RequestCatalog` API object. The flag is
+  omitted when not supplied, so the server default (Hybrid) applies as before.
+  Birthright (Role) profiles do not support entitlement request settings: c1i
+  rejects `--published`, `--enrollment-behavior`, `--unenrollment-behavior`,
+  and `--unenrollment-entitlement-behavior` combined with `--type birthright`
+  client-side (exit 2), quoting the server's own error message. Changing to
+  `--type birthright` while the profile has active requests returns `400 "turn
+  off requests before changing the profile type to Birthright"`.
+
 ## [0.12.0] - 2026-11-20
 
 ### Upgrading from 0.11.0

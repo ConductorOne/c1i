@@ -39,6 +39,7 @@ var changedAllowlist = map[string]string{
 	"root.go:validateDotSegmentIDFlags":                                "the central id guard: walks set flags and judges their content itself",
 	"root.go:GetBaseURLWithSource":                                     "--url precedence: a passed flag outranks env/config; the value is validated elsewhere",
 	"mutation.go:refuseMutationFields":                                 "--fields is refused on a mutation if passed at all, whatever its value",
+	"access_profiles_create.go:validateBirthrightConstraints":          "rejects --published/--enrollment-behavior/--unenrollment-behavior/--unenrollment-entitlement-behavior only when the user explicitly passed them with --type birthright; the server rejects their presence regardless of value, so Changed (not content) is the signal",
 	"access_profiles_entitlements.go:buildRequestableEntitlementsBody": "a bool: --create-requests=false must differ from absent",
 	"flags.go:requireNonEmpty":                                         "content is judged by hasVisibleRune first; Changed only picks the unset vs blank message",
 	"flags.go:bodyFileMask":                                            "was --body-file/--update-mask passed (even as an empty path); the mask content is checked by normalizeUpdateMask",

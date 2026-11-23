@@ -1006,6 +1006,17 @@ resource with `--resource-id` likewise means you drop
   `--enrollment-behavior unspecified` resets to the server default (measured:
   ENFORCE becomes BYPASS); `--unenrollment-behavior unspecified` resets to
   LEAVE_ACCESS_AS_IS, and the third flag's reset value was not measured.
+- `access-profiles create` and `update` accept `--type birthright|catalog|hybrid`
+  (tenant feature required). `birthright` (alias `role`) maps to
+  `REQUEST_CATALOG_TYPE_BUNDLE`; `catalog` to `REQUEST_CATALOG_TYPE_CATALOG`;
+  `hybrid` to `REQUEST_CATALOG_TYPE_CATALOG_AND_BUNDLE`. Birthright profiles do
+  not support entitlement request settings: `--published`, `--enrollment-behavior`,
+  `--unenrollment-behavior`, and `--unenrollment-entitlement-behavior` are
+  rejected client-side (exit 2) when `--type birthright` is set — the server
+  returns `400 "access profile type Birthright does not support entitlement
+  request settings"`. Changing an existing profile to `--type birthright` while
+  it has active requests returns `400 "turn off requests before changing the
+  profile type to Birthright"`; disable requests on the profile before the update.
 - `access-profiles delete <access-profile-id>` is a soft delete: the catalog
   leaves `access-profiles list`, while `access-profiles get` still returns it at
   exit `0` with `deletedAt` set. So a `deleted_at` in an `access-profiles list`
