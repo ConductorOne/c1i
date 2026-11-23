@@ -168,3 +168,108 @@ func TestDocsEndpointProjectsFields(t *testing.T) {
 		t.Errorf("projected output = %s, want only summary", got)
 	}
 }
+
+// stubMultiMethodSpec has a path with two methods, so --method has something
+// real to narrow and something real to list as "not defined".
+const stubMultiMethodSpec = `
+paths:
+  /api/v1/things:
+    get:
+      summary: List Things
+      operationId: c1.api.thing.v1.Things.List
+    post:
+      summary: Create Thing
+      operationId: c1.api.thing.v1.Things.Create
+`
+
+func runDocsEndpoint(t *testing.T, path, method string) (stdout string, err error) {
+	t.Helper()
+	var out bytes.Buffer
+	restoreCmdWriters(t)
+	resetCmdFlags(t, docsEndpointCmd)
+	docsEndpointCmd.SetOut(&out)
+	docsEndpointCmd.SetErr(&bytes.Buffer{})
+	if method != "" {
+		if setErr := docsEndpointCmd.Flags().Set("method", method); setErr != nil {
+			t.Fatalf("failed to set --method: %v", setErr)
+		}
+	}
+	err = docsEndpointCmd.RunE(docsEndpointCmd, []string{path})
+	return out.String(), err
+}
+
+// --method narrows the output to just that method's operation.
+func TestDocsEndpointMethodFiltersToOneMethod(t *testing.T) {
+	primeOpenAPICacheWith(t, stubMultiMethodSpec)
+
+	got, err := runDocsEndpoint(t, "/api/v1/things", "post")
+	if err != nil {
+		t.Fatalf("RunE: %v", err)
+	}
+	if !strings.Contains(got, "Create Thing") || strings.Contains(got, "List Things") {
+		t.Errorf("output = %s, want only the post operation", got)
+	}
+}
+
+// --method matches case-insensitively.
+func TestDocsEndpointMethodCaseInsensitive(t *testing.T) {
+	primeOpenAPICacheWith(t, stubMultiMethodSpec)
+
+	got, err := runDocsEndpoint(t, "/api/v1/things", "POST")
+	if err != nil {
+		t.Fatalf("RunE: %v", err)
+	}
+	if !strings.Contains(got, "Create Thing") || strings.Contains(got, "List Things") {
+		t.Errorf("output = %s, want only the post operation", got)
+	}
+}
+
+// Omitting --method keeps every method, unchanged from before the flag existed.
+func TestDocsEndpointNoMethodKeepsEveryMethod(t *testing.T) {
+	primeOpenAPICacheWith(t, stubMultiMethodSpec)
+
+	got, err := runDocsEndpoint(t, "/api/v1/things", "")
+	if err != nil {
+		t.Fatalf("RunE: %v", err)
+	}
+	if !strings.Contains(got, "Create Thing") || !strings.Contains(got, "List Things") {
+		t.Errorf("output = %s, want both operations", got)
+	}
+}
+
+// A method outside get|post|put|patch|delete is a usage error naming the
+// accepted values, not a silent pass-through.
+func TestDocsEndpointMethodUnknownValueIsUsageError(t *testing.T) {
+	primeOpenAPICacheWith(t, stubMultiMethodSpec)
+
+	_, err := runDocsEndpoint(t, "/api/v1/things", "fetch")
+	if err == nil {
+		t.Fatal("expected an error for an unrecognized --method value")
+	}
+	if _, ok := err.(*usageError); !ok {
+		t.Errorf("expected a usageError, got %T: %v", err, err)
+	}
+	for _, want := range []string{"fetch", "get", "post", "put", "patch", "delete"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("error %q missing %q", err.Error(), want)
+		}
+	}
+}
+
+// A valid method the path doesn't define lists the methods it does define.
+func TestDocsEndpointMethodNotDefinedListsAvailable(t *testing.T) {
+	primeOpenAPICacheWith(t, stubMultiMethodSpec)
+
+	_, err := runDocsEndpoint(t, "/api/v1/things", "delete")
+	if err == nil {
+		t.Fatal("expected an error for a method the path doesn't define")
+	}
+	if _, ok := err.(*usageError); !ok {
+		t.Errorf("expected a usageError, got %T: %v", err, err)
+	}
+	for _, want := range []string{"/api/v1/things", "DELETE", "GET", "POST"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("error %q missing %q", err.Error(), want)
+		}
+	}
+}

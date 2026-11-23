@@ -3176,6 +3176,7 @@ c1i docs endpoints --filter task
 
 # Show full request/response schema for an endpoint
 c1i docs endpoint /api/v1/search/tasks
+c1i docs endpoint /api/v1/search/tasks --method get
 
 # Dump the raw OpenAPI spec
 c1i docs openapi
@@ -3197,6 +3198,8 @@ version and family/command/leaf counts; `--json` carries them too, plus full
 paths and aliases. `-o/--output` writes to a file.
 
 `docs openapi`, `docs endpoints`, and `docs endpoint` use the current public API contract at `https://www.c1.ai/api/openapi.yaml`, including MCP server, tool, and toolset operations. The spec is cached for 24 hours at `~/.c1i/cache/api-openapi.yaml`; fetch failures fall back to that cache, however old, with a one-line warning on stderr naming its age. A response over 32 MiB counts as a failed fetch. With a cache to fall back on, a fetch makes one attempt unless you set `--max-retries` or `C1I_MAX_RETRIES`. With no cache, a failed fetch exits `4` for a `404`, `5` for a `429`, `6` for a `5xx`, and `8` for anything else, such as an unreachable host, a refused redirect or a redirect loop.
+
+`docs endpoint --method get|post|put|patch|delete` (case-insensitive) scopes the schema to one HTTP method instead of every method the path defines. An unknown method, or one the path doesn't define, exits `2` and lists the methods the path does define.
 
 `docs search` and `docs page` send your query to a third-party documentation
 search API (`api.mintlify.com`), not to the C1 API. The docs site is

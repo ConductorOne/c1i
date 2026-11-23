@@ -17,7 +17,7 @@ covers what you need yet.
   docs search <query>            Search documentation by keyword
   docs page <path>               Fetch a full documentation page
   docs endpoints [--filter <p>]  List all API endpoints (filterable)
-  docs endpoint <path>           Show full schema for a specific endpoint
+  docs endpoint <path> [--method m]  Show full schema for a specific endpoint
   docs openapi                   Dump the raw OpenAPI spec
   docs guide [name]              Print an embedded task-oriented runbook (list names if omitted)
   docs map [--json]              Print the live command tree (families, commands, descriptions)

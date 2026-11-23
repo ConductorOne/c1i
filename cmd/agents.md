@@ -300,7 +300,10 @@ authenticating. Which one depends on what you are after:
   empty result means nothing matched, not "the search gave up" — then `docs
   endpoint <path>` prints that route's full request/response schema (its
   top-level keys are HTTP methods; `--fields` projects it, e.g.
-  `--fields get.summary`).
+  `--fields get.summary`). `--method get|post|put|patch|delete`
+  (case-insensitive) scopes the schema to one method instead; an unknown
+  method, or one the path doesn't define, exits 2 and lists the methods the
+  path does define.
 - **A step-by-step runbook**: `docs guide` lists the embedded guides with a
   one-line purpose, and `docs guide <name>` prints one. These are static
   content, no network call. The complete workflow index is:
