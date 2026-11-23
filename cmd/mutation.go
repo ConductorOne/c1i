@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"net/http"
 	"reflect"
+	"sort"
 	"strings"
 
 	"github.com/ConductorOne/c1i/internal/client"
@@ -908,4 +909,97 @@ func notApplied(err error) error {
 		return nil
 	}
 	return &mutationError{err: err, applied: appliedFalse}
+}
+
+// sendRuleInsertSequence builds and sends a findings rule family's
+// --insert-at sequence: list path's existing rules, shift every one whose
+// orderField is >= insertAt down by one (highest order first, so no two
+// rules ever collide mid-move), then create newRule at insertAt. It lives
+// here, not in the command file, because the list read decides how many
+// steps there are — something sendMutationSequence's caller-built, static
+// step list cannot do on its own — and this file is the one place allowed
+// to read before a write (TestMutationsWriteOnlyThroughHelper). The list
+// read happens even under --dry-run, like any other pre-send read.
+func sendRuleInsertSequence(cmd *cobra.Command, path, key, orderField string, insertAt int, newRule map[string]any) error {
+	baseURL, err := GetBaseURL()
+	if err != nil {
+		return err
+	}
+	c, err := newClient(cmd, baseURL)
+	if err != nil {
+		return fmt.Errorf("authentication failed: %w", err)
+	}
+	data, err := c.Get(cmd.Context(), path, nil)
+	if err != nil {
+		return fmt.Errorf("API error listing existing rules for --insert-at: %w", err)
+	}
+	items, _, err := extractListAndToken(data, "list")
+	if err != nil {
+		return unreadablePage(fmt.Errorf("failed to parse the rule list: %w", err))
+	}
+	type shiftingRule struct {
+		id    string
+		order int
+		body  map[string]any
+	}
+	var shifting []shiftingRule
+	for _, raw := range items {
+		var item map[string]any
+		if err := json.Unmarshal(raw, &item); err != nil {
+			return unreadablePage(fmt.Errorf("failed to parse a rule in the list: %w", err))
+		}
+		order, ok := jsonInt(item[orderField])
+		if !ok || order < insertAt {
+			continue
+		}
+		id, _ := item["id"].(string)
+		if id == "" {
+			continue
+		}
+		delete(item, "createdAt")
+		delete(item, "updatedAt")
+		shifting = append(shifting, shiftingRule{id: id, order: order, body: item})
+	}
+	sort.Slice(shifting, func(i, j int) bool { return shifting[i].order > shifting[j].order })
+
+	steps := make([]mutationStep, 0, len(shifting)+1)
+	for _, r := range shifting {
+		from, to := r.order, r.order+1
+		r.body[orderField] = to
+		steps = append(steps, mutationStep{
+			Build: func([]string) mutation {
+				return mutation{Method: http.MethodPost, Path: client.Path(path+"/%s/update", r.id), Body: map[string]any{key: r.body}}
+			},
+			ResultID: func([]byte) (string, error) { return r.id, nil },
+			WrapErr: func(err error, moved []string) error {
+				return fmt.Errorf("shifting rule %s from %d to %d (to free %d for the new rule): %w%s", r.id, from, to, insertAt, err, movedSuffix(moved))
+			},
+		})
+	}
+	newRule[orderField] = insertAt
+	steps = append(steps, mutationStep{
+		Build: func([]string) mutation {
+			return mutation{Method: http.MethodPost, Path: path, Body: map[string]any{key: newRule}}
+		},
+		WrapErr: func(err error, moved []string) error {
+			return fmt.Errorf("creating the rule at %d: %w%s", insertAt, err, movedSuffix(moved))
+		},
+	})
+	return sendMutationSequence(cmd, steps, "")
+}
+
+// movedSuffix extends a sendRuleInsertSequence step's error with the rule
+// ids already shifted (and not rolled back) before it failed.
+func movedSuffix(moved []string) string {
+	if len(moved) == 0 {
+		return ""
+	}
+	return fmt.Sprintf("; already shifted (not rolled back): %s", strings.Join(moved, ", "))
+}
+
+// jsonInt reads a JSON-decoded field as an int; JSON numbers decode to
+// float64 through map[string]any.
+func jsonInt(v any) (int, bool) {
+	f, ok := v.(float64)
+	return int(f), ok
 }

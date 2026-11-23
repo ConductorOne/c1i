@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"strings"
@@ -126,7 +127,7 @@ var findingsBulkCreateTasksCmd = &cobra.Command{
 	},
 }
 
-func newFindingRulesCmd(name, short, path, key string, row listRowFn) *cobra.Command {
+func newFindingRulesCmd(name, short, path, key, orderField, orderLabel string, row listRowFn) *cobra.Command {
 	group := &cobra.Command{Use: name, Short: short}
 	list := &cobra.Command{Use: "list", Short: "List rules (NDJSON output)", RunE: func(cmd *cobra.Command, _ []string) error {
 		return getFixedList(cmd, path, row)
@@ -135,13 +136,33 @@ func newFindingRulesCmd(name, short, path, key string, row listRowFn) *cobra.Com
 	get := &cobra.Command{Use: "get <rule-id>", Short: "Get a rule (pretty JSON)", Args: cobra.ExactArgs(1), RunE: func(cmd *cobra.Command, args []string) error {
 		return getResource(cmd, client.Path(path+"/%s", args[0]), nil, "id", key)
 	}}
-	create := &cobra.Command{Use: "create", Short: "Create a rule from JSON (pretty JSON)", Args: cobra.NoArgs, RunE: func(cmd *cobra.Command, _ []string) error {
-		object, err := readRequiredJSONObject(cmd, "body-file")
-		if err != nil {
-			return err
-		}
-		return sendMutation(cmd, mutation{Method: http.MethodPost, Path: path, Body: map[string]any{key: object}})
-	}}
+	create := &cobra.Command{Use: "create", Short: "Create a rule from JSON (pretty JSON)", Args: cobra.NoArgs,
+		Long: fmt.Sprintf(`Create a rule from a JSON object (pretty JSON). %[1]s is an exact, unique
+order: creating a rule whose %[1]s collides with an existing rule's own 400s
+("order N is already used by another rule") instead of making room for it.
+
+Pass --insert-at N to put the new rule at %[1]s N instead: every existing
+rule at or after N shifts one %[1]s down first, highest first so no two
+rules ever collide mid-move, then the new rule is created at N.
+--insert-at overrides any %[2]s already in the JSON body. A failure
+part-way through names exactly which rules already shifted (nothing is
+rolled back); retry with --insert-at past them, or finish the reorder by
+hand with "update".`, orderLabel, orderField),
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			object, err := readRequiredJSONObject(cmd, "body-file")
+			if err != nil {
+				return err
+			}
+			if flagGiven(cmd, "insert-at") {
+				insertAt, _ := cmd.Flags().GetInt("insert-at")
+				if insertAt < 1 {
+					return &usageError{fmt.Errorf("--insert-at must be at least 1 (got %d): it is the new rule's 1-indexed %s, not an offset", insertAt, orderLabel)}
+				}
+				return sendRuleInsertSequence(cmd, path, key, orderField, insertAt, object)
+			}
+			return sendMutation(cmd, mutation{Method: http.MethodPost, Path: path, Body: map[string]any{key: object}}, withErrorMap(orderCollisionHint(orderLabel)))
+		}}
+	create.Flags().Int("insert-at", 0, fmt.Sprintf("1-indexed %s for the new rule; shifts any colliding rule down instead of 400ing (overrides %s in the JSON body)", orderLabel, orderField))
 	update := &cobra.Command{Use: "update <rule-id>", Short: "Update a rule from JSON (pretty JSON)", Args: cobra.ExactArgs(1), RunE: func(cmd *cobra.Command, args []string) error {
 		object, err := readRequiredJSONObject(cmd, "body-file")
 		if err != nil {
@@ -167,8 +188,20 @@ func newFindingRulesCmd(name, short, path, key string, row listRowFn) *cobra.Com
 	return group
 }
 
-var findingsRoutingRulesCmd = newFindingRulesCmd("routing-rules", "Manage finding routing rules", "/api/v1/findings/routing-rules", "routingRule", findingRuleRow)
-var findingsTransformationRulesCmd = newFindingRulesCmd("transformation-rules", "Manage finding transformation rules", "/api/v1/findings/transformation-rules", "transformationRule", findingTransformationRuleRow)
+// orderCollisionHint turns the server's order-collision 400 into a pointer
+// at --insert-at, which does by hand what the message otherwise demands.
+func orderCollisionHint(orderLabel string) func(error) error {
+	return func(err error) error {
+		var apiErr *client.APIError
+		if errors.As(err, &apiErr) && apiErr.StatusCode == http.StatusBadRequest && strings.Contains(apiErr.Body, "is already used by another rule") {
+			return fmt.Errorf("API error: %w (pass --insert-at to shift the colliding rule's %s down automatically instead of freeing it by hand)", err, orderLabel)
+		}
+		return nil
+	}
+}
+
+var findingsRoutingRulesCmd = newFindingRulesCmd("routing-rules", "Manage finding routing rules", "/api/v1/findings/routing-rules", "routingRule", "priority", "priority", findingRuleRow)
+var findingsTransformationRulesCmd = newFindingRulesCmd("transformation-rules", "Manage finding transformation rules", "/api/v1/findings/transformation-rules", "transformationRule", "evaluationOrder", "evaluation order", findingTransformationRuleRow)
 
 var findingsSettingsCmd = &cobra.Command{Use: "settings", Short: "Inspect and update finding detector settings"}
 var findingsSettingsShowCmd = &cobra.Command{Use: "show", Short: "Show finding detector settings (pretty JSON)",
