@@ -2964,6 +2964,50 @@ both together must both match. The search index lags writes: a new webhook was
 missing from an unfiltered search for a few seconds, and a deleted one may
 still be found briefly, so use `list`/`get` for the current state.
 
+### Decoys
+
+Decoys are planted honey-credentials (honeytokens): fake credentials that
+exist only to be stolen, which raise a Finding the moment anything tries to
+use them.
+
+```sh
+c1i decoys list [--page-size N] [--page-token TOKEN] [--limit N]
+c1i decoys get <decoy-id>
+c1i decoys search [--query TEXT] [--kind KIND]... [--status active|disabled]... [--annotation-key KEY]... [--has-been-used]
+c1i decoys create --user-client-credential-user-id <user-id> [--display-name NAME] [--description TEXT] [--annotation key=value]...
+c1i decoys create --access-token-subject-user-id <user-id> [--access-token-expires 1h]
+c1i decoys create --connector-client
+c1i decoys create --workload-fed-provider-id <provider-id> --workload-fed-condition 'claims.sub == "x"' [--workload-fed-service-principal-user-id <user-id>]
+c1i decoys update <decoy-id> [--display-name NAME] [--description TEXT] [--disabled] [--annotation key=value]...
+c1i decoys rotate <decoy-id>
+c1i decoys delete <decoy-id>
+```
+
+`create` takes exactly one selector flag, which picks the decoy's kind:
+`--user-client-credential-user-id` (a client-credential decoy under an
+existing HUMAN/SERVICE user), `--access-token-subject-user-id` (a session
+access-token decoy, `--access-token-expires` sets its lifetime),
+`--connector-client` (a connector-shaped credential, no further flags), or
+`--workload-fed-provider-id` (a workload-federation-trust decoy, requiring
+`--workload-fed-condition`; `--workload-fed-service-principal-user-id` is
+optional). None, or more than one, exits `2`. A complete request body may be
+passed with `--body-file` instead, mutually exclusive with every flag above.
+
+`create` and `rotate` are the only place the vended secret appears: under
+`.material`, shaped by kind (`.material.clientCredential.clientSecret`,
+`.material.accessToken.accessToken`, or
+`.material.workloadFederation.workloadFederationTrustId`, which has no
+server-vended secret). It cannot be read again; run `decoys rotate` for a
+fresh one. `decoys get`/`list`/`search` never show it.
+
+`update`'s `--annotation key=value` (repeatable) follows the server's own
+per-key PATCH semantics: a key you pass overwrites that key, an omitted key
+stays, and `key=` (an empty value) deletes it. `search`'s `--kind` and
+`--status` are each repeatable and OR within themselves; `--annotation-key`
+matches a decoy carrying at least one of the given keys; `--has-been-used`
+filters to decoys that have fired at least once (there is no "never used"
+filter).
+
 ### Hooks
 
 Hooks are customer-configured interception points for tool calls: an event

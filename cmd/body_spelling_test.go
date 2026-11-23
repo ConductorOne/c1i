@@ -416,6 +416,7 @@ var spellingExempt = map[string]string{
 	"automations execute --context-file":                        "free-form context map: its keys are data",
 	"automations update --body-file":                            "sent verbatim; the owned id key is covered by findings state",
 	"connectors sync-compare --body-file":                       "sent verbatim, no guard reads it",
+	"decoys create --body-file":                                 "sent verbatim, no guard reads it",
 	"connectors update --body-file":                             "sent verbatim; the owned id key is covered by findings state",
 	"findings assignee --body-file":                             "owned findingId key, same declaration as findings state",
 	"findings audits search --body-file":                        "owned paging keys, covered by role-mining suggestions users",

@@ -140,6 +140,7 @@ var wantEmptyAllowed = map[string]string{
 	"c1i tasks retry-provisioning --comment":                    emptyIsOmitted,
 	"c1i webhooks create --description":                         emptyIsSent,
 	"c1i webhooks update --description":                         emptyIsSent,
+	"c1i decoys update --description":                           emptyIsSent,
 	"c1i hooks create --description":                            emptyIsSent,
 	"c1i hooks update --description":                            emptyIsSent,
 	"c1i bridges update --description":                          emptyIsSent,

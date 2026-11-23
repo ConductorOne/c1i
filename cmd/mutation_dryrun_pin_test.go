@@ -57,6 +57,8 @@ var dryRunStubs = map[string][]string{
 	"c1i connectors create":                                     {"--app-id=x1", "--catalog-id=x1"},
 	"c1i connectors schedule":                                   {"x1", "--app-id=x1", "--clear"},
 	"c1i connectors update":                                     {"x1", "--app-id=x1", "--body-file=@{}", "--update-mask=config"},
+	"c1i decoys create":                                         {"--workload-fed-provider-id=x1", "--workload-fed-condition=true"},
+	"c1i decoys update":                                         {"x1", "--disabled"},
 	"c1i functions update":                                      {"x1", "--display-name=x1"},
 	"c1i entitlements update":                                   {"x1", "--app-id=x1", "--description=d"},
 	"c1i entitlements account-provisioning set":                 {"x1", "--app-id=x1", "--connector-id=x1", "--field=k=v", "--do-not-save"},
