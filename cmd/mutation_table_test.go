@@ -54,6 +54,8 @@ const (
 	tblSPDoc        = `{"id":"sp-1","displayName":"zz"}`
 	tblWebhook      = `{"webhook":{"id":"wh-1","displayName":"zz"}}`
 	tblWebhookDoc   = `{"id":"wh-1","displayName":"zz"}`
+	tblDecoy        = `{"decoy":{"id":"d-1","displayName":"zz"},"material":{"clientCredential":{"clientId":"c-1","clientSecret":"s-1"}}}`
+	tblDecoyDoc     = `{"id":"d-1","displayName":"zz","material":{"clientCredential":{"clientId":"c-1","clientSecret":"s-1"}}}`
 	tblAttrValue    = `{"value":{"id":"av-1","attributeTypeId":"ty-1","value":"zz"}}`
 	tblAttrValueDoc = `{"id":"av-1","attributeTypeId":"ty-1","value":"zz"}`
 	tblMapping      = `{"attribute":{"userAttributeMapping":{"id":"map-1","appId":"app-1","attributeType":{"id":"ty-1","displayName":"Department"}},"appPath":"a","fallbacksPath":"f"},"expanded":[]}`
@@ -401,6 +403,11 @@ var mutationTable = []mutationRow{
 	{cmd: "webhooks update", args: []string{"wh-1", "--description", "d"}, body: tblWebhook, want: tblWebhookDoc, ids: idPath, method: "POST", path: "/api/v1/webhooks/wh-1"},
 	{cmd: "webhooks test", args: []string{"wh-1"}, body: `{"webhook":{"id":"inst-1","webhookId":"wh-1"}}`, want: `{"id":"inst-1","webhookId":"wh-1"}`, ids: []string{".id", ".webhookId"}, method: "POST", path: "/api/v1/webhooks/wh-1/test"},
 	{cmd: "webhooks delete", args: []string{"wh-1"}, body: `{}`, method: "DELETE", path: "/api/v1/webhooks/wh-1"},
+	// decoys
+	{cmd: "decoys create", args: []string{"--workload-fed-provider-id", "p-1", "--workload-fed-condition", "true", "--display-name", "zz"}, body: tblDecoy, want: tblDecoyDoc, ids: idPath, method: "POST", path: "/api/v1/decoys"},
+	{cmd: "decoys update", args: []string{"d-1", "--disabled"}, body: tblDecoy, want: tblDecoyDoc, ids: idPath, method: "PATCH", path: "/api/v1/decoys/d-1"},
+	{cmd: "decoys rotate", args: []string{"d-1"}, body: tblDecoy, want: tblDecoyDoc, ids: idPath, method: "POST", path: "/api/v1/decoys/d-1/rotate"},
+	{cmd: "decoys delete", args: []string{"d-1"}, body: `{}`, method: "DELETE", path: "/api/v1/decoys/d-1"},
 	// hooks and users set-delegation
 	{cmd: "hooks create", args: []string{"--display-name", "zz", "--event", "pre-tool-use", "--function-id", "fn-1"}, body: `{"hook":{"id":"hk-1","displayName":"zz"}}`, want: `{"id":"hk-1","displayName":"zz"}`, ids: idPath, method: "POST", path: "/api/v1/hooks", reads: 1},
 	{cmd: "hooks update", args: []string{"hk-1", "--priority", "3"}, body: `{"hook":{"id":"hk-1","displayName":"zz"}}`, want: `{"id":"hk-1","displayName":"zz"}`, ids: idPath, method: "POST", path: "/api/v1/hooks/hk-1"},

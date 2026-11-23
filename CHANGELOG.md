@@ -6,6 +6,18 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+- `decoys list|get|search|create|update|rotate|delete` manages decoy
+  credentials (honeytokens): `create` takes exactly one selector
+  (`--user-client-credential-user-id`, `--access-token-subject-user-id`,
+  `--connector-client`, or `--workload-fed-provider-id` with
+  `--workload-fed-condition`) or a complete `--body-file`. `create` and
+  `rotate` are the only place the vended secret appears, under `.material`,
+  exactly once; it cannot be read again. `update`'s `--annotation key=value`
+  follows the server's per-key PATCH semantics (overwrite, leave unchanged,
+  or delete with `key=`); `search` filters by `--kind`, `--status`,
+  `--annotation-key`, and `--has-been-used`.
+
 ## [0.12.0] - 2026-11-20
 
 ### Upgrading from 0.11.0

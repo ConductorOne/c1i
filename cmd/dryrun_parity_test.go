@@ -177,8 +177,11 @@ func TestDryRunParityBadIDs(t *testing.T) {
 }
 
 // unknownIDExemptions names an unset id flag no invocation can run with, keyed
-// "<command> --flag", with the reason. None exists; an entry is a deliberate edit.
-var unknownIDExemptions = map[string]string{}
+// "<command> --flag", with the reason. An entry is a deliberate edit.
+var unknownIDExemptions = map[string]string{
+	"decoys create --access-token-subject-user-id":   "mutually exclusive with the row's --workload-fed-provider-id selector: a decoy has exactly one kind",
+	"decoys create --user-client-credential-user-id": "mutually exclusive with the row's --workload-fed-provider-id selector: a decoy has exactly one kind",
+}
 
 // dropFlag returns tail without any occurrence of --name.
 func dropFlag(tail []string, name string) []string {
