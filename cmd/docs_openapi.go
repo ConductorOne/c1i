@@ -123,6 +123,8 @@ resources. Pass a returned path to "docs endpoint" for its full schema.`,
 	},
 }
 
+var docsEndpointHTTPMethods = []string{"get", "post", "put", "patch", "delete"}
+
 var docsEndpointCmd = &cobra.Command{
 	Use:   "endpoint <path>",
 	Short: "Show full request/response schema for an API endpoint (no auth required)",
@@ -130,9 +132,13 @@ var docsEndpointCmd = &cobra.Command{
 endpoint. The path is one of the values returned by 'c1i docs endpoints'
 (no auth required for either command).
 
+--method get|post|put|patch|delete (case-insensitive) scopes the output to
+one HTTP method instead of every method the path defines; an unknown method,
+or one the path doesn't define, exits 2 and lists the methods it does define.
+
 Examples:
   c1i docs endpoint /api/v1/users/{id}
-  c1i docs endpoint /api/v1/search/tasks
+  c1i docs endpoint /api/v1/search/tasks --method get
   c1i docs endpoint /api/v1/auth/introspect`,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
@@ -158,6 +164,14 @@ Examples:
 			return &usageError{fmt.Errorf("endpoint %s not found", target)}
 		}
 
+		if method, _ := cmd.Flags().GetString("method"); method != "" {
+			filtered, err := filterEndpointByMethod(target, pathObj, method)
+			if err != nil {
+				return err
+			}
+			pathObj = filtered
+		}
+
 		resolved := resolveRefs(pathObj, spec, 0, nil)
 
 		out, err := json.Marshal(resolved)
@@ -168,8 +182,44 @@ Examples:
 	},
 }
 
+// filterEndpointByMethod narrows pathObj to the single named HTTP method.
+// method is matched case-insensitively against docsEndpointHTTPMethods; an
+// unrecognized method, or one target doesn't define, is a usage error that
+// lists the methods target actually defines (sorted, excluding the
+// path-level "parameters" key), so the caller sees valid choices immediately
+// instead of re-running without --method.
+func filterEndpointByMethod(target string, pathObj map[string]any, method string) (map[string]any, error) {
+	normalized := strings.ToLower(method)
+	valid := false
+	for _, m := range docsEndpointHTTPMethods {
+		if m == normalized {
+			valid = true
+			break
+		}
+	}
+	if !valid {
+		return nil, &usageError{fmt.Errorf("--method %q is not one of %s", method, strings.Join(docsEndpointHTTPMethods, ", "))}
+	}
+
+	op, ok := pathObj[normalized]
+	if !ok {
+		var defined []string
+		for key := range pathObj {
+			if key == "parameters" {
+				continue
+			}
+			defined = append(defined, strings.ToUpper(key))
+		}
+		sort.Strings(defined)
+		return nil, &usageError{fmt.Errorf("endpoint %s has no %s method; it defines: %s", target, strings.ToUpper(normalized), strings.Join(defined, ", "))}
+	}
+
+	return map[string]any{normalized: op}, nil
+}
+
 func init() {
 	docsEndpointsCmd.Flags().String("filter", "", "Filter endpoints by pattern (matches path, summary, operation ID, description)")
+	docsEndpointCmd.Flags().String("method", "", "Scope output to one HTTP method: get, post, put, patch, or delete (case-insensitive)")
 	docsCmd.AddCommand(docsOpenapiCmd)
 	docsCmd.AddCommand(docsEndpointsCmd)
 	docsCmd.AddCommand(docsEndpointCmd)

@@ -51,6 +51,11 @@ Output and error text:
   output is unchanged.
 
 ### Added
+- `docs endpoint <path> --method get|post|put|patch|delete` (case-insensitive)
+  scopes the printed schema to one HTTP method instead of every method the
+  path defines. An unknown method, or one the path doesn't define, is a usage
+  error listing the methods the path does define. Default behavior (every
+  method) is unchanged when `--method` is omitted.
 - `connectors sync --wait [--wait-timeout 15m]` polls the connector (the same
   read as `connectors get`) until a sync started after the command ran
   reaches a terminal status, comparing `.status.completedAt` against a
