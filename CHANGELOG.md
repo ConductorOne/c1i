@@ -6,6 +6,22 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- `findings routing-rules|transformation-rules create --insert-at N` puts the
+  new rule at priority/evaluation_order N, shifting every existing rule at or
+  after N down one first (highest order first, so none collide mid-move)
+  instead of 400ing on `create`'s own collision. `--insert-at` overrides any
+  `priority`/`evaluationOrder` already in `--body-file`; a failure part-way
+  through names exactly which rules already shifted (nothing is rolled
+  back).
+
+### Fixed
+
+- `findings routing-rules|transformation-rules create`'s collision 400
+  ("order N is already used by another rule") now points at the new
+  `--insert-at` instead of leaving the caller to free the order by hand.
+
 ## [0.12.0] - 2026-11-20
 
 ### Upgrading from 0.11.0

@@ -2092,12 +2092,12 @@ c1i findings bulk-create-tasks --body-file <file|->
 
 c1i findings routing-rules list [--limit N]
 c1i findings routing-rules get <rule-id>
-c1i findings routing-rules create --body-file <file|->
+c1i findings routing-rules create --body-file <file|-> [--insert-at N]
 c1i findings routing-rules update <rule-id> --body-file <file|->
 c1i findings routing-rules delete <rule-id>
 c1i findings transformation-rules list [--limit N]
 c1i findings transformation-rules get <rule-id>
-c1i findings transformation-rules create --body-file <file|->
+c1i findings transformation-rules create --body-file <file|-> [--insert-at N]
 c1i findings transformation-rules update <rule-id> --body-file <file|->
 c1i findings transformation-rules delete <rule-id>
 c1i findings settings show
@@ -2133,6 +2133,13 @@ The rule-list endpoints do not currently expose public filtering or paging; use
 `priority` (a real integer the API sends), while a transformation row adds
 `evaluation_order` (its application sequence, not a rank) and `transform_count`
 and has no `priority` — `--fields priority` therefore matches nothing there.
+`priority`/`evaluation_order` is an exact, unique order: `create` 400s on a
+collision ("order N is already used by another rule") unless `--insert-at N`
+is given, which shifts every existing rule at or after N down one first
+(highest first, so none collide mid-move), then creates the new rule at N;
+it overrides any `priority`/`evaluationOrder` already in `--body-file`. A
+failure part-way through names exactly which rules already shifted (nothing
+is rolled back).
 Use JSON files for oneof actions, custom
 finding targets, and nested rules; the commands insert positional IDs into the
 request. `findings create-task` accepts an optional `--policy-id`, looked up first (no
